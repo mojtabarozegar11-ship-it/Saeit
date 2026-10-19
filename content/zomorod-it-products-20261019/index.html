@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark"><title>آزمایشگاه محصولات دیجیتال | زمرد ملل</title>
+<style>
+:root{font-family:Vazirmatn,Tahoma,Arial,sans-serif;color-scheme:dark;--gold:#f1cf83;--green:#a3ead1;--line:#c5dfbc55;--panel:#133328d9}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;color:#ecf7ec;background:radial-gradient(ellipse at 15% 5%,#2b614d,#0a1d18 75%);line-height:1.85}
+main{max-width:1060px;margin:auto;padding:20px}.head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px}
+a{color:var(--gold)}.eyebrow{font-size:.75rem;letter-spacing:.12em;font-weight:700;color:var(--green)}h1{font-size:clamp(1.25rem,3.5vw,2rem);color:var(--gold);margin:0 0 8px}p{margin:8px 0 15px}
+.panel{background:linear-gradient(145deg,#1c4434ec,#102c24e9);border:1px solid var(--line);border-radius:23px;box-shadow:0 17px 42px #0007,inset 0 1px #fff2;padding:clamp(16px,2.5vw,25px);margin:16px 0}
+.layout{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.field{display:block;font-weight:700;font-size:.93rem;color:#e1f4e3}
+.field input,.field textarea{width:100%;margin-top:5px;padding:12px 13px;background:#0a211ccf;color:#fff;border:1px solid #80bda278;border-radius:12px;font:inherit;min-height:48px}
+.field input:focus,.field textarea:focus{outline:2px solid #efd087;outline-offset:2px}.field textarea{min-height:86px;resize:vertical}
+.wide{grid-column:1/-1}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+button{font:700 .95rem Tahoma,Arial,sans-serif;cursor:pointer;border-radius:13px;padding:12px 18px;border:1px solid var(--gold);background:linear-gradient(140deg,#f3d993,#b99152);color:#162d25}
+button.secondary{background:#17382c;color:#f5e7c3;border-color:#99bba0}button:focus-visible{outline:3px solid white;outline-offset:3px}
+.result{margin-top:14px;white-space:normal}.metric{font-size:clamp(1.3rem,4vw,2.2rem);font-weight:900;color:var(--gold)}.result ul{padding-right:23px}.result h2{font-size:1.1rem;color:var(--green)}
+.small{font-size:.86rem;color:#d1e2d3}.hidden{display:none!important}
+@media(max-width:650px){.layout{grid-template-columns:1fr}.wide{grid-column:auto}.head{align-items:flex-start}main{padding:12px}}
+</style></head><body><main>
+<div class="head"><div><div class="eyebrow">ZOMOROD DIGITAL LAB • PRODUCT SERIES 01</div><h1 id="title">محصول دیجیتال</h1><p id="desc"></p></div><a href="/topics/" target="_top">بازگشت به موضوعات ↗</a></div>
+<div class="panel">
+<form id="form" autocomplete="off"><div class="layout" id="fields"></div><div class="actions"><button type="submit">محاسبه و ساخت خروجی</button><button type="button" class="secondary" id="reset">بازنشانی</button><button type="button" class="secondary" id="save" disabled>دریافت گزارش JSON</button></div></form>
+<div class="result" id="result" role="status" aria-live="polite"></div></div>
+<p class="small">ابزار مستقل، رایگان و قابل استفاده در مرورگر. داده‌های واردشده به سرور ارسال نمی‌شوند. محاسبات برای برنامه‌ریزی اولیه‌اند و جایگزین ارزیابی تخصصی، آزمایش واقعی یا تضمین مالی و امنیتی نیستند.</p>
+</main><script id="catalog" type="application/json">[{"slug":"website-design","title":"معمار وب‌سایت","desc":"برآورد اولیه ساخت وب‌سایت و اولویت بهینه‌سازی","labels":["تعداد صفحات","زمان بارگذاری فعلی (ثانیه)","تعداد فرم‌های تبدیل"],"values":[12,4,2],"note":"برآورد فنی را با نقشه سایت و آزمون دسترس‌پذیری اعتبارسنجی کنید.","action":"ابتدا صفحات و مسیرهای تبدیل را مشخص و سپس نمونه واکنش‌گرا را آزمون کنید."},{"slug":"software-development","title":"استودیوی برنامه‌ریزی نرم‌افزار","desc":"تخمین ظرفیت توسعه و برنامه تحویل اولیه","labels":["تعداد ویژگی‌ها","پیچیدگی میانگین (۱ تا ۵)","تعداد توسعه‌دهنده"],"values":[15,3,3],"note":"معیار پذیرش و آزمون‌های خودکار برای هر قابلیت بنویسید.","action":"تقسیم ویژگی‌ها به واحدهای کوچک و اولویت‌بندی بر اساس ریسک."},{"slug":"mobile-app-development","title":"معمار اپلیکیشن موبایل","desc":"برآورد دامنه نسخه اولیه و حجم ساخت","labels":["تعداد صفحه‌ها","تعداد پلتفرم‌ها (۱ یا ۲)","تعداد اتصال به سرویس خارجی"],"values":[10,2,3],"note":"مجوزها، حالت آفلاین و دسترس‌پذیری را از آغاز درنظر بگیرید.","action":"نمونه قابل لمس با مسیر اصلی کاربر بسازید و روی گوشی واقعی بیازمایید."},{"slug":"ux-design","title":"آزمایشگاه تجربه کاربری","desc":"محاسبه امتیاز سه محور قابل سنجش UX","labels":["امتیاز ناوبری (۰ تا ۱۰)","وضوح محتوا (۰ تا ۱۰)","دسترس‌پذیری (۰ تا ۱۰)"],"values":[7,6,5],"note":"این امتیاز خوداظهاری است؛ با آزمون واقعی کاربران تأیید شود.","action":"مشکل دارای پایین‌ترین امتیاز را در نسخه بعدی اصلاح کنید."},{"slug":"applied-ai","title":"ارزیاب کاربرد هوش مصنوعی","desc":"محاسبه هزینه تخمینی فراخوانی و نظارت انسانی","labels":["فراخوانی در ماه","هزینه هر ۱۰۰۰ فراخوانی (دلار)","درصد بازبینی انسانی"],"values":[50000,1.8,15],"note":"هیچ داده حساس را بدون مبنای قانونی به مدل ارسال نکنید.","action":"پیش از استقرار ارزیابی خطا، نظارت انسانی و هزینه را اجرا کنید."},{"slug":"business-automation","title":"طراح اتوماسیون","desc":"برآورد ساعت ذخیره‌شده و ارزش زمانی","labels":["تکرار فرایند در ماه","دقیقه فعالیت دستی در هر بار","هزینه هر ساعت کار (واحد پولی)"],"values":[450,12,10],"note":"زمان استثناها و کنترل نهایی انسان را محاسبه کنید.","action":"ابتدا فرایند را مستندسازی و فقط بخش‌های کم‌خطر را خودکار کنید."},{"slug":"data-analytics","title":"آزمایشگاه آمار داده","desc":"تحلیل آماری سریع یک مجموعه عددی بدون ارسال به سرور","labels":["تعداد نمونه مورد انتظار","درصد داده مفقود","حد آستانه هشدار"],"values":[50,0,20],"note":"داده‌های ورودی باید از نظر نوع، واحد و کیفیت کنترل شوند.","action":"از فهرست اعداد یا جدول CSV خود برای مقایسه میانگین و پراکندگی استفاده کنید."},{"slug":"cloud-infrastructure","title":"برآوردگر زیرساخت ابری","desc":"محاسبه هزینه ماهانه و ظرفیت پایه","labels":["تعداد ماشین‌ها","هزینه ساعتی هر ماشین (دلار)","حجم ذخیره‌سازی (گیگابایت)"],"values":[3,0.12,200],"note":"هزینه شبکه، پشتیبان‌گیری و ذخیره‌سازی جداگانه ارزیابی شود.","action":"بار واقعی و بودجه هشدار را پیش از انتخاب معماری اندازه بگیرید."},{"slug":"cybersecurity","title":"ارزیاب ریسک امنیتی","desc":"برآورد ریسک دارایی و شدت سناریوی تهدید","labels":["تعداد دارایی‌های کلیدی","احتمال وقوع (۱ تا ۵)","شدت اثر (۱ تا ۵)"],"values":[12,3,4],"note":"این ابزار آزمون نفوذ یا تأیید امنیت نیست.","action":"کنترل دسترسی، احراز هویت چندمرحله‌ای و نسخه پشتیبان را ارزیابی کنید."},{"slug":"ecommerce","title":"ماشین‌حساب تجارت الکترونیک","desc":"سود ناخالص، حاشیه سود و حجم فروش","labels":["قیمت فروش هر واحد","هزینه متغیر هر واحد","فروش ماهانه (تعداد)"],"values":[500000,310000,160],"note":"کارمزد پرداخت، مالیات، ارسال و هزینه ثابت در این محاسبه لحاظ نشده‌اند.","action":"اقتصاد هر سفارش و سیاست بازگشت را جداگانه بررسی کنید."},{"slug":"digital-products","title":"اعتبارسنج محصول دیجیتال","desc":"پیش‌بینی اولیه فروش از قیف بازدید","labels":["بازدید ماهانه","نرخ تبدیل (درصد)","قیمت هر محصول"],"values":[3000,2,250000],"note":"نرخ تبدیل واقعی باید با آزمایش میدانی اندازه‌گیری شود.","action":"یک نمونه حداقلی بسازید و بازخورد مشتریان بالقوه را ثبت کنید."},{"slug":"game-development","title":"کارگاه طراحی بازی","desc":"برآورد محتوای بازی و تدوین هسته گیم‌پلی","labels":["تعداد مکانیک‌های اصلی","تعداد مراحل","دقایق هدف هر نوبت بازی"],"values":[4,12,10],"note":"سرگرمی سالم، رضایت کاربر و کنترل زمان بازی مهم‌تر از استفاده اجباری است.","action":"یک حلقه گیم‌پلی قابل آزمون بسازید و بازخورد قابل اندازه‌گیری بگیرید."},{"slug":"digital-animation","title":"استودیوی انیمیشن","desc":"محاسبه مدت صحنه و فریم‌های تولید","labels":["تعداد نما","طول متوسط هر نما (ثانیه)","نرخ فریم بر ثانیه"],"values":[15,7,24],"note":"برآورد رندر وابسته به پیچیدگی، رزولوشن و سخت‌افزار است.","action":"پیش از ساخت، استوری‌بورد و انیماتیک تصویب شود."},{"slug":"professional-content","title":"تقویم‌ساز محتوا","desc":"برنامه‌ریزی حجم محتوای چندکاناله","labels":["تعداد پست در هفته","تعداد هفته","تعداد کانال انتشار"],"values":[4,8,2],"note":"کیفیت علمی و اصالت را پیش از انتشار کنترل کنید.","action":"برای هر محتوا هدف، منبع، بازبین و معیار موفقیت تعیین کنید."},{"slug":"seo","title":"کارگاه سئوی صفحه","desc":"ارزیابی دستی عنوان، توضیحات و محتوای صفحه","labels":["تعداد کاراکتر عنوان","تعداد کاراکتر توضیحات متا","تعداد پیوند داخلی"],"values":[54,148,6],"note":"امتیاز عددی این ابزار تضمین رتبه گوگل نیست.","action":"قصد جستجو، کیفیت پاسخ و داده ساختاریافته را با ابزارهای معتبر بررسی کنید."},{"slug":"tech-project-management","title":"برنامه‌ریز اسپرینت","desc":"برآورد تعداد اسپرینت‌های لازم برای بک‌لاگ","labels":["امتیازهای بک‌لاگ","سرعت تیم در هر اسپرینت","طول هر اسپرینت (هفته)"],"values":[120,24,2],"note":"ظرفیت، مرخصی‌ها و ریسک‌های وابستگی را بازنگری کنید.","action":"هدف هر اسپرینت را با نتیجه قابل تحویل تعریف کنید."},{"slug":"api-engineering","title":"معمار رابط API","desc":"برآورد آزمون و طراحی قرارداد API","labels":["تعداد endpoint","تعداد روش برای هر endpoint","تعداد مصرف‌کننده مستقل"],"values":[12,2,3],"note":"در قرارداد API احراز هویت، اعتبارسنجی و محدودسازی درخواست ضروری است.","action":"ابتدا OpenAPI و آزمون قرارداد را مستند کنید."},{"slug":"backup-recovery","title":"طراح بازیابی اطلاعات","desc":"برآورد نقطه بازیابی و حجم تغییرات در خطر","labels":["حجم اطلاعات (گیگابایت)","فاصله بکاپ (ساعت)","تغییر روزانه (گیگابایت)"],"values":[300,12,20],"note":"بکاپ بدون آزمون بازیابی قابل اتکا نیست.","action":"قانون نسخه‌های جداگانه، آزمایش بازیابی و هشدار شکست نسخه‌برداری را اجرا کنید."},{"slug":"digital-training","title":"سازنده دوره آموزشی","desc":"برآورد زمان یادگیری و ساختار دوره","labels":["تعداد درس","میانگین مدت درس (دقیقه)","زمان تمرین و ارزیابی (ساعت)"],"values":[18,25,6],"note":"برای هر درس هدف رفتاری و آزمون قابل سنجش تعریف کنید.","action":"نمونه یک درس را با مخاطب واقعی پایلوت کنید."},{"slug":"software-qa","title":"سازنده ماتریس آزمون","desc":"محاسبه سناریوها و میزان پوشش خودکار","labels":["تعداد ویژگی‌ها","سناریوی آزمون برای هر ویژگی","درصد خودکارسازی"],"values":[20,6,60],"note":"موفقیت در آزمون به معنای عاری بودن کامل از نقص نیست.","action":"سناریوهای حساس، امنیت و دسترس‌پذیری را به‌صورت مستقل پوشش دهید."},{"slug":"live-878f27b75f2daa","title":"استودیوی تولید دیجیتال","desc":"برآورد پروژه چندصحنه‌ای برای استودیو","labels":["تعداد صحنه‌ها","زمان تولید هر صحنه (ساعت)","تعداد اعضای تیم"],"values":[8,5,3],"note":"هزینه نهایی تولید به بازبینی‌ها و منابع وابسته است.","action":"شات‌لیست، دارایی‌ها، مجوزها و تقویم بازبینی را پیش از تولید مشخص کنید."}]</script>
+<script>
+(function(){
+"use strict";
+var catalog=JSON.parse(document.getElementById("catalog").textContent);
+var slug=new URLSearchParams(location.search).get("tool")||"website-design";
+var item=catalog.find(function(e){return e.slug===slug;})||catalog[0];
+var f=document.getElementById("form"),fields=document.getElementById("fields"),res=document.getElementById("result"),report=null;
+document.getElementById("title").textContent=item.title;
+document.getElementById("desc").textContent=item.desc;
+document.title=item.title+" | زمرد ملل";
+function el(tag,cls,text){var n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;}
+function setup(){
+fields.replaceChildren();
+var label=el("label","field wide","عنوان پروژه یا سناریو");var name=el("input");
+name.name="project";name.maxLength=120;name.placeholder="نام پروژه";name.value="پروژه نمونه";
+label.appendChild(name);fields.appendChild(label);
+item.labels.forEach(function(t,i){var l=el("label","field",t),n=el("input");n.type="number";n.inputMode="decimal";n.required=true;n.min=0;n.max=1e10;n.step="any";n.name="n"+i;n.value=item.values[i];l.appendChild(n);fields.appendChild(l);});
+if(slug==="data-analytics"){var l=el("label","field wide","اعداد یا ستون عددی CSV (با ویرگول، فاصله یا سطر جدید جدا کنید)");var ta=el("textarea");ta.name="values";ta.value="12, 15, 17, 19, 21, 23, 27, 35";l.appendChild(ta);fields.appendChild(l);}
+if(slug==="seo"){var l=el("label","field wide","عنوان صفحه برای بررسی طول و محتوا");var ta=el("textarea");ta.name="seo_title";ta.value="راهنمای طراحی وب‌سایت استاندارد و بهینه";l.appendChild(ta);fields.appendChild(l);}
+res.replaceChildren();report=null;document.getElementById("save").disabled=true;
+}
+var fix=function(n){return Number.isFinite(n)?new Intl.NumberFormat("fa-IR",{maximumFractionDigits:2}).format(n):"نامعتبر";};
+function calculate(v,fd){
+var a=v[0],b=v[1],c=v[2],lead="",facts=[],tips=[];
+function metric(t,n){facts.push(t+" : "+fix(n));}
+switch(slug){
+case "website-design":lead="برآورد اولیه "+fix(a*4+b*2+c*6)+" ساعت‌کار";metric("صفحات نیازمند طراحی",a);metric("اولویت بهبود سرعت (ثانیه)",Math.max(0,b-2.5));tips.push("نقشه سایت، فرم‌ها و معیارهای Core Web Vitals را ثبت کنید.");break;
+case "software-development":var effort=a*(6+4*b);lead=fix(effort)+" ساعت‌کار پایه";metric("هفته کاری تقریبی هر توسعه‌دهنده",effort/Math.max(c,1)/30);tips.push("برآورد با ریسک فنی و پوشش آزمون تعدیل شود.");break;
+case "mobile-app-development":lead=fix(a*5+b*35+c*18)+" امتیاز برآورد اولیه";metric("صفحات رابط",a);metric("پلتفرم هدف",b);tips.push("مجوزها و سازگاری دستگاهی را در نمونه واقعی بررسی کنید.");break;
+case "ux-design":var ux=(a+b+c)/3*10;lead=fix(ux)+" از ۱۰۰ (امتیاز خودارزیابی)";metric("فاصله تا امتیاز ۸۰",Math.max(0,80-ux));tips.push("محور با کمترین امتیاز را در آزمون کاربردپذیری اولویت دهید.");break;
+case "applied-ai":var ai=a/1000*b;lead=fix(ai)+" دلار هزینه تقریبی ماهانه مدل";metric("موارد بازبینی انسانی",a*c/100);tips.push("هزینه زیرساخت، توکن، انحراف پاسخ و محرمانگی جداست.");break;
+case "business-automation":var hours=a*b/60;lead=fix(hours)+" ساعت قابل صرفه‌جویی ماهانه";metric("ارزش فرضی زمان",hours*c);tips.push("کنترل کیفیت، هزینه اتوماسیون و موارد استثنا از صرفه‌جویی خالص کسر شوند.");break;
+case "data-analytics":var input=String(fd.get("values")||"");var arr=input.split(/[,;\n\t ]+/).filter(Boolean).map(Number);if(!arr.length||arr.some(function(x){return !Number.isFinite(x);}))throw Error("فقط اعداد معتبر وارد کنید.");var mean=arr.reduce(function(x,y){return x+y;},0)/arr.length;var sorted=arr.slice().sort(function(x,y){return x-y;});var variance=arr.reduce(function(x,y){return x+(y-mean)*(y-mean);},0)/arr.length;lead="میانگین: "+fix(mean);metric("تعداد داده",arr.length);metric("میانه",sorted[Math.floor((arr.length-1)/2)]/2+sorted[Math.floor(arr.length/2)]/2);metric("کمینه",sorted[0]);metric("بیشینه",sorted[sorted.length-1]);metric("انحراف معیار جامعه",Math.sqrt(variance));tips.push("اعداد نامعتبر، واحدهای ناسازگار و داده‌های مفقود را پیش از استنتاج بررسی کنید.");break;
+case "cloud-infrastructure":lead=fix(a*b*730+c*.02)+" دلار تخمین ماهانه";metric("ساعت ماشین در ماه",a*730);tips.push("هزینه انتقال داده، مانیتورینگ، بکاپ و مالیات اضافه می‌شود.");break;
+case "cybersecurity":lead="سطح ریسک پایه: "+fix(b*c)+" از ۲۵";metric("دارایی‌های تحت بررسی",a);tips.push("اولویت به احراز هویت چندعاملی، اصل حداقل دسترسی و تست بازیابی بدهید.");break;
+case "ecommerce":var margin=a-c;lead=fix(margin*b)+" سود ناخالص ماهانه";metric("حاشیه سود هر سفارش",margin);metric("درصد حاشیه سود",a?margin/a*100:0);tips.push("هزینه ثابت، مرجوعی، کارمزد، مالیات و ارسال لحاظ نشده است.");break;
+case "digital-products":var orders=a*b/100;lead=fix(orders)+" سفارش پیش‌بینی‌شده ماهانه";metric("درآمد ناخالص فرضی",orders*c);tips.push("پیش‌بینی مبتنی بر نرخ تبدیل فرضی است؛ داده واقعی جایگزین شود.");break;
+case "game-development":lead=fix(a*c)+" دقیقه‌مکانیک برنامه‌ریزی‌شده";metric("مراحل برای هر مکانیک",b/Math.max(a,1));tips.push("یک حلقه کوتاه و لذت‌بخش بسازید؛ زمان بازی و تجربه کاربر را مسئولانه طراحی کنید.");break;
+case "digital-animation":lead=fix(a*b)+" ثانیه انیمیشن برنامه‌ریزی‌شده";metric("فریم کلی",a*b*c);metric("دقیقه خروجی",a*b/60);tips.push("کیفیت نورپردازی و زمان رندر با نمونه واقعی سنجیده شود.");break;
+case "professional-content":lead=fix(a*b*c)+" انتشار برنامه‌ریزی‌شده";metric("پست برای هر کانال",a*b);tips.push("با بازبینی منبع، حق نشر و استاندارد ویرایشی منتشر شود.");break;
+case "seo":var txt=String(fd.get("seo_title")||"");lead="طول عنوان نمونه: "+fix(txt.length)+" کاراکتر";metric("طول عنوان ثبت‌شده",a);metric("طول متا",b);metric("پیوندهای داخلی",c);tips.push("طول عنوان و توضیح متا معیار کمکی است، نه امتیاز رتبه‌بندی.");if(a<35||a>65)tips.push("عنوان فعلی را برای خوانایی و نمایش در جستجو بازبینی کنید.");break;
+case "tech-project-management":var s=Math.ceil(a/Math.max(b,0.001));lead=fix(s)+" اسپرینت تقریبی";metric("مدت به هفته",s*c);tips.push("وابستگی‌ها، ظرفیت واقعی و بافر ریسک لحاظ شود.");break;
+case "api-engineering":lead=fix(a*b)+" عملیات API اولیه";metric("آزمون‌های قراردادی حداقلی",a*b*3);metric("ترکیب مصرف‌کننده/عملیات",a*b*c);tips.push("احراز هویت، خطایابی، نسخه‌بندی و محدودسازی درخواست‌ها را مستند کنید.");break;
+case "backup-recovery":lead=fix(b/24*c)+" گیگابایت تغییر در معرض خطر";metric("حد تقریبی RPO (ساعت)",b);metric("حجم پایه (گیگابایت)",a);tips.push("هر بازیابی باید با آزمون عملی و پایش زمان واقعی بازیابی اعتبارسنجی شود.");break;
+case "digital-training":lead=fix(a*b/60+c)+" ساعت یادگیری تقریبی";metric("دقیقه محتوا",a*b);tips.push("برای هر هدف آموزشی آزمون پیشرفت و تمرین واقعی تعریف کنید.");break;
+case "software-qa":var total=a*b;lead=fix(total)+" سناریوی تست";metric("خودکار",total*c/100);metric("دستی",total*(100-c)/100);tips.push("سناریوهای منفی، امنیتی و رگرسیون را نیز اضافه کنید.");break;
+case "live-878f27b75f2daa":lead=fix(a*b)+" ساعت‌کار صحنه";metric("ساعت برنامه‌ریزی به‌ازای عضو تیم",a*b/Math.max(c,1));tips.push("دارایی‌ها، حقوق استفاده و تایید نهایی نسخه‌ها ثبت شود.");break;
+default:throw Error("محصول شناسایی نشد.");
+}
+return {lead:lead,facts:facts,tips:tips};
+}
+function addResult(data){
+res.replaceChildren();
+res.appendChild(el("h2","","خروجی محاسبه و برنامه اقدام"));
+res.appendChild(el("div","metric",data.lead));
+var ul=el("ul");data.facts.forEach(function(x){ul.appendChild(el("li","",x));});res.appendChild(ul);
+res.appendChild(el("h2","","راهنمای اعتبارسنجی و گام بعد"));
+var ol=el("ul");data.tips.concat([item.action,item.note]).forEach(function(x){ol.appendChild(el("li","",x));});res.appendChild(ol);
+}
+f.addEventListener("submit",function(event){event.preventDefault();
+try{
+var fd=new FormData(f),values=[0,1,2].map(function(i){return Number(fd.get("n"+i));});
+if(values.some(function(v){return !Number.isFinite(v)||v<0||v>1e10;}))throw Error("اعداد باید معتبر و نامنفی باشند.");
+if(["ux-design"].includes(slug)&&values.some(function(v){return v>10;}))throw Error("امتیاز UX باید بین صفر و ده باشد.");
+var o=calculate(values,fd);report={product:item.title,slug:slug,created_at:new Date().toISOString(),project:String(fd.get("project")||"").slice(0,120),inputs:values,output:o};
+addResult(o);document.getElementById("save").disabled=false;
+}catch(e){res.replaceChildren(el("p","",String(e.message||e)));}});
+document.getElementById("reset").addEventListener("click",setup);
+document.getElementById("save").addEventListener("click",function(){if(!report)return;var b=new Blob([JSON.stringify(report,null,2)],{type:"application/json;charset=utf-8"}),u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download="zomorod-"+slug+"-report.json";a.click();setTimeout(function(){URL.revokeObjectURL(u);},1000);});
+setup();
+}());
+</script></body></html>
