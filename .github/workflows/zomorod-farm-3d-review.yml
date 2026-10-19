@@ -126,3 +126,5 @@ jobs:
             ssh -T -F "$d/config" host "test ! -L '$stage' && rm -f '$stage/old.js' '$stage/new.js' '$stage/old.html' '$stage/new.html' && rmdir '$stage'" || true
           fi
           rm -rf "$d"
+
+# River Pulse V4 review: preserve production while testing enhanced gameplay.
