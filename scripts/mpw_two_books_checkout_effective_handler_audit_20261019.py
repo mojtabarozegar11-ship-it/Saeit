@@ -68,3 +68,27 @@ if checkout_ast:
     first=source.splitlines()[checkout_ast.lineno-1:min(checkout_ast.end_lineno,checkout_ast.lineno+19)]
     first=[("[REDACTED]" if any(b in x.lower() for b in blocked) else x[:180]) for x in first]
     print("MPW_ACTIVE_CHECKOUT_DISPATCH_FIRST_LINES="+json.dumps(first,ensure_ascii=False))
+
+
+from mpw_commerce.product_checkout_page import product_checkout_page
+from django.test import RequestFactory
+from types import SimpleNamespace
+product_module=ast.parse((app/"mpw_commerce/product_checkout_page.py").read_text("utf8","replace"))
+product_view=next(n for n in product_module.body if isinstance(n,ast.FunctionDef) and n.name=="product_checkout_page")
+mutable_call_names={"create","bulk_create","update","delete","save","get_or_create","update_or_create","send","post","transfer"}
+unsafe=[ast.unparse(call.func).split(".")[-1] for call in ast.walk(product_view) if isinstance(call,ast.Call) and ast.unparse(call.func).split(".")[-1] in mutable_call_names]
+if unsafe:raise RuntimeError("Product page is not proven read-only: "+str(sorted(set(unsafe))))
+for pk in (72,225):
+    rq=RequestFactory().get(f"/store/product/{pk}/checkout/",secure=True,HTTP_HOST="mojplaywin.com")
+    rq.user=SimpleNamespace(is_authenticated=True,is_active=True,pk=-1000)
+    try:
+        response=product_checkout_page(rq,pk)
+        payload=response.content.decode("utf8","replace")
+        print("MPW_BOOK_FAKE_SIGNED_IN_RENDER="+json.dumps({"product":pk,
+            "http_status":response.status_code,"html_rendered":len(payload)>500,
+            "contains_product_title":("Chess" in payload if pk==72 else "Taniya" in payload),
+            "read_only":True,"real_customer_authenticated":False,
+            "order_or_payment_created":False}))
+    except Exception as exc:
+        print("MPW_BOOK_FAKE_SIGNED_IN_RENDER="+json.dumps({"product":pk,
+            "error_type":type(exc).__name__,"read_only":True}))
