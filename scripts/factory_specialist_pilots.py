@@ -50,7 +50,7 @@ def toolchain(manifest):
             or root.parent != path.parent / "versions"):
         raise RuntimeError("PILOT_TOOLCHAIN_ROOT_NOT_VERSION_PINNED")
     python = root / "venv" / "bin" / "python"
-    if Path(item.get("python", "")) != python or python.is_symlink() or not python.is_file():
+    if Path(item.get("python", "")) != python or not python.is_file():
         raise RuntimeError("PILOT_TOOLCHAIN_PYTHON_INVALID")
     if not (root / "proof.json").is_file():
         raise RuntimeError("PILOT_TOOLCHAIN_LOCAL_PROOF_MISSING")

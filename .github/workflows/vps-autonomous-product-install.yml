@@ -28,6 +28,8 @@ on:
       - "tests/test_factory_recipe_designer.py"
       - "scripts/factory_product_maker.py"
       - "scripts/factory_vps_product_cycle.py"
+      - "scripts/factory_specialist_pilots.py"
+      - "tests/test_factory_specialist_pilots.py"
       - "scripts/factory_production_warehouse.py"
       - "deploy/install_autonomous_factory_products.sh"
       - "tests/test_factory_measured_qa.py"

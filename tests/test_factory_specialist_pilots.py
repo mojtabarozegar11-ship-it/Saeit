@@ -39,6 +39,17 @@ class SpecialistPilotTests(unittest.TestCase):
             run.assert_not_called()
         self.assertFalse(list((self.output / "family-pilots").glob("*/technical-receipt.json")))
 
+    def test_verified_venv_python_symlink_is_allowed(self):
+        # Standard venv/bin/python is commonly a symlink to its interpreter.
+        local_interpreter = self.root / "trusted-interpreter"
+        local_interpreter.write_bytes(b"trusted-binary")
+        link = self.version / "venv" / "bin" / "python"
+        link.unlink()
+        link.symlink_to(local_interpreter)
+        version, executable = pilots.toolchain(self.manifest)
+        self.assertEqual(version, self.version)
+        self.assertEqual(executable, link)
+
     def test_manifest_cannot_run_unpinned_python(self):
         data = json.loads(self.manifest.read_text())
         data["python"] = "/tmp/untrusted-python"
