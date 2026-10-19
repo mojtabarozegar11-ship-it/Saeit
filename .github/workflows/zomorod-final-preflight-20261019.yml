@@ -1,0 +1,122 @@
+name: Zomorod final remaining fixes preflight public and private flags
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-final-preflight-20261019.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare verified VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-glass-headers-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo PINNED_HOST_AND_RELAY_VERIFIED=yes
+      - name: Inspect exact production targets without leaking secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/zm-glass-headers-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import re,json
+          root=Path('/home/zomorod2/public_html')
+          for part in ['index.html','research/index.html','agriculture/index.html','about/index.html','.htaccess','store/index.php']:
+              p=root/part;s=p.read_text(encoding='utf-8',errors='replace')
+              data={'file':part,'size':len(s),'p0p3':s.count('zm-priority-p0p3-20261019'),'final':s.count('zm-p0p3-final-a11y-20261019')}
+              if part=='index.html':
+                  data.update(img_tags=len(re.findall(r'<img\b',s)),img_loading_lazy=len(re.findall(r'<img[^>]*loading=[\x22\x27]lazy',s,re.I)),img_decoding_async=len(re.findall(r'<img[^>]*decoding=[\x22\x27]async',s,re.I)),img_class_examples=re.findall(r'<img\b[^>]{0,420}>',s)[:4])
+              if part in ['research/index.html','agriculture/index.html']:
+                  data['nav_identity_header']=re.findall(r'<header[^>]*class=[\x22\x27]zm-v7-header[^>]*>',s)[:2]
+                  data['primary_footer']=re.findall(r'<footer[^>]*>',s)[:4]
+                  data['parent_of_identity']=s[max(0,s.find('class="zm-v7-identity"')-320):s.find('class="zm-v7-identity"')+190]
+                  data['markup_head_before']=s[s.find('<body'):s.find('<body')+1200]
+              if part=='store/index.php':
+                  data['contains_payment_gate_terms']=any(x in s.lower() for x in ['bank shahr','بانک شهر','payment','checkout'])
+                  data['payment_live_flags']=re.findall(r'(?:PAYMENT|GATEWAY|BANK|MERCHANT)[A-Z_]*\s*=\s*(?:false|true|0|1)',s,re.I)[:8]
+              if part=='.htaccess':data['last_config_lines']=s.splitlines()[-14:]
+              print('PREFLIGHT_TARGET='+json.dumps(data,ensure_ascii=False),flush=True)
+          for p in [root/'store'/'payments.php',root/'store'/'index.php',root/'business'/'index.php']:
+              print('PROTECTED_APP_FILE='+json.dumps({'path':str(p.relative_to(root)),'exists':p.is_file()}))
+          private=root.parent/'.private'
+          print('PRIVATE_COMMERCE_FLAGS='+json.dumps({'store_private_exists':(private/'zomorod-business/site_store.php').exists(),'billing_config_present':any((private/x).is_file() for x in ['zomorod-business/payment.php','zomorod-business/gateway.php','zomorod-business/bank_config.php'])}))
+          PY
+      - name: Check public headers and template DOM ancestry with chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          cat > audit.cjs <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+           const b=await chromium.launch({headless:true,args:['--no-sandbox']});
+           for(const path of ['/','/about/','/research/','/agriculture/','/store/','/business/','/tala/']){
+             const context=await b.newContext({viewport:{width:390,height:900}});
+             const p=await context.newPage();const r=await p.goto('https://zomorodmelal.ir'+path,{waitUntil:'domcontentloaded',timeout:40000});
+             const v=await p.evaluate(()=>{
+               const q=s=>[...document.querySelectorAll(s)];
+               const anc=e=>{const a=[];while(e&&a.length<8){a.push([e.tagName,e.className?.toString()?.slice(0,80)||'',e.getAttribute?.('role'),e.getAttribute?.('aria-label')]);e=e.parentElement}return a};
+               const imgs=q('img'),above=imgs.filter(x=>x.getBoundingClientRect().top<1200);
+               return {heads:q('.zm-v7-header').map(x=>({role:x.getAttribute('role'),parent:x.parentElement?.tagName})),identity:q('.zm-v7-identity').slice(0,1).map(anc),footer:q('footer').slice(0,2).map(anc),hasMain:!!document.querySelector('main'),imgs:imgs.length,above:above.length,lazy:imgs.filter(x=>x.loading==='lazy').length,rootRows:q('.orbit-shelf').length,rootCards:q('.topic-card').length};
+             });
+             console.log('PUBLIC_FINAL_BASELINE='+JSON.stringify({path,status:r.status(),hsts:r.headers()['strict-transport-security']||null,csp:r.headers()['content-security-policy']||null,cspReport:r.headers()['content-security-policy-report-only']||null,xFrame:r.headers()['x-frame-options']||null,...v}));
+             await context.close();
+           }
+           await b.close();
+          })().catch(e=>{console.error(e.stack);process.exit(1)})
+          JS
+          node audit.cjs
+      - name: Clear credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zm-glass-headers-ssh"
