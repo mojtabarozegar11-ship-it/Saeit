@@ -1,0 +1,29 @@
+name: MojPlayWin public store response consistency audit
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-store-response-consistency-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Sample storefront response variants without changes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request, hashlib, json, time
+          from collections import Counter
+          samples=[]
+          for i in range(12):
+              url="https://mojplaywin.com/store/?store_consistency="+str(time.time_ns())+"-"+str(i)
+              req=urllib.request.Request(url,headers={"Cache-Control":"no-cache","Pragma":"no-cache","User-Agent":"MPWStoreConsistencyAudit/1.0"})
+              with urllib.request.urlopen(req,timeout=18) as response:
+                  data=response.read(950000)
+                  t=data.decode("utf8","replace")
+                  headers={k:v for k,v in response.headers.items() if k.lower() in ("server","age","via","cache-control","x-cache","cf-cache-status","vary","etag","x-litespeed-cache")}
+                  samples.append({"i":i,"http":response.status,"length":len(data),"sha":hashlib.sha256(data).hexdigest()[:12],"has_chess":'mpw-sale-book72' in t,"has_buyer_details":'id="mpw-book-buyer-details"' in t,"has_checkout_link":'href="/store/product/72/checkout/"' in t,"stale_payment_note":"Payment is not open for these books yet." in t,"headers":headers})
+          print("MPW_STORE_VARIANTS="+json.dumps(samples))
+          print("MPW_STORE_VARIANT_COUNTS="+json.dumps(dict(Counter(str((r["length"],r["has_buyer_details"],r["has_checkout_link"])) for r in samples))))
+          PY
