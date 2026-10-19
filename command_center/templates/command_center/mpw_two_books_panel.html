@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>مدیریت فروش دو کتاب | MojPlayWin</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101b2a;color:#f0f5ff;font:16px/1.8 system-ui,Tahoma,sans-serif}
+main{max-width:1080px;padding:32px 17px;margin:auto}a{color:#badfff}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:15px}
+.card{padding:20px;border:1px solid #445872;border-radius:18px;background:#1c3049}
+h1{font-size:1.7rem}h2{font-size:1.2rem;margin:0 0 8px}.value{font-size:1.55rem;font-weight:700}
+.ok{color:#9ddcba}.pending{color:#ffd79a}ul{margin:0;padding-right:20px}
+small{color:#c3d1e5}code{overflow-wrap:anywhere}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #3a526f;padding:7px;text-align:right}
+</style>
+</head>
+<body><main>
+<p><a href="/staff/command-center/">بازگشت به پنل مدیریت</a></p>
+<h1>وضعیت واقعی فروش و تحویل دو کتاب</h1>
+<p>این صفحه فقط گزارش می‌دهد و هیچ پرداختی را فعال یا تأیید نمی‌کند. اعداد مستقیماً از پایگاه داده فعال Django استخراج می‌شوند.</p>
+<div class="grid">
+<div class="card"><h2>کل سفارش‌های مرتبط</h2><div class="value">{{ orders_total }}</div></div>
+<div class="card"><h2>درخواست‌های پرداخت</h2><div class="value">{{ intents_total }}</div></div>
+<div class="card"><h2>فاکتورهای موتور Native</h2><div class="value">{{ native_invoices_count|default_if_none:"نامشخص" }}</div></div>
+<div class="card"><h2>تسویه و تحویل آزمون‌شده</h2><div class="value pending">هنوز تأیید نشده</div></div>
+</div>
+<h2>فهرست دو کتاب</h2>
+<div class="grid">
+{% for book in books %}
+<section class="card">
+<h2>{{ book.name }}</h2>
+<p>شناسه محصول: {{ book.id }} {% if book.exists %} | قیمت: {{ book.price }} {{ book.currency }}{% endif %}</p>
+<p>وضعیت فروش: {% if book.sale_ready %}<span class="ok">شرایط نرم‌افزاری برقرار است؛ آزمون واقعی پرداخت هنوز لازم است</span>{% else %}<span class="pending">برای پرداخت واقعی آماده نیست</span>{% endif %}</p>
+<p>سفارش: {{ book.buyer_orders }} | سفارش با وضعیت پرداخت‌شده: {{ book.paid_orders }}</p>
+<p>مدارک مالکیت: {% if book.has_recorded_owner %}ثبت شده{% else %}ثبت نشده{% endif %} | محتوای دانش منتشرشده: {% if book.knowledge_published %}بله{% else %}خیر{% endif %}</p>
+{% if book.exists %}
+<ul>
+{% for name,ok in book.permissions.items %}
+<li><code dir="ltr">{{ name }}</code> — {% if ok %}تأیید در داده‌ها{% else %}تکمیل نشده{% endif %}</li>
+{% endfor %}
+</ul>
+{% else %}<p>رکورد محصول یافت نشد.</p>{% endif %}
+</section>
+{% endfor %}
+</div>
+<h2>کلیدهای زیرساخت فروش و تسویه</h2>
+<div class="card"><table><thead><tr><th>تنظیم</th><th>وضعیت</th></tr></thead><tbody>
+{% for key,value in flags.items %}
+<tr><td><code dir="ltr">{{ key }}</code></td><td>{% if value %}<span class="ok">فعال</span>{% else %}<span class="pending">غیرفعال</span>{% endif %}</td></tr>
+{% endfor %}</tbody></table></div>
+<p><small>آمار دانلود تأییدشده تنها پس از اتصال رسیدهای معتبر تحویل قابل اعلام است. وجود فایل PDF به معنی وصول وجه یا تحویل موفق به مشتری نیست. کیف‌پول، فایل‌های خصوصی و اطلاعات مشتری در این صفحه نمایش داده نمی‌شوند.</small></p>
+</main></body></html>
