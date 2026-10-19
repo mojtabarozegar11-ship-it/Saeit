@@ -6,6 +6,7 @@ on:
       - .github/workflows/mpw-vps-warehouse-courier.yml
       - scripts/mpw_vps_warehouse_courier.py
       - scripts/mpw_three_factory_orders.py
+      - scripts/mpw_courier_catalog_drafts.py
       - tests/test_mpw_courier_upgrade.py
       - tests/test_mpw_vps_warehouse_courier.py
   schedule:
@@ -30,7 +31,7 @@ jobs:
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_vps_warehouse_courier tests.test_mpw_courier_upgrade -v
-          python3 -m py_compile scripts/mpw_vps_warehouse_courier.py scripts/mpw_three_factory_orders.py
+          python3 -m py_compile scripts/mpw_vps_warehouse_courier.py scripts/mpw_three_factory_orders.py scripts/mpw_courier_catalog_drafts.py
           python3 - <<'PY'
           from pathlib import Path
           src=Path('scripts/mpw_vps_warehouse_courier.py').read_text()
@@ -263,6 +264,19 @@ jobs:
               print("MPW_NATIVE_FACTORY_ORDERS_ACCEPTED=3")
               print("MPW_NATIVE_FACTORY_ORDER_IDS="+json.dumps(ids))
           PY
+      - name: Materialize MojPlayWin-only verified private inventory as inactive native store drafts
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-store-preflight"
+          timeout 45s scp -q -F "$d/config" scripts/mpw_courier_catalog_drafts.py saeit-cpanel:.private_mojplaywin_main_agents/evolution_runtime_20261018/warehouse_courier/catalog_drafts.py
+          timeout 110s ssh -T -F "$d/config" saeit-cpanel \
+            'set -e; chmod 600 "$HOME/.private_mojplaywin_main_agents/evolution_runtime_20261018/warehouse_courier/catalog_drafts.py"; \
+            cd "$HOME/Saeit-staging"; \
+            "$HOME/virtualenv/Saeit-staging/3.11/bin/python" \
+              "$HOME/.private_mojplaywin_main_agents/evolution_runtime_20261018/warehouse_courier/catalog_drafts.py" \
+              --inbox "$HOME/.private_mojplaywin_main_agents/evolution_runtime_20261018/warehouse_courier" \
+              --app "$HOME/Saeit-staging" --document-root "$HOME/mojplaywin.com" --apply'
       - name: Independently verify private recipient and first stage return count
         shell: bash
         run: |
