@@ -534,8 +534,18 @@ def triage_factory_stage1(root=VPS):
             }
             result = dest/(identity+".json")
             if result.exists() or result.is_symlink():
-                require(result.is_file() and not result.is_symlink()
-                        and json_file(result,100_000) == details, "STAGE1_WORK_ORDER_DRIFT")
+                require(result.is_file() and not result.is_symlink(), "STAGE1_WORK_ORDER_UNSAFE")
+                original_work = json_file(result,100_000)
+                require(original_work.get("schema") == RETURN_SCHEMA
+                        and original_work.get("tenant") == TENANT
+                        and original_work.get("product_id") == product
+                        and original_work.get("version") == version
+                        and original_work.get("artifact_sha256") == row["artifact_sha256"]
+                        and original_work.get("commercial_approval_claimed") is not True
+                        and original_work.get("production_rebuild_executed") is False,
+                        "STAGE1_WORK_ORDER_CONFLICT")
+                # Preserve the original work item and its audit history across upgrades.
+                details = original_work
             else:
                 atomic(result,json_blob(details))
             items.append(details)
