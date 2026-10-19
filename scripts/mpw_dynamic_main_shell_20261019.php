@@ -152,6 +152,14 @@ function transformMain(string $body, string $path, string $newHeader, string $ne
         $body=takeOne($body,'~<title\b[^>]*>[\s\S]*?</title\s*>~i',
             '<title>'.$titleMap[$path].'</title>','main-only document title',true);
     }
+    // The old shared Education template still emits a Zomorodmelal
+    // meta description on the MojPlayWin host; keep course content intact.
+    if ($path==='/education/') {
+        $body=takeOne($body,
+            '~<meta\b(?=[^>]*\bname=["\']description["\'])[^>]*>~i',
+            '<meta name="description" content="Explore MojPlayWin education, practical skills, applied technology, research and learning resources.">',
+            'Education-specific company metadata',true);
+    }
     $ogTitle=(preg_match('~<title\b[^>]*>([\s\S]*?)</title\s*>~i',$body,$titleMatch)
         ? html_entity_decode(strip_tags($titleMatch[1]),ENT_QUOTES|ENT_HTML5,'UTF-8')
         : 'MojPlayWin');
