@@ -122,6 +122,48 @@ jobs:
               print("ROOT_DJANGO_CLIENT_HEALTH_ERROR="+type(exc).__name__)
           PY
           REMOTE
+      - name: Inspect own cPanel Passenger processes, capacity and sanitized error counters
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,subprocess,re
+          from pathlib import Path
+          h=Path.home()
+          stat=os.statvfs(h)
+          print("ROOT_HOME_FREE_MIB="+str(stat.f_bavail*stat.f_frsize//1048576))
+          print("ROOT_HOME_INODES_AVAILABLE="+str(stat.f_favail))
+          cmd=subprocess.run(["ps","-u",str(os.getuid()),"-o","comm="],
+                             capture_output=True,text=True,timeout=8)
+          # Some versions of ps accept user names but not numeric IDs.
+          if cmd.returncode==0:
+              names=cmd.stdout.splitlines()
+              for key in ("lswsgi","passenger","python"):
+                  print("ROOT_OWN_PROCESS_"+key.upper()+"="+str(sum(key in x.lower() for x in names)))
+          roots=[h/"Saeit"/"stderr.log",h/"public_html"/"error_log"]
+          if (h/"logs").is_dir():
+              roots += list((h/"logs").glob("*zomorod*"))[:12]
+              roots += list((h/"logs").glob("*error*"))[:6]
+          patterns={"startup":r"(?i)passenger|lswsgi|spawn|application startup",
+                    "resource":r"(?i)resource temporarily unavailable|memory|lve|quota|limit reached|killed",
+                    "upstream":r"(?i)proxy|503|timeout|connection refused"}
+          for path in roots:
+              if not path.is_file() or path.is_symlink():continue
+              try:
+                  with path.open("rb") as stream:
+                      stream.seek(max(0,path.stat().st_size-131072))
+                      chunk=stream.read().decode("utf-8","replace")
+                  label="app" if path.name=="stderr.log" else "host"
+                  print("ROOT_ERRORLOG_"+label+"_PRESENT=yes")
+                  for group,pattern in patterns.items():
+                      print("ROOT_ERRORLOG_"+label+"_"+group.upper()+"_COUNT="+str(len(re.findall(pattern,chunk))))
+              except (OSError,ValueError):
+                  print("ROOT_ERRORLOG_READ=unavailable")
+          PY
+          REMOTE
       - name: Probe exact public Django health route with sanitized response fields
         shell: bash
         run: |
