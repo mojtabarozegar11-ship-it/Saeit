@@ -120,7 +120,7 @@ class Factory12StageTests(unittest.TestCase):
         for i in range(1,6):m.review(self.root,self.wid,self.review_file(i))
         ref=self.review_file(6,reviewer="reviewer-02")
         contents=json.loads(ref.read_text())
-        contents["checks"][0]["status"]="failed"
+        contents["notes"]="Unauthorized unsigned alteration"
         ref.write_text(json.dumps(contents))
         with self.assertRaisesRegex(RuntimeError,"REVIEWER_SIGNATURE_MISMATCH"):
             m.review(self.root,self.wid,ref)
