@@ -140,7 +140,10 @@ class BridgeTests(unittest.TestCase):
             sent.append(recipe)
             return {"recipe": recipe, "status": "received_private"}
 
+        # This test checks rotation only; its placeholder directories have no
+        # manifests. Product integrity itself is tested separately.
         with mock.patch.object(sender, "host_ssh_options", return_value=["verified"]), \
+             mock.patch.object(sender, "verify_source", return_value="verified-sha"), \
              mock.patch.object(sender, "deliver", side_effect=fake_delivery):
             a = sender.sync(source, "unused", "unused", limit=3)
             b = sender.sync(source, "unused", "unused", limit=3)
@@ -163,7 +166,10 @@ class BridgeTests(unittest.TestCase):
                 raise RuntimeError("temporary SSH failure")
             return {"recipe": recipe, "status": "received_private"}
 
+        # The fault-injection test isolates the SSH receipt boundary from
+        # product QA, which is covered by real-SHA regression tests.
         with mock.patch.object(sender, "host_ssh_options", return_value=["verified"]), \
+             mock.patch.object(sender, "verify_source", return_value="verified-sha"), \
              mock.patch.object(sender, "deliver", side_effect=fail_second):
             with self.assertRaisesRegex(RuntimeError, "temporary SSH failure"):
                 sender.sync(source, "unused", "unused", limit=3)
