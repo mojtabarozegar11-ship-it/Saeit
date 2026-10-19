@@ -68,9 +68,15 @@ jobs:
           # Remove absolute/escaping links; retain the host's own glibc/loader.
           python3 - "$bundle/runtime/prefix" <<'PY'
           from pathlib import Path
-          import sys
+          import os,sys
           root=Path(sys.argv[1]).resolve()
-          for path in root.rglob('*'):
+          links=[p for p in root.rglob('*') if p.is_symlink()]
+          for path in links:
+              target=os.readlink(path)
+              if target.startswith('/'):
+                  path.unlink()
+                  path.symlink_to(os.path.relpath(root/target.lstrip('/'),path.parent))
+          for path in links:
               if path.is_symlink():
                   try: path.resolve().relative_to(root)
                   except (ValueError,RuntimeError): path.unlink()

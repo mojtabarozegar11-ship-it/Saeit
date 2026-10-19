@@ -43,19 +43,22 @@ jobs:
                   proof=version/'proof.json'
                   if proof.is_file():
                       report=json.loads(proof.read_text())
-                      print('PROOF='+json.dumps(report['checks'],sort_keys=True))
+                      print('PROOF='+json.dumps({k:v['passed'] for k,v in report['checks'].items()},sort_keys=True))
                   piplog=version/'pip-install.log'
                   if piplog.is_file():
                       print('PIP_LOG_BYTES='+str(piplog.stat().st_size))
-          version=root/'build-toolchain/versions/f7b1913a9c01411393cf28316cd7bb34f8a7165f'
-          prefix=version/'prefix'
-          for relative in ('usr/lib/libreoffice/program/fundamentalrc','usr/lib/libreoffice/program/bootstraprc','usr/lib/libreoffice/program/unorc','usr/lib/libreoffice/program/sofficerc'):
-              p=prefix/relative
-              if p.is_file(): print('OFFICE_CONFIG '+relative+' '+p.read_text()[:5000])
-          for relative in ('usr/lib/libreoffice/share','usr/share/libreoffice','etc/libreoffice','usr/lib/libreoffice/program/services'):
-              p=prefix/relative
-              if p.is_dir(): print('OFFICE_DIRECTORY '+relative+' '+str([str(x.relative_to(prefix)) for x in p.iterdir()]))
-          services=prefix/'usr/lib/libreoffice/program/services/services.rdb'
-          if services.is_file(): print('SERVICE_REGISTRY_HEAD='+services.read_text(errors='replace')[:2500])
+          manifest=root/'build-toolchain/toolchain-manifest.json'
+          if manifest.is_file():
+              report=json.loads(manifest.read_text())
+              assert len(report['checks'])==6 and all(x['passed'] for x in report['checks'].values())
+              print('VERIFIED_PACKAGES='+json.dumps(report['packages'],sort_keys=True))
+              print('LOCAL_MODEL_EVIDENCE='+json.dumps(report['checks']['local_language_model']['evidence'],sort_keys=True))
+          factory=Path.home()/'factory-runtime'
+          production=factory/'private/autonomous-product-cycle/production-state.json'
+          if production.is_file():
+              state=json.loads(production.read_text())
+              print('FACTORY_REGISTERED_RECIPE_COUNT='+str(state.get('registered_recipe_count')))
+              print('PRODUCTION_STATE_MTIME='+str(production.stat().st_mtime))
+          print('EXISTING_COMFYUI_CPU_ENV='+str((Path.home()/'comfyui-isolated/env-cpu/bin/python').is_file()))
           print('CURRENT_MANIFEST='+str((root/'build-toolchain/toolchain-manifest.json').is_file()))
           PY
