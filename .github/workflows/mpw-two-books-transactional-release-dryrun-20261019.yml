@@ -1,0 +1,126 @@
+name: MojPlayWin 2 books reversible full checkout transaction simulation
+on:
+  push:
+    branches: [mpw-two-books-unified-release-20261019]
+    paths: [".github/workflows/mpw-two-books-transactional-release-dryrun-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Simulate all sales approvals in rollback-only Django transaction
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 135s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,pathlib,copy,json,decimal
+          r=pathlib.Path('/home/zomorod2/Saeit-staging')
+          os.chdir(r);sys.path.insert(0,str(r));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.conf import settings
+          from django.db import transaction
+          from django.test import RequestFactory,override_settings
+          from core.models import Product,KnowledgeArticle,Order,OrderItem
+          from mpw_commerce.buyer_orders import _eligible
+          from mpw_commerce.product_checkout_page import approved_for_checkout
+          from mpw_commerce.checkout_views import _ready
+          from mpw_commerce.policy import order_snapshot
+          from mpw_native_checkout.wallet_ownership import proven_assets
+          flags=['MPW_COMMERCE_RELEASE_READY','MPW_COMMERCE_CUSTOMER_HTTP_ENABLED',
+              'MPW_COMMERCE_INVOICING_ENABLED','MPW_COMMERCE_BUYER_SIGNATURE_ENABLED',
+              'MPW_COMMERCE_SETTLEMENT_ENABLED','MPW_COMMERCE_REAL_RPC_ENABLED',
+              'MPW_COMMERCE_AUTORECONCILE_ENABLED','MPW_COMMERCE_DOWNLOADS_ENABLED']
+          assert all(getattr(settings,k,None) is False for k in flags)
+          assert proven_assets().get('ETH') and proven_assets().get('TRX')
+          rf=RequestFactory()
+          report=[]
+          with transaction.atomic():
+            for pk in (72,225):
+              p=Product.objects.select_for_update().select_related('knowledge_article','owner').get(pk=pk)
+              assert not p.active and p.owner_id and p.product_type=='digital_book' and p.currency=='USD'
+              assert p.price==decimal.Decimal('7.50' if pk==72 else '4.00')
+              m=copy.deepcopy(p.metadata)
+              assert m.get('asset_verified') is True
+              sale=m.get('mpw_commerce')
+              assert isinstance(sale,dict) and sale.get('private_file') and sale.get('fulfillment')=='digital'
+              article=p.knowledge_article
+              if pk==225:
+                article=KnowledgeArticle.objects.create(
+                  title='Taniya and the Little Baker Worms',
+                  slug='mpw-taniya-little-baker-worms-commerce-20261019',
+                  content='Illustrated children’s storybook. Original 40-page English PDF. This listing describes the digital purchase edition of Taniya and the Little Baker Worms.',
+                  version=1,published=True)
+                p.knowledge_article=article
+              else:
+                article.published=True;article.save(update_fields=['published'])
+              m.update({'quality_approved':True,'license_verified':True,'factory_publication_permission':True,
+                        'asset_verified':True,'checkout_enabled':True,'payment_live':True})
+              sale['enabled']=True
+              m['mpw_commerce']=sale
+              p.metadata=m;p.active=True;p.save(update_fields=['metadata','active','knowledge_article'])
+              with override_settings(**{k:True for k in flags}):
+                req=rf.get('/store/product/'+str(pk)+'/checkout/',secure=True,HTTP_HOST='mojplaywin.com')
+                req.user=p.owner
+                order_allowed=_eligible(p)
+                page_allowed=approved_for_checkout(req,p)
+                request_ready=_ready(req)
+                created=Order.objects.create(customer=p.owner,status='pending',total=p.price,currency='USD')
+                OrderItem.objects.create(order=created,product=p,quantity=1,unit_price=p.price,currency='USD')
+                total,_=order_snapshot(created)
+                report.append({'id':pk,'eligible':order_allowed,'page_open':page_allowed,
+                  'customer_http_ready':request_ready,'order_amount_correct':total==p.price})
+            transaction.set_rollback(True)
+          print('MPW_RELEASE_DRY_RUN='+json.dumps(report))
+          assert len(report)==2 and all(all(v is True for k,v in item.items() if k!='id') for item in report)
+          assert Product.objects.get(pk=72).active is False and Product.objects.get(pk=225).active is False
+          print('MPW_RELEASE_DRY_RUN=PASS;all_database_changes_rolled_back=true;public_payments_remain_disabled=true')
+          PY
+          BASH
