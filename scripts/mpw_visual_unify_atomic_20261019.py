@@ -132,7 +132,7 @@ def php_patch(doc):
     if "standard footer replacement" not in doc or "mpw-contact-safe-business-20261019" not in doc:
         fail("Previously verified dynamic PHP features missing")
     result=doc.replace(PHP_ANCHOR,PHP_ADD+PHP_ANCHOR,1)
-    if result.count(MARK)!=1:fail("Unexpected PHP marker count")
+    if result.count(MARK)!=3:fail("Unexpected PHP marker count")
     return result
 def planned():
     validate_paths()
