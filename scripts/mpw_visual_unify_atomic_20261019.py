@@ -136,11 +136,20 @@ def php_patch(doc):
     if result.count(MARK)!=3:fail("Unexpected PHP marker count")
     return result
 def planned():
+    import subprocess
     validate_paths()
     out=[]
     for p in paths():
         before=p.read_bytes()
         new=(php_patch if p==PHP else static_patch)(before.decode("utf-8")).encode("utf-8")
+        if p==PHP:
+            fd,tmp=tempfile.mkstemp(suffix=".php",dir=HOME,prefix=".mpw-visual-lint-")
+            try:
+                with os.fdopen(fd,"wb") as f:f.write(new)
+                check=subprocess.run(["php","-l",tmp],capture_output=True,text=True,timeout=20)
+                if check.returncode!=0:fail("Refuse PHP syntax error: "+check.stderr[-900:])
+            finally:
+                if os.path.exists(tmp):os.unlink(tmp)
         out.append((p,before,new,stat.S_IMODE(p.stat().st_mode)))
     if len(out)!=20:fail("Expected exactly twenty main-domain source files")
     return out
