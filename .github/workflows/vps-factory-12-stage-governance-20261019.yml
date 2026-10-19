@@ -1,0 +1,121 @@
+name: VPS factory twelve-stage QA governance and stock admission
+on:
+  pull_request:
+    paths:
+      - "scripts/factory_12_stage_governance.py"
+      - "tests/test_factory_12_stage_governance.py"
+      - "deploy/install_factory_12_stage_governance.sh"
+      - ".github/workflows/vps-factory-12-stage-governance-20261019.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_12_stage_governance.py"
+      - "tests/test_factory_12_stage_governance.py"
+      - "deploy/install_factory_12_stage_governance.sh"
+      - ".github/workflows/vps-factory-12-stage-governance-20261019.yml"
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-factory-12-stage-governance
+  cancel-in-progress: false
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify 12-stage passports, independent specialists, real evidence and stock restrictions
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_12_stage_governance.sh
+          python3 -m py_compile scripts/factory_12_stage_governance.py
+          python3 -m unittest discover -s tests -p 'test_factory_12_stage_governance.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_continuous_production_orders.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_production_warehouse.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path("scripts/factory_12_stage_governance.py").read_text()+Path("deploy/install_factory_12_stage_governance.sh").read_text()
+          for unsafe in ("import requests","import urllib.request","requests.post(","urllib.request.urlopen(","os.system("):
+              assert unsafe not in code, unsafe
+          assert "automated human attestations" in code
+          assert "FINAL_WAREHOUSE_TEN_GATES_NOT_PASSED" in code
+          print("FACTORY_12_STAGE_NO_NETWORK_OR_FAKE_QA=PASS")
+          PY
+  release:
+    needs: tests
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-factory-12-stage-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Deploy the independent 12-stage QA sidecar only on VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-minute"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh_vps() {
+            ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          ssh_vps 'test "$(id -un)" = githubops && test -s "$HOME/factory-runtime/private/autonomous-product-cycle/production-warehouse/stock-register.json" && test -d "$HOME/factory-runtime/private/autonomous-product-cycle/production-instructions/orders" && crontab -l | grep -q SAEIT_FACTORY_EVERY_MINUTE_V1'
+          target="/home/githubops/factory-runtime/operations/.lifecycle-staging-$GITHUB_RUN_ID"
+          ssh_vps "umask 077; test ! -e '$target'; mkdir -m 700 '$target'"
+          for file in scripts/factory_12_stage_governance.py deploy/install_factory_12_stage_governance.sh; do
+            short="$(basename "$file")"
+            cat "$file" | ssh_vps "umask 077; cat > '$target/$short'"
+            checksum="$(sha256sum "$file" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$target/$short' | awk '{print \$1}')\" = '$checksum'"
+          done
+          ssh_vps "bash -n '$target/install_factory_12_stage_governance.sh' && bash '$target/install_factory_12_stage_governance.sh' '$target/factory_12_stage_governance.py'"
+          echo FACTORY_LIFECYCLE_INSTALL_SUCCESS=PASS
+      - name: Read-only final verification of the 12-stage VPS dashboard and both independent minute cron entries
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-minute"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh_vps() {
+            ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          ssh_vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import json,subprocess
+          base=Path.home()/"factory-runtime"
+          private=base/"private"/"autonomous-product-cycle"
+          doc=json.loads((private/"product-lifecycle"/"dashboard.json").read_text())
+          cron=subprocess.check_output(["crontab","-l"],text=True)
+          assert doc["schema"]=="saeit.factory.lifecycle.v1"
+          assert len(doc["stages"])==12
+          assert doc["instructions_seen"]>=1
+          assert doc["final_commercially_verified_stock"]==0
+          assert doc["site_distribution_enabled"] is False
+          assert doc["manufacturing_order_automation_complete"] is False
+          assert cron.count("SAEIT_FACTORY_EVERY_MINUTE_V1")==1
+          assert cron.count("SAEIT_FACTORY_LIFECYCLE_12_V1")==1
+          assert doc["old_technical_QA_stock_pending_final_review"]>=2
+          print("FACTORY_12_STAGE_VPS_VERIFIED=PASS")
+          print("FACTORY_ACTIVE_WORK_ORDERS="+str(doc["instructions_seen"]))
+          print("FACTORY_LEGACY_TECHNICAL_ONLY_STOCK="+str(doc["old_technical_QA_stock_pending_final_review"]))
+          print("FACTORY_FULLY_APPROVED_FINAL_STOCK="+str(doc["final_commercially_verified_stock"]))
+          print("FACTORY_SITE_TRANSFERS=ZERO")
+          PY
