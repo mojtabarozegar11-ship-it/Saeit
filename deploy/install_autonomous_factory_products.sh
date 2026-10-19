@@ -24,6 +24,7 @@ test -f "$repo/scripts/factory_product_maker.py"
 test -f "$repo/scripts/factory_recipe_designer.py"
 test -f "$repo/scripts/factory_specialist_pilots.py"
 test -f "$repo/scripts/factory_specialist_formats.py"
+test -f "$repo/scripts/factory_research_triage.py"
 test -f "$repo/factory_config/design_opportunities.json"
 test -f "$repo/scripts/factory_autonomous_portfolio.py"
 test -f "$repo/scripts/factory_evidence_quality.py"
@@ -71,7 +72,7 @@ chmod 700 "$stage" "$scripts" "$recipes" "$private"
 
 for f in factory_product_maker.py factory_autonomous_portfolio.py \
          factory_evidence_quality.py factory_first_product_pilot.py factory_vps_product_cycle.py \
-         factory_product_rework.py factory_recipe_designer.py factory_specialist_pilots.py factory_specialist_formats.py; do
+         factory_product_rework.py factory_recipe_designer.py factory_specialist_pilots.py factory_specialist_formats.py factory_research_triage.py; do
   install -m 600 "$repo/scripts/$f" "$scripts/$f"
 done
 install -d -m 700 "$stage/factory_config"
@@ -98,7 +99,7 @@ incoming=""
 
 # Quality gate must exist and compile BEFORE any production cycle or cron change.
 "$python" -B -c 'import ast, pathlib, sys; [ast.parse(pathlib.Path(x).read_text(encoding="utf-8")) for x in sys.argv[1:]]' \
-  "$scripts/factory_recipe_designer.py" "$scripts/factory_evidence_quality.py" "$scripts/factory_autonomous_portfolio.py" "$scripts/factory_vps_product_cycle.py" "$scripts/factory_product_rework.py" "$scripts/factory_specialist_pilots.py" "$scripts/factory_specialist_formats.py"
+  "$scripts/factory_recipe_designer.py" "$scripts/factory_evidence_quality.py" "$scripts/factory_autonomous_portfolio.py" "$scripts/factory_vps_product_cycle.py" "$scripts/factory_product_rework.py" "$scripts/factory_specialist_pilots.py" "$scripts/factory_specialist_formats.py" "$scripts/factory_research_triage.py"
 
 # Product QA is mandatory BEFORE changes to the local scheduler.
 # The cycle discovers the complete catalog and runs each recipe's test_*.py suite.
@@ -123,6 +124,9 @@ exec >> "$ops/autonomous-product-cycle.log" 2>&1
 if ! "$python" "$scripts/factory_specialist_pilots.py" \\
   --out "$private" --manifest "$ops/build-toolchain/toolchain-manifest.json"; then
   echo FACTORY_SPECIALIST_PILOT_NEEDS_REWORK
+fi
+if ! "$python" "$scripts/factory_research_triage.py" --out "$private"; then
+  echo FACTORY_RESEARCH_TRIAGE_NEEDS_REWORK
 fi
 EOF
 chmod 700 "$stage/run-local-cycle.sh"
