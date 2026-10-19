@@ -148,14 +148,6 @@ jobs:
           d="$RUNNER_TEMP/mpw-consolidated-ssh"
           timeout 90s ssh -T -F "$d/config" saeit-cpanel \
             "python3 - install '$GITHUB_RUN_ID'" < scripts/mpw_footer_singleline_atomic_20261019.py
-      - name: Refresh only MojPlayWin Django cached footer template safely
-        id: refresh
-        shell: bash
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/mpw-consolidated-ssh"
-          timeout 45s ssh -T -F "$d/config" saeit-cpanel \
-            "python3 - refresh '$GITHUB_RUN_ID'" < scripts/mpw_footer_singleline_atomic_20261019.py
       - name: Verify every known main-domain page and unchanged protected paths
         id: verify
         shell: bash
@@ -186,7 +178,7 @@ jobs:
               if path in excluded:
                   print('CHILD_ROUTE_UNCHANGED',path,final,flush=True)
                   continue
-              # The 19 root static files are directly changed; the other
+              # The 19 main static pages and exact real homepage are directly changed; the other
               # routes inherit the updated shared template or research footer.
               got=False
               for attempt in range(5):
@@ -202,7 +194,7 @@ jobs:
               verified+=1
           print('MPW_ALL_MAIN_ROUTES_FOOTER_VERIFIED='+str(verified))
           PY
-      - name: Roll back all twenty exact files if any verification fails
+      - name: Roll back all twenty-one exact files if any verification fails
         if: failure() && steps.publish.outcome == 'success'
         shell: bash
         run: |
