@@ -1,0 +1,128 @@
+name: MPW five integrations cPanel main-only deployment preflight
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-five-live-preflight-20261019.yml"]
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency: {group: mpw-five-main-only-release, cancel-in-progress: false}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Compile scoped sources and offline unit checks
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q command_center
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest command_center.tests.test_mpw_private_telemetry -v
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inventory exact active main application without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 100s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import json,hashlib,os,subprocess
+          root=Path("/home/zomorod2/Saeit-staging")
+          site=Path("/home/zomorod2/mojplaywin.com")
+          wsgi=site/"passenger_wsgi.py"
+          expected="APP='/home/zomorod2/Saeit-staging'"
+          assert root.is_dir() and not root.is_symlink()
+          assert wsgi.is_file() and expected in wsgi.read_text("utf8","replace"), "MAIN_RUNTIME_MAPPING_MISMATCH"
+          names=[
+             "manage.py","config/urls.py","config/settings.py","command_center/__init__.py",
+             "command_center/urls.py","command_center/models.py","command_center/mpw_operations.py",
+             "command_center/mpw_public.py","command_center/mpw_workflow.py",
+             "command_center/templatetags/mpw_main.py","command_center/migrations/0001_mpw_record.py",
+             "command_center/templates/command_center/dashboard.html",
+             "core/templates/mojplaywin/site_base.html","core/templates/mojplaywin/store.html",
+             "core/templates/mojplaywin/mpw_managed_blocks.html",
+             "core/templates/mojplaywin/mpw_managed_offers.html",
+             "core/mojplaywin_views.py","core/cryptopay_checkout.py","core/cryptopay_tron_config.py",
+             "core/templates/mojplaywin/checkout.html","core/templates/mojplaywin/payment.html"]
+          data=[]
+          for rel in names:
+              f=root/rel
+              exists=f.is_file() and not f.is_symlink()
+              raw=f.read_bytes() if exists else b""
+              data.append({"file":rel,"exists":exists,"size":len(raw),
+                           "sha256":hashlib.sha256(raw).hexdigest()[:16] if exists else ""})
+          routes=(root/"command_center/urls.py").read_text("utf8","replace") if (root/"command_center/urls.py").is_file() else ""
+          store=(root/"core/templates/mojplaywin/store.html").read_text("utf8","replace") if (root/"core/templates/mojplaywin/store.html").is_file() else ""
+          print("MPW_MAIN_APP_AUDIT="+json.dumps({"wsgi_pin":True,"files":data,
+              "operations_route_present":'mpw-operations/' in routes,
+              "agent_monitor_route_present":'mpw-agents/' in routes,
+              "published_books_marker":'mpw-sale-book72' in store and 'mpw-sale-book225' in store,
+              "main_template_size":len(store),
+              "venv_python":Path("/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python").is_file(),
+              "db_file":(root/"db.sqlite3").is_file(),
+              "private_monitor_present":Path("/home/zomorod2/.private_mojplaywin_main_agents/evolution_runtime_20261018/agent_dashboard_telemetry.json").is_file(),
+              },sort_keys=True))
+          PY
+      - name: Capture non-invasive public main and child site baseline
+        run: |
+          python3 - <<'PY'
+          import urllib.request, urllib.error, json
+          urls=["/","/store/","/admin/login/","/staff/command-center/mpw-operations/",
+                "/staff/command-center/mpw-agents/","/taniya/","/farnaz/","/saman/","/picm/",
+                "/zahra/","/mojtaba.roozegar/"]
+          out={}
+          for p in urls:
+              req=urllib.request.Request("https://mojplaywin.com"+p,headers={"User-Agent":"MPWFivePreflight/1.0","Cache-Control":"no-cache"})
+              try:
+                  with urllib.request.urlopen(req,timeout=15) as a: status=a.status
+              except urllib.error.HTTPError as e: status=e.code
+              except Exception as e: status="network_error"
+              out[p]=status
+          print("MPW_BASELINE="+json.dumps(out,sort_keys=True))
+          if out["/"]!=200 or out["/store/"]!=200: raise RuntimeError("MAIN_SITE_NOT_HEALTHY")
+          PY
+      - name: Remove ephemeral SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mojplaywin-inventory-ssh"
