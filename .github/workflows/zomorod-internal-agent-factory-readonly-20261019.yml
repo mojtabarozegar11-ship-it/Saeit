@@ -125,6 +125,19 @@ jobs:
                   con.execute("PRAGMA query_only=ON")
                   tables={x[0] for x in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
                   print("SITE_PRIVATE_DB_TABLES="+json.dumps(sorted(tables)[:24]))
+                  for special in ("runs","agents"):
+                      if special in tables:
+                          fields=[x[1] for x in con.execute('PRAGMA table_info("'+special+'")')]
+                          print("SITE_PRIVATE_DB_COLUMNS="+special+" "+json.dumps(fields))
+                  if "runs" in tables:
+                      fields={x[1] for x in con.execute('PRAGMA table_info("runs")')}
+                      if {"agent_code","status"}.issubset(fields):
+                          summary=[dict(code=str(code),status=str(status),count=int(n)) for code,status,n in con.execute("SELECT agent_code,status,COUNT(*) FROM runs GROUP BY agent_code,status ORDER BY agent_code,status")]
+                          print("SITE_PRIVATE_PER_AGENT_OUTCOMES="+json.dumps(summary))
+                      for field in ("created_at","ran_at","checked_at","timestamp","created","at","observed_at"):
+                          if field in fields:
+                              print("SITE_PRIVATE_LAST_RUN_TIMESTAMP="+field+" "+str(con.execute('SELECT MAX("'+field+'") FROM runs').fetchone()[0])[:60])
+                              break
                   for t in sorted(tables):
                       if t.startswith("sqlite_") or t not in ("agents","runs","publications","production","products","events","config","tasks"):continue
                       cols={x[1] for x in con.execute('PRAGMA table_info("'+t+'")')}
@@ -148,6 +161,19 @@ jobs:
               print("SITE_LOCAL_FILE_PRESENT="+relative+" "+str(f.is_file()))
           PY
           if command -v crontab >/dev/null 2>&1; then
+            crontab -l 2>/dev/null | python3 -c '
+import re,sys,json
+rows=[s.strip() for s in sys.stdin if s.strip() and not s.lstrip().startswith("#")]
+for i,line in enumerate(rows):
+    if not re.search(r"factory|product|knowledge_agent|company_activity|site_agents|master_agent",line,re.I):continue
+    methods=[k for k in ("php","python","curl","wget","ssh","rsync","scp","manage.py") if k in line]
+    script_names=re.findall(r"[A-Za-z0-9_/-]+\.(?:php|py|sh)(?![A-Za-z0-9])",line)
+    safe_names=[s.rsplit("/",1)[-1] for s in script_names][:8]
+    flags={"VPS_OR_REMOTE_REFERENCE":bool(re.search(r"vps|ssh|rsync|scp|mojplaywin",line,re.I)),
+      "SITE_AGENT_REFERENCE":"site_agents" in line,
+      "LOCAL_FACTORY_REFERENCE":bool(re.search(r"factory|product",line,re.I))}
+    print("SITE_CRON_SAFE_CLASSIFICATION="+json.dumps({"index":i,"methods":methods,"script_basenames":safe_names,**flags}))
+' || true
             cron="$(crontab -l 2>/dev/null || true)"
             for term in "knowledge_agent" "company_activity" "site_agents" "autonomous_master" "factory" "product"; do
               if printf '%s\n' "$cron" | grep -q "$term"; then
