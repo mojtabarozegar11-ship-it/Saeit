@@ -13,7 +13,7 @@ recipes="$runtime/product_recipes"
 python="$base/.venv/bin/python"
 source_dir="$(cd -- "$(dirname -- "$0")/.." && pwd -P)"
 db="$base/private/factory-fresh-isolated.sqlite3"
-files=(factory_evidence_quality.py factory_autonomous_portfolio.py factory_vps_product_cycle.py factory_product_rework.py)
+files=(factory_evidence_quality.py factory_autonomous_portfolio.py factory_vps_product_cycle.py)
 test -d "$target" && test ! -L "$target"
 test -f "$target/factory_first_product_pilot.py"
 test -f "$target/factory_product_maker.py"
@@ -38,7 +38,7 @@ done
 import ast,sys
 from pathlib import Path
 root=Path(sys.argv[1])
-for name in ("factory_evidence_quality.py","factory_autonomous_portfolio.py","factory_vps_product_cycle.py","factory_product_rework.py"):
+for name in ("factory_evidence_quality.py","factory_autonomous_portfolio.py","factory_vps_product_cycle.py"):
     ast.parse((root/name).read_text(encoding="utf-8"))
 print("FACTORY_CANDIDATE_ALL_QUALITY_MODULES_PARSE")
 PY
