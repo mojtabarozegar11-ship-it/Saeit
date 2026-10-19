@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("adapter", ROOT / "scripts/factory_public_library_adapter.py")
@@ -23,9 +24,10 @@ class ResourceTests(unittest.TestCase):
             (root / "index.html").write_text("original")
         release = self.mpw / "factory-releases" / mod.RELEASE
         release.mkdir(parents=True)
-        archive = b"test archive"
-        self.hash = hashlib.sha256(archive).hexdigest()
-        (release / mod.ZIP).write_bytes(archive)
+        with zipfile.ZipFile(release / mod.ZIP, "w") as archive:
+            archive.writestr("farm_enterprise_economics/calculator.py", "print(1)")
+            archive.writestr("farm_enterprise_economics/README.md", "Example only")
+        self.hash = hashlib.sha256((release / mod.ZIP).read_bytes()).hexdigest()
         (release / "SHA256SUMS.txt").write_text(self.hash + "  " + mod.ZIP + "\n")
         (release / "index.html").write_text("Farm Enterprise Economics Toolkit " + self.hash)
 
