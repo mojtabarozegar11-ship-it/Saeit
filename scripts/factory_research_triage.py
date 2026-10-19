@@ -50,6 +50,8 @@ def sha(value):
 
 
 def atomic(path, value):
+    if path.parent.is_symlink():
+        raise RuntimeError('SELF_UPGRADE_BLOCKED_SYMLINK_PARENT')
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     fd, stage = tempfile.mkstemp(prefix=".research-triage-", dir=str(path.parent))
     try:
