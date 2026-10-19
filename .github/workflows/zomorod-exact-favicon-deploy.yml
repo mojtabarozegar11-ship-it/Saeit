@@ -30,7 +30,16 @@ jobs:
           d=Path('content/zomorod-seo-brand')
           img=Image.open(source).convert('RGBA')
           assert img.size == (128,128)
-          assert img.getpixel((0,0))[3] == 0 and img.getpixel((127,127))[3] == 0, 'Source must be transparent'
+          # Earlier site asset has gray/white checkerboard pixels baked into RGB.
+          # Extract the official mark, eliminating only near-neutral background tiles.
+          src_px=list(img.getdata())
+          cleared=[]
+          for red,green,blue,alpha in src_px:
+              neutral=(max(red,green,blue)-min(red,green,blue) <= 16)
+              checker=(min(red,green,blue) >= 170 and neutral)
+              cleared.append((red,green,blue,0 if checker else alpha))
+          img.putdata(cleared)
+          assert img.getpixel((0,0))[3] == 0 and img.getpixel((127,127))[3] == 0, 'Checker removal did not clear the corners'
           # Clip to exact circle; no square/white/checkerboard around the company mark.
           a=img.getchannel('A')
           circle=Image.new('L',img.size,0)
