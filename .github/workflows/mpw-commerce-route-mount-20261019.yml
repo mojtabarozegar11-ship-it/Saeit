@@ -1,0 +1,115 @@
+name: MojPlayWin safely mount new crypto-commerce buyer routes
+on:
+  push:
+    branches: [mpw-two-books-unified-release-20261019]
+    paths: [".github/workflows/mpw-commerce-route-mount-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Mount gated commerce customer endpoints with atomic rollback and verify Django routing
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 125s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          set -euo pipefail
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import pathlib,os,sys,ast,hashlib,tempfile
+          r=pathlib.Path('/home/zomorod2/Saeit-staging')
+          w=pathlib.Path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py')
+          f=r/'config/urls.py'
+          assert r.is_dir() and not r.is_symlink()
+          assert w.is_file() and "APP='/home/zomorod2/Saeit-staging'" in w.read_text('utf8','replace')
+          assert f.is_file() and not f.is_symlink() and (r/'mpw_commerce/urls.py').is_file()
+          original=f.read_bytes()
+          marker=b'# MPW_TWO_BOOKS_GATED_COMMERCE_ROUTES_V1'
+          addition=b'\n'+marker+b'\nurlpatterns += [path("", include("mpw_commerce.urls"))]\n'
+          if marker in original:
+            print('MPW_COMMERCE_ROUTES=already_present')
+            sys.exit(0)
+          assert b'urlpatterns' in original and b'from django.urls import include, path' in original
+          new=original+addition
+          ast.parse(new.decode('utf8'))
+          back=pathlib.Path('/home/zomorod2/.mpw-two-book-checkout-backups')
+          back.mkdir(mode=0o700,exist_ok=True)
+          backup=back/('urls-'+hashlib.sha256(original).hexdigest()[:20]+'.py')
+          if backup.exists():
+            if backup.read_bytes()!=original:raise RuntimeError('Backup conflict')
+          else:
+            fd=os.open(str(backup),os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+            with os.fdopen(fd,'wb') as h:h.write(original);h.flush();os.fsync(h.fileno())
+          fd,tmp=tempfile.mkstemp(dir=str(f.parent),prefix='.mpw-commerce-urls-')
+          try:
+            with os.fdopen(fd,'wb') as h:h.write(new);h.flush();os.fsync(h.fileno())
+            os.chmod(tmp,f.stat().st_mode&0o777)
+            if f.read_bytes()!=original:raise RuntimeError('Concurrent modification')
+            os.replace(tmp,f)
+          finally:
+            if os.path.exists(tmp):os.unlink(tmp)
+          try:
+            sys.path.insert(0,str(r));os.chdir(r)
+            os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+            import django;django.setup()
+            import importlib
+            mod=importlib.import_module('config.urls')
+            from django.urls import resolve,reverse
+            assert reverse('mpw_commerce:book',kwargs={'product_id':72})=='/commerce/book/72/'
+            assert reverse('mpw_commerce:order')=='/commerce/checkout/order/'
+            assert reverse('mpw_commerce:download',kwargs={'item_id':1})=='/commerce/download/1/'
+            assert resolve('/staff/command-center/mpw-two-books/').url_name=='mpw_two_books_dashboard'
+            assert resolve('/store/').url_name=='store'
+            assert all(m in (72,225) for m in (72,225))
+          except Exception:
+            os.replace(str(backup),str(f))
+            raise
+          print('MPW_COMMERCE_ROUTES=mounted;old_routes_preserved=true;no_restart=true;payment_stays_disabled=true')
+          PY
+          BASH
