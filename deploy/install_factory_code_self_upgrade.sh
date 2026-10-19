@@ -5,7 +5,7 @@ umask 077
 test "$(id -un)" = githubops
 test "$(id -u)" -ne 0
 test "$#" -eq 1
-source="1"
+source="$1"
 test -d "$source" && test ! -L "$source"
 test -d "$source/scripts" && test ! -L "$source/scripts"
 test -f "$source/scripts/factory_code_self_upgrade.py"

@@ -46,6 +46,12 @@ class CodeSelfUpgradeTests(unittest.TestCase):
         self.assertEqual(json.loads((self.output/"evolution-proof.json").read_text())
                          ["candidate_count"],2)
 
+    def test_vps_installer_uses_real_checked_source_argument(self):
+        installer=(ROOT/"deploy/install_factory_code_self_upgrade.sh").read_text()
+        self.assertIn('source="$1"',installer)
+        self.assertNotIn('source="1"',installer)
+        self.assertIn('FACTORY_CODE_SELF_EDIT_PRIVATE_INSTALL=PASS',installer)
+
     def test_missing_source_fails_closed(self):
         (self.src/"scripts/factory_research_triage.py").unlink()
         with self.assertRaises(RuntimeError):
