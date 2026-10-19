@@ -64,7 +64,7 @@ jobs:
           stage=Path.home()/'factory-runtime/operations/toolchain-source-39232784800-1'
           model=stage/'qwen2.5-coder-0.5b-instruct-q4_k_m.gguf'
           # The original run has a 40-minute deadline; recovery starts after it.
-          # The original bounded transfer has ended; this timestamp prevents concurrent writes.
+          # Preserve the transferred bundle and use relocated private bootstrap configuration.
           import datetime
           deadline=datetime.datetime(2026,10,19,10,30,tzinfo=datetime.timezone.utc).timestamp()
           while time.time()<deadline:

@@ -41,6 +41,20 @@ for name,destination in json.loads(pathlib.Path(sys.argv[2]).read_text()).items(
     link.symlink_to(os.path.relpath(dest,link.parent))
 PYLINK
 fi
+# Distro bootstrap files hard-code system locations; relocate the private copies.
+"$base/.venv/bin/python" - "$target/prefix" <<'PYOFFICE'
+import pathlib,sys
+root=pathlib.Path(sys.argv[1]).resolve()
+program=root/'usr/lib/libreoffice/program'
+for file in list(program.glob('*rc'))+list(program.rglob('*.rdb')):
+    if not file.is_file(): continue
+    try: text=file.read_text()
+    except UnicodeError: continue
+    updated=text
+    for path in ('/usr/lib/libreoffice','/etc/libreoffice','/usr/share/java'):
+        updated=updated.replace('file://'+path,(root/path.lstrip('/')).as_uri())
+    if updated!=text: file.write_text(updated)
+PYOFFICE
 # Restore relocated office resource links removed from the original portable archive.
 for entry in 'share:../../share/libreoffice' 'ure-link:../ure'; do
   name="${entry%%:*}"; destination="${entry#*:}"
@@ -97,6 +111,7 @@ cat > "$target/bin/libreoffice" <<EOF
 set -euo pipefail
 export LD_LIBRARY_PATH="$target/prefix/usr/lib/libreoffice/program:$target/prefix/usr/lib/x86_64-linux-gnu:$target/prefix/lib/x86_64-linux-gnu:$target/prefix/usr/lib:$target/prefix/usr/lib/x86_64-linux-gnu/pulseaudio:$target/prefix/usr/lib/x86_64-linux-gnu/blas:$target/prefix/usr/lib/x86_64-linux-gnu/lapack"
 export FONTCONFIG_FILE="$target/fonts.conf" SAL_USE_VCLPLUGIN=svp
+export URE_BOOTSTRAP="vnd.sun.star.pathname:$target/prefix/usr/lib/libreoffice/program/fundamentalrc"
 exec "$target/prefix/usr/lib/libreoffice/program/soffice" "\$@"
 EOF
 chmod 700 "$target/bin/libreoffice"
