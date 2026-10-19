@@ -123,4 +123,24 @@ jobs:
                       if scanned>=16000:break
                   if scanned>=16000:break
               print("SOURCE_SCAN",label,"files",scanned,"matches",matches[:45])
+          import urllib.request,hashlib,re
+          base=root/"design-preview-20261017"
+          try:
+              req=urllib.request.Request("https://mojplaywin.com/",headers={"Cache-Control":"no-cache"})
+              with urllib.request.urlopen(req,timeout=16) as resp:
+                  public=resp.read(3000000)
+              print("HOME_LIVE_HASH",len(public),hashlib.sha256(public).hexdigest()[:20])
+          except Exception as exc:
+              print("HOME_LIVE_FETCH_ERROR",type(exc).__name__)
+              public=b""
+          for rel in ("index.html","production-home-20261017.html","research.html"):
+              p=base/rel
+              if not p.is_file():continue
+              data=p.read_bytes()
+              title=re.search(rb"<title[^>]*>(.*?)</title>",data,re.I|re.S)
+              print("HOME_CANDIDATE",rel,len(data),hashlib.sha256(data).hexdigest()[:20],
+                    "same_as_live",data==public,"title",title.group(1)[:110].decode("utf8","replace") if title else "none")
+          for i,line in enumerate(rules,1):
+              if any(k in line for k in ("production-home-20261017","design-preview-20261017/index.html","RewriteRule ^$","RewriteRule ^/?$")):
+                  print("HOME_REWRITE",i,line[:320])
           '"'"''
