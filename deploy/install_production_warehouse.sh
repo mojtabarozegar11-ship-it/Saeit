@@ -74,7 +74,10 @@ rollback() {
   local rc="$?"
   if test "$rc" -ne 0; then
     echo "FACTORY_WAREHOUSE_INSTALL_FAILED_RESTORING_CRON"
-    crontab "$back/original.cron" || true
+    # Retain all unrelated jobs, undo only this add-on after a failed install.
+    if crontab -l 2>/dev/null | grep -q "$marker"; then
+      (crontab -l 2>/dev/null | grep -v -- "$marker" || true) | crontab - || true
+    fi
     if test -f "$back/previous-worker.py"; then
       install -m 600 "$back/previous-worker.py" "$worker/factory_production_warehouse.py"
     fi
@@ -121,10 +124,11 @@ PY
 
 # Existing factory production runs at minute 23; warehouse stock scan is 31.
 # It also runs immediately at installation and can be invoked manually.
-grep -v "$marker" "$back/original.cron" > "$back/new.cron" || true
-printf '31 * * * * /bin/bash %s # %s\n' "$worker/run-warehouse.sh" "$marker" >> "$back/new.cron"
-chmod 600 "$back/new.cron"
-crontab "$back/new.cron"
+# Submit directly via stdin to avoid remote temporary crontab file-path issues.
+{
+  crontab -l 2>/dev/null | grep -v -- "$marker" || true
+  printf '31 * * * * /bin/bash %s # %s\n' "$worker/run-warehouse.sh" "$marker"
+} | crontab -
 test "$(crontab -l | grep -c "$marker")" -eq 1
 test "$(crontab -l | grep -c SAEIT_AUTONOMOUS_PRODUCTS_V2)" -eq 1
 trap - EXIT
