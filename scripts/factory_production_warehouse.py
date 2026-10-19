@@ -179,6 +179,7 @@ def stock_one(root, recipe, warehouse, *, quality_snapshot=None):
         "schema": SCHEMA,
         "product_id": recipe,
         "product_name": str(manifest.get("name", recipe))[:200],
+        "family_id": manifest.get('family_id') if re.fullmatch(r'F(?:0[1-9]|[1-3][0-9]|40)',str(manifest.get('family_id',''))) else None,
         "source_sha256": manifest["source_sha256"],
         "artifact_sha256": manifest["artifact_sha256"],
         "bytes": artifact.stat().st_size,
@@ -228,6 +229,7 @@ def stock_summary(warehouse):
                 record = verify_stored(version)
                 stocked.append({
                     "product_id": record["product_id"],
+                    "family_id": record.get('family_id'),
                     "version": record["source_sha256"],
                     "artifact_sha256": record["artifact_sha256"],
                     "bytes": record["bytes"],

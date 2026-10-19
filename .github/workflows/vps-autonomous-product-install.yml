@@ -204,6 +204,9 @@ jobs:
           print("FACTORY_WORKBOOK_BUILD50_STATUS="+workbook["status"])
           print("FACTORY_WORKBOOK_BUILD50_COMPLETED="+str(workbook["completed_stages"]))
           assert workbook["completed_stages"]==50, workbook.get("defects")
+          product=json.loads((root/"digital-products/capacity_planning_workbook/manufacturing_manifest.json").read_text())
+          assert any(item["product_id"]=="capacity_planning_workbook" and item["version"]==product["source_sha256"] and item.get("family_id")=="F27" for item in register["records"]), register["needs_rework_or_review"]
+          print("FACTORY_WORKBOOK_BUILD50_CURRENT_VERSION_STOCKED=PASS")
           print("FACTORY_BUILD50_PRODUCTS_INSPECTED="+str(quality["inspected"]))
           print("FACTORY_BUILD50_PROVEN_COMPLETED="+str(quality["verified_50_stage_builds"]))
           print("FACTORY_BUILD50_RETURNED_TO_PLANNING="+str(quality["requiring_replanning"]))

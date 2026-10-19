@@ -2,11 +2,20 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+import zipfile
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('workbook50',ROOT/'scripts/factory_build50_workbook.py')
 producer=importlib.util.module_from_spec(spec);spec.loader.exec_module(producer)
 
 class Workbook50Tests(unittest.TestCase):
+    def test_package_members_follow_the_warehouse_order(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);names=['workbook.xlsx','workbook.ods','user-guide.md']
+            for name in names:(root/name).write_bytes(('TEST FIXTURE '+name).encode())
+            archive=producer.package(root,names)
+            with zipfile.ZipFile(archive) as file:
+                self.assertEqual(file.namelist(),[producer.PRODUCT+'/'+n for n in sorted(names)])
+                self.assertIsNone(file.testzip())
     def test_twelve_reference_models_reject_invalid_inputs(self):
         self.assertEqual(len(producer.UNITS),12)
         for unit in producer.UNITS:

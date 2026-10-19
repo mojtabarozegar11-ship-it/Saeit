@@ -40,6 +40,15 @@ ACTIONS=('Specify finite input domains and meaningful units for ',
          'Independently test normal, zero and scaled reference cases for ',
          'Revise the worksheet with protected formulas, guidance and validation for ')
 
+def package(folder,names):
+    folder=Path(folder);path=folder/(PRODUCT+'-internal-qa.zip')
+    with zipfile.ZipFile(path,'w',zipfile.ZIP_DEFLATED) as archive:
+        for name in sorted(names):
+            info=zipfile.ZipInfo(PRODUCT+'/'+name,date_time=(2020,1,1,0,0,0))
+            info.compress_type=zipfile.ZIP_DEFLATED;info.external_attr=0o100644<<16
+            archive.writestr(info,(folder/name).read_bytes())
+    return path
+
 def valid(unit,values):
     if len(values)!=len(unit[2]) or any(type(x) not in (int,float) or not math.isfinite(x) or not 0<=x<=1000000 for x in values):
         raise ValueError('INVALID_QUANTITY')
@@ -80,7 +89,7 @@ def build(root,tools):
     profile_data=[{'title':u[0],'formula':u[1],'values':u[2],'labels':u[3],'units':u[4],'result_unit':u[5],'maximum_input':1000000,'minimum_positive_divisor':1e-9} for u in UNITS]
     source=protocol.digest({'profiles':profile_data,'producer_sha256':protocol.file_sha(__file__),
                             'protocol_sha256':protocol.file_sha(Path(protocol.__file__))})
-    plan={'schema':protocol.SCHEMA,'product_id':PRODUCT,'producer_id':'openpyxl_workbook_builder',
+    plan={'schema':protocol.SCHEMA,'product_id':PRODUCT,'family_id':'F27','producer_id':'openpyxl_workbook_builder',
           'source_snapshot_sha256':source,'work_packages':[
               {'id':'unit_%02d_%d'%(n,action),'instruction':ACTIONS[action]+unit[0]+'.',
                'acceptance':['Required inputs, units and outputs are explicit',
@@ -178,8 +187,7 @@ def build(root,tools):
                                    'Definition: '+u[1]+'. Sample expected result: '+str(reference(u,u[2]))])
         (folder/'user-guide.md').write_text('\n\n'.join(text),encoding='utf8')
         names=['workbook.xlsx','workbook.ods','user-guide.md']
-        with zipfile.ZipFile(folder/(PRODUCT+'-internal-qa.zip'),'w',zipfile.ZIP_DEFLATED) as archive:
-            for name in names:archive.write(folder/name,PRODUCT+'/'+name)
+        package(folder,names)
         return result(names+[PRODUCT+'-internal-qa.zip'],3)
     def reviewer(plan,context):
         folder=Path(context['folder']);book=load_workbook(folder/'workbook.xlsx',data_only=True)
@@ -224,6 +232,7 @@ def build(root,tools):
     shutil.copyfile(archive,temporary);os.replace(temporary,target/archive.name)
     qa=protocol.read(folder/'independent-review.json')
     protocol.save(target/'manufacturing_manifest.json',{'schema_version':2,'recipe':PRODUCT,'name':'Capacity planning workbook',
+        'family_id':'F27','bytes':archive.stat().st_size,
         'source_sha256':protocol.digest({name:protocol.file_sha(folder/name) for name in ('workbook.xlsx','workbook.ods','user-guide.md')}),'build50_source_snapshot_sha256':source,'artifact_sha256':protocol.file_sha(archive),
         'files':['workbook.xlsx','workbook.ods','user-guide.md'],'qa_status':'passed','qa_evidence':'unit_tests_passed',
         'qa_measurements':qa,'commercial_status':'private_internal_qa_pass_not_published',
