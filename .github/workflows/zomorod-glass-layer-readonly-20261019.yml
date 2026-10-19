@@ -1,0 +1,27 @@
+name: Zomorod root glass typography layer read-only diagnostic
+on:
+  pull_request:
+    paths:
+      - scripts/zm_home_layer_audit_20261019.cjs
+      - .github/workflows/zomorod-glass-layer-readonly-20261019.yml
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Inspect live CSS stacking and empty headings from Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          mkdir zm-layer-audit && cd zm-layer-audit
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          cp "$GITHUB_WORKSPACE/scripts/zm_home_layer_audit_20261019.cjs" audit.cjs
+          node audit.cjs
