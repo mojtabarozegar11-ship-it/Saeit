@@ -1,0 +1,106 @@
+name: MojPlayWin checkout template security Django readiness audit
+on:
+  push:
+    branches: [mpw-two-books-unified-release-20261019]
+    paths: [".github/workflows/mpw-audit-authenticated-shop-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Validate authenticated checkout pages and Django deployment checks without payments
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 110s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,pathlib,json,io
+          os.chdir('/home/zomorod2/Saeit-staging')
+          sys.path.insert(0,os.getcwd())
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.test import RequestFactory
+          from django.conf import settings
+          from django.core.management import call_command
+          from django.urls import reverse,resolve
+          from core.models import Product
+          from mpw_commerce.product_checkout_page import approved_for_checkout,product_checkout_page
+          from mpw_commerce.checkout_views import _ready
+          from mpw_commerce.buyer_orders import _eligible
+          rf=RequestFactory()
+          for pk in (72,225):
+            p=Product.objects.select_related('owner','knowledge_article').get(pk=pk)
+            req=rf.get('/commerce/book/'+str(pk)+'/',secure=True,HTTP_HOST='mojplaywin.com')
+            req.user=p.owner
+            v={'id':pk,'is_eligible':_eligible(p),'approved_for_checkout':approved_for_checkout(req,p),
+               'http_api_ready':_ready(req),'checkout_page_status':None,'html_bytes':None,
+               'wallet_flow_ui':False,'script_refs':0}
+            try:
+              resp=product_checkout_page(req,pk)
+              src=resp.content.decode('utf8','replace')
+              v.update({'checkout_page_status':resp.status_code,'html_bytes':len(src),
+                'wallet_flow_ui':any(q in src.lower() for q in ('eth','trx','wallet','metamask','tronlink')),
+                'script_refs':src.lower().count('<script'),'has_csrf_token':('csrfmiddlewaretoken' in src or 'csrftoken' in src.lower())})
+            except Exception as e:v['render_error']=type(e).__name__
+            print('MPW_AUTHENTICATED_CHECKOUT='+json.dumps(v))
+          anon_req=rf.get('/commerce/book/72/',secure=True,HTTP_HOST='mojplaywin.com')
+          from django.contrib.auth.models import AnonymousUser
+          anon_req.user=AnonymousUser()
+          p=Product.objects.select_related('owner','knowledge_article').get(pk=72)
+          print('MPW_AUTHENTICATED_CHECKOUT='+json.dumps({'anonymous_checkout_approved':approved_for_checkout(anon_req,p)}))
+          paths=('mpw_commerce:order','mpw_commerce:challenge','mpw_commerce:verify',
+                 'mpw_commerce:invoice','mpw_commerce:purchases')
+          print('MPW_ACTIVE_REVERSES='+json.dumps({n:reverse(n) for n in paths}))
+          output=io.StringIO()
+          call_command('check',deploy=True,stdout=output,stderr=output)
+          lines=[s.strip()[:200] for s in output.getvalue().splitlines() if ('Warning' in s or 'security.W' in s or 'System check' in s)]
+          print('MPW_DJANGO_DEPLOY_WARNINGS='+json.dumps(lines[:25]))
+          PY
+          BASH
