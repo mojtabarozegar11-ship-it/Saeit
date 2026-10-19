@@ -12,6 +12,12 @@ class Workbook50Tests(unittest.TestCase):
         for unit in producer.UNITS:
             self.assertGreaterEqual(producer.checks(unit),7)
             self.assertGreaterEqual(producer.reference(unit,unit[2]),0)
+    def test_storage_formulas_use_explicit_binary_units(self):
+        storage=next(u for u in producer.UNITS if u[0]=='Replicated storage')
+        backup=next(u for u in producer.UNITS if u[0]=='Backup duration')
+        self.assertEqual(storage[5],'GiB')
+        self.assertIn('MiB/file',storage[4])
+        self.assertEqual(backup[4],['GiB','MiB/second'])
     def test_zero_divisors_are_rejected(self):
         for unit in producer.UNITS:
             if '/b' in unit[1]:

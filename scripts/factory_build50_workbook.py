@@ -24,8 +24,8 @@ PRODUCT='capacity_planning_workbook'
 UNITS=[
  ('Work capacity','a*b*c',[4,6,8],['People','Units per person per hour','Hours'],['people','units/person/hour','hours'],'units',lambda a,b,c:a*b*c),
  ('Material demand','a*b',[120,2.5],['Planned units','Material per unit'],['units','kg/unit'],'kg',lambda a,b:a*b),
- ('Replicated storage','a*b*c/1024',[200,8,3],['Files','Size per file','Replicas'],['files','MB/file','copies'],'GB',lambda a,b,c:a*b*c/Fraction(1024)),
- ('Backup duration','a*1024/b',[12,24],['Data volume','Transfer rate'],['GB','MB/second'],'seconds',lambda a,b:a*Fraction(1024)/b),
+ ('Replicated storage','a*b*c/1024',[200,8,3],['Files','Size per file','Replicas'],['files','MiB/file','copies'],'GiB',lambda a,b,c:a*b*c/Fraction(1024)),
+ ('Backup duration','a*1024/b',[12,24],['Data volume','Transfer rate'],['GiB','MiB/second'],'seconds',lambda a,b:a*Fraction(1024)/b),
  ('Batch throughput','a*b/c',[8,20,30],['Batches','Units per batch','Elapsed minutes'],['batches','units/batch','minutes'],'units/minute',lambda a,b,c:a*b/c),
  ('Capacity load','a/b*100',[28,40],['Required work hours','Available hours'],['hours','hours'],'percent',lambda a,b:Fraction(100)*a/b),
  ('Defect frequency','a/b*100',[3,120],['Recorded defects','Processed jobs'],['defects','jobs'],'defects per 100 jobs',lambda a,b:Fraction(100)*a/b),
@@ -168,6 +168,7 @@ def build(root,tools):
         os.replace(recalculated/'workbook.xlsx',folder/'workbook.xlsx')
         text=['# Capacity planning workbook','Illustrative estimates. Replace inputs with actual measurements.',
               'Edit unlocked numeric inputs. Inspect the visible formulas and units. Zero denominators are invalid.',
+              'Binary storage units are explicit: one GiB equals 1024 MiB. These must not be mixed with decimal GB and MB.',
               'This tool is not an agronomic recommendation, financial forecast or commercial quality certificate.']
         for u in UNITS:text.extend(['## '+u[0],'Inputs: '+', '.join(u[3]),'Output unit: '+u[5],
                                    'Definition: '+u[1]+'. Sample expected result: '+str(reference(u,u[2]))])
