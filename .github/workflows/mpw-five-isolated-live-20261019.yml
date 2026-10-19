@@ -1,0 +1,186 @@
+name: MojPlayWin five-part main-only one-stage live activation
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-five-isolated-live-20261019.yml"]
+permissions: {contents: read}
+concurrency: {group: mpw-five-main-only-release, cancel-in-progress: false}
+jobs:
+  verified-main-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Source tests and package only additional MojPlayWin files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_five_cpanel_live_20261019.py command_center/models.py command_center/mpw_public.py command_center/mpw_workflow.py command_center/mpw_operations.py
+          python3 - <<'PY'
+          import subprocess,tarfile
+          files=(
+            "command_center/models.py",
+            "command_center/mpw_public.py",
+            "command_center/mpw_workflow.py",
+            "command_center/mpw_operations.py",
+            "command_center/mpw_monitor_views.py",
+            "command_center/mpw_private_telemetry.py",
+            "command_center/migrations/__init__.py",
+            "command_center/migrations/0001_mpw_record.py",
+            "command_center/templatetags/__init__.py",
+            "command_center/templatetags/mpw_main.py",
+            "command_center/templates/command_center/mpw_operations.html",
+            "command_center/templates/command_center/mpw_agent_monitor.html",
+            "core/templates/mojplaywin/mpw_managed_blocks.html",
+            "core/templates/mojplaywin/mpw_managed_offers.html",
+          )
+          import os
+          target=os.environ["RUNNER_TEMP"]+"/mpw-five-payload.tar.gz"
+          with tarfile.open(target,"w:gz") as out:
+              for path in files:
+                  out.add(path,arcname=path,recursive=False)
+          assert os.path.getsize(target)<700000
+          print("MPW_FIVE_MAIN_SOURCE_PACKAGE=verified")
+          PY
+      - name: Capture protected live route and book baselines before mutation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error,os
+          paths=("/","/store/","/taniya/","/farnaz/","/saman/","/picm/","/zahra/","/mojtaba.roozegar/")
+          result={}
+          for path in paths:
+              req=urllib.request.Request("https://mojplaywin.com"+path,headers={"Cache-Control":"no-cache","User-Agent":"MPWIsolatedReleaseBefore/1.0"})
+              try:
+                  with urllib.request.urlopen(req,timeout=25) as a:
+                      status=a.status
+                      body=a.read(700000).decode("utf8","replace") if path=="/store/" else ""
+              except urllib.error.HTTPError as e:
+                  status=e.code
+                  body=""
+              result[path]=status
+              if path=="/store/":
+                  assert body.count('id="mpw-sale-book72"')==1
+                  assert body.count('id="mpw-sale-book225"')==1
+          assert result["/"]==result["/store/"]==200
+          with open(os.environ["RUNNER_TEMP"]+"/mpw-baseline.json","w") as f:json.dump(result,f)
+          print("MPW_PROTECTED_ROUTE_BASELINE="+json.dumps(result,sort_keys=True))
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Reconfirm pinned tenant and create private release staging
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          stage="/home/zomorod2/.private_mojplaywin_main_agents/mpw_five_releases/$GITHUB_RUN_ID"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "python3 -c 'from pathlib import Path; import os; p=Path(\"/home/zomorod2/.private_mojplaywin_main_agents/mpw_five_releases\"); assert p.parent.is_dir() and not p.parent.is_symlink(); p.mkdir(mode=0o700,exist_ok=True); assert not p.is_symlink(); s=p/\"$GITHUB_RUN_ID\"; s.mkdir(mode=0o700,exist_ok=False)'"
+          scp -q -F "$d/config" "$RUNNER_TEMP/mpw-five-payload.tar.gz" "saeit-cpanel:$stage/payload.tar.gz"
+          scp -q -F "$d/config" scripts/mpw_five_cpanel_live_20261019.py "saeit-cpanel:$stage/controller.py"
+      - name: Activate scoped Django records, admin controls and main templates
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.private_mojplaywin_main_agents/mpw_five_releases/$GITHUB_RUN_ID"
+          timeout 220s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel "python3 -B '$stage/controller.py' install '$GITHUB_RUN_ID'"
+      - name: Verify live operations authentication, all protected pages and original books
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,time,urllib.request,urllib.error
+          with open(os.environ["RUNNER_TEMP"]+"/mpw-baseline.json") as f:before=json.load(f)
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,req,fp,code,msg,headers,newurl): return None
+          direct=urllib.request.build_opener(NoRedirect)
+          passed=False
+          for attempt in range(6):
+              try:
+                  req=urllib.request.Request("https://mojplaywin.com/staff/command-center/mpw-operations/",headers={"Cache-Control":"no-cache"})
+                  try:
+                      with direct.open(req,timeout=20) as result: code=result.status; location=result.headers.get("Location","")
+                  except urllib.error.HTTPError as e: code=e.code; location=e.headers.get("Location","")
+                  if code in (301,302,303) and "/admin/login/" in location:
+                      passed=True
+                      break
+              except Exception: pass
+              time.sleep(5)
+          if not passed:raise RuntimeError("MAIN_OPERATIONS_AUTH_ROUTE_NOT_ACTIVE")
+          req=urllib.request.Request("https://mojplaywin.com/staff/command-center/mpw-agents/",headers={"Cache-Control":"no-cache"})
+          try:
+              with direct.open(req,timeout=20) as h: chart_status=h.status
+          except urllib.error.HTTPError as e: chart_status=e.code
+          if chart_status not in (301,302,303): raise RuntimeError("PRIVATE_AGENT_CHART_NOT_PROTECTED")
+          after={}
+          for path in before:
+              req=urllib.request.Request("https://mojplaywin.com"+path,headers={"Cache-Control":"no-cache","User-Agent":"MPWIsolatedReleaseAfter/1.0"})
+              try:
+                  with urllib.request.urlopen(req,timeout=25) as h:
+                      after[path]=h.status
+                      body=h.read(700000).decode("utf8","replace") if path=="/store/" else ""
+              except urllib.error.HTTPError as e:
+                  after[path]=e.code;body=""
+              if path=="/store/":
+                  assert body.count('id="mpw-sale-book72"')==1,"CHESS_CARD_CHANGED"
+                  assert body.count('id="mpw-sale-book225"')==1,"TANIYA_CARD_CHANGED"
+          print("MPW_PROTECTED_ROUTES_AFTER="+json.dumps(after,sort_keys=True))
+          if after!=before:raise RuntimeError("CHILD_OR_MAIN_SITE_HTTP_REGRESSION")
+          print("MPW_FIVE_LIVE_RELEASE_VERIFIED=main_controls_and_protected_siblings")
+          print("MPW_PAYMENT_RECEIPT_ENABLED=no")
+          PY
+      - name: Restore exact original files if post-deploy smoke fails
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.private_mojplaywin_main_agents/mpw_five_releases/$GITHUB_RUN_ID"
+          timeout 110s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel "python3 -B '$stage/controller.py' rollback '$GITHUB_RUN_ID'"
+      - name: Delete ephemeral SSH identity material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mojplaywin-inventory-ssh"
