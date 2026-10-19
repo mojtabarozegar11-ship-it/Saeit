@@ -32,7 +32,16 @@ jobs:
           chmod 600 "$d/"*
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          # The VPS key scan can intermittently time out on hosted runners.
+          # Retry network acquisition only; trust remains pinned to the exact SHA-256.
+          scan=""
+          for attempt in 1 2 3; do
+            scan="$(ssh-keyscan -T 8 -t rsa 178.239.147.150 2>/dev/null || true)"
+            test -n "$scan" && break
+            sleep 2
+          done
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/vps.known"
           test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           cat > "$d/config" <<EOF
           Host saeit-vps
@@ -58,7 +67,14 @@ jobs:
             RequestTTY no
           EOF
           chmod 600 "$d/config"
-          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          # cPanel identity is acquired through the verified VPS jump host.
+          # Missing response gets three bounded retries; fingerprint mismatch fails.
+          scan=""
+          for attempt in 1 2 3; do
+            scan="$(timeout 28s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null || true)"
+            test -n "$scan" && break
+            sleep 2
+          done
           test -n "$scan"
           printf '%s\n' "$scan" > "$d/host.candidate"
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
