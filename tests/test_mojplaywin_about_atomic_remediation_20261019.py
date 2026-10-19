@@ -84,3 +84,52 @@ def test_compose_with_synthetic_old_page_fails_closed_on_repeat_and_preserves_se
         assert False, "Second install must fail, never double-patch"
     except RuntimeError:
         pass
+
+
+def test_bounded_live_drift_patch_does_not_require_byte_identical_old_sections():
+    # The production About HTML can contain old assets with benign changes:
+    # this test exercises the narrow per-section fallback in isolation.
+    cases=[
+      ("mojplaywin_about_team_section_20261018.html",
+        "Illustrative Team Roles","Meet Our Team",
+        '<p class="mpw-profile-indicator">Illustrative role · not verified staff</p>',
+        "Business Strategy &amp; Development (Illustrative Role)",
+        "CEO &amp; Business Development","mpw-team-card"),
+      ("mpw_international_team_section_20261018.html",
+        "Illustrative International Operations Roles",
+        "International Management &amp; Operations Team",
+        '<p class="mpw-profile-indicator">Illustrative role · not verified staff</p>',
+        "Executive Strategy &amp; Operations (Illustrative Role)",
+        "Chief Executive Officer","mpw-intl-card"),
+      ("mpw_senior_advisory_board_20261018.html",
+        "Illustrative Advisory Role Profiles","Senior Advisory Board",
+        '<p class="mpw-profile-indicator">Fictional advisor · no verified appointment</p>',
+        "DO_NOT_REPLACE","DO_NOT_REPLACE","mpw-advisory-card"),
+    ]
+    for name,new_h,old_h,label,new_role,old_role,card in cases:
+        current=(ROOT/"content"/name).read_text("utf-8")
+        older=current.replace(new_h,old_h,1).replace(label,"")
+        if new_role!="DO_NOT_REPLACE":older=older.replace(new_role,old_role,1)
+        assert older.count('class="'+card+'"')==10
+        older=older.replace("</section>","<!-- verified unrelated live material -->\n</section>",1)
+        repaired=patch.edit_drifted_section(older,name)
+        assert 'class="'+card+'"' in repaired
+        assert repaired.count('class="mpw-profile-indicator"')==10
+        assert old_h+"</h2>" not in repaired
+        if new_role!="DO_NOT_REPLACE":
+            assert old_role+"</p>" not in repaired
+        assert "verified unrelated live material" in repaired
+
+    gallery=(ROOT/"content/mpw_seven_team_gallery_20261019.html").read_text("utf-8")
+    sixth='<li class="mpw-seven-item" data-gallery-image="06"><p>Duplicate image six</p></li>'
+    older=gallery.replace("</ul>",sixth+"</ul>",1)
+    assert older.count('class="mpw-seven-item"')==7
+    repaired=patch.edit_drifted_section(older,"mpw_seven_team_gallery_20261019.html")
+    assert repaired.count('class="mpw-seven-item"')==6
+    assert 'data-gallery-image="06"' not in repaired
+
+    founder=(ROOT/"content/mpw_founder_spotlight_20261019.html").read_text("utf-8")
+    founder=founder.replace("Owner · Founder · Chief Executive Officer","Founder")
+    repaired=patch.edit_drifted_section(founder,"mpw_founder_spotlight_20261019.html")
+    assert "Owner · Founder · Chief Executive Officer" in repaired
+    assert "mpw-owner-legal" in repaired
