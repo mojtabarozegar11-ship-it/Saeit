@@ -71,26 +71,7 @@ done
 test -s "$private/production-state.json"
 test "$(find "$private/digital-products" -type f -name "*-internal-qa.zip" -print -quit | wc -l)" -ge 1
 
-# Retire removed recipe directories out of the active catalog; keep a private archive
-# of only recipes absent from the source. Existing packages and QA history stay intact.
-mkdir -p "$retired"
-chmod 700 "$retired"
-if [[ -d "$old_catalog" ]]; then
-  for old_recipe in "$old_catalog"/*; do
-    [[ -e "$old_recipe" ]] || continue
-    old_name="$(basename "$old_recipe")"
-    [[ "$old_name" =~ ^[a-z0-9]+(_[a-z0-9]+)*$ ]] || { echo "INVALID_OLD_RECIPE_SLUG"; exit 1; }
-    [[ -d "$old_recipe" && ! -L "$old_recipe" ]] || { echo "UNSAFE_OLD_RECIPE_PATH"; exit 1; }
-    if ! grep -Fxq "$old_name" "$desired_catalog"; then
-      mv -- "$old_recipe" "$retired/$old_name-$stamp"
-      echo "RETIRED_RECIPE=$old_name"
-    fi
-  done
-  [[ "$old_catalog" == "$ops"/.product-recipes-old-* ]] || { echo "UNSAFE_OLD_CATALOG_PATH"; exit 1; }
-  rm -rf -- "$old_catalog"
-fi
-install -m 600 "$desired_catalog" "$stage/installed-recipes.txt"
-rm -f -- "$desired_catalog"
+
 
 cat > "$stage/run-local-cycle.sh" <<EOF
 #!/usr/bin/env bash
