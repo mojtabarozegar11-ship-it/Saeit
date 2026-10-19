@@ -11,6 +11,9 @@ on:
       - "scripts/factory_product_maker.py"
       - "scripts/factory_vps_product_cycle.py"
       - "scripts/factory_specialist_pilots.py"
+      - "scripts/factory_specialist_formats.py"
+      - "scripts/factory_research_triage.py"
+      - "tests/test_factory_research_triage.py"
       - "tests/test_factory_specialist_pilots.py"
       - "product_recipes/**"
       - "deploy/install_autonomous_factory_products.sh"
@@ -29,6 +32,9 @@ on:
       - "scripts/factory_product_maker.py"
       - "scripts/factory_vps_product_cycle.py"
       - "scripts/factory_specialist_pilots.py"
+      - "scripts/factory_specialist_formats.py"
+      - "scripts/factory_research_triage.py"
+      - "tests/test_factory_research_triage.py"
       - "tests/test_factory_specialist_pilots.py"
       - "scripts/factory_production_warehouse.py"
       - "deploy/install_autonomous_factory_products.sh"
@@ -59,6 +65,7 @@ jobs:
           python -B -m unittest discover -s tests -p 'test_factory_production_warehouse.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_specialist_pilots.py' -v
+          python -B -m unittest discover -s tests -p 'test_factory_research_triage.py' -v
   deploy:
     needs: measured-qa
     if: github.event_name == 'workflow_dispatch' || (github.repository == 'mojtabarozegar11-ship-it/Saeit' && contains(github.event.head_commit.message, '[approved-factory-unlimited-builds-20261019]'))
@@ -77,6 +84,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_factory_quality_module_upgrade.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_specialist_pilots.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_research_triage.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_evidence_quality.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_vps_installer_syntax.py' -v
       - name: Install private VPS factory product cycle
@@ -95,7 +103,7 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           SSH=(ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes githubops@178.239.147.150)
-          tar -cf - tests/test_factory_vps_product_cycle.py tests/test_factory_specialist_pilots.py scripts/factory_specialist_pilots.py scripts/factory_recipe_designer.py factory_config/design_opportunities.json scripts/factory_first_product_pilot.py scripts/factory_autonomous_portfolio.py scripts/factory_evidence_quality.py scripts/factory_product_maker.py scripts/factory_product_rework.py scripts/factory_vps_product_cycle.py scripts/factory_production_warehouse.py product_recipes/ deploy/install_production_warehouse.sh deploy/install_autonomous_factory_products.sh | "${SSH[@]}" 'mkdir -p "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"; tar -xf - -C "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"'
+          tar -cf - tests/test_factory_vps_product_cycle.py tests/test_factory_specialist_pilots.py tests/test_factory_research_triage.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_research_triage.py scripts/factory_recipe_designer.py factory_config/design_opportunities.json scripts/factory_first_product_pilot.py scripts/factory_autonomous_portfolio.py scripts/factory_evidence_quality.py scripts/factory_product_maker.py scripts/factory_product_rework.py scripts/factory_vps_product_cycle.py scripts/factory_production_warehouse.py product_recipes/ deploy/install_production_warehouse.sh deploy/install_autonomous_factory_products.sh | "${SSH[@]}" 'mkdir -p "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"; tar -xf - -C "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"'
           "${SSH[@]}" '"$HOME/factory-runtime/.venv/bin/python" -B -m unittest discover -s "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/tests" -p test_factory_vps_product_cycle.py -v'
           echo VPS_FACTORY_ISOLATED_FAULT_INJECTION=PASS
           "${SSH[@]}" 'bash "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/deploy/install_autonomous_factory_products.sh"'
@@ -131,4 +139,40 @@ jobs:
           capabilities["memory_mb"]=memory
           print("VPS_FACTORY_REAL_BUILD_CAPABILITIES="+json.dumps(capabilities,sort_keys=True))
           PY
+          # Build and independently hash-check every new private technical pilot.
+          # Existing minute cron may continue; repeated artifacts remain idempotent.
+                    "${SSH[@]}" '"$HOME/factory-runtime/.venv/bin/python" -' <<'PYFAMILY'
+          import importlib.util,json,subprocess
+          from pathlib import Path
+          root=Path.home()/"factory-runtime"
+          private=root/"private/autonomous-product-cycle"
+          script=root/"operations/autonomous-product-runtime/scripts/factory_specialist_pilots.py"
+          spec=importlib.util.spec_from_file_location("specialist_proof",str(script))
+          producer=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(producer)
+          manifest=root/"operations/build-toolchain/toolchain-manifest.json"
+          for attempt in range(len(producer.FAMILIES)+1):
+              result=subprocess.run([str(root/".venv/bin/python"),str(script),
+                 "--out",str(private),"--manifest",str(manifest)],
+                 capture_output=True,text=True,timeout=95)
+              if result.returncode:
+                  raise RuntimeError("PILOT_LOOP_ERROR:"+result.stderr[-250:])
+          passed=[]
+          blocked=[]
+          for family in producer.FAMILIES:
+              versions=private/"family-pilots"/family
+              valid=False
+              for receipt in versions.glob("*/technical-receipt.json"):
+                  evidence=json.loads(receipt.read_text(encoding="utf8"))
+                  if producer.verified_receipt(receipt.parent,family,evidence["source_key"]):
+                      valid=True
+              (passed if valid else blocked).append(family)
+          q=json.loads((private/"research-triage/triage-status.json").read_text(encoding="utf8"))
+          print("FACTORY_SPECIALIST_PROVEN_FAMILIES="+json.dumps(sorted(passed)))
+          print("FACTORY_SPECIALIST_MISSING_FAMILIES="+json.dumps(sorted(blocked)))
+          print("FACTORY_RESEARCH_REMEDIATION_PLAN_COUNT="+str(q["research_ledgers_found"]))
+          print("FACTORY_RESEARCH_GENUINE_FIXED_COUNT="+str(q["genuine_research_repairs_verified_this_run"]))
+          print("FACTORY_COMMERCIAL_RELEASE=false")
+          assert not blocked, "SPECIALIST_PILOT_TECHNICAL_QA_BLOCKED"
+          PYFAMILY
           "${SSH[@]}" 'test -s "$HOME/factory-runtime/private/autonomous-product-cycle/production-state.json" && test "$(find "$HOME/factory-runtime/private/autonomous-product-cycle/digital-products" -type f -name "*-internal-qa.zip" -print -quit)" != "" && crontab -l | grep SAEIT_AUTONOMOUS_PRODUCTS_V2 && echo AUTONOMOUS_PRODUCT_VPS_VERIFIED'

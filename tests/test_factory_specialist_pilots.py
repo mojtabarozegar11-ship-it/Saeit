@@ -72,7 +72,7 @@ class SpecialistPilotTests(unittest.TestCase):
     def test_one_new_family_per_tick_then_idempotent(self):
         with mock.patch.object(pilots.subprocess, "run", side_effect=self._write_generated) as run:
             names = []
-            for n in range(4):
+            for n in range(len(pilots.FAMILIES)):
                 status = pilots.cycle(self.output, self.manifest)
                 self.assertEqual(status["status"], "pilot_built")
                 names.append(status["family"])
@@ -80,7 +80,7 @@ class SpecialistPilotTests(unittest.TestCase):
             self.assertEqual(set(names), set(pilots.FAMILIES))
             same = pilots.cycle(self.output, self.manifest)
             self.assertEqual(same["status"], "technical_pilots_verified")
-            self.assertEqual(run.call_count, 4)
+            self.assertEqual(run.call_count, len(pilots.FAMILIES))
             self.assertEqual(same["fully_verified_families"], 0)
 
     def test_corrupt_previous_product_is_retained_and_rebuilt(self):
@@ -98,6 +98,30 @@ class SpecialistPilotTests(unittest.TestCase):
             self.assertEqual((preserved[0] / "budget.xlsx").read_bytes(), b"corrupt")
             self.assertTrue(pilots.verified_receipt(version, "F27", initial["source_key"]))
 
+    def test_broken_family_does_not_starve_other_specialists(self):
+        failing = "F10"
+        def selective(args, **kwargs):
+            if args[4] == failing:
+                return type("Result", (), {"returncode": 1, "stderr": "broken specialist",
+                                            "stdout": ""})()
+            return self._write_generated(args, **kwargs)
+        with mock.patch.object(pilots.subprocess, "run", side_effect=selective):
+            for i in range(len(pilots.FAMILIES) + 1):
+                result = pilots.cycle(self.output, self.manifest)
+        self.assertEqual(result["status"], "needs_rework")
+        root = self.output / "family-pilots"
+        self.assertTrue(list((root / "F39").glob("*/sound_effect.wav")))
+        self.assertFalse(list((root / failing).glob("*/technical-receipt.json")))
+        retry = json.loads((root / failing / "rework.json").read_text())
+        self.assertEqual(retry["attempts"], 8)
+        self.assertTrue(retry["retry_on_next_tick"])
+        self.assertEqual(result["fully_verified_families"], 0)
+
+    def test_expanded_family_set_is_explicit(self):
+        self.assertEqual(len(pilots.FAMILIES), 11)
+        self.assertEqual(pilots.FAMILIES["F37"], ("motion.gif", "motion.mp4"))
+        self.assertEqual(pilots.FAMILIES["F39"], ("sound_effect.wav", "sound_effect.mp3"))
+
     def test_failed_pilot_is_never_auto_approved_and_retries(self):
         def fail(*args, **kwargs):
             return type("Result", (), {"returncode": 1,
@@ -107,8 +131,10 @@ class SpecialistPilotTests(unittest.TestCase):
             second = pilots.cycle(self.output, self.manifest)
         self.assertEqual(first["status"], "needs_rework")
         self.assertEqual(second["status"], "needs_rework")
-        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_count, 2 * len(pilots.FAMILIES))
         self.assertTrue(list((self.output / "family-pilots/F27").glob("rework.json")))
+        ticket = json.loads((self.output / "family-pilots/F27/rework.json").read_text())
+        self.assertEqual(ticket["attempts"], 2)
         self.assertFalse(list((self.output / "family-pilots/F27").glob("*/technical-receipt.json")))
 
 
