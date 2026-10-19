@@ -26,6 +26,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile games/farm-wars-v3/scripts/embed_game_in_card_page.py
+          grep -Fq 'min-height:720px' games/farm-wars-v3/scripts/embed_game_in_card_page.py
           node --check games/farm-wars-v3/tests/embedded-game-page.cjs
           python3 - <<'PY'
           from urllib.request import Request,urlopen
