@@ -1,0 +1,15 @@
+name: Zomorod game development card destination read-only audit
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/zomorod-game-card-destination-audit.yml']
+permissions: {contents: read}
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - run: python3 games/farm-wars-v3/scripts/audit_game_card_destination.py
