@@ -34,7 +34,7 @@ SHA = re.compile(r"^[a-f0-9]{64}$")
 MAX_ZIP = 25 * 1024 * 1024
 MAX_PACKAGE = 110 * 1024 * 1024
 MAX_ITEMS = 50
-MAX_FILES = 101
+MAX_FILES = 201
 MAX_UNCOMPRESSED = 80 * 1024 * 1024
 ISSUES = (
     "INDEPENDENT_CONTENT_QUALITY_REVIEW_REQUIRED",
@@ -141,6 +141,59 @@ def verify_stock(manifest, recipe, version, raw):
     return True
 
 
+def customer_companion(root, product, version, original_sha):
+    """Only a source-bound *private* buyer bundle; never a store-sale approval."""
+    candidate = Path(root) / "customer-packs" / product / version
+    if candidate.is_symlink():
+        raise RuntimeError("CUSTOMER_CANDIDATE_SYMLINK")
+    if not candidate.exists():
+        return None
+    clean_dir(candidate)
+    manifest_path = candidate / "candidate_manifest.json"
+    archive_path = candidate / "customer-package.zip"
+    report = json_file(manifest_path, 100_000)
+    require(archive_path.is_file() and not archive_path.is_symlink()
+            and 0 < archive_path.stat().st_size <= MAX_ZIP, "CUSTOMER_PACKAGE_FILE_INVALID")
+    raw = archive_path.read_bytes()
+    validate_customer_companion(report, raw, product, version, original_sha)
+    return report, raw
+
+
+def validate_customer_companion(report, raw, product, version, original_sha):
+    require(isinstance(report, dict)
+            and report.get("schema") == "saeit.factory.consumer-package.v1"
+            and report.get("product_id") == product
+            and report.get("factory_source_sha256") == version
+            and report.get("factory_internal_zip_sha256") == original_sha
+            and report.get("technical_buyer_package_verified") is True
+            and report.get("consumer_cli_smoke_examples_passed") == 2
+            and report.get("independent_domain_review_completed") is False
+            and report.get("rights_and_license_review_completed") is False
+            and report.get("eligible_for_commercial_listing") is False
+            and report.get("commercial_release") is False
+            and report.get("public_download_allowed") is False
+            and report.get("price") is None
+            and report.get("package_bytes") == len(raw)
+            and report.get("package_sha256") == digest(raw),
+            "CUSTOMER_PACKAGE_SHA_OR_RELEASE_GATE_INVALID")
+    safe_zip(raw)
+    with zipfile.ZipFile(io.BytesIO(raw)) as package:
+        needed={"product/calculator.py","product/example_inputs.json",
+                "guide/START_HERE.md","qa/SHA256SUMS.txt",
+                "license/REVIEW_REQUIRED.txt"}
+        require(needed.issubset(set(package.namelist())),
+                "CUSTOMER_PACKAGE_DELIVERABLES_MISSING")
+        require(b"NOT LICENSED FOR PUBLIC RESALE" in package.read("license/REVIEW_REQUIRED.txt"),
+                "CUSTOMER_PACKAGE_LICENSE_HOLD_MISSING")
+        sums=package.read("qa/SHA256SUMS.txt").decode("utf8")
+        for line in sums.splitlines():
+            sha, sep, name=line.partition("  ")
+            require(sep and SHA.fullmatch(sha) and name in package.namelist()
+                    and digest(package.read(name))==sha,
+                    "CUSTOMER_PACKAGE_MEMBER_DIGEST_FAILED")
+    return True
+
+
 def stock_records(root):
     clean_dir(root)
     finished = root / "production-warehouse/finished"
@@ -175,18 +228,28 @@ def add_tar(tar, name, raw):
 
 def export_factory(root=VPS):
     records = stock_records(Path(root))
+    companions = {(p,v):customer_companion(root,p,v,m["artifact_sha256"])
+                  for p,v,m,raw in records}
     stream = io.BytesIO()
     with tarfile.open(fileobj=stream, mode="w:gz") as tar:
         index = {"schema": SCHEMA, "tenant": TENANT, "created_utc": stamp(),
                  "inventory_count": len(records),
                  "items": [{"product_id":p, "version":v,
                             "artifact_sha256":m["artifact_sha256"],
-                            "bytes":len(blob)} for p,v,m,blob in records]}
+                            "bytes":len(blob),
+                            "consumer_package_sha256":(
+                                companions[(p,v)][0]["package_sha256"]
+                                if companions[(p,v)] is not None else None)}
+                           for p,v,m,blob in records]}
         add_tar(tar, "index.json", json_blob(index))
         for product, version, manifest, raw in records:
             name = "items/" + product + "/" + version + "/"
             add_tar(tar, name + "manifest.json", json_blob(manifest))
             add_tar(tar, name + "product.zip", raw)
+            if companions[(product,version)] is not None:
+                customer_manifest,customer_bytes=companions[(product,version)]
+                add_tar(tar, name + "customer_manifest.json", json_blob(customer_manifest))
+                add_tar(tar, name + "customer-package.zip", customer_bytes)
     value = stream.getvalue()
     require(len(value) <= MAX_PACKAGE, "WAREHOUSE_TRANSFER_TOO_LARGE")
     return value
@@ -230,7 +293,23 @@ def unpack(raw):
                 "BATCH_HASH_OR_SIZE_INVALID")
         manifest = json.loads(blobs[base + "manifest.json"])
         verify_stock(manifest, product, version, blobs[base+"product.zip"])
-        products.append((product, version, manifest, blobs[base+"product.zip"]))
+        customer=None
+        candidate_sha=item.get("consumer_package_sha256")
+        if candidate_sha is not None:
+            require(isinstance(candidate_sha,str) and SHA.fullmatch(candidate_sha),
+                    "CUSTOMER_BATCH_SHA_INVALID")
+            expected.update((base+"customer_manifest.json",base+"customer-package.zip"))
+            require(base+"customer_manifest.json" in blobs
+                    and base+"customer-package.zip" in blobs,
+                    "CUSTOMER_BATCH_FILE_MISSING")
+            report=json.loads(blobs[base+"customer_manifest.json"])
+            raw_customer=blobs[base+"customer-package.zip"]
+            require(report.get("package_sha256")==candidate_sha,
+                    "CUSTOMER_BATCH_MANIFEST_MISMATCH")
+            validate_customer_companion(report,raw_customer,product,version,
+                                        manifest["artifact_sha256"])
+            customer=(report,raw_customer)
+        products.append((product, version, manifest, blobs[base+"product.zip"],customer))
     require(set(blobs) == expected, "UNEXPECTED_TRANSFER_PATH")
     return products
 
@@ -252,8 +331,9 @@ def import_site(batch, root=DEST):
     private_new(root / "received")
     private_new(root / "returns")
     added, previous = 0, 0
+    customer_added,customer_existing,customer_missing=0,0,0
     rows = []
-    for product, version, manifest, content in products:
+    for product, version, manifest, content, customer in products:
         parent = root/"received"/product
         private_new(parent)
         version_dir = parent / version
@@ -269,12 +349,32 @@ def import_site(batch, root=DEST):
             atomic(version_dir/"product.zip",content)
             atomic(version_dir/"warehouse_manifest.json",json_blob(manifest))
             added += 1
+        if customer is not None:
+            candidate_report,candidate_zip=customer
+            candidate_zip_path=version_dir/"customer-package.zip"
+            candidate_manifest_path=version_dir/"customer_manifest.json"
+            if candidate_zip_path.exists() or candidate_manifest_path.exists():
+                require(candidate_zip_path.is_file() and not candidate_zip_path.is_symlink()
+                        and candidate_manifest_path.is_file() and not candidate_manifest_path.is_symlink()
+                        and digest(candidate_zip_path.read_bytes())==candidate_report["package_sha256"]
+                        and json_file(candidate_manifest_path)==candidate_report,
+                        "CUSTOMER_PREVIOUS_RECEIPT_CONFLICT")
+                customer_existing+=1
+            else:
+                atomic(candidate_zip_path,candidate_zip)
+                atomic(candidate_manifest_path,json_blob(candidate_report))
+                customer_added+=1
+        else:
+            customer_missing+=1
         # This independent QA does NOT invent a content, licensing or owner
         # approval. Missing commercial verification returns to stage one.
         issues = list(ISSUES)
         qa = {"schema": SCHEMA,"tenant":TENANT,"product_id":product,
               "version":version,"artifact_sha256":manifest["artifact_sha256"],
-              "technical_zip_verified":True,"commercial_approved":False,
+              "technical_zip_verified":True,
+              "customer_bundle_verified":customer is not None,
+              "customer_package_sha256":(customer[0]["package_sha256"] if customer else None),
+              "commercial_approved":False,
               "qa_state":"requires_factory_stage1_rework","issue_codes":issues,
               "public_listing":False,"payment_enabled":False,
               "preserve_original":True}
@@ -296,7 +396,11 @@ def import_site(batch, root=DEST):
         rows.append({"product_id":product,"version":version,"qa_state":qa["qa_state"]})
     report = {"schema":SCHEMA,"tenant":TENANT,"last_checked_utc":stamp(),
               "factory_versions_observed":len(products),"new_private_imports":added,
-              "duplicate_versions_skipped":previous,"quality_approved":0,
+              "duplicate_versions_skipped":previous,
+              "new_customer_packages_received":customer_added,
+              "existing_customer_packages_verified":customer_existing,
+              "warehouse_versions_without_customer_bundle":customer_missing,
+              "quality_approved":0,
               "pending_stage1_return":len(rows),"publicly_published":0,
               "store_product_created":0,"warehouse_bot_connected":True}
     atomic(root/"status.json",json_blob(report))
