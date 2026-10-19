@@ -106,6 +106,8 @@ jobs:
           import os,re
           from pathlib import Path
           os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
           from django.test import Client
           from django.conf import settings
           selector=Path.home()/"public_html"/".htaccess"
