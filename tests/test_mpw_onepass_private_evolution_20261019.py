@@ -110,6 +110,54 @@ class OnePassQualityTests(unittest.TestCase):
         self.assertEqual(after["open_rework_items"], 2)
         self.assertEqual(len(after["issues"]), 103)
 
+    def test_legacy_worker_execution_requires_real_receipts(self):
+        import os
+        self.populate()
+        quality = {
+            "status": "MPW_ZOMOROD_QUALITY_STANDARDS_USED_IN_PRIVATE_REVIEW",
+            "actual_private_drafts_scored": 2,
+            "quality_review_results": {"first": "scored", "second": "scored"},
+            "source_hashes_verified": True,
+            "factory_or_zomorod_modified": False,
+            "website_published": False,
+        }
+        manager = {
+            "status": "MPW_ZOMOROD_REPORTING_AND_ECONOMIC_POLICIES_IN_USE",
+            "source_modules_hash_verified": 2, "validated_private_drafts": 2,
+            "shared_Django_changed": False, "zomorod_or_factory_modified": False,
+            "financial_actions_executed": 0,
+        }
+        self.write("quality_review_agent_20261018/last_review.log", quality)
+        self.write("management_intelligence_20261018/last_run.log", manager)
+        self.write("management_intelligence_20261018/latest_company_operations.json",
+                   {"observed_utc": self.now.isoformat(), "financial_account_data_consulted": False,
+                    "factory_connected": False})
+        for rel in ("quality_review_agent_20261018/last_review.log",
+                    "management_intelligence_20261018/last_run.log"):
+            p = self.root / rel
+            os.utime(p, (self.now.timestamp(), self.now.timestamp()))
+        result = evaluate(self.root, self.now)
+        self.assertEqual(result["summary"]["healthy"], 26)
+        self.assertEqual(result["summary"]["unknown"], 0)
+        self.assertTrue(result["worker_execution_evidence"]["quality"]["verified"])
+        self.assertTrue(result["worker_execution_evidence"]["management"]["verified"])
+        self.assertEqual(run_once(self.root, self.now)["open_rework_items"], 0)
+
+    def test_worker_proof_rejects_stale_or_untrusted_log(self):
+        import os
+        self.populate()
+        self.write("quality_review_agent_20261018/last_review.log",
+                   {"status": "MPW_ZOMOROD_QUALITY_STANDARDS_USED_IN_PRIVATE_REVIEW",
+                    "source_hashes_verified": True, "actual_private_drafts_scored": 2,
+                    "quality_review_results": {}, "factory_or_zomorod_modified": False,
+                    "website_published": False})
+        target = self.root / "quality_review_agent_20261018/last_review.log"
+        os.utime(target, ((self.now-timedelta(days=1)).timestamp(),) * 2)
+        self.assertFalse(evaluate(self.root, self.now)["worker_execution_evidence"]["quality"]["verified"])
+        target.unlink()
+        target.symlink_to(self.root / EVO / "all_77_modules_last_run.json")
+        self.assertFalse(evaluate(self.root, self.now)["worker_execution_evidence"]["quality"]["verified"])
+
     def test_symlink_destinations_refused(self):
         foreign = self.root / "foreign"
         foreign.mkdir(mode=0o700)
