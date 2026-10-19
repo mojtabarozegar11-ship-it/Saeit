@@ -46,6 +46,16 @@ button{font-family:inherit;cursor:pointer;touch-action:manipulation}button:focus
 @media(max-width:770px){.top{left:8px;right:8px;top:7px;display:block}.brand{justify-content:space-between}.brand-icon{width:40px;height:40px;font-size:21px}.brand .over{font-size:8px}.brand .under{font-size:8px}.resources{max-width:none;justify-content:space-between;margin-top:7px;gap:3px}.resource{min-height:36px;border-radius:10px;padding:5px 6px;flex:1 0 16%;min-width:48px}.resource .sym{font-size:14px}.resource strong{font-size:12px}.resource small{font-size:8px}.side{right:8px;top:114px;max-height:31vh;width:186px;gap:4px}.side .sheet{padding:9px}.sheet p{font-size:10px;margin:2px 0 5px}.sheet .heading{font-size:12px}.left{display:none}.bottom{left:5px;right:5px;bottom:5px;grid-template-columns:1fr}.toolbar{order:1;justify-content:flex-start;max-width:100%;gap:5px;padding:7px;border-radius:12px}.tool{flex:0 0 68px;max-width:none;min-height:67px;padding:4px}.tool .ico{font-size:20px}.tool .title{font-size:10px}.tool .cost{font-size:8px}.control{position:fixed;left:8px;bottom:104px;grid-template-columns:repeat(3,34px);gap:3px;padding:5px;border-radius:12px}.control button{min-height:34px;font-size:14px}.control .wide{min-height:25px;font-size:9px}.terrain-tip{bottom:90px;max-width:75%;font-size:9px;padding:6px 8px;pointer-events:none}.toast{top:149px;font-size:10px}.intro-panel{padding:24px 18px}.intro-panel h2{font-size:25px}}
 @media(max-height:700px) and (max-width:770px){.side{top:98px;max-height:25vh}.toolbar{max-height:88px}.terrain-tip{display:none}.control{bottom:93px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+.mobile-war-toggle{display:none}
+@media(max-width:770px){
+ .mobile-war-toggle{display:block;position:fixed;z-index:6;top:118px;right:9px;background:#123728ed;color:#ffdf9a;border:1px solid #e8d7a174;border-radius:12px;padding:7px 12px;box-shadow:0 4px 16px #001b1155;font-weight:800;font-size:12px;backdrop-filter:blur(8px)}
+ .side{width:216px;top:160px;right:8px;max-height:calc(100% - 285px);transform:translateX(calc(100% + 20px));transition:transform .23s ease;overflow:auto}
+ .side.open{transform:translateX(0)}
+ .side .sheet{padding:9px}
+ .terrain-tip{bottom:91px;max-width:88%;font-size:10px}
+ .control{bottom:94px}
+ #intro .intro-panel{max-height:93vh;overflow:auto}
+}
 </style>
 </head>
 <body>
@@ -54,7 +64,8 @@ button{font-family:inherit;cursor:pointer;touch-action:manipulation}button:focus
   <div class="brand"><span class="brand-icon" aria-hidden="true">♛</span><div><div class="over">ZOMOROD • FARM DOMINION</div><h1>فرمانروای مزرعه‌ها</h1><div class="under">یک امپراتوری سبز بساز. از آن دفاع کن. پیروز شو.</div></div></div>
   <div class="resources" id="resources" aria-live="polite"></div>
 </header>
-<aside class="ui side">
+<button id="toggle-war" class="mobile-war-toggle" type="button" aria-controls="rival-panel" aria-expanded="false">⚔️ رقیب‌ها</button>
+<aside id="rival-panel" class="ui side">
   <section class="sheet"><div class="heading"><span>⚔️ نبرد قلمروها</span><span class="pill" id="day"></span></div><p>سه خاندان رقیب برای تصرف دره زمرد آماده‌اند. ارتش بساز و قلعه‌هایشان را فتح کن.</p><div id="enemies"></div><div class="mission" id="mission"></div></section>
   <section class="sheet"><div class="heading"><span>📜 گزارش نبرد</span><span class="pill" id="season"></span></div><div class="news" id="log" role="status" aria-live="polite"></div></section>
 </aside>
