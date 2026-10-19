@@ -1,0 +1,62 @@
+name: Personal site script bottleneck read-only audit
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Personal live script bottleneck audit 2026-10-19'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Audit executable scripts, response headers and HTML semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/mpw-script-audit
+          curl --fail --silent --show-error --location --max-time 40 \
+            --dump-header /tmp/mpw-script-audit/headers.txt \
+            --output /tmp/mpw-script-audit/home.html \
+            'https://mojplaywin.com/mojtaba.roozegar/'
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import re
+          s=Path('/tmp/mpw-script-audit/home.html').read_text(errors='replace')
+          class Parser(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.scripts=[];self.inline=False;self.text=''
+              def handle_starttag(self,tag,attrs):
+                  if tag=='script':
+                      a=dict(attrs);self.inline=not bool(a.get('src'))
+                      self.text=''
+                      self.scripts.append({'src':a.get('src','[inline]'), 'type':a.get('type','normal'),'async': 'async' in a,'defer':'defer' in a})
+              def handle_data(self,data):
+                  if self.inline:self.text+=data
+              def handle_endtag(self,tag):
+                  if tag=='script' and self.inline:
+                      self.scripts[-1]['inline_bytes']=len(self.text.encode())
+                      self.inline=False
+          p=Parser();p.feed(s)
+          print('PERSONAL_HTML_BYTES='+str(len(s.encode())))
+          print('PERSONAL_SCRIPT_COUNT='+str(len(p.scripts)))
+          for i,x in enumerate(p.scripts):
+              if x['src'] == '[inline]':
+                  print('SCRIPT_INLINE='+str(i)+' BYTES='+str(x.get('inline_bytes',0)))
+              else:print('SCRIPT_EXTERNAL='+str(i)+' SRC='+x['src'][:160]+' DEFER='+str(x['defer'])+' ASYNC='+str(x['async']))
+          for pat in (r'<img\\b',r'<style\\b',r'<link\\b[^>]*stylesheet',r'<details\\b',r'<section\\b'):
+              print('HTML_COUNT_'+pat.replace('\\','').replace('<','').replace('b','')+'='+str(len(re.findall(pat,s,re.I))))
+          for h in Path('/tmp/mpw-script-audit/headers.txt').read_text().splitlines():
+              if h.lower().startswith(('http/','content-type:','cache-control:','content-encoding:','server:','vary:')):
+                  print('RESPONSE_HEADER='+h[:250])
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: personal-script-audit-summary
+          path: /tmp/mpw-script-audit/headers.txt
+          retention-days: 3
