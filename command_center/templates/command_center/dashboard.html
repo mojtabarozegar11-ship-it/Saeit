@@ -38,7 +38,10 @@ section{margin-top:24px;scroll-margin-top:92px}
 <div id="staff-approvals">{% include "command_center/approval_queue.html" %}</div>
 <div id="staff-content">{% include "command_center/content_studio.html" %}</div>
 <div id="staff-album">{% include "command_center/media_album.html" %}</div>
-<section class="card"><h2>{% if lang == "fa" %}تنظیمات ایجنت‌ها{% else %}Agent Settings{% endif %}</h2><div class="grid">{% for item in agent_settings %}<div class="card"><span class="label">{{ item.label }}</span></div>{% endfor %}</div><p>{% if lang == "fa" %}این بخش‌ها هنوز به عملیات زنده متصل نشده‌اند.{% else %}These settings are not yet connected to live operations.{% endif %}</p></section><section id="staff-infrastructure"><h2>{% if lang == "fa" %}نقشه سلامت سامانه‌ها{% else %}System Health Map{% endif %}</h2><div id="systems" class="grid">
+<section class="card"><h2>{% if lang == "fa" %}تنظیمات ایجنت‌ها{% else %}Agent Settings{% endif %}</h2><div class="grid">{% for item in agent_settings %}<div class="card"><span class="label">{{ item.label }}</span></div>{% endfor %}</div><p>{% if lang == "fa" %}این بخش‌ها هنوز به عملیات زنده متصل نشده‌اند.{% else %}These settings are not yet connected to live operations.{% endif %}</p></section>{% if request.get_host == "zomorodmelal.ir" or request.get_host == "www.zomorodmelal.ir" %}
+<section id="zm-uptime" class="card"><h2>پایش واقعی Django و Passenger</h2><p>آخرین نمونه‌های پایش؛ سبز سالم، طلایی اختلال، قرمز خطا. بدون داده معتبر وضعیت نامشخص است.</p><div id="zm-uptime-chart" role="img" aria-label="نمودار تاریخچه وضعیت سرویس" style="display:flex;gap:3px;align-items:flex-end;min-height:54px;overflow-x:auto"></div><small id="zm-uptime-caption">هنوز داده دوره‌ای دریافت نشده است.</small></section>
+{% endif %}
+<section id="staff-infrastructure"><h2>{% if lang == "fa" %}نقشه سلامت سامانه‌ها{% else %}System Health Map{% endif %}</h2><div id="systems" class="grid">
 {% for component in components %}<article class="card" data-component="{{ component }}"><div class="label">{{ component }}</div><span class="state unknown">نامشخص</span><p><small>اتصال داده برقرار نیست</small></p></article>{% endfor %}
 </div></section>
 <section class="card"><h2>{% if lang == "fa" %}پیشرفت تأییدشده{% else %}Verified Progress{% endif %}</h2><div id="workstreams"><p>تا اتصال معیارهای واقعی، درصدی نمایش داده نمی‌شود.</p></div></section>
@@ -53,6 +56,18 @@ async function refresh(){
   const res=await fetch(endpoint,{credentials:"same-origin",cache:"no-store"});
   if(!res.ok)throw new Error("HTTP "+res.status);
   const data=await res.json();
+  const uptime=document.getElementById("zm-uptime-chart"),uptimeText=document.getElementById("zm-uptime-caption");
+  if(uptime&&uptimeText){
+    uptime.replaceChildren();
+    const history=(data.runtime_history||[]).slice(-96);
+    for(const sample of history){
+      const bar=document.createElement("span");
+      bar.style.cssText="height:42px;width:8px;flex:0 0 8px;border-radius:3px;background:"+(sample.status==="healthy"?"#209e78":sample.status==="failed"?"#c73e4a":"#cf9b39");
+      bar.title=sample.time+" / "+sample.status+(sample.recovery?" / Passenger restart requested":"");
+      uptime.append(bar);
+    }
+    uptimeText.textContent=history.length?("نمونه‌های ثبت‌شده: "+history.length+" | آخرین: "+history[history.length-1].time):"هنوز داده معتبر از cPanel نرسیده است.";
+  }
   const map=new Map((data.health.components||[]).map(x=>[x.component,x]));
   document.querySelectorAll("[data-component]").forEach(el=>{
     const item=map.get(el.dataset.component);
