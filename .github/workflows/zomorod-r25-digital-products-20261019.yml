@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: zomorod-r25-digital-products
+  group: zomorod-r25-digital-products-repaired-release
   cancel-in-progress: false
 jobs:
   release:
