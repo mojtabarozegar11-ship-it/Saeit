@@ -75,6 +75,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=2):
                 repair.record_technical_recovery(
                     root, recipe, json.loads(manifest.read_text(encoding="utf-8")))
         rework_counts = repair.summarize(root)
+        for candidate in dossier.get("entries", []):
+            repair.record_research_gaps(root, candidate)
+        research_rework_counts = repair.summarize_research(root)
         # The outbox is a PRIVATE staging manifest, not a request to a shop.
         # It deliberately does not carry a publish=true flag.
         state = {
@@ -94,6 +97,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=2):
                 for item in failures
             ],
             "private_rework_queue": rework_counts,
+            "research_correction_queue": research_rework_counts,
             "manufacturing_failed_recipe_count": len(failures),
             "technical_zip_checks_only": True,
             "research_coverage_policy": "saeit.factory.research-readiness.v1",
@@ -112,7 +116,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=2):
         return {"status": "needs_rework" if failures else "ok",
                 "processed": dossier["processed_count"],
                 "manufactured": len(produced), "updated": dossier["updated_count"],
-                "failed": len(failures), "rework_queue": rework_counts}
+                "failed": len(failures), "rework_queue": rework_counts,
+                "research_rework_queue": research_rework_counts}
 
 
 def main(argv=None):
@@ -134,6 +139,7 @@ def main(argv=None):
     print("VPS_FACTORY_PRODUCT_CANDIDATES_SCANNED=" + str(result["processed"]))
     print("VPS_FACTORY_QA_REWORK_NEW_OR_OPEN=" + str(result.get("failed", 0)))
     print("VPS_FACTORY_PRIVATE_QA_REWORK=" + json.dumps(result.get("rework_queue", {}), sort_keys=True))
+    print("VPS_FACTORY_RESEARCH_REWORK=" + json.dumps(result.get("research_rework_queue", {}), sort_keys=True))
     print("VPS_FACTORY_STORE_PUBLICATION_ENABLED=false")
     return 0
 
