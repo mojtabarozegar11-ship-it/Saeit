@@ -22,11 +22,21 @@ import tempfile
 SCHEMA = "saeit.factory.code-self-upgrade.v1"
 # The rules are explicit tested repair templates, not unrestricted code generation.
 SAFE_FIXES = (
-    ("scripts/factory_research_triage.py", "def atomic(path, value):"),
-    ("scripts/factory_specialist_pilots.py", "def atomic(path, data):"),
+    # path, exact function signature, exact first body, function name, probe input
+    ("scripts/factory_research_triage.py", "def atomic(path, value):",
+     "    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)\n",
+     "atomic", "dict"),
+    ("scripts/factory_specialist_pilots.py", "def atomic(path, data):",
+     "    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)\n",
+     "atomic", "dict"),
+    ("scripts/factory_first_product_pilot.py", "def write_atomic(path, text):",
+     "    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)\n",
+     "write_atomic", "text"),
+    ("scripts/factory_public_library_adapter.py", "def atomic_write(path, raw, *, mode=0o644):",
+     "    fd, temp = tempfile.mkstemp(prefix=\".saeit-public-\", dir=path.parent)\n",
+     "atomic_write", "bytes"),
 )
 PRELUDE = "    if path.parent.is_symlink():\n        raise RuntimeError('SELF_UPGRADE_BLOCKED_SYMLINK_PARENT')\n"
-ATOMIC_BODY = "    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)\n"
 MAX_FILE_BYTES = 1_000_000
 
 # Probe an actual before/after behavior in a disposable directory.
@@ -44,7 +54,10 @@ module=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 blocked=False
 try:
-    module.atomic(inside/'external'/'unexpected.json',{'test':'known_symlink_attack'})
+    function=getattr(module,sys.argv[3])
+    payload={'test':'known_symlink_attack'} if sys.argv[4]=='dict' else (
+        b'known_symlink_attack' if sys.argv[4]=='bytes' else 'known_symlink_attack')
+    function(inside/'external'/'unexpected.json',payload)
 except (OSError,RuntimeError,ValueError):
     blocked=True
 print(json.dumps({'blocked':blocked,'escaped':(outside/'unexpected.json').exists()}))
@@ -94,28 +107,28 @@ def inventory(repo):
     return entries
 
 
-def edit(source, header):
-    # AST validation before and after applies even to real patch candidates.
+def edit(source, header, body, method_name):
+    # Strict, tested function-level transforms. No arbitrary LLM shell output.
     tree = ast.parse(source)
-    methods = [x for x in tree.body if isinstance(x, ast.FunctionDef) and x.name == "atomic"]
+    methods = [x for x in tree.body if isinstance(x, ast.FunctionDef) and x.name == method_name]
     if len(methods) != 1 or header not in source:
         return None
-    needle = header + "\n" + ATOMIC_BODY
+    needle = header + "\n" + body
     if needle not in source:
         return None
-    new = source.replace(needle, header + "\n" + PRELUDE + ATOMIC_BODY, 1)
+    new = source.replace(needle, header + "\n" + PRELUDE + body, 1)
     if new == source or len(new) - len(source) > 200:
         raise RuntimeError("CODE_UPGRADE_PATCH_UNEXPECTED")
     ast.parse(new)
     return new
 
 
-def probe(python, source, stage):
+def probe(python, source, stage, method_name, payload_kind):
     root = stage / "probe"
     root.mkdir(parents=True)
     try:
         process = subprocess.run(
-            [str(python), "-I", "-B", "-c", PROBE, str(source), str(root)],
+            [str(python), "-I", "-B", "-c", PROBE, str(source), str(root), method_name, payload_kind],
             capture_output=True, universal_newlines=True, timeout=20,
             env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8",
                  "PYTHONDONTWRITEBYTECODE": "1"},
@@ -140,15 +153,15 @@ def generate(repo, output, python=None):
     if out.is_symlink() or not out.is_dir():
         raise RuntimeError("CODE_UPGRADE_OUTPUT_UNSAFE")
     modules = inventory(base)
-    allowed = {p for p, _ in SAFE_FIXES}
+    allowed = {rule[0] for rule in SAFE_FIXES}
     source_paths = {e["path"] for e in modules}
     if not allowed.issubset(source_paths):
         raise RuntimeError("CODE_UPGRADE_EXPECTED_MODULE_MISSING")
     candidates = []
-    for path, header in SAFE_FIXES:
+    for path, header, body, method_name, payload_kind in SAFE_FIXES:
         original = base / path
         source = original.read_text(encoding="utf8")
-        candidate = edit(source, header)
+        candidate = edit(source, header, body, method_name)
         if candidate is None:
             continue
         item = {
@@ -170,8 +183,10 @@ def generate(repo, output, python=None):
         # two independent runs, not just AST checks or strings in logs.
         with tempfile.TemporaryDirectory(dir=str(slot)) as tmp:
             scratch = Path(tmp)
-            baseline = probe(python or sys.executable, original, scratch / "baseline")
-            improved = probe(python or sys.executable, proposed, scratch / "candidate")
+            baseline = probe(python or sys.executable, original, scratch / "baseline",
+                             method_name, payload_kind)
+            improved = probe(python or sys.executable, proposed, scratch / "candidate",
+                             method_name, payload_kind)
         item.update({"baseline": baseline, "candidate": improved,
                      "negative_case_reproduced": baseline == {
                          "blocked": False, "escaped": True},
@@ -198,6 +213,9 @@ def generate(repo, output, python=None):
         "approval_required_for_production_merge": True,
         "unreviewed_llm_edits_admitted": False,
         "code_mutation_scope": [x[0] for x in SAFE_FIXES],
+        "code_edits_across_all_modules_claimed": False,
+        "upgrade_policy": "tested_allowlisted_defect_rules_no_live_mutation",
+        "modules_without_proven_repair": len(modules) - len(candidates),
     }
     atomic(out / "evolution-proof.json", state)
     return state
