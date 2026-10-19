@@ -308,14 +308,16 @@ class ProductionContinuityTests(unittest.TestCase):
 
     def test_high_level_internal_needs_feed_real_new_product_builds(self):
         novel=0
-        for _ in range(10):
-            result=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True,enable_design_intake=True)
+        for _ in range(6):
+            result=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True,
+                                   enable_design_intake=True,design_capacity=6)
             novel+=result['new_artifacts']
         status=json.loads((self.output/'engineering-intake/production-results.json').read_text())
-        self.assertEqual(status['technical_prototypes'],7)
-        self.assertEqual(status['functional_products'],6)
-        self.assertGreaterEqual(novel,10)
-        replay=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True,enable_design_intake=True)
+        self.assertEqual(status['technical_prototypes'],15)
+        self.assertGreaterEqual(status['functional_products'],9)
+        self.assertGreaterEqual(novel,18)
+        replay=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True,
+                               enable_design_intake=True,design_capacity=6)
         self.assertEqual(replay['new_artifacts'],0)
         for receipt in (self.output/'engineering-intake').glob('*.json'):
             item=json.loads(receipt.read_text())
