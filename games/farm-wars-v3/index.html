@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#11251d">
+<title>Farm Dominion | نبرد مزارع زمرد</title>
+<meta name="description" content="Farm Dominion بازی سه‌بعدی واقعی مزرعه‌داری و نبرد فرماندهان، ساخت قلعه، کشاورزی و جنگ استراتژیک.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#14251d;--dark:#10241d;--panel:#11271fee;--panel-light:#233b30df;--edge:#6f8d6b66;--gold:#f4d58b;--sand:#eee3c5;--text:#fdf9ea;--muted:#bed3bd;--green:#8bd1a0;--red:#ef9586}*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;font-family:Vazirmatn,Tahoma,sans-serif;background:#8eb8ad;color:var(--text)}
+button{font-family:inherit;cursor:pointer;touch-action:manipulation}button:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+#viewport{position:fixed;inset:0;background:linear-gradient(#88b4ad 0%,#bfd9b0 48%,#4b7151 100%)}
+#world{width:100%;height:100%;display:block;touch-action:none;cursor:grab}#world:active{cursor:grabbing}
+.veil{pointer-events:none;position:absolute;inset:0;background:radial-gradient(ellipse at 50% 40%,transparent 30%,#081f204b 110%),linear-gradient(0deg,#071b0d70 0,transparent 25%,transparent 70%,#051f2270);z-index:1}
+.ui{position:fixed;z-index:3;pointer-events:none}.ui>*{pointer-events:auto}
+.top{top:12px;right:18px;left:18px;display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+.brand{display:flex;align-items:center;gap:9px;text-shadow:0 2px 8px #12261ebb}.brand-icon{width:60px;height:60px;border:2px solid #f8df93a6;border-radius:18px;background:linear-gradient(140deg,#386c50,#153d2c);display:grid;place-items:center;font-size:28px;box-shadow:0 7px 25px #0005,inset 0 2px #fff5}.brand .over{font-size:10px;color:#ffeeaf;letter-spacing:2.6px;font-weight:800}.brand h1{font-size:clamp(19px,2.5vw,30px);margin:0;color:#fff5cb;line-height:1.25;font-weight:900}.brand .under{font-size:10px;color:#e6f2d7}
+.resources{display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap;max-width:680px}
+.resource{display:flex;align-items:center;gap:6px;padding:7px 11px 7px 15px;background:linear-gradient(150deg,#203e30ee,#10251df2);border:1px solid #a8c29177;border-radius:14px;box-shadow:0 4px 15px #06170c68,inset 0 1px #fff2;color:#ffefd2;backdrop-filter:blur(13px);min-height:46px}
+.resource .sym{font-size:21px}.resource strong{display:block;font-weight:800;font-size:15px;line-height:1.1}.resource small{display:block;font-size:9px;color:#b5cbb5}
+.side{top:99px;right:18px;width:280px;display:grid;gap:12px;max-height:calc(100% - 268px);overflow:auto;padding:3px;scrollbar-width:thin}
+.sheet{background:linear-gradient(155deg,#1b3d31eb,#10241df2);border:1px solid #e1deb263;border-radius:18px;padding:14px;box-shadow:0 11px 35px #06180c80,inset 0 1px #fffa8b28;backdrop-filter:blur(16px)}
+.sheet .heading{display:flex;align-items:center;justify-content:space-between;color:#fce3a0;font-weight:900;font-size:15px;gap:8px}.pill{font-size:10px;font-weight:700;padding:4px 8px;border-radius:20px;background:#385e47;border:1px solid #eae0ad59;color:#f4e9c0}
+.sheet p{font-size:11px;line-height:1.8;color:#d5e2d0;margin:7px 0 10px}.bar{height:8px;border-radius:10px;background:#0b201a;overflow:hidden;border:1px solid #5e7059}.bar>span{display:block;height:100%;background:linear-gradient(90deg,#efa178,#ffdd94);width:100%;transition:width .4s}
+.target{display:grid;grid-template-columns:1fr auto;align-items:center;gap:5px;padding:9px 0;border-bottom:1px solid #a9bf9760;font-size:12px}.target:last-of-type{border:0}.target .faction{font-weight:800}.target .health{font-size:10px;color:#e8cbb2}
+.news{font-size:10px;color:#cae5cc;margin-top:6px;line-height:1.6}.mission{padding:7px 9px;border-radius:9px;background:#46634573;font-size:11px;color:#f6f4ce;margin:8px 0}
+.left{top:100px;left:16px;width:232px;display:grid;gap:10px;max-height:calc(100% - 265px);overflow:auto;scrollbar-width:thin}
+.card-title{font-weight:800;color:#ffe4a0;font-size:14px;margin-bottom:5px}.row-small{display:flex;gap:8px;justify-content:space-between;font-size:11px;align-items:center;padding:4px 0;border-bottom:1px solid #d4e1b522}.row-small b{color:#f9e5b1}.quest-progress{height:7px;background:#0e251b;border-radius:10px;overflow:hidden;margin-top:8px}.quest-progress i{display:block;height:100%;background:linear-gradient(90deg,#77ce98,#e9d384);width:0%;transition:width .3s}
+.terrain-tip{position:fixed;bottom:150px;right:50%;transform:translateX(50%);pointer-events:none;border:1px solid #ffebaf64;border-radius:17px;background:#09221cba;padding:7px 13px;text-align:center;box-shadow:0 5px 25px #0b1e13a6;font-size:11px;z-index:3;max-width:60%;backdrop-filter:blur(8px)}
+.bottom{position:fixed;z-index:4;bottom:12px;right:12px;left:12px;pointer-events:none;display:grid;grid-template-columns: minmax(0,1fr) 235px;gap:10px;align-items:end}
+.toolbar{pointer-events:auto;display:flex;align-items:stretch;justify-content:center;gap:8px;border:1px solid #f8dda478;border-radius:18px;padding:10px;background:#10251dec;box-shadow:0 8px 45px #061c15b0,inset 0 1px #ffebad32;backdrop-filter:blur(18px);overflow:auto;scrollbar-width:thin}
+.tool{flex:1 0 78px;max-width:112px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:13px;border:1px solid #a3bb976f;background:linear-gradient(155deg,#426d50,#254633);box-shadow:0 3px 0 #12291d,inset 0 2px #fff2;color:#fff5d4;padding:6px 7px 7px;min-height:76px}
+.tool .ico{font-size:22px;line-height:1.1}.tool .title{font-size:11px;font-weight:800;white-space:nowrap}.tool .cost{font-size:9px;opacity:.79;white-space:nowrap}.tool:active{transform:translateY(2px);box-shadow:0 1px 0 #12291d}.tool.active{background:linear-gradient(155deg,#d3a451,#896535);border-color:#ffe6a4;color:#281b0b}.tool.war{background:linear-gradient(160deg,#a44b42,#72392f)}.tool.special{background:linear-gradient(165deg,#ecb85f,#b07e36);color:#2b210f}.tool:disabled{opacity:.44;filter:grayscale(.6);cursor:not-allowed}
+.control{pointer-events:auto;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;background:#10251de8;border:1px solid #f6ddaa5c;padding:10px;border-radius:18px;backdrop-filter:blur(12px)}.control button{background:#2e5040e6;color:#ecf4dc;border:1px solid #adc79b73;border-radius:11px;min-height:40px;font-size:16px}.control button:hover{background:#496c50}.control .wide{grid-column:span 3;font-size:11px;font-weight:800;color:#ffe8b2;min-height:28px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);top:90px;z-index:10;pointer-events:none;color:#ffefc3;background:#172f27ec;border:1px solid #d8b77e;border-radius:14px;padding:9px 16px;max-width:min(500px,93vw);box-shadow:0 6px 30px #132117c0;text-align:center;font-size:12px;transition:opacity .3s}.toast.hide{opacity:0}
+#intro{position:fixed;z-index:20;inset:0;background:linear-gradient(145deg,#081b17e8,#132921d7);display:flex;justify-content:center;align-items:center;padding:15px;backdrop-filter:blur(12px)}
+#intro.hidden{display:none}.intro-panel{max-width:520px;padding:36px 30px;background:linear-gradient(150deg,#325941,#142e24);border:2px solid #d9c38d;border-radius:26px;box-shadow:0 30px 90px #03180cda;text-align:center}.intro-emblem{font-size:60px;filter:drop-shadow(0 6px 8px #040c0750)}.intro-panel h2{font-size:31px;color:#ffe5a7;margin:10px 0 5px}.intro-panel p{font-size:13px;color:#d9e9d4;line-height:2}.intro-panel .badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin:20px 0}.intro-panel .badges b{background:#62846b59;border:1px solid #c7d8b17a;border-radius:20px;font-size:11px;padding:6px 10px}
+#start{background:linear-gradient(#ffe4a5,#d9a851);border:0;border-radius:14px;padding:14px 37px;font-weight:900;font-size:15px;color:#3d2613;box-shadow:0 6px #9c703c}
+#start:disabled{opacity:.5}.loading{font-size:11px;color:#c1d4c4;margin-top:15px;min-height:22px}
+#error{display:none;color:#ffd9b5;padding:13px;background:#7a352d;border:1px solid #d28e72;border-radius:9px;margin-top:8px;font-size:12px}
+.tour{position:fixed;z-index:10;top:50%;left:50%;transform:translate(-50%,-50%);width:min(430px,95%);border:1px solid #f5daa2;border-radius:22px;background:#16352be9;padding:25px;text-align:center;display:none;box-shadow:0 25px 100px #041509ad;backdrop-filter:blur(15px)}
+.tour h2{color:#ffe6b0}.tour p{font-size:13px;color:#d5e7d2;line-height:2}.tour button{padding:10px 25px;border:0;border-radius:10px;background:var(--gold);font-weight:bold;color:#2c2917}
+@media(max-width:1060px){.side{width:240px}.left{width:190px}.resource{padding:6px 8px}.bottom{grid-template-columns:1fr 145px}.toolbar{gap:5px;padding:7px}.tool{flex-basis:70px;min-height:70px}}
+@media(max-width:770px){.top{left:8px;right:8px;top:7px;display:block}.brand{justify-content:space-between}.brand-icon{width:40px;height:40px;font-size:21px}.brand .over{font-size:8px}.brand .under{font-size:8px}.resources{max-width:none;justify-content:space-between;margin-top:7px;gap:3px}.resource{min-height:36px;border-radius:10px;padding:5px 6px;flex:1 0 16%;min-width:48px}.resource .sym{font-size:14px}.resource strong{font-size:12px}.resource small{font-size:8px}.side{right:8px;top:114px;max-height:31vh;width:186px;gap:4px}.side .sheet{padding:9px}.sheet p{font-size:10px;margin:2px 0 5px}.sheet .heading{font-size:12px}.left{display:none}.bottom{left:5px;right:5px;bottom:5px;grid-template-columns:1fr}.toolbar{order:1;justify-content:flex-start;max-width:100%;gap:5px;padding:7px;border-radius:12px}.tool{flex:0 0 68px;max-width:none;min-height:67px;padding:4px}.tool .ico{font-size:20px}.tool .title{font-size:10px}.tool .cost{font-size:8px}.control{position:fixed;left:8px;bottom:104px;grid-template-columns:repeat(3,34px);gap:3px;padding:5px;border-radius:12px}.control button{min-height:34px;font-size:14px}.control .wide{min-height:25px;font-size:9px}.terrain-tip{bottom:90px;max-width:75%;font-size:9px;padding:6px 8px;pointer-events:none}.toast{top:149px;font-size:10px}.intro-panel{padding:24px 18px}.intro-panel h2{font-size:25px}}
+@media(max-height:700px) and (max-width:770px){.side{top:98px;max-height:25vh}.toolbar{max-height:88px}.terrain-tip{display:none}.control{bottom:93px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="viewport"><canvas id="world" aria-label="جهان سه‌بعدی مزرعه‌ها و قلعه‌های رقیب"></canvas><div class="veil"></div></div>
+<header class="ui top">
+  <div class="brand"><span class="brand-icon" aria-hidden="true">♛</span><div><div class="over">ZOMOROD • FARM DOMINION</div><h1>فرمانروای مزرعه‌ها</h1><div class="under">یک امپراتوری سبز بساز. از آن دفاع کن. پیروز شو.</div></div></div>
+  <div class="resources" id="resources" aria-live="polite"></div>
+</header>
+<aside class="ui side">
+  <section class="sheet"><div class="heading"><span>⚔️ نبرد قلمروها</span><span class="pill" id="day"></span></div><p>سه خاندان رقیب برای تصرف دره زمرد آماده‌اند. ارتش بساز و قلعه‌هایشان را فتح کن.</p><div id="enemies"></div><div class="mission" id="mission"></div></section>
+  <section class="sheet"><div class="heading"><span>📜 گزارش نبرد</span><span class="pill" id="season"></span></div><div class="news" id="log" role="status" aria-live="polite"></div></section>
+</aside>
+<aside class="ui left"><section class="sheet"><div class="card-title">🏡 قلمرو فرمانروایی</div><div id="estate"></div></section><section class="sheet"><div class="card-title">🎯 اهداف امروز</div><p id="quest"></p><div class="quest-progress"><i id="questfill"></i></div></section><section class="sheet"><div class="card-title">🗺️ راهنمای فرماندهی</div><p>موس: درگ برای جابه‌جایی، اسکرول برای زوم، لمس دو انگشت برای زوم. برای انتخاب خانه روی آن بزنید. از منوی پایین فرمان صادر کنید.</p><button id="tutorial" style="width:100%;border:1px solid #ffe3a1;background:#456e53;color:#fff2c8;border-radius:9px;padding:7px">راهنمای بازی</button></section></aside>
+<div class="terrain-tip" id="selection">یک زمین مزرعه را انتخاب کنید و کشت یا ساخت‌وساز را آغاز کنید.</div>
+<div class="bottom">
+  <nav class="toolbar" id="actions" aria-label="فرمان‌های ساخت، کشاورزی و نبرد"></nav>
+  <div class="control" aria-label="کنترل دوربین">
+    <button id="cam-left" aria-label="چرخش دوربین به چپ">⟲</button>
+    <button id="cam-home" aria-label="نمای خانه">⌂</button>
+    <button id="cam-right" aria-label="چرخش دوربین به راست">⟳</button>
+    <button id="zoom-out" aria-label="دورتر">−</button>
+    <button id="next-day" class="wide">☀ روز بعد</button>
+    <button id="zoom-in" aria-label="نزدیک‌تر">+</button>
+  </div>
+</div>
+<div id="toast" class="toast hide" role="status" aria-live="polite"></div>
+<div id="intro"><div class="intro-panel"><div class="intro-emblem">♛</div><div class="over" style="color:#e6cf92;letter-spacing:2.5px;font-size:12px;font-weight:800">FARM DOMINION • 3D WORLD</div><h2>فرمانروای مزرعه‌ها</h2><p>زمینت را آباد کن، محصولات را برداشت کن، آسیاب و انبار بساز، سرباز تعلیم بده و در نبرد واقعی با سه خاندان رقیب پیروز شو.</p><div class="badges"><b>🌾 کشاورزی</b><b>🏘️ شهرسازی</b><b>🐑 دامداری</b><b>⚔️ نبرد سه‌بعدی</b><b>🏰 فتح قلعه‌ها</b></div><button id="start" disabled>جهان در حال آماده‌سازی...</button><div class="loading" id="loading">بارگذاری مدل‌های سه‌بعدی...</div><div id="error"></div></div></div>
+<div id="tour" class="tour" role="dialog" aria-labelledby="tourTitle"><h2 id="tourTitle">شروع امپراتوری</h2><p id="tourBody">ابتدا با انتخاب زمین نزدیک قلعه خود گندم بکارید، سپس با زدن «روز بعد» محصول رشد می‌کند. پس از برداشت از بخش سپاه سرباز آموزش دهید و به قلعه‌های رقیب حمله کنید.</p><button id="close-tour">متوجه شدم</button></div>
+<script src="./game.js" defer></script>
+</body>
+</html>
