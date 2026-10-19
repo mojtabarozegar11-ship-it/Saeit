@@ -68,6 +68,17 @@ try {
     }
     ensure(count(array_unique($observed))===100,'unique generation test evidence');
     ensure((int)$db->query('SELECT COUNT(*) FROM runs')->fetchColumn()===1100,'all 1100 results recorded');
+    // Master transport failure plus an unrelated unhealthy agent must not
+    // become a mere warning: fail-closed master status remains "error".
+    $masterFault=zmAgentCycle($db,null,function(string $url):array {
+        if($url==='https://zomorodmelal.ir/' || $url==='https://zomorodmelal.ir/agriculture/')
+            return ['http'=>0,'bytes'=>0,'content_type'=>'','error'=>'simulated failure'];
+        return ['http'=>200,'bytes'=>200,'content_type'=>'text/html','error'=>''];
+    });
+    $masterLast=end($masterFault);
+    ensure($masterLast[0]==='master' && $masterLast[1]==='error' && $masterLast[2]===0,
+      'master hard failure not downgraded to warning');
+    echo "SITE_AGENT_MASTER_BOTH_FAILURES_FAIL_CLOSED=passed\n";
     $callsBefore=$calls;
     $db->exec("UPDATE agents SET check_path='//evil.example/path' WHERE code='agriculture'");
     $x=zmAgentCycle($db,'agriculture',function($url)use(&$calls){$calls++;return ['http'=>200,'bytes'=>1000,'content_type'=>'text/html'];});
