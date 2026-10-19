@@ -164,6 +164,29 @@ jobs:
                   print("ROOT_ERRORLOG_READ=unavailable")
           PY
           REMOTE
+      - name: Compare direct cPanel origin with public host using read-only HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          origin="$(getent ahostsv4 zohal.pws-dns.net | awk 'NR==1{print $1}' || true)"
+          case "$origin" in
+            ''|*[!0-9.]*)
+              echo "ROOT_ORIGIN_DNS=unavailable"
+              exit 0
+              ;;
+          esac
+          echo "ROOT_ORIGIN_DNS=resolved"
+          for target in "$origin" 127.0.0.1; do
+            if test "$target" = 127.0.0.1; then label=loopback; else label=cpanel_origin; fi
+            for path in / /api/health/; do
+              output="$(curl -sS --max-time 14 --resolve "zomorodmelal.ir:443:$target" -o /dev/null -w '%{http_code}|%{content_type}' "https://zomorodmelal.ir$path" 2>/dev/null || true)"
+              echo "ROOT_DIRECT_HTTP source=$label path=$path result=$output"
+            done
+          done
+          REMOTE
       - name: Probe exact public Django health route with sanitized response fields
         shell: bash
         run: |
