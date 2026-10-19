@@ -6,6 +6,9 @@ on:
       - "deploy/install_autonomous_factory_products.sh"
       - "deploy/install_production_warehouse.sh"
       - "tests/test_factory_every_minute.py"
+      - "scripts/factory_continuous_production_orders.py"
+      - "tests/test_factory_continuous_production_orders.py"
+      - "deploy/install_factory_continuous_orders.sh"
       - ".github/workflows/vps-factory-every-minute-20261019.yml"
   push:
     branches: [main]
@@ -14,6 +17,9 @@ on:
       - "deploy/install_autonomous_factory_products.sh"
       - "deploy/install_production_warehouse.sh"
       - "tests/test_factory_every_minute.py"
+      - "scripts/factory_continuous_production_orders.py"
+      - "tests/test_factory_continuous_production_orders.py"
+      - "deploy/install_factory_continuous_orders.sh"
       - ".github/workflows/vps-factory-every-minute-20261019.yml"
 permissions:
   contents: read
@@ -31,11 +37,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_factory_every_minute.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_continuous_production_orders.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_production_warehouse.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
   deploy:
     needs: contract
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-factory-minute-20261019]')
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && (contains(github.event.head_commit.message, '[approved-factory-minute-20261019]') || contains(github.event.head_commit.message, '[approved-factory-work-orders-20261019]'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -104,6 +111,35 @@ jobs:
           print("FACTORY_MINUTE_MANUAL_CYCLE=PASS")
           print("FACTORY_MINUTE_STOCK_VERSIONS="+str(reg["finished_goods_versions"]))
           print("FACTORY_MINUTE_NO_SITE_TRANSFER=PASS")
+          PY
+          # Only the existing private VPS factory is modified; no sites.
+          order_stage="/home/githubops/factory-runtime/operations/.workorders-source-$GITHUB_RUN_ID"
+          ssh_vps "umask 077; test ! -e '$order_stage'; mkdir -m 700 '$order_stage'"
+          for src in scripts/factory_continuous_production_orders.py deploy/install_factory_continuous_orders.sh; do
+            file="$(basename "$src")"
+            cat "$src" | ssh_vps "umask 077; cat > '$order_stage/$file'"
+            digest="$(sha256sum "$src" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$order_stage/$file' | awk '{print \$1}')\" = '$digest'"
+          done
+          ssh_vps "bash -n '$order_stage/install_factory_continuous_orders.sh' && bash '$order_stage/install_factory_continuous_orders.sh' '$order_stage/factory_continuous_production_orders.py'"
+          ssh_vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import json,subprocess
+          home=Path.home()/"factory-runtime"
+          ops=home/"operations"
+          private=home/"private"/"autonomous-product-cycle"
+          cron=subprocess.check_output(["crontab","-l"],text=True)
+          assert cron.count("SAEIT_FACTORY_EVERY_MINUTE_V1")==1
+          runner=(ops/"production-warehouse"/"run-minute-cycle.sh").read_text()
+          assert runner.count("FACTORY_AUTONOMOUS_WORK_ORDER_GENERATOR_V1")==1
+          assert runner.index("run-local-cycle.sh")<runner.index("generate-orders.py")<runner.index("run-warehouse.sh")
+          info=json.loads((private/"production-instructions"/"order-status.json").read_text())
+          assert info["instructions_issued_total"]>=1 and info["candidate_instructions"]>=1
+          assert info["site_connection_required"] is False and info["distribution_enabled"] is False
+          print("FACTORY_INSTRUCTION_ENGINE_ACTIVE=PASS")
+          print("FACTORY_ORDERS_PENDING="+str(info["pending_instructions"]))
+          print("FACTORY_ORDERS_ISSUED_TOTAL="+str(info["instructions_issued_total"]))
+          print("FACTORY_INSTRUCTIONS_AVAILABLE="+str(info["candidate_instructions"]))
           PY
       - name: Final scheduling result
         run: |
