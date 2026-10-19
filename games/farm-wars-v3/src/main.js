@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import {GENES,FLOW,climate,makeMeta,ensureMeta,seedDetails,requiredDays,pulse as riverPulse,cycleGene,harvest as riverHarvest,attackModifier,advance as riverAdvance,deliver as riverDeliver,rivalsTurn} from './strategy.mjs';
 
 (() => {
 'use strict';
@@ -20,6 +21,11 @@ const itemDefs = {
  train:{label:'سرباز',icon:'🛡️',cost:{gold:55,food:24}},
  attack:{label:'حمله',icon:'⚔️',cost:{army:4,food:24}},
  repair:{label:'تعمیر',icon:'🧱',cost:{gold:60,wood:45}},
+ 'flow-grow':{label:'آبیاری',icon:'💧'},
+ 'flow-guard':{label:'خندق آب',icon:'🛡️'},
+ 'flow-siege':{label:'سیل محاصره',icon:'🌊'},
+ 'gene-cycle':{label:'انتخاب بذر',icon:'🧬'},
+ 'contract':{label:'ارسال سفارش',icon:'📦'},
  next:{label:'روز بعد',icon:'☀️'}
 };
 const factions=[{name:'خاندان آتش',color:0xcf6542,x:15,z:2,initial:220},{name:'خاندان آهن',color:0x6b7cae,x:16,z:7,initial:260},{name:'خاندان سایه',color:0x7c5c8f,x:15,z:12,initial:310}];
@@ -28,7 +34,7 @@ const key=(x,z)=>x+','+z;
 const pos=(x,z)=>new THREE.Vector3((x-(NX-1)/2)*T,0,(z-(NZ-1)/2)*T);
 function rng(v){let n=Math.sin(v*127.1+17.75)*43758.5453;return n-Math.floor(n);}
 function fresh(){
- let d={v:3,day:1,gold:420,food:190,wood:220,army:12,workers:5,health:450,maxHealth:450,plots:{},enemies:factions.map(f=>f.initial),selected:{x:7,z:8},enemySelected:0,log:['مزرعه بزرگ زمرد آماده فرمان شماست.'],completed:false,wins:0,score:0};
+ let d={v:3,day:1,gold:420,food:190,wood:220,army:12,workers:5,health:450,maxHealth:450,plots:{},enemies:factions.map(f=>f.initial),selected:{x:7,z:8},enemySelected:0,log:['مزرعه بزرگ زمرد آماده فرمان شماست.'],completed:false,wins:0,score:0,meta:makeMeta(1)};
  d.plots[key(6,9)]={type:'wheat',age:2};
  d.plots[key(7,9)]={type:'corn',age:1};
  d.plots[key(6,10)]={type:'wheat',age:1};
@@ -48,6 +54,7 @@ let state=restore(),mode='wheat',assets={},renderer,scene,camera,sun,terrain,gro
 let cam={center:new THREE.Vector3(-3.5,0,0),angle:Math.PI/4,zoom:1,polar:Math.PI/3.05},camMin=0.8,camMax=2.7;
 let buildingGroup,cropGroup,environmentGroup,actorsGroup,particlesGroup,flags=[],windmills=[],animals=[],animatedUnits=[],fx=[],ready=false;
 let rafId=0,lastTime=0,frame=0,lastToast=0,activePointers=new Map(),lastPinch=0;
+ensureMeta(state);
 const rendererStats={drawCalls:0};
 function save(){try{localStorage.setItem(STORAGE,JSON.stringify(state));}catch(e){}}
 function notice(message){state.log.unshift(message);state.log=state.log.slice(0,6);updateUI();const t=ui.toast;t.textContent=message;t.classList.remove('hide');lastToast=performance.now();}
@@ -56,7 +63,7 @@ function pay(cost){for (const [k,v] of Object.entries(cost||{}))state[k]-=v;}
 function gain(result){for (const [k,v] of Object.entries(result||{}))state[k]+=v;}
 function isInside(x,z){return x>=0&&x<NX&&z>=0&&z<NZ;}
 function isPlayerPlot(x,z){return isInside(x,z)&&x>=1&&x<=8&&z>=1&&z<=12&&!((x<=4&&z>=5&&z<=8)||(x>=4&&x<=6&&z>=2&&z<=4));}
-function readyCrop(p){return !!p&&['wheat','corn','pumpkin'].includes(p.type)&&p.age>=itemDefs[p.type].days;}
+function readyCrop(p){return !!p&&['wheat','corn','pumpkin'].includes(p.type)&&p.age>=requiredDays(state,p,itemDefs[p.type].days);}
 function countType(t){return Object.values(state.plots).filter(p=>p.type===t).length;}
 function liveEnemyCount(){return state.enemies.filter(n=>n>0).length;}
 function currentTarget(){return factions[state.enemySelected];}
@@ -364,9 +371,9 @@ function placePermanent(){
  const farmer=putModel(buildingGroup,'character-female',1.45,pos(5,8).x,.05,pos(5,8).z);
  if(farmer)animals.push({obj:farmer,initial:farmer.position.clone(),seed:6});
 }
-function cropPatch(x,z,type,age){
+function cropPatch(x,z,type,age,gene){
  const g=groupAt(x,z);
- const ripe=age>=itemDefs[type].days;
+ const ripe=age>=requiredDays(state,{gene},itemDefs[type].days);
  addBox(g,1.89,.15,1.93,0,.075,0,pal.soil);
  for(let row=0;row<5;row++){
   let zz=(row-2)*.33;
@@ -393,7 +400,7 @@ function refreshPlots(){
  for(const [coord,p] of Object.entries(state.plots)){
    const [x,z]=coord.split(',').map(Number);
    let g;
-   if(['wheat','corn','pumpkin'].includes(p.type))g=cropPatch(x,z,p.type,p.age);
+   if(['wheat','corn','pumpkin'].includes(p.type))g=cropPatch(x,z,p.type,p.age,p.gene);
    else if(p.type==='orchard')g=houseModel('orchard');
    else g=houseModel(p.type);
    if(!g.position.lengthSq())g.position.copy(pos(x,z));
@@ -485,20 +492,39 @@ function action(modeName){
  const def=itemDefs[modeName];
  if(!def){return;}
  mode=modeName;
+ if(modeName.startsWith('flow-')){
+   const wave=modeName.slice(5);
+   const result=riverPulse(state,wave,state.enemySelected);
+   if(!result.ok){showToast(result.reason);return;}
+   const where=wave==='grow'?pos(6,9):wave==='guard'?pos(3,6):pos(factions[state.enemySelected].x,factions[state.enemySelected].z);
+   burst(where,result.color,50);
+   notice('💧 فرمان '+FLOW[wave].label+' اجرا شد؛ '+FLOW[wave].detail+'.');
+   updateUI();save();return;
+ }
+ if(modeName==='gene-cycle'){
+   const gene=cycleGene(state);notice('🧬 بذر بعدی: '+gene.label+'؛ '+gene.desc+'.');updateUI();save();return;
+ }
+ if(modeName==='contract'){
+   const result=riverDeliver(state);
+   if(!result.ok){showToast(result.reason);return;}
+   burst(pos(7,5),0xf4e5a0,40);
+   notice('📦 سفارش کاروان تحویل شد: +'+result.gold+' طلا، +'+result.wood+' چوب، +'+result.water+' آب.');
+   updateUI();save();return;
+ }
  if(def.build){
    const {x,z}=state.selected;
    if(!isPlayerPlot(x,z)){showToast('ساخت‌وساز فقط در زمین‌های سبز شما ممکن است.');return;}
    if(state.plots[key(x,z)]){showToast('این زمین قبلاً ساخته شده است؛ یک زمین خالی را انتخاب کنید.');return;}
    if(!affordable(def.cost)){showToast('منابع کافی ندارید؛ برداشت محصول و تجارت را ادامه دهید.');return;}
    pay(def.cost);
-   state.plots[key(x,z)]={type:modeName,age:0};
+   state.plots[key(x,z)]={type:modeName,age:0,...(['wheat','corn','pumpkin'].includes(modeName)?{gene:ensureMeta(state).gene}:{})};
    refreshPlots();notice(def.label+' در زمین '+(x+1)+'–'+(z+1)+' ساخته شد.');burst(pos(x,z),0xede1a4,16);save();
  }else if(modeName==='harvest'){
    const p=state.plots[key(state.selected.x,state.selected.z)];
    if(!readyCrop(p)){showToast('ابتدا یک کشتزار کاملاً رسیده را انتخاب کنید.');return;}
-   const yieldItem=itemDefs[p.type].yield;
-   gain(yieldItem);delete state.plots[key(state.selected.x,state.selected.z)];
-   refreshPlots();notice('محصول برداشت شد: '+yieldItem.food+' غذا و '+yieldItem.gold+' سکه.');burst(pos(state.selected.x,state.selected.z),0xe9d28c,20);
+   const yieldItem=riverHarvest(state,p,itemDefs[p.type].yield);
+   gain({food:yieldItem.food,gold:yieldItem.gold});delete state.plots[key(state.selected.x,state.selected.z)];
+   refreshPlots();notice('🌾 محصول ژنتیکی برداشت شد: '+yieldItem.food+' غذا و '+yieldItem.gold+' سکه. محموله انبار: '+yieldItem.stock+'.');burst(pos(state.selected.x,state.selected.z),0xe9d28c,20);
  }else if(modeName==='train'){
    if(!affordable(def.cost)){showToast('برای آموزش نیرو به طلا و غذا نیاز است.');return;}
    pay(def.cost);state.army+=4;notice('چهار سرباز تازه نفس به ارتش زمرد پیوستند.');
@@ -508,12 +534,13 @@ function action(modeName){
    if(!state.enemies[i]){showToast('قلعه این خاندان قبلاً فتح شده است؛ دشمن دیگری را انتخاب کنید.');return;}
    if(!affordable(def.cost)){showToast('برای نبرد حداقل چهار سرباز و ۲۴ غذا لازم است.');return;}
    pay(def.cost);
-   const strength=36+Math.floor(Math.random()*20)+Math.min(18,countType('tower')*3)+Math.min(12,state.workers*2);
+   const wave=attackModifier(state,i);
+   const strength=36+Math.floor(Math.random()*20)+Math.min(18,countType('tower')*3)+Math.min(12,state.workers*2)+wave.damage;
    state.enemies[i]=Math.max(0,state.enemies[i]-strength);
    state.score+=strength*4;
    const target=pos(factions[i].x,factions[i].z);
    spawnSquad(true,4,pos(3,6),target,()=>burst(target,0xffb96f,28));
-   notice('سپاه زمرد به '+factions[i].name+' یورش برد؛ '+strength+' خسارت وارد شد.');
+   notice('⚔️ سپاه زمرد به '+factions[i].name+' یورش برد؛ '+strength+' خسارت.'+(wave.damage?' 🌊 سیل محاصره: +'+wave.damage+' قدرت':''));
    if(state.enemies[i]===0){
     state.gold+=170;state.wood+=45;state.wins++;
     notice('پرچم زمرد بر فراز '+factions[i].name+' برافراشته شد! +۱۷۰ طلا');
@@ -535,19 +562,22 @@ function nextDay(){
  const upkeep=Math.ceil(state.army/3);
  gain({gold,wood,food});
  state.food=Math.max(0,state.food-upkeep);
- for(const p of Object.values(state.plots))if(['wheat','corn','pumpkin'].includes(p.type))p.age++;
+ const ecosystem=riverAdvance(state);
+ const climateData=ecosystem.forecast;
+ const previousSky=scene.background;
+ const seasonalColors=[0xa5cfc3,0xc2c9a4,0xd7b794,0xc4cce0];
+ scene.background=new THREE.Color(seasonalColors[climateData.seasonIndex]);
+ scene.fog.color.setHex(seasonalColors[climateData.seasonIndex]);
+ pal.water.opacity=climateData.isDrought?.64:.84;
  if(state.day%2===0&&liveEnemyCount()){
    const alive=factions.map((f,i)=>({...f,i})).filter(f=>state.enemies[f.i]>0);
-   const attacker=alive[state.day%alive.length],damage=Math.max(1,35+Math.floor(Math.random()*16)-countType('tower')*15-Math.floor(state.army/5));
-   state.health=Math.max(0,state.health-damage);
+   const attacker=alive[state.day%alive.length];
+   const result=rivalsTurn(state,attacker.i,Math.random(),countType('tower'));
    spawnSquad(false,3,pos(attacker.x,attacker.z),pos(3,6),()=>burst(pos(3,6),0xffae74,16));
-   notice('هجوم '+attacker.name+': '+damage+' خسارت به قلعه! برج‌های دفاعی خسارت را کاهش می‌دهند.');
+   const special=result.stolen?' دزدی غذا: '+result.stolen+'.':result.healed?' تقویت قلعه دشمن: +'+result.healed+'.':'';
+   notice('⚔️ حمله '+attacker.name+': '+result.damage+' آسیب.'+(result.shielded?' 🛡️ خندق آب از دژ محافظت کرد.':'')+special);
  }else{
-   notice('روز '+state.day+' آغاز شد: '+gold+' طلا، '+wood+' چوب و '+food+' غذا به انبار اضافه شد.');
- }
- if(state.day%4===0){
-   const idx=state.enemies.findIndex(h=>h>0);
-   if(idx>=0)state.enemies[idx]=Math.min(factions[idx].initial,state.enemies[idx]+12);
+   notice('☀️ '+climateData.season+'، '+climateData.weather+'؛ +'+gold+' طلا، +'+wood+' چوب، +'+food+' غذا و +'+ecosystem.replenishment+' آب.');
  }
  if(state.health===0){state.completed=true;setTimeout(()=>showDefeat(),1500);}
  refreshPlots();updateUI();save();
@@ -590,9 +620,17 @@ function burst(location,color,count){
  }
 }
 function updateUI(){
- const badges=[['☀','روز',state.day],['🪙','طلا',state.gold],['🌾','غذا',state.food],['🪵','چوب',state.wood],['🛡','سپاه',state.army],['♥','قلعه',state.health+'/'+state.maxHealth]];
+ const meta=ensureMeta(state),weather=climate(state.day);
+ const badges=[['☀','روز',state.day],['🪙','طلا',state.gold],['🌾','غذا',state.food],['💧','آب',meta.water],['🪵','چوب',state.wood],['🛡','سپاه',state.army],['♥','قلعه',state.health+'/'+state.maxHealth]];
  ui.resources.innerHTML=badges.map(([sym,title,n])=>'<div class="resource"><span class="sym">'+sym+'</span><div><strong>'+n+'</strong><small>'+title+'</small></div></div>').join('');
- ui.day.textContent='روز '+state.day;ui.season.textContent='مرحله '+(1+Math.floor(state.day/5));
+ ui.day.textContent='روز '+state.day;ui.season.textContent=weather.season+' · '+weather.weather;
+ if($('hydro-info')){
+  $('hydro-info').textContent='💧 آب '+meta.water+'/۱۰۰ · '+FLOW[meta.flow].label+' · '+weather.season+' ('+weather.weather+')';
+  $('seed-info').textContent='🧬 بذر انتخابی: '+GENES[meta.gene].label+' — '+GENES[meta.gene].desc+' | شهرت: '+meta.renown;
+  const c=meta.contract;
+  $('contract-info').textContent='📦 سفارش کاروان: '+itemDefs[c.type].label+' ×'+c.quota+' | موجود: '+meta.cargo[c.type]+' | جایزه: '+c.rewardGold+' طلا';
+ }
+
  ui.enemies.innerHTML=factions.map((f,i)=>{
   const hp=state.enemies[i],selected=i===state.enemySelected;
   return '<button type="button" class="target" data-enemy="'+i+'" aria-pressed="'+selected+'" style="background:'+(selected?'#416b506e':'transparent')+';color:#fff0ca;border:0;border-bottom:1px solid #b9d1ac40;width:100%;text-align:right;cursor:pointer;border-radius:5px"><span><span style="color:#'+new THREE.Color(f.color).getHexString()+'">◆</span> <span class="faction">'+f.name+'</span></span><span class="health">'+(hp===0?'فتح شد ✓':hp+' / '+f.initial)+'</span></button>';
@@ -600,20 +638,20 @@ function updateUI(){
  ui.mission.textContent=state.completed?(state.health>0?'🎉 هر سه قلعه فتح شدند!':'قلعه شما سقوط کرد.'):('🎯 قلعه هدف: '+currentTarget().name+' · '+state.enemies[state.enemySelected]+' جان');
  ui.log.textContent=state.log.slice(0,4).map((s,i)=>(i===0?'◉ ':'▫ ')+s).join('\n');
  ui.estate.innerHTML=[['🏘 ساختمان‌ها',Object.values(state.plots).filter(p=>!['wheat','corn','pumpkin'].includes(p.type)).length+5],['🌱 مزارع',Object.values(state.plots).filter(p=>['wheat','corn','pumpkin'].includes(p.type)).length],['👷 کارگران',state.workers],['🛡 برج دفاع',countType('tower')],['🏆 پیروزی',state.wins+'/۳']].map(([k,v])=>'<div class="row-small"><span>'+k+'</span><b>'+v+'</b></div>').join('');
- ui.quest.textContent=state.wins===0?'اولین قلعه رقیب را فتح کنید. منابع بسازید و سپاه را برای حمله آماده کنید.':state.wins===3?'هر سه خاندان شکست خوردند.':state.wins+' قلعه فتح شد. '+(3-state.wins)+' رقیب باقی مانده است.';
+ ui.quest.textContent=state.wins===0?'با کشاورزی، انتخاب بذر و مدیریت آب نخستین قلعه رقیب را فتح کنید.':state.wins===3?'هر سه خاندان شکست خوردند.':state.wins+' قلعه فتح شد. '+(3-state.wins)+' رقیب باقی مانده است.';
  ui.questfill.style.width=(state.wins/3*100)+'%';
  const selected=state.selected,p=state.plots[key(selected.x,selected.z)];
  ui.selection.textContent='زمین '+(selected.x+1)+' / '+(selected.z+1)+' · '+(p?(itemDefs[p.type].label+(readyCrop(p)?' · محصول آماده برداشت ✓':p.age?' · '+p.age+' روز رشد':'')):'آماده کاشت یا ساخت')+' · روی زمین بزنید و فرمان صادر کنید';
  for(const b of ui.actions.querySelectorAll('button[data-action]')){
    const name=b.dataset.action,def=itemDefs[name];
    b.classList.toggle('active',name===mode);
-   b.disabled=state.completed||!!def.cost&&!affordable(def.cost);
+   b.disabled=state.completed||!!def.cost&&!affordable(def.cost)||name.startsWith('flow-')&&(meta.water<25||meta.pulseDay===state.day)||(name==='contract'&&meta.cargo[meta.contract.type]<meta.contract.quota);
  }
 }
 function buildActions(){
- const order=['wheat','corn','pumpkin','harvest','orchard','barn','mill','market','tower','train','attack','repair'];
+ const order=['wheat','corn','pumpkin','harvest','orchard','barn','mill','market','tower','train','attack','repair','flow-grow','flow-guard','flow-siege','gene-cycle','contract'];
  ui.actions.innerHTML=order.map(name=>{
-  const d=itemDefs[name],cost=Object.entries(d.cost||{}).map(([k,v])=>v+({gold:'🪙',wood:'🪵',food:'🌾',army:'🛡'}[k])).join(' ');
+  const d=itemDefs[name],cost=name.startsWith('flow-')?'۲۵ 💧':name==='gene-cycle'?'۳ بذر':name==='contract'?'کاروان':Object.entries(d.cost||{}).map(([k,v])=>v+({gold:'🪙',wood:'🪵',food:'🌾',army:'🛡'}[k])).join(' ');
   return '<button class="tool '+(name==='attack'?'war':name==='harvest'?'special':'')+'" data-action="'+name+'" type="button"><span class="ico">'+d.icon+'</span><span class="title">'+d.label+'</span><span class="cost">'+(cost||'آماده')+'</span></button>';
  }).join('');
  ui.actions.addEventListener('click',e=>{const b=e.target.closest('button[data-action]');if(b)action(b.dataset.action);});
@@ -741,7 +779,8 @@ window.FarmDominionDebug={
  zoom:setZoom,
  getCamera:()=>({zoom:cam.zoom,center:cam.center.toArray()}),
  assets:()=>Object.keys(assets),
- controls:()=>ui.actions.querySelectorAll('button').length
+ controls:()=>ui.actions.querySelectorAll('button').length,
+ getStrategy:()=>JSON.parse(JSON.stringify(ensureMeta(state))),getClimate:()=>climate(state.day)
 };
 main();
 })();
