@@ -374,6 +374,16 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
         if not hmac.compare_digest(signature, expected):
             return Response({"detail": "Invalid webhook signature."}, status=status.HTTP_401_UNAUTHORIZED)
 
+        # A generic HMAC callback is NOT bank confirmation. Never credit an
+        # order for Bank Shahr before the bank's exact contracted PSP and
+        # server-to-server verification protocol have been implemented/tested.
+        normalized_provider = "".join(char for char in provider.lower() if char.isalnum())
+        if normalized_provider in {"bankshahr", "shahrbank", "bankshahripg"}:
+            return Response(
+                {"detail": "Bank Shahr settlement is disabled pending official PSP verification."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         try:
             payload = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
