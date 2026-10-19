@@ -8,6 +8,8 @@ import json
 import os
 import pathlib
 import sys
+import tempfile
+import time
 
 ROOT = pathlib.Path("/home/zomorod2/Saeit-staging")
 PRIVATE = pathlib.Path("/home/zomorod2/.mpw-commerce-two-books")
@@ -17,6 +19,35 @@ REQUIRED = (
     "MPW_COMMERCE_SETTLEMENT_ENABLED",
     "MPW_COMMERCE_REAL_RPC_ENABLED",
 )
+
+def heartbeat(report, *, error=None):
+    """Publish only nonsensitive counters and one trustworthy UTC heartbeat."""
+    if not PRIVATE.is_dir() or PRIVATE.is_symlink():
+        return
+    now = int(time.time())
+    state = report.get("state", "error") if isinstance(report, dict) else "error"
+    record = {
+        "schema": 1,
+        "utc_epoch": now,
+        "state": state,
+        "healthy": error is None and state in ("idle", "scanned", "disabled"),
+        "pending": int(report.get("pending", 0)) if isinstance(report, dict) else 0,
+        "matched": int(report.get("matched", 0)) if isinstance(report, dict) else 0,
+        "paid": int(report.get("paid", 0)) if isinstance(report, dict) else 0,
+        "rejected": int(report.get("rejected", 0)) if isinstance(report, dict) else 0,
+        "error_type": error or "",
+    }
+    fd, temporary = tempfile.mkstemp(prefix=".reconcile-monitor-", dir=str(PRIVATE))
+    try:
+        with os.fdopen(fd, "w", encoding="utf8") as stream:
+            json.dump(record, stream, sort_keys=True)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, PRIVATE / "worker-heartbeat.json")
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def run():
@@ -64,8 +95,14 @@ def run():
 if __name__ == "__main__":
     try:
         result = run()
+        if "--self-check" not in sys.argv:
+            heartbeat(result)
+        if result.get("state") in ("unbounded_scope_denied", "other_product_scope_denied"):
+            raise RuntimeError("Reconciliation scope was denied")
         if "--self-check" in sys.argv or result.get("state") not in ("disabled", "idle"):
             print("MPW_WORKER_RESULT=" + json.dumps(result, sort_keys=True), flush=True)
     except Exception as exc:
+        if "--self-check" not in sys.argv:
+            heartbeat({"state": "error"}, error=type(exc).__name__)
         print("MPW_WORKER_ERROR=" + type(exc).__name__, flush=True)
         sys.exit(1)
