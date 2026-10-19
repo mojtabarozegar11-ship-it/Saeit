@@ -208,9 +208,30 @@ def find_records(root,by_id,by_slug):
             pf=pproot/(str(work_order)+".json")
             passport=read_obj(pf,200000) if pf.is_file() else {}
             fid=classify({},passport,by_id,by_slug)
-            if fid:
+            # A standalone JSON receipt is not a product. Confirm the actual
+            # immutable artifact, checksums and ten approval receipts exist.
+            archive=folder/"product.zip"
+            record_file=liferoot/(str(work_order)+".json")
+            record=read_obj(record_file,200000) if record_file.is_file() else {}
+            valid=(archive.is_file() and not archive.is_symlink()
+                   and archive.stat().st_size==data.get("bytes")
+                   and data.get("stage_gates_passed")==10
+                   and data.get("distributed") is False
+                   and record.get("final_warehouse_id")==work_order
+                   and record.get("stage_status",{}).get("11")=="passed"
+                   and isinstance(data.get("artifact_sha256"),str))
+            if valid:
+                digest=hashlib.sha256()
+                with archive.open("rb") as fh:
+                    for chunk in iter(lambda:fh.read(1048576),b""):
+                        digest.update(chunk)
+                valid=digest.hexdigest()==data["artifact_sha256"]
+            if not valid:
+                unassigned["invalid_or_unverified_final_goods"]+=1
+            elif fid:
                 counts[fid]["final_approved"]+=1
-            else:unassigned["final_goods_unclassified"]+=1
+            else:
+                unassigned["final_goods_unclassified"]+=1
     return counts,unassigned,lengths
 
 def run(root,registry):
