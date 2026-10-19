@@ -158,11 +158,22 @@ def generate(repo, output, python=None):
     if not allowed.issubset(source_paths):
         raise RuntimeError("CODE_UPGRADE_EXPECTED_MODULE_MISSING")
     candidates = []
+    already_protected = []
     for path, header, body, method_name, payload_kind in SAFE_FIXES:
         original = base / path
         source = original.read_text(encoding="utf8")
         candidate = edit(source, header, body, method_name)
         if candidate is None:
+            # Existing upstream fix is not a newly generated change. Verify it
+            # empirically; never double-count the same repair as a new upgrade.
+            with tempfile.TemporaryDirectory(dir=str(out)) as tmp:
+                existing = probe(python or sys.executable, original, Path(tmp),
+                                 method_name, payload_kind)
+            if existing != {"blocked": True, "escaped": False}:
+                raise RuntimeError("CODE_UPGRADE_UNREPAIRED_UNSUPPORTED_SOURCE:" + path)
+            already_protected.append({
+                "path": path, "source_sha256": digest_bytes(source.encode("utf8")),
+                "negative_case_blocked": True, "new_code_edit_performed": False})
             continue
         item = {
             "path": path, "rule": "reject_atomic_symlink_parent",
@@ -206,6 +217,10 @@ def generate(repo, output, python=None):
         "candidates_with_measured_improvement": sum(
             x["measured_quality_improvement"] for x in candidates),
         "private_verified_code_edits": len(candidates),
+        "already_protected_source_modules": already_protected,
+        "preexisting_verified_repairs": len(already_protected),
+        "validated_repair_rule_coverage": len(candidates) + len(already_protected),
+        "unresolved_known_security_regressions": 0,
         "production_code_promotions": 0,
         "commercial_publications": 0,
         "generation_number_proven_in_production": 0,
