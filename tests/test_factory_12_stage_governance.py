@@ -1,5 +1,7 @@
 """Factory 12-stage lifecycle: never conflate draft/technical QA with final sale goods."""
 import importlib.util
+import hashlib
+import hmac
 import json
 from pathlib import Path
 import tempfile
@@ -25,6 +27,12 @@ class Factory12StageTests(unittest.TestCase):
         (self.technical/"stock-register.json").write_text(json.dumps({"finished_goods_versions":2}))
         self.base=self.root/"product-lifecycle"
         self.wid="WO-00000001"
+        keys=self.base/"reviewer-keys.json"
+        keys.parent.mkdir(exist_ok=True)
+        self.reviewer_key="e7"*32
+        keys.write_text(json.dumps({"schema":"saeit.factory.reviewer-keys.v1",
+                                    "reviewers":{"reviewer-02":self.reviewer_key}}))
+        keys.chmod(0o600)
     def passport(self):
         return {"schema":m.SPEC_SCHEMA,"work_order":self.wid,"title":"Real software utility",
                 "product_type":"software","version":"1.0.0","origin":"factory_invention",
@@ -59,6 +67,9 @@ class Factory12StageTests(unittest.TestCase):
                 "checks":checks,
                 "evidence_files":[{"path":proof.name,"sha256":m.sha(proof)}]}
         if defect:record["defect"]=defect
+        if stage in (6,10):
+            record["reviewer_signature"]=hmac.new(bytes.fromhex(self.reviewer_key),
+                m.signed_review_message(record),hashlib.sha256).hexdigest()
         ref=self.root/("stage-"+str(stage)+"-"+decision+".json")
         ref.write_text(json.dumps(record))
         return ref
@@ -104,6 +115,55 @@ class Factory12StageTests(unittest.TestCase):
         ref.write_text(json.dumps(doc))
         with self.assertRaises(RuntimeError):m.review(self.root,self.wid,ref)
         m.review(self.root,self.wid,self.review_file(6,reviewer="reviewer-02"))
+    def test_qualifying_human_review_requires_real_signing_key(self):
+        self.register()
+        for i in range(1,6):m.review(self.root,self.wid,self.review_file(i))
+        ref=self.review_file(6,reviewer="reviewer-02")
+        contents=json.loads(ref.read_text())
+        contents["checks"][0]["status"]="failed"
+        ref.write_text(json.dumps(contents))
+        with self.assertRaisesRegex(RuntimeError,"REVIEWER_SIGNATURE_MISMATCH"):
+            m.review(self.root,self.wid,ref)
+        keys=self.base/"reviewer-keys.json"
+        keys.chmod(0o644)
+        with self.assertRaisesRegex(RuntimeError,"REVIEWER_SECRET_STORE_MISSING_OR_INSECURE"):
+            m.review(self.root,self.wid,self.review_file(6,reviewer="reviewer-02"))
+        keys.chmod(0o600)
+        m.review(self.root,self.wid,self.review_file(6,reviewer="reviewer-02"))
+    def test_final_archive_rejects_high_expansion_and_unsafe_paths(self):
+        self.register()
+        for i in range(1,11):
+            reviewer="reviewer-02" if i in (6,10) else "engineer-01"
+            m.review(self.root,self.wid,self.review_file(i,reviewer=reviewer))
+        big=self.root/"bomb.zip"
+        with zipfile.ZipFile(big,"w",compression=zipfile.ZIP_DEFLATED) as z:
+            for name in m.REQUIRED_PACKAGE:
+                z.writestr(name+"example.txt","content")
+            z.writestr("product/big.bin",b"x"*(2*1024*1024))
+        with self.assertRaisesRegex(RuntimeError,"FINAL_ZIP_DECOMPRESSION_LIMIT"):
+            m.final_admit(self.root,self.wid,big.name)
+        duplicate=self.root/"duplicate.zip"
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore",UserWarning)
+            with zipfile.ZipFile(duplicate,"w") as z:
+                for name in m.REQUIRED_PACKAGE:z.writestr(name+"example.txt","content")
+                z.writestr("product/example.txt","content again")
+        with self.assertRaisesRegex(RuntimeError,"FINAL_WAREHOUSE_UNSAFE_ZIP"):
+            m.final_admit(self.root,self.wid,duplicate.name)
+    def test_final_stock_blocks_tampered_human_review_after_receipt(self):
+        self.register()
+        for i in range(1,11):
+            reviewer="reviewer-02" if i in (6,10) else "engineer-01"
+            m.review(self.root,self.wid,self.review_file(i,reviewer=reviewer))
+        receipt=self.base/"review-receipts"/self.wid
+        critical=list(receipt.glob("stage-10-*.json"))[0]
+        critical.write_text(critical.read_text().replace("qualified_specialist","not_authorized"))
+        package=self.root/"package.zip"
+        with zipfile.ZipFile(package,"w") as f:
+            for name in m.REQUIRED_PACKAGE:f.writestr(name+"real.txt","contents")
+        with self.assertRaisesRegex(RuntimeError,"FINAL_REVIEW_RECEIPT_TAMPERED"):
+            m.final_admit(self.root,self.wid,package.name)
     def test_rework_preserved_and_retested_without_fake_pass(self):
         self.register()
         defect={"description":"Invalid computation result","severity":"critical",
