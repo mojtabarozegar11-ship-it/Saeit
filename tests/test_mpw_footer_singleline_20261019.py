@@ -24,7 +24,8 @@ def test_root_only_footer_source_and_no_regression_to_old_credit():
        "ventures-currency-crypto","ventures-ecommerce","ventures-fuel-station",
        "ventures-hospitality","ventures-jewelry-gold"}
     assert str(foot.TEMPLATE)=="/home/zomorod2/Saeit-staging/core/templates/mojplaywin/footer.html"
-    assert len(foot.targets())==20
+    assert len(foot.targets())==21
+    assert str(foot.HOMEPAGE)=="/home/zomorod2/mojplaywin.com/design-preview-20261017/production-home-20261017.html"
 
 def test_two_distinct_footer_types_keep_links_and_only_one_credit():
     foot.selftest()
@@ -45,13 +46,12 @@ def test_two_distinct_footer_types_keep_links_and_only_one_credit():
       except RuntimeError:
           pass
 
-def test_passenger_refresh_uses_verified_main_site_app_root_not_wsgi_mtime():
+def test_real_production_home_is_patched_without_app_reload():
     import inspect
-    text=inspect.getsource(foot.refresh_app)
-    assert 'ROOT/"tmp/restart.txt"' in text
-    assert 'PassengerAppRoot /home/zomorod2/mojplaywin.com' in text
-    assert 'os.utime(signal,None)' in text
-    assert 'os.utime(wsgi,None)' not in text
+    assert foot.HOMEPAGE in foot.targets()
+    src=inspect.getsource(foot.before_guard)
+    assert 'production-home-20261017.html' in src
+    assert 'def refresh_app(' not in inspect.getsource(foot)
     rollback=inspect.getsource(foot.rollback)
-    assert 'ROOT/"tmp/restart.txt"' in rollback
-    assert 'PassengerAppRoot /home/zomorod2/mojplaywin.com' in rollback
+    assert 'restart.txt' not in rollback
+    assert 'MPW_FOOTER_SINGLE_LINE_ROLLED_BACK=21' in rollback
