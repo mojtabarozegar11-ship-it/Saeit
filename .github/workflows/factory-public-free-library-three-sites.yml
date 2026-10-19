@@ -1,0 +1,130 @@
+name: Factory approved free resource library three-site activation
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/factory-public-free-library-three-sites.yml]
+permissions: {contents: read}
+concurrency:
+  group: saeit-factory-public-resource-activation
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Isolated resource adapter regression and syntax checks
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_public_library_adapter.py
+          python3 -m unittest discover -s tests -p 'test_factory_public_library_adapter.py' -v
+      - name: Safely install only the additive catalog adapter and verify all sites
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/factory-public-activation"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          for field in VPS_KEY HOST_KEY; do
+            printf '%s' "${!field}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/$field.key"
+            chmod 600 "$d/$field.key"
+            ssh-keygen -y -P '' -f "$d/$field.key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 9 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-cpanel 'test -d "$HOME/.saeit-factory-inbox/bin" && test ! -L "$HOME/.saeit-factory-inbox/bin"'
+          scp -F "$d/config" scripts/factory_public_library_adapter.py saeit-cpanel:/home/zomorod2/.saeit-factory-inbox/bin/factory_public_library_adapter.py.new
+          ssh -F "$d/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          bin="$HOME/.saeit-factory-inbox/bin"
+          test -s "$bin/factory_public_library_adapter.py.new"
+          python3 -m py_compile "$bin/factory_public_library_adapter.py.new"
+          chmod 600 "$bin/factory_public_library_adapter.py.new"
+          mv -f "$bin/factory_public_library_adapter.py.new" "$bin/factory_public_library_adapter.py"
+          for id in mojplaywin-main zomorod-main zomorod-tala; do
+            python3 "$bin/factory_public_library_adapter.py" --home "$HOME" --site-id "$id" --preflight
+          done
+          echo FACTORY_THREE_SITE_PREFLIGHT_PASSED
+          for id in mojplaywin-main zomorod-main zomorod-tala; do
+            python3 "$bin/factory_public_library_adapter.py" --home "$HOME" --site-id "$id"
+          done
+          echo FACTORY_PUBLIC_RESOURCE_PAGES_STAGED
+          REMOTE
+          for item in "mojplaywin-main|https://mojplaywin.com/factory-products/index.html" "zomorod-main|https://zomorodmelal.ir/factory-products/index.html" "zomorod-tala|https://zomorodmelal.ir/tala/factory-products/index.html"; do
+            label="${item%%|*}"
+            url="${item#*|}"
+            status="$(curl -sSL --max-time 20 -o "$d/$label.html" -w '%{http_code}' "$url")"
+            echo "FACTORY_RESOURCE_HTTPS_${label}=$status"
+            test "$status" = 200
+            grep -q 'Farm Enterprise Economics Toolkit' "$d/$label.html"
+            grep -q 'mojplaywin.com/factory-releases/farm-enterprise-economics-v1/index.html' "$d/$label.html"
+          done
+          echo FACTORY_PUBLIC_RESOURCE_THREE_SITES_VERIFIED
+          ssh -T -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          import json,pathlib,tempfile,os
+          root=pathlib.Path.home()/"factory-runtime"/"private"/"multisite-distribution"
+          file=root/"site-registry.json"
+          data=json.loads(file.read_text(encoding="utf-8"))
+          assert data.get("schema")=="saeit.factory.sites.v1"
+          required={"mojplaywin-main","zomorodmelal-main","zomorodmelal-tala"}
+          found=set()
+          for site in data["sites"]:
+              if site["id"] in required:
+                  assert site["status"] in ("pending","active")
+                  site["status"]="active"
+                  site["owner_verified"]=True
+                  site["adapter_verified"]=True
+                  site["public_factory_library_verified"]=True
+                  found.add(site["id"])
+          assert found==required, "REQUIRED_SITE_REGISTRY_ENTRIES_MISSING"
+          fd,temp=tempfile.mkstemp(prefix=".factory-site-registry-",dir=str(root))
+          try:
+              with os.fdopen(fd,"w") as out:
+                  json.dump(data,out,sort_keys=True,indent=2)
+                  out.write("\n")
+              os.chmod(temp,0o600)
+              os.replace(temp,file)
+          finally:
+              if os.path.exists(temp):os.unlink(temp)
+          print("FACTORY_VERIFIED_SITE_ADAPTERS="+str(len(found)))
+          PY
+          ssh -T -F "$d/config" saeit-vps 'bash "$HOME/factory-runtime/operations/multisite-distribution/run-local-catalog.sh" && python3 -' <<'PY'
+          import json,pathlib
+          p=pathlib.Path.home()/"factory-runtime"/"private"/"multisite-distribution"/"catalogs"/"distribution-state.json"
+          data=json.loads(p.read_text(encoding="utf-8"))
+          assert data["sites_active"]>=3
+          print("FACTORY_MULTISITE_ACTIVE_SITE_CATALOGS="+str(data["sites_active"]))
+          print("FACTORY_QA_RELEASED_NEW_PRODUCTS="+str(data["products_approved"]))
+          print("FACTORY_MULTISITE_PUBLIC_LINKS_VERIFIED=3")
+          PY
