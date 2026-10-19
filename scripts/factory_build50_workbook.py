@@ -149,7 +149,10 @@ def build(root,tools):
             for row in source_sheet:
                 for cell in row:
                     out=sheet.cell(cell.row,cell.column,cell.value)
-                    if cell.has_style:out._style=copy.copy(cell._style)
+                    if cell.has_style:
+                        out.font=copy.copy(cell.font);out.fill=copy.copy(cell.fill)
+                        out.border=copy.copy(cell.border);out.alignment=copy.copy(cell.alignment)
+                        out.number_format=cell.number_format
                     out.protection=copy.copy(cell.protection)
             for key,value in source_sheet.column_dimensions.items():sheet.column_dimensions[key].width=value.width
             sheet.data_validations=copy.deepcopy(source_sheet.data_validations)

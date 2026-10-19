@@ -32,6 +32,13 @@ class Workbook50Tests(unittest.TestCase):
             self.assertEqual(result['defects'][0]['failed_stage'],50)
             self.assertEqual(result['status'],'rework_required')
             folder=Path(result['attempt_folder'])
+            self.assertIn('FileNotFoundError',result['defects'][0]['reason'])
+            from openpyxl import load_workbook
+            assembled=load_workbook(folder/'workbook.xlsx')
+            for unit in producer.UNITS:
+                sheet=assembled[unit[0][:31]]
+                self.assertEqual(sheet['A2'].fill.fgColor.rgb[-6:],'17365D')
+                self.assertEqual(sheet['A2'].font.color.rgb[-6:],'FFFFFF')
             self.assertEqual(len(list(folder.glob('*-reviewed.xlsx'))),12)
             self.assertEqual(len(list(folder.glob('*-work.json'))),48)
             self.assertFalse((Path(td)/'digital-products/capacity_planning_workbook').exists())
