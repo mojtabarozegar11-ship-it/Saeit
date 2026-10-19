@@ -1,0 +1,64 @@
+name: Build Commander Gen15 ZIP
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/master-agent-execution-engine
+    paths:
+      - '.github/workflows/build-commander-gen15-zip.yml'
+      - 'core/master_agent_capability_pack.py'
+      - 'core/master_execution.py'
+      - 'core/commander_orchestrator.py'
+      - 'core/chat_runtime.py'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact Commander Gen15 source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Verify Commander files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f core/master_agent_capability_pack.py
+          test -f core/master_execution.py
+          test -f core/commander_orchestrator.py
+          test -f core/chat_runtime.py
+          printf '%s\n' "${GITHUB_SHA}" > COMMANDER_BUILD_COMMIT.txt
+
+      - name: Create clean deployment archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .git
+          zip -r SAEIT-COMMANDER-GEN15-FINAL.zip . \
+            -x 'SAEIT-COMMANDER-GEN15-FINAL.zip' \
+               '.github/*' \
+               '__pycache__/*' '*.pyc' '*.pyo' \
+               '.env' '.env.*' \
+               'db.sqlite3' \
+               'media/*' 'staticfiles/*'
+          test -s SAEIT-COMMANDER-GEN15-FINAL.zip
+          unzip -t SAEIT-COMMANDER-GEN15-FINAL.zip
+          sha256sum SAEIT-COMMANDER-GEN15-FINAL.zip > SAEIT-COMMANDER-GEN15-FINAL.sha256
+
+      - name: Upload final ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SAEIT-COMMANDER-GEN15-FINAL
+          path: |
+            SAEIT-COMMANDER-GEN15-FINAL.zip
+            SAEIT-COMMANDER-GEN15-FINAL.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+# build trigger: final-gen15-2026-09-30
