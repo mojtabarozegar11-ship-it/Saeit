@@ -337,6 +337,35 @@ jobs:
           print("FACTORY_VALIDATION_REASON_CATEGORIES="+",".join(k+":"+str(v) for k,v in reasons.items()))
           PY
           fi
+          echo FACTORY_PRIVATE_PRODUCT_SNAPSHOT_BEGIN
+          crontab -l 2>/dev/null | grep -c 'SAEIT_AUTONOMOUS_PRODUCTS_V2' | awk '{print "FACTORY_PRIVATE_PRODUCT_CRON_COUNT=" $1}' || true
+          if test -s "$base/private/autonomous-product-cycle/production-state.json"; then
+            "$base/.venv/bin/python" - "$base/private/autonomous-product-cycle" <<'PY'
+          import json, pathlib, sys, collections
+          root=pathlib.Path(sys.argv[1])
+          state=json.loads((root/"production-state.json").read_text(encoding="utf-8"))
+          for key in ("mode","built_product_count","artifact_qa_passed","research_review_candidate_count","publishable_product_count","store_distribution_state","manufacturing_failed_recipe_count"):
+              val=state.get(key,"missing")
+              if isinstance(val,(str,int,float,bool)):
+                  print("FACTORY_PRIVATE_PRODUCT_"+key.upper()+"="+str(val))
+          candidates=[]
+          for item in sorted((root/"digital-products").glob("*/*-internal-qa.zip")) if (root/"digital-products").is_dir() else []:
+              if item.is_file():
+                  candidates.append((item.parent.name,item.stat().st_size))
+          print("FACTORY_PRIVATE_ZIP_COUNT="+str(len(candidates)))
+          for name,size in candidates[:12]:
+              print("FACTORY_PRIVATE_ZIP="+name+" bytes="+str(size))
+          tickets=collections.Counter()
+          for ledger in (root/"qa-rework").glob("*/ledger.json") if (root/"qa-rework").is_dir() else []:
+              try:
+                  obj=json.loads(ledger.read_text(encoding="utf-8"))
+                  tickets[str(obj.get("current_status","unknown"))]+=1
+              except (ValueError,OSError):
+                  tickets["unreadable"]+=1
+          print("FACTORY_PRIVATE_REWORK_STATUS="+",".join(k+":"+str(v) for k,v in sorted(tickets.items())))
+          PY
+          else echo FACTORY_PRIVATE_PRODUCT_STATE_MISSING; fi
+          echo FACTORY_PRIVATE_PRODUCT_SNAPSHOT_DONE
           echo FACTORY_INVENTORY_READ_ONLY_DONE
           REMOTE
 # 2026-10-14 dynamic factory verification requested by operator
