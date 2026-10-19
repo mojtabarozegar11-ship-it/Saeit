@@ -20,7 +20,7 @@ target="$root/versions/$revision"
 test ! -L "$target"
 if [[ ! -d "$target" ]]; then
   mkdir -m 700 "$target"
-  tar -xf "$bundle/runtime.tar" -C "$target" --no-same-owner
+  tar -xf "$bundle/runtime.tar.xz" -C "$target" --no-same-owner
 fi
 mkdir -p "$target/bin" "$target/work" "$target/models" "$target/font-cache"
 if [[ ! -x "$target/venv/bin/python" ]]; then
@@ -80,7 +80,16 @@ if [[ ! -f "$target/models/coder.gguf" ]]; then
   install -m 600 "$bundle/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf" "$target/models/coder.gguf"
 fi
 install -m 600 "$bundle/prove.py" "$target/prove.py"
-timeout 480 nice -n 15 "$target/venv/bin/python" "$target/prove.py" "$target"
+if ! timeout 480 nice -n 15 "$target/venv/bin/python" "$target/prove.py" "$target"; then
+  "$target/venv/bin/python" - "$target/proof.json" <<'PYFAIL'
+import json,pathlib,sys
+p=pathlib.Path(sys.argv[1])
+if p.is_file():
+    report=json.loads(p.read_text())
+    print(json.dumps({k:v for k,v in report['checks'].items() if not v['passed']},sort_keys=True))
+PYFAIL
+  exit 5
+fi
 # Only a fully verified toolchain becomes current. Previous versions remain intact.
 "$target/venv/bin/python" - "$target" "$root" <<'PY'
 import json,os,pathlib,sys
