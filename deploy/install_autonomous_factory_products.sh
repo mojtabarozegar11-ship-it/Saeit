@@ -114,7 +114,7 @@ incoming=""
 # The cycle discovers the complete catalog and runs each recipe's test_*.py suite.
 "$python" "$scripts/factory_vps_product_cycle.py" \
   --db "$db" --out "$private" --recipes "$recipes" \
-  --max-products 25 --enable-designer --enable-design-intake
+  --max-products 25 --enable-designer --enable-design-intake --enable-invention-supply
 test -s "$private/production-state.json"
 test "$(find "$private/digital-products" -type f -name "*-internal-qa.zip" -print -quit | wc -l)" -ge 1
 
@@ -127,7 +127,7 @@ flock -n 9 || exit 0
 exec >> "$ops/autonomous-product-cycle.log" 2>&1
 "$python" "$scripts/factory_vps_product_cycle.py" \\
   --db "$db" --out "$private" --recipes "$recipes" \\
-  --max-products 25 --enable-designer --enable-design-intake
+  --max-products 25 --enable-designer --enable-design-intake --enable-invention-supply
 # A broken specialist cannot stop core product manufacturing. Its private
 # rework receipt persists for the following minute; publication stays locked.
 if ! "$python" "$scripts/factory_specialist_pilots.py" \\
