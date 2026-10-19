@@ -139,4 +139,40 @@ jobs:
           capabilities["memory_mb"]=memory
           print("VPS_FACTORY_REAL_BUILD_CAPABILITIES="+json.dumps(capabilities,sort_keys=True))
           PY
+          # Build and independently hash-check every new private technical pilot.
+          # Existing minute cron may continue; repeated artifacts remain idempotent.
+                    "${SSH[@]}" '"$HOME/factory-runtime/.venv/bin/python" -' <<'PYFAMILY'
+          import importlib.util,json,subprocess
+          from pathlib import Path
+          root=Path.home()/"factory-runtime"
+          private=root/"private/autonomous-product-cycle"
+          script=root/"operations/autonomous-product-runtime/scripts/factory_specialist_pilots.py"
+          spec=importlib.util.spec_from_file_location("specialist_proof",str(script))
+          producer=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(producer)
+          manifest=root/"operations/build-toolchain/toolchain-manifest.json"
+          for attempt in range(len(producer.FAMILIES)+1):
+              result=subprocess.run([str(root/".venv/bin/python"),str(script),
+                 "--out",str(private),"--manifest",str(manifest)],
+                 capture_output=True,text=True,timeout=95)
+              if result.returncode:
+                  raise RuntimeError("PILOT_LOOP_ERROR:"+result.stderr[-250:])
+          passed=[]
+          blocked=[]
+          for family in producer.FAMILIES:
+              versions=private/"family-pilots"/family
+              valid=False
+              for receipt in versions.glob("*/technical-receipt.json"):
+                  evidence=json.loads(receipt.read_text(encoding="utf8"))
+                  if producer.verified_receipt(receipt.parent,family,evidence["source_key"]):
+                      valid=True
+              (passed if valid else blocked).append(family)
+          q=json.loads((private/"research-triage/triage-status.json").read_text(encoding="utf8"))
+          print("FACTORY_SPECIALIST_PROVEN_FAMILIES="+json.dumps(sorted(passed)))
+          print("FACTORY_SPECIALIST_MISSING_FAMILIES="+json.dumps(sorted(blocked)))
+          print("FACTORY_RESEARCH_REMEDIATION_PLAN_COUNT="+str(q["research_ledgers_found"]))
+          print("FACTORY_RESEARCH_GENUINE_FIXED_COUNT="+str(q["genuine_research_repairs_verified_this_run"]))
+          print("FACTORY_COMMERCIAL_RELEASE=false")
+          assert not blocked, "SPECIALIST_PILOT_TECHNICAL_QA_BLOCKED"
+          PYFAMILY
           "${SSH[@]}" 'test -s "$HOME/factory-runtime/private/autonomous-product-cycle/production-state.json" && test "$(find "$HOME/factory-runtime/private/autonomous-product-cycle/digital-products" -type f -name "*-internal-qa.zip" -print -quit)" != "" && crontab -l | grep SAEIT_AUTONOMOUS_PRODUCTS_V2 && echo AUTONOMOUS_PRODUCT_VPS_VERIFIED'
