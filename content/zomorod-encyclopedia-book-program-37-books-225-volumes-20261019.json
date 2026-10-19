@@ -1,0 +1,4402 @@
+{
+  "title": "برنامه جامع کتاب‌های دانشنامه تخصصی زمرد ملل — نسخه توسعه‌یافته ۳۷ کتاب",
+  "scope": "ساختار ۲۹ حوزه صفحه /topics/؛ همراه با عناوین و مسیرهای واقعی تمام موضوعات",
+  "reference": "https://zomorodmelal.ir/topics/",
+  "created": "2026-10-19",
+  "publication_status": "فقط طرح انتشاراتی؛ هیچ جلدی صرفاً به دلیل حضور در این فایل تولید یا منتشرشده محسوب نمی‌شود",
+  "source_topic_count": 605,
+  "main_books": 37,
+  "planned_volumes": 225,
+  "dynamic_topics_needing_editorial_titles": 25,
+  "books": [
+    {
+      "book_no": 1,
+      "code": "zm-r01",
+      "title": "زراعت و تولیدات گیاهی",
+      "volume_count": 5,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "غلات و دانه‌های روغنی"
+        },
+        {
+          "volume_no": 2,
+          "title": "محصولات صنعتی، غده‌ای و ریشه‌ای"
+        },
+        {
+          "volume_no": 3,
+          "title": "حبوبات، علوفه و گیاهان دارویی"
+        },
+        {
+          "volume_no": 4,
+          "title": "زراعت دیم، آبی و نظام‌های کشت"
+        },
+        {
+          "volume_no": 5,
+          "title": "کشاورزی دقیق، بهره‌وری و مدیریت مزرعه"
+        }
+      ],
+      "source_topic_count": 21,
+      "topics": [
+        {
+          "slug": "wheat",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/wheat/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "barley",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/barley/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "rice",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/rice/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "maize",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/maize/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "canola",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/canola/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "soybean",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/soybean/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "cotton",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/cotton/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "sugar-beet",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/sugar-beet/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "potato",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/potato/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "onion",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/onion/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "chickpea",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/chickpea/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "lentil",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/lentil/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "bean",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/bean/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "sesame",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/sesame/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "alfalfa",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/alfalfa/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "medicinal-plants",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/medicinal-plants/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "rainfed-farming",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/rainfed-farming/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "irrigated-farming",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/irrigated-farming/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "precision-farming",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/precision-farming/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "farm-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/farm-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "live-7cf414e0641284",
+          "url": "https://zomorodmelal.ir/topics/zm-r01/live-7cf414e0641284/",
+          "editorial_review_required": true
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 2,
+      "code": "zm-r02",
+      "title": "باغبانی و باغداری",
+      "volume_count": 5,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "باغ‌های میوه و گونه‌های سردسیری"
+        },
+        {
+          "volume_no": 2,
+          "title": "محصولات گرمسیری و نیمه‌گرمسیری"
+        },
+        {
+          "volume_no": 3,
+          "title": "خشکبار و باغ‌های اقتصادی"
+        },
+        {
+          "volume_no": 4,
+          "title": "سبزی، نهال و تولیدات ویژه"
+        },
+        {
+          "volume_no": 5,
+          "title": "هرس، تغذیه، حفاظت و مدیریت پس از برداشت"
+        }
+      ],
+      "source_topic_count": 21,
+      "topics": [
+        {
+          "slug": "fruit-orchards",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/fruit-orchards/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "citrus",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/citrus/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "apple-pear",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/apple-pear/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "grapes",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/grapes/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "pomegranate",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/pomegranate/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "kiwifruit",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/kiwifruit/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "date-palm",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/date-palm/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "olive",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/olive/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "pistachio",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/pistachio/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "almond",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/almond/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "walnut",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/walnut/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "strawberry",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/strawberry/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "vegetables",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/vegetables/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "nursery",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/nursery/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "pruning",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/pruning/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "orchard-nutrition",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/orchard-nutrition/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "orchard-pest-control",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/orchard-pest-control/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "smart-horticulture",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/smart-horticulture/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "post-harvest",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/post-harvest/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "orchard-development",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/orchard-development/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "live-7c988d00c16243",
+          "url": "https://zomorodmelal.ir/topics/zm-r02/live-7c988d00c16243/",
+          "editorial_review_required": true
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 3,
+      "code": "zm-r03",
+      "title": "گلخانه و کشت کنترل‌شده",
+      "volume_count": 5,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "طراحی، احداث و تجهیزات گلخانه"
+        },
+        {
+          "volume_no": 2,
+          "title": "کشت خاکی، هیدروپونیک و عمودی"
+        },
+        {
+          "volume_no": 3,
+          "title": "محیط، نور و بهینه‌سازی انرژی"
+        },
+        {
+          "volume_no": 4,
+          "title": "آبیاری، تغذیه و پرورش نشا"
+        },
+        {
+          "volume_no": 5,
+          "title": "اتوماسیون، بهداشت و بهره‌وری تولید"
+        }
+      ],
+      "source_topic_count": 21,
+      "topics": [
+        {
+          "slug": "greenhouse-design",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/greenhouse-design/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "greenhouse-construction",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/greenhouse-construction/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "hydroponics",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/hydroponics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "soil-greenhouse",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/soil-greenhouse/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "greenhouse-vegetables",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/greenhouse-vegetables/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "ornamental-plants",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/ornamental-plants/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "seedlings",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/seedlings/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "climate-control",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/climate-control/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "ventilation",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/ventilation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "greenhouse-irrigation",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/greenhouse-irrigation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "fertigation",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/fertigation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "grow-lighting",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/grow-lighting/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "greenhouse-automation",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/greenhouse-automation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "greenhouse-pests",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/greenhouse-pests/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "disease-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/disease-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "vertical-farming",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/vertical-farming/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "smart-greenhouse",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/smart-greenhouse/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "energy-efficiency",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/energy-efficiency/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "greenhouse-equipment",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/greenhouse-equipment/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "greenhouse-productivity",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/greenhouse-productivity/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "live-13f270f102c45b",
+          "url": "https://zomorodmelal.ir/topics/zm-r03/live-13f270f102c45b/",
+          "editorial_review_required": true
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 4,
+      "code": "zm-r04",
+      "title": "دامپروری",
+      "volume_count": 5,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "پرورش دام سنگین و تولید لبنی و گوشتی"
+        },
+        {
+          "volume_no": 2,
+          "title": "دام سبک و گونه‌های بومی"
+        },
+        {
+          "volume_no": 3,
+          "title": "خوراک، جیره و اقتصاد تغذیه"
+        },
+        {
+          "volume_no": 4,
+          "title": "ژنتیک، تولیدمثل و بهداشت دام"
+        },
+        {
+          "volume_no": 5,
+          "title": "مدیریت گله، استاندارد و اقتصاد دامداری"
+        }
+      ],
+      "source_topic_count": 21,
+      "topics": [
+        {
+          "slug": "dairy-cattle",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/dairy-cattle/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "beef-cattle",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/beef-cattle/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "sheep-farming",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/sheep-farming/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "goat-farming",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/goat-farming/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "camel-farming",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/camel-farming/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "animal-feed",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/animal-feed/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "feed-formulation",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/feed-formulation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "animal-health",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/animal-health/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "livestock-breeding",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/livestock-breeding/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "livestock-reproduction",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/livestock-reproduction/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "herd-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/herd-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "small-ruminants",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/small-ruminants/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "large-ruminants",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/large-ruminants/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "fattening",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/fattening/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "livestock-housing",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/livestock-housing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "livestock-records",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/livestock-records/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "industrial-livestock",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/industrial-livestock/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "rural-livestock",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/rural-livestock/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "livestock-economics",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/livestock-economics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "livestock-products",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/livestock-products/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "live-10a4b249ffa8ce",
+          "url": "https://zomorodmelal.ir/topics/zm-r04/live-10a4b249ffa8ce/",
+          "editorial_review_required": true
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 5,
+      "code": "zm-r05",
+      "title": "طیور",
+      "volume_count": 4,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "پرورش طیور گوشتی و تخم‌گذار"
+        },
+        {
+          "volume_no": 2,
+          "title": "مولدها، جوجه‌کشی و گونه‌های پرورشی"
+        },
+        {
+          "volume_no": 3,
+          "title": "خوراک، تجهیزات، تهویه و شرایط سالن"
+        },
+        {
+          "volume_no": 4,
+          "title": "امنیت زیستی، بهداشت و ارزیابی عملکرد"
+        }
+      ],
+      "source_topic_count": 21,
+      "topics": [
+        {
+          "slug": "broilers",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/broilers/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "layers",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/layers/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "breeders",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/breeders/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "hatchery",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/hatchery/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "turkey-farming",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/turkey-farming/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "quail-farming",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/quail-farming/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "duck-farming",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/duck-farming/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "poultry-feed",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/poultry-feed/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "poultry-ventilation",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/poultry-ventilation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "poultry-disease-control",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/poultry-disease-control/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "vaccination",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/vaccination/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "poultry-farm-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/poultry-farm-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "poultry-equipment",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/poultry-equipment/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "day-old-chicks",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/day-old-chicks/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "flock-performance",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/flock-performance/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "poultry-breeding",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/poultry-breeding/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "feed-conversion",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/feed-conversion/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "egg-production",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/egg-production/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "biosecurity",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/biosecurity/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "smart-poultry",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/smart-poultry/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "live-109d3eb3fe15c5",
+          "url": "https://zomorodmelal.ir/topics/zm-r05/live-109d3eb3fe15c5/",
+          "editorial_review_required": true
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 6,
+      "code": "zm-r06",
+      "title": "آبزیان",
+      "volume_count": 4,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "گونه‌های ماهی، میگو و سامانه‌های پرورش"
+        },
+        {
+          "volume_no": 2,
+          "title": "تکثیر، بچه‌ماهی و تغذیه آبزیان"
+        },
+        {
+          "volume_no": 3,
+          "title": "کیفیت آب، زیست‌امنیتی و سلامت"
+        },
+        {
+          "volume_no": 4,
+          "title": "اقتصاد، فناوری و بازار محصولات آبزی"
+        }
+      ],
+      "source_topic_count": 21,
+      "topics": [
+        {
+          "slug": "coldwater-fish",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/coldwater-fish/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "warmwater-fish",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/warmwater-fish/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "trout",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/trout/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "carp",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/carp/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "shrimp",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/shrimp/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "hatchery-fingerlings",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/hatchery-fingerlings/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "aquafeed",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/aquafeed/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "water-quality",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/water-quality/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "pond-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/pond-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "aeration-oxygen",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/aeration-oxygen/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "aquatic-diseases",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/aquatic-diseases/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "aquaculture-equipment",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/aquaculture-equipment/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "recirculating-aquaculture",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/recirculating-aquaculture/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "industrial-aquaculture",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/industrial-aquaculture/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "aquaculture-yield-analysis",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/aquaculture-yield-analysis/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "cage-farming",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/cage-farming/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "aquafarm-development",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/aquafarm-development/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "seafood-processing",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/seafood-processing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "aquaculture-economics",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/aquaculture-economics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "seafood-exports",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/seafood-exports/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "live-f82dabc8a52f37",
+          "url": "https://zomorodmelal.ir/topics/zm-r06/live-f82dabc8a52f37/",
+          "editorial_review_required": true
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 7,
+      "code": "zm-r07",
+      "title": "بذر، نهال و نهاده‌ها",
+      "volume_count": 4,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "اصلاح، تولید و آزمون بذر"
+        },
+        {
+          "volume_no": 2,
+          "title": "تولید نهال و نشا"
+        },
+        {
+          "volume_no": 3,
+          "title": "کودها، آفت‌کش‌ها و سایر نهاده‌ها"
+        },
+        {
+          "volume_no": 4,
+          "title": "گواهی کیفیت، نگهداری و زنجیره تأمین"
+        }
+      ],
+      "source_topic_count": 23,
+      "topics": [
+        {
+          "slug": "seed-production",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/seed-production/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "improved-seeds",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/improved-seeds/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "hybrid-seeds",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/hybrid-seeds/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "vegetable-seeds",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/vegetable-seeds/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "fruit-saplings",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/fruit-saplings/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "ornamental-saplings",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/ornamental-saplings/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "seedling-production",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/seedling-production/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "organic-fertilizers",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/organic-fertilizers/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "mineral-fertilizers",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/mineral-fertilizers/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "biofertilizers",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/biofertilizers/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "crop-protection",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/crop-protection/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "input-quality-control",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/input-quality-control/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "seed-treatment",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/seed-treatment/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "input-packaging",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/input-packaging/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "input-storage",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/input-storage/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "input-sales",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/input-sales/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "seed-testing",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/seed-testing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "germination",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/germination/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "input-sourcing",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/input-sourcing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "input-advisory",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/input-advisory/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "live-a1e0deb3bdc018",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/live-a1e0deb3bdc018/",
+          "editorial_review_required": true
+        },
+        {
+          "slug": "live-e898b3d81f68f6",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/live-e898b3d81f68f6/",
+          "editorial_review_required": true
+        },
+        {
+          "slug": "live-a092dbb985805b",
+          "url": "https://zomorodmelal.ir/topics/zm-r07/live-a092dbb985805b/",
+          "editorial_review_required": true
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 8,
+      "code": "zm-r08",
+      "title": "ژنتیک و اصلاح نژاد",
+      "volume_count": 6,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "مبانی ژنتیک، وراثت و نشانگرهای مولکولی"
+        },
+        {
+          "volume_no": 2,
+          "title": "اصلاح ژنتیکی محصولات زراعی و باغی"
+        },
+        {
+          "volume_no": 3,
+          "title": "اصلاح دام، طیور و آبزیان"
+        },
+        {
+          "volume_no": 4,
+          "title": "ژنومیک و زیست‌فناوری کشاورزی"
+        },
+        {
+          "volume_no": 5,
+          "title": "ذخایر ژنتیکی، تنوع و اخلاق پژوهش"
+        },
+        {
+          "volume_no": 6,
+          "title": "طرح‌های ژنتیکی، داده‌ها و انتقال فناوری"
+        }
+      ],
+      "source_topic_count": 21,
+      "topics": [
+        {
+          "slug": "plant-genetics",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/plant-genetics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "plant-breeding",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/plant-breeding/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "animal-genetics",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/animal-genetics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "livestock-genetic-improvement",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/livestock-genetic-improvement/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "poultry-genetics",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/poultry-genetics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "aquatic-genetics",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/aquatic-genetics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "agricultural-biotechnology",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/agricultural-biotechnology/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "molecular-markers",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/molecular-markers/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "genotype-selection",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/genotype-selection/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "genetic-diversity",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/genetic-diversity/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "germplasm-bank",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/germplasm-bank/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "plant-tissue-culture",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/plant-tissue-culture/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "micropropagation",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/micropropagation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "high-yield-seeds",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/high-yield-seeds/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "stress-resistance",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/stress-resistance/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "disease-resistance",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/disease-resistance/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "quantitative-qualitative-traits",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/quantitative-qualitative-traits/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "yield-improvement",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/yield-improvement/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "genetic-research",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/genetic-research/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "breeding-commercialization",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/breeding-commercialization/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "live-12cfb5efb53485",
+          "url": "https://zomorodmelal.ir/topics/zm-r08/live-12cfb5efb53485/",
+          "editorial_review_required": true
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 9,
+      "code": "zm-r09",
+      "title": "آبیاری، آب و خاک",
+      "volume_count": 5,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "روش‌های آبیاری قطره‌ای، بارانی و هوشمند"
+        },
+        {
+          "volume_no": 2,
+          "title": "مدیریت منابع و کیفیت آب"
+        },
+        {
+          "volume_no": 3,
+          "title": "فیزیک، شیمی و حاصلخیزی خاک"
+        },
+        {
+          "volume_no": 4,
+          "title": "زهکشی، شوری و حفاظت خاک"
+        },
+        {
+          "volume_no": 5,
+          "title": "اقلیم، کاربری زمین و مدیریت یکپارچه منابع"
+        }
+      ],
+      "source_topic_count": 22,
+      "topics": [
+        {
+          "slug": "drip-irrigation",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/drip-irrigation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "sprinkler-irrigation",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/sprinkler-irrigation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "smart-irrigation",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/smart-irrigation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "water-use-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/water-use-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "agricultural-water",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/agricultural-water/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "drainage",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/drainage/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "soil-conservation",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/soil-conservation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "soil-fertility",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/soil-fertility/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "soil-testing",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/soil-testing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "soil-amendment",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/soil-amendment/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "salinity-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/salinity-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "soil-erosion",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/soil-erosion/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "soil-mapping",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/soil-mapping/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "soil-moisture",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/soil-moisture/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "farm-water-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/farm-water-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "water-testing",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/water-testing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "water-reservoir",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/water-reservoir/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "watershed-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/watershed-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "land-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/land-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "land-use-planning",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/land-use-planning/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "live-d547f4ec288373",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/live-d547f4ec288373/",
+          "editorial_review_required": true
+        },
+        {
+          "slug": "live-839a67dd045c7c",
+          "url": "https://zomorodmelal.ir/topics/zm-r09/live-839a67dd045c7c/",
+          "editorial_review_required": true
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 10,
+      "code": "zm-r10",
+      "title": "ادوات و ماشین‌آلات کشاورزی",
+      "volume_count": 4,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "تراکتور، نیروی محرکه و خاک‌ورزی"
+        },
+        {
+          "volume_no": 2,
+          "title": "ماشین‌های کاشت، داشت و برداشت"
+        },
+        {
+          "volume_no": 3,
+          "title": "مکانیزاسیون هوشمند و کشاورزی دقیق"
+        },
+        {
+          "volume_no": 4,
+          "title": "نگهداری، ایمنی و اقتصاد ماشین‌آلات"
+        }
+      ],
+      "source_topic_count": 23,
+      "topics": [
+        {
+          "slug": "tractors",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/tractors/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "combine-harvesters",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/combine-harvesters/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "ploughs",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/ploughs/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "disc-harrows",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/disc-harrows/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "seed-drills",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/seed-drills/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "sprayers",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/sprayers/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "fertilizer-spreaders",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/fertilizer-spreaders/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "transplanters",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/transplanters/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "harvest-machines",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/harvest-machines/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "orchard-machines",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/orchard-machines/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "greenhouse-machines",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/greenhouse-machines/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "irrigation-equipment",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/irrigation-equipment/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "spare-parts",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/spare-parts/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "maintenance-repair",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/maintenance-repair/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "farm-mechanization",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/farm-mechanization/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "livestock-equipment",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/livestock-equipment/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "poultry-equipment",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/poultry-equipment/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "aquaculture-machinery",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/aquaculture-machinery/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "mechanized-agriculture",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/mechanized-agriculture/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "smart-machinery",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/smart-machinery/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "live-27a1e2e70f8e56",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/live-27a1e2e70f8e56/",
+          "editorial_review_required": true
+        },
+        {
+          "slug": "live-f6de1ac86afba6",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/live-f6de1ac86afba6/",
+          "editorial_review_required": true
+        },
+        {
+          "slug": "live-012fe51dac9eb5",
+          "url": "https://zomorodmelal.ir/topics/zm-r10/live-012fe51dac9eb5/",
+          "editorial_review_required": true
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 11,
+      "code": "zm-r11",
+      "title": "صنعت و فرآوری",
+      "volume_count": 5,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "مواد اولیه و فرایندهای صنایع تبدیلی"
+        },
+        {
+          "volume_no": 2,
+          "title": "فرآوری محصولات کشاورزی و صنایع غذایی"
+        },
+        {
+          "volume_no": 3,
+          "title": "سردخانه، خشک‌کردن و بسته‌بندی"
+        },
+        {
+          "volume_no": 4,
+          "title": "کنترل کیفیت، استاندارد و رهگیری"
+        },
+        {
+          "volume_no": 5,
+          "title": "بازده، محصولات ارزش‌افزوده و تجارت صنعتی"
+        }
+      ],
+      "source_topic_count": 21,
+      "topics": [
+        {
+          "slug": "food-industry",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/food-industry/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "agricultural-processing",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/agricultural-processing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "packaging",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/packaging/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "cold-storage",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/cold-storage/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "crop-drying",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/crop-drying/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "sorting-grading",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/sorting-grading/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "quality-control",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/quality-control/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "standardization",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/standardization/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "supply-chain",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/supply-chain/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "industrial-warehousing",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/industrial-warehousing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "feed-factory",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/feed-factory/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "fertilizer-factory",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/fertilizer-factory/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "production-lines",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/production-lines/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "industrial-productivity",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/industrial-productivity/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "industrial-maintenance",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/industrial-maintenance/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "production-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/production-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "industrial-safety",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/industrial-safety/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "factory-development",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/factory-development/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "value-added-products",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/value-added-products/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "industrial-exports",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/industrial-exports/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "live-002af4c17f74c4",
+          "url": "https://zomorodmelal.ir/topics/zm-r11/live-002af4c17f74c4/",
+          "editorial_review_required": true
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 12,
+      "code": "zm-r18",
+      "title": "صنایع غذایی",
+      "volume_count": 5,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "طراحی محصول و فرمولاسیون غذا"
+        },
+        {
+          "volume_no": 2,
+          "title": "صنایع لبنی، آرد و نان"
+        },
+        {
+          "volume_no": 3,
+          "title": "گوشت، کنسرو، نوشیدنی و فرآوری"
+        },
+        {
+          "volume_no": 4,
+          "title": "ایمنی، آزمون و کیفیت مواد غذایی"
+        },
+        {
+          "volume_no": 5,
+          "title": "بسته‌بندی، رهگیری و اقتصاد بازار غذا"
+        }
+      ],
+      "source_topic_count": 20,
+      "topics": [
+        {
+          "slug": "food-product-design",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/food-product-design/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "dairy-production",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/dairy-production/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "flour-milling",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/flour-milling/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "bakery-industry",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/bakery-industry/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "canning",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/canning/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "beverage-industry",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/beverage-industry/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "meat-processing",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/meat-processing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "seafood-processing",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/seafood-processing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "nuts-processing",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/nuts-processing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "edible-oils",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/edible-oils/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "chocolate-production",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/chocolate-production/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "fruit-processing",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/fruit-processing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "vegetable-processing",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/vegetable-processing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "iqf-food",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/iqf-food/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "food-cold-chain",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/food-cold-chain/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "food-safety-lab",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/food-safety-lab/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "food-packaging",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/food-packaging/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "food-traceability",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/food-traceability/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "food-formulation",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/food-formulation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "food-markets",
+          "url": "https://zomorodmelal.ir/topics/zm-r18/food-markets/",
+          "editorial_review_required": false
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 13,
+      "code": "zm-r19",
+      "title": "کارخانجات و مهندسی تولید",
+      "volume_count": 5,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "امکان‌سنجی، طراحی کارخانه و جانمایی"
+        },
+        {
+          "volume_no": 2,
+          "title": "خط تولید، اتوماسیون و کنترل فرایند"
+        },
+        {
+          "volume_no": 3,
+          "title": "ظرفیت، نگهداری و بهره‌وری"
+        },
+        {
+          "volume_no": 4,
+          "title": "مهندسی کیفیت، ایمنی و محیط‌زیست"
+        },
+        {
+          "volume_no": 5,
+          "title": "لجستیک، ماشین‌سازی و نوسازی کارخانه"
+        }
+      ],
+      "source_topic_count": 20,
+      "topics": [
+        {
+          "slug": "plant-feasibility",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/plant-feasibility/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "plant-layout",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/plant-layout/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "production-lines",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/production-lines/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "factory-automation",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/factory-automation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "process-control",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/process-control/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "manufacturing-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/manufacturing-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "capacity-planning",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/capacity-planning/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "industrial-maintenance",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/industrial-maintenance/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "industrial-parts",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/industrial-parts/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "factory-energy",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/factory-energy/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "industrial-hse",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/industrial-hse/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "industrial-quality",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/industrial-quality/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "factory-warehousing",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/factory-warehousing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "supply-chain",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/supply-chain/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "packaging-plants",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/packaging-plants/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "metal-manufacturing",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/metal-manufacturing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "polymer-manufacturing",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/polymer-manufacturing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "machine-building",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/machine-building/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "industrial-logistics",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/industrial-logistics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "plant-modernization",
+          "url": "https://zomorodmelal.ir/topics/zm-r19/plant-modernization/",
+          "editorial_review_required": false
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 14,
+      "code": "zm-r12",
+      "title": "تحقیقات و پژوهش‌های علمی",
+      "volume_count": 5,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "سؤال علمی، فرضیه و طرح پژوهش"
+        },
+        {
+          "volume_no": 2,
+          "title": "روش‌شناسی، آزمایش میدانی و آزمایشگاهی"
+        },
+        {
+          "volume_no": 3,
+          "title": "آمار، طراحی آزمایش و علوم داده"
+        },
+        {
+          "volume_no": 4,
+          "title": "انتشار علمی، اخلاق و مستندسازی"
+        },
+        {
+          "volume_no": 5,
+          "title": "نوآوری، مدیریت پژوهش و تجاری‌سازی دانش"
+        }
+      ],
+      "source_topic_count": 20,
+      "topics": [
+        {
+          "slug": "research-projects",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/research-projects/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "applied-research",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/applied-research/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "feasibility-studies",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/feasibility-studies/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "experimental-design",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/experimental-design/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "statistics-data-analysis",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/statistics-data-analysis/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "field-research",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/field-research/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "laboratory-research",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/laboratory-research/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "interdisciplinary-research",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/interdisciplinary-research/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "scientific-papers",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/scientific-papers/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "research-reports",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/research-reports/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "innovation-invention",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/innovation-invention/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "knowledge-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/knowledge-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "technology-development",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/technology-development/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "project-evaluation",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/project-evaluation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "strategic-studies",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/strategic-studies/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "research-databank",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/research-databank/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "scientific-documentation",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/scientific-documentation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "research-dissemination",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/research-dissemination/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "research-collaborators",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/research-collaborators/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "private-research-network",
+          "url": "https://zomorodmelal.ir/topics/zm-r12/private-research-network/",
+          "editorial_review_required": false
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 15,
+      "code": "research-units",
+      "title": "واحدهای تخصصی تحقیقات",
+      "volume_count": 5,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "ژنتیک مولکولی، کمی و ژنومیک"
+        },
+        {
+          "volume_no": 2,
+          "title": "اصلاح نژاد محصولات، دام، طیور و آبزیان"
+        },
+        {
+          "volume_no": 3,
+          "title": "میکروبیولوژی و بیوتکنولوژی"
+        },
+        {
+          "volume_no": 4,
+          "title": "بیوانفورماتیک، آمار زیستی و هوش مصنوعی"
+        },
+        {
+          "volume_no": 5,
+          "title": "علوم گیاهی، خاک، آب، اقلیم و غذا"
+        }
+      ],
+      "source_topic_count": 20,
+      "topics": [
+        {
+          "slug": "molecular-genetics",
+          "url": "https://zomorodmelal.ir/research/directory/units/molecular-genetics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "quantitative-genetics",
+          "url": "https://zomorodmelal.ir/research/directory/units/quantitative-genetics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "genomics",
+          "url": "https://zomorodmelal.ir/research/directory/units/genomics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "crop-breeding",
+          "url": "https://zomorodmelal.ir/research/directory/units/crop-breeding/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "horticultural-breeding",
+          "url": "https://zomorodmelal.ir/research/directory/units/horticultural-breeding/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "animal-breeding",
+          "url": "https://zomorodmelal.ir/research/directory/units/animal-breeding/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "poultry-genetics",
+          "url": "https://zomorodmelal.ir/research/directory/units/poultry-genetics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "aquatic-genetics",
+          "url": "https://zomorodmelal.ir/research/directory/units/aquatic-genetics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "microbiology",
+          "url": "https://zomorodmelal.ir/research/directory/units/microbiology/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "biotechnology",
+          "url": "https://zomorodmelal.ir/research/directory/units/biotechnology/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "bioinformatics",
+          "url": "https://zomorodmelal.ir/research/directory/units/bioinformatics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "biostatistics",
+          "url": "https://zomorodmelal.ir/research/directory/units/biostatistics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "research-ai",
+          "url": "https://zomorodmelal.ir/research/directory/units/research-ai/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "plant-physiology",
+          "url": "https://zomorodmelal.ir/research/directory/units/plant-physiology/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "soil-sciences",
+          "url": "https://zomorodmelal.ir/research/directory/units/soil-sciences/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "plant-nutrition",
+          "url": "https://zomorodmelal.ir/research/directory/units/plant-nutrition/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "plant-pathology",
+          "url": "https://zomorodmelal.ir/research/directory/units/plant-pathology/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "food-science",
+          "url": "https://zomorodmelal.ir/research/directory/units/food-science/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "functional-foods",
+          "url": "https://zomorodmelal.ir/research/directory/units/functional-foods/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "water-climate",
+          "url": "https://zomorodmelal.ir/research/directory/units/water-climate/",
+          "editorial_review_required": false
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 16,
+      "code": "research-laboratories",
+      "title": "آزمایشگاه‌های تخصصی",
+      "volume_count": 5,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "آزمایشگاه‌های DNA، RNA، ژنوم و سلول"
+        },
+        {
+          "volume_no": 2,
+          "title": "میکروبیولوژی، زیست‌فناوری و بیوشیمی"
+        },
+        {
+          "volume_no": 3,
+          "title": "آزمون خاک، آب، گیاه و بذر"
+        },
+        {
+          "volume_no": 4,
+          "title": "کنترل کیفیت غذا، ترکیبات زیست‌فعال و تخمیر"
+        },
+        {
+          "volume_no": 5,
+          "title": "آزمون خوراک، مواد و تضمین کیفیت آزمایشگاهی"
+        }
+      ],
+      "source_topic_count": 20,
+      "topics": [
+        {
+          "slug": "molecular-genetics",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/molecular-genetics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "dna-rna",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/dna-rna/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "genomics",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/genomics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "cell-biology",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/cell-biology/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "microbiology",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/microbiology/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "food-microbiology",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/food-microbiology/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "biotechnology",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/biotechnology/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "biochemistry",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/biochemistry/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "soil-analysis",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/soil-analysis/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "water-quality",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/water-quality/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "plant-nutrition",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/plant-nutrition/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "plant-physiology",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/plant-physiology/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "plant-health",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/plant-health/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "seed-quality",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/seed-quality/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "food-quality",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/food-quality/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "bioactives",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/bioactives/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "fermentation",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/fermentation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "feed-analysis",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/feed-analysis/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "materials-testing",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/materials-testing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "research-quality",
+          "url": "https://zomorodmelal.ir/research/directory/laboratories/research-quality/",
+          "editorial_review_required": false
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 17,
+      "code": "research-centers",
+      "title": "مراکز تحقیقات",
+      "volume_count": 5,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "مراکز ژنتیک، ژنومیک و اصلاح نژاد"
+        },
+        {
+          "volume_no": 2,
+          "title": "میکروبیولوژی و زیست‌فناوری"
+        },
+        {
+          "volume_no": 3,
+          "title": "هوش مصنوعی و زیست‌اطلاعات"
+        },
+        {
+          "volume_no": 4,
+          "title": "آب، خاک، اقلیم و حفاظت گیاه"
+        },
+        {
+          "volume_no": 5,
+          "title": "علوم غذایی، تنوع زیستی و توسعه فناوری"
+        }
+      ],
+      "source_topic_count": 20,
+      "topics": [
+        {
+          "slug": "genetics",
+          "url": "https://zomorodmelal.ir/research/directory/centers/genetics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "genomics",
+          "url": "https://zomorodmelal.ir/research/directory/centers/genomics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "plant-breeding",
+          "url": "https://zomorodmelal.ir/research/directory/centers/plant-breeding/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "animal-breeding",
+          "url": "https://zomorodmelal.ir/research/directory/centers/animal-breeding/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "poultry",
+          "url": "https://zomorodmelal.ir/research/directory/centers/poultry/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "aquaculture",
+          "url": "https://zomorodmelal.ir/research/directory/centers/aquaculture/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "microbiology",
+          "url": "https://zomorodmelal.ir/research/directory/centers/microbiology/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "biotechnology",
+          "url": "https://zomorodmelal.ir/research/directory/centers/biotechnology/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "bioinformatics",
+          "url": "https://zomorodmelal.ir/research/directory/centers/bioinformatics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "artificial-intelligence",
+          "url": "https://zomorodmelal.ir/research/directory/centers/artificial-intelligence/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "soil-science",
+          "url": "https://zomorodmelal.ir/research/directory/centers/soil-science/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "water-resources",
+          "url": "https://zomorodmelal.ir/research/directory/centers/water-resources/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "climate",
+          "url": "https://zomorodmelal.ir/research/directory/centers/climate/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "plant-protection",
+          "url": "https://zomorodmelal.ir/research/directory/centers/plant-protection/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "physiology",
+          "url": "https://zomorodmelal.ir/research/directory/centers/physiology/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "food-science",
+          "url": "https://zomorodmelal.ir/research/directory/centers/food-science/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "functional-foods",
+          "url": "https://zomorodmelal.ir/research/directory/centers/functional-foods/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "biodiversity",
+          "url": "https://zomorodmelal.ir/research/directory/centers/biodiversity/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "sustainable-agriculture",
+          "url": "https://zomorodmelal.ir/research/directory/centers/sustainable-agriculture/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "technology-development",
+          "url": "https://zomorodmelal.ir/research/directory/centers/technology-development/",
+          "editorial_review_required": false
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 18,
+      "code": "zm-r13",
+      "title": "دانش، فناوری و هوش مصنوعی",
+      "volume_count": 5,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "مبانی هوش مصنوعی، یادگیری ماشین و تحلیل داده"
+        },
+        {
+          "volume_no": 2,
+          "title": "اینترنت اشیا، سنجش از دور و کشاورزی دیجیتال"
+        },
+        {
+          "volume_no": 3,
+          "title": "سامانه‌های تصمیم‌یار و پایش هوشمند"
+        },
+        {
+          "volume_no": 4,
+          "title": "ربات‌ها، دستیارها و اتوماسیون سازمانی"
+        },
+        {
+          "volume_no": 5,
+          "title": "امنیت اطلاعات و توسعه پلتفرم‌های نرم‌افزاری"
+        }
+      ],
+      "source_topic_count": 20,
+      "topics": [
+        {
+          "slug": "artificial-intelligence",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/artificial-intelligence/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "machine-learning",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/machine-learning/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "intelligent-analytics",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/intelligent-analytics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "decision-support",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/decision-support/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "office-automation",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/office-automation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "agricultural-iot",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/agricultural-iot/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "remote-sensing",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/remote-sensing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "agricultural-drones",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/agricultural-drones/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "smart-mapping",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/smart-mapping/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "management-dashboard",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/management-dashboard/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "specialist-software",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/specialist-software/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "ai-assistants",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/ai-assistants/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "data-mining",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/data-mining/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "online-monitoring",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/online-monitoring/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "smart-alerts",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/smart-alerts/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "emerging-technologies",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/emerging-technologies/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "digital-agriculture",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/digital-agriculture/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "digital-transformation",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/digital-transformation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "information-security",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/information-security/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "platform-development",
+          "url": "https://zomorodmelal.ir/topics/zm-r13/platform-development/",
+          "editorial_review_required": false
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 19,
+      "code": "zm-r14",
+      "title": "آموزش، آکادمی و توانمندسازی",
+      "volume_count": 4,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "دروس کشاورزی، باغبانی و گلخانه"
+        },
+        {
+          "volume_no": 2,
+          "title": "آموزش دامپروری و آبزی‌پروری"
+        },
+        {
+          "volume_no": 3,
+          "title": "آموزش اقتصاد، مدیریت و فناوری‌های نو"
+        },
+        {
+          "volume_no": 4,
+          "title": "طراحی آموزشی، ارزیابی، کارگاه و آموزش الکترونیکی"
+        }
+      ],
+      "source_topic_count": 20,
+      "topics": [
+        {
+          "slug": "zomorod-academy",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/zomorod-academy/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "agriculture-courses",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/agriculture-courses/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "livestock-courses",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/livestock-courses/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "horticulture-courses",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/horticulture-courses/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "greenhouse-courses",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/greenhouse-courses/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "aquaculture-courses",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/aquaculture-courses/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "agricultural-economics-courses",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/agricultural-economics-courses/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "farm-management-courses",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/farm-management-courses/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "technology-courses",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/technology-courses/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "ai-training",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/ai-training/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "webinars",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/webinars/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "professional-workshops",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/professional-workshops/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "management-training",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/management-training/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "farmer-training",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/farmer-training/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "learning-packages",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/learning-packages/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "certifications",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/certifications/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "elearning",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/elearning/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "knowledge-based-content",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/knowledge-based-content/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "expert-qa",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/expert-qa/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "learning-club",
+          "url": "https://zomorodmelal.ir/topics/zm-r14/learning-club/",
+          "editorial_review_required": false
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 20,
+      "code": "zm-r15",
+      "title": "خدمات، پروژه‌ها و بازرگانی",
+      "volume_count": 5,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "مشاوره تخصصی و طراحی پروژه"
+        },
+        {
+          "volume_no": 2,
+          "title": "اجرا، نظارت فنی و ممیزی"
+        },
+        {
+          "volume_no": 3,
+          "title": "امکان‌سنجی، مدیریت و سرمایه‌گذاری"
+        },
+        {
+          "volume_no": 4,
+          "title": "خدمات آزمایشگاهی، مهندسی و قراردادی"
+        },
+        {
+          "volume_no": 5,
+          "title": "تأمین، بازاریابی، واردات و صادرات"
+        }
+      ],
+      "source_topic_count": 25,
+      "topics": [
+        {
+          "slug": "specialist-consulting",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/specialist-consulting/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "project-design",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/project-design/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "project-execution",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/project-execution/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "technical-supervision",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/technical-supervision/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "audit-evaluation",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/audit-evaluation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "economic-feasibility",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/economic-feasibility/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "business-plans",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/business-plans/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "laboratory-services",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/laboratory-services/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "engineering-services",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/engineering-services/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "project-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/project-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "investment",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/investment/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "business-partnerships",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/business-partnerships/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "product-sales",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/product-sales/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "marketing-sales",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/marketing-sales/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "procurement",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/procurement/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "exports",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/exports/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "imports",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/imports/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "contract-services",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/contract-services/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "customer-support",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/customer-support/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "collaboration-opportunities",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/collaboration-opportunities/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "live-eeda784ac03011",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/live-eeda784ac03011/",
+          "editorial_review_required": true
+        },
+        {
+          "slug": "live-63b4db054fdbf7",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/live-63b4db054fdbf7/",
+          "editorial_review_required": true
+        },
+        {
+          "slug": "live-0145b0957fb332",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/live-0145b0957fb332/",
+          "editorial_review_required": true
+        },
+        {
+          "slug": "live-66f10027fd934e",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/live-66f10027fd934e/",
+          "editorial_review_required": true
+        },
+        {
+          "slug": "live-fb7a62dfe0e234",
+          "url": "https://zomorodmelal.ir/topics/zm-r15/live-fb7a62dfe0e234/",
+          "editorial_review_required": true
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 21,
+      "code": "zm-r20",
+      "title": "عمران و صنعت ساختمان",
+      "volume_count": 4,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "معماری و مهندسی سازه"
+        },
+        {
+          "volume_no": 2,
+          "title": "تأسیسات، مصالح و ساختمان هوشمند"
+        },
+        {
+          "volume_no": 3,
+          "title": "پیمانکاری، اجرا و کنترل هزینه"
+        },
+        {
+          "volume_no": 4,
+          "title": "ایمنی، نگهداری و تحویل ساختمان"
+        }
+      ],
+      "source_topic_count": 20,
+      "topics": [
+        {
+          "slug": "building-construction",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/building-construction/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "architecture-design",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/architecture-design/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "structural-design",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/structural-design/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "general-contracting",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/general-contracting/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "building-renovation",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/building-renovation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "mechanical-systems",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/mechanical-systems/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "electrical-systems",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/electrical-systems/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "construction-pm",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/construction-pm/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "quantity-surveying",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/quantity-surveying/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "construction-cost-control",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/construction-cost-control/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "road-landscaping",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/road-landscaping/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "waterproofing",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/waterproofing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "facades-materials",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/facades-materials/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "smart-buildings",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/smart-buildings/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "building-efficiency",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/building-efficiency/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "surveying",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/surveying/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "site-safety",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/site-safety/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "construction-quality",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/construction-quality/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "facility-maintenance",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/facility-maintenance/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "construction-handover",
+          "url": "https://zomorodmelal.ir/topics/zm-r20/construction-handover/",
+          "editorial_review_required": false
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 22,
+      "code": "zm-r21",
+      "title": "املاک و مستغلات",
+      "volume_count": 4,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "اقتصاد بازار، ارزیابی و انواع ملک"
+        },
+        {
+          "volume_no": 2,
+          "title": "کاربری زمین و توسعه ملک"
+        },
+        {
+          "volume_no": 3,
+          "title": "اجاره، قرارداد و مدیریت دارایی"
+        },
+        {
+          "volume_no": 4,
+          "title": "سرمایه‌گذاری، ریسک و سامانه‌های مکانی"
+        }
+      ],
+      "source_topic_count": 20,
+      "topics": [
+        {
+          "slug": "real-estate-valuation",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/real-estate-valuation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "housing-market",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/housing-market/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "property-asset-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/property-asset-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "residential-property",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/residential-property/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "commercial-property",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/commercial-property/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "office-property",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/office-property/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "industrial-property",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/industrial-property/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "land-use",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/land-use/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "property-development",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/property-development/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "property-roi",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/property-roi/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "property-contracts",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/property-contracts/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "rental-analysis",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/rental-analysis/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "property-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/property-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "renovate-to-sell",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/renovate-to-sell/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "joint-development",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/joint-development/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "building-permits",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/building-permits/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "property-marketing",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/property-marketing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "property-investment",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/property-investment/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "property-risk",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/property-risk/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "property-gis",
+          "url": "https://zomorodmelal.ir/topics/zm-r21/property-gis/",
+          "editorial_review_required": false
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 23,
+      "code": "zm-r22",
+      "title": "طلا، جواهر و گوهرسنگ",
+      "volume_count": 5,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "طلا، نقره، سکه و فلزات گران‌بها"
+        },
+        {
+          "volume_no": 2,
+          "title": "گوهرشناسی، الماس و سنگ‌های رنگی"
+        },
+        {
+          "volume_no": 3,
+          "title": "طراحی، ساخت و تعمیر جواهرات"
+        },
+        {
+          "volume_no": 4,
+          "title": "عیارسنجی، اصالت و ارزش‌گذاری"
+        },
+        {
+          "volume_no": 5,
+          "title": "حسابداری تخصصی، تجارت قانونی و امنیت"
+        }
+      ],
+      "source_topic_count": 21,
+      "topics": [
+        {
+          "slug": "raw-gold",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/raw-gold/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "melted-gold",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/melted-gold/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "gold-coins",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/gold-coins/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "silver-alloys",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/silver-alloys/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "gemology",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/gemology/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "diamonds",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/diamonds/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "emerald-ruby",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/emerald-ruby/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "jewelry-design",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/jewelry-design/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "jewelry-manufacturing",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/jewelry-manufacturing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "gold-assaying",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/gold-assaying/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "gem-valuation",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/gem-valuation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "jewelry-pricing",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/jewelry-pricing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "gold-accounting",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/gold-accounting/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "jewelry-workshop",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/jewelry-workshop/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "jewelry-repair",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/jewelry-repair/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "regulated-gold-trade",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/regulated-gold-trade/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "precious-metal-markets",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/precious-metal-markets/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "jewelry-photography",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/jewelry-photography/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "jewelry-authentication",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/jewelry-authentication/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "gold-security",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/gold-security/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "live-f1cb23690c82da",
+          "url": "https://zomorodmelal.ir/topics/zm-r22/live-f1cb23690c82da/",
+          "editorial_review_required": true
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 24,
+      "code": "zm-r23",
+      "title": "فرش دستباف و صنایع دستی",
+      "volume_count": 4,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "تاریخ، مکاتب و فنون بافت فرش"
+        },
+        {
+          "volume_no": 2,
+          "title": "طرح، رنگ، الیاف و مواد اولیه"
+        },
+        {
+          "volume_no": 3,
+          "title": "اصالت، کارشناسی و مرمت فرش"
+        },
+        {
+          "volume_no": 4,
+          "title": "صنایع دستی مکمل، نگهداری و بازاریابی"
+        }
+      ],
+      "source_topic_count": 20,
+      "topics": [
+        {
+          "slug": "persian-handmade-carpet",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/persian-handmade-carpet/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "knots-and-weaves",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/knots-and-weaves/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "carpet-patterns",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/carpet-patterns/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "natural-dyes",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/natural-dyes/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "wool-silk",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/wool-silk/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "carpet-knot-density",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/carpet-knot-density/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "kilims-rugs",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/kilims-rugs/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "tribal-carpets",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/tribal-carpets/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "city-carpets",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/city-carpets/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "silk-carpets",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/silk-carpets/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "carpet-restoration",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/carpet-restoration/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "carpet-care",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/carpet-care/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "carpet-authenticity",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/carpet-authenticity/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "carpet-appraisal",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/carpet-appraisal/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "carpet-trade",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/carpet-trade/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "carpet-collection",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/carpet-collection/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "woodcraft",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/woodcraft/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "ceramics",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/ceramics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "traditional-textiles",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/traditional-textiles/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "handicraft-marketing",
+          "url": "https://zomorodmelal.ir/topics/zm-r23/handicraft-marketing/",
+          "editorial_review_required": false
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 25,
+      "code": "zm-r24",
+      "title": "رستوران، آشپزی و مهمان‌داری",
+      "volume_count": 5,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "توسعه منو و آشپزی حرفه‌ای"
+        },
+        {
+          "volume_no": 2,
+          "title": "قنادی، نوشیدنی و کافه‌داری"
+        },
+        {
+          "volume_no": 3,
+          "title": "مدیریت آشپزخانه و ایمنی غذایی"
+        },
+        {
+          "volume_no": 4,
+          "title": "خدمات پذیرایی، تشریفات و عملیات رستوران"
+        },
+        {
+          "volume_no": 5,
+          "title": "تجربه مهمان، بازاریابی و سودآوری"
+        }
+      ],
+      "source_topic_count": 20,
+      "topics": [
+        {
+          "slug": "menu-development",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/menu-development/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "professional-cooking",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/professional-cooking/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "iranian-cuisine",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/iranian-cuisine/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "international-cuisine",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/international-cuisine/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "pastry-confectionery",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/pastry-confectionery/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "cafe-beverages",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/cafe-beverages/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "kitchen-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/kitchen-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "kitchen-food-safety",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/kitchen-food-safety/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "food-cost-control",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/food-cost-control/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "restaurant-procurement",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/restaurant-procurement/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "restaurant-design",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/restaurant-design/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "restaurant-marketing",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/restaurant-marketing/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "catering",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/catering/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "banquet-planning",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/banquet-planning/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "hospitality-staff-training",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/hospitality-staff-training/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "hospitality-quality",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/hospitality-quality/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "guest-experience",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/guest-experience/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "restaurant-online-ordering",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/restaurant-online-ordering/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "takeaway-packaging",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/takeaway-packaging/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "restaurant-profitability",
+          "url": "https://zomorodmelal.ir/topics/zm-r24/restaurant-profitability/",
+          "editorial_review_required": false
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 26,
+      "code": "zm-r25",
+      "title": "فناوری اطلاعات و خدمات دیجیتال",
+      "volume_count": 5,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "طراحی وب و مهندسی نرم‌افزار"
+        },
+        {
+          "volume_no": 2,
+          "title": "اپلیکیشن، تجربه کاربری و طراحی محصول"
+        },
+        {
+          "volume_no": 3,
+          "title": "هوش مصنوعی، داده و اتوماسیون کسب‌وکار"
+        },
+        {
+          "volume_no": 4,
+          "title": "شبکه، زیرساخت و امنیت سایبری"
+        },
+        {
+          "volume_no": 5,
+          "title": "آزمون کیفیت، راهبری و اقتصاد خدمات دیجیتال"
+        }
+      ],
+      "source_topic_count": 21,
+      "topics": [
+        {
+          "slug": "website-design",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/website-design/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "software-development",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/software-development/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "mobile-app-development",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/mobile-app-development/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "ux-design",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/ux-design/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "applied-ai",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/applied-ai/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "business-automation",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/business-automation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "data-analytics",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/data-analytics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "cloud-infrastructure",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/cloud-infrastructure/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "cybersecurity",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/cybersecurity/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "ecommerce",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/ecommerce/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "digital-products",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/digital-products/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "game-development",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/game-development/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "digital-animation",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/digital-animation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "professional-content",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/professional-content/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "seo",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/seo/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "tech-project-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/tech-project-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "api-engineering",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/api-engineering/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "backup-recovery",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/backup-recovery/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "digital-training",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/digital-training/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "software-qa",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/software-qa/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "live-878f27b75f2daa",
+          "url": "https://zomorodmelal.ir/topics/zm-r25/live-878f27b75f2daa/",
+          "editorial_review_required": true
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 27,
+      "code": "zm-r26",
+      "title": "گردشگری، رویدادها و خدمات حرفه‌ای",
+      "volume_count": 4,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "گردشگری فرهنگی، طبیعی و برنامه‌ریزی مقصد"
+        },
+        {
+          "volume_no": 2,
+          "title": "هتلداری، اقامت و خدمات سفر"
+        },
+        {
+          "volume_no": 3,
+          "title": "رویدادها، نمایشگاه‌ها و خدمات تخصصی"
+        },
+        {
+          "volume_no": 4,
+          "title": "بازاریابی گردشگری و همکاری بین‌المللی"
+        }
+      ],
+      "source_topic_count": 20,
+      "topics": [
+        {
+          "slug": "tourism-planning",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/tourism-planning/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "cultural-tourism",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/cultural-tourism/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "nature-tourism",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/nature-tourism/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "destination-development",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/destination-development/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "hotel-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/hotel-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "accommodation",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/accommodation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "travel-guidance",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/travel-guidance/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "urban-tourism",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/urban-tourism/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "tourism-economics",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/tourism-economics/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "responsible-tourism",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/responsible-tourism/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "exhibition-design",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/exhibition-design/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "conference-management",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/conference-management/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "event-planning",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/event-planning/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "corporate-events",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/corporate-events/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "public-relations",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/public-relations/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "professional-branding",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/professional-branding/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "research-services",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/research-services/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "technical-translation",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/technical-translation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "business-advisory",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/business-advisory/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "international-collaboration",
+          "url": "https://zomorodmelal.ir/topics/zm-r26/international-collaboration/",
+          "editorial_review_required": false
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 28,
+      "code": "zm-r16",
+      "title": "شرکت، رسانه و ارتباطات",
+      "volume_count": 3,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "هویت، مأموریت، تاریخچه و ساختار سازمانی"
+        },
+        {
+          "volume_no": 2,
+          "title": "مدیریت برند، رسانه و دانش سازمانی"
+        },
+        {
+          "volume_no": 3,
+          "title": "روابط عمومی، مسئولیت‌پذیری و همکاری‌ها"
+        }
+      ],
+      "source_topic_count": 22,
+      "topics": [
+        {
+          "slug": "about-company",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/about-company/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "founder",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/founder/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "mission-vision",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/mission-vision/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "organization-structure",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/organization-structure/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "company-departments",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/company-departments/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "company-news",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/company-news/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "articles-encyclopedia",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/articles-encyclopedia/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "media-publications",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/media-publications/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "photo-gallery",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/photo-gallery/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "videos",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/videos/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "events",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/events/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "achievements",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/achievements/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "clients-partners",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/clients-partners/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "operating-countries",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/operating-countries/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "social-responsibility",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/social-responsibility/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "careers",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/careers/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "contact-us",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/contact-us/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "support",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/support/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "social-media",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/social-media/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "zomorod-portal",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/zomorod-portal/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "live-4f10f17be161ad",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/live-4f10f17be161ad/",
+          "editorial_review_required": true
+        },
+        {
+          "slug": "live-68a120ac7e20ad",
+          "url": "https://zomorodmelal.ir/topics/zm-r16/live-68a120ac7e20ad/",
+          "editorial_review_required": true
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 29,
+      "code": "zm-r17",
+      "title": "اخبار شرکت و اطلاع‌رسانی تخصصی",
+      "volume_count": 3,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "خبرنویسی، منابع و راستی‌آزمایی"
+        },
+        {
+          "volume_no": 2,
+          "title": "خبرهای پژوهش، کشاورزی، صنعت و فناوری"
+        },
+        {
+          "volume_no": 3,
+          "title": "روابط عمومی، آرشیو و اصلاحیه‌های خبری"
+        }
+      ],
+      "source_topic_count": 20,
+      "topics": [
+        {
+          "slug": "latest",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/latest/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "official",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/official/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "research",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/research/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "farming",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/farming/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "industry",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/industry/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "technology",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/technology/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "academy",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/academy/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "training",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/training/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "conferences",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/conferences/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "collaborations",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/collaborations/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "reports",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/reports/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "achievements",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/achievements/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "new-services",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/new-services/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "publications",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/publications/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "occasions",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/occasions/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "events",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/events/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "cooperation",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/cooperation/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "media",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/media/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "social-responsibility",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/social-responsibility/",
+          "editorial_review_required": false
+        },
+        {
+          "slug": "archive",
+          "url": "https://zomorodmelal.ir/topics/zm-r17/archive/",
+          "editorial_review_required": false
+        }
+      ],
+      "status": "proposed_outline_not_published"
+    },
+    {
+      "book_no": 30,
+      "code": "business-foundations",
+      "title": "دانشنامه جامع کسب‌وکار و کارآفرینی",
+      "volume_count": 8,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "مبانی کسب‌وکار، کارآفرینی و مدل‌های کسب‌وکار"
+        },
+        {
+          "volume_no": 2,
+          "title": "تحقیقات بازار، شناخت مشتری و ارزش پیشنهادی"
+        },
+        {
+          "volume_no": 3,
+          "title": "راه‌اندازی شرکت، فرایندها و عملیات اجرایی"
+        },
+        {
+          "volume_no": 4,
+          "title": "بازاریابی، برندینگ، مذاکره و فروش"
+        },
+        {
+          "volume_no": 5,
+          "title": "حسابداری، بودجه‌ریزی و تأمین مالی کسب‌وکار"
+        },
+        {
+          "volume_no": 6,
+          "title": "منابع انسانی، مدیریت تیم و رهبری سازمانی"
+        },
+        {
+          "volume_no": 7,
+          "title": "راهبرد رقابت، رشد، مقیاس‌پذیری و نوآوری"
+        },
+        {
+          "volume_no": 8,
+          "title": "حقوق کسب‌وکار، قراردادها، مالیات و مدیریت ریسک"
+        }
+      ],
+      "source_topic_count": 0,
+      "topics": [],
+      "status": "proposed_outline_not_published",
+      "category": "additional_user_requested_series",
+      "source_status": "new_proposed",
+      "scope_note": "جلدهای پیشنهادی؛ نیازمند برنامه تألیف و داوری علمی"
+    },
+    {
+      "book_no": 31,
+      "code": "income-creation",
+      "title": "دانشنامه درآمد، استقلال مالی و اقتصاد شخصی",
+      "volume_count": 6,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "مفهوم درآمد، ثروت، جریان نقدی و اقتصاد شخصی"
+        },
+        {
+          "volume_no": 2,
+          "title": "درآمد فعال از مهارت‌ها، مشاغل و خدمات تخصصی"
+        },
+        {
+          "volume_no": 3,
+          "title": "درآمد از تولید محصول، دانش و مالکیت فکری"
+        },
+        {
+          "volume_no": 4,
+          "title": "مدل‌های درآمدی کسب‌وکار و دارایی‌ها"
+        },
+        {
+          "volume_no": 5,
+          "title": "بودجه شخصی، هزینه‌ها، مالیات و مدیریت بدهی"
+        },
+        {
+          "volume_no": 6,
+          "title": "تنوع‌بخشی درآمد، تحلیل ریسک و پایداری مالی"
+        }
+      ],
+      "source_topic_count": 0,
+      "topics": [],
+      "status": "proposed_outline_not_published",
+      "category": "additional_user_requested_series",
+      "source_status": "new_proposed",
+      "scope_note": "جلدهای پیشنهادی؛ نیازمند برنامه تألیف و داوری علمی"
+    },
+    {
+      "book_no": 32,
+      "code": "internet-income",
+      "title": "دانشنامه روش‌های کسب درآمد از اینترنت",
+      "volume_count": 8,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "زیرساخت فعالیت آنلاین، اعتبار حرفه‌ای و امنیت دیجیتال"
+        },
+        {
+          "volume_no": 2,
+          "title": "دورکاری، فریلنسینگ و ارائه خدمات آنلاین"
+        },
+        {
+          "volume_no": 3,
+          "title": "کسب‌وکار خدماتی و راه‌اندازی آژانس دیجیتال"
+        },
+        {
+          "volume_no": 4,
+          "title": "فروشگاه اینترنتی، تجارت الکترونیک و خدمات مشتری"
+        },
+        {
+          "volume_no": 5,
+          "title": "رسانه، تولید محتوا و مدل‌های درآمدی مخاطب‌محور"
+        },
+        {
+          "volume_no": 6,
+          "title": "آموزش آنلاین، محصولات دانلودی و اشتراک دیجیتال"
+        },
+        {
+          "volume_no": 7,
+          "title": "همکاری در فروش، تبلیغات و مشارکت‌های تجاری"
+        },
+        {
+          "volume_no": 8,
+          "title": "تحلیل داده، قیف فروش، بازاریابی و رشد پایدار آنلاین"
+        }
+      ],
+      "source_topic_count": 0,
+      "topics": [],
+      "status": "proposed_outline_not_published",
+      "category": "additional_user_requested_series",
+      "source_status": "new_proposed",
+      "scope_note": "جلدهای پیشنهادی؛ نیازمند برنامه تألیف و داوری علمی"
+    },
+    {
+      "book_no": 33,
+      "code": "chatgpt-income",
+      "title": "دانشنامه درآمدزایی حرفه‌ای با ChatGPT",
+      "volume_count": 8,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "مبانی کار با ChatGPT، توانایی‌ها، محدودیت‌ها و طراحی دستور"
+        },
+        {
+          "volume_no": 2,
+          "title": "پژوهش، خلاصه‌سازی، ویراستاری و تولید محتوای قابل‌راستی‌آزمایی"
+        },
+        {
+          "volume_no": 3,
+          "title": "خدمات نویسندگی، بازاریابی و تولید محتوای چندرسانه‌ای با نظارت انسانی"
+        },
+        {
+          "volume_no": 4,
+          "title": "ساخت دوره، محتوای آموزشی و دستیارهای دانش تخصصی"
+        },
+        {
+          "volume_no": 5,
+          "title": "تحلیل داده، تهیه گزارش و خدمات تصمیم‌یار برای مشتریان"
+        },
+        {
+          "volume_no": 6,
+          "title": "طراحی محصولات دیجیتال، نمونه‌سازی نرم‌افزار و کنترل کیفیت خروجی"
+        },
+        {
+          "volume_no": 7,
+          "title": "طراحی گردش‌کار و اتوماسیون با حفظ محرمانگی و تأیید انسانی"
+        },
+        {
+          "volume_no": 8,
+          "title": "قیمت‌گذاری خدمات، یافتن مشتری، قراردادها، حقوق نشر و مدیریت ریسک"
+        }
+      ],
+      "source_topic_count": 0,
+      "topics": [],
+      "status": "proposed_outline_not_published",
+      "category": "additional_user_requested_series",
+      "source_status": "new_proposed",
+      "scope_note": "بدون وعده درآمد تضمینی؛ با رعایت حقوق مؤلف، محرمانگی و راستی‌آزمایی"
+    },
+    {
+      "book_no": 34,
+      "code": "success-evidence",
+      "title": "دانشنامه علمی موفقیت، رشد فردی و حرفه‌ای",
+      "volume_count": 7,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "تعریف موفقیت، هدف‌گذاری و سنجش پیشرفت"
+        },
+        {
+          "volume_no": 2,
+          "title": "خودشناسی، توانمندی‌ها و انگیزش مبتنی بر شواهد"
+        },
+        {
+          "volume_no": 3,
+          "title": "عادت‌سازی، تمرکز، مدیریت زمان و بهره‌وری"
+        },
+        {
+          "volume_no": 4,
+          "title": "یادگیری مستمر، تفکر انتقادی و خلاقیت"
+        },
+        {
+          "volume_no": 5,
+          "title": "تاب‌آوری، مدیریت فشار روانی و تعادل زندگی"
+        },
+        {
+          "volume_no": 6,
+          "title": "ارتباط مؤثر، مذاکره، همکاری و رهبری"
+        },
+        {
+          "volume_no": 7,
+          "title": "تصمیم‌گیری، اخلاق حرفه‌ای و اصلاح مسیر رشد"
+        }
+      ],
+      "source_topic_count": 0,
+      "topics": [],
+      "status": "proposed_outline_not_published",
+      "category": "additional_user_requested_series",
+      "source_status": "new_proposed",
+      "scope_note": "جلدهای پیشنهادی؛ نیازمند برنامه تألیف و داوری علمی"
+    },
+    {
+      "book_no": 35,
+      "code": "shia-islamic-studies",
+      "title": "دانشنامه جامع معارف اسلامی و مذهب شیعه",
+      "volume_count": 12,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "مبانی اعتقادی و کلام امامیه"
+        },
+        {
+          "volume_no": 2,
+          "title": "تاریخ اسلام و شکل‌گیری مکاتب شیعی"
+        },
+        {
+          "volume_no": 3,
+          "title": "سیره پیامبر اسلام در منابع و پژوهش‌های شیعی"
+        },
+        {
+          "volume_no": 4,
+          "title": "زندگی و سیره امامان اهل‌بیت"
+        },
+        {
+          "volume_no": 5,
+          "title": "امامت و ولایت در منابع و مباحث کلامی"
+        },
+        {
+          "volume_no": 6,
+          "title": "حدیث شیعه، درایه و رجال"
+        },
+        {
+          "volume_no": 7,
+          "title": "فقه عبادات در مکتب امامیه"
+        },
+        {
+          "volume_no": 8,
+          "title": "فقه معاملات، حقوق و مسائل نوپدید"
+        },
+        {
+          "volume_no": 9,
+          "title": "اخلاق، تربیت و سبک زندگی در میراث شیعه"
+        },
+        {
+          "volume_no": 10,
+          "title": "ادعیه، زیارت و فرهنگ مناسک"
+        },
+        {
+          "volume_no": 11,
+          "title": "اندیشه اجتماعی و سیاسی شیعه در تاریخ"
+        },
+        {
+          "volume_no": 12,
+          "title": "مکتب‌شناسی، تاریخ اندیشه و مطالعات تطبیقی مذاهب"
+        }
+      ],
+      "source_topic_count": 0,
+      "topics": [],
+      "status": "proposed_outline_not_published",
+      "category": "additional_user_requested_series",
+      "source_status": "seeded_in_code_not_published",
+      "scope_note": "جلدهای پیشنهادی؛ نیازمند برنامه تألیف و داوری علمی"
+    },
+    {
+      "book_no": 36,
+      "code": "quran-encyclopedia",
+      "title": "دانشنامه جامع قرآن کریم",
+      "volume_count": 16,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "تاریخ وحی، نزول، جمع و تدوین قرآن"
+        },
+        {
+          "volume_no": 2,
+          "title": "علوم قرآن و مبانی مطالعات قرآنی"
+        },
+        {
+          "volume_no": 3,
+          "title": "قرائات، رسم‌الخط و تاریخ متن"
+        },
+        {
+          "volume_no": 4,
+          "title": "واژگان‌شناسی و ریشه‌های لغوی قرآن"
+        },
+        {
+          "volume_no": 5,
+          "title": "دستور زبان، نحو و بلاغت قرآنی"
+        },
+        {
+          "volume_no": 6,
+          "title": "سیاق، محکم و متشابه و روش تحلیل آیات"
+        },
+        {
+          "volume_no": 7,
+          "title": "تاریخ تفسیر و روش‌شناسی تفسیر قرآن"
+        },
+        {
+          "volume_no": 8,
+          "title": "توحید، خداشناسی و صفات الهی در قرآن"
+        },
+        {
+          "volume_no": 9,
+          "title": "قصص قرآن و تاریخ پیامبران"
+        },
+        {
+          "volume_no": 10,
+          "title": "انسان‌شناسی، اختیار و مسئولیت در قرآن"
+        },
+        {
+          "volume_no": 11,
+          "title": "اخلاق فردی، خانواده و تربیت در قرآن"
+        },
+        {
+          "volume_no": 12,
+          "title": "جامعه، عدالت و مناسبات اقتصادی در قرآن"
+        },
+        {
+          "volume_no": 13,
+          "title": "آیات احکام و مطالعات حقوقی قرآنی"
+        },
+        {
+          "volume_no": 14,
+          "title": "آفرینش، طبیعت و شیوه فهم گزاره‌های قرآنی"
+        },
+        {
+          "volume_no": 15,
+          "title": "مطالعات تطبیقی تفاسیر شیعه و اهل سنت"
+        },
+        {
+          "volume_no": 16,
+          "title": "فرهنگ‌نامه واژگان، اطلس موضوعی و نمایه جامع قرآن"
+        }
+      ],
+      "source_topic_count": 0,
+      "topics": [],
+      "status": "proposed_outline_not_published",
+      "category": "additional_user_requested_series",
+      "source_status": "seeded_in_code_not_published",
+      "scope_note": "جلدهای پیشنهادی؛ نیازمند برنامه تألیف و داوری علمی"
+    },
+    {
+      "book_no": 37,
+      "code": "occult-history-27-volumes",
+      "title": "دانشنامه تاریخی و انتقادی علوم غریبه",
+      "volume_count": 27,
+      "volumes": [
+        {
+          "volume_no": 1,
+          "title": "مبانی تاریخی، تعاریف و اصطلاح‌شناسی علوم غریبه"
+        },
+        {
+          "volume_no": 2,
+          "title": "نسخه‌شناسی، کتاب‌شناسی و تصحیح انتقادی متون"
+        },
+        {
+          "volume_no": 3,
+          "title": "علوم غریبه در سنت‌های ایران باستان"
+        },
+        {
+          "volume_no": 4,
+          "title": "تاریخ علوم غریبه در جهان اسلام"
+        },
+        {
+          "volume_no": 5,
+          "title": "میراث یونانی و هلنیستی و انتقال متون"
+        },
+        {
+          "volume_no": 6,
+          "title": "حروف، اعداد و رمزپردازی در تاریخ اندیشه"
+        },
+        {
+          "volume_no": 7,
+          "title": "جفر در منابع تاریخی و ارزیابی انتقادی"
+        },
+        {
+          "volume_no": 8,
+          "title": "رمل و شیوه‌های فال‌گیری در مطالعات فرهنگی"
+        },
+        {
+          "volume_no": 9,
+          "title": "تاریخ نجوم احکامی و طالع‌بینی"
+        },
+        {
+          "volume_no": 10,
+          "title": "کیمیاگری و پیوندهای تاریخی آن با دانش مواد"
+        },
+        {
+          "volume_no": 11,
+          "title": "سیمیا در تاریخ متون و روایت‌های فرهنگی"
+        },
+        {
+          "volume_no": 12,
+          "title": "هیمیا و ادبیات نیروها و عوامل نامرئی"
+        },
+        {
+          "volume_no": 13,
+          "title": "لیمیا در منابع تاریخی، نمایش و افسون"
+        },
+        {
+          "volume_no": 14,
+          "title": "طلسمات: تاریخ، نقش‌ها و نمادشناسی"
+        },
+        {
+          "volume_no": 15,
+          "title": "حرز و تعویذ در فرهنگ عامه و تاریخ ادیان"
+        },
+        {
+          "volume_no": 16,
+          "title": "ادعیه و اوراد در نسخه‌ها و سنت‌های متنی"
+        },
+        {
+          "volume_no": 17,
+          "title": "اسامی، نشانه‌ها و نظام‌های رمزآمیز"
+        },
+        {
+          "volume_no": 18,
+          "title": "خواب‌گزاری و تعبیر رؤیا در تمدن‌های مختلف"
+        },
+        {
+          "volume_no": 19,
+          "title": "کهانت، پیشگویی و تاریخ ادعاهای غیب‌گویی"
+        },
+        {
+          "volume_no": 20,
+          "title": "جادو، سحر و روایت‌های اجتماعی و تاریخی"
+        },
+        {
+          "volume_no": 21,
+          "title": "تصوف، مکاشفه و تجربه‌های عرفانی در منابع"
+        },
+        {
+          "volume_no": 22,
+          "title": "باورهای درمانی تاریخی و ارزیابی شواهد پزشکی"
+        },
+        {
+          "volume_no": 23,
+          "title": "باورهای حفاظت، بدیُمنی و آیین‌های عامیانه"
+        },
+        {
+          "volume_no": 24,
+          "title": "علوم غریبه در فقه، کلام و اخلاق اسلامی شیعه"
+        },
+        {
+          "volume_no": 25,
+          "title": "مطالعات تطبیقی سنت‌های یهودی، مسیحی و غربی"
+        },
+        {
+          "volume_no": 26,
+          "title": "روان‌شناسی باور، سوگیری شناختی و آزمون تجربی ادعاها"
+        },
+        {
+          "volume_no": 27,
+          "title": "اطلس نسخه‌ها، منابع، واژه‌نامه و نمایه انتقادی جامع"
+        }
+      ],
+      "source_topic_count": 0,
+      "topics": [],
+      "status": "proposed_outline_not_published",
+      "category": "additional_user_requested_series",
+      "source_status": "seeded_in_code_with_27_in_title_not_published",
+      "scope_note": "مطالعه تاریخی، نسخه‌شناسانه و نقادانه؛ بدون ادعای اثربخشی فراطبیعی یا ارائه دستورعمل عملی"
+    }
+  ],
+  "revision": "user_requested_8_new_subjects",
+  "extensions_not_yet_on_live_topics": 8,
+  "additional_books": 8,
+  "additional_volumes": 92
+}
