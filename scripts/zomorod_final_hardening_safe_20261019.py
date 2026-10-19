@@ -50,7 +50,7 @@ def selftest():
  assert NEW_POLICY.startswith('Header always append Content-Security-Policy ')
  assert "'unsafe-inline'" not in NEW_POLICY and "'unsafe-eval'" not in NEW_POLICY
  assert 'includeSubDomains' not in NEW_HSTS
- page='<html><head></head><body><header class="zm-v7-header" role="none"><nav class="zm-v7-chain"></nav></header><footer role="contentinfo"></footer><!-- zm-p0p3-final-a11y-20261019 --></body></html>'
+ page='<html><head></head><body><header class="zm-v7-header" role="none"><div class="zm-v7-top"><nav class="zm-v7-chain"></nav></div></header><footer role="contentinfo"></footer><!-- zm-p0p3-final-a11y-20261019 --></body></html>'
  assert NEW_HEADER in transform(FILES[0],page.encode()).decode()
  sample=('PassengerAppRoot "test"\nRewriteRule ^$ index.html [END]\n'+OLD_POLICY+'\n'+OLD_HSTS+'\n').encode()
  x=transform(FILES[2],sample).decode()
