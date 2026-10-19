@@ -49,8 +49,8 @@ jobs:
           for name,raw in files.items():
               (d/(name+'.b64')).write_text(base64.b64encode(raw).decode('ascii'),encoding='ascii')
               print('TRUE_ROUND_ICON',name,len(raw))
-          assert files['favicon.ico'][:4]==b'\\x00\\x00\\x01\\x00'
-          assert files['icon-192.png'].startswith(b'\\x89PNG\\r\\n\\x1a\\n')
+          assert files['favicon.ico'][:4]==b'\x00\x00\x01\x00'
+          assert files['icon-192.png'].startswith(b'\x89PNG\r\n\x1a\n')
           PY
           python3 -m py_compile content/zomorod-seo-brand/deploy_exact_favicon.py
           grep -q 'ZOMOROD_ROUND_FAVICON_ROLLBACK=restored' content/zomorod-seo-brand/deploy_exact_favicon.py
