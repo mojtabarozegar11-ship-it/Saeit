@@ -112,7 +112,8 @@ def sync_catalog(source_root, active_root, retired_root, manifest_path):
 
         previous = set()
         if moved_old:
-            previous = set(maker.discover_recipes(old))
+            old_dirs = [item for item in old.iterdir() if item.is_dir() and not item.name.startswith(".")]
+            previous = set(maker.discover_recipes(old)) if old_dirs else set()
         removed = sorted(previous - names)
         for slug in removed:
             destination = _unique_archive_path(retired, slug, stamp)
