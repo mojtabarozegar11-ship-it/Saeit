@@ -75,8 +75,9 @@ def metadata_company(doc):
     # One canonical of its own; no index-collapsing redirect or duplicate page.
     if not re.search(r'rel=["\x27]canonical["\x27][^>]*href=["\x27]https://mojplaywin.com/company/["\x27]',doc,re.I):
         fail("Company canonical unexpectedly changed")
-    if "mpw-company-og-20261019" in doc or "application/ld+json" in doc:
-        fail("Unexpected preexisting company metadata, review manually")
+    if "mpw-company-og-20261019" in doc:
+        fail("Company Open Graph refinement already installed")
+    preserve_existing_schema=("application/ld+json" in doc.lower())
     injected=(
         '<meta id="mpw-company-og-20261019" property="og:type" content="website">\n'
         '<meta property="og:site_name" content="MojPlayWin">\n'
@@ -97,6 +98,10 @@ def metadata_company(doc):
         "founder":{"@type":"Person","name":"Mojtaba Roozegar"},
         "contactPoint":{"@type":"ContactPoint","contactType":"Business enquiries (via published support channel)","email":MAIL}}},ensure_ascii=False,separators=(',',':'))+
         '</script>\n')
+    # Keep any pre-existing schema.org entities intact. Do not publish a second
+    # AboutPage/Organization block if the live document already has JSON-LD.
+    if preserve_existing_schema:
+        injected=injected.split('<script type="application/ld+json" id="mpw-company-schema-20261019">',1)[0]
     if doc.lower().count("</head>")!=1:fail("No single head end")
     doc=unique(doc,"</head>",injected+"</head>","company SEO injection")
     doc=edit_tag(doc,r'<meta\b(?=[^>]*\bname=["\x27]theme-color["\x27])[^>]*>',
