@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#10251e">
+<meta name="description" content="نبرد مزارع زمرد؛ بازی رایگان کشاورزی، مدیریت منابع، ساخت قلعه و رقابت استراتژیک با هوش مصنوعی؛ قابل اجرا روی موبایل و رایانه.">
+<title>نبرد مزارع زمرد | Zomorod Farm Wars</title>
+<style>
+:root{color-scheme:dark;--bg:#0c221a;--panel:#173a2c;--line:#507153;--gold:#f4cd76;--white:#f8f3e4;--muted:#bfd3bd;--red:#f5a49a}
+*{box-sizing:border-box}body{margin:0;color:var(--white);font-family:Tahoma,"Noto Sans Arabic",sans-serif;min-height:100vh;background:radial-gradient(ellipse at 23% -20%,#3e684b 0,transparent 53%),radial-gradient(ellipse at 95% 60%,#244c40 0,transparent 50%),var(--bg);line-height:1.6}
+button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visible{outline:3px solid #fff08b;outline-offset:3px}button:disabled{opacity:.44;cursor:not-allowed}
+.wrap{max-width:1250px;margin:auto;padding:16px}.top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 0 16px}.brand{display:flex;align-items:center;gap:14px}.emblem{width:62px;height:62px;display:grid;place-items:center;font-size:31px;border-radius:19px;border:1px solid #a3a177;background:linear-gradient(140deg,#5a8651,#193c2d);box-shadow:0 8px 25px #0007,inset 0 2px 0 #d5ef9366;transform:rotate(-5deg)}h1{margin:0;font-size:clamp(21px,3vw,34px);letter-spacing:-.5px;color:#fff2bb}.sub{font-size:12px;color:#bcd6bc}.chip{border:1px solid #6d885f;border-radius:40px;padding:8px 15px;background:#173c2f;font-size:12px;color:#efe7c9}.top-btn{background:#214c38;color:#f5e6b0;border:1px solid #70906a;border-radius:12px;padding:9px 14px}
+.stats{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-bottom:15px}.stat{padding:11px 5px;text-align:center;border:1px solid #587455;border-radius:14px;background:linear-gradient(150deg,#2a523c,#163528);box-shadow:inset 0 1px #eff2c625,0 6px 16px #091b154a}.stat small{display:block;color:#b5ceb2;font-size:11px}.stat b{font-size:clamp(13px,2.3vw,21px);font-variant-numeric:tabular-nums}.main{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:16px}.board{background:linear-gradient(170deg,#223f34,#102b26);border:1px solid #57745b;border-radius:22px;padding:18px;box-shadow:0 20px 60px #0005,inset 0 2px 0 #e4f3c21c;position:relative;overflow:hidden}.board:before{content:"";position:absolute;width:240px;height:240px;top:-160px;left:10%;background:#ffdb8866;filter:blur(90px);pointer-events:none}.boardhead{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:14px}.boardhead h2{font-size:17px;margin:0}.boardhead small{color:var(--muted)}.legend{display:flex;justify-content:space-between;font-size:12px;color:#b8cead;gap:5px;margin-bottom:5px}
+.farm{direction:ltr;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:clamp(3px,.75vw,9px);max-width:750px;margin:auto;padding:12px 2px 20px;perspective:900px}.tile{position:relative;aspect-ratio:1/1;min-width:0;background:linear-gradient(135deg,#80a956,#3b704b);border:1px solid #a0b670;border-bottom:5px solid #285338;border-radius:14px 14px 12px 12px;box-shadow:inset 0 2px #d9ed9859,0 7px 0 #143b2a,0 10px 10px #0003;color:white;font-size:clamp(19px,3.8vw,43px);transition:transform .15s,filter .15s,border .15s;display:grid;place-items:center;padding:0;isolation:isolate}.tile::before{content:"";position:absolute;inset:5px;border:1px dashed #e9ed8e42;border-radius:9px;pointer-events:none}.tile:active{transform:translateY(4px);box-shadow:inset 0 2px #d9ed9859,0 3px 0 #143b2a}.tile.sel{border-color:#ffeaa8;outline:3px solid #ffe18d;outline-offset:1px;z-index:2;filter:brightness(1.16)}.tile.enemy{background:linear-gradient(130deg,#ad665b,#6e3a3f);border-color:#dca090;border-bottom-color:#49242b;box-shadow:inset 0 2px #ffc2a233,0 7px 0 #401e2a,0 10px 10px #0005}.tile .icon{position:relative;z-index:1;filter:drop-shadow(0 5px 2px #1329197a)}.tile .tag{position:absolute;top:2px;right:3px;background:#142b22bf;border-radius:7px;padding:0 3px;font-size:9px;color:#ffe5a3}.tile .ready{position:absolute;bottom:3px;left:3px;width:8px;height:8px;background:#fff0aa;border-radius:50%;box-shadow:0 0 9px #f8da67}.tile .enemybar{position:absolute;bottom:4px;left:8%;width:84%;height:4px;border-radius:4px;background:#591e29;overflow:hidden}.tile .enemybar:after{content:"";display:block;width:var(--life);height:100%;background:#ffd48b}
+.panel{border:1px solid #536f58;border-radius:19px;background:linear-gradient(160deg,#234632,#17352b);padding:14px;margin-bottom:13px;box-shadow:0 8px 27px #0003}.panel h3{margin:0 0 9px;color:#ffe2a0;font-size:15px}.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.action{border:1px solid #798e63;color:#f8f2d9;background:linear-gradient(160deg,#467452,#27503b);padding:9px 5px;border-radius:12px;font-size:12px;min-height:54px;box-shadow:inset 0 1px #f6edbb30,0 4px #112c20;line-height:1.4}.action strong{display:block;font-size:14px}.action:active:not(:disabled){transform:translateY(3px);box-shadow:inset 0 1px #f6edbb30,0 1px #112c20}.action.war{background:linear-gradient(145deg,#b8694f,#773e3b);border-color:#c38f72}.action.end{background:linear-gradient(145deg,#d5af57,#a07939);border-color:#f0d088;color:#261e0c}.wide{grid-column:span 2}.journal{min-height:78px;max-height:130px;overflow:auto;white-space:pre-line;font-size:12px;color:#dbe5ce}.progress{height:9px;background:#10261e;border-radius:9px;overflow:hidden;border:1px solid #71805b;margin:6px 0 10px}.progress span{height:100%;display:block;background:linear-gradient(90deg,#e6ae66,#f7e3a6);transition:width .25s}.quest{color:#d9e6c9;font-size:13px;margin:8px 0}.foot{color:#a9c4b5;font-size:11px;margin:18px auto;text-align:center}.banner{position:fixed;inset:0;background:#06140ec9;z-index:10;display:none;align-items:center;justify-content:center;padding:20px}.banner.show{display:flex}.modal{max-width:440px;background:linear-gradient(150deg,#3c6746,#112a21);border:2px solid #d1bb73;border-radius:22px;padding:30px 26px;text-align:center;box-shadow:0 25px 80px #0009}.modal h2{font-size:26px;color:#ffe79c}.modal p{color:#e2e8d5}.modal button{background:var(--gold);color:#1d291a;border:0;border-radius:10px;padding:14px 27px;font-weight:bold}.hint{color:#b8d1b7;font-size:12px;text-align:center}.selected{color:#ffe8a4}.pulse{animation:pulse 2.6s infinite}@keyframes pulse{50%{filter:brightness(1.35)}}@media(max-width:910px){.main{grid-template-columns:1fr}.side{display:grid;grid-template-columns:1fr 1fr;gap:12px}.panel{margin:0}}@media(max-width:620px){.wrap{padding:9px}.stats{grid-template-columns:repeat(4,1fr);gap:5px}.stat{padding:7px 3px}.stat small{font-size:10px}.brand{gap:7px}.emblem{width:43px;height:43px;font-size:25px}.chip{padding:5px 9px}.board{padding:10px;border-radius:15px}.farm{gap:3px;padding:9px 2px 14px}.tile{border-radius:7px;border-bottom-width:3px;box-shadow:0 3px 0 #143b2a,0 4px 5px #0003}.tile::before{inset:3px;border-radius:4px}.tile .tag{font-size:8px}.side{grid-template-columns:1fr}.actions{grid-template-columns:repeat(2,1fr)}.action{min-height:50px}.boardhead h2{font-size:15px}}@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top"><div class="brand"><div class="emblem" aria-hidden="true">🌾</div><div><h1>نبرد مزارع زمرد</h1><div class="sub">ZOMOROD FARM WARS · نسخه ۱.۰ · استراتژی نوبتی</div></div></div><div><span class="chip">🏆 مزرعه بساز · از قلعه دفاع کن · رقیب را شکست بده</span> <button id="sound" class="top-btn" type="button" aria-label="تغییر وضعیت صدا">🔇 بی‌صدا</button></div></header>
+<section id="stats" class="stats" aria-label="آمار قلمرو"></section>
+<div class="main">
+<main class="board"><div class="boardhead"><h2>🗺️ سرزمین سبز و قلعه رقیب</h2><small id="turnInfo"></small></div><div class="legend"><span>🟩 مزرعه شما</span><span>🟥 قلمرو رقیب</span></div><div id="farm" class="farm" role="group" aria-label="زمین بازی شامل چهل و هشت خانه"></div><p class="hint">برای ساخت‌وساز روی یک خانه سبز خالی بزنید؛ برداشت محصول از همان خانه انجام می‌شود.</p><p class="hint selected" id="selection" aria-live="polite"></p></main>
+<aside class="side">
+<section class="panel"><h3>🏗️ مدیریت مزرعه</h3><div class="actions">
+<button class="action" data-act="wheat"><strong>🌾 گندم</strong>۱۰ طلا · ۲ روز</button>
+<button class="action" data-act="corn"><strong>🌽 ذرت</strong>۱۸ طلا · ۳ روز</button>
+<button class="action" data-act="harvest"><strong>🧺 برداشت</strong>خانه رسیده</button>
+<button class="action" data-act="orchard"><strong>🌳 باغ</strong>۳۵ طلا · ۱۵ چوب</button>
+<button class="action" data-act="tower"><strong>🏰 برج دفاع</strong>۴۵ طلا · ۲۰ چوب</button>
+<button class="action" data-act="market"><strong>🏪 بازارچه</strong>۵۰ طلا · ۲۵ چوب</button>
+</div></section>
+<section class="panel"><h3>⚔️ سپاه و رقبا</h3><div class="actions">
+<button class="action" data-act="train"><strong>🛡️ استخدام</strong>۳۰ طلا · ۱۲ غذا</button>
+<button class="action war" data-act="attack"><strong>⚔️ یورش</strong>۳ سرباز · ۸ غذا</button>
+<button class="action" data-act="repair"><strong>🧱 تعمیر</strong>۲۵ طلا · ۱۵ چوب</button>
+<button class="action end" data-act="next"><strong>☀️ روز بعد</strong>پیشروی رقیب</button>
+</div><div class="quest" id="quest"></div><div class="progress"><span id="enemyprogress"></span></div><small class="sub">قدرت برج‌ها، میزان خسارت حمله رقیب را کاهش می‌دهد.</small></section>
+<section class="panel"><h3>📜 گزارش فرماندهی</h3><div id="journal" class="journal" role="status" aria-live="polite"></div><div class="actions" style="margin-top:12px"><button class="action" data-act="help">❔ راهنمای بازی</button><button class="action" data-act="restart">🔁 بازی جدید</button></div></section>
+</aside>
+</div>
+<footer class="foot">© زمرد ملل · بازی مستقل و رایگان · بدون اتصال به درگاه پرداخت یا ارسال اطلاعات شخصی · پیشرفت فقط در مرورگر شما ذخیره می‌شود.</footer>
+</div>
+<div class="banner" id="overlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal"><h2 id="modalTitle"></h2><p id="modalMessage"></p><button type="button" id="modalClose">ادامه بازی</button></div></div>
+<script>
+(function(){
+'use strict';
+var KEY='zm-farmwars-v1-save', COLS=8, ROWS=6, cells=48, sound=false, audio=null;
+var $=function(id){return document.getElementById(id);};
+var types={empty:'🌿',wheat:'🌾',corn:'🌽',orchard:'🌳',tower:'🏰',market:'🏪'};
+function seed(){return {v:1,day:1,gold:160,food:48,wood:55,army:3,life:130,enemy:165,wins:0,selected:2,history:['به قلمرو زمرد خوش آمدید! یک خانه سبز را انتخاب کنید.'],tiles:Array.from({length:cells},function(_,i){return i%COLS>=6?{type:'enemy',age:0}:{type:'empty',age:0};}),done:false};}
+function valid(z){return z&&z.v===1&&Array.isArray(z.tiles)&&z.tiles.length===cells&&z.tiles.every(function(t,i){return t&&Number.isInteger(t.age)&&t.age>=0&&t.age<100000&&typeof t.type==='string'&&((i%COLS>=6&&t.type==='enemy')||(i%COLS<6&&Object.hasOwn(types,t.type)));})&&['day','gold','food','wood','army','life','enemy','wins','selected'].every(function(k){return Number.isSafeInteger(z[k])&&z[k]>=0&&z[k]<1000000;})&&z.selected<cells&&Array.isArray(z.history)&&z.history.length<=15&&z.history.every(function(x){return typeof x==='string'&&x.length<250;})&&typeof z.done==='boolean';}
+function load(){try{var x=JSON.parse(localStorage.getItem(KEY));if(valid(x))return x;}catch(e){}return seed();}
+var s=load();function save(){try{localStorage.setItem(KEY,JSON.stringify(s));}catch(e){}}
+function log(m){s.history.unshift('روز '+s.day+': '+m);s.history=s.history.slice(0,8);}
+function beep(freq){if(!sound)return;try{audio=audio||new(window.AudioContext||window.webkitAudioContext)();var o=audio.createOscillator(),g=audio.createGain();o.type='sine';o.frequency.value=freq;g.gain.setValueAtTime(.07,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+.14);o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+.14);}catch(e){}}
+function show(title,msg){$('modalTitle').textContent=title;$('modalMessage').textContent=msg;$('overlay').classList.add('show');}
+function ready(t){return (t.type==='wheat'&&t.age>=2)||(t.type==='corn'&&t.age>=3);}
+function count(type){return s.tiles.filter(function(t){return t.type===type;}).length;}
+function selected(){return s.tiles[s.selected];}
+function own(){return s.selected%COLS<6;}
+function can(cost){return Object.keys(cost).every(function(k){return s[k]>=cost[k];});}
+function charge(cost){Object.keys(cost).forEach(function(k){s[k]-=cost[k];});}
+function render(){
+ var fields=[['📅 روز',s.day],['🪙 طلا',s.gold],['🌽 غذا',s.food],['🪵 چوب',s.wood],['🛡️ سرباز',s.army],['❤️ قلعه',s.life],['🚩 رقیب',s.enemy]];
+ $('stats').innerHTML=fields.map(function(v){return '<div class="stat"><small>'+v[0]+'</small><b>'+v[1]+'</b></div>';}).join('');
+ $('turnInfo').textContent='مرحله '+Math.ceil(s.day/5)+' · '+(s.day%4===0?'شبِ نبرد 🌙':'آفتابِ رشد ☀️');
+ $('farm').innerHTML=s.tiles.map(function(t,i){
+ var enemy=i%COLS>=6,icon=enemy?(i===6||i===46?'🏯':i%3===0?'⚔️':'🏴'):t.type==='empty'?'🌿':(t.type==='wheat'||t.type==='corn')&&!ready(t)?'🌱':types[t.type];
+ var label=enemy?'خانه دشمن':t.type==='empty'?'زمین خالی':t.type==='wheat'?'گندم':t.type==='corn'?'ذرت':t.type==='tower'?'برج دفاعی':t.type==='market'?'بازارچه':'باغ میوه';
+ return '<button type="button" class="tile'+(enemy?' enemy':'')+(i===s.selected?' sel':'')+(ready(t)?' pulse':'')+'" data-cell="'+i+'" aria-pressed="'+(i===s.selected)+'" aria-label="خانه '+(i+1)+'، '+label+(ready(t)?' آماده برداشت':'')+'"><span class="icon">'+icon+'</span>'+(!enemy&&t.age>0&&!ready(t)?'<span class="tag">'+t.age+' روز</span>':'')+(ready(t)?'<span class="ready"></span>':'')+(enemy?'<span class="enemybar" style="--life:'+Math.max(0,s.enemy/165*100)+'%"></span>':'')+'</button>';
+ }).join('');
+ $('selection').textContent=own()?'خانه '+(s.selected+1)+' · '+(selected().type==='empty'?'آماده ساخت':ready(selected())?'آماده برداشت':selected().type==='wheat'?'مزرعه گندم':selected().type==='corn'?'مزرعه ذرت':selected().type==='tower'?'برج دفاعی':selected().type==='orchard'?'باغ میوه':'بازارچه'):'خانه '+(s.selected+1)+' · قلمرو رقیب';
+ $('journal').textContent=s.history.join('\n');
+ $('quest').textContent=s.enemy>0?'🎯 مأموریت: مقاومت کنید و سلامت قلعه رقیب را از '+s.enemy+' به صفر برسانید.':'🏆 پیروزی! قلعه رقیب فتح شد.';
+ $('enemyprogress').style.width=Math.max(0,s.enemy/165*100)+'%';
+ var rules={wheat:{gold:10},corn:{gold:18},orchard:{gold:35,wood:15},tower:{gold:45,wood:20},market:{gold:50,wood:25},train:{gold:30,food:12},attack:{food:8,army:3},repair:{gold:25,wood:15}};
+ document.querySelectorAll('[data-act]').forEach(function(b){var a=b.getAttribute('data-act');b.disabled=s.done&&a!=='restart'&&a!=='help'||!!rules[a]&&!can(rules[a])||(a==='harvest'&&!ready(selected()))||(a==='repair'&&s.life>=130)||(a==='attack'&&s.enemy<=0)||(['wheat','corn','orchard','tower','market'].includes(a)&&(!own()||selected().type!=='empty'));});
+ save();
+}
+function choose(i){if(i<0||i>=cells)return;s.selected=i;render();}
+function act(action){
+ if(action==='restart'){if(window.confirm('بازی فعلی و پیشرفت ذخیره‌شده پاک شود؟')){s=seed();log('ماجراجویی جدید آغاز شد.');render();}return;}
+ if(action==='help'){show('📖 راهنمای نبرد مزارع','روی یک زمین سبز خالی بزنید و گندم، ذرت، باغ، برج یا بازار بسازید. روز بعد موجب رشد محصولات، کسب درآمد و حرکت رقیب می‌شود. گندم در ۲ روز، ذرت در ۳ روز می‌رسد. باغ هر روز چوب، بازار طلا و برج دفاع فراهم می‌کند. غذا و طلا برای آموزش سپاه و نبرد لازم است. با یورش‌های حساب‌شده قلعه رقیب را فتح کنید.');return;}
+ if(s.done)return;
+ var costs={wheat:{gold:10},corn:{gold:18},orchard:{gold:35,wood:15},tower:{gold:45,wood:20},market:{gold:50,wood:25},train:{gold:30,food:12},attack:{army:3,food:8},repair:{gold:25,wood:15}};
+ if(costs[action]&&!can(costs[action])){log('منابع کافی نیست؛ محصول برداشت کنید یا روز بعد را انتخاب کنید.');return render();}
+ var tile=selected();
+ if(['wheat','corn','orchard','tower','market'].includes(action)){
+  if(!own()||tile.type!=='empty'){log('ابتدا یک خانه سبز خالی را انتخاب کنید.');return render();}
+  charge(costs[action]);tile.type=action;tile.age=0;log('ساخت '+({wheat:'مزرعه گندم',corn:'مزرعه ذرت',orchard:'باغ درختی',tower:'برج دفاعی',market:'بازارچه'}[action])+' انجام شد.');beep(540);
+ }else if(action==='harvest'){
+  if(!own()||!ready(tile)){log('محصول این خانه هنوز نرسیده است.');return render();}
+  var corn=tile.type==='corn';s.food+=corn?42:25;s.gold+=corn?28:18;s.wood+=corn?2:1;tile.type='empty';tile.age=0;log('محصول برداشت شد: '+(corn?'۴۲ غذا و ۲۸ طلا':'۲۵ غذا و ۱۸ طلا')+'.');beep(730);
+ }else if(action==='train'){
+  charge(costs.train);s.army+=3;log('سه سرباز به سپاه زمرد پیوستند.');beep(660);
+ }else if(action==='attack'){
+  charge(costs.attack);var damage=20+Math.floor(Math.random()*16)+Math.min(12,count('tower')*2);s.enemy=Math.max(0,s.enemy-damage);
+  s.gold+=10;log('یورش موفق: '+damage+' خسارت به رقیب، ۱۰ طلا غنیمت.');beep(330);
+  if(s.enemy===0){s.done=true;s.wins=1;show('🏆 پیروزی بزرگ زمرد!','قلعه رقیب فتح شد! در '+s.day+' روز امپراتوری مزرعه را نجات دادید. برای تجربه دوباره «بازی جدید» را انتخاب کنید.');}
+ }else if(action==='repair'){
+  if(s.life>=130){log('قلعه سالم است.');return render();}
+  charge(costs.repair);s.life=Math.min(130,s.life+37);log('قلعه تعمیر شد و ۳۷ سلامت بازیافت.');beep(600);
+ }else if(action==='next'){
+  s.day+=1;var crops=0;
+  s.tiles.forEach(function(t){if(t.type==='wheat'||t.type==='corn'){t.age++;if(ready(t))crops++;}});
+  s.gold+=12+count('market')*15;s.wood+=4+count('orchard')*12;
+  var upkeep=Math.ceil(s.army/3);s.food=Math.max(0,s.food-upkeep);
+  var enemyDamage=Math.max(0,14+Math.floor(Math.random()*13)+Math.floor(s.day/7)*2-count('tower')*9);
+  if(s.day%5===0){enemyDamage+=8;log('هشدار: موج سنگین حمله دشمن!');}
+  s.life=Math.max(0,s.life-enemyDamage);
+  if(s.day%3===0&&s.enemy>0)s.enemy=Math.min(165,s.enemy+5);
+  log('درآمد روزانه: '+(12+count('market')*15)+' طلا، '+(4+count('orchard')*12)+' چوب. حمله رقیب: '+enemyDamage+' آسیب. '+crops+' مزرعه آماده برداشت.');
+  beep(470);
+  if(s.life===0){s.done=true;show('💔 قلعه زمرد سقوط کرد','مقاومت دلیرانه شما تا روز '+s.day+' ادامه یافت. با ساخت برج و توسعه اقتصادی، دوباره پیروز شوید.');}
+ }else{return;}
+ render();
+}
+$('farm').addEventListener('click',function(e){var b=e.target.closest('[data-cell]');if(b)choose(Number(b.getAttribute('data-cell')));});
+document.querySelectorAll('[data-act]').forEach(function(b){b.addEventListener('click',function(){act(b.getAttribute('data-act'));});});
+$('sound').addEventListener('click',function(){sound=!sound;this.textContent=sound?'🔊 باصدا':'🔇 بی‌صدا';if(sound)beep(800);});
+$('modalClose').addEventListener('click',function(){$('overlay').classList.remove('show');});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')$('overlay').classList.remove('show');if(document.activeElement&&document.activeElement.hasAttribute('data-cell')){var i=Number(document.activeElement.getAttribute('data-cell')),delta={ArrowRight:1,ArrowLeft:-1,ArrowDown:COLS,ArrowUp:-COLS}[e.key];if(delta!==undefined){e.preventDefault();var next=i+delta;if(next>=0&&next<cells&&Math.abs(next%COLS-i%COLS)<=1){var b=document.querySelector('[data-cell="'+next+'"]');if(b){b.focus();choose(next);}}}}});
+window.ZomorodFarmWarsTest={getState:function(){return JSON.parse(JSON.stringify(s));},action:act,select:choose,reset:function(){s=seed();render();},valid:valid};
+render();
+})();
+</script>
+</body>
+</html>
