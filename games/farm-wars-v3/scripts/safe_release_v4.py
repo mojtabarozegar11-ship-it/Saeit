@@ -22,7 +22,7 @@ def sha(p):
         for block in iter(lambda:f.read(262144),b""):h.update(block)
     return h.hexdigest()
 def guard(p,exists=True):
-    assert p.is_relative_to(ROOT) or p.is_relative_to(STAGE),f"path escaped approved roots: {p}"
+    assert os.path.commonpath([str(p),str(ROOT)])==str(ROOT) or os.path.commonpath([str(p),str(STAGE)])==str(STAGE),f"path escaped approved roots: {p}"
     assert not p.is_symlink(),f"symlink blocked: {p}"
     if exists:assert p.is_file() and p.stat().st_size>0,f"missing file: {p}"
 def atomic_copy(src,dst):
@@ -88,7 +88,7 @@ def prepare():
     assert not (GAME/"game.js").exists() and not (GAME/"assets").exists()
     assert not (GAME/"cover.webp").exists()
     assert "PassengerEnabled off" in (GAME/".htaccess").read_text()
-    for rel in ["build/index.html","build/game.js","build/cover.webp","build/.htaccess"]:
+    for rel in ["build/index.html","build/game.js","build/.htaccess"]:
        guard(STAGE/rel)
     models=list((STAGE/"build/assets").glob("*.glb"))
     assert len(models)==27
@@ -103,7 +103,7 @@ def prepare():
     assert len(protected)>=2
     m={"phase":"prepared","oldGame":sha(STAGE/"old-game.html"),
        "oldHome":sha(STAGE/"old-home.html"),"newGame":sha(STAGE/"build/index.html"),
-       "newJs":sha(STAGE/"build/game.js"),"newCover":sha(STAGE/"build/cover.webp"),
+       "newJs":sha(STAGE/"build/game.js"),"newCover":None,
        "oldPreview":sha(STAGE/"old-preview.html"),"oldPreviewJs":sha(STAGE/"old-preview.js"),
        "protected":protected,"modelCount":len(models)}
     store(m);print("RIVER_PULSE_PRODUCTION_PREPARED=PASS")
@@ -128,9 +128,18 @@ def rollback_preview():
     if sha(PREVIEW/"game.js") in [m["oldPreviewJs"],m["newJs"]]:
        atomic_copy(STAGE/"old-preview.js",PREVIEW/"game.js")
     print("RIVER_PULSE_PREVIEW_REVERTED=YES")
+def artwork():
+    m=metadata()
+    assert m["phase"]=="preview",m["phase"]
+    cover=STAGE/"build/cover.webp"
+    guard(cover)
+    assert 1000<cover.stat().st_size<160000,"real game cover should be optimized"
+    m["newCover"]=sha(cover)
+    store(m)
+    print("RIVER_PULSE_REAL_SCREENSHOT_COVER=PASS",cover.stat().st_size)
 def game():
     m=metadata()
-    assert m["phase"]=="preview"
+    assert m["phase"]=="preview" and m["newCover"]
     assert sha(GAME/"index.html")==m["oldGame"]
     assert not (GAME/"assets").exists() and not (GAME/"game.js").exists()
     try:
@@ -213,7 +222,7 @@ def main():
     STAGE=Path("/home/zomorod2/.farm-dominion-v4-"+RUN)
     assert STAGE.is_dir() and not STAGE.is_symlink()
     mapping={"prepare":prepare,"preview":preview,"game":game,"home":home,
-             "verify":verify,"rollback":rollback,"rollback_game":rollback_game,
+             "verify":verify,"artwork":artwork,"rollback":rollback,"rollback_game":rollback_game,
              "rollback_preview":rollback_preview,"rollback_home":rollback_home}
     if command not in mapping:raise SystemExit("invalid command")
     mapping[command]()
