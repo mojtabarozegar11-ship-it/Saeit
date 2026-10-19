@@ -86,6 +86,12 @@ jobs:
           test -d "$HOME/saeit_v91_runtime_stage_20261012"
           echo "CORE_AND_AGENT_FILES_PRESERVED=yes"
           REMOTE
+      - name: Compare current isolated Zomorod store hashes (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel 'sha256sum "$HOME/.private/zomorod-business/site_store.php" "$HOME/public_html/store/index.php"'
       - name: Remove temporary SSH credentials
         if: always()
         shell: bash
