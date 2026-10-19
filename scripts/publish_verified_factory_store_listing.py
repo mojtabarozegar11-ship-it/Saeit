@@ -7,6 +7,7 @@ recording the owner's publication request as a delegated instruction.
 Never creates orders, payment intents, or alters unrelated products.
 """
 import argparse
+from copy import copy
 from decimal import Decimal
 import importlib.util
 import json
@@ -84,6 +85,41 @@ def verify_sources(inbox, docroot):
     return digest
 
 
+RELEASE_METADATA = {
+    "factory_public_url": PUBLIC_RELATIVE_URL,
+    "factory_public_download_url": FREE_DOWNLOAD_URL,
+    "factory_software_qa": "passed",
+    "factory_product_edition": "free_v1",
+    "factory_storefront": "mojplaywin",
+    "factory_publication_permission": True,
+    "factory_commercial_status": "published_free_download_no_checkout",
+    "factory_status": "published_free",
+    "factory_factual_and_market_qa": "not_claimed_or_required_for_synthetic_scenarios",
+    "factory_license_review": "free_evaluation_permission_from_owner",
+    "manual_price_required": False,
+}
+
+
+def verify_live_release_gate(product, metadata):
+    """Fail closed against the deployed Product.clean gate before any DB write.
+
+    GitHub's simplified Product model and the live cPanel model can differ.
+    The live model remains the authority; this check NEVER grants approval,
+    creates a gate, sets flags in the database, or substitutes for QA.
+    """
+    from django.core.exceptions import ValidationError
+
+    candidate = copy(product)
+    candidate.active = True
+    candidate.title = TITLE
+    candidate.metadata = dict(metadata, **RELEASE_METADATA)
+    try:
+        candidate.clean()
+    except ValidationError as exc:
+        reason = " | ".join(str(message) for message in exc.messages)
+        raise ValueError("RUNTIME_RELEASE_GATE_NOT_READY: " + reason[:240]) from exc
+
+
 def publish(inbox, app, docroot, *, apply=False, delegated_owner_instruction=False):
     importer = loaded("factory_native_store_importer", "import_factory_store_drafts.py")
     app = importer.verify_target(app, docroot)
@@ -121,10 +157,13 @@ def publish(inbox, app, docroot, *, apply=False, delegated_owner_instruction=Fal
                 and product.knowledge_article.published):
             return {"status": "already_active", "product_id": product.pk, "sha256": digest}
         raise ValueError("ACTIVE_PRODUCT_RELEASE_MISMATCH")
+    if apply and not delegated_owner_instruction:
+        raise ValueError("OWNER_PUBLICATION_MANDATE_REQUIRED")
+    # Green dry-run must exercise the deployed Product gate, not merely QA metadata.
+    # Propose ACTIVE state on an unsaved copy, then abandon without DB writes.
+    verify_live_release_gate(product, metadata)
     if not apply:
         return {"status": "verified_dry_run", "product_id": product.pk, "sha256": digest}
-    if not delegated_owner_instruction:
-        raise ValueError("OWNER_PUBLICATION_MANDATE_REQUIRED")
     from core.approval import ApprovalService
     Approval = apps.get_model("core", "ApprovalRequest")
     with transaction.atomic():
@@ -154,19 +193,7 @@ def publish(inbox, app, docroot, *, apply=False, delegated_owner_instruction=Fal
                 req.pk, True, actor_id=owner.pk,
                 note=OWNER_DECISION_NOTE, actor_type="owner"
             )
-        metadata.update({
-            "factory_public_url": PUBLIC_RELATIVE_URL,
-            "factory_public_download_url": FREE_DOWNLOAD_URL,
-            "factory_software_qa": "passed",
-            "factory_product_edition": "free_v1",
-            "factory_storefront": "mojplaywin",
-            "factory_publication_permission": True,
-            "factory_commercial_status": "published_free_download_no_checkout",
-            "factory_status": "published_free",
-            "factory_factual_and_market_qa": "not_claimed_or_required_for_synthetic_scenarios",
-            "factory_license_review": "free_evaluation_permission_from_owner",
-            "manual_price_required": False,
-        })
+        metadata.update(RELEASE_METADATA)
         product.knowledge_article = article
         product.metadata = metadata
         product.title = TITLE
