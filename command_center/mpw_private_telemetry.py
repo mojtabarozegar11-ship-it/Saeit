@@ -85,8 +85,10 @@ def _status(raw_state, observed, now, ttl_seconds, present):
     if age < -60 or age > ttl_seconds:
         return "stale"
     if raw_state in ("ok", "healthy", "success", "active_private",
-                     "gen65_operational_private", "active_private_learning", "loaded"):
+                     "gen65_operational_private", "active_private_learning"):
         return "healthy"
+    if raw_state == "loaded_only":
+        return "loaded_only"
     if raw_state in ("warning", "degraded"):
         return "degraded"
     if raw_state in ("error", "failed"):
@@ -131,8 +133,9 @@ def snapshot(root=BASE, now=None, with_history=True):
         {"generation": (gen or {}).get("active_private_generation")})
 
     roles = reports["roles"] or {}
-    role_rows = {r.get("code"): r for r in roles.get("runs", [])
-                 if isinstance(r, dict) and isinstance(r.get("code"), str)}
+    role_source = roles.get("runs", [])
+    role_rows = {r.get("code"): r for r in role_source
+                 if isinstance(r, dict) and isinstance(r.get("code"), str)} if isinstance(role_source, list) else {}
     for name in ROLE_CODES:
         row = role_rows.get(name)
         put("role_" + name, "Site health: " + name, "agent",
@@ -141,8 +144,9 @@ def snapshot(root=BASE, now=None, with_history=True):
 
     for group, expected in (("five", FIVE), ("six", SIX)):
         record = reports[group] or {}
-        rows = {r.get("name"): r for r in record.get("roles", [])
-                if isinstance(r, dict) and isinstance(r.get("name"), str)}
+        group_source = record.get("roles", [])
+        rows = {r.get("name"): r for r in group_source
+                if isinstance(r, dict) and isinstance(r.get("name"), str)} if isinstance(group_source, list) else {}
         for name in expected:
             row = rows.get(name)
             put("robot_" + name, name, "robot", record if row else None,
@@ -153,18 +157,26 @@ def snapshot(root=BASE, now=None, with_history=True):
     registry = module_report.get("per_module_capability_registry", [])
     if not isinstance(registry, list):
         registry = []
+    # A successful Python import is NOT evidence of a functional execution.
+    # Always report the entire expected 77-slot inventory, even when the
+    # private report is missing, truncated, malformed or has duplicate names.
+    # Per-module execution requires a separate independently verified receipt.
     seen = set()
-    for idx, row in enumerate(registry[:77]):
-        if not isinstance(row, dict):
-            continue
-        name = _safe_label(row.get("module"), "module_" + str(idx + 1))
+    for idx in range(77):
+        row = registry[idx] if idx < len(registry) and isinstance(registry[idx], dict) else None
+        name = _safe_label((row or {}).get("module"), "module_" + str(idx + 1))
         if name in seen:
-            continue
+            row = None
+            name = "module_" + str(idx + 1)
         seen.add(name)
-        # The module namespace is not an independently running daemon.
-        put("module_" + str(idx + 1), name, "module", module_report,
-            "observed_utc", "loaded" if row.get("loaded") is True else "error",
-            7200, {"role": "imported_library", "independent_process": False})
+        loaded = (row or {}).get("loaded")
+        import_state = "loaded_only" if loaded is True else (
+            "failed" if loaded is False else None)
+        put("module_" + str(idx + 1), name, "module",
+            module_report if row else None, "observed_utc", import_state,
+            7200, {"role": "imported_library", "independent_process": False,
+                   "import_verified": loaded is True,
+                   "functional_execution_verified": False})
 
     # Two additional workers are present in private Cron, but their log formats
     # do not prove an execution status; surface them as unknown until instrumented.
@@ -187,7 +199,7 @@ def snapshot(root=BASE, now=None, with_history=True):
                     ]
                     history_available = history_available or bool(item["history"])
     counts = {name: sum(x["state"] == name for x in items)
-              for name in ("healthy", "stale", "unknown", "failed", "degraded")}
+              for name in ("healthy", "loaded_only", "stale", "unknown", "failed", "degraded")}
     return {"tenant": TENANT, "captured_at": now.isoformat(),
             "source": "private_cpanel_reports", "items": items,
             "summary": {"total": len(items), **counts},
