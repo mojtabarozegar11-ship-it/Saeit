@@ -1,0 +1,457 @@
+{
+  "collection": "MojPlayWin research-grade editorial briefs",
+  "created": "2026-10-19",
+  "scope": "30 total research-grade editorial briefs across 19 existing informative pages; no shop/checkout/admin/child sites",
+  "publication": "educational methodologies only, not implemented services or certified academic research",
+  "sources": {
+    "nist-ai": [
+      "NIST AI Risk Management Framework",
+      "https://airc.nist.gov/airmf-resources/airmf/5-sec-core/"
+    ],
+    "nist-gen": [
+      "NIST Generative AI Profile",
+      "https://doi.org/10.6028/NIST.AI.600-1"
+    ],
+    "nist-ssdf": [
+      "NIST Secure Software Development Framework",
+      "https://csrc.nist.gov/pubs/sp/800/218/final"
+    ],
+    "wcag": [
+      "W3C Web Content Accessibility Guidelines 2.2",
+      "https://www.w3.org/TR/WCAG22/"
+    ],
+    "fair": [
+      "FAIR Guiding Principles",
+      "https://doi.org/10.1038/sdata.2016.18"
+    ],
+    "prisma": [
+      "PRISMA 2020 reporting statement",
+      "https://www.bmj.com/content/372/bmj.n71"
+    ],
+    "strobe": [
+      "STROBE reporting guideline",
+      "https://www.equator-network.org/reporting-guidelines/strobe/"
+    ],
+    "oecd": [
+      "OECD Responsible Business Conduct Guidelines",
+      "https://doi.org/10.1787/81f92357-en"
+    ],
+    "ipcc": [
+      "IPCC Sixth Assessment Synthesis",
+      "https://www.ipcc.ch/report/sixth-assessment-report-cycle/2023/"
+    ],
+    "codex": [
+      "Codex General Principles of Food Hygiene CXC 1-1969",
+      "https://www.fao.org/fao-who-codexalimentarius/codex-texts/codes-of-practice/en/"
+    ],
+    "faowater": [
+      "FAO AquaCrop water productivity model",
+      "https://www.fao.org/aquacrop"
+    ],
+    "gge": [
+      "GGE biplot and AMMI comparison (Crop Science)",
+      "https://doi.org/10.2135/CROPSCI2006.06.0374"
+    ],
+    "rfc": [
+      "IETF RFC 9110 HTTP semantics",
+      "https://www.rfc-editor.org/rfc/rfc9110.html"
+    ],
+    "worldbank": [
+      "World Bank Commodity Markets Research",
+      "https://www.worldbank.org/en/research/commodity-markets"
+    ]
+  },
+  "articles": [
+    {
+      "route": "/company/",
+      "title": "Governance by verifiable claims rather than promotional certainty",
+      "question": "How can an interdisciplinary digital enterprise communicate its capabilities without confusing ambitions, prototypes and deployed services?",
+      "method": "Construct an evidence registry in which every capability has a named owner, deployment environment, status class (proposed, prototype, tested, active, retired), observation date and supporting artifact. Interview representatives from research, finance, engineering and service delivery independently; reconcile conflicting answers before publication. Preserve claims and prior revisions as immutable versions rather than rewriting the historical record.",
+      "analysis": "Model each published statement as a tuple (claim, scope, timestamp, provenance, confidence, reviewer). A claim about scientific expertise is not equivalent to proof of a laboratory installation; similarly a payment integration in a repository does not demonstrate completed customer settlements. Apply a materiality threshold to determine which assertions require additional evidence and keep unresolved claims explicitly conditional.",
+      "assessment": "Audit a stratified sample of public pages against deployment logs and primary documents. Report the fraction of substantiated claims, median age of supporting evidence, unowned assertions and correction lead time. Block statements about accreditation, patents, audited revenue or active production when no primary evidence is available.",
+      "limitations": "This is a governance design, not an assertion that a particular company has validated facilities or certifications. The OECD guidance concerns responsible conduct and cannot independently authenticate a company profile.",
+      "refs": [
+        "oecd",
+        "fair"
+      ]
+    },
+    {
+      "route": "/company/",
+      "title": "Technology readiness, organizational maturity and investment gates",
+      "question": "Which project is ready to become a commercial service, and how should uncertainty affect the allocation of scarce research capital?",
+      "method": "Create independent gates for technical feasibility, user utility, security, legal scope and unit economics. Score each gate from evidence rather than employee confidence. A prototype may satisfy an engineering gate while failing accessibility or customer entitlement delivery; do not average these incompatible failures into an apparently healthy composite score.",
+      "analysis": "Use a decision matrix with alternatives such as continue research, run a controlled pilot, license technology, partner, or stop. For each option specify expected reversible cost, maximum plausible loss, information gained and dependence on assumptions. Compare one-stage deployment against staged investment with a fixed learning budget and a minimum success criterion announced before testing.",
+      "assessment": "Track gate pass rates, ratio of independently reproduced tests, post-launch rollback frequency, and calibration between predicted and observed results. Approve public release only after responsible reviewers sign off on the smallest required evidence set; log rejected releases as learning events.",
+      "limitations": "Maturity instruments are context-specific; a numerical readiness score cannot guarantee market fit or compliance. Publishing examples of gates does not imply that any listed product is currently available.",
+      "refs": [
+        "nist-ssdf",
+        "oecd"
+      ]
+    },
+    {
+      "route": "/research/",
+      "title": "Causal diagrams and the identification of research effects",
+      "question": "When an observed improvement occurs after adopting a technology, which variables must be controlled before claiming the technology caused the improvement?",
+      "method": "Write the causal estimand first: average treatment effect, intention-to-treat effect or a policy-specific effect. Draw a directed acyclic graph of treatment assignment, outcomes, confounders, mediators and selection. Identify an admissible adjustment set without conditioning on colliders. Where randomization is feasible, preregister allocation, blinding where appropriate and a protocol for noncompliance.",
+      "analysis": "For observational evidence, compare inverse-probability weighting, matching and doubly robust estimators with diagnostics for overlap and balance. Estimate uncertainty using appropriate cluster structure; probe sensitivity to unmeasured confounding rather than relying on p-values alone. Pre- and post-changes without a credible comparator do not identify causal effects.",
+      "assessment": "Document missingness by treatment group, attrition, standardized mean differences after adjustment and uncertainty intervals for prespecified outcomes. Publish a negative-control analysis or falsification test when scientifically justified. Keep exploratory subgroup discoveries apart from confirmatory results.",
+      "limitations": "Identification relies on assumptions that data alone cannot prove. STROBE strengthens reporting transparency but does not certify that observational estimates are unbiased.",
+      "refs": [
+        "strobe",
+        "fair"
+      ]
+    },
+    {
+      "route": "/research/",
+      "title": "Sequential experiments, multiplicity and statistical decision quality",
+      "question": "How can a research program run many related experiments without overclaiming false positives or wasting expensive laboratory and computing resources?",
+      "method": "Set a primary endpoint, minimal practically important effect and analysis plan before collecting outcome data. Choose a design for correlated observations and likely attrition; calculate power or posterior operating characteristics through simulation rather than using a formula under implausible independence. Distinguish confirmatory hypotheses from adaptive exploration and handle repeated interim looks explicitly.",
+      "analysis": "Compare a fixed-sample confidence-interval decision, alpha-spending sequential testing and Bayesian posterior decision rules using simulations generated from plausible null, small-effect and heterogeneous-effect scenarios. Assess the probability of a correct decision, expected sample size and cost under each scenario. Calibrate priors against domain evidence; do not call a posterior probability a frequentist false-positive rate.",
+      "assessment": "Publish simulation code and seeds, familywise error or false discovery rate where relevant, and distribution of study duration. Record early-stop reasons, deviations and whether a replication dataset reproduced direction and practical magnitude.",
+      "limitations": "The strongest-looking threshold is not always the best policy: decision losses, ethical constraints and measurement quality must be specified. A reporting checklist cannot substitute for a well-designed experiment.",
+      "refs": [
+        "prisma",
+        "strobe"
+      ]
+    },
+    {
+      "route": "/knowledge/",
+      "title": "Systematic evidence synthesis without cherry-picked sources",
+      "question": "What constitutes a defensible synthesis of rapidly changing digital research when convenient search results disagree?",
+      "method": "Frame a review question using population/context, intervention or exposure, comparator and outcomes. Preregister inclusion criteria, eligible time window, search syntax and screening workflow. Search multiple bibliographic indexes and inspect backward/forward citations. Apply duplicate-independent screening to a subset or all records where resources permit; record disagreements and adjudication rules.",
+      "analysis": "Extract study design, denominator, outcome measurement, funding and risk-of-bias factors into a machine-readable table. Synthesize comparable effect measures only after checking heterogeneity and design compatibility; otherwise present a structured narrative map. Use explicit inclusion dates and do not mix an updated preprint with an older peer-reviewed estimate as if identical.",
+      "assessment": "Report the search date, database names, deduplication counts, screened records, exclusions with reasons and a PRISMA-style flow record. Provide a reproducible search strategy and an uncertainty table that separates consensus, conflicting evidence and evidence gaps.",
+      "limitations": "PRISMA governs transparent reporting, not guaranteed correctness or formal certification. Do not represent a curated reading list as a systematic review without performing the promised workflow.",
+      "refs": [
+        "prisma",
+        "fair"
+      ]
+    },
+    {
+      "route": "/knowledge/",
+      "title": "FAIR research data and provenance-aware publication",
+      "question": "How should research records be structured so that third parties can re-use them without exposing confidential or personal information?",
+      "method": "Specify persistent identifiers, human- and machine-readable metadata, controlled units, instrument calibration, transformations and licensing restrictions at data creation. Record raw inputs and derived outputs separately. Maintain a provenance graph linking dataset revisions to code commits, analytical parameters, authorship approvals and publication versions.",
+      "analysis": "Assess findability, accessibility under legitimate authorization, interoperability through documented schemas and reuse through explicit provenance. FAIR does not imply unrestricted openness: sensitive data may require controlled access and aggregate release. Introduce schema validation, unit tests for ranges and a documented procedure for de-identification and retention.",
+      "assessment": "Test reproducibility by having a second reviewer independently regenerate an example figure or analysis from authorized inputs. Measure metadata completeness, broken links, unresolved units and time-to-reproduce. Deliver a data dictionary, provenance manifest and a rights-aware access policy.",
+      "limitations": "A perfect metadata score does not prove data accuracy; instruments and collection protocols still require independent validation. Rights and consent override convenience of data distribution.",
+      "refs": [
+        "fair",
+        "oecd"
+      ]
+    },
+    {
+      "route": "/industry/",
+      "title": "Failure-mode analysis for resilient digital-to-industrial workflows",
+      "question": "How can factories and digital platforms prioritize reliability failures before they propagate into customer harm?",
+      "method": "Decompose the process into observable steps and define functional requirements for each. For each failure mode record initiating mechanism, potential effects, detectability, existing controls and owner. Use severity, occurrence and detectability ratings only as prioritization aids, not as universally calibrated probabilities. Always escalate severe hazards regardless of a low product of ratings.",
+      "analysis": "Construct fault trees for critical top events and examine common-cause failures such as shared power, authentication or contaminated input batches. Tie corrective actions to measured mechanisms: redesign, redundant sensing, operator training and change control. Re-test the original failure scenario after correction using the same acceptance criteria.",
+      "assessment": "Track recurrence rate per operating hour or unit, mean time to restoration, critical near-misses and proportion of actions verified with evidence. Validate control effectiveness through small-scale simulation or staged operational tests before wider rollout.",
+      "limitations": "FMEA and fault-tree results depend on expert completeness. No checklist removes the need for statutory safety reviews or site-specific industrial engineering.",
+      "refs": [
+        "nist-ssdf",
+        "oecd"
+      ]
+    },
+    {
+      "route": "/industry/",
+      "title": "Statistical process control beyond attractive dashboards",
+      "question": "When does variation represent common-cause noise, and when does a production line require corrective intervention?",
+      "method": "Define a stable measurement system with calibration and a clear operational definition of each quality attribute. Select rational subgroups appropriate to the process and plot time-ordered data with limits estimated from an appropriate baseline. Do not substitute specification limits for statistical control limits or treat a centered process as automatically capable.",
+      "analysis": "Diagnose distributional assumptions, autocorrelation and batch effects before interpreting Shewhart, EWMA or CUSUM charts. Evaluate process capability only after evidence of statistical stability; otherwise a Cp/Cpk estimate can create false confidence. Use designed experiments to identify controllable factors when persistent shifts appear.",
+      "assessment": "Monitor false-alarm rates, detection delay for meaningful shifts, gauge repeatability and reproducibility, and the proportion of nonconformities with verified root-cause closure. Retain charts as evidence linked to actual corrective actions rather than decorative management graphics.",
+      "limitations": "Control charts are not independent proof of product safety or regulatory approval. Quality failures should initiate controlled rework where feasible, but unsafe or irrecoverable material must not automatically be returned to production.",
+      "refs": [
+        "oecd",
+        "strobe"
+      ]
+    },
+    {
+      "route": "/economy/",
+      "title": "Unit economics under joint demand and cost uncertainty",
+      "question": "Which digital product creates sustainable contribution margin after refunds, support, taxes and infrastructure costs are acknowledged?",
+      "method": "Define unit of analysis unambiguously: activated customer, successfully fulfilled order, subscription-month or consumed computing job. Separate incremental from allocated fixed costs and include payment processing, fraud reserves, hosting, support, refunds, content rights and distribution. Construct cohorts by acquisition channel to avoid averaging heterogeneous customers.",
+      "analysis": "Express contribution as net recognized revenue minus variable delivery and acquisition costs. Estimate lifetime value using survival-weighted future margins and appropriate discounting rather than multiplying a short observed retention rate into perpetuity. Use scenario analysis across acquisition costs, churn, exchange-rate exposure and adverse refund concentration.",
+      "assessment": "Publish a sensitivity tornado, cohort survival curve, realized versus projected margins and cash conversion cycle. Require a minimal profitable base case and a tolerable downside-case loss before scaling. Reconcile dashboard values to transaction-level accounting.",
+      "limitations": "An economic model based on hypothetical prices is not a financial forecast. No profitability claim should be published without reconciled source data.",
+      "refs": [
+        "oecd",
+        "worldbank"
+      ]
+    },
+    {
+      "route": "/economy/",
+      "title": "Real-options thinking for staged investment in uncertain platforms",
+      "question": "How should managers price the value of waiting for evidence rather than committing immediately to irreversible infrastructure?",
+      "method": "Decompose investments into reversible experiments and irreversible capital commitments. For each decision node record probability ranges, information gained, abandon/expand options, implementation delays and carrying costs. Contrast a static net present value decision with a decision tree that permits termination after a failed pilot.",
+      "analysis": "Use Monte Carlo simulation for uncertain adoption, energy costs, regulation and operational uptime; preserve correlations rather than sampling every risk independently. Define the objective: expected monetary value, value at risk, service utility or a constrained mix. Estimate the expected value of sample information by comparing outcomes with and without an informative pilot.",
+      "assessment": "Report the break-even adoption distribution, expected regret of each policy, threshold for expansion and downside drawdown. Challenge model assumptions with pre-committed adversarial scenarios rather than only central estimates.",
+      "limitations": "Assigned probability distributions are judgments, not facts. A project with high expected value may still violate liquidity or safety constraints.",
+      "refs": [
+        "oecd",
+        "worldbank"
+      ]
+    },
+    {
+      "route": "/studio/",
+      "title": "Player-retention analysis with survival models and fair experimentation",
+      "question": "Can a game improve first-session comprehension while avoiding engagement metrics that reward compulsive design?",
+      "method": "Instrument only essential events with clear definitions for acquisition, tutorial start, first meaningful action, voluntary return and session exit. Analyze censoring: a user installed yesterday cannot yet contribute an observed 30-day retention outcome. Construct Kaplan–Meier curves or discrete-time hazard models, with cohort and device effects modeled explicitly.",
+      "analysis": "Preregister one accessible tutorial variant against a control; randomize at the player level and predefine stopping rules. Measure voluntary comprehension, task completion, session satisfaction and adverse friction as joint outcomes. Avoid designing exclusively for maximum session length, because duration may capture confusion or unhelpful compulsion.",
+      "assessment": "Report day-1/day-7 retention with appropriate denominators, hazard ratios or absolute differences with uncertainty, accessibility completion rates and a negative guardrail such as complaint or excessive time-on-task.",
+      "limitations": "Tracking consent and protections for minors require extra care. Observational retention can be confounded by acquisition channel and is not causal evidence without a suitable experiment.",
+      "refs": [
+        "wcag",
+        "strobe"
+      ]
+    },
+    {
+      "route": "/studio/",
+      "title": "Procedural content systems that remain testable and artistically original",
+      "question": "How can generative game levels preserve novelty without breaking solvability, accessibility or pacing?",
+      "method": "Specify the design space mathematically: topology, challenge distribution, required resources, narrative constraints and protected accessibility paths. Generate candidates with reproducible seeds and run static checks before human playtests. Establish a constraint solver or reachability test to reject impossible levels; reserve a human editorial pass for aesthetic coherence.",
+      "analysis": "Evaluate novelty with diversity of structural features rather than raw random seed count; distinguish true variation from cosmetic permutations. Use controlled playtesting with counterbalanced order and both expert and novice players. Inspect pacing variance, softlocks, visual readability and the stability of progression over many deterministic seeds.",
+      "assessment": "Record fraction of generated levels solvable under modeled rules, distinct experience archetypes, accessibility failures and human preference intervals. An evaluation archive should let a reviewer replay failing seeds and inspect exact generation parameters.",
+      "limitations": "No algorithmic novelty metric guarantees fun or originality under copyright law. Publicly available generation concepts are not proof that the company runs a specific game engine.",
+      "refs": [
+        "wcag",
+        "nist-ssdf"
+      ]
+    },
+    {
+      "route": "/market/",
+      "title": "Demand forecasting with leakage-resistant evaluation",
+      "question": "Can seasonal demand for digital products be predicted better than a transparent low-complexity baseline?",
+      "method": "Define target, forecast horizon and decision unit before feature engineering. Create chronological training, validation and locked holdout periods; leave an embargo if features use late-arriving records. Compare seasonal-naive, exponential smoothing and regularized models before sophisticated ensembles. Include plausible supply constraints and promotion exposure.",
+      "analysis": "Evaluate rolling-origin backtests under multiple demand regimes, not a single random train-test split. Estimate forecast calibration and economic cost of under/overprediction, particularly for products with asymmetric lost-sales and overstock losses. Monitor shift caused by new marketing channels, pricing policies and product catalog changes.",
+      "assessment": "Report weighted absolute percentage error only where denominators are appropriate; also show mean absolute scaled error, pinball loss for probabilistic quantiles and forecast bias by category. Require improved decision utility rather than a cosmetically lower error alone.",
+      "limitations": "A numerical forecast is conditional on past relationships. Sudden regulation, infrastructure disruption or product launches can invalidate historical seasonality.",
+      "refs": [
+        "worldbank",
+        "strobe"
+      ]
+    },
+    {
+      "route": "/market/",
+      "title": "Measuring price elasticity without exploiting consumers",
+      "question": "What is the causal effect of a transparent price change on contribution margin and buyer trust?",
+      "method": "Use price experiments only where lawful, with comparable treatment groups and clear disclosures. If experimentation is inappropriate, exploit documented exogenous variation and write down assumptions. Define elasticity as relative demand change divided by relative price change for a specified range; allow heterogeneous responses across customer cohorts and product tiers.",
+      "analysis": "Model nonlinearity, substitution and stockouts, rather than fitting one coefficient to all market states. Predefine a business objective balancing margin, conversion and complaint rates. Design an experiment with guardrails preventing discriminatory or deceptive pricing. Observe refunds and chargebacks after the purchase window to capture delayed harms.",
+      "assessment": "Publish absolute conversion and net margin differences with intervals, segment balance, incidence of complaints and any test stopped early. Provide a rationale for ethical boundaries and review of legal constraints across relevant jurisdictions.",
+      "limitations": "Elasticity estimates from short tests may not generalize to a price regime change. Small datasets or simultaneous campaigns make causal attribution fragile.",
+      "refs": [
+        "oecd",
+        "worldbank"
+      ]
+    },
+    {
+      "route": "/agents/",
+      "title": "Evaluation harnesses for autonomous agents with observable outcomes",
+      "question": "What evidence distinguishes a running agent from an automation that merely reports itself as active?",
+      "method": "Create a test suite of task instances with input, authorized tools, budget, allowed side effects, expected artifacts and failure boundaries. Separate mock-tool unit tests from staged end-to-end tests and real production traces. Record each agent invocation with job ID, timestamps, tool results, retries, cost and operator approvals. Use signed or append-only logs for the critical record.",
+      "analysis": "Define success only when an external effect can be independently inspected: content actually appears at the target URL, an authorized file was correctly updated, or a report includes traceable evidence. Add adversarial tasks involving stale credentials, tool outages, permission changes, conflicting instructions and false tool success messages. Compare model variants on matched task instances.",
+      "assessment": "Report verified success fraction, unauthorized action rate, 95th percentile latency, recovery rate, and human escalation frequency. Dashboard charts must be driven by real event tables and clearly distinguish planned, running, failed, completed and verified outcomes.",
+      "limitations": "An agent can pass offline benchmarks while failing under live dependencies. Never label unobserved business gains as produced by agents.",
+      "refs": [
+        "nist-ai",
+        "nist-gen"
+      ]
+    },
+    {
+      "route": "/agents/",
+      "title": "Safe self-improving systems with bounded authority and rollback",
+      "question": "When an autonomous system proposes changing its own code or configuration, how can an organization prevent cascading production failures?",
+      "method": "Implement separation of proposer, tester, reviewer and deployer privileges. Proposed changes become signed artifacts with diff, test results, dependency lockfiles and reversible deployment instructions. Put destructive operations, identity management, purchases and production access outside autonomous default permissions. Require independent review for scope expansion.",
+      "analysis": "Use canary deployment with strict resource, time and error budgets, and an automatically evaluated rollback predicate. Maintain a known-good version and evaluate each candidate against regression and safety suites; improvements on one metric must not regress essential protections. Treat prompt-injection attempts as untrusted input and test boundary crossings explicitly.",
+      "assessment": "Track proportion of attempted unauthorized actions denied, regression defects detected before release, canary rollback latency and percentage of changes traceable to human approval. Record who authorized each promotion and why observed evidence warranted the decision.",
+      "limitations": "Self-modification is not biological evolution, and an assigned generation number is not evidence of meaningful improvement. Safety outcomes need sustained production observation.",
+      "refs": [
+        "nist-ai",
+        "nist-ssdf"
+      ]
+    },
+    {
+      "route": "/ventures/agriculture/",
+      "title": "Genotype-by-environment inference in multi-location breeding trials",
+      "question": "How can a crop-breeding program distinguish broad adaptability from location-specific superiority under variable climate?",
+      "method": "Plan a multi-environment, multi-season trial with randomization within each site, adequate replication and consistent phenotype definitions. Model genotypes, environments and genotype-by-environment interactions; examine heterogeneous residual variance and spatial field trends. Predefine whether the breeding objective favors mean performance, stability or stress-specific outcomes.",
+      "analysis": "Compare mixed-effects models with genotype and genotype-by-environment random terms to AMMI/GGE visualizations; use the latter for interpretation, not as substitutes for prediction validation. Incorporate genomic relatedness if suitable data and permissions exist. Hold out an entire site-season to assess transportability rather than only individual plots.",
+      "assessment": "Report predictive ability in held-out environments, variance components, yield stability, genetic gain per year and uncertainty for the top-ranked candidates. Require independent multi-season confirmation before a variety commercialization claim.",
+      "limitations": "A few demonstration plots do not establish a release-ready cultivar. The reported model must disclose local agronomy and the tested range of environmental stress.",
+      "refs": [
+        "gge",
+        "ipcc"
+      ]
+    },
+    {
+      "route": "/ventures/agriculture/",
+      "title": "Water-productivity experiments for climate-resilient crops",
+      "question": "Can irrigation scheduling improve output per unit of water without reducing quality or exporting environmental damage downstream?",
+      "method": "Combine soil moisture measurements, irrigation flow logs, meteorological inputs and crop growth stage annotations. Compare a prespecified irrigation policy with locally appropriate practice using randomized plots where feasible. Quantify water from source to field, including delivery losses and salinity effects. Check sensor calibration and missing data.",
+      "analysis": "Use a water-balance framework and a crop-water model such as AquaCrop as a scenario tool, not a substitute for observations. Evaluate sensitivity to soil parameter uncertainty, root depth and weather extrapolation. Distinguish yield per cubic metre of evapotranspiration from yield per cubic metre of water withdrawn; both are relevant but answer different questions.",
+      "assessment": "Report harvestable yield, quality grade, applied irrigation volume, soil salinity, yield stability and water productivity with confidence intervals. Include operational cost and a multi-season validation plan before prescribing a region-wide schedule.",
+      "limitations": "Water-saving claims can be misleading when saved irrigation is offset by changes in consumption elsewhere in a basin. Field recommendations require local expert assessment.",
+      "refs": [
+        "faowater",
+        "ipcc"
+      ]
+    },
+    {
+      "route": "/ventures/cafe-restaurant/",
+      "title": "A practical HACCP design for digital-supported food operations",
+      "question": "How can a restaurant prevent unsafe food preparation while integrating inventory, ordering and delivery systems?",
+      "method": "Map every ingredient from approved supplier through receiving, storage, preparation, holding, transport and service. Conduct a hazard analysis covering biological, chemical, physical and allergen risks, with control measures assigned to real process steps. Identify any critical control points using a documented decision method; specify critical limits and calibrated monitoring devices.",
+      "analysis": "Design corrective actions around product isolation, root-cause analysis, staff retraining and validated disposition. Link digital timestamps to responsible staff and lot IDs, but confirm actual measurement integrity; automatic data entry is not evidence of safe temperatures. Verify supplier traceability and that downstream recalls can be executed promptly.",
+      "assessment": "Audit monitoring completeness, critical-limit excursions, response latency, trace-back time and the effectiveness of corrective actions. Conduct a mock recall and independent hygiene review before scaling operations.",
+      "limitations": "This text is educational and not a certified HACCP plan. Applicable food regulations and critical limits vary by product and jurisdiction; specialist validation is required.",
+      "refs": [
+        "codex",
+        "oecd"
+      ]
+    },
+    {
+      "route": "/ventures/cafe-restaurant/",
+      "title": "Queueing theory for fair service and resilient restaurant capacity",
+      "question": "Can redesigning kitchen and order-routing operations reduce waiting time without creating unsafe speed pressure?",
+      "method": "Measure time-stamped arrivals, preparation duration by menu type, handoff delay, cancellations and staffing. Segment dine-in, pickup and delivery because their arrival patterns and failure costs differ. Start with a simple queueing model, then use a discrete-event simulation to represent multiple stations, shared resources, priority rules and correlated rush periods.",
+      "analysis": "Test policies such as prep batching, transparent promised windows and balancing high-variance items. Stress-test the model at peak utilization, where average-delay estimates can become unstable. Consider service fairness by monitoring how wait times vary across customer groups and avoid making queue priority a proxy for arbitrary discrimination.",
+      "assessment": "Evaluate 90th percentile end-to-end wait, order accuracy, food-safety deviations, waste, staff overtime and customer abandonment. Validate simulation against observed holdout days before changing live scheduling.",
+      "limitations": "Queueing models assume particular arrival/service patterns that may fail during festivals or major disruptions. Faster operations do not supersede food safety checks.",
+      "refs": [
+        "codex",
+        "strobe"
+      ]
+    },
+    {
+      "route": "/ventures/fuel-station/",
+      "title": "Economic and resilience appraisal of mixed-energy roadside services",
+      "question": "What is the defensible business case for a roadside facility combining conventional fuel services and future charging infrastructure?",
+      "method": "Design a scenario tree for traffic, energy prices, grid connection time, equipment utilization, vehicle mix, outage risk and permitted site functions. Separate construction cost, grid upgrade, operational expenditure and working capital. Document land use, fire safety and licensed fuel handling as separate legal prerequisites not solvable by software alone.",
+      "analysis": "Estimate unit service cost and net present value under low, central and high utilization rather than assuming nameplate charging capacity becomes paid throughput. Model arrival peaks and queuing, electricity demand charges and backup operation. Explicitly calculate opportunity cost of waiting for improved grid access or alternative technology.",
+      "assessment": "Report scenario-dependent break-even throughput, outage hours, energy efficiency, capacity factor and a downside cash exposure estimate. Include environmental and customer-safety conditions as hard decision constraints.",
+      "limitations": "This is a pre-feasibility method, not a permit, pricing offer, operational claim or investment recommendation. Local laws and technical standards dominate implementation.",
+      "refs": [
+        "ipcc",
+        "oecd"
+      ]
+    },
+    {
+      "route": "/ventures/jewelry-gold/",
+      "title": "Assay uncertainty and provenance economics in precious-metal commerce",
+      "question": "How should a jewelry business communicate purity, mass, pricing and authenticity when measurement and market data are imperfect?",
+      "method": "Define the exact measurands: gross mass, net precious-metal mass, assay-based fineness, labor cost, stones, fees and taxes. Record instrument calibration, custody handovers and independent laboratory certificates where actually available. Separate spot-reference market data from a binding merchant quote and timestamp every input.",
+      "analysis": "Use transparent formula components: estimated intrinsic metal value equals measured net mass times tested fineness times a contemporaneous reference price, subject to units and quotation conventions. Perform sensitivity analysis for assay uncertainty, spread and weight tolerance. Create a provenance ledger that distinguishes seller declarations from independent verification.",
+      "assessment": "Report measurement uncertainty, discrepancy resolution time, evidence completeness, effective markup and complaint rate. A product listing should disclose that appraisal and resale value may differ from hypothetical intrinsic value.",
+      "limitations": "Do not present an unassayed item as certified or a dynamic public price as a guaranteed executable quote. Gemstone grading and legal ownership require separate checks.",
+      "refs": [
+        "oecd",
+        "fair"
+      ]
+    },
+    {
+      "route": "/ventures/carpets/",
+      "title": "Digital provenance and conservation of handmade textile heritage",
+      "question": "Can a traceability system improve confidence in a handmade carpet without reducing complex craft traditions to a simplistic authenticity score?",
+      "method": "Create an object record containing acquisition provenance, dimensions, weave structure, fiber identification method, dye observations, condition and dated photographs. Use non-destructive inspection by default and obtain informed consent to document makers and craft communities. Preserve original oral histories alongside translated or normalized descriptions.",
+      "analysis": "Design a confidence scheme with evidence grades rather than a binary authentic/fake label. Compare microscopy, dye analysis or other materials testing only where proportionate and authorized. Record uncertainties about geographical attribution and modifications such as repairs, later fringes or recoloring. A digital token does not establish physical provenance without controlled custody and independent evidence.",
+      "assessment": "Measure completeness of custody records, proportion of independently verified material claims, number of corrected attributions and ability to link a current item to its earlier documented state.",
+      "limitations": "Local heritage laws, export restrictions and rights of craft communities vary. Documentary claims should not imply forensic certainty from photographs alone.",
+      "refs": [
+        "fair",
+        "oecd"
+      ]
+    },
+    {
+      "route": "/ventures/currency-crypto/",
+      "title": "Scenario-based digital-asset risk literacy without performance promises",
+      "question": "How can readers distinguish settlement technology, price exposure, custody failure and regulatory risk when reviewing digital assets?",
+      "method": "Separate market, liquidity, counterparty, smart-contract, operational and legal exposures into individual risk registers. Explain key management using a conceptual threat model with offline backup, recovery procedures and segregated duties; do not publish wallet credentials. Analyze price returns at a clearly stated cadence and explain the limitations of historical sampling.",
+      "analysis": "Present stress scenarios covering large correlated price moves, unavailable exchanges, frozen transfers and fee spikes. Compare historical volatility, peak-to-trough drawdown and scenario loss while noting heavy tails and the absence of stable tail estimates in sparse data. For a business contemplating acceptance, evaluate settlement confirmation, refunds, accounting and conversion cost separately from speculative holdings.",
+      "assessment": "Report stress-loss range and operating recovery time rather than an asserted future return. Keep educational examples explicitly hypothetical and invite jurisdiction-specific compliance review.",
+      "limitations": "This material is not investment advice or evidence that a payment gateway is live. Different assets and chains involve materially different custody and finality risks.",
+      "refs": [
+        "oecd",
+        "worldbank"
+      ]
+    },
+    {
+      "route": "/ventures/ecommerce/",
+      "title": "Exactly-once customer entitlement through idempotent commerce workflows",
+      "question": "How can a digital shop avoid collecting a payment without delivering a product—or delivering the same paid entitlement twice?",
+      "method": "Model the order lifecycle as a finite-state machine with durable identifiers: created, payment-pending, provider-confirmed, fulfillment-pending, delivered, refunded and disputed. Treat provider callbacks as untrusted until authenticated and independently reconciled. Persist a deduplication key for each logical operation and use transactional outbox or equivalent durable event publication to decouple payment events from delivery.",
+      "analysis": "Test message replay, reordered callbacks, provider timeouts, interrupted file delivery, cancelled orders and simultaneous refund/delivery requests. Make operations idempotent at the business layer even when the transport uses POST; RFC 9110 does not automatically confer HTTP-method idempotency on application effects. Retain records sufficient for customer service without disclosing sensitive tokens.",
+      "assessment": "Report paid-but-unfulfilled count, incorrect duplicate-entitlement count, refund settlement age and fraction of reconciled transactions. A release gate should include a test purchase and independent evidence of lawful delivery.",
+      "limitations": "Code presence or green unit tests cannot prove actual funds are received. Payment, privacy and consumer-protection obligations differ by market.",
+      "refs": [
+        "rfc",
+        "nist-ssdf"
+      ]
+    },
+    {
+      "route": "/ventures/ecommerce/",
+      "title": "Returns, refunds and reversible digital-product quality assurance",
+      "question": "What quality controls make a digital storefront trustworthy after the sale, not just at checkout?",
+      "method": "For each product define a specification, version, user-visible preview, license terms, format, accessibility constraints and delivery verification method. Establish defect classes and acceptance tests before listing. Design a complaint channel that preserves order evidence while minimizing personal-data retention. Track legitimate refunds and chargebacks separately from technical delivery errors.",
+      "analysis": "Use a structured defect loop: reproduce, identify root cause, classify impact, patch or replace, independently retest and notify affected buyers where justified. Version released downloads and provide compatibility information. Include accessibility testing, readability review and links that actually resolve; a cover image is not proof of content quality.",
+      "assessment": "Evaluate 30-day refund share with cohort context, first-contact resolution time, repeat incident rate, product defect density and completion of corrective actions. Compare metrics against an established internal baseline, not a fabricated industry benchmark.",
+      "limitations": "Not every defective digital product can be safely repaired in place if licensing or safety constraints are violated. Buyer rights are governed by applicable law.",
+      "refs": [
+        "wcag",
+        "oecd"
+      ]
+    },
+    {
+      "route": "/ventures/hospitality/",
+      "title": "Hospitality capacity, fairness and environmental-load modeling",
+      "question": "How can lodging and visitor-service operators balance occupancy with guest experience, resource use and seasonal shocks?",
+      "method": "Combine booking lead times, cancellation behavior, room availability, service staffing, local water/energy demand and guest feedback in a time-indexed dataset. Separate anticipated demand from confirmed arrivals. Use constrained optimization to test allocation decisions under physical capacity, fair-pricing principles and local legal requirements.",
+      "analysis": "Simulate cancellation and no-show distributions and link occupancy scenarios to energy and water intensity. Estimate environmental-load uncertainty using observed utility meters rather than generic averages. Stress-test outage days, extreme heat and peak events; define business-continuity thresholds independently of revenue optimization.",
+      "assessment": "Report occupancy and net revenue alongside complaints per stay, staff workload, resource intensity per occupied room and recovery time after disruption. Examine whether gains stem from service improvement or displacement of vulnerable customers.",
+      "limitations": "Forecasts will be unstable around rare events. Sustainable-tourism branding requires real measured evidence, not only software dashboards.",
+      "refs": [
+        "ipcc",
+        "oecd"
+      ]
+    },
+    {
+      "route": "/services/",
+      "title": "Service-level objectives and error budgets for reliable platforms",
+      "question": "How can a multi-page online service communicate reliability in terms a customer can verify?",
+      "method": "Define service-level indicators around user journeys rather than merely host uptime: successful page load, successful registration, usable search and fulfilled purchase. Select explicit numerator, denominator and measurement points. Track synthetic external tests alongside server-side traces while avoiding collection of unnecessary user identifiers.",
+      "analysis": "Choose realistic objectives and an error budget for each service. Link alerting to burn rate and user impact rather than one noisy CPU threshold. Review incidents with a blameless causal narrative and corrective action ownership. Introduce change freezes or progressive rollout policies when reliability budget is exhausted.",
+      "assessment": "Publish availability, p95 user-experienced latency, page-level error rate, unresolved incident age and successful recovery-drill results with clear observation windows. A dashboard value must be traceable to raw event evidence and sampling methodology.",
+      "limitations": "A green status tile is not proof that transactional features work. Shared hosting and external dependencies require separate failure attribution and explicit limitations.",
+      "refs": [
+        "nist-ssdf",
+        "rfc"
+      ]
+    },
+    {
+      "route": "/about/",
+      "title": "Public-interest claims and the ethics of AI-generated corporate imagery",
+      "question": "How should a company present stylized portraits, simulated roles and aspirational departments without misleading readers about real employment or qualifications?",
+      "method": "Inventory every profile card and annotate whether it represents a verified person, authorized composite illustration, fictitious role or placeholder. Require consent and reliable identity provenance for real photographs. Separate organizational responsibility held by identifiable humans from speculative future staffing; assign clear disclosures adjacent to generated visuals, not buried in a remote legal page.",
+      "analysis": "Perform a confusion audit with independent readers: ask whether they interpret profiles as real staff, consultants or merely illustrative. Record ambiguous impressions and redesign the labeling and information hierarchy accordingly. Keep founder and leadership assertions grounded in verifiable public material; do not infer age, credentials, residence or awards from images alone.",
+      "assessment": "Report the number of role cards with unambiguous provenance, percentage of testers correctly distinguishing illustrations and median correction time for inaccurate claims. Prioritize reader comprehension over purely visual polish.",
+      "limitations": "A prominent disclaimer does not authorize impersonation or false employment assertions. Generated imagery remains promotional illustration unless independently verified.",
+      "refs": [
+        "oecd",
+        "nist-gen"
+      ]
+    },
+    {
+      "route": "/about/mojtaba-rozegar/",
+      "title": "Research leadership, attribution and conflict-of-interest transparency",
+      "question": "What evidence should accompany statements that a founder directed or financed a substantial share of an organization’s research activity?",
+      "method": "Create a project-level contribution taxonomy distinguishing conception, investigation, funding, supervision, writing, approval and operational ownership. Compile signed source records where authorized: project proposals, financial ledgers, laboratory notebooks, publication author lists and dated milestone reviews. Differentiate self-reported support from independently audited amounts or third-party endorsement.",
+      "analysis": "Publish a narrative of research intent while maintaining a traceable boundary between strategic leadership and scientific authorship on particular studies. Document potential conflicts of interest and review controls when the same person funds, evaluates and publicizes work. For every published result, provide methods, limitations, data access conditions and attribution appropriate to the underlying evidence.",
+      "assessment": "Assess completeness of contribution records, reproducibility of cited scientific results and correction policy responsiveness. Review claims of academic rank, titles or professional certification before public attribution.",
+      "limitations": "Leadership statements are not substitutes for peer review or research governance. A personal contribution percentage must not be presented as independently confirmed without source evidence.",
+      "refs": [
+        "fair",
+        "prisma",
+        "oecd"
+      ]
+    }
+  ]
+}
