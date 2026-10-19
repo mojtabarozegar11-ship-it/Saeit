@@ -19,7 +19,7 @@ def test_new_contact_branch_is_scoped_and_does_not_modify_allowed_routes():
     for path in ('store','games','ai','privacy','terms','support','weather'):
         assert f"'{path}' => '/{path}/'" in opening
     assert new.count("if ($path==='/contact/')")==1
-    assert new.count("mpw-contact-safe-business-20261019")==1
+    assert new.count("mpw-contact-safe-business-20261019")==2
     assert new.count("'Business'=>[")==1 and new.count("'Press'=>[")==1
     assert 'mailto:' in new
     assert 'support@mojplaywin.com' in new
