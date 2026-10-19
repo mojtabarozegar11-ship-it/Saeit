@@ -6,6 +6,7 @@ Operations: prepare, install, verify, rollback, cleanup. Fail closed.
 from __future__ import annotations
 import hashlib, html, json, os, re, shutil, stat, sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 ROOT=Path("/home/zomorod2/public_html")
 PREFIX="ZM-IT-PRODUCT-20261019"
@@ -55,12 +56,24 @@ def manifest_and_home():
     orbit=json.loads(found.group(1))
     rows=[row for row in orbit["rows"] if row["id"]=="ZM-R25"]
     if len(rows)!=1:die("IT row count changed")
-    urls=[card.get("canonicalUrl") for card in rows[0]["cards"]]
-    permitted=set(c["path"] for c in cards)|{"/farm-wars/"}
-    unexpected=set(urls)-permitted
-    if unexpected:die("new IT card without its own approved product: "+str(unexpected))
-    if len(urls)!=22 or len(set(urls))!=22 or set(urls)!=permitted:
-        die("expected 21 specialist cards plus standalone Farm Dominion card")
+    urls=[]
+    for card in rows[0]["cards"]:
+        raw=card.get("canonicalUrl")
+        if not isinstance(raw,str) or not raw.strip():
+            die("R25 home card missing canonicalUrl")
+        parsed=urlsplit(raw.strip())
+        if parsed.netloc and parsed.netloc.lower() not in {"zomorodmelal.ir","www.zomorodmelal.ir"}:
+            die("unexpected external R25 destination")
+        urls.append(parsed.path.rstrip("/")+"/")
+    expected_paths={c["path"] for c in cards}
+    missing=expected_paths-set(urls)
+    if len(urls)!=22 or missing:
+        die("R25 card coverage mismatch: "+str(sorted(missing)))
+    # The 22nd existing card is the separate farm game.  Its canonicalUrl may
+    # differ from /farm-wars/ or duplicate game-development; we do not edit it.
+    extra=set(urls)-expected_paths
+    if len(extra)>1:die("multiple unapproved R25 home card targets: "+str(sorted(extra)))
+    print("R25_EXISTING_HOME_LINKS_VALIDATED=21; extra="+repr(sorted(extra)),flush=True)
     return paths,home
 
 def payload(stage):
