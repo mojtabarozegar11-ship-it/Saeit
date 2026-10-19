@@ -38,3 +38,24 @@ for pk in (72,225):
 print('MPW_AUTHENTICATED_BUYER_CHECKOUT_CONTRACT='+json.dumps(result,ensure_ascii=False))
 # Strict privacy check: an unauthenticated/synthetic user is never granted any paid item.
 print('MPW_UNPAID_DOWNLOAD_GATE='+json.dumps({'anonymous_purchase_entitlement':can_access_purchased_digital_item(1,-10490) is True,'expected_denied':True}))
+
+
+from django.urls import get_resolver, URLResolver, URLPattern
+def scan_patterns(patterns,prefix=""):
+    for p in patterns:
+        path=prefix+str(p.pattern)
+        if isinstance(p,URLResolver):
+            scan_patterns(p.url_patterns,path)
+        elif isinstance(p,URLPattern) and any(word in path.lower() for word in ("checkout","commerce","wallet","order","download")):
+            print("MPW_REAL_BUYER_ROUTING="+json.dumps({"pattern":path[:180],"handler":p.callback.__module__,"route_name":p.name}))
+scan_patterns(get_resolver().url_patterns)
+r=RequestFactory().get("/store/product/72/checkout/",secure=True,HTTP_HOST="mojplaywin.com")
+r.user=SimpleNamespace(is_authenticated=True,is_active=True,pk=-10490)
+html_src=product_checkout_page(r,72).content.decode("utf8","replace")
+selected=[]
+for line in html_src.splitlines():
+    if "checkout/" in line or "/api/" in line:
+        if any(y in line.lower() for y in ("secret","private","token","address","password","signature")):
+            continue
+        selected.append(line.strip()[:230])
+print("MPW_CHECKOUT_CLIENT_ROUTE_HINTS="+json.dumps(selected[:40]))
