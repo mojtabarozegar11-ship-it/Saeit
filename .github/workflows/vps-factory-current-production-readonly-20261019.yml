@@ -214,5 +214,44 @@ jobs:
               print("STAGE_STOCK_REWORK_HOLDS="+str(len(doc.get("needs_rework_or_review",[]))),flush=True)
               print("STAGE_DISTRIBUTION_ENABLED="+str(doc.get("distribution_enabled")),flush=True)
               print("STAGE_DISTRIBUTION_SITES_CONTACTED="+str(doc.get("sites_contacted")),flush=True)
+          # Site bridge + strict lifecycle capacity diagnosis; no mutation.
+          lc=private/"product-lifecycle"/"dashboard.json"
+          age(lc,"FACTORY_LIFECYCLE_DASHBOARD")
+          if lc.is_file() and not lc.is_symlink():
+              try:
+                  data=json.loads(lc.read_text(encoding="utf8"))
+                  for key in ("as_of_utc","instructions_seen","newly_tracked","manufacturing_related_work_orders","research_only_work_orders",
+                              "workorder_status","blocked_reasons","orders_by_stage","open_defects","orders_stalled_over_24h",
+                              "old_technical_QA_stock_pending_final_review","final_commercially_verified_stock",
+                              "manufacturing_order_automation_complete"):
+                      print("FACTORY_LIFECYCLE_"+key.upper()+"="+json.dumps(data.get(key),ensure_ascii=True,sort_keys=True)[:1200],flush=True)
+              except Exception as exc:
+                  print("FACTORY_LIFECYCLE_DIAGNOSTIC_ERROR="+type(exc).__name__,flush=True)
+          intake=private/"production-instructions"/"zomorod-site-intake"
+          waiting=admitted=cycles=0
+          target_ids={"ZMREQ-b9f7aa246bd869e9170d","ZMREQ-d3a4963c4585261da1e6","ZMREQ-c436eb74b19029a3ac2c"}
+          target_states={}
+          if intake.is_dir() and not intake.is_symlink():
+              for f in sorted(intake.glob("*.json")):
+                  if not f.is_file() or f.is_symlink():continue
+                  try:
+                      d=json.loads(f.read_text(encoding="utf8"))
+                      if d.get("schema")!="saeit.zomorod.site-factory-intake.v1":continue
+                      cycles+=1
+                      for item in d.get("requests",[]):
+                          state=item.get("state")
+                          waiting+=int(state=="awaiting_native_capacity")
+                          admitted+=int(state=="admitted")
+                          if item.get("request_id") in target_ids:
+                              target_states[item["request_id"]]={"state":state,"native_work_order":item.get("native_work_order")}
+                  except (OSError,ValueError,TypeError,KeyError):
+                      continue
+          print("ZM_SITE_INTAKE_CYCLES="+str(cycles),flush=True)
+          print("ZM_SITE_INTAKE_WAITING_REQUESTS="+str(waiting),flush=True)
+          print("ZM_SITE_INTAKE_ADMITTED_REQUESTS="+str(admitted),flush=True)
+          print("ZM_SITE_THREE_REQUEST_STATES="+json.dumps(target_states,sort_keys=True),flush=True)
+          for label,marker in (("MINUTE","SAEIT_FACTORY_EVERY_MINUTE_V1"),("LIFECYCLE","SAEIT_FACTORY_LIFECYCLE_12_V1")):
+              n=sum(marker in line and not line.lstrip().startswith("#") for line in c.stdout.splitlines())
+              print("FACTORY_"+label+"_CRON_COUNT="+str(n),flush=True)
           print("STAGE_SNAPSHOT_READONLY=PASS",flush=True)
           PY
