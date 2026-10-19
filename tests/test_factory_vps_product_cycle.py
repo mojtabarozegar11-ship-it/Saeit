@@ -257,11 +257,19 @@ class ProductionContinuityTests(unittest.TestCase):
         self.assertEqual(data['completed_cycles'],2)
         self.assertEqual(data['new_or_updated_artifacts_total'],3)
         self.assertEqual(data['new_or_updated_artifacts_this_cycle'],0)
+        self.assertEqual(data['consecutive_zero_new_cycles'],1)
+        self.assertEqual(data['zero_new_products_reason_code'],
+                         'unchanged_sources_no_distinct_new_product')
+        self.assertEqual(data['new_product_flow_status'],'no_new_artifact_recorded')
+        self.assertIsNotNone(data['last_new_artifact_at_utc'])
         self.assertIsNotNone(data['last_healthy_cycle_at_utc'])
         cycle.run_cycle(self.home/'missing.db',self.output,self.recipes)
         data=json.loads(path.read_text());self.assertEqual(data['consecutive_degraded_cycles'],1)
         cycle.run_cycle(self.db,self.output,self.recipes)
-        self.assertEqual(json.loads(path.read_text())['consecutive_degraded_cycles'],0)
+        final=json.loads(path.read_text())
+        self.assertEqual(final['consecutive_degraded_cycles'],0)
+        self.assertEqual(final['consecutive_zero_new_cycles'],3)
+        self.assertEqual(final['new_or_updated_artifacts_total'],3)
 
     def test_direct_api_rejects_invalid_limits(self):
         for kwargs in ({'max_products':True},{'max_products':0},{'max_recipes':0},{'max_recipes':True}):
