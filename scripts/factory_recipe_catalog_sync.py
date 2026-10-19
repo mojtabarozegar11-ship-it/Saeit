@@ -91,7 +91,8 @@ def sync_catalog(source_root, active_root, retired_root, manifest_path):
     stage = Path(tempfile.mkdtemp(prefix=".recipe-catalog-stage-", dir=str(active.parent)))
     old = active.parent / (".recipe-catalog-old-" + stamp)
     archived = []
-    moved_old = False\n    installed_new = False
+    moved_old = False
+    installed_new = False
     try:
         staged_root = stage / "catalog"
         staged_root.mkdir(mode=0o700)
