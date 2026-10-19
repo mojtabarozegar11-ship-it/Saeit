@@ -15,7 +15,7 @@ class FakeResponse:
         self.status = status
         self.url = url
         self.headers = {"Content-Type": "text/html; charset=utf-8",
-                        "Strict-Transport-Security": "max-age=86400"}
+                        "strict-transport-security": "max-age=86400"}
 
     def __enter__(self):
         return self
