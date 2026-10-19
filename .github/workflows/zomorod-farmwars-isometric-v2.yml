@@ -1,0 +1,235 @@
+name: Zomorod Farm Wars V2 illustrated isometric upgrade
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/zomorod-farmwars-isometric-v2.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-farmwars-isolated
+  cancel-in-progress: false
+jobs:
+  upgrade:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'workflow_dispatch' ||
+       contains(github.event.head_commit.message, '[approved-zm-farmwars-iso-v2]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test all isometric game mechanics and graphics code
+        shell: bash
+        run: |
+          set -euo pipefail
+          node games/farm-wars/test.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          h=Path('games/farm-wars/index.html').read_text('utf-8')
+          assert '<canvas id="land"' in h and 'function castle(' in h
+          assert 'function drawObjects(' in h and 'function render(' in h
+          assert h.count('<script>')==1 and h.count('</script>')==1
+          assert 'OPENAI_API_KEY' not in h and 'sk-proj-' not in h
+          assert 'eval(' not in h
+          assert 'مزارع زمرد' in h and 'aria-live' in h and 'touch-action:none' in h
+          assert 'PassengerEnabled off' in Path('games/farm-wars/.htaccess').read_text()
+          Path('/tmp/farmwars-v2.js').write_text(re.search(r'<script>\s*([\s\S]*?)\s*</script>',h).group(1),'utf-8')
+          print('ISOMETRIC_GRAPHICS_PREFLIGHT=PASS',len(h))
+          PY
+          node --check /tmp/farmwars-v2.js
+      - name: Record site baseline before modifying anything
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import urlopen,Request
+          from urllib.error import HTTPError
+          import os,json
+          root='https://zomorodmelal.ir'
+          paths=['/','/agriculture/','/research/','/store/','/tala/','/farm-wars/']
+          out={}
+          for path in paths:
+            try:
+              with urlopen(Request(root+path,headers={'Cache-Control':'no-cache','User-Agent':'ZomorodGameUpgrade/2'}),timeout=24) as r:code=r.status
+            except HTTPError as e:code=e.code
+            out[path]=code
+            print('BASELINE',path,code)
+          if any(out[p]!=200 for p in paths):raise SystemExit('BASELINE_SITE_UNHEALTHY')
+          with open(os.environ['RUNNER_TEMP']+'/farmwars-baseline.json','w') as f:json.dump(out,f)
+          PY
+      - name: Open pinned GitHub to VPS to cPanel SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          umask 077
+          d="$RUNNER_TEMP/farmwars-v2-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+          echo ISOMETRIC_RELAY=PINNED
+      - name: Stage new game privately and back up old game with protection hashes
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farmwars-v2-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          id="$1";root="$HOME/public_html";game="$root/farm-wars";stage="$HOME/.zm-isometric-game-$id"
+          test -s "$root/index.html" && test -s "$root/.htaccess" && test -s "$root/agriculture/index.html"
+          test -s "$game/index.html" && ! test -L "$game" && ! test -L "$game/index.html"
+          grep -Fq 'ZOMOROD FARM WARS' "$game/index.html"
+          test -f "$game/.htaccess" && ! test -L "$game/.htaccess"
+          grep -Fq 'PassengerEnabled off' "$game/.htaccess"
+          test ! -e "$stage" && test ! -L "$stage"
+          mkdir -m 700 "$stage"
+          cp -p "$game/index.html" "$stage/previous.html"
+          cmp -s "$game/index.html" "$stage/previous.html"
+          sha256sum "$root/index.html" "$root/.htaccess" "$root/agriculture/index.html" "$root/research/index.html" "$root/store/index.html" > "$stage/protected.sha256"
+          echo ISOMETRIC_ORIGINAL_GAME_BACKUP=PASS
+          REMOTE
+          stage="/home/zomorod2/.zm-isometric-game-$GITHUB_RUN_ID"
+          timeout 50s scp -q -F "$d/config" games/farm-wars/index.html "saeit-cpanel:$stage/new.html"
+          digest="$(sha256sum games/farm-wars/index.html | awk '{print $1}')"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel \
+            "test \"\$(sha256sum '$stage/new.html' | awk '{print \$1}')\" = '$digest'"
+          echo ISOMETRIC_NEW_GAME_STAGING=VERIFIED
+      - name: Atomically replace only the existing game HTML
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farmwars-v2-ssh"
+          timeout 55s ssh -T -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          id="$1";stage="$HOME/.zm-isometric-game-$id";game="$HOME/public_html/farm-wars/index.html"
+          tmp="$HOME/public_html/farm-wars/.index-v2-$id"
+          test -s "$stage/new.html" && test -s "$stage/previous.html"
+          test ! -e "$tmp" && ! test -L "$game"
+          cmp -s "$game" "$stage/previous.html"
+          sha256sum -c --status "$stage/protected.sha256"
+          active=0
+          rollback() {
+            if test "$active" = 1 && cmp -s "$game" "$stage/new.html"; then
+              cp -p "$stage/previous.html" "$tmp"
+              mv -f "$tmp" "$game"
+              echo ISOMETRIC_INLINE_ROLLBACK=YES
+            fi
+          }
+          trap 'r=$?; trap - EXIT; if test "$r" != 0; then rollback; fi; exit "$r"' EXIT
+          install -m 644 "$stage/new.html" "$tmp"
+          cmp -s "$tmp" "$stage/new.html"
+          mv -f "$tmp" "$game"
+          active=1
+          cmp -s "$game" "$stage/new.html"
+          sha256sum -c --status "$stage/protected.sha256"
+          active=0
+          trap - EXIT
+          echo ISOMETRIC_ONLY_GAME_UPGRADED=PASS
+          REMOTE
+      - name: Verify real public game bytes and all protected page statuses
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          import hashlib,json,os,time
+          root='https://zomorodmelal.ir'
+          expected=hashlib.sha256(Path('games/farm-wars/index.html').read_bytes()).hexdigest()
+          ok=False
+          for attempt in range(1,6):
+            try:
+              u=root+'/farm-wars/?v2_verify='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt)
+              with urlopen(Request(u,headers={'Cache-Control':'no-cache,no-store','User-Agent':'ZomorodGameUpgrade/2'}),timeout=27) as r:
+                b=r.read(100000);typ=r.headers.get('Content-Type','');status=r.status
+              ok=(status==200 and 'text/html' in typ and hashlib.sha256(b).hexdigest()==expected and b'<canvas id="land"' in b and b'ZOMOROD FARM KINGDOMS' in b)
+              print('ISOMETRIC_PUBLIC_VERSION_2 attempt='+str(attempt)+' verified='+str(ok),flush=True)
+              if ok:break
+            except Exception as e:print('ISOMETRIC_PUBLIC_RETRY '+type(e).__name__,flush=True)
+            time.sleep(3)
+          if not ok:raise SystemExit('ISOMETRIC_PUBLIC_NOT_VERIFIED')
+          with open(os.environ['RUNNER_TEMP']+'/farmwars-baseline.json') as f:baseline=json.load(f)
+          for path,old in baseline.items():
+            with urlopen(Request(root+path,headers={'Cache-Control':'no-cache','User-Agent':'ZomorodGameUpgrade/2'}),timeout=24) as r:status=r.status
+            print('ISOMETRIC_PROTECTED_PAGE',path,'before',old,'after',status)
+            if status!=old:raise SystemExit('ISOMETRIC_PROTECTED_PAGE_CHANGED '+path)
+          print('ISOMETRIC_PUBLIC_ACCEPTANCE=PASS')
+          PY
+          d="$RUNNER_TEMP/farmwars-v2-ssh"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel \
+            "sha256sum -c --status '/home/zomorod2/.zm-isometric-game-$GITHUB_RUN_ID/protected.sha256' && echo ISOMETRIC_ALL_OTHER_SITE_FILES_UNCHANGED=YES"
+      - name: Restore previous game if any live verification fails
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farmwars-v2-ssh"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          id="$1";stage="$HOME/.zm-isometric-game-$id";game="$HOME/public_html/farm-wars/index.html"
+          temp="$HOME/public_html/farm-wars/.rollback-$id"
+          test -s "$stage/previous.html" && test -s "$stage/new.html"
+          if cmp -s "$game" "$stage/new.html"; then
+            cp -p "$stage/previous.html" "$temp"
+            mv -f "$temp" "$game"
+            cmp -s "$game" "$stage/previous.html"
+            echo ISOMETRIC_ROLLBACK=COMPLETED
+          else
+            echo ISOMETRIC_ROLLBACK_BLOCKED_CONCURRENT_CHANGE
+            exit 1
+          fi
+          REMOTE
+      - name: Clean private staging and credential files
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/farmwars-v2-ssh";stage="/home/zomorod2/.zm-isometric-game-$GITHUB_RUN_ID"
+          if test -f "$d/config"; then
+            timeout 35s ssh -T -F "$d/config" saeit-cpanel \
+              "test ! -L '$stage' && rm -f -- '$stage/new.html' '$stage/previous.html' '$stage/protected.sha256' && rmdir '$stage'" || true
+          fi
+          rm -rf "$d"
