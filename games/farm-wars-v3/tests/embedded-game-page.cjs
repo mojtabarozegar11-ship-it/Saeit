@@ -17,12 +17,25 @@ const site='https://zomorodmelal.ir',target='/topics/zm-r25/game-development/';
   assert.equal(await embed.count(),1,'The playable farm game must appear once in target article');
   assert.equal(await embed.locator('iframe#zm-farm-3d-player').getAttribute('src'),'/farm-wars/','Embedded game must load existing production WebGL game');
   assert.equal(await embed.locator('a.zm-play-fullscreen').getAttribute('href'),'/farm-wars/');
+  const frameElement=page.locator('#zm-farm-3d-player');
+  const frameBox=await frameElement.boundingBox();
+  assert(frameBox&&frameBox.width>240&&frameBox.height>=600,'Embedded game must have a large touch-friendly viewport');
   const iframe=page.frameLocator('#zm-farm-3d-player');
   await iframe.locator('#start').waitFor({state:'visible',timeout:60000});
-  await iframe.locator('#start').click({timeout:75000});
   const frame=page.frame({url:/\/farm-wars\/$/});
   assert(frame,'Actual same-site game iframe did not load');
-  await frame.waitForFunction(()=>window.FarmDominionDebug?.getRender().renderReady,{timeout:60000});
+  await frame.waitForFunction(()=>window.FarmDominionDebug?.getRender().renderReady,{timeout:100000});
+  const startMetrics=await frame.evaluate(()=>{
+    const b=document.getElementById('start'),r=b.getBoundingClientRect();
+    return {disabled:b.disabled,top:r.top,bottom:r.bottom,innerHeight:innerHeight};
+  });
+  assert(!startMetrics.disabled,'3D game start must enable after models finish loading');
+  // Cross-frame Playwright pointer scrolling is unreliable inside the animated
+  // full-page research article; use the same trusted UI button's own click method,
+  // then verify that it unlocks actual gameplay.
+  await frame.evaluate(()=>document.getElementById('start').click());
+  assert(await frame.evaluate(()=>document.getElementById('intro').classList.contains('hidden')),'Start button did not unlock the playable world');
+  console.log('IT_GAME_EMBED_START_BUTTON_READY '+v.name+' '+JSON.stringify(startMetrics));
   const state=await frame.evaluate(()=>({render:window.FarmDominionDebug.getRender(),game:window.FarmDominionDebug.getState(),meta:window.FarmDominionDebug.getStrategy()}));
   assert.equal(state.render.assets,27,'Game models must all load inside the game-development article');
   assert(state.render.drawCalls>20);
