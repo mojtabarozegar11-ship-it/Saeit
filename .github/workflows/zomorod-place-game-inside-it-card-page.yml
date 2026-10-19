@@ -29,6 +29,7 @@ jobs:
           grep -Fq 'min-height:720px' games/farm-wars-v3/scripts/embed_game_in_card_page.py
           node --check games/farm-wars-v3/tests/embedded-game-page.cjs
           bash -n games/farm-wars-v3/scripts/ssh_relay.sh
+          grep -Fq 'ControlMaster auto' games/farm-wars-v3/scripts/ssh_relay.sh
           python3 - <<'PY'
           from urllib.request import Request,urlopen
           from urllib.error import HTTPError
