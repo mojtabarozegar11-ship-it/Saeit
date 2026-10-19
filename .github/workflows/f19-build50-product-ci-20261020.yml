@@ -1,0 +1,21 @@
+name: F19 real BUILD50 original website product CI
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/f19-build50-product-ci-20261020.yml"]
+permissions: {contents: read}
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test all 50 production stages, final archive and tamper rejection
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_f19_build50_product.sh
+          python3 -m py_compile scripts/factory_build50_f19_web_template.py scripts/factory_f19_independent_web_review.py scripts/factory_build50_family_bridge.py
+          python3 -m unittest discover -s tests -p 'test_factory_build50_f19_web_template.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_build50_family_bridge.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_build_50.py' -v
+          echo F19_BUILD50_ORIGINAL_PRODUCT_CI=PASS
