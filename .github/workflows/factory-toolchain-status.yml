@@ -47,5 +47,15 @@ jobs:
                   piplog=version/'pip-install.log'
                   if piplog.is_file():
                       print('PIP_LOG_BYTES='+str(piplog.stat().st_size))
+          version=root/'build-toolchain/versions/f7b1913a9c01411393cf28316cd7bb34f8a7165f'
+          prefix=version/'prefix'
+          for relative in ('usr/lib/libreoffice/program/fundamentalrc','usr/lib/libreoffice/program/bootstraprc','usr/lib/libreoffice/program/unorc','usr/lib/libreoffice/program/sofficerc'):
+              p=prefix/relative
+              if p.is_file(): print('OFFICE_CONFIG '+relative+' '+p.read_text()[:5000])
+          for relative in ('usr/lib/libreoffice/share','usr/share/libreoffice','etc/libreoffice','usr/lib/libreoffice/program/services'):
+              p=prefix/relative
+              if p.is_dir(): print('OFFICE_DIRECTORY '+relative+' '+str([str(x.relative_to(prefix)) for x in p.iterdir()]))
+          services=prefix/'usr/lib/libreoffice/program/services/services.rdb'
+          if services.is_file(): print('SERVICE_REGISTRY_HEAD='+services.read_text(errors='replace')[:2500])
           print('CURRENT_MANIFEST='+str((root/'build-toolchain/toolchain-manifest.json').is_file()))
           PY
