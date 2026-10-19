@@ -99,7 +99,9 @@ class ContinuousInventionTests(unittest.TestCase):
             "expression":"measured_distance / measured_speed","output_unit":"hours","family_id":"F28",
             "inputs":[{"name":"measured_distance","unit":"km"},{"name":"measured_speed","unit":"km/hour"}]
         }]}))
-        result=invent.propose(self.root,max_new=5,max_pending=20)
+        # Scan through the finite built-ins, then reach the extension pack.
+        for _ in range(4):
+            result=invent.propose(self.root,max_new=5,max_pending=30)
         self.assertGreaterEqual(result["duplicate_pattern_skips"],1)
         self.assertFalse((self.root/"engineering-briefs/auto_need_renamed_trip_time.json").exists())
 
