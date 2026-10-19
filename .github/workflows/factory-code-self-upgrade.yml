@@ -61,7 +61,7 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs
           ssh_vps() {
-            ssh -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 "$@"
+            ssh -i "$d/key" -o ControlMaster=auto -o ControlPath="$d/master.sock" -o ControlPersist=90 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 "$@"
           }
           stage="/home/githubops/factory-runtime/operations/.self-edit-staging-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           ssh_vps "umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
