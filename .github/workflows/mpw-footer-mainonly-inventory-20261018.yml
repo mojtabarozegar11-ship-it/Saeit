@@ -173,6 +173,42 @@ jobs:
                   valid=zipfile.is_file() and not zipfile.is_symlink() and gzip.decompress(zipfile.read_bytes())==data
                   print('STORE_ASSET '+name+' SHA='+hashlib.sha256(data).hexdigest()+' LENGTH='+str(len(data))+' GZIP_VALID='+str(valid),flush=True)
           PY
+      - name: Snapshot page fingerprints, routes, and homepage safely
+        run: |
+          set -euo pipefail
+          timeout 85s ssh -T -F "$RUNNER_TEMP/mpw-footer-inventory/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,re,os,json
+          root=Path('/home/zomorod2/mojplaywin.com')
+          pre=root/'design-preview-20261017/mpw-ten-editorials-20261018/pages'
+          candidates=[*sorted(pre.glob('*.html'))]
+          for p in (root/'design-preview-20261017').rglob('*.html'):
+              if '/mpw-ten-editorials-20261018/pages/' not in str(p) and p.stat().st_size>100000:candidates.append(p)
+          seen=set()
+          for p in candidates:
+              if p in seen or p.is_symlink() or not p.is_file() or p.stat().st_size>1600000:continue
+              seen.add(p);d=p.read_bytes();s=d.decode('utf8','replace')
+              foot=len(re.findall(r'<footer\b',s,re.I))
+              header=len(re.findall(r'<header\b',s,re.I))
+              lang=re.search(r'<html\b[^>]*lang\s*=\s*["\']?([\w-]+)',s,re.I)
+              canon=re.search(r'<link\b[^>]*rel=["\']canonical["\'][^>]*>',s,re.I)
+              canon=canon.group(0) if canon else ''
+              print('DOC '+str(p.relative_to(root))+' SHA='+hashlib.sha256(d).hexdigest()+' BYTES='+str(len(d))+' TITLE='+repr((re.search(r'<title[^>]*>(.*?)</title>',s,re.I|re.S).group(1) if re.search(r'<title[^>]*>(.*?)</title>',s,re.I|re.S) else '')[:130])+' LANG='+repr(lang.group(1) if lang else None)+' HEADERS='+str(header)+' FOOTERS='+str(foot)+' CANON='+repr(canon[:150])+' FOUNDER='+str('Mojtaba Roozegar' in s)+' BASE64='+str(s.count('data:image/jpeg;base64,')),flush=True)
+          home=root/'design-preview-20261017'
+          ht=root/'.htaccess'
+          print('ROUTES_SHA='+hashlib.sha256(ht.read_bytes()).hexdigest()+' BYTES='+str(ht.stat().st_size),flush=True)
+          for i,line in enumerate(ht.read_text('utf8',errors='replace').splitlines()):
+              if re.search('RewriteCond.*REQUEST_URI|RewriteRule.*design-preview|RewriteRule.*search',line,re.I):
+                  print('HT '+str(i+1)+' '+line[:180],flush=True)
+          for p in sorted(root.rglob('*.html')):
+              if p.is_symlink() or not p.is_file() or p.stat().st_size<180000:continue
+              if len(p.relative_to(root).parts)>6:continue
+              try:
+                  s=p.read_text('utf8',errors='replace')
+                  if 'mpo-orbit-track' in s and 'mpo-orbit-card' in s:
+                      print('HOME_CANDIDATE '+str(p.relative_to(root))+' SHA='+hashlib.sha256(p.read_bytes()).hexdigest()+' BYTES='+str(p.stat().st_size),flush=True)
+              except Exception:pass
+          PY
       - name: Remove relay material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-footer-inventory"
