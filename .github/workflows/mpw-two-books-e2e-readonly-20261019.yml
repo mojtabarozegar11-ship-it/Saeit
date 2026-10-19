@@ -1,4 +1,4 @@
-name: MojPlayWin ETH TRX indexer conditions read only
+name: MojPlayWin indexer endpoint HTTP diagnosis read only
 on:
   push:
     branches: [main]
