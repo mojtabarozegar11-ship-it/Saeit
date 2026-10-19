@@ -383,7 +383,7 @@ def triage_factory_stage1(root=VPS):
     intake = root/"design-intake/mojplaywin-stage1-quality-returns"
     clean_dir(intake)
     parent = root/"design-state"
-    clean_dir(parent)
+    private_new(parent)
     dest = parent/"mojplaywin-stage1-qa-work"
     private_new(dest)
     lock_path = dest/".queue.lock"
