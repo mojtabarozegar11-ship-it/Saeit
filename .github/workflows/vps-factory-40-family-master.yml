@@ -1,0 +1,112 @@
+name: VPS private 40-family production management master
+on:
+  pull_request:
+    paths:
+      - "factory_config/forty_families.json"
+      - "scripts/factory_40_family_master.py"
+      - "tests/test_factory_40_family_master.py"
+      - "deploy/install_factory_40_family_master.sh"
+      - ".github/workflows/vps-factory-40-family-master.yml"
+  push:
+    branches: [main]
+    paths:
+      - "factory_config/forty_families.json"
+      - "scripts/factory_40_family_master.py"
+      - "tests/test_factory_40_family_master.py"
+      - "deploy/install_factory_40_family_master.sh"
+      - ".github/workflows/vps-factory-40-family-master.yml"
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-factory-forty-line-planner
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate all 40 profiles, real measurement, conservative admission and site isolation
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_40_family_master.sh
+          python3 -m py_compile scripts/factory_40_family_master.py
+          python3 -m unittest discover -s tests -p 'test_factory_40_family_master.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_12_stage_governance.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_production_warehouse.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=json.loads(Path("factory_config/forty_families.json").read_text())
+          assert len(p["profiles"]) == 40
+          assert all(x["resource_policy"]["max_concurrent_jobs"] == 1 for x in p["profiles"])
+          assert all(x["adapter_status"] == "not_verified_on_vps" for x in p["profiles"])
+          for filename in ["scripts/factory_40_family_master.py","deploy/install_factory_40_family_master.sh"]:
+              s=Path(filename).read_text()
+              for banned in ("import requests", "urllib.request.urlopen(", "factory_store_sender.py", "rsync -a", "scp -r"):
+                  assert banned not in s,(filename,banned)
+          print("FACTORY_40_UNVERIFIED_PRODUCTS_NOT_AUTORUN=PASS")
+          PY
+  install:
+    needs: validate
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-factory-40-lines-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install private read-only 40-family master on existing VPS and verify real telemetry
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-40-master"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh_vps() {
+            ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          ssh_vps 'set -eu; test "$(id -un)" = githubops; test -s "$HOME/factory-runtime/private/autonomous-product-cycle/production-warehouse/stock-register.json"; test -d "$HOME/factory-runtime/private/autonomous-product-cycle/product-lifecycle"; crontab -l | grep SAEIT_FACTORY_EVERY_MINUTE_V1; crontab -l | grep SAEIT_FACTORY_LIFECYCLE_12_V1; echo FORTY_MASTER_VPS_BASELINE_OK'
+          folder="/home/githubops/factory-runtime/operations/.forty-master-staging-$GITHUB_RUN_ID"
+          ssh_vps "umask 077; test ! -e '$folder'; mkdir -m 700 '$folder'"
+          for item in factory_config/forty_families.json scripts/factory_40_family_master.py deploy/install_factory_40_family_master.sh; do
+            file="$(basename "$item")"
+            cat "$item" | ssh_vps "umask 077; cat > '$folder/$file'"
+            hash="$(sha256sum "$item" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$folder/$file' | awk '{print \$1}')\" = '$hash'"
+          done
+          ssh_vps "bash -n '$folder/install_factory_40_family_master.sh' && bash '$folder/install_factory_40_family_master.sh' '$folder/factory_40_family_master.py' '$folder/forty_families.json'"
+          ssh_vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import json,subprocess
+          private=Path.home()/"factory-runtime"/"private"/"autonomous-product-cycle"
+          report=json.loads((private/"production-family-management"/"family-dashboard.json").read_text())
+          cron=subprocess.check_output(["crontab","-l"],text=True)
+          assert report["schema"]=="saeit.factory.family-master-dashboard.v1"
+          assert len(report["families"])==40
+          assert report["registered_families"]==40
+          assert report["production_ready_families"]==0
+          assert report["fully_verified_active_producer_families"]==0
+          assert report["distribution_enabled"] is False
+          assert cron.count("SAEIT_FACTORY_EVERY_MINUTE_V1")==1
+          assert cron.count("SAEIT_FACTORY_LIFECYCLE_12_V1")==1
+          assert cron.count("SAEIT_FACTORY_FORTY_FAMILY_MASTER_V1")==1
+          old=json.loads((private/"production-warehouse"/"stock-register.json").read_text())
+          assert old["sites_contacted"]==0
+          assert old["finished_goods_versions"]>=2
+          print("VPS_40_FAMILIES_REGISTERED="+str(report["registered_families"]))
+          print("VPS_40_FAMILY_QA_PRODUCTION_LINES_VERIFIED="+str(report["fully_verified_active_producer_families"]))
+          print("VPS_40_FAMILY_PLANNED_SAFE_CAPACITY="+str(report["measured_vps_capacity"]["worker_slots_theoretical"]))
+          print("VPS_40_FAMILY_UNASSIGNED_WORK_ORDERS="+str(sum(report["unassigned_work_orders"].values())))
+          print("VPS_40_EXISTING_TECHNICAL_STOCK="+str(old["finished_goods_versions"]))
+          print("VPS_40_FAMILY_MINUTE_CRON_INSTALLED=PASS")
+          print("VPS_40_FAMILY_WEBSITE_TRANSFER=false")
+          PY
