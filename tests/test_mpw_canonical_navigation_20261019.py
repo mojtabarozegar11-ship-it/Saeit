@@ -47,3 +47,12 @@ def test_php_reuses_home_canonical_header_without_other_domain_changes():
     assert m.HOMEPAGE not in m.all_targets()
     assert not any("farnaz" in str(p) for p in m.all_targets())
     m.selftest()
+
+
+def test_github_inline_route_verification_python_parses():
+    import ast,re,textwrap
+    wf=(p.parents[1]/".github/workflows/mpw-canonical-navigation-20261019.yml").read_text("utf8")
+    blocks=re.findall(r"^\s*python3 - <<'PY'\s*\n(.*?)^\s*PY\s*$",wf,flags=re.S|re.M)
+    assert len(blocks)==2
+    for k,code in enumerate(blocks):
+        ast.parse(textwrap.dedent(code),filename=f"mpw-nav-verification-{k}")
