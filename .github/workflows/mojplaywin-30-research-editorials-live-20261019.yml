@@ -1,0 +1,208 @@
+name: MojPlayWin 30 research-grade briefs across 19 main informational pages (isolated)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mojplaywin-30-research-editorials-live-20261019.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  publish-thirty-research-briefs:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[approved-mpw-30-research-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate thirty unique research briefs and reversible nineteen-page edits
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_30_research_editorials_atomic_20261019.py
+          python3 - <<'PY'
+          import json,importlib.util
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location('pub','scripts/mpw_30_research_editorials_atomic_20261019.py')
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          src=Path('content/mpw_30_research_grade_articles_20261019.json')
+          data=m.validate_source(json.loads(src.read_text('utf-8')))
+          assert len(m.ROUTES)==19 and len(data['articles'])==30
+          assert not any(x.startswith(m.EXCLUDED) for x in m.ROUTES)
+          ids=[]
+          for route in m.ROUTES:
+            s='<html><head><title>Test</title></head><body><main><h1>Research</h1><p>'+('Existing material. '*250)+'</p><div id="mpw-ten-illustrated-20261018">'+('<article class="mpw-ten-card"></article>'*10)+'</div>'
+            if route=='/about/':
+              s+='<div id="mpw-founder-spotlight-20261019"></div><div id="mpw-meet-team-20261018"></div><div id="mpw-senior-advisory-20261018"></div><div id="mpw-international-team-20261018"></div><div id="mpw-seven-gallery-20261019"></div>'
+              s+=('<li class="mpw-team-card"></li>'*10)+('<li class="mpw-advisory-card"></li>'*10)+('<li class="mpw-intl-card"></li>'*10)
+            s+='</main></body></html>'
+            out=m.combine(route,s.encode(),data)
+            tag='class="mpw-r30-paper mpw-research-brief-20261019"'
+            n=sum(a['route']==route for a in data['articles'])
+            assert out.count(tag.encode())==n
+            assert out.replace(('\n'+m.render(data,route)+'\n').encode(),b'',1)==s.encode()
+            assert out.count(b'class="mpw-ten-card"')==10
+            ids+= [a['title'] for a in data['articles'] if a['route']==route]
+          assert len(ids)==len(set(ids))==30
+          print('MPW_30_RESEARCH_OFFLINE_QA=PASS articles=30 pages=19 no_replacements=yes')
+          PY
+      - name: Snapshot live public main and protected route statuses
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          info=['/','/store/','/checkout/','/about/','/research/','/knowledge/','/agents/','/company/',
+                '/mojtaba.roozegar/','/mojtaba.roozegar/about/','/farnaz/','/saman/','/picm/','/taniya/','/zahra/']
+          statuses={}
+          for path in info:
+            url='https://mojplaywin.com'+path
+            request=urllib.request.Request(url,headers={'User-Agent':'MojPlayWin30ResearchBaseline/1.0','Cache-Control':'no-cache'})
+            try:
+              with urllib.request.urlopen(request,timeout=21) as resp:code=resp.status
+            except urllib.error.HTTPError as e:code=e.code
+            except Exception as e:raise SystemExit('PRECHECK_NETWORK_ERROR '+url+' '+type(e).__name__)
+            statuses[url]=code
+            print('MPW30_BEFORE='+url+' '+str(code))
+          for p in ('/','/store/','/about/','/research/','/knowledge/','/agents/','/company/','/mojtaba.roozegar/','/farnaz/'):
+            if statuses['https://mojplaywin.com'+p]!=200:raise SystemExit('CRITICAL_BASELINE_UNHEALTHY '+p)
+          with open(os.environ['RUNNER_TEMP']+'/mpw-30-protected-baseline.json','w') as f:json.dump(statuses,f)
+          PY
+      - name: Build host-key-pinned GitHub to VPS to cPanel SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-30-research-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Stage only one 30-brief source dataset in private cPanel home
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-30-research-ssh"
+          scp -q -F "$d/config" content/mpw_30_research_grade_articles_20261019.json \
+            "saeit-cpanel:/home/zomorod2/.mpw-30-scientific-content-$GITHUB_RUN_ID.json"
+      - name: Atomically add thirty research articles to nineteen existing public pages
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-30-research-ssh"
+          digest=$(sha256sum content/mpw_30_research_grade_articles_20261019.json | awk '{print $1}')
+          timeout 95s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID' '$digest'" \
+            < scripts/mpw_30_research_editorials_atomic_20261019.py
+      - name: Verify thirty live articles, existing editorial notes, founder, staff and protected routes
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,re,time,urllib.request,urllib.error,sys
+          sys.path.insert(0,'scripts')
+          import mpw_30_research_editorials_atomic_20261019 as m
+          with open('content/mpw_30_research_grade_articles_20261019.json',encoding='utf-8') as f:data=json.load(f)
+          total=0
+          for route in m.ROUTES:
+            n=sum(x['route']==route for x in data['articles'])
+            ok=False
+            for attempt in range(1,4):
+              url='https://mojplaywin.com'+route+'?mpw30='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt)
+              request=urllib.request.Request(url,headers={'User-Agent':'MojPlayWin30ResearchLiveQA/1.0','Cache-Control':'no-cache'})
+              try:
+                with urllib.request.urlopen(request,timeout=26) as r:
+                  body=r.read(2200000).decode('utf-8','replace');status=r.status
+                section='id="mpw-research-editorials-20261019-'+m.slug(route)+'"'
+                ok=(status==200 and body.count(section)==1
+                   and body.count('class="mpw-r30-paper mpw-research-brief-20261019"')==n
+                   and body.count('class="mpw-ten-card"')==10 and body.count('id="mpw-ten-illustrated-20261018"')==1
+                   and len(re.findall(r'<h1\b',body,re.I))==1)
+                if route=='/about/':
+                  ok=ok and all(x in body for x in ('MPW_FOUNDER_SPOTLIGHT_ADDON_20261019','MPW_TEAM_ADDON_V1',
+                       'MPW_SENIOR_ADVISORY_ADDON_20261018','MPW_INTERNATIONAL_TEAM_ADDON_20261018',
+                       'MPW_SEVEN_IMAGES_AFTER_ADVISORS_20261019')) and body.count('class="mpw-team-card"')==10 and body.count('class="mpw-advisory-card"')==10 and body.count('class="mpw-intl-card"')==10
+                print('MPW30_LIVE_ROUTE='+route+' verified='+str(ok)+' articles='+str(n)+' attempt='+str(attempt))
+                if ok:break
+              except Exception as e:print('MPW30_ROUTE_RETRY='+route+' '+type(e).__name__)
+              time.sleep(2)
+            if not ok:raise SystemExit('MPW30_UNVERIFIED_LIVE_ROUTE '+route)
+            total+=n
+          if total!=30:raise SystemExit('WRONG_LIVE_TOTAL '+str(total))
+          baseline=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-30-protected-baseline.json'))
+          for url,before in baseline.items():
+            req=urllib.request.Request(url,headers={'User-Agent':'MojPlayWin30ResearchLiveQA/1.0','Cache-Control':'no-cache'})
+            try:
+              with urllib.request.urlopen(req,timeout=21) as resp:now=resp.status
+            except urllib.error.HTTPError as e:now=e.code
+            if now!=before:raise SystemExit('PROTECTED_URL_STATUS_CHANGED '+url)
+            print('MPW30_PROTECTED_UNCHANGED='+url+' '+str(now))
+          print('MPW_30_RESEARCH_EDITORIALS_LIVE_VERIFIED=YES pages=19 articles=30')
+          PY
+          d="$RUNNER_TEMP/mpw-30-research-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - status '$GITHUB_RUN_ID'" \
+            < scripts/mpw_30_research_editorials_atomic_20261019.py
+      - name: Roll back only this new research content after a failed verification
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-30-research-ssh"
+          if test -f "$d/config"; then
+            timeout 80s ssh -T -F "$d/config" saeit-cpanel \
+              "python3 - rollback '$GITHUB_RUN_ID'" \
+              < scripts/mpw_30_research_editorials_atomic_20261019.py || true
+          fi
+      - name: Remove only uniquely staged private JSON and runner key material
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-30-research-ssh"
+          if test -f "$d/config"; then
+            timeout 25s ssh -T -F "$d/config" saeit-cpanel \
+              "test ! -L /home/zomorod2/.mpw-30-scientific-content-$GITHUB_RUN_ID.json && rm -f -- /home/zomorod2/.mpw-30-scientific-content-$GITHUB_RUN_ID.json" || true
+          fi
+          rm -rf -- "$d"
