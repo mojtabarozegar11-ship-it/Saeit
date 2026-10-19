@@ -102,6 +102,23 @@ jobs:
               except Exception as exc:
                   print("ROOT_DATABASE_HEALTH=failed_"+type(exc).__name__)
           PY
+          "$HOME/virtualenv/Saeit/3.10/bin/python" - <<'PY'
+          import os,re
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          from django.test import Client
+          from django.conf import settings
+          selector=Path.home()/"public_html"/".htaccess"
+          if selector.is_file():
+              t=selector.read_text(errors="replace")
+              names=[line.split('"')[1] for line in t.splitlines() if line.strip().startswith("PassengerPython ") and line.count('"')>=2]
+              print("ROOT_PASSENGER_MODE="+",".join("selector" if x.endswith("/lswsgi") else "virtualenv" if "/virtualenv/Saeit/" in x else "other" for x in names))
+          try:
+              response=Client(HTTP_HOST="zomorodmelal.ir").get("/api/health/",secure=True)
+              print("ROOT_DJANGO_CLIENT_HEALTH_STATUS="+str(response.status_code))
+          except Exception as exc:
+              print("ROOT_DJANGO_CLIENT_HEALTH_ERROR="+type(exc).__name__)
+          PY
           REMOTE
       - name: Probe exact public Django health route with sanitized response fields
         shell: bash
