@@ -1,0 +1,51 @@
+name: Factory toolchain read-only status
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/factory-toolchain-status.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect private transfer and proof metadata
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/toolchain-ssh"
+          mkdir -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs
+          options=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          remote=(ssh "${options[@]}" githubops@178.239.147.150)
+          "${remote[@]}" 'python3 -' <<'PY'
+          import json
+          from pathlib import Path
+          root=Path.home()/'factory-runtime/operations'
+          for stage in sorted(root.glob('toolchain-source-*')):
+              print('STAGE='+stage.name)
+              print(json.dumps({p.name:p.stat().st_size for p in stage.iterdir() if p.is_file()},sort_keys=True))
+          versions=root/'build-toolchain/versions'
+          if versions.is_dir():
+              for version in sorted(versions.iterdir()):
+                  if not version.is_dir(): continue
+                  print('VERSION='+version.name)
+                  proof=version/'proof.json'
+                  if proof.is_file():
+                      report=json.loads(proof.read_text())
+                      print('PROOF='+json.dumps(report['checks'],sort_keys=True))
+                  piplog=version/'pip-install.log'
+                  if piplog.is_file():
+                      print('PIP_LOG_BYTES='+str(piplog.stat().st_size))
+          print('CURRENT_MANIFEST='+str((root/'build-toolchain/toolchain-manifest.json').is_file()))
+          PY
