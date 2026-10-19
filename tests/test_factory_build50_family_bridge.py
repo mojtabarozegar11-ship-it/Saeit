@@ -48,12 +48,46 @@ class FamilyBridgeTests(unittest.TestCase):
         artifact.write_bytes(b'tampered')
         self.assertEqual(self.execute()['families'][13]['technical_pilot_count'],0)
     def test_true_verified_fifty_stage_attempt_is_counted_with_its_family(self):
+        # Regression fixture: 48 distinct workbook operations, not one vague
+        # instruction disguised with numbers (which validate_plan rightly rejects).
+        worksheets = (
+            'seed-rate input worksheet',
+            'soil-moisture measurements worksheet',
+            'irrigation schedule worksheet',
+            'rainfall observations worksheet',
+            'crop-yield estimates worksheet',
+            'fertilizer budget worksheet',
+        )
+        operations = (
+            'validate typed fields and mandatory source columns',
+            'normalize physical units and record each conversion',
+            'reject missing observations with explicit error labels',
+            'compute bounded summary values with formula traceability',
+            'propagate measurement uncertainty into output intervals',
+            'check domain-specific conservation and sum invariants',
+            'cross-check formulas against independent numerical examples',
+            'produce a machine-readable audit trace for the reviewer',
+        )
         plan={'schema':protocol.SCHEMA,'product_id':'sampleF27','family_id':'F27',
               'producer_id':'workbook_producer','source_snapshot_sha256':'c'*64,
               'work_packages':[{'id':'real_%02d'%i,
-                'instruction':'Derive a new measurable capability #%02d using distinct input and acceptance evidence.'%i,
+                'instruction':('For the %s, %s; validate a concrete output using '
+                               'documented input evidence and an explicit failure case.')%(sheet,operation),
                 'acceptance':['Real file matches tested expected behavior','Failure case is checked']}
-                for i in range(48)]}
+                for i,(sheet,operation) in enumerate(
+                    (sheet,operation) for sheet in worksheets for operation in operations)]}
+        self.assertEqual(len(plan['work_packages']),48)
+        self.assertEqual(len(set(
+            protocol.re.sub(r'\\d+','<number>',task['instruction'].strip().casefold())
+            for task in plan['work_packages'])),48)
+        # Keep a direct anti-forgery check: numeric-only renaming stays invalid.
+        bad_plan={**plan,'work_packages':[dict(t) for t in plan['work_packages']]}
+        bad_plan['work_packages'][0]['instruction'] = (
+            'Derive measured workbook capability #01 with independent evidence and checks.')
+        bad_plan['work_packages'][1]['instruction'] = (
+            'Derive measured workbook capability #02 with independent evidence and checks.')
+        with self.assertRaisesRegex(ValueError,'BUILD50_DISTINCT_SUBSTANTIVE_INSTRUCTIONS_REQUIRED'):
+            protocol.validate_plan(bad_plan)
         def worker(task,context):
             out='actual_%02d.txt'%context['stage']
             (Path(context['folder'])/out).write_text(task['instruction'])
