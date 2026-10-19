@@ -1,8 +1,6 @@
 name: MojPlayWin-only P0 live source authority read-only audit
 on:
-  push:
-    branches: [fix/mojplaywin-only-p0-p2-evidence-hardening-20261019]
-    paths: [.github/workflows/mpw-runtime-authority-readonly-20261019.yml]
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -10,7 +8,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   inspect:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/fix/mojplaywin-only-p0-p2-evidence-hardening-20261019'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 7
     steps:
