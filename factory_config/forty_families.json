@@ -1,0 +1,3118 @@
+{
+  "schema": "saeit.factory.family-registry.v1",
+  "registration_date": "2026-10-19",
+  "principle": "Registration is not proof of a working producer or commercially approved stock.",
+  "distribution_enabled": false,
+  "commercial_auto_approval": false,
+  "readiness_policy": "awaiting_executor_validation_until_real_trial_and_independent_qa",
+  "profiles": [
+    {
+      "id": "F01",
+      "slug": "specialist_books",
+      "name_fa": "کتاب تخصصی",
+      "subcategories": [
+        "علمی",
+        "فنی",
+        "مدیریتی",
+        "آموزشی"
+      ],
+      "audiences": [
+        "specialists"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "کتاب تخصصی / علمی"
+      ],
+      "deliverables": [
+        "original_pdf",
+        "original_epub"
+      ],
+      "formats": [
+        "PDF",
+        "EPUB"
+      ],
+      "producer_adapter": "authoring_typesetting",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "source_verification",
+        "expert_peer_review",
+        "technical_accuracy",
+        "layout_and_accessibility"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F02",
+      "slug": "fiction_books",
+      "name_fa": "کتاب داستان",
+      "subcategories": [
+        "کودک",
+        "نوجوان",
+        "معمایی",
+        "علمی‌تخیلی"
+      ],
+      "audiences": [
+        "readers"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "کتاب داستان / کودک"
+      ],
+      "deliverables": [
+        "original_pdf",
+        "original_epub"
+      ],
+      "formats": [
+        "PDF",
+        "EPUB"
+      ],
+      "producer_adapter": "story_editing_typesetting",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "narrative_coherence",
+        "age_appropriateness",
+        "originality",
+        "illustration_consistency"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F03",
+      "slug": "encyclopedias",
+      "name_fa": "دانشنامه",
+      "subcategories": [
+        "موضوعی",
+        "مصور",
+        "چندجلدی",
+        "اصطلاحات"
+      ],
+      "audiences": [
+        "researchers"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "دانشنامه / موضوعی"
+      ],
+      "deliverables": [
+        "original_html",
+        "original_pdf",
+        "original_epub"
+      ],
+      "formats": [
+        "HTML",
+        "PDF",
+        "EPUB"
+      ],
+      "producer_adapter": "knowledge_editor",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "entry_provenance",
+        "internal_links",
+        "coverage",
+        "editorial_crosscheck"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F04",
+      "slug": "research_reports",
+      "name_fa": "گزارش پژوهشی",
+      "subcategories": [
+        "مرور شواهد",
+        "تحلیل فناوری",
+        "مطالعات موضوعی"
+      ],
+      "audiences": [
+        "specialists"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "گزارش پژوهشی / مرور شواهد"
+      ],
+      "deliverables": [
+        "original_pdf",
+        "original_docx"
+      ],
+      "formats": [
+        "PDF",
+        "DOCX"
+      ],
+      "producer_adapter": "research_analysis",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "reproducible_sources",
+        "methods_disclosure",
+        "bias_limitations",
+        "qualified_review"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F05",
+      "slug": "market_reports",
+      "name_fa": "گزارش بازار",
+      "subcategories": [
+        "رقبا",
+        "مشتریان",
+        "روندها",
+        "فرصت‌ها"
+      ],
+      "audiences": [
+        "businesses"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "گزارش بازار / رقبا"
+      ],
+      "deliverables": [
+        "original_pdf",
+        "original_xlsx"
+      ],
+      "formats": [
+        "PDF",
+        "XLSX"
+      ],
+      "producer_adapter": "market_analysis",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "dated_market_evidence",
+        "sample_validity",
+        "comparison_method",
+        "no_invented_claims"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F06",
+      "slug": "operation_guides",
+      "name_fa": "راهنمای اجرایی",
+      "subcategories": [
+        "دستورالعمل",
+        "تعمیر",
+        "بهره‌برداری",
+        "کنترل کیفیت"
+      ],
+      "audiences": [
+        "operators"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "راهنمای اجرایی / دستورالعمل"
+      ],
+      "deliverables": [
+        "original_pdf",
+        "original_html"
+      ],
+      "formats": [
+        "PDF",
+        "HTML"
+      ],
+      "producer_adapter": "technical_authoring",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "step_reproducibility",
+        "risk_warnings",
+        "field_check",
+        "clarity"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F07",
+      "slug": "text_courses",
+      "name_fa": "دوره متنی",
+      "subcategories": [
+        "مقدماتی",
+        "حرفه‌ای",
+        "پروژه‌محور"
+      ],
+      "audiences": [
+        "learners"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "دوره متنی / مقدماتی"
+      ],
+      "deliverables": [
+        "original_html",
+        "original_pdf"
+      ],
+      "formats": [
+        "HTML",
+        "PDF"
+      ],
+      "producer_adapter": "learning_design",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "learning_objectives",
+        "exercise_solutions",
+        "progression",
+        "learning_assessment"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F08",
+      "slug": "video_courses",
+      "name_fa": "دوره ویدئویی",
+      "subcategories": [
+        "مهارت",
+        "نرم‌افزار",
+        "هنر",
+        "کسب‌وکار"
+      ],
+      "audiences": [
+        "learners"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "دوره ویدئویی / مهارت"
+      ],
+      "deliverables": [
+        "original_mp4",
+        "original_vtt"
+      ],
+      "formats": [
+        "MP4",
+        "VTT"
+      ],
+      "producer_adapter": "video_lessons",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "audio_visual_playback",
+        "transcript_accuracy",
+        "exercise_alignment",
+        "caption_quality"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": true,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F09",
+      "slug": "audio_courses",
+      "name_fa": "دوره صوتی",
+      "subcategories": [
+        "زبان",
+        "روایت آموزشی",
+        "مرور درس"
+      ],
+      "audiences": [
+        "learners"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "دوره صوتی / زبان"
+      ],
+      "deliverables": [
+        "original_mp3",
+        "original_vtt"
+      ],
+      "formats": [
+        "MP3",
+        "VTT"
+      ],
+      "producer_adapter": "audio_lessons",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "full_playback",
+        "speech_clarity",
+        "pedagogical_accuracy",
+        "text_sync"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F10",
+      "slug": "assessment_packs",
+      "name_fa": "بسته تمرین و ارزیابی",
+      "subcategories": [
+        "سؤال",
+        "پاسخ تشریحی",
+        "مطالعه موردی"
+      ],
+      "audiences": [
+        "educators"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "بسته تمرین و ارزیابی / سؤال"
+      ],
+      "deliverables": [
+        "original_pdf",
+        "original_json"
+      ],
+      "formats": [
+        "PDF",
+        "JSON"
+      ],
+      "producer_adapter": "assessment_generator",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "answer_key_correctness",
+        "difficulty_balance",
+        "rubric_reliability",
+        "question_uniqueness"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F11",
+      "slug": "teacher_kits",
+      "name_fa": "بسته آموزشی معلم",
+      "subcategories": [
+        "طرح درس",
+        "فعالیت",
+        "کاربرگ",
+        "معیار ارزیابی"
+      ],
+      "audiences": [
+        "teachers"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "بسته آموزشی معلم / طرح درس"
+      ],
+      "deliverables": [
+        "original_pdf",
+        "original_docx"
+      ],
+      "formats": [
+        "PDF",
+        "DOCX"
+      ],
+      "producer_adapter": "teacher_materials",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "curriculum_alignment",
+        "classroom_feasibility",
+        "assessment_rubric",
+        "age_appropriateness"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F12",
+      "slug": "mobile_games",
+      "name_fa": "بازی موبایل",
+      "subcategories": [
+        "معمایی",
+        "استراتژی",
+        "شبیه‌سازی",
+        "آموزشی"
+      ],
+      "audiences": [
+        "players"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "بازی موبایل / معمایی"
+      ],
+      "deliverables": [
+        "original_apk",
+        "original_aab"
+      ],
+      "formats": [
+        "APK",
+        "AAB"
+      ],
+      "producer_adapter": "game_mobile_build",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "device_launch",
+        "real_gameplay",
+        "crash_free",
+        "touch_accessibility",
+        "save_restore",
+        "asset_rights"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F13",
+      "slug": "desktop_games",
+      "name_fa": "بازی رایانه",
+      "subcategories": [
+        "داستانی",
+        "مدیریتی",
+        "پازل",
+        "ماجراجویی"
+      ],
+      "audiences": [
+        "players"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "بازی رایانه / داستانی"
+      ],
+      "deliverables": [
+        "original_exe",
+        "original_appimage"
+      ],
+      "formats": [
+        "EXE",
+        "APPIMAGE"
+      ],
+      "producer_adapter": "game_desktop_build",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "clean_install",
+        "full_playthrough",
+        "performance",
+        "save_restore",
+        "license_audit"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F14",
+      "slug": "browser_games",
+      "name_fa": "بازی مرورگری",
+      "subcategories": [
+        "تک‌نفره",
+        "گروهی",
+        "آموزشی",
+        "کوتاه"
+      ],
+      "audiences": [
+        "players"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "بازی مرورگری / تک‌نفره"
+      ],
+      "deliverables": [
+        "original_html",
+        "original_js",
+        "original_zip"
+      ],
+      "formats": [
+        "HTML",
+        "JS",
+        "ZIP"
+      ],
+      "producer_adapter": "game_web_build",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "browser_run",
+        "playability",
+        "security",
+        "responsive",
+        "save_restore_if_promised"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F15",
+      "slug": "game_assets",
+      "name_fa": "دارایی بازی",
+      "subcategories": [
+        "شخصیت",
+        "محیط",
+        "رابط کاربری",
+        "افکت"
+      ],
+      "audiences": [
+        "developers"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "دارایی بازی / شخصیت"
+      ],
+      "deliverables": [
+        "original_png",
+        "original_glb",
+        "original_wav"
+      ],
+      "formats": [
+        "PNG",
+        "GLB",
+        "WAV"
+      ],
+      "producer_adapter": "game_asset_pipeline",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "game_engine_import",
+        "asset_consistency",
+        "polycount",
+        "rights"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F16",
+      "slug": "mobile_apps",
+      "name_fa": "اپلیکیشن موبایل",
+      "subcategories": [
+        "بهره‌وری",
+        "آموزش",
+        "ابزار تخصصی"
+      ],
+      "audiences": [
+        "users"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "اپلیکیشن موبایل / بهره‌وری"
+      ],
+      "deliverables": [
+        "original_apk",
+        "original_aab"
+      ],
+      "formats": [
+        "APK",
+        "AAB"
+      ],
+      "producer_adapter": "app_mobile_build",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "install_launch",
+        "functional_tests",
+        "permissions_security",
+        "device_coverage"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F17",
+      "slug": "desktop_software",
+      "name_fa": "نرم‌افزار دسکتاپ",
+      "subcategories": [
+        "مدیریت",
+        "محاسبات",
+        "پردازش فایل"
+      ],
+      "audiences": [
+        "professionals"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "نرم‌افزار دسکتاپ / مدیریت"
+      ],
+      "deliverables": [
+        "original_exe",
+        "original_appimage",
+        "original_zip"
+      ],
+      "formats": [
+        "EXE",
+        "APPIMAGE",
+        "ZIP"
+      ],
+      "producer_adapter": "app_desktop_build",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "clean_install",
+        "functional_tests",
+        "error_handling",
+        "security_scan"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F18",
+      "slug": "web_apps",
+      "name_fa": "برنامه وب",
+      "subcategories": [
+        "داشبورد",
+        "سامانه مدیریت",
+        "ابزار تعاملی"
+      ],
+      "audiences": [
+        "businesses"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "برنامه وب / داشبورد"
+      ],
+      "deliverables": [
+        "original_html",
+        "original_js",
+        "original_zip"
+      ],
+      "formats": [
+        "HTML",
+        "JS",
+        "ZIP"
+      ],
+      "producer_adapter": "app_web_build",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "e2e_workflows",
+        "accessibility",
+        "security",
+        "responsive",
+        "load_test"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F19",
+      "slug": "website_templates",
+      "name_fa": "قالب وب‌سایت",
+      "subcategories": [
+        "شرکتی",
+        "فروشگاهی",
+        "شخصی",
+        "آموزشی"
+      ],
+      "audiences": [
+        "site_owners"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "قالب وب‌سایت / شرکتی"
+      ],
+      "deliverables": [
+        "original_html",
+        "original_css",
+        "original_zip"
+      ],
+      "formats": [
+        "HTML",
+        "CSS",
+        "ZIP"
+      ],
+      "producer_adapter": "web_template_builder",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "responsive",
+        "accessibility",
+        "cross_browser",
+        "performance",
+        "installation"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F20",
+      "slug": "plugins_modules",
+      "name_fa": "افزونه و ماژول",
+      "subcategories": [
+        "گزارش‌گیری",
+        "جست‌وجو",
+        "مدیریت محتوا"
+      ],
+      "audiences": [
+        "developers"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "افزونه و ماژول / گزارش‌گیری"
+      ],
+      "deliverables": [
+        "original_zip",
+        "original_py"
+      ],
+      "formats": [
+        "ZIP",
+        "PY"
+      ],
+      "producer_adapter": "plugin_builder",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "compatible_versions",
+        "integration_tests",
+        "security",
+        "failure_isolation"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F21",
+      "slug": "developer_tools",
+      "name_fa": "ابزار برنامه‌نویسی",
+      "subcategories": [
+        "کتابخانه",
+        "ابزار خط فرمان",
+        "ابزار آزمون"
+      ],
+      "audiences": [
+        "developers"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "ابزار برنامه‌نویسی / کتابخانه"
+      ],
+      "deliverables": [
+        "original_py",
+        "original_zip"
+      ],
+      "formats": [
+        "PY",
+        "ZIP"
+      ],
+      "producer_adapter": "library_cli_builder",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "unit_tests",
+        "api_contract",
+        "reproducible_install",
+        "security_review"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F22",
+      "slug": "automation_workflows",
+      "name_fa": "گردش‌کار خودکار",
+      "subcategories": [
+        "پردازش سند",
+        "گزارش‌سازی",
+        "مدیریت فایل"
+      ],
+      "audiences": [
+        "businesses"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "گردش‌کار خودکار / پردازش سند"
+      ],
+      "deliverables": [
+        "original_json",
+        "original_py",
+        "original_zip"
+      ],
+      "formats": [
+        "JSON",
+        "PY",
+        "ZIP"
+      ],
+      "producer_adapter": "workflow_builder",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "idempotence",
+        "recovery",
+        "permissions",
+        "workflow_simulation"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F23",
+      "slug": "ai_assistants",
+      "name_fa": "دستیار هوش مصنوعی",
+      "subcategories": [
+        "آموزشی",
+        "پژوهشی",
+        "پشتیبانی",
+        "تخصصی"
+      ],
+      "audiences": [
+        "users"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "دستیار هوش مصنوعی / آموزشی"
+      ],
+      "deliverables": [
+        "original_json",
+        "original_py",
+        "original_zip"
+      ],
+      "formats": [
+        "JSON",
+        "PY",
+        "ZIP"
+      ],
+      "producer_adapter": "assistant_builder",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "prompt_injection_defense",
+        "grounding",
+        "evaluation_suite",
+        "privacy_limits"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F24",
+      "slug": "tested_prompts",
+      "name_fa": "بسته پرامپت آزموده",
+      "subcategories": [
+        "نوشتن",
+        "تحلیل",
+        "طراحی",
+        "برنامه‌نویسی"
+      ],
+      "audiences": [
+        "creators"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "بسته پرامپت آزموده / نوشتن"
+      ],
+      "deliverables": [
+        "original_md",
+        "original_json"
+      ],
+      "formats": [
+        "MD",
+        "JSON"
+      ],
+      "producer_adapter": "prompt_lab",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "multi_case_trials",
+        "version_dependence",
+        "failure_examples",
+        "limits"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F25",
+      "slug": "datasets",
+      "name_fa": "مجموعه‌داده",
+      "subcategories": [
+        "آموزشی",
+        "آماری",
+        "برچسب‌خورده",
+        "مصنوعیِ مشخص‌شده"
+      ],
+      "audiences": [
+        "analysts"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "مجموعه‌داده / آموزشی"
+      ],
+      "deliverables": [
+        "original_csv",
+        "original_parquet",
+        "original_json"
+      ],
+      "formats": [
+        "CSV",
+        "PARQUET",
+        "JSON"
+      ],
+      "producer_adapter": "dataset_pipeline",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "provenance",
+        "license",
+        "schema_accuracy",
+        "duplicates_privacy",
+        "dictionary"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F26",
+      "slug": "ml_models",
+      "name_fa": "مدل یادگیری ماشین",
+      "subcategories": [
+        "طبقه‌بندی",
+        "پیش‌بینی",
+        "تشخیص",
+        "پردازش زبان"
+      ],
+      "audiences": [
+        "researchers"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "مدل یادگیری ماشین / طبقه‌بندی"
+      ],
+      "deliverables": [
+        "original_onnx",
+        "original_pth"
+      ],
+      "formats": [
+        "ONNX",
+        "PTH"
+      ],
+      "producer_adapter": "ml_training",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "holdout_evaluation",
+        "data_leakage",
+        "reproducibility",
+        "bias_documentation",
+        "license"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": true,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F27",
+      "slug": "spreadsheets",
+      "name_fa": "فایل محاسباتی",
+      "subcategories": [
+        "بودجه",
+        "موجودی",
+        "برنامه‌ریزی",
+        "تحلیل سناریو"
+      ],
+      "audiences": [
+        "analysts"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "فایل محاسباتی / بودجه"
+      ],
+      "deliverables": [
+        "original_xlsx",
+        "original_ods"
+      ],
+      "formats": [
+        "XLSX",
+        "ODS"
+      ],
+      "producer_adapter": "spreadsheet_builder",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "formula_recalculation",
+        "units",
+        "invalid_inputs",
+        "scenario_checks"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F28",
+      "slug": "simulators_calculators",
+      "name_fa": "شبیه‌ساز و ماشین‌حساب",
+      "subcategories": [
+        "مهندسی",
+        "کشاورزی",
+        "آموزشی",
+        "اقتصادی"
+      ],
+      "audiences": [
+        "professionals"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "شبیه‌ساز و ماشین‌حساب / مهندسی"
+      ],
+      "deliverables": [
+        "original_py",
+        "original_html",
+        "original_zip"
+      ],
+      "formats": [
+        "PY",
+        "HTML",
+        "ZIP"
+      ],
+      "producer_adapter": "simulation_builder",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "numerical_reference",
+        "boundary_cases",
+        "units",
+        "real_execution",
+        "scenario_examples"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F29",
+      "slug": "document_templates",
+      "name_fa": "قالب سند",
+      "subcategories": [
+        "گزارش",
+        "پیشنهاد پروژه",
+        "رزومه",
+        "فرم"
+      ],
+      "audiences": [
+        "professionals"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "قالب سند / گزارش"
+      ],
+      "deliverables": [
+        "original_docx",
+        "original_odt"
+      ],
+      "formats": [
+        "DOCX",
+        "ODT"
+      ],
+      "producer_adapter": "document_template_builder",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "editable_layout",
+        "field_integrity",
+        "typography",
+        "accessibility"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F30",
+      "slug": "slide_templates",
+      "name_fa": "قالب ارائه",
+      "subcategories": [
+        "آموزشی",
+        "تجاری",
+        "پژوهشی",
+        "معرفی محصول"
+      ],
+      "audiences": [
+        "presenters"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "قالب ارائه / آموزشی"
+      ],
+      "deliverables": [
+        "original_pptx",
+        "original_odp"
+      ],
+      "formats": [
+        "PPTX",
+        "ODP"
+      ],
+      "producer_adapter": "slide_template_builder",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "editable_elements",
+        "layout_overflow",
+        "contrast",
+        "presenter_use"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F31",
+      "slug": "printables",
+      "name_fa": "اقلام چاپ‌پذیر",
+      "subcategories": [
+        "برنامه‌ریز",
+        "دفتر تمرین",
+        "کارت",
+        "پوستر"
+      ],
+      "audiences": [
+        "consumers"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "اقلام چاپ‌پذیر / برنامه‌ریز"
+      ],
+      "deliverables": [
+        "original_pdf",
+        "original_svg"
+      ],
+      "formats": [
+        "PDF",
+        "SVG"
+      ],
+      "producer_adapter": "print_design",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "print_size",
+        "bleed_margins",
+        "resolution",
+        "font_embedding"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F32",
+      "slug": "brand_identity",
+      "name_fa": "بسته هویت بصری",
+      "subcategories": [
+        "لوگو",
+        "رنگ",
+        "تایپوگرافی",
+        "راهنمای برند"
+      ],
+      "audiences": [
+        "brands"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "بسته هویت بصری / لوگو"
+      ],
+      "deliverables": [
+        "original_svg",
+        "original_pdf",
+        "original_png"
+      ],
+      "formats": [
+        "SVG",
+        "PDF",
+        "PNG"
+      ],
+      "producer_adapter": "branding_studio",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "originality",
+        "trademark_screening",
+        "contrast",
+        "usage_guidelines"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F33",
+      "slug": "illustrations",
+      "name_fa": "تصویر و تصویرسازی",
+      "subcategories": [
+        "علمی",
+        "داستانی",
+        "تزئینی",
+        "تجاری"
+      ],
+      "audiences": [
+        "creators"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "تصویر و تصویرسازی / علمی"
+      ],
+      "deliverables": [
+        "original_png",
+        "original_svg"
+      ],
+      "formats": [
+        "PNG",
+        "SVG"
+      ],
+      "producer_adapter": "illustration_studio",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "real_resolution",
+        "anatomy_defects",
+        "visual_coherence",
+        "asset_rights"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F34",
+      "slug": "ui_icons",
+      "name_fa": "آیکن و عناصر رابط",
+      "subcategories": [
+        "آیکن",
+        "مؤلفه",
+        "کیت رابط",
+        "عناصر گرافیکی"
+      ],
+      "audiences": [
+        "designers"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "آیکن و عناصر رابط / آیکن"
+      ],
+      "deliverables": [
+        "original_svg",
+        "original_png",
+        "original_json"
+      ],
+      "formats": [
+        "SVG",
+        "PNG",
+        "JSON"
+      ],
+      "producer_adapter": "ui_asset_studio",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "pixel_alignment",
+        "contrast",
+        "consistent_set",
+        "svg_security"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F35",
+      "slug": "models_3d_cad",
+      "name_fa": "مدل سه‌بعدی و CAD",
+      "subcategories": [
+        "معماری",
+        "محصول",
+        "محیط",
+        "قطعات"
+      ],
+      "audiences": [
+        "engineers"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "مدل سه‌بعدی و CAD / معماری"
+      ],
+      "deliverables": [
+        "original_glb",
+        "original_obj",
+        "original_step"
+      ],
+      "formats": [
+        "GLB",
+        "OBJ",
+        "STEP"
+      ],
+      "producer_adapter": "cad_pipeline",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "opens_real_file",
+        "topology",
+        "scale",
+        "textures",
+        "compatibility"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": true,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F36",
+      "slug": "materials_textures",
+      "name_fa": "بافت و متریال",
+      "subcategories": [
+        "سطوح",
+        "مواد",
+        "پس‌زمینه",
+        "متریال سه‌بعدی"
+      ],
+      "audiences": [
+        "artists"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "بافت و متریال / سطوح"
+      ],
+      "deliverables": [
+        "original_png",
+        "original_exr"
+      ],
+      "formats": [
+        "PNG",
+        "EXR"
+      ],
+      "producer_adapter": "texture_studio",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "seamless_tiling",
+        "real_resolution",
+        "channel_alignment",
+        "rights"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F37",
+      "slug": "motion_animation",
+      "name_fa": "انیمیشن و موشن",
+      "subcategories": [
+        "توضیحی",
+        "لوگو",
+        "شخصیت",
+        "نمودار متحرک"
+      ],
+      "audiences": [
+        "creators"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "انیمیشن و موشن / توضیحی"
+      ],
+      "deliverables": [
+        "original_mp4",
+        "original_gif"
+      ],
+      "formats": [
+        "MP4",
+        "GIF"
+      ],
+      "producer_adapter": "animation_pipeline",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "render_playback",
+        "timing",
+        "continuity",
+        "frames",
+        "rights"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": true,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F38",
+      "slug": "videos_editing",
+      "name_fa": "ویدئو و قالب تدوین",
+      "subcategories": [
+        "کلیپ",
+        "معرفی محصول",
+        "عنوان‌بندی",
+        "انتقال"
+      ],
+      "audiences": [
+        "editors"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "ویدئو و قالب تدوین / کلیپ"
+      ],
+      "deliverables": [
+        "original_mp4",
+        "original_xml"
+      ],
+      "formats": [
+        "MP4",
+        "XML"
+      ],
+      "producer_adapter": "video_edit_pipeline",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "full_playback",
+        "codec_compatibility",
+        "editable_timeline",
+        "audio_sync"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": true,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F39",
+      "slug": "music_sfx",
+      "name_fa": "موسیقی و افکت صوتی",
+      "subcategories": [
+        "موسیقی بازی",
+        "پس‌زمینه",
+        "محیط",
+        "افکت"
+      ],
+      "audiences": [
+        "creators"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "موسیقی و افکت صوتی / موسیقی بازی"
+      ],
+      "deliverables": [
+        "original_wav",
+        "original_mp3"
+      ],
+      "formats": [
+        "WAV",
+        "MP3"
+      ],
+      "producer_adapter": "audio_creation_pipeline",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "full_listening",
+        "clipping_loudness",
+        "rights",
+        "loop_quality"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    },
+    {
+      "id": "F40",
+      "slug": "audiobooks",
+      "name_fa": "کتاب صوتی و روایت",
+      "subcategories": [
+        "داستان",
+        "آموزشی",
+        "مستند",
+        "روایت نمایشی"
+      ],
+      "audiences": [
+        "listeners"
+      ],
+      "languages": [
+        "fa",
+        "en"
+      ],
+      "uses": [
+        "کتاب صوتی و روایت / داستان"
+      ],
+      "deliverables": [
+        "original_mp3",
+        "original_vtt"
+      ],
+      "formats": [
+        "MP3",
+        "VTT"
+      ],
+      "producer_adapter": "audiobook_pipeline",
+      "adapter_status": "not_verified_on_vps",
+      "specialist_tests": [
+        "narration_accuracy",
+        "intelligibility",
+        "complete_playback",
+        "chapter_sync",
+        "rights"
+      ],
+      "universal_tests": [
+        "completeness",
+        "correctness_functionality",
+        "originality_and_licensing",
+        "user_experience",
+        "delivery_integrity",
+        "critical_defect_zero"
+      ],
+      "qa_owner": "independent_quality_team",
+      "required_proofs": [
+        "real_file",
+        "automated_test_log",
+        "human_review_if_risk",
+        "license_and_provenance",
+        "user_guide",
+        "preview",
+        "sha256"
+      ],
+      "resource_policy": {
+        "cpu_cores_max": 1,
+        "memory_mb_max": 512,
+        "gpu_required": false,
+        "gpu_limit_mb": "needs_benchmark",
+        "disk_mb_max": 1024,
+        "cost_ceiling_usd": 0,
+        "time_limit_seconds": 900,
+        "max_concurrent_jobs": 1,
+        "requires_real_benchmark": true
+      },
+      "rework": {
+        "limit_per_defect": 3,
+        "critical_defect_blocks_final_stock": true,
+        "escalate_to": "qualified_specialist",
+        "retain_all_versions": true
+      },
+      "private_warehouse": "product-lifecycle/approved-finished-goods",
+      "distribution_targets": "configured_later_only",
+      "verified_consecutive_pilot_batches": 0,
+      "readiness": "awaiting_executor_validation",
+      "production_activation_allowed": false
+    }
+  ]
+}
