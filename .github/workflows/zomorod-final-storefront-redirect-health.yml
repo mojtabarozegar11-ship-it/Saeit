@@ -1,4 +1,4 @@
-name: Read only storefront redirect and protected path health check
+name: Zomorod main-store live protected preflight and approved free wheat product
 on:
   push:
     branches: [main]
@@ -14,6 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Prepare pinned cPanel relay
         shell: bash
         env:
@@ -116,6 +119,25 @@ jobs:
           print("ZM_ADD_RELEASE_PRIVATE_LENGTH="+str(len(a)))
           print("ZM_ADD_RELEASE_PUBLIC_LENGTH="+str(len(b)))
           PY
+      - name: Publish reviewed original free wheat tool in native Zomorod store only
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-zm-free-wheat-live]')
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_zomorod_free_seed_product.py' -v
+          python3 -m unittest discover -s tests -p 'test_zomorod_wheat_additive_release.py' -v
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          stage="/home/zomorod2/.private/zomorod-business/.wheat-release-$GITHUB_RUN_ID"
+          ssh -F "$d/config" saeit-cpanel "test ! -e '$stage' && install -d -m 700 '$stage'"
+          scp -q -F "$d/config" scripts/zomorod_wheat_additive_release.py saeit-cpanel:"$stage/installer.py"
+          scp -q -F "$d/config" content/zomorod-v11/free-products/wheat-seed-rate-planner-v1/index.html saeit-cpanel:"$stage/index.html"
+          artifact="$(sha256sum content/zomorod-v11/free-products/wheat-seed-rate-planner-v1/index.html | awk '{print $1}')"
+          ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/installer.py' --stage '$stage' --run '$GITHUB_RUN_ID' --sha256 '$artifact'"
+          curl -fsSL --retry 2 --max-time 25 "https://zomorodmelal.ir/store/?wheat_live=$GITHUB_RUN_ID" -o "$d/wheat-store.html"
+          grep -Fq 'wheat_seed_rate_v1' "$d/wheat-store.html"
+          curl -fsSL --retry 2 --max-time 25 "https://zomorodmelal.ir/store/free-products/wheat-seed-rate-planner-v1/index.html?wheat_live=$GITHUB_RUN_ID" -o "$d/wheat-product.html"
+          test "$(sha256sum "$d/wheat-product.html" | awk '{print $1}')" = "$artifact"
+          echo ZM_NEW_FREE_WHEAT_PRODUCT_LIVE_HTTP_AND_SHA256=PASS
       - name: Remove temporary SSH credentials
         if: always()
         shell: bash
