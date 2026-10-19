@@ -63,7 +63,7 @@ class FactoryVPSCycleTests(unittest.TestCase):
         self.assertTrue(state["new_recipe_authoring_required"])
         self.assertFalse(state["scientific_validity_review_completed"])
         self.assertFalse(state["economic_value_review_completed"])
-        self.assertEqual(state["research_correction_required_count"], 0)
+        self.assertGreaterEqual(state["research_correction_required_count"], 1)
         self.assertTrue(state["artifact_qa_passed"])
         self.assertTrue(state["technical_zip_checks_only"])
         self.assertEqual(state["research_review_candidate_count"], 0)
