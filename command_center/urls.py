@@ -1,5 +1,6 @@
 from django.urls import path
 from .views import dashboard, overview_api
+from .workflow import stages
 from .agent_views import metrics
 from .agent_directory import directory
 from .agent_proposals import propose
@@ -21,6 +22,7 @@ urlpatterns = [
     path("mpw-two-books/", mpw_two_books_dashboard, name="mpw_two_books_dashboard"),
     path("api/mpw-agents/", mpw_monitor_api, name="mpw_agent_monitor_api"),
     path("api/overview/", overview_api, name="command_center_overview_api"),
+    path("api/workflow/", stages, name="command_center_workflow_api"),
     path("api/agents/", metrics, name="command_center_agent_metrics_api"),
     path("api/agents/directory/", directory, name="command_center_agent_directory_api"),
     path("api/agents/proposals/", propose, name="command_center_agent_proposals_api"),
