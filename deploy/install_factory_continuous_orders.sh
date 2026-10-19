@@ -43,6 +43,11 @@ install -m 600 "$source_file" "$temporary"
 mv -f -- "$temporary" "$dest"
 chmod 600 "$dest"
 
+# First prove the exact installed instruction engine can handle the current
+# private research dossiers, before touching the existing minute runner.
+"$python" -B "$dest" --factory-private "$private"
+test -s "$private/production-instructions/order-status.json"
+
 # Only patch a known and currently deployed minutely factory runner.
 "$python" -B - "$runner" "$dest" "$private" "$marker" <<'PY'
 from pathlib import Path
@@ -82,6 +87,9 @@ finally:
 PY
 bash -n "$runner"
 test "$(grep -c "$marker" "$runner")" -eq 1
+# A minute runner may be executing concurrently. Preserve a rollback copy of
+# its prior version; never alter cron, any site or finished warehouse stock.
+
 
 # Validate with the actual 25 factory dossiers. No stock file is touched.
 "$python" -B "$dest" --factory-private "$private"
