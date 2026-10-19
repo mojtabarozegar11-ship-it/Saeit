@@ -1,0 +1,31 @@
+name: Diagnose pinned SSH routes for embedded Farm Dominion game
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/zomorod-farm-ssh-route-diagnostic.yml']
+permissions: {contents: read}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Probe HTTPS and pinned SSH hosts without access to secret keys
+        shell: bash
+        run: |
+          set +e
+          for protocol in vps direct; do
+            if test "$protocol" = vps; then
+              host=178.239.147.150;port=22;type=rsa;pin="SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+            else
+              host=zohal.pws-dns.net;port=1396;type=ed25519;pin="SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+            fi
+            timeout 18s ssh-keyscan -T 12 -p "$port" -t "$type" "$host" > "$RUNNER_TEMP/$protocol.keys" 2>"$RUNNER_TEMP/$protocol.error"
+            code="$?"
+            hash="$(ssh-keygen -lf "$RUNNER_TEMP/$protocol.keys" -E sha256 2>/dev/null | awk '{print $2}' | sort -u)"
+            if test "$code" = 0 && test "$hash" = "$pin"; then
+              echo "SSH_ROUTE $protocol PINNED_AND_REACHABLE"
+            else
+              echo "SSH_ROUTE $protocol UNREACHABLE_OR_FINGERPRINT_NOT_VERIFIED result=$code"
+              sed -e 's/[[:cntrl:]]//g' "$RUNNER_TEMP/$protocol.error" | head -2
+            fi
+          done
