@@ -213,6 +213,29 @@ def import_drafts(root,app,docroot,*,apply=False):
             p.full_clean()
             p.save()
             result["created_inactive_drafts"]+=1
+    if apply:
+        # Only the private courier telemetry file is updated; no public site files.
+        from datetime import datetime, timezone
+        import tempfile
+        status_file=Path(root)/"status.json"
+        status=checked_json(status_file)
+        if status.get("schema")!="mpw.factory.warehouse-courier.v1" or status.get("tenant")!=TENANT:
+            raise RuntimeError("MPW_DRAFT_PRIVATE_STATUS_SCOPE_MISMATCH")
+        status["native_store_inactive_drafts"]=(
+            result["created_inactive_drafts"]+result["already_existing"])
+        status["last_native_store_draft_sync_utc"]=datetime.now(timezone.utc).isoformat(timespec="seconds")
+        fd,tmp=tempfile.mkstemp(prefix=".mpw-draft-state-",dir=str(status_file.parent))
+        try:
+            os.fchmod(fd,0o600)
+            with os.fdopen(fd,"w",encoding="utf8") as stream:
+                json.dump(status,stream,sort_keys=True,ensure_ascii=False)
+                stream.write("\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(tmp,status_file)
+        finally:
+            if os.path.lexists(tmp):
+                os.unlink(tmp)
     return result
 
 def main():
