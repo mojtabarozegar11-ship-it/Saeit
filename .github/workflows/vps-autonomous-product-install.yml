@@ -8,6 +8,8 @@ on:
       - "scripts/factory_build_50.py"
       - "tests/test_factory_build_50.py"
       - "scripts/factory_design_intake.py"
+      - "scripts/factory_customer_packager.py"
+      - "tests/test_factory_customer_packager.py"
       - "scripts/factory_continuous_invention.py"
       - "tests/test_factory_continuous_invention.py"
       - "tests/test_factory_design_intake.py"
@@ -40,6 +42,8 @@ on:
       - "scripts/factory_build_50.py"
       - "tests/test_factory_build_50.py"
       - "scripts/factory_design_intake.py"
+      - "scripts/factory_customer_packager.py"
+      - "tests/test_factory_customer_packager.py"
       - "scripts/factory_continuous_invention.py"
       - "tests/test_factory_continuous_invention.py"
       - "tests/test_factory_design_intake.py"
@@ -81,6 +85,7 @@ jobs:
           python -B -m unittest discover -s tests -p 'test_factory_recipe_designer.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_design_intake.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_continuous_invention.py' -v
+          python -B -m unittest discover -s tests -p 'test_factory_customer_packager.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_measured_qa.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_product_maker.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_production_warehouse.py' -v
@@ -108,6 +113,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_factory_quality_module_upgrade.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_continuous_invention.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_customer_packager.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_specialist_pilots.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_research_triage.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_build_50.py' -v
@@ -130,7 +136,7 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           SSH=(ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes githubops@178.239.147.150)
-          tar -cf - scripts/factory_continuous_invention.py tests/test_factory_continuous_invention.py scripts/factory_design_intake.py tests/test_factory_design_intake.py factory_config/internal_design_supply.json scripts/factory_build50_workbook.py tests/test_factory_build50_workbook.py scripts/factory_build_50.py tests/test_factory_build_50.py tests/test_factory_vps_product_cycle.py tests/test_factory_specialist_pilots.py tests/test_factory_research_triage.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_research_triage.py scripts/factory_recipe_designer.py factory_config/design_opportunities.json scripts/factory_first_product_pilot.py scripts/factory_autonomous_portfolio.py scripts/factory_evidence_quality.py scripts/factory_product_maker.py scripts/factory_product_rework.py scripts/factory_vps_product_cycle.py scripts/factory_production_warehouse.py product_recipes/ deploy/install_production_warehouse.sh deploy/install_autonomous_factory_products.sh | "${SSH[@]}" 'mkdir -p "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"; tar -xf - -C "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"'
+          tar -cf - scripts/factory_customer_packager.py tests/test_factory_customer_packager.py scripts/factory_continuous_invention.py tests/test_factory_continuous_invention.py scripts/factory_design_intake.py tests/test_factory_design_intake.py factory_config/internal_design_supply.json scripts/factory_build50_workbook.py tests/test_factory_build50_workbook.py scripts/factory_build_50.py tests/test_factory_build_50.py tests/test_factory_vps_product_cycle.py tests/test_factory_specialist_pilots.py tests/test_factory_research_triage.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_research_triage.py scripts/factory_recipe_designer.py factory_config/design_opportunities.json scripts/factory_first_product_pilot.py scripts/factory_autonomous_portfolio.py scripts/factory_evidence_quality.py scripts/factory_product_maker.py scripts/factory_product_rework.py scripts/factory_vps_product_cycle.py scripts/factory_production_warehouse.py product_recipes/ deploy/install_production_warehouse.sh deploy/install_autonomous_factory_products.sh | "${SSH[@]}" 'mkdir -p "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"; tar -xf - -C "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"'
           # VPS regression: GitHub hosted QA had openpyxl but the actual VPS
           # service venv did not; F27 designs were silently blocked (6 of 15).
           # Provision the exact reviewed version before staging QA. No elevated
@@ -140,6 +146,7 @@ jobs:
           "${SSH[@]}" '"$HOME/factory-runtime/.venv/bin/python" -B -m unittest discover -s "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/tests" -p test_factory_vps_product_cycle.py -v'
           "${SSH[@]}" '"$HOME/factory-runtime/.venv/bin/python" -B -m unittest discover -s "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/tests" -p test_factory_build_50.py -v'
           "${SSH[@]}" '"$HOME/factory-runtime/.venv/bin/python" -B -m unittest discover -s "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/tests" -p test_factory_design_intake.py -v'
+          "${SSH[@]}" '"$HOME/factory-runtime/.venv/bin/python" -B -m unittest discover -s "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/tests" -p test_factory_customer_packager.py -v'
           echo VPS_FACTORY_ISOLATED_FAULT_INJECTION=PASS
           "${SSH[@]}" 'python3 -' <<'PYBEFORE'
           import json
@@ -308,5 +315,31 @@ jobs:
           print("FACTORY_ENGINEERING_REAL_FORMAT_PROTOTYPES="+str(status["technical_prototypes"]))
           print("FACTORY_ENGINEERING_NOVEL_FUNCTIONS_SINCE_DEPLOY="+str(len(novel)))
           print("FACTORY_ENGINEERING_50_STAGE_NEW_PROTOTYPES_VERIFIED=0")
+
+          # Real consumer bundle audit: checked byte hashes, held-out examples,
+          # onboarding, draft sales metadata and explicit legal approval hold.
+          from zipfile import ZipFile
+          packages=list((root/"customer-packs").glob("*/**/candidate_manifest.json"))
+          verified=[]
+          for path in packages:
+              item=json.loads(path.read_text())
+              if item.get("schema")!="saeit.factory.consumer-package.v1":continue
+              z=path.parent/"customer-package.zip"
+              assert z.is_file() and not z.is_symlink()
+              assert hashlib.sha256(z.read_bytes()).hexdigest()==item["package_sha256"]
+              with ZipFile(z) as a:
+                  assert a.testzip() is None
+                  assert "product/calculator.py" in a.namelist()
+                  assert "guide/START_HERE.md" in a.namelist()
+                  assert "license/REVIEW_REQUIRED.txt" in a.namelist()
+                  assert "qa/SHA256SUMS.txt" in a.namelist()
+              assert item["technical_buyer_package_verified"] is True
+              assert item["consumer_cli_smoke_examples_passed"]==2
+              assert item["commercial_release"] is False
+              assert item["eligible_for_commercial_listing"] is False
+              verified.append(item)
+          assert len({x["functional_sha256"] for x in verified})>=2, "FACTORY_CONSUMER_USABLE_PACKAGES_MISSING"
+          print("FACTORY_REAL_CUSTOMER_PACKAGE_REVIEW_CANDIDATES="+str(len(verified)))
+          print("FACTORY_REAL_CUSTOMER_PACKAGE_COMMERCIAL_SALE_READY=0")
           print("FACTORY_NEW_DESIGN_TO_REAL_PROTOTYPE=PASS")
           PYENGINEERING
