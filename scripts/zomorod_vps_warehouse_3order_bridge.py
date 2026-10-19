@@ -16,7 +16,7 @@ import re
 import sys
 
 SCHEMA="saeit.factory.production-instructions.v1"
-CYCLE=re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+CYCLE=re.compile(r"^(?P<day>[0-9]{4}-[0-9]{2}-[0-9]{2})(?:-r(?P<run>[0-9]{5,20}))?$")
 ID=re.compile(r"^WO-[0-9]{8}$")
 FAMILY=re.compile(r"^F(?:0[1-9]|[1-3][0-9]|40)$")
 SHA=re.compile(r"^[a-f0-9]{64}$")
@@ -46,8 +46,9 @@ def registry(path):
 
 def orders_once(root,engine,profiles,cycle,*,dry_run=False,max_active=297):
     root=Path(root)
-    if not CYCLE.fullmatch(cycle):raise ValueError("CYCLE_ID_INVALID")
-    dt.date.fromisoformat(cycle)
+    found=CYCLE.fullmatch(cycle)
+    if not found:raise ValueError("CYCLE_ID_INVALID")
+    dt.date.fromisoformat(found.group("day"))
     if root.is_symlink() or not root.is_dir():raise RuntimeError("FACTORY_PRIVATE_ROOT_INVALID")
     area=root/"production-instructions"
     orderdir=area/"orders"
@@ -81,7 +82,7 @@ def orders_once(root,engine,profiles,cycle,*,dry_run=False,max_active=297):
         if active+missing>max_active or len(existing)+missing>engine.MAX_ORDERS:
             raise RuntimeError("FACTORY_PENDING_CAPACITY_REACHED")
         # Select different real registered product families, rotate daily.
-        day=dt.date.fromisoformat(cycle).toordinal()
+        day=dt.date.fromisoformat(found.group("day")).toordinal() + (int(found.group("run") or 0) % 40)
         selected=[profiles[((day*3)+(i-1))%40] for i in (1,2,3)]
         next_id=max([int(v["id"][3:]) for v in existing],default=0)+1
         to_write=[]
