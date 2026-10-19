@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline, QA-first product manufacturer with an extensible recipe directory.
+"""Offline builder for authored recipes; it does not invent product source from scratch.
 
 Any new product folder with a README heading and one or more test_*.py files
 is discovered automatically. Tests pass before a private reproducible ZIP is
@@ -162,7 +162,7 @@ def manufacture(recipe, recipes_root, private_root):
     qa_status = verify_recipe(source)
     make_zip(zip_path, source, recipe, files)
     metadata = {
-        "schema_version": 2, "recipe": recipe, "name": name,
+        "schema_version": 3, "recipe": recipe, "name": name,
         "source_sha256": checksum, "artifact_sha256": sha256_file(zip_path),
         "bytes": zip_path.stat().st_size, "files": list(sorted(files)),
         "qa_status": "passed", "qa_evidence": qa_status,
@@ -171,7 +171,7 @@ def manufacture(recipe, recipes_root, private_root):
         "scientific_validity": "pending_independent_specialist_review",
         "economic_value": "pending_independent_review",
         "commercial_and_legal_review": "pending",
-        "quality_scope": "software_tests_and_zip_integrity_only",
+        "quality_scope": "software_tests_and_zip_integrity_only",\n        "automatic_product_invention": "not_implemented",\n        "new_recipe_authoring_required": True,
         "commercial_status": "private_internal_qa_pass_not_published",
         "factory_trigger": "inventory_and_scheduled_manufacturing",
         "customer_order_required": False, "price": None,
