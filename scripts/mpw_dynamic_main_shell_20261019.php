@@ -66,7 +66,7 @@ STYLE;
 
 function takeOne(string $subject, string $regex, string $replacement, string $description, bool $required): string {
     $count = 0;
-    $out = preg_replace($regex, $replacement, $subject, 1, $count);
+    $out = preg_replace_callback($regex, static fn($m)=>$replacement, $subject, 1, $count);
     if (!is_string($out) || $count > 1 || ($required && $count !== 1)) {
         throw new RuntimeException('Unexpected HTML pattern: ' . $description);
     }
@@ -145,6 +145,21 @@ function transformMain(string $body, string $path, string $newHeader, string $ne
     if (isset($titleMap[$path])) {
         $body=takeOne($body,'~<title\b[^>]*>[\s\S]*?</title\s*>~i',
             '<title>'.$titleMap[$path].'</title>','main-only document title',true);
+    }
+    $ogTitle=(preg_match('~<title\b[^>]*>([\s\S]*?)</title\s*>~i',$body,$titleMatch)
+        ? html_entity_decode(strip_tags($titleMatch[1]),ENT_QUOTES|ENT_HTML5,'UTF-8')
+        : 'MojPlayWin');
+    $ogName=htmlspecialchars($ogTitle,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
+    $ogUrl=htmlspecialchars('https://mojplaywin.com'.$path,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
+    foreach (['og:title'=>$ogName,'og:url'=>$ogUrl,'og:site_name'=>'MojPlayWin',
+              'og:image'=>'https://mojplaywin.com'.MPW_BRAND_ICON] as $property=>$value) {
+        $pat='~<meta\b(?=[^>]*\bproperty=["\']'.preg_quote($property,'~').'["\'])[^>]*>~i';
+        $replace='<meta property="'.$property.'" content="'.$value.'">';
+        if (preg_match($pat,$body)) {
+            $body=takeOne($body,$pat,$replace,'social tag '.$property,true);
+        } else {
+            $body=takeOne($body,'~</head\s*>~i',$replace."\n</head>",'social tag insertion '.$property,true);
+        }
     }
     $body=takeOne($body,'~<link\b(?=[^>]*\brel=["\']icon["\'])[^>]*>~i',
         '<link rel="icon" type="image/webp" href="'.MPW_BRAND_ICON.'">','brand icon',false);
