@@ -1,0 +1,48 @@
+{% load static %}<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="same-origin">
+  <title>{% block title %}دفتر مدیریت{% endblock %} | زمرد ملل</title>
+  <link rel="stylesheet" href="{% static 'enterprise_portal/app.css' %}">
+</head>
+<body>
+<div class="site-shell">
+{% if request.user.is_authenticated %}
+<aside class="sidebar" aria-label="فهرست میزکار">
+  <a class="brand" href="{% url 'enterprise_portal:dashboard' %}">
+    <span class="brand-icon" aria-hidden="true">◆</span>
+    <span><strong>زمرد ملل</strong><small>دفتر مدیریت شرکت</small></span>
+  </a>
+  <p class="sidebar-label">سامانه یکپارچه سازمانی</p>
+  <nav class="main-nav" aria-label="منوی داخلی">
+    <a href="{% url 'enterprise_portal:dashboard' %}">◈ &nbsp; میزکار اصلی</a>
+    {% if perms.enterprise_portal.view_journalentry %}<a href="{% url 'enterprise_portal:finance' %}">▤ &nbsp; حسابداری و مالی</a>{% endif %}
+    {% if perms.enterprise_portal.view_inventoryitem %}<a href="{% url 'enterprise_portal:inventory' %}">▣ &nbsp; انبار و تولید</a>{% endif %}
+    {% if perms.enterprise_portal.view_worktask %}<a href="{% url 'enterprise_portal:tasks' %}">✓ &nbsp; کارها و پیگیری</a>{% endif %}
+    {% if perms.enterprise_portal.view_officeletter %}<a href="{% url 'enterprise_portal:letters' %}">✉ &nbsp; دبیرخانه</a>{% endif %}
+    {% if perms.enterprise_portal.view_commercialdocument %}<a href="{% url 'admin:enterprise_portal_commercialdocument_changelist' %}">◉ &nbsp; قرارداد و بازرگانی</a>{% endif %}
+    {% if perms.enterprise_portal.view_managementproject %}<a href="{% url 'admin:enterprise_portal_managementproject_changelist' %}">◇ &nbsp; برنامه‌های مدیریت</a>{% endif %}
+  </nav>
+  <div class="sidebar-foot">
+    <span>حساب فعال: <b>{{ request.user.get_username }}</b></span>
+    <form method="post" action="{% url 'enterprise_portal:logout' %}">
+      {% csrf_token %}<button class="link-button" type="submit">خروج امن از سامانه <span aria-hidden="true">↗</span></button>
+    </form>
+  </div>
+</aside>
+{% endif %}
+<main class="{% if not request.user.is_authenticated %}login-main{% else %}workspace{% endif %}" id="main">
+  {% if request.user.is_authenticated %}
+  <header class="topbar">
+    <div class="bread"><span class="signal"></span> محیط خصوصی · فقط کاربران مجاز</div>
+    <div><a href="{% url 'enterprise_portal:dashboard' %}">دفتر مرکزی</a> <span class="muted">/</span> <span>{% block crumb %}مدیریت{% endblock %}</span></div>
+  </header>
+  {% endif %}
+  {% block content %}{% endblock %}
+  <footer class="site-foot"><span>© 2022–2026 ZOMOROD MELAL · تمام حقوق محفوظ است</span><span>سیستم محرمانه داخلی؛ اطلاعات مالی آزمایشی تا تأیید حسابرس</span></footer>
+</main>
+</div>
+</body></html>

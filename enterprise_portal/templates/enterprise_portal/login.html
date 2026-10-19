@@ -1,0 +1,37 @@
+{% extends 'enterprise_portal/shell.html' %}
+{% block title %}ورود امن{% endblock %}
+{% block content %}
+<div class="login-layout">
+  <section class="login-feature" aria-label="معرفی دفتر شرکت">
+    <div class="eyebrow">ZOMOROD MELAL · PRIVATE ENTERPRISE DESK</div>
+    <div class="login-mark" aria-hidden="true"><span>◆</span></div>
+    <h1>فرماندهی یکپارچه<br><em>کسب‌وکار و سازمان</em></h1>
+    <p>حسابداری و دفتر کل، مدیریت خرید و فروش، عملیات صنعتی، دبیرخانه، وظایف، پروژه‌ها و بودجه شرکت؛ در یک فضای کاری کنترل‌شده.</p>
+    <div class="feature-grid">
+      <div><span>01</span><strong>حسابداری</strong><small>دفتر کل و اسناد متوازن</small></div>
+      <div><span>02</span><strong>صنعت و تجارت</strong><small>انبار، فاکتور و قرارداد</small></div>
+      <div><span>03</span><strong>اتوماسیون اداری</strong><small>نامه و ارجاع وظایف</small></div>
+      <div><span>04</span><strong>مدیریت</strong><small>بودجه، پروژه و گزارش</small></div>
+    </div>
+  </section>
+  <section class="login-panel" aria-labelledby="login-title">
+    <div class="secure-label"><span class="signal"></span> ورود به بخش خصوصی شرکت</div>
+    <h2 id="login-title">به میزکار خوش آمدید</h2>
+    <p class="muted">فقط حساب‌های کاربری مجاز می‌توانند وارد شوند.</p>
+    <form method="post" class="login-form" autocomplete="on" novalidate>
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div class="alert" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+      <label for="{{ form.username.id_for_label }}">نام کاربری</label>
+      {{ form.username }}
+      {% for error in form.username.errors %}<p class="error">{{ error }}</p>{% endfor %}
+      <label for="{{ form.password.id_for_label }}">رمز عبور</label>
+      {{ form.password }}
+      {% for error in form.password.errors %}<p class="error">{{ error }}</p>{% endfor %}
+      {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+      <button type="submit" class="primary-btn">ورود به مدیریت شرکت <span aria-hidden="true">←</span></button>
+    </form>
+    <div class="login-notice">رمز عبور فقط از طریق حساب کاربری Django بررسی می‌شود و در این صفحه نمایش یا ذخیره نمی‌شود. اطلاعات حساس را در دستگاه‌های مشترک وارد نکنید.</div>
+    <a class="back-link" href="/">بازگشت به سایت اصلی زمرد ملل</a>
+  </section>
+</div>
+{% endblock %}
