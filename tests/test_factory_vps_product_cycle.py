@@ -59,6 +59,11 @@ class FactoryVPSCycleTests(unittest.TestCase):
         self.assertEqual(state["new_or_updated_product_count"],3)
         self.assertEqual(state["unchanged_product_rechecks"],0)
         self.assertEqual(first["new_artifacts"],3)
+        self.assertEqual(first["new_distinct_products"],3)
+        self.assertEqual(first["updated_existing_versions"],0)
+        self.assertEqual(state["truly_new_product_count"],3)
+        self.assertEqual(state["updated_existing_product_count"],0)
+        self.assertEqual(sorted(state["truly_new_product_ids"]),sorted(state["built_product_recipes"]))
         self.assertEqual(state["api_usage"], "none")
         self.assertEqual(state["token_usage"], 0)
         self.assertTrue(state["artifact_qa_passed"])
@@ -84,6 +89,23 @@ class FactoryVPSCycleTests(unittest.TestCase):
         state=json.loads((self.output/"production-state.json").read_text(encoding="utf8"))
         self.assertEqual(state["new_or_updated_product_count"],0)
         self.assertEqual(state["unchanged_product_rechecks"],3)
+        self.assertEqual(state["truly_new_product_count"],0)
+        self.assertEqual(state["updated_existing_product_count"],0)
+        health=json.loads((self.output/"production-health.json").read_text())
+        self.assertEqual(health["new_distinct_product_ids_total"],3)
+        self.assertEqual(health["new_distinct_product_ids_this_cycle"],0)
+
+    def test_source_change_counts_update_not_new_product(self):
+        cycle.run_cycle(self.db,self.output,self.recipes)
+        recipe=self.recipes/"water_budget_economics"
+        readme=recipe/"README.md"
+        readme.write_text(readme.read_text()+"\\nCorrected private planning guidance.\\n")
+        result=cycle.run_cycle(self.db,self.output,self.recipes)
+        self.assertEqual(result["new_distinct_products"],0)
+        self.assertEqual(result["updated_existing_versions"],1)
+        health=json.loads((self.output/"production-health.json").read_text())
+        self.assertEqual(health["new_distinct_product_ids_total"],3)
+        self.assertEqual(health["updated_existing_product_versions_total"],1)
 
     def test_cycle_builds_a_recipe_added_after_the_factory_code(self):
         shutil.copytree(ROOT / "product_recipes" / "farm_enterprise_economics",
@@ -262,6 +284,11 @@ class ProductionContinuityTests(unittest.TestCase):
         data=json.loads(path.read_text());self.assertEqual(data['consecutive_degraded_cycles'],1)
         cycle.run_cycle(self.db,self.output,self.recipes)
         self.assertEqual(json.loads(path.read_text())['consecutive_degraded_cycles'],0)
+
+    def test_design_capacity_must_be_bounded(self):
+        for bad in (0,21,True,"6"):
+            with self.assertRaisesRegex(ValueError,"DESIGN_CAPACITY_INVALID"):
+                cycle.run_cycle(self.db,self.output,self.recipes,design_capacity=bad)
 
     def test_direct_api_rejects_invalid_limits(self):
         for kwargs in ({'max_products':True},{'max_products':0},{'max_recipes':0},{'max_recipes':True}):
