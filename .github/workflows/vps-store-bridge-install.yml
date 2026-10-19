@@ -2,7 +2,11 @@ name: VPS Factory to cPanel Private Store Bridge
 on:
   push:
     branches: [main]
-    paths: [.github/workflows/vps-store-bridge-install.yml]
+    paths:
+      - ".github/workflows/vps-store-bridge-install.yml"
+      - "scripts/factory_store_sender.py"
+      - "scripts/store_receiver.py"
+      - "tests/test_store_bridge.py"
   workflow_dispatch:
 permissions:
   contents: read
