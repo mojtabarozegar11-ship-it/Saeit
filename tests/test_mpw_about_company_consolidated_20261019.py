@@ -19,7 +19,7 @@ def about():
           + '<p>'+'Unchanged research evidence '*4100+'</p></main>')
     return head+doc+'</body></html>'
 def company():
-    head='''<!doctype html><html><head><title>About MojPlayWin | MojPlayWin</title><meta name="description" content="A digital-first company bringing research, modern technology, games, and education into one growing destination."><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#103b2d"><link rel="canonical" href="https://mojplaywin.com/company/"></head><body>'''
+    head='''<!doctype html><html><head><title>About MojPlayWin | MojPlayWin</title><meta name="description" content="A digital-first company bringing research, modern technology, games, and education into one growing destination."><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#103b2d"><link rel="canonical" href="https://mojplaywin.com/company/"></head><body class="site-standard-v2 mojplaywin-section">'''
     banner='''<section id="mpw-company-owner-crosslink-20261019"><h2 id="mpw-company-owner-title">A limited liability company owned and led by Mojtaba Roozegar</h2><p>MPW_COMPANY_FOUNDER_POLISH_20261019_V1</p></section>'''
     nav='''<header class="mw-site-nav"><img src="/design-preview-20261017/static/site/mojplaywin-atelier/official-coin-80.3ea52711f49d.webp" alt=""><nav><a href="/company/">About</a><h3>Discover</h3></nav></header>'''
     core='''<div class="mw-shell"><section class="mw-page-hero"><h1>About MojPlayWin</h1><img src="/static/site/heroes/platform-home.4dd3ab6a401d.webp" alt="About MojPlayWin"></section>'''+''.join('<div class="mpw-ten-card">Guide %s</div>'%i for i in range(10))+'</div>'
@@ -41,6 +41,7 @@ def test_two_pages_preserve_content_and_headings():
     assert 'theme-color" content="#050608"' in b
     assert 'width="1200" height="675"' in b
     assert 'About Us</a>' in b
+    assert 'class="site-standard-v2 mojplaywin-section mpw-company-harmonized"' in b
     assert 'Business Partnership' in a and 'Business Partnership' in b
 
 def test_repeated_patch_and_missing_evidence_fail_closed():
