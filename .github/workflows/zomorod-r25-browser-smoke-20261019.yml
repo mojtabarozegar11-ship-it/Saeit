@@ -1,0 +1,52 @@
+name: Zomorod R25 Browser Product Acceptance
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/zomorod-r25-browser-smoke-20261019.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'workflow_dispatch' ||
+       contains(github.event.head_commit.message, '[approved-r25-browser-smoke-20261019]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Real headless Chrome verifies product title, form and live page visibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$chrome" ]; then
+            echo "::error::No headless Chrome binary found on runner"; exit 1
+          fi
+          echo "BROWSER_BINARY=$chrome"
+          base='https://zomorodmelal.ir'
+          "$chrome" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --no-first-run --virtual-time-budget=3500 --dump-dom "$base/digital-lab/?tool=website-design" >/tmp/zm-r25-app-dom.html 2>/tmp/zm-r25-chrome-errors.txt || {
+            tail -n 25 /tmp/zm-r25-chrome-errors.txt; exit 1;
+          }
+          python3 - <<'PY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+          doc=Path('/tmp/zm-r25-app-dom.html').read_text(errors='replace')
+          assert 'معمار وب‌سایت' in doc, 'Product title not rendered by browser JS'
+          assert 'name="n0"' in doc, 'Tool numeric input not rendered'
+          assert 'name="project"' in doc, 'Project input not rendered'
+          assert 'محاسبه و ساخت خروجی' in doc, 'Submit button missing'
+          print('REAL_BROWSER_PRODUCT_JS_AND_FORM=PASS')
+          PY
+          "$chrome" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --no-first-run --virtual-time-budget=3500 --dump-dom "$base/topics/zm-r25/website-design/" >/tmp/zm-r25-topic-dom.html 2>/tmp/zm-r25-topic-chrome-errors.txt || {
+            tail -n 25 /tmp/zm-r25-topic-chrome-errors.txt; exit 1;
+          }
+          python3 - <<'PY'
+          from pathlib import Path
+          doc=Path('/tmp/zm-r25-topic-dom.html').read_text(errors='replace')
+          assert 'ZM-R25-VISIBLE-20261019:START' in doc, 'Live button absent'
+          assert 'اجرای محصول دیجیتال و دریافت گزارش' in doc, 'Button text absent'
+          assert 'src="/digital-lab/?tool=website-design"' in doc, 'In-page iframe absent'
+          assert 'معرفی علمی و ارزیابی پژوهشی' in doc, 'Original topic article missing'
+          print('REAL_BROWSER_PROMINENT_PRODUCT_PAGE=PASS')
+          PY
