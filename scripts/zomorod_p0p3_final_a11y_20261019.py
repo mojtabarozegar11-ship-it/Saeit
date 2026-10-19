@@ -40,6 +40,10 @@ def transform(p,old):
   if s.count(foot)!=1:raise RuntimeError('Expected one nested footer')
   s=s.replace(foot,'<footer class="zm-footer" role="none">',1)
  if name=='agriculture/index.html':
+  # The original inline SVG/legacy stylesheet can override later author CSS; pin the short pill labels themselves.
+  source='<a class="pill" href='
+  assert s.count(source)>=3
+  s=s.replace(source,'<a class="pill" style="color:#17372a!important;background-color:#e9eee5!important" href=')
   head='<header class="zm-v7-header" role="banner">'
   if s.count(head)!=1:raise RuntimeError('Expected one duplicate banner')
   s=s.replace(head,'<header class="zm-v7-header" role="none">',1)
