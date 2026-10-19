@@ -1,0 +1,106 @@
+name: MojPlayWin two book commerce route and dashboard safety map
+on:
+  push:
+    branches: [mpw-two-books-unified-release-20261019]
+    paths: [".github/workflows/mpw-two-books-activation-route-map-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Map live storefront, payment routes, admin charts and PDF validation support
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 130s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          set -euo pipefail
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,pathlib,json,ast,shutil
+          r=pathlib.Path('/home/zomorod2/Saeit-staging');os.chdir(r);sys.path.insert(0,str(r))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.urls import get_resolver
+          from django.contrib import admin
+          def tree(pats,prefix='',depth=0):
+            if depth>6:return
+            for p in pats:
+              name=prefix+str(p.pattern)
+              if hasattr(p,'url_patterns'):tree(p.url_patterns,name,depth+1)
+              elif any(k in name.lower() for k in ('store/','checkout','payment','commerce','merchant-wallet','download','staff/','admin/')):
+                print('MPW_STOREFLOW_ROUTE='+json.dumps({'route':name[:160],'module':getattr(p.callback,'__module__',''),'name':p.name},sort_keys=True))
+          tree(get_resolver().url_patterns)
+          for sub in ('core/cryptopay_checkout.py','mpw_commerce/product_checkout_page.py','mpw_commerce/urls.py',
+            'mpw_commerce/checkout_views.py','mpw_commerce/merchant_dashboard.py','command_center/views.py',
+            'command_center/urls.py'):
+            p=r/sub
+            if not p.is_file():continue
+            raw=p.read_text('utf8','replace').splitlines()
+            node=ast.parse('\n'.join(raw))
+            names=[(x.name,x.lineno,x.end_lineno) for x in node.body if isinstance(x,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef))]
+            kept=[]
+            for n,st,en in names:
+              if any(s in n.lower() for s in ('checkout','product','order','dashboard','download','status','invoice','overview')):
+                selection=raw[st-1:en]
+                summary=[]
+                for line in selection:
+                  q=line.strip()
+                  if not q or q.startswith('#'):continue
+                  if any(x in q.lower() for x in ('secret','token','password','private_key','wallet_address','recipient_address','api_key','mnemonic','rpc_url')):
+                    summary.append('[sensitive configuration operation omitted]');continue
+                  if any(x in q.lower() for x in ('return','render','redirect','resolve','get_object','host','http','response','mpw_','product','status','api/','invoice','download','signature','rate','paid','access','login','permission')):
+                    summary.append(q[:180])
+                kept.append({'name':n,'line':st,'excerpt':summary[:55]})
+            print('MPW_ROUTE_FUNCTION='+json.dumps({'module':sub,'functions':kept[:12]},sort_keys=True))
+          print('MPW_PDF_UTILITIES='+json.dumps({k:bool(shutil.which(k)) for k in ('pdfinfo','qpdf','mutool','pdftotext')},sort_keys=True))
+          from django.conf import settings
+          for k in ('DEBUG','SECURE_SSL_REDIRECT','SESSION_COOKIE_SECURE','CSRF_COOKIE_SECURE'):
+            print('MPW_DJANGO_SECURITY='+json.dumps({'key':k,'enabled':getattr(settings,k,None) is True}))
+          PY
+          BASH
