@@ -78,7 +78,7 @@ class FamilyBridgeTests(unittest.TestCase):
                     (sheet,operation) for sheet in worksheets for operation in operations)]}
         self.assertEqual(len(plan['work_packages']),48)
         self.assertEqual(len(set(
-            protocol.re.sub(r'\\d+','<number>',task['instruction'].strip().casefold())
+            protocol.re.sub(r'\d+','<number>',task['instruction'].strip().casefold())
             for task in plan['work_packages'])),48)
         # Keep a direct anti-forgery check: numeric-only renaming stays invalid.
         bad_plan={**plan,'work_packages':[dict(t) for t in plan['work_packages']]}
