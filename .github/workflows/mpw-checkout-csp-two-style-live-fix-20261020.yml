@@ -1,0 +1,116 @@
+name: MojPlayWin checkout CSP exact two-style live repair with isolated backup
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-checkout-csp-two-style-live-fix-20261020.yml"]
+permissions: {contents: read}
+concurrency:
+  group: mpw-checkout-csp-specific-only
+  cancel-in-progress: false
+jobs:
+  csp-repair:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Prove exact patch compiles and selftest has no customer data
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_checkout_csp_styleguard_live_20261020.py
+          python3 scripts/mpw_checkout_csp_styleguard_live_20261020.py selftest
+      - name: Snapshot main storefront and protected sibling routes
+        run: |
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error
+          paths=['/','/store/','/store/product/72/','/store/product/225/','/accounts/login/','/taniya/','/farnaz/','/saman/','/picm/','/mojtaba.roozegar/']
+          states={}
+          for p in paths:
+              try:
+                  with urllib.request.urlopen(urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache'}),timeout=17) as r:
+                      states[p]=r.status
+              except urllib.error.HTTPError as e:states[p]=e.code
+          print('MPW_CSP_BEFORE_HTTP='+json.dumps(states,sort_keys=True))
+          if any(x!=200 for x in states.values()):raise RuntimeError('Protected route not healthy before patch')
+          PY
+      - name: Establish pinned VPS to cPanel connection
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-csp-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Preview the actual two-book checkout with CSP patch held in memory only
+        run: |
+          set -euo pipefail
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-csp-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - preview" < scripts/mpw_checkout_csp_styleguard_live_20261020.py
+      - name: Install only the verified checkout CSP Python-file patch and private rollback backup
+        id: install
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-csp-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - publish '$GITHUB_RUN_ID'" < scripts/mpw_checkout_csp_styleguard_live_20261020.py
+      - name: Verify exact patched file and signed-in template render on a new isolated Python process
+        run: |
+          set -euo pipefail
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-csp-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify '$GITHUB_RUN_ID'" < scripts/mpw_checkout_csp_styleguard_live_20261020.py
+      - name: Check main storefront and all known protected sibling responses
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error
+          paths=['/','/store/','/store/product/72/','/store/product/225/','/accounts/login/','/taniya/','/farnaz/','/saman/','/picm/','/mojtaba.roozegar/']
+          states={}
+          for p in paths:
+              try:
+                  with urllib.request.urlopen(urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache'}),timeout=17) as r:
+                      states[p]=r.status
+              except urllib.error.HTTPError as e:states[p]=e.code
+          print('MPW_CSP_AFTER_HTTP='+json.dumps(states,sort_keys=True))
+          if any(x!=200 for x in states.values()):raise RuntimeError('Protected route regression detected')
+          print('MPW_CSP_PATCH_SIBLING_HEALTH=PASS')
+          PY
+      - name: Restore exact original checkout source if a post-install gate fails
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          set -euo pipefail
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-csp-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'" < scripts/mpw_checkout_csp_styleguard_live_20261020.py
+      - name: Destroy temporary SSH relay keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-csp-ssh"
