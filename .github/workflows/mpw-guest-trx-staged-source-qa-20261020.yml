@@ -2,7 +2,7 @@ name: MojPlayWin guest TRX fail-closed source QA
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/mpw-guest-trx-staged-source-qa-20261020.yml"]
+    paths: [".github/workflows/mpw-guest-trx-staged-source-qa-20261020.yml", "mpw_guest_trx_20261020/**"]
 permissions: {contents: read}
 jobs:
   qa:
