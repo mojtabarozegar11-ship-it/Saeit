@@ -9,7 +9,7 @@ import argparse
 from collections import Counter
 import json
 from pathlib import Path
-from factory_private_product_passport_policy_20261020 import ensure_private_passport
+from factory_personal_owner_passport_policy_20261020 import ensure_private_passport
 
 def backfill(private_factory_root, limit=1000):
     root = Path(private_factory_root)
