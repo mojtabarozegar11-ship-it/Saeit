@@ -1,0 +1,73 @@
+name: Install three genuine game, motion and sound BUILD50 producers on VPS
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_build50_three_media.py"
+      - "scripts/factory_three_independent_review.py"
+      - "scripts/factory_three_builder_cycle.py"
+      - "tests/test_factory_build50_three_media.py"
+      - "deploy/install_factory_three_real_builders.sh"
+      - ".github/workflows/vps-factory-three-real-builders-20261020.yml"
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: saeit-private-real-build50-three
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Three genuine source renderers and independent negative quality checks
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_three_real_builders.sh
+          python3 -m py_compile scripts/factory_build50_three_media.py scripts/factory_three_independent_review.py scripts/factory_three_builder_cycle.py
+          python3 -m unittest discover -s tests -p test_factory_build50_three_media.py -v
+          echo FACTORY_THREE_BUILDERS_CODE_TESTS=PASS
+  release:
+    needs: test
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 23
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Host-key pinned real VPS delivery and independent BUILD50 verification
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/three-real-ssh";install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps(){ ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 githubops@178.239.147.150 "$@"; }
+          stage="/home/githubops/factory-runtime/operations/.three-real-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh_vps "test ! -e '$stage' && mkdir -m 700 '$stage'"
+          for source in scripts/factory_build50_three_media.py scripts/factory_three_independent_review.py scripts/factory_three_builder_cycle.py deploy/install_factory_three_real_builders.sh;do
+            name="$(basename "$source")"
+            cat "$source" | ssh_vps "umask 077; cat > '$stage/$name'; chmod 600 '$stage/$name'"
+            wanted="$(sha256sum "$source"|cut -d' ' -f1)"
+            ssh_vps "test \"\$(sha256sum '$stage/$name'|cut -d' ' -f1)\" = '$wanted'"
+          done
+          ssh_vps "timeout 950s bash '$stage/install_factory_three_real_builders.sh' '$stage'"
+          ssh_vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import subprocess
+          base=Path.home()/'factory-runtime';script=base/'operations/forty-execution/periodic-dispatch.sh'
+          assert script.read_text().count('factory_three_builder_cycle.py')==1
+          cron=subprocess.check_output(['crontab','-l'],text=True)
+          assert cron.count('SAEIT_FACTORY_FORTY_FAMILY_OPERATIONAL_DISPATCH_V1')==1
+          print('VPS_THREE_REAL_BUILDERS_SCHEDULE_RECONCILE=PASS')
+          print('VPS_NO_STORES_OR_PAYMENTS_MODIFIED=PASS')
+          PY
