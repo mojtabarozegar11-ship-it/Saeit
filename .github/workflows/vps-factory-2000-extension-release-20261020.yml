@@ -1,0 +1,81 @@
+name: Factory one-pass 2000 NEW tools (3000 total)
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_3000_workbench.py"
+      - "scripts/factory_1000_workbench.py"
+      - "tests/test_factory_3000_workbench.py"
+      - "deploy/install_factory_2000_extension.sh"
+      - ".github/workflows/vps-factory-2000-extension-release-20261020.yml"
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: saeit-onepass-2000-new-tools
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: QA 3000 executable tool bindings and old 1000 compatibility
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_2000_extension.sh
+          python3 -m py_compile scripts/factory_3000_workbench.py scripts/factory_1000_workbench.py
+          python3 -m unittest discover -s tests -p test_factory_1000_workbench.py -v
+          python3 -m unittest discover -s tests -p test_factory_3000_workbench.py -v
+          echo FACTORY_2000_NEW_TOOLS_CI=PASS
+  deploy:
+    needs: test
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Deploy privately by pinned SSH relay with hash readback
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-2000-ssh";install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() { ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150 "$@"; }
+          stage="/home/githubops/factory-runtime/operations/.workbench-2000-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh_vps "test -x /home/githubops/factory-runtime/.venv/bin/python && test -s /home/githubops/factory-runtime/operations/forty-family-master/forty_families.json && test ! -e '$stage' && mkdir -m 700 '$stage'"
+          for f in scripts/factory_3000_workbench.py scripts/factory_1000_workbench.py deploy/install_factory_2000_extension.sh;do
+            name="$(basename "$f")"
+            cat "$f" | ssh_vps "umask 077; cat > '$stage/$name'; chmod 600 '$stage/$name'"
+            digest="$(sha256sum "$f" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$stage/$name' | awk '{print \$1}')\" = '$digest'"
+          done
+          ssh_vps "timeout 180s bash '$stage/install_factory_2000_extension.sh' '$stage'"
+          ssh_vps 'python3 -' <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path.home()/'factory-runtime';ops=root/'operations/production-workbench-3000'
+          area=root/'private/autonomous-product-cycle/production-toolkit-3000'
+          runner=ops/'runner.py';core=ops/'factory_1000_workbench.py'
+          catalog=area/'catalog.json';verification=area/'verification.json'
+          c=json.loads(catalog.read_text());v=json.loads(verification.read_text())
+          sha=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
+          assert c['tools_count']==3000 and v['synthetic_test_invocations_passed']==3000
+          assert v['new_bindings_added']==2000 and len({x['id'] for x in c['tools']})==3000
+          assert v['runtime_sha256']==sha(runner) and v['catalog_sha256']==sha(catalog)
+          assert v['base_runtime_sha256']==sha(core)
+          assert v['sites_affected']==[] and v['payment_operations']==0
+          print('VPS_2000_NEW_FUNCTIONAL_SUPPORT_BINDINGS=PASS')
+          print('VPS_3000_TOTAL_REGISTERED_SUPPORT_BINDINGS=PASS')
+          print('VPS_NATIVE_PRODUCT_ENGINES_ADDED=0')
+          PY

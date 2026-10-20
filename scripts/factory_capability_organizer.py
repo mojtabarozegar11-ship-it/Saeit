@@ -101,15 +101,23 @@ def heritage(source_repo,root,planner):
       'copied_modules_are_product_makers':False}
 
 def workbench(ops,root,planner):
-    runner=ops/'production-workbench-1000/runner.py';area=root/'production-toolkit'
-    try:
-        catalog=planner.read(area/'catalog.json');receipt=planner.read(area/'verification.json')
-        if runner.is_symlink() or not runner.is_file():raise ValueError()
-        if hashfile(runner)!=receipt['runtime_sha256'] or hashfile(area/'catalog.json')!=receipt['catalog_sha256']:raise ValueError()
-        if len(catalog['tools'])!=1000 or receipt['synthetic_test_invocations_passed']!=1000:raise ValueError()
-        module=load(runner,'factory_proven_workbench_support')
-        return module,catalog
-    except (ValueError,OSError,KeyError,TypeError):return None,None
+    # Prefer the independent, receipt-verified 3000 catalog; fall back to v1.
+    for version,count in ((3000,3000),(1000,1000)):
+        runner=ops/('production-workbench-%d'%version)/'runner.py'
+        area=root/('production-toolkit-3000' if version==3000 else 'production-toolkit')
+        try:
+            catalog=planner.read(area/'catalog.json');receipt=planner.read(area/'verification.json')
+            if runner.is_symlink() or not runner.is_file():raise ValueError()
+            if hashfile(runner)!=receipt['runtime_sha256'] or hashfile(area/'catalog.json')!=receipt['catalog_sha256']:raise ValueError()
+            if len(catalog['tools'])!=count or receipt['synthetic_test_invocations_passed']!=count:raise ValueError()
+            if version==3000:
+                core=runner.with_name('factory_1000_workbench.py')
+                if core.is_symlink() or not core.is_file() or hashfile(core)!=receipt['base_runtime_sha256']:raise ValueError()
+            module=load(runner,'factory_proven_workbench_support_%d'%version)
+            return module,catalog
+        except (ValueError,OSError,KeyError,TypeError):
+            continue
+    return None,None
 
 def run(root,registry,ops,source_repo):
     planner=load(HERE/'factory_product_planner.py','organizer_product_planner')
@@ -151,7 +159,7 @@ def run(root,registry,ops,source_repo):
     result={'schema':'saeit.factory.organized-capabilities.v1','observed_utc':datetime.now(timezone.utc).isoformat(),
       'family_count':40,'native_recipe_families':len(verified),'families':families,
       'candidate_engines_are_complete_builders':False,'toolchain':chain,'roles':role_rows,
-      'support_tool_bindings_available':1000 if wb else 0,'unique_support_operations':25 if wb else 0,
+      'support_tool_bindings_available':cat['tools_count'] if cat else 0,'unique_support_operations':cat['shared_unique_operations'] if cat else 0,
       'real_family_support_invocations_this_cycle':total,'family_support_receipts':supports,
       'legacy':imported,'separate_agents_started':0,'commercial_release':False,'sites_modified':False}
     area=planner.private(root/'capability-organization');planner.save(area/'dashboard.json',result)
