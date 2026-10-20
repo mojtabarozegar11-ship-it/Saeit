@@ -68,7 +68,7 @@ def save(path, value, immutable=False):
     return True
 
 
-def verified_extended_native_archive(recipe,manifest,members,actual_sha):
+def verified_extended_native_archive(recipe,manifest,members,actual_sha,archive):
     """Only SHA-bound, documented, machine-reviewed native packages exceed 80 ZIP items.
 
     This is archive-integrity review only, not actual expert/rights assessment.
@@ -112,6 +112,37 @@ def verified_extended_native_archive(recipe,manifest,members,actual_sha):
     if len(suffixes)<2 or not suffixes.intersection(
             {".py",".xlsx",".ods",".svg",".png",".mp4",".gif",".wav",".mp3",".exr",".csv",".pdf",".json"}):
         return False
+    # 48-pair native multimedia bundles cannot be accepted from a mere list
+    # of names or unverifiable review claims. Check actual member bytes,
+    # paired stems, distinct content and container signatures.
+    family=manifest["family_id"]
+    paired={"F36":(".png",".exr"),"F37":(".gif",".mp4"),
+            "F39":(".wav",".mp3")}
+    if family in paired:
+        from pathlib import PurePosixPath
+        left,right=paired[family]
+        groups={ext:{PurePosixPath(n).stem:n for n in documented
+                      if PurePosixPath(n).suffix.lower()==ext}
+                for ext in (left,right)}
+        if (len(groups[left])!=48 or len(groups[right])!=48
+                or set(groups[left])!=set(groups[right]) or len(documented)!=97):
+            return False
+        magics={".png":lambda b:b.startswith(b"\\x89PNG\\r\\n\\x1a\\n"),
+                ".exr":lambda b:b[:4]==b"\\x76\\x2f\\x31\\x01",
+                ".gif":lambda b:b.startswith((b"GIF87a",b"GIF89a")),
+                ".mp4":lambda b:len(b)>=8 and b[4:8]==b"ftyp",
+                ".wav":lambda b:b[:4]==b"RIFF" and b[8:12]==b"WAVE",
+                ".mp3":lambda b:b.startswith(b"ID3") or
+                       (len(b)>=2 and b[0]==255 and b[1]&224==224)}
+        for ext in (left,right):
+            hashes=set()
+            for filename in groups[ext].values():
+                data=archive.read(recipe+"/"+filename)
+                if not magics[ext](data[:16]):
+                    return False
+                hashes.add(hashlib.sha256(data).hexdigest())
+            if len(hashes)!=48:
+                return False
     return True
 
 
@@ -198,7 +229,7 @@ def inspect_actual_products(root, lifecycle):
                         if not is_special:
                             errors.append("F34_EXACT_EVIDENCE_INVALID")
                     is_extended=(not is_special and
-                        verified_extended_native_archive(recipe,m,members,actual_digest))
+                        verified_extended_native_archive(recipe,m,members,actual_digest,z))
                     if (not members or len(members)>(100 if is_special else
                                     201 if is_extended else 80)
                             or sum(x.file_size for x in members)>100*1024*1024):
