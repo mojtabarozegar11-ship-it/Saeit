@@ -16,7 +16,7 @@ exec 9>"$ops/.mpw-repair-install.lock";flock -w 35 9
 install -d -m 700 "$target" "$ops/backups"
 backup="$ops/backups/mpw-stage1-real-repair-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 install -d -m 700 "$backup"
-files="mpw_factory_stage1_technical_repair.py mpw_vps_warehouse_courier.py factory_customer_packager.py factory_product_maker.py"
+files="mpw_factory_stage1_technical_repair.py mpw_vps_warehouse_courier.py factory_customer_packager.py factory_native_customer_packager.py factory_product_maker.py"
 for file in $files;do
  test -s "$stage/$file" && test ! -L "$stage/$file"
  if test -f "$target/$file";then test ! -L "$target/$file";cp -p "$target/$file" "$backup/$file";fi
@@ -74,10 +74,13 @@ for item in report['results']:
     assert item['human_release_pending'] is True
     assert item['consumer_bundle_status'] in (
         'new_independently_verified','preexisting_independently_verified',
-        'held_for_rework','absent')
+        'held_for_rework','absent','new_native_structure_verified_private_review',
+        'preexisting_native_private_preview_verified')
 print('VPS_MPW_RETURNED_PRODUCTS_INDEPENDENTLY_AUDITED='+str(report['returned_products_inspected']))
 print('VPS_MPW_SOURCE_ZIPS_VERIFIED='+str(report['original_stock_zips_verified']))
 print('VPS_MPW_ACTUAL_NEW_BUYER_BUNDLES='+str(report['new_customer_bundles_technically_repaired']))
+print('VPS_MPW_NEW_NATIVE_PRIVATE_PREVIEWS='+str(report['new_native_private_previews_statically_validated']))
+print('VPS_MPW_EXISTING_NATIVE_PRIVATE_PREVIEWS='+str(report['existing_native_private_previews_revalidated']))
 print('VPS_MPW_REPAIR_BLOCKED='+str(report['technical_package_attempts_blocked']))
 print('VPS_MPW_HUMAN_QA_UNRESOLVED='+str(report['independent_content_rights_review_still_required']))
 PY
