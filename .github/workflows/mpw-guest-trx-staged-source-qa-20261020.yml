@@ -1,0 +1,24 @@
+name: MojPlayWin guest TRX fail-closed source QA
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-guest-trx-staged-source-qa-20261020.yml"]
+permissions: {contents: read}
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Compile staged no-account modules without executing payments
+        run: |
+          python3 -m py_compile mpw_guest_trx_20261020/*.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('mpw_guest_trx_20261020')
+          files=('guest_checkout.py','guest_database.py','guest_pricing.py','guest_receipts.py','guest_orders.py','guest_settlement.py','guest_product.py','guest_trx.html')
+          assert all((p/f).exists() for f in files)
+          assert 'raise Http404' in (p/'guest_checkout.py').read_text()
+          print('MPW_GUEST_TRX_STAGED_NOT_PUBLIC_QA=PASS')
+          PY
