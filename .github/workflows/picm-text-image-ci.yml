@@ -9,6 +9,9 @@ on:
       - tests/test_picm_text_image_ui.py
       - scripts/picm_text_image_browser_proof.py
       - .github/workflows/picm-text-image-ci.yml
+      - .github/workflows/picm-text-image-scoped-deploy.yml
+      - scripts/picm_text_image_release.py
+      - tests/test_picm_text_image_release.py
   pull_request:
     paths:
       - templates/picm/index.html
@@ -16,6 +19,9 @@ on:
       - tests/test_picm_text_image_ui.py
       - scripts/picm_text_image_browser_proof.py
       - .github/workflows/picm-text-image-ci.yml
+      - .github/workflows/picm-text-image-scoped-deploy.yml
+      - scripts/picm_text_image_release.py
+      - tests/test_picm_text_image_release.py
 permissions:
   contents: read
 jobs:
@@ -30,7 +36,7 @@ jobs:
       - name: Compile real implementation and test browser JavaScript
         run: |
           set -Eeuo pipefail
-          python -m py_compile scripts/picm_text_image_browser_proof.py tests/test_picm_text_image_ui.py
+          python -m py_compile scripts/picm_text_image_browser_proof.py scripts/picm_text_image_release.py tests/test_picm_text_image_ui.py tests/test_picm_text_image_release.py
           node --check templates/picm/text_image.js
           python - <<'PY'
           from pathlib import Path
@@ -51,7 +57,7 @@ jobs:
           DEBUG: 'False'
           ALLOWED_HOSTS: localhost,127.0.0.1
         run: |
-          python -m pytest -q tests/test_picm_text_image_ui.py tests/test_picm_views.py tests/test_picm_auth.py
+          python -m pytest -q tests/test_picm_text_image_ui.py tests/test_picm_text_image_release.py tests/test_picm_views.py tests/test_picm_auth.py
           python manage.py check
       - name: Verify Chrome can POST without photo, poll, preview and download private PNG
         run: python scripts/picm_text_image_browser_proof.py
