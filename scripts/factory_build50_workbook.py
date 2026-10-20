@@ -130,7 +130,8 @@ def build(root,tools):
         if state.get('status')=='awaiting_owner_acceptance' and protocol.verify_attempt(home,state,source):
             try:
                 manifest=protocol.read(target/'manufacturing_manifest.json')
-                if (protocol.file_sha(target/(PRODUCT+'-internal-qa.zip'))==manifest['artifact_sha256']
+                if (manifest.get('family_id')=='F27' and manifest.get('recipe')==PRODUCT and manifest.get('qa_status')=='passed'
+                        and protocol.file_sha(target/(PRODUCT+'-internal-qa.zip'))==manifest['artifact_sha256']
                         and manifest['artifact_sha256']==protocol.file_sha(Path(state['attempt_folder'])/(PRODUCT+'-internal-qa.zip'))):
                     return {'status':'unchanged_verified_build','completed_stages':50,'commercial_release':False}
             except (ValueError,OSError,KeyError):pass

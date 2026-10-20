@@ -235,11 +235,15 @@ def build(root):
     if (home/'state.json').is_file() and (target/'manufacturing_manifest.json').is_file():
         old=proto.read(home/'state.json')
         if old.get('source_snapshot_sha256')==recipe['source_snapshot_sha256'] and proto.verify_attempt(home,old,recipe['source_snapshot_sha256']):
-            saved=proto.read(target/'manufacturing_manifest.json')
-            arc=target/(PRODUCT+'-internal-qa.zip')
-            if arc.is_file() and proto.file_sha(arc)==saved.get('artifact_sha256'):
-                return {'status':'unchanged_verified_technical_product','completed_stages':50,
-                        'commercial_release':False}
+            try:
+                saved=proto.read(target/'manufacturing_manifest.json')
+                arc=target/(PRODUCT+'-internal-qa.zip')
+                if (saved.get('family_id')=='F34' and saved.get('recipe')==PRODUCT and saved.get('qa_status')=='passed'
+                    and arc.is_file() and proto.file_sha(arc)==saved.get('artifact_sha256')
+                    and saved['artifact_sha256'] in proto.read(Path(old['attempt_folder'])/'50-summary.json').get('outputs',{}).values()):
+                    return {'status':'unchanged_verified_technical_product','completed_stages':50,
+                            'commercial_release':False}
+            except (OSError,ValueError,KeyError):pass
     state=proto.run_attempt(root,recipe,worker,assembler,reviewer)
     if state.get('status')!='awaiting_owner_acceptance' or not proto.verify_attempt(home,state,recipe['source_snapshot_sha256']):
         return {'status':'technical_rework_required','completed_stages':state.get('completed_stages',0),

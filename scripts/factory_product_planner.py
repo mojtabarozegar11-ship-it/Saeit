@@ -60,6 +60,7 @@ def save(p,v):
         if os.path.exists(tmp):os.unlink(tmp)
 
 def request(value,profiles):
+    if not isinstance(value,dict):raise ValueError('PLANNER_OBJECT_REQUIRED')
     if value.get('schema')!=SCHEMA or value.get('family_id') not in profiles:raise ValueError('PLANNER_REQUEST_SCHEMA')
     family=value['family_id'];kind=value.get('kind')
     if kind not in ('catalog','custom','qualification'):raise ValueError('PLANNER_REQUEST_KIND')
@@ -169,17 +170,31 @@ def admissible(capacity):
     if capacity['load_average'] is not None and capacity['load_average']>capacity['cpu_count']*2:reasons.append('cpu_busy')
     return reasons
 
-def execute(root,req):
-    family=req['family_id']
+def command_for(root,req):
+    family=req['family_id'];timeout=90
     if family in BATCH:command=[sys.executable,'-B',str(HERE/'factory_batch5_build.py'),'--family',family,'--factory-private',str(root)]
-    elif family=='F18':command=[sys.executable,'-B',str(HERE/'factory_build50_f18_webapps.py'),'--factory-private',str(root)]
+    elif family in ('F18','F19'):
+        script={'F18':'factory_build50_f18_webapps.py','F19':'factory_build50_f19_web_template.py'}[family]
+        command=[sys.executable,'-B',str(HERE/script),'--factory-private',str(root)]
     elif family=='F31':command=[sys.executable,'-B',str(HERE/'factory_build50_f31_planner.py'),'--factory-private',str(root),'--week',req['parameters']['week']]
-    else:return {'status':'blocked_executor_not_routed','retry_after_seconds':3600}
+    elif family in ('F27','F34'):
+        manifest=Path(root).parent.parent/'operations/build-toolchain/toolchain-manifest.json'
+        _,python=load('factory_specialist_pilots').toolchain(manifest)
+        script={'F27':'factory_build50_workbook.py','F34':'factory_build50_f34_icon_kit.py'}[family]
+        command=[str(python),'-B',str(HERE/script),'--factory-private',str(root)]
+        if family=='F27':command+=['--toolchain',str(manifest),'--worker'];timeout=210
+    else:raise ValueError('PLANNER_EXECUTOR_NOT_ROUTED')
+    return command,timeout
+
+def execute(root,req):
+    try:command,timeout=command_for(root,req)
+    except (ValueError,RuntimeError,OSError,KeyError):
+        return {'status':'blocked_executor_or_toolchain_unavailable','retry_after_seconds':3600}
     # Kill the whole child process group on timeout; leave evidence for safe retry.
     child=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,start_new_session=True,
       env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',OMP_NUM_THREADS='1',OPENBLAS_NUM_THREADS='1'))
     try:
-        out,err=child.communicate(timeout=90)
+        out,err=child.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         os.killpg(child.pid,signal.SIGKILL);child.communicate()
         return {'status':'timed_out','retry_after_seconds':300}

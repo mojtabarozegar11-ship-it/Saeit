@@ -267,7 +267,9 @@ def build(root):
             try:
                 receipt=proto.read(target/'manufacturing_manifest.json')
                 zipfile=target/(PRODUCT+'-internal-qa.zip')
-                if receipt.get('artifact_sha256')==proto.file_sha(zipfile):
+                if (receipt.get('family_id')=='F19' and receipt.get('recipe')==PRODUCT and receipt.get('qa_status')=='passed'
+                    and receipt.get('artifact_sha256')==proto.file_sha(zipfile)
+                    and receipt['artifact_sha256'] in proto.read(Path(state['attempt_folder'])/'50-summary.json').get('outputs',{}).values()):
                     return {'status':'unchanged_verified_technical_product','completed_stages':50,'commercial_release':False}
             except (OSError,ValueError,KeyError):pass
     def reviewer(plan_data,context):

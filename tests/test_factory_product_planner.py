@@ -66,6 +66,40 @@ class ProductPlanner(unittest.TestCase):
             r=planner.cycle(self.root,REGISTRY,dispatch=True,max_execute=1)
         self.assertEqual(r['executions_this_tick'],1);self.assertEqual(r['verified_native_product_plans'],0)
         timed=next(x for x in r['rows'] if x['status']=='timed_out');self.assertGreater(timed['retry_at'],timed['last_attempt'])
+    def test_all_catalog_routes_exist_and_office_has_sufficient_timeout(self):
+        from types import SimpleNamespace
+        import sys
+        with patch.object(planner,'load',return_value=SimpleNamespace(toolchain=lambda p:(p.parent,Path(sys.executable)))):
+            for family in planner.CATALOG:
+                command,timeout=planner.command_for(self.root,{'family_id':family})
+                script=next(Path(x) for x in command if x.endswith('.py'))
+                self.assertTrue(script.is_file(),family)
+                self.assertEqual(timeout,210 if family=='F27' else 90)
+                if family=='F27':self.assertIn('--worker',command);self.assertIn('--toolchain',command)
+        with patch.object(planner,'load',side_effect=RuntimeError('no verified toolchain')):
+            self.assertEqual(planner.execute(self.root,{'family_id':'F27'})['status'],'blocked_executor_or_toolchain_unavailable')
+    def test_non_object_intakes_do_not_crash_entire_queue(self):
+        for value in (None,[],42,'invalid'):
+            with self.assertRaises(ValueError):planner.request(value,self.profiles)
+        planner.cycle(self.root,REGISTRY)
+        (self.root/'product-planning/intake/array.json').write_text('[]')
+        report=planner.cycle(self.root,REGISTRY)
+        self.assertEqual(report['unique_product_plans'],40)
+        self.assertEqual(len(report['rejected_inputs']),1)
+    def test_f19_route_restores_tampered_export_and_metadata(self):
+        req={'family_id':'F19'};product=planner.CATALOG['F19']
+        self.assertEqual(planner.execute(self.root,req)['exit_code'],0)
+        self.assertIsNotNone(planner.proof(self.root,product,'F19',proto))
+        target=self.root/'digital-products'/product
+        archive=target/(product+'-internal-qa.zip');original=archive.read_bytes()
+        archive.write_bytes(b'forged')
+        manifest=planner.read(target/'manufacturing_manifest.json')
+        import hashlib
+        manifest['artifact_sha256']=hashlib.sha256(b'forged').hexdigest()
+        (target/'manufacturing_manifest.json').write_text(json.dumps(manifest))
+        self.assertEqual(planner.execute(self.root,req)['exit_code'],0)
+        self.assertEqual(archive.read_bytes(),original)
+        self.assertIsNotNone(planner.proof(self.root,product,'F19',proto))
     def test_symlink_and_evidence_escape_rejected(self):
         alias=self.root/'alias';alias.symlink_to(self.root,target_is_directory=True)
         with self.assertRaises(ValueError):planner.cycle(alias,REGISTRY)
