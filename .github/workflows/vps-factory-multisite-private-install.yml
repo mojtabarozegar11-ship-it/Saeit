@@ -21,9 +21,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
           python3 -m unittest discover -s tests -p 'test_factory_multisite_orchestrator.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_cross_site_capabilities.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_cross_site_cycle.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_legacy_77_benchmark.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_legacy_77_cycle.py' -v
           bash -n deploy/install_factory_multisite_private.sh
       - name: Deliver private catalog software to VPS only
         shell: bash
@@ -42,7 +45,9 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           sshopts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12)
-          tar -cf "$d/bundle.tar" scripts/factory_multisite_orchestrator.py config/factory_sites_seed.json deploy/install_factory_multisite_private.sh scripts/factory_cross_site_capabilities.py scripts/factory_cross_site_cycle.py content/zomorod-v11/site_agents.php content/zomorod-v11/site_agent_workforce.php command_center/mpw_private_telemetry.py ops/factory-site-capabilities/zomorod/site_agents.php ops/factory-site-capabilities/zomorod/site_agent_workforce.php ops/factory-site-capabilities/mojplaywin/mpw_private_telemetry.py
+          mapfile -d '' -t heritage < <(find ops/factory-site-capabilities/legacy-candidates -type f -print0 | sort -z)
+          test "${#heritage[@]}" -eq 91
+          tar -cf "$d/bundle.tar" scripts/factory_multisite_orchestrator.py config/factory_sites_seed.json deploy/install_factory_multisite_private.sh scripts/factory_cross_site_capabilities.py scripts/factory_cross_site_cycle.py scripts/factory_legacy_77_benchmark.py scripts/factory_legacy_77_cycle.py content/zomorod-v11/site_agents.php content/zomorod-v11/site_agent_workforce.php command_center/mpw_private_telemetry.py ops/factory-site-capabilities/zomorod/site_agents.php ops/factory-site-capabilities/zomorod/site_agent_workforce.php ops/factory-site-capabilities/mojplaywin/mpw_private_telemetry.py "${heritage[@]}"
           ssh "${sshopts[@]}" githubops@178.239.147.150 'test "$(id -un)" = githubops && mkdir -p "$HOME/factory-runtime/operations/multisite-deploy-source"'
           scp "${sshopts[@]}" "$d/bundle.tar" githubops@178.239.147.150:/home/githubops/factory-runtime/operations/multisite-deploy-source/source.tar
           ssh "${sshopts[@]}" githubops@178.239.147.150 'bash -se' <<'REMOTE'
@@ -60,6 +65,8 @@ jobs:
               "deploy/install_factory_multisite_private.sh",
               "scripts/factory_cross_site_capabilities.py",
               "scripts/factory_cross_site_cycle.py",
+              "scripts/factory_legacy_77_benchmark.py",
+              "scripts/factory_legacy_77_cycle.py",
               "content/zomorod-v11/site_agents.php",
               "content/zomorod-v11/site_agent_workforce.php",
               "command_center/mpw_private_telemetry.py",
@@ -69,7 +76,11 @@ jobs:
           }
           with tarfile.open(path) as tar:
               members=tar.getmembers()
-              assert {m.name for m in members} == expected
+              heritage={m.name for m in members if m.name.startswith("ops/factory-site-capabilities/legacy-candidates/")}
+              assert len(heritage)==91
+              assert all(x.endswith(".py") or x=="ops/factory-site-capabilities/legacy-candidates/mpw_v91_port/ORIGIN.json" for x in heritage)
+              assert all(".." not in pathlib.PurePosixPath(x).parts and x.startswith("ops/factory-site-capabilities/legacy-candidates/") for x in heritage)
+              assert {m.name for m in members} == expected | heritage
               assert all(m.isfile() and not m.issym() and not m.islnk() for m in members)
               for item in members:
                   target=dest/item.name
@@ -82,6 +93,9 @@ jobs:
           test "$(crontab -l | grep -c SAEIT_MULTISITE_CATALOG_V1)" -eq 1
           test "$(crontab -l | grep -c SAEIT_CROSS_SITE_FACTORY_QA_V1)" -eq 1
           test -s "$HOME/factory-runtime/private/autonomous-product-cycle/cross-site-capabilities/last-report.json"
+          test "$(crontab -l | grep -c SAEIT_FACTORY_HERITAGE_77_V1)" -eq 1
+          test -s "$HOME/factory-runtime/private/autonomous-product-cycle/cross-site-capabilities/legacy-77-last-report.json"
+          echo VPS_FACTORY_HERITAGE_77_HOURLY_VERIFIED
           echo VPS_FACTORY_CROSS_SITE_QA_HOURLY_VERIFIED
           echo VPS_FACTORY_MULTISITE_INSTALL_CONFIRMED
           REMOTE
