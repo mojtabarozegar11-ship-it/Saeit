@@ -84,6 +84,42 @@ jobs:
                   print('MPW_BUYER_ACCOUNT_ROUTE='+route+' HTTP=200 LOGIN_REDIRECT='+str('login' in resp.geturl().lower()))
           print('MPW_REAL_PAYMENT_TRANSFER_NOT_ATTEMPTED=PASS')
           PY
+      - name: Diagnose signed-in checkout rendering without orders or payments
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,traceback
+          from pathlib import Path
+          root=Path('/home/zomorod2/Saeit-staging')
+          assert root.is_dir() and not root.is_symlink()
+          os.chdir(root);sys.path.insert(0,str(root))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from django.test import RequestFactory
+          from django.template.loader import get_template
+          from django.template import TemplateDoesNotExist
+          from mpw_commerce.product_checkout_page import product_checkout_page,approved_for_checkout
+          from core.models import Product
+          from types import SimpleNamespace
+          try:
+              tmpl=get_template('mpw_commerce/product_checkout.html')
+              print('MPW_CHECKOUT_TEMPLATE='+json.dumps({'found':True,'origin_name':Path(tmpl.origin.name).name}))
+          except TemplateDoesNotExist:
+              print('MPW_CHECKOUT_TEMPLATE='+json.dumps({'found':False}))
+          for pk in (72,225):
+              req=RequestFactory().get(f'/store/product/{pk}/checkout/',secure=True,HTTP_HOST='mojplaywin.com')
+              req.user=SimpleNamespace(is_authenticated=True,is_active=True,pk=-1000,username='read-only-checkout-audit')
+              product=Product.objects.select_related('knowledge_article').get(pk=pk)
+              print('MPW_CHECKOUT_GATE='+json.dumps({'product':pk,'eligible':approved_for_checkout(req,product) is True}))
+              try:
+                  response=product_checkout_page(req,pk)
+                  print('MPW_CHECKOUT_RENDER='+json.dumps({'product':pk,'status':response.status_code,'size':len(response.content),'successful':response.status_code==200 and len(response.content)>1000}))
+              except Exception as e:
+                  stack=[{'file':Path(f.filename).name,'function':f.name,'line':f.lineno} for f in traceback.extract_tb(e.__traceback__)[-10:]]
+                  print('MPW_CHECKOUT_RENDER='+json.dumps({'product':pk,'exception':type(e).__name__,'stack':stack,'read_only':True}))
+          print('MPW_CHECKOUT_DIAG_READONLY=PASS')
+          PY
       - name: Remove encrypted SSH relay temporary files
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
