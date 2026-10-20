@@ -74,7 +74,7 @@ class ProductPlanner(unittest.TestCase):
                 command,timeout=planner.command_for(self.root,{'family_id':family})
                 script=next(Path(x) for x in command if x.endswith('.py'))
                 self.assertTrue(script.is_file(),family)
-                self.assertEqual(timeout,210 if family=='F27' else 90)
+                self.assertEqual(timeout,210 if family=='F27' else 240 if family in ('F36','F37','F39') else 90)
                 if family=='F27':self.assertIn('--worker',command);self.assertIn('--toolchain',command)
         with patch.object(planner,'load',side_effect=RuntimeError('no verified toolchain')):
             self.assertEqual(planner.execute(self.root,{'family_id':'F27'})['status'],'blocked_executor_or_toolchain_unavailable')
