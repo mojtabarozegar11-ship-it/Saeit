@@ -1,0 +1,21 @@
+name: MojPlayWin fiat-to-native-TRX checkout security contract tests
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mpw_fiat_to_trx_20261020/**"
+      - "tests/test_mpw_fiat_to_trx_provider_20261020.py"
+      - ".github/workflows/mpw-fiat-trx-provider-contract-tests-20261020.yml"
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Offline hosted gateway readiness and webhook integrity tests
+        run: |
+          python3 -m py_compile mpw_fiat_to_trx_20261020/provider_adapter.py
+          python3 -m unittest discover -s tests -p test_mpw_fiat_to_trx_provider_20261020.py -v
+          echo 'MPW_FIAT_TO_TRX_PROVIDER_OFFLINE_GATES=PASS'
