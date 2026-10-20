@@ -82,8 +82,9 @@ jobs:
           chmod 700 "$HOME/.saeit-factory-inbox" "$HOME/.saeit-factory-inbox/bin"
           REMOTE
           scp -F "$d/config" scripts/store_receiver.py saeit-cpanel:/home/zomorod2/.saeit-factory-inbox/bin/store_receiver.py.tmp
-          ssh -F "$d/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
           set -euo pipefail
+          run="$1"
           incoming="$HOME/.saeit-factory-inbox/bin/store_receiver.py.tmp"
           active="$HOME/.saeit-factory-inbox/bin/store_receiver.py"
           test -s "$incoming" && test ! -L "$incoming"
@@ -92,14 +93,20 @@ jobs:
           chmod 600 "$incoming"
           if test -e "$active"; then
             test -f "$active"
-            # The current release changes only the VPS sender. Do not
-            # unexpectedly replace a differently patched live cPanel receiver.
-            cmp -s "$incoming" "$active" || {
-              echo CPANEL_RECEIVER_RUNTIME_DRIFT_STOP
-              exit 1
-            }
-            rm -f -- "$incoming"
-            echo PRIVATE_CPANEL_RECEIVER_UNCHANGED
+            if cmp -s "$incoming" "$active";then
+              rm -f -- "$incoming"
+              echo PRIVATE_CPANEL_RECEIVER_UNCHANGED
+            else
+              backup="$HOME/.backups/saeit-private-receiver/$run"
+              install -d -m 700 "$backup"
+              test ! -L "$backup/receiver.before.py"
+              cp -p "$active" "$backup/receiver.before.py"
+              chmod 600 "$backup/receiver.before.py"
+              cmp -s "$active" "$backup/receiver.before.py"
+              mv -f -- "$incoming" "$active"
+              python3 -m py_compile "$active"
+              echo PRIVATE_CPANEL_RECEIVER_UPDATED_WITH_VERIFIED_BACKUP
+            fi
           else
             mv -f "$incoming" "$active"
             echo PRIVATE_CPANEL_RECEIVER_FIRST_INSTALL
