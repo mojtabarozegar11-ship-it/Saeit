@@ -13,6 +13,8 @@ import hashlib
 import io
 import json
 import os
+import re
+import zlib
 import shutil
 import stat
 import subprocess
@@ -86,11 +88,54 @@ def disk_free(path: Path) -> int:
     return s.f_bavail * s.f_frsize
 
 
-def encrypt_stream_to_file(stream, target: Path, gpg_home: Path, key: bytes):
+
+class GzipSourceVerifier:
+    """Bounded streaming gzip CRC/size validator; source footer remains external.
+
+    gzip member must terminate exactly before the authenticated completion marker.
+    Rejects trailing members, decompression bombs and truncated gzip streams.
+    No decompressed customer bytes are written to disk or logs.
+    """
+    def __init__(self):
+        self._marker_tail = b""
+        self._decoder = zlib.decompressobj(wbits=31)
+        self.decompressed_bytes = 0
+
+    def feed(self, block):
+        joined = self._marker_tail + block
+        marker_size = len(MARKER)
+        if len(joined) <= marker_size:
+            self._marker_tail = joined
+            return
+        data, self._marker_tail = joined[:-marker_size], joined[-marker_size:]
+        if self._decoder.eof:
+            raise RuntimeError("additional data after gzip end")
+        while data:
+            unpacked = self._decoder.decompress(data, 1024 * 1024)
+            self.decompressed_bytes += len(unpacked)
+            if self.decompressed_bytes > MAX_SOURCE_BYTES:
+                raise RuntimeError("uncompressed gzip safety maximum exceeded")
+            data = self._decoder.unconsumed_tail
+            if self._decoder.eof:
+                if self._decoder.unused_data or data:
+                    raise RuntimeError("gzip has trailing data or second member")
+                break
+
+    def finish(self):
+        if self._marker_tail != MARKER or not self._decoder.eof:
+            raise RuntimeError("gzip source did not complete cleanly")
+        if self._decoder.unused_data or self._decoder.unconsumed_tail:
+            raise RuntimeError("gzip trailing bytes rejected")
+        if self.decompressed_bytes < 1024:
+            raise RuntimeError("source gzip content too small")
+        return self.decompressed_bytes
+
+
+def encrypt_stream_to_file(stream, target: Path, gpg_home: Path, key: bytes, *, verifier=None):
     fd = os.open(str(target), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         proc = gpg_process(key, gpg_home, [
-            "--symmetric", "--cipher-algo", "AES256", "--compress-algo", "zlib",
+            "--symmetric", "--cipher-algo", "AES256", "--compress-algo", "none" if verifier is not None else "zlib",
             "--s2k-digest-algo", "SHA256", "--s2k-mode", "3",
             "--s2k-count", "65011712", "--output", "-",
         ], input_pipe=True, stdout=fd)
@@ -110,6 +155,8 @@ def encrypt_stream_to_file(stream, target: Path, gpg_home: Path, key: bytes):
                 raise RuntimeError("source exceeds safety maximum")
             digest.update(chunk)
             tail = (tail + chunk)[-len(MARKER):]
+            if verifier is not None:
+                verifier.feed(chunk)
             proc.stdin.write(chunk)
             if target.stat().st_size > MAX_ENCRYPTED_BYTES or disk_free(target.parent) < 3 * 1024**3:
                 raise RuntimeError("VPS storage safety cap")
@@ -118,6 +165,8 @@ def encrypt_stream_to_file(stream, target: Path, gpg_home: Path, key: bytes):
             raise RuntimeError("GPG encryption process failed")
         if total < 1024 + len(MARKER) or tail != MARKER:
             raise RuntimeError("source completion footer absent")
+        if verifier is not None:
+            verifier.finish()
         return total, digest.hexdigest()
     finally:
         if proc.poll() is None:
@@ -154,9 +203,14 @@ def verify_stream(target: Path, gpg_home: Path, key: bytes):
 
 
 def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None = None,
-          minimum_free: int = MIN_START_FREE):
+          minimum_free: int = MIN_START_FREE, stem: str = STEM,
+          source_encoding: str = "raw-with-footer-v1"):
     if kind not in ("mysql", "files"):
         raise RuntimeError("unsupported kind")
+    if not isinstance(stem, str) or not re.fullmatch(r"mojplaywin_20\d{6}", stem):
+        raise RuntimeError("unsafe backup version stem")
+    if source_encoding not in ("raw-with-footer-v1", "gzip-with-footer-v1"):
+        raise RuntimeError("unsupported encoding")
     root = Path.home() if root is None else root
     keyroot = Path.home() if keyroot is None else keyroot
     backups = root / ".private-mojplaywin-offhost-backups"
@@ -168,18 +222,21 @@ def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None =
     if shutil.which("gpg") is None or disk_free(backups) < minimum_free:
         raise RuntimeError("GPG unavailable or destination capacity insufficient")
     key = recovery_key(secrets / "recovery-key.bin")
-    partial = backups / (STEM + "_" + kind + "_" + VERSION + ".gpg.partial")
-    complete = backups / (STEM + "_" + kind + "_" + VERSION + ".gpg")
-    manifest = backups / (STEM + "_" + kind + "_" + VERSION + ".manifest.json")
+    partial = backups / (stem + "_" + kind + "_" + VERSION + ".gpg.partial")
+    complete = backups / (stem + "_" + kind + "_" + VERSION + ".gpg")
+    manifest = backups / (stem + "_" + kind + "_" + VERSION + ".manifest.json")
     if any(x.exists() or x.is_symlink() for x in (partial,complete,manifest)):
         raise RuntimeError("one-time output already exists; refusing overwrite")
-    total, digest = encrypt_stream_to_file(stream, partial, gnupg, key)
+    verifier = GzipSourceVerifier() if source_encoding == "gzip-with-footer-v1" else None
+    total, digest = encrypt_stream_to_file(stream, partial, gnupg, key, verifier=verifier)
     verified_total, verified_digest = verify_stream(partial, gnupg, key)
     if total != verified_total or digest != verified_digest:
         raise RuntimeError("OpenPGP round-trip integrity or size mismatch")
     os.rename(partial, complete)
     summary = {
         "kind": kind, "format": "OpenPGP-AES256-GPGv2",
+        "source_encoding": source_encoding,
+        "uncompressed_source_bytes": verifier.decompressed_bytes if verifier else None,
         "encrypted_bytes": complete.stat().st_size,
         "plaintext_bytes": total, "plaintext_sha256": digest,
         "source_completion_footer_verified": True,
@@ -196,6 +253,7 @@ def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None =
         f.flush()
         os.fsync(f.fileno())
     return {"kind": kind, "gpg_aes256_backup_created": True,
+            "source_encoding": source_encoding,
             "encrypted_bytes": summary["encrypted_bytes"],
             "plaintext_bytes": total, "decryption_verified": True,
             "source_complete": True, "full_tenant_backup": False,
