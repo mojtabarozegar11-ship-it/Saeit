@@ -1,0 +1,51 @@
+name: One-pass independent real VPS E2E proof 3000 tools and native product receipts
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_onepass_e2e_evidence_20261020.py"
+      - ".github/workflows/factory-onepass-e2e-evidence-20261020.yml"
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: saeit-factory-live-onepass-e2e-proof
+  cancel-in-progress: false
+jobs:
+  proof:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate real one-pass proof script (not a mock)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_onepass_e2e_evidence_20261020.py
+          echo ONEPASS_PROOF_SOURCE_CHECK=PASS
+      - name: Run independent real VPS end-to-end checks via existing secure relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-onepass-real-proof"
+          install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps(){ ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150 "$@"; }
+          stage="/home/githubops/factory-runtime/operations/.e2e-proof-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh_vps "test ! -e '$stage' && mkdir -m 700 '$stage'"
+          source="scripts/factory_onepass_e2e_evidence_20261020.py"
+          cat "$source" | ssh_vps "umask 077; cat > '$stage/e2e.py'; chmod 600 '$stage/e2e.py'"
+          digest="$(sha256sum "$source" | awk '{print $1}')"
+          ssh_vps "test \"\$(sha256sum '$stage/e2e.py' | awk '{print \$1}')\" = '$digest'"
+          ssh_vps "timeout 180s /home/githubops/factory-runtime/.venv/bin/python -B '$stage/e2e.py' --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --ops /home/githubops/factory-runtime/operations --registry /home/githubops/factory-runtime/operations/forty-family-master/forty_families.json --run-id '$GITHUB_RUN_ID'"
+          echo ONEPASS_E2E_EXECUTED_ON_REAL_VPS=PASS
