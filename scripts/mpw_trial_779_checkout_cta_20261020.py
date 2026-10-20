@@ -142,7 +142,7 @@ def rollback():
     print("MPW_MICRO_CTA_ROLLBACK=PASS")
 
 def selftest():
-    assert OLD in NEW and "product.pk == 779" in NEW
+    assert "{% elif product.pk == 72 or product.pk == 225 %}" in NEW and "product.pk == 779" in NEW
     test=b"prefix "+OLD.encode()+b" suffix"
     assert transformed(test).count(b"/commerce/book/779/")==1
     assert b"product.pk == 72 or product.pk == 225" in transformed(test)
