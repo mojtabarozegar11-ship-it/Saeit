@@ -1,0 +1,34 @@
+name: Factory quarantined 77-module historical replay
+on:
+  pull_request:
+    paths:
+      - "ops/factory-site-capabilities/legacy-candidates/**"
+      - "scripts/factory_legacy_77_benchmark.py"
+      - "tests/test_factory_legacy_77_benchmark.py"
+      - ".github/workflows/factory-legacy-77-benchmark.yml"
+  push:
+    branches: [main]
+    paths:
+      - "ops/factory-site-capabilities/legacy-candidates/**"
+      - "scripts/factory_legacy_77_benchmark.py"
+      - "tests/test_factory_legacy_77_benchmark.py"
+      - ".github/workflows/factory-legacy-77-benchmark.yml"
+permissions:
+  contents: read
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: SHA verification and contained functional replay
+        run: |
+          set -euo pipefail
+          python -B -m unittest discover -s tests -p 'test_factory_legacy_77_benchmark.py' -v
+          python -B scripts/factory_legacy_77_benchmark.py
+          echo "NO_LIVE_WEBSITE_OR_VPS_DEPLOYED=true"
