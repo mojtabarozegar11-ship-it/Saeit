@@ -22,6 +22,13 @@ jobs:
           python3 -m py_compile scripts/mojplaywin_backup_vps_failure_readonly.py scripts/mojplaywin_backup_restore_readiness_readonly.py scripts/mojplaywin_recovery_stream_vps.py
           python3 -m unittest discover -s tests -p test_mojplaywin_backup_vps_failure_readonly.py
           python3 -m unittest discover -s tests -p test_mojplaywin_backup_restore_readiness_readonly.py
+      - name: Run isolated factory regression tests without production access
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --no-input -r requirements.txt
+          python3 -m unittest discover -s tests -p test_factory_continuous_production_orders.py -v
+          python3 -m unittest discover -s tests -p test_factory_f18_and_organizer.py -v
       - name: Establish host-pinned private relay without disclosing keys
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -88,6 +95,14 @@ jobs:
           python3 -m unittest discover -s tests -p test_mojplaywin_consistent_db_preflight_readonly.py
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 75s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/mojplaywin_consistent_db_preflight_readonly.py
+      - name: Read masked database size and hosting quota metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_mojplaywin_mysql_quota_sanitize_readonly.py
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json Mysql list_databases' | python3 scripts/mojplaywin_mysql_quota_sanitize_readonly.py mysql
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json Quota get_local_quota_info' | python3 scripts/mojplaywin_mysql_quota_sanitize_readonly.py quota
       - name: Remove temporary SSH material
         if: always()
         shell: bash
