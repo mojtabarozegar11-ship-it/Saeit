@@ -91,6 +91,12 @@ jobs:
               if not root.is_dir():continue
               names=[p.relative_to(root).as_posix() for p in root.rglob('*.html') if not p.is_symlink() and any(k in p.name.lower() for k in ('login','register','account','product','checkout'))]
               print('MPW_RELEVANT_TEMPLATE_FILENAMES='+json.dumps({'root':root.relative_to(app).as_posix(),'names':names[:70]}))
+          for rel in ('core/templates/brands/mojplaywin/product.html','mpw_commerce/templates/mpw_commerce/customer_login.html','mpw_commerce/templates/mpw_commerce/customer_register.html','core/templates/brands/mojplaywin/base.html','core/templates/mojplaywin/site_base.html'):
+              path=app/rel
+              if not path.is_file() or path.is_symlink():continue
+              raw=path.read_text('utf8','replace')
+              # Static Django templates only: never inspect credentials, runtime DB or environment files.
+              print('MPW_TEMPLATE_RENDER_SCOPE='+json.dumps({'path':rel,'chars':len(raw),'text':raw[:9000]},ensure_ascii=False))
           PY
       - name: Erase temporary SSH keys
         if: always()
