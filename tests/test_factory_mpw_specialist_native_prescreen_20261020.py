@@ -36,7 +36,7 @@ def wav_sample():
     b=io.BytesIO()
     with wave.open(b,"wb") as wav:
         wav.setnchannels(1);wav.setsampwidth(2);wav.setframerate(16000)
-        wav.writeframes(b"\x00\x40\xff\x00"*(16000//2))
+        wav.writeframes(b"".join(struct.pack("<h",((i*73)%30000)-15000) for i in range(16000)))
     return b.getvalue()
 
 
