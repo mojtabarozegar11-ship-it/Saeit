@@ -135,6 +135,12 @@ jobs:
           python3 - <<'PY'
           import json,os,time,urllib.request,urllib.error
           data=json.load(open('mpw_revenue_20261020/earn/catalog.json'))
+          for path in ('/mpw-editorial/revenue/index.html','/mpw-editorial/revenue/website-doctor/index.html','/mpw-editorial/revenue/assets/style.css'):
+              try:
+                  with urllib.request.urlopen(urllib.request.Request('https://mojplaywin.com'+path+'?probe='+str(time.time_ns()),headers={'Cache-Control':'no-cache'}),timeout=18) as resp:
+                      print('MPW_NEW_EXPLICIT_FILE_READBACK',path,resp.status,resp.headers.get('Content-Type'),resp.read(250).decode('utf8','replace')[:75])
+              except urllib.error.HTTPError as exc:
+                  print('MPW_NEW_EXPLICIT_FILE_HTTP_ERROR',path,exc.code,exc.headers.get('Content-Type'),repr(exc.read(180).decode('utf8','replace')))
           paths=['/mpw-editorial/revenue/']+['/mpw-editorial/revenue/'+p['slug']+'/' for p in data['offers']]
           for path in paths:
               ok=False
