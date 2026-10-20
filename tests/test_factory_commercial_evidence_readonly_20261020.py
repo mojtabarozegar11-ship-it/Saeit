@@ -45,6 +45,23 @@ class CommercialEvidenceTests(unittest.TestCase):
         self.assertFalse(item["sale_allowed_by_this_audit"])
         self.assertFalse(a.audit_factory(self.root)["paid_items_activated"])
 
+    def test_missing_legacy_source_file_index_can_be_reconstructed_without_title_claim(self):
+        self.manifest.pop("files")
+        (self.folder / "manufacturing_manifest.json").write_text(json.dumps(self.manifest))
+        item = a.examine_product(self.folder)
+        self.assertEqual(item["source_file_index_status"],
+                         "reconstructed_from_sha_verified_archive_not_source_proof")
+        self.assertEqual(item["members_integrity_checked"], 3)
+        self.assertFalse(item["actual_creator_title_chain_independently_verified"])
+        self.assertFalse(item["sale_allowed_by_this_audit"])
+        self.assertEqual(a.audit_factory(self.root)["counts"]["missing_original_member_index_reconstructed"], 1)
+
+    def test_wrong_explicit_member_index_still_fails(self):
+        self.manifest["files"] = ["README.md", "LICENSE.txt", "invented.py"]
+        (self.folder / "manufacturing_manifest.json").write_text(json.dumps(self.manifest))
+        with self.assertRaisesRegex(ValueError, "SOURCE_FILE_INDEX_MISMATCH"):
+            a.examine_product(self.folder)
+
     def test_corrupt_hash_fails(self):
         self.archive.write_bytes(self.archive.read_bytes() + b"tamper")
         with self.assertRaisesRegex(ValueError, "ARCHIVE_SHA_MISMATCH"):

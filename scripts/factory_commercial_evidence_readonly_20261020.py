@@ -71,8 +71,14 @@ def examine_product(folder):
     total_uncompressed = 0
     names = set()
     declared_source_names = manifest.get("files")
-    if not isinstance(declared_source_names, list) or not declared_source_names:
-        raise ValueError("SOURCE_FILE_INDEX_MISSING")
+    # Some historical QA manifests have no source-file-name index. Recover only
+    # the verifiable archive member index, not authorship or legal title.
+    original_file_index_present = isinstance(declared_source_names, list) and bool(declared_source_names)
+    if declared_source_names is not None and not isinstance(declared_source_names, list):
+        raise ValueError("SOURCE_FILE_INDEX_MALFORMED")
+    if isinstance(declared_source_names, list) and any(
+            not isinstance(x, str) or not x for x in declared_source_names):
+        raise ValueError("SOURCE_FILE_INDEX_MALFORMED")
     with zipfile.ZipFile(zip_path) as archive:
         info = archive.infolist()
         if not 0 < len(info) <= MAX_FILES:
@@ -106,11 +112,13 @@ def examine_product(folder):
                 other_files += 1
         if archive.testzip() is not None:
             raise ValueError("ARCHIVE_CRC_FAILED")
-    if set(declared_source_names) != {str(PurePosixPath(x).relative_to(folder.name)) for x in names}:
+    if original_file_index_present and set(declared_source_names) != {
+            str(PurePosixPath(x).relative_to(folder.name)) for x in names}:
         raise ValueError("SOURCE_FILE_INDEX_MISMATCH")
     return {
         "artifact_sha256": expected,
         "members_integrity_checked": member_total,
+        "source_file_index_status": "original_manifest_index_present" if original_file_index_present else "reconstructed_from_sha_verified_archive_not_source_proof",
         "rights_document_filename_candidates": rights_documents,
         "dependency_manifest_candidates": dependency_manifests,
         "code_files": code_files,
@@ -144,6 +152,8 @@ def audit_factory(root):
             doc = examine_product(folder)
             counters["archive_integrity_verified"] += 1
             counters["components_inspected"] += doc["members_integrity_checked"]
+            counters["missing_original_member_index_reconstructed"] += int(
+                doc["source_file_index_status"] == "reconstructed_from_sha_verified_archive_not_source_proof")
             counters["rights_document_filename_candidates"] += doc["rights_document_filename_candidates"]
             counters["dependency_manifest_candidates"] += doc["dependency_manifest_candidates"]
             counters["code_files"] += doc["code_files"]
