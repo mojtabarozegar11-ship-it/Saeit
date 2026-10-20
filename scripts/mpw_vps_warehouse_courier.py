@@ -510,6 +510,21 @@ def import_site(batch, root=DEST):
             atomic(version_dir/"product.zip",content)
             atomic(version_dir/"warehouse_manifest.json",json_blob(manifest))
             added += 1
+        # A deliberately sparse page transports at most 3 preview bundles.
+        # All other private, previously received companions MUST be reverified
+        # locally instead of getting their site QA status downgraded to "missing".
+        if customer is None:
+            old_manifest=version_dir/"customer_manifest.json"
+            old_zip=version_dir/"customer-package.zip"
+            if old_manifest.exists() or old_zip.exists():
+                require(old_manifest.is_file() and not old_manifest.is_symlink()
+                        and old_zip.is_file() and not old_zip.is_symlink(),
+                        "CUSTOMER_PRIVATE_PREVIOUS_PARTIAL_OR_UNSAFE")
+                old_report=json_file(old_manifest,100_000)
+                old_raw=old_zip.read_bytes()
+                validate_customer_companion(old_report,old_raw,product,version,
+                                            manifest["artifact_sha256"])
+                customer=(old_report,old_raw)
         native_preview=(customer is not None and customer[0].get("schema")==NATIVE_PREVIEW_SCHEMA)
         if customer is not None:
             candidate_report,candidate_zip=customer
