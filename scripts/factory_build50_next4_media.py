@@ -77,6 +77,7 @@ def listening(folder,task):
  return [task['id']+'.mp3']
 def subtitle(folder,task):
  s='WEBVTT\n\n00:00:00.000 --> 00:00:01.400\n'+task['mode'].title()+' of '+task['topic']+' - original technical training example.\n'
+ s += ' Listen for the changing timing, loudness and pitch. Compare the original signal with the captioned practice objective, then repeat the example as needed.\n'
  (folder/(task['id']+'.vtt')).write_text(s,encoding='utf8')
  return task['id']+'.vtt'
 def identity(folder,task):
