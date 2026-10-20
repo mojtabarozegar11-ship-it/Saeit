@@ -123,7 +123,7 @@ jobs:
           import os,json,stat
           from pathlib import Path
           root=Path('/home/zomorod2/mojplaywin.com')
-          for rel in ('earn','earn/index.html','earn/assets','earn/assets/style.css','earn/website-doctor','earn/website-doctor/index.html'):
+          for rel in ('mpw-editorial/revenue','mpw-editorial/revenue/index.html','mpw-editorial/revenue/assets','mpw-editorial/revenue/assets/style.css','mpw-editorial/revenue/website-doctor','mpw-editorial/revenue/website-doctor/index.html'):
               p=root/rel
               if not p.exists() or p.is_symlink():raise RuntimeError('Missing or symlinked '+rel)
               st=p.stat()
@@ -135,7 +135,7 @@ jobs:
           python3 - <<'PY'
           import json,os,time,urllib.request,urllib.error
           data=json.load(open('mpw_revenue_20261020/earn/catalog.json'))
-          paths=['/earn/']+['/earn/'+p['slug']+'/' for p in data['offers']]
+          paths=['/mpw-editorial/revenue/']+['/mpw-editorial/revenue/'+p['slug']+'/' for p in data['offers']]
           for path in paths:
               ok=False
               for trial in range(5):

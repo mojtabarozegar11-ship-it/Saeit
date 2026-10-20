@@ -3,18 +3,18 @@
 import hashlib, io, json, os, re, shutil, stat, sys, tarfile
 from pathlib import Path
 
-ROOT=Path("/home/zomorod2/mojplaywin.com")
+ROOT=Path("/home/zomorod2/mojplaywin.com/mpw-editorial")
 HOME=Path("/home/zomorod2")
 SLUGS=['website-doctor','landing-page-studio','ai-automation','business-spreadsheets','website-templates','social-media-kits','resume-builder','logo-studio','browser-games','marketing-ai','business-calculators','website-care']
 EXPECTED={"earn/index.html","earn/catalog.json","earn/sitemap.xml","earn/assets/style.css"}
 EXPECTED.update("earn/"+slug+"/index.html" for slug in SLUGS)
 def fail(message): raise RuntimeError(message)
 def guard():
-    if ROOT.is_symlink() or not ROOT.is_dir() or ROOT.resolve()!=ROOT or not (ROOT/".htaccess").is_file():fail("Unexpected main web root")
-    if (ROOT/"earn").is_symlink():fail("Symlinked earn path")
+    if ROOT.is_symlink() or not ROOT.is_dir() or ROOT.resolve()!=ROOT or ROOT.name!="mpw-editorial" or not (ROOT/"index.html").is_file() or not (ROOT.parent/".htaccess").is_file():fail("Unexpected editorial static root")
+    if (ROOT/"revenue").is_symlink():fail("Symlinked revenue path")
 def paths(run):
     if not re.fullmatch(r"[0-9]{8,20}",run):fail("Invalid release ID")
-    return ROOT/"earn", ROOT/(".earn-stage-"+run), HOME/(".mpw-earn-backup-"+run)
+    return ROOT/"revenue", ROOT/(".revenue-stage-"+run), HOME/(".mpw-revenue-backup-"+run)
 def sha(b):return hashlib.sha256(b).hexdigest()
 def safe_tree(path):
     if path.is_symlink():fail("Symlinked directory")
@@ -44,11 +44,12 @@ def publish(run):
             name=m.name.removeprefix("./")
             if m.size>220000:fail("Oversized document")
             payload=tf.extractfile(m).read()
+            payload=payload.replace(b"/earn/",b"/mpw-editorial/revenue/")
             if len(payload)!=m.size:fail("Archive short read")
             docs[name]=payload
     except (tarfile.TarError, OSError, UnicodeError) as exc:fail("Invalid archive: "+type(exc).__name__)
-    if b"https://mojplaywin.com/earn/" not in docs["earn/index.html"]:fail("Missing canonical main hub")
-    if docs["earn/index.html"].count(b'/earn/')<12:fail("Insufficient catalog links")
+    if b"https://mojplaywin.com/mpw-editorial/revenue/" not in docs["earn/index.html"]:fail("Missing canonical main hub")
+    if docs["earn/index.html"].count(b'/mpw-editorial/revenue/')<12:fail("Insufficient catalog links")
     if b"<urlset" not in docs["earn/sitemap.xml"]:fail("Invalid sitemap")
     stage.mkdir(mode=0o755)
     stage.chmod(0o755)
