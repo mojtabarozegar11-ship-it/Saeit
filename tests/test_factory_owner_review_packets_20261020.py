@@ -222,6 +222,51 @@ class ReviewPacketTests(unittest.TestCase):
         self.assertFalse(chosen["rights_approved"])
         self.assertFalse(chosen["owner_release_approved"])
 
+    def test_equivalent_immutable_qa_schema_upgrade_is_not_false_conflict(self):
+        import hashlib
+        wo="WO-00000001"
+        order={"requesting_site":"mojplaywin.com","source_product_id":"existing_native",
+               "source_sha256":"a"*64,"source_artifact_sha256":"b"*64}
+        folder=self.root/"design-state/mojplaywin-native-specialist-evidence/existing_native"
+        folder.mkdir(parents=True)
+        records=self.root/"production-instructions/mojplaywin-specialist-order-reports"
+        records.mkdir(parents=True)
+        for modern in (False,True):
+            proof={"schema":"saeit.factory.specialist-native-prescreen.v1",
+                   "family_id":"F20","source_sha256":"a"*64,
+                   "original_factory_artifact_sha256":"b"*64,
+                   "automated_format_prescreen_passed":True,
+                   "automated_technical_blockers":[],
+                   "commercial_release":False,"final_work_order_completed":False}
+            if modern:
+                proof.update(family_provenance_source="warehouse_manifest",
+                             family_provenance_receipt_sha256=None)
+            raw=m.serialize(proof)
+            fingerprint=hashlib.sha256(raw).hexdigest()
+            (folder/("a"*64+"-"+fingerprint+".json")).write_bytes(raw)
+            packet={"schema":"saeit.factory.specialist-work-order-dossier.v1",
+                    "work_order":wo,"source_work_order_sha256":"d"*64,
+                    "original_source_sha256":"a"*64,
+                    "source_artifact_sha256":"b"*64,
+                    "family_id":"F20","specialist_prescreen_sha256":fingerprint,
+                    "engineering_work_order_completed":False,"commercial_approval":False}
+            (records/(wo+"-"+fingerprint+".json")).write_text(json.dumps(packet))
+        selected=m.linked_specialist_review(self.root,wo,order,"d"*64)
+        self.assertTrue(selected["format_prescreen_passed"])
+        self.assertTrue(selected["source_has_explicit_provenance_revision"])
+        self.assertFalse(selected["owner_release_approved"])
+        self.assertFalse(selected["rights_approved"])
+        # A different family with equally green superficial status is a
+        # genuine contradiction and cannot be reconciled by chronology.
+        changed=dict(proof,family_id="F21")
+        raw=m.serialize(changed)
+        fingerprint=hashlib.sha256(raw).hexdigest()
+        (folder/("a"*64+"-"+fingerprint+".json")).write_bytes(raw)
+        packet=dict(packet,family_id="F21",specialist_prescreen_sha256=fingerprint)
+        (records/(wo+"-"+fingerprint+".json")).write_text(json.dumps(packet))
+        with self.assertRaisesRegex(RuntimeError,"OWNER_SPECIALIST_MULTIPLE_CURRENT_QA"):
+            m.linked_specialist_review(self.root,wo,order,"d"*64)
+
     def test_invalid_forged_specialist_sidecar_is_refused(self):
         import hashlib
         wo="WO-00000001"
