@@ -98,7 +98,7 @@ jobs:
       - name: Read-only live checkout flag audit without revealing credentials
         run: |
           set -euo pipefail
-          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel python3 - <<'PY'
+          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
           import json,os,sys
           from pathlib import Path
           app=Path('/home/zomorod2/Saeit-staging')
