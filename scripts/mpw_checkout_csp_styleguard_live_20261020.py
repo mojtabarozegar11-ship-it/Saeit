@@ -21,8 +21,8 @@ WSGI = Path("/home/zomorod2/mojplaywin.com/passenger_wsgi.py")
 BACKUPS = Path("/home/zomorod2/.private_mojplaywin_main_agents")
 OLD1 = """if len(scripts) != 1 or len(styles) != 1 or b'<meta charset="utf-8">' not in body:"""
 NEW1 = """if len(scripts) != 1 or len(styles) not in (1, 2) or b'<meta charset="utf-8">' not in body:"""
-OLD2 = """"style-src 'self' " + source_hash(styles[0]) + "; """"
-NEW2 = """"style-src 'self' " + " ".join(source_hash(style) for style in styles) + "; """"
+OLD2 = "\"style-src 'self' \" + source_hash(styles[0]) + \"; \""
+NEW2 = "\"style-src 'self' \" + \" \".join(source_hash(style) for style in styles) + \"; \""
 
 def sha(blob):
     return hashlib.sha256(blob).hexdigest()
