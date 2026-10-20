@@ -187,7 +187,7 @@ def command_for(root,req):
           'F33':'factory_build50_creative_kits.py'}[family]
         command=[str(python),'-B',str(HERE/script),'--factory-private',str(root)]
         if family=='F27':command+=['--toolchain',str(manifest),'--worker'];timeout=210
-         elif family in ('F29','F30','F33'):command+=['--family',family]
+        elif family in ('F29','F30','F33'):command+=['--family',family]
     else:raise ValueError('PLANNER_EXECUTOR_NOT_ROUTED')
     return command,timeout
 

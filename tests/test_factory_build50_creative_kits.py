@@ -11,6 +11,7 @@ maker=load("factory_build50_creative_kits")
 proto=load("factory_build_50")
 reviewer=load("factory_creative_independent_review")
 
+@unittest.skipUnless(all(importlib.util.find_spec(name) is not None for name in ('docx','pptx','PIL')), 'Office and image test dependencies are verified in isolated factory workflow')
 class CreativeKits(unittest.TestCase):
     def test_all_three_real_50_stage_products_and_replay(self):
         with tempfile.TemporaryDirectory() as tmp:
