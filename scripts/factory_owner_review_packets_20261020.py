@@ -127,8 +127,8 @@ def verified_extended_native_archive(recipe,manifest,members,actual_sha,archive)
         if (len(groups[left])!=48 or len(groups[right])!=48
                 or set(groups[left])!=set(groups[right]) or len(documented)!=97):
             return False
-        magics={".png":lambda b:b.startswith(b"\\x89PNG\\r\\n\\x1a\\n"),
-                ".exr":lambda b:b[:4]==b"\\x76\\x2f\\x31\\x01",
+        magics={".png":lambda b:b.startswith(b"\x89PNG\r\n\x1a\n"),
+                ".exr":lambda b:b[:4]==b"\x76\x2f\x31\x01",
                 ".gif":lambda b:b.startswith((b"GIF87a",b"GIF89a")),
                 ".mp4":lambda b:len(b)>=8 and b[4:8]==b"ftyp",
                 ".wav":lambda b:b[:4]==b"RIFF" and b[8:12]==b"WAVE",
