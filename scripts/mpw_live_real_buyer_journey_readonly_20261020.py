@@ -41,4 +41,7 @@ if p.is_file() and not p.is_symlink():
  for i in sorted(set(j for x in focus for j in range(max(0,x-5),min(len(lines),x+8)))):
   shown.append(str(i+1)+': '+lines[i][:240])
  out('MPW_BUYER_CHECKOUT_STATUS_UI',redact(shown,250))
+if p.is_file() and not p.is_symlink():
+ lines=p.read_text('utf8','replace').splitlines()
+ out('MPW_BUYER_PAYMENT_CONFIRM_UI_FULL',redact([str(i+1)+': '+lines[i][:220] for i in range(160,min(len(lines),265))],110))
 print('MPW_REAL_CUSTOMER_PATH_SOURCE_READONLY=PASS')
