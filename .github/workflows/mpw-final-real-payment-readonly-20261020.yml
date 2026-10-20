@@ -115,7 +115,7 @@ jobs:
           os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
           import django;django.setup()
           from core.models import Product,KnowledgeArticle
-          from mpw_commerce.fulfillment import _private_file
+          from mpw_commerce.buyer_orders import _private_file
           def out(tag,detail):print(tag+'='+json.dumps(detail,sort_keys=True,default=str))
           out('MPW_MICRO_SCHEMA',{'product':[(f.name,f.get_internal_type(),f.null) for f in Product._meta.fields],'article':[(f.name,f.get_internal_type(),f.null) for f in KnowledgeArticle._meta.fields]})
           out('MPW_MICRO_READER',{'file_resolver_source':inspect.getsource(_private_file)[:5500]})
