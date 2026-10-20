@@ -10,6 +10,8 @@ CLI modes run through the GitHub Actions SSH bastion; no new APIs or secrets.
 from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
+import ast
+import csv
 import fcntl
 import hashlib
 import importlib.util
@@ -23,10 +25,12 @@ import sys
 import tarfile
 import tempfile
 import zipfile
+import xml.etree.ElementTree as ET
 
 TENANT = "mojplaywin-main"
 SCHEMA = "mpw.factory.warehouse-courier.v1"
 RETURN_SCHEMA = "mpw.factory.return-to-stage1.v1"
+NATIVE_PREVIEW_SCHEMA = "saeit.factory.native-source-review-package.v1"
 VPS = Path.home() / "factory-runtime/private/autonomous-product-cycle"
 PANEL = Path("/home/zomorod2/.private_mojplaywin_main_agents")
 DEST = PANEL / "evolution_runtime_20261018/warehouse_courier"
@@ -142,6 +146,137 @@ def verify_stock(manifest, recipe, version, raw):
     return True
 
 
+def native_format_census(raw):
+    """Independent *static* checks of real source members; not software execution or rights approval.
+
+    Each member must be a recognized document, code source or media format. ZIP
+    integrity/traversal/symlink/size protections are always checked first.
+    """
+    safe_zip(raw)
+    formats = {}
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        members = archive.infolist()
+        require(0 < len(members) <= 300, "NATIVE_EMPTY_OR_OVERSIZED_SOURCE")
+        for info in members:
+            require(not info.is_dir(), "NATIVE_DIRECTORY_MEMBER_UNEXPECTED")
+            suffix = PurePosixPath(info.filename).suffix.lower()
+            require(suffix in {".py", ".json", ".md", ".txt", ".html", ".css",
+                               ".js", ".svg", ".png", ".xlsx", ".ods", ".csv",
+                               ".gif", ".mp4", ".exr", ".wav", ".mp3", ".pdf",
+                               ".docx", ".epub"}, "NATIVE_SPECIALIST_FORMAT_UNSUPPORTED")
+            check_as_text = suffix in {".py",".json",".md",".txt",".html",".css",".js",".svg",".csv"}
+            limit = 2_000_001 if check_as_text else 16384
+            with archive.open(info) as fp:
+                head = fp.read(min(info.file_size, limit))
+            require(bool(head), "NATIVE_EMPTY_DELIVERABLE")
+            if check_as_text:
+                require(info.file_size <= 2_000_000, "NATIVE_TEXT_TOO_LARGE_FOR_STATIC_QA")
+                try:
+                    decoded = head.decode("utf-8-sig")
+                except UnicodeError as exc:
+                    raise RuntimeError("NATIVE_TEXT_ENCODING_UNVERIFIED") from exc
+                require(bool(decoded.strip()), "NATIVE_EMPTY_TEXT")
+                if suffix == ".json":
+                    json.loads(decoded)
+                elif suffix == ".py":
+                    ast.parse(decoded, filename="<factory-native-static-check>")
+                elif suffix == ".svg":
+                    try:
+                        svg = ET.fromstring(decoded)
+                    except ET.ParseError as exc:
+                        raise RuntimeError("NATIVE_SVG_XML_INVALID") from exc
+                    require(svg.tag.split("}")[-1].lower() == "svg", "NATIVE_SVG_NOT_SVG")
+                    for element in svg.iter():
+                        require(element.tag.split("}")[-1].lower() not in ("script","foreignobject"),
+                                "NATIVE_UNSAFE_SVG_ELEMENT")
+                        for k,v in element.attrib.items():
+                            name=k.split("}")[-1].lower()
+                            require(not name.startswith("on"), "NATIVE_SVG_EVENT_HANDLER")
+                            if name == "href":
+                                require(not v.strip().lower().startswith(("http:","https:","javascript:","data:")),
+                                        "NATIVE_SVG_EXTERNAL_REFERENCE")
+                elif suffix == ".html":
+                    require("<html" in decoded.lower() or "<!doctype" in decoded.lower(),
+                            "NATIVE_HTML_DOCUMENT_UNVERIFIED")
+                elif suffix == ".csv":
+                    require(len(list(csv.reader(io.StringIO(decoded)))) >= 1, "NATIVE_CSV_EMPTY")
+            else:
+                if suffix == ".png":
+                    require(head[:8] == b"\x89PNG\r\n\x1a\n" and head[12:16] == b"IHDR"
+                            and 0 < int.from_bytes(head[16:20], "big") <= 32768
+                            and 0 < int.from_bytes(head[20:24], "big") <= 32768,
+                            "NATIVE_PNG_SIGNATURE_OR_DIMENSION")
+                elif suffix == ".gif":
+                    require(head[:6] in (b"GIF87a",b"GIF89a"), "NATIVE_GIF_SIGNATURE")
+                elif suffix == ".mp4":
+                    require(head[4:8] == b"ftyp", "NATIVE_MP4_SIGNATURE")
+                elif suffix == ".exr":
+                    require(head[:4] == b"\x76\x2f\x31\x01", "NATIVE_EXR_SIGNATURE")
+                elif suffix == ".wav":
+                    require(head[:4] == b"RIFF" and head[8:12] == b"WAVE",
+                            "NATIVE_WAV_SIGNATURE")
+                elif suffix == ".mp3":
+                    require(head[:3] == b"ID3" or (len(head)>=2 and head[0]==255 and (head[1]&224)==224),
+                            "NATIVE_MP3_SIGNATURE")
+                elif suffix == ".pdf":
+                    require(head.startswith(b"%PDF-"), "NATIVE_PDF_SIGNATURE")
+                elif suffix in (".xlsx",".ods",".docx",".epub"):
+                    require(head.startswith(b"PK"), "NATIVE_OFFICE_CONTAINER_SIGNATURE")
+            formats[suffix]=formats.get(suffix,0)+1
+    require(any(ext in formats for ext in (".py",".csv",".xlsx",".ods",".html",
+            ".svg",".png",".gif",".mp4",".exr",".wav",".mp3",".pdf",".docx",".epub")),
+            "NATIVE_NO_REAL_DELIVERABLES")
+    return {"inspected_members":len(members),"format_counts":dict(sorted(formats.items())),
+            "scope":"static file syntax, signatures, archive safety and source integrity only",
+            "code_execution_verified":False, "domain_quality_verified":False}
+
+
+def verify_native_private_preview(report, raw, product, version, original_sha):
+    """Validate native review-package provenance; it never becomes a sale-ready bundle."""
+    require(isinstance(report,dict)
+            and report.get("schema")==NATIVE_PREVIEW_SCHEMA
+            and report.get("product_id")==product
+            and report.get("factory_source_sha256")==version
+            and report.get("factory_internal_zip_sha256")==original_sha
+            and report.get("native_structural_review_passed") is True
+            and report.get("technical_buyer_package_verified") is False
+            and report.get("consumer_cli_smoke_examples_passed")==0
+            and report.get("independent_domain_review_completed") is False
+            and report.get("rights_and_license_review_completed") is False
+            and report.get("eligible_for_commercial_listing") is False
+            and report.get("commercial_release") is False
+            and report.get("public_download_allowed") is False
+            and report.get("price") is None
+            and report.get("package_bytes")==len(raw)
+            and report.get("package_sha256")==digest(raw),
+            "NATIVE_PREVIEW_APPROVAL_OR_IDENTITY_INVALID")
+    safe_zip(raw)
+    with zipfile.ZipFile(io.BytesIO(raw)) as package:
+        needed={"product/ORIGINAL_FACTORY_PRODUCT.zip","guide/START_HERE.md",
+                "qa/NATIVE_STRUCTURE_QA.json","qa/SHA256SUMS.txt",
+                "license/REVIEW_REQUIRED.txt"}
+        require(set(package.namelist()) == needed, "NATIVE_PREVIEW_MEMBER_LIST_INVALID")
+        original = package.read("product/ORIGINAL_FACTORY_PRODUCT.zip")
+        require(digest(original)==original_sha, "NATIVE_PREVIEW_SOURCE_HASH_DRIFT")
+        require(b"NOT LICENSED FOR PUBLIC RESALE" in package.read("license/REVIEW_REQUIRED.txt"),
+                "NATIVE_PREVIEW_NO_LICENSE_HOLD")
+        report_qa=json.loads(package.read("qa/NATIVE_STRUCTURE_QA.json"))
+        require(report_qa.get("original_artifact_sha256")==original_sha
+                and report_qa.get("original_source_sha256")==version
+                and report_qa.get("native_formats")==native_format_census(original)
+                and report_qa.get("human_expert_reviewed") is False
+                and report_qa.get("commercial_release") is False,
+                "NATIVE_PREVIEW_FORMAT_EVIDENCE_INVALID")
+        lines=package.read("qa/SHA256SUMS.txt").decode("utf8").splitlines()
+        require(len(lines)==4, "NATIVE_PREVIEW_HASH_LIST")
+        for line in lines:
+            sha,sep,name=line.partition("  ")
+            require(bool(sep) and bool(SHA.fullmatch(sha)) and name in needed
+                    and name!="qa/SHA256SUMS.txt" and digest(package.read(name))==sha,
+                    "NATIVE_PREVIEW_MEMBER_HASH_MISMATCH")
+    return True
+
+
 def customer_companion(root, product, version, original_sha):
     """Only a source-bound *private* buyer bundle; never a store-sale approval."""
     candidate = Path(root) / "customer-packs" / product / version
@@ -161,6 +296,8 @@ def customer_companion(root, product, version, original_sha):
 
 
 def validate_customer_companion(report, raw, product, version, original_sha):
+    if isinstance(report,dict) and report.get('schema')==NATIVE_PREVIEW_SCHEMA:
+        return verify_native_private_preview(report,raw,product,version,original_sha)
     require(isinstance(report, dict)
             and report.get("schema") == "saeit.factory.consumer-package.v1"
             and report.get("product_id") == product
@@ -348,6 +485,7 @@ def import_site(batch, root=DEST):
     private_new(root / "returns")
     added, previous = 0, 0
     customer_added,customer_existing,customer_missing=0,0,0
+    native_preview_added=native_preview_existing=0
     rows = []
     for product, version, manifest, content, customer in products:
         parent = root/"received"/product
@@ -365,6 +503,7 @@ def import_site(batch, root=DEST):
             atomic(version_dir/"product.zip",content)
             atomic(version_dir/"warehouse_manifest.json",json_blob(manifest))
             added += 1
+        native_preview=(customer is not None and customer[0].get("schema")==NATIVE_PREVIEW_SCHEMA)
         if customer is not None:
             candidate_report,candidate_zip=customer
             candidate_zip_path=version_dir/"customer-package.zip"
@@ -375,12 +514,14 @@ def import_site(batch, root=DEST):
                         and digest(candidate_zip_path.read_bytes())==candidate_report["package_sha256"]
                         and json_file(candidate_manifest_path)==candidate_report,
                         "CUSTOMER_PREVIOUS_RECEIPT_CONFLICT")
-                customer_existing+=1
+                if native_preview:native_preview_existing+=1
+                else:customer_existing+=1
             else:
                 atomic(candidate_zip_path,candidate_zip)
                 atomic(candidate_manifest_path,json_blob(candidate_report))
-                customer_added+=1
-        else:
+                if native_preview:native_preview_added+=1
+                else:customer_added+=1
+        if customer is None or native_preview:
             customer_missing+=1
         # This independent QA does NOT invent a content, licensing or owner
         # approval. Missing commercial verification returns to stage one.
@@ -388,7 +529,8 @@ def import_site(batch, root=DEST):
         qa = {"schema": SCHEMA,"tenant":TENANT,"product_id":product,
               "version":version,"artifact_sha256":manifest["artifact_sha256"],
               "technical_zip_verified":True,
-              "customer_bundle_verified":customer is not None,
+              "customer_bundle_verified":customer is not None and not native_preview,
+              "native_private_structure_preview_verified":bool(native_preview),
               "customer_package_sha256":(customer[0]["package_sha256"] if customer else None),
               "commercial_approved":False,
               "qa_state":"requires_factory_stage1_rework","issue_codes":issues,
@@ -415,6 +557,8 @@ def import_site(batch, root=DEST):
               "duplicate_versions_skipped":previous,
               "new_customer_packages_received":customer_added,
               "existing_customer_packages_verified":customer_existing,
+              "new_native_private_previews_received":native_preview_added,
+              "existing_native_private_previews_verified":native_preview_existing,
               "warehouse_versions_without_customer_bundle":customer_missing,
               "quality_approved":0,
               "pending_stage1_return":len(rows),"publicly_published":0,

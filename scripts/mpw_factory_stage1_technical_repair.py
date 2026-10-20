@@ -90,7 +90,7 @@ def validate_original(root,filename,row,courier):
         raise ValueError("REPAIR_SOURCE_RETURN_SHA_DRIFT")
     return product,version,manifest,raw
 
-def once(root,courier,packager,filename,row,do_pack):
+def once(root,courier,packager,native,filename,row,do_pack):
     """Returns honest per-source result. No mutation of original production ZIP."""
     item={"schema":SCHEMA,
       "tenant":courier.TENANT,
@@ -101,6 +101,7 @@ def once(root,courier,packager,filename,row,do_pack):
       "consumer_bundle_status":"not_examined",
       "consumer_package_sha256":None,
       "new_customer_bundle_rebuilt":False,
+      "new_native_private_preview_created":False,
       "rebuild_of_factory_source_performed":False,
       "commercial_review_complete":False,
       "content_expert_signed":False,
@@ -118,27 +119,35 @@ def once(root,courier,packager,filename,row,do_pack):
         companion=courier.customer_companion(root,product,version,manifest["artifact_sha256"])
         if companion:
             report,payload=companion
-            item["consumer_bundle_status"]="preexisting_independently_verified"
+            item["consumer_bundle_status"]=("preexisting_native_private_preview_verified"
+                if report.get("schema")==courier.NATIVE_PREVIEW_SCHEMA else
+                "preexisting_independently_verified")
             item["consumer_package_sha256"]=report["package_sha256"]
         else:
             item["consumer_bundle_status"]="absent"
             if not do_pack:
                 item["blocking_reason"]="REPAIR_BUDGET_DEFERS_TECHNICAL_PACKAGE"
             else:
-                # Refuse an unverifiable, wrong-version or unfit source. The
-                # packager checks actual recipe hashes and runs two CLI examples.
-                rec=root/"digital-products"/product/"manufacturing_manifest.json"
-                details=packager.read(rec)
-                if (details.get("source_sha256")!=version or
-                    details.get("artifact_sha256")!=manifest["artifact_sha256"]):
-                    raise ValueError("REPAIR_LATEST_MANUFACTURED_VERSION_DIFFERENT")
-                packer=packager.pack(root,product)
+                # Keep real calculator smoke tests for synthesizer products;
+                # other source-native families receive static private previews.
+                if packager.RECIPE.fullmatch(product):
+                    rec=root/"digital-products"/product/"manufacturing_manifest.json"
+                    details=packager.read(rec)
+                    if (details.get("source_sha256")!=version or
+                        details.get("artifact_sha256")!=manifest["artifact_sha256"]):
+                        raise ValueError("REPAIR_LATEST_MANUFACTURED_VERSION_DIFFERENT")
+                    packer=packager.pack(root,product)
+                    status="new_independently_verified"
+                    item["new_customer_bundle_rebuilt"]=bool(packer["new"])
+                else:
+                    packer=native.pack(root,product,version,manifest,raw,courier)
+                    status="new_native_structure_verified_private_review"
+                    item["new_native_private_preview_created"]=bool(packer["new"])
                 companion=courier.customer_companion(root,product,version,manifest["artifact_sha256"])
                 if not companion or companion[0]["package_sha256"]!=packer["package_sha256"]:
                     raise ValueError("REPAIR_INDEPENDENT_BUYER_PACKAGE_VERIFICATION_FAILED")
-                item["consumer_bundle_status"]="new_independently_verified"
+                item["consumer_bundle_status"]=status
                 item["consumer_package_sha256"]=packer["package_sha256"]
-                item["new_customer_bundle_rebuilt"]=bool(packer["new"])
     except (OSError,ValueError,RuntimeError,KeyError,TypeError,TimeoutError) as error:
         item["consumer_bundle_status"]="held_for_rework"
         item["blocking_reason"]=(type(error).__name__+":"+str(error))[:220]
@@ -150,14 +159,20 @@ def run(root=ROOT,max_new=43):
     if type(max_new) is not int or not 0<=max_new<=43:raise ValueError("REPAIR_BAD_BUDGET")
     courier=load("mpw_vps_warehouse_courier")
     packager=load("factory_customer_packager")
+    native=load("factory_native_customer_packager")
     entries=stage1(root,courier)
+    # Fair scheduled rotation: a few permanent blockers must not starve
+    # the remaining private source versions when max_new is only three.
+    if entries and max_new:
+        shift=(int(datetime.now(timezone.utc).timestamp()//300)*max_new)%len(entries)
+        entries=entries[shift:]+entries[:shift]
     parent=private(root/"design-state/mojplaywin-actual-technical-repair")
     lock=parent/".repair.lock"
     if lock.is_symlink():raise ValueError("REPAIR_LOCK_SYMLINK")
     descriptor=os.open(str(lock),os.O_RDWR|os.O_CREAT|getattr(os,"O_NOFOLLOW",0),0o600)
     try:
         fcntl.flock(descriptor,fcntl.LOCK_EX)
-        repaired=checked=blocked=already=missing=0
+        repaired=checked=blocked=already=missing=native_new=native_existing=0
         rows=[]
         for p,row in entries:
             filename=p.name
@@ -168,10 +183,12 @@ def run(root=ROOT,max_new=43):
                 if isinstance(product,str) and isinstance(version,str) and courier.RECIPE.fullmatch(product) and courier.SHA.fullmatch(version):
                     expected=root/"customer-packs"/product/version/"customer-package.zip"
                     candidate=not expected.exists()
-            allowed=candidate and repaired+blocked<max_new
-            result=once(root,courier,packager,filename,row,allowed)
+            allowed=candidate and repaired+native_new+blocked<max_new
+            result=once(root,courier,packager,native,filename,row,allowed)
             if result["technical_zip_integrity_passed"]:checked+=1
             if result["new_customer_bundle_rebuilt"]:repaired+=1
+            if result["new_native_private_preview_created"]:native_new+=1
+            if result["consumer_bundle_status"]=="preexisting_native_private_preview_verified":native_existing+=1
             if result["consumer_bundle_status"]=="preexisting_independently_verified":already+=1
             if result["consumer_bundle_status"] in ("held_for_rework","absent"):
                 if result.get("blocking_reason")=="REPAIR_BUDGET_DEFERS_TECHNICAL_PACKAGE":missing+=1
@@ -188,6 +205,8 @@ def run(root=ROOT,max_new=43):
           "returned_products_inspected":len(entries),
           "original_stock_zips_verified":checked,
           "new_customer_bundles_technically_repaired":repaired,
+           "new_native_private_previews_statically_validated":native_new,
+           "existing_native_private_previews_revalidated":native_existing,
           "existing_customer_bundles_verified":already,
           "technical_package_attempts_blocked":blocked,
           "technical_package_deferred_by_budget":missing,
@@ -203,6 +222,8 @@ def run(root=ROOT,max_new=43):
           k:status[k] for k in (
             "returned_products_inspected","original_stock_zips_verified",
             "new_customer_bundles_technically_repaired","existing_customer_bundles_verified",
+             "new_native_private_previews_statically_validated",
+             "existing_native_private_previews_revalidated",
             "technical_package_attempts_blocked","technical_package_deferred_by_budget",
             "independent_content_rights_review_still_required","source_product_rebuilds_verified",
             "stage1_returns_remaining_open","commercially_approved_returns")},
