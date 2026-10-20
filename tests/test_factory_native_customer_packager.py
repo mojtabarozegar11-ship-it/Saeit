@@ -64,6 +64,50 @@ class NativePreviewTest(unittest.TestCase):
         self.assertFalse(native.pack(self.root,self.product,self.version,self.manifest,self.original,courier)["new"])
         self.assertEqual((self.stock/"product.zip").read_bytes(),self.original)
 
+    def test_site_qa_accepts_native_preview_but_never_labels_it_buyer_ready(self):
+        native.pack(self.root,self.product,self.version,self.manifest,self.original,courier)
+        archive=courier.export_factory(self.root)
+        site=self.root/"site-private"
+        site.mkdir(mode=0o700)
+        report=courier.import_site(archive,site)
+        self.assertEqual(report["new_native_private_previews_received"],1)
+        self.assertEqual(report["new_customer_packages_received"],0)
+        self.assertEqual(report["warehouse_versions_without_customer_bundle"],1)
+        self.assertEqual(report["publicly_published"],0)
+        qa=json.loads((site/"received"/self.product/self.version/"site_qa.json").read_text())
+        self.assertTrue(qa["native_private_structure_preview_verified"])
+        self.assertFalse(qa["customer_bundle_verified"])
+        self.assertFalse(qa["payment_enabled"])
+        feedback=courier.receive_factory_returns(courier.feedback_site(site),self.root)
+        self.assertEqual(feedback["accepted_stage1_qa_returns"],1)
+        self.assertFalse(feedback["factory_repair_executed"])
+
+    def test_three_item_budget_does_not_expand_for_native_previews(self):
+        inbox=self.root/"design-intake/mojplaywin-stage1-quality-returns"
+        inbox.mkdir(parents=True)
+        for i in range(5):
+            ident="original_native_"+str(i)
+            ver=("%064x"%(i+7))
+            stock=self.root/"production-warehouse/finished"/ident/ver
+            stock.mkdir(parents=True)
+            m=dict(self.manifest,product_id=ident,source_sha256=ver)
+            (stock/"warehouse_manifest.json").write_text(json.dumps(m))
+            (stock/"product.zip").write_bytes(self.original)
+            row={"schema":courier.RETURN_SCHEMA,"tenant":courier.TENANT,
+                 "product_id":ident,"source_sha256":ver,
+                 "artifact_sha256":m["artifact_sha256"],"stage":1,
+                 "status":"return_for_qa_completion","issues":list(courier.ISSUES),
+                 "published":False,"factory_original_must_be_preserved":True}
+            (inbox/(ident+"-"+ver+".json")).write_text(json.dumps(row))
+        first=worker.run(self.root,max_new=3)
+        self.assertEqual(first["new_native_private_previews_statically_validated"],3)
+        self.assertEqual(first["technical_package_deferred_by_budget"],2)
+        self.assertEqual(first["stage1_returns_remaining_open"],5)
+        nextpass=worker.run(self.root,max_new=43)
+        self.assertEqual(nextpass["new_native_private_previews_statically_validated"],2)
+        self.assertEqual(nextpass["existing_native_private_previews_revalidated"],3)
+        self.assertEqual(nextpass["commercially_approved_returns"],0)
+
     def test_bad_format_and_unsafe_svg_block_native_pack(self):
         for corrupt in (
             {"native_art/misleading.png":b"not a png"},
