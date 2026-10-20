@@ -155,7 +155,7 @@ jobs:
           old_stopped=False
           deployed=False
           newproc=None
-          logfile=None
+          spawned=[]
           def alive(pid):
               try:
                   os.kill(pid,0)
@@ -168,6 +168,7 @@ jobs:
                   proc=subprocess.Popen([sys.executable,'-u',str(target)],
                       cwd=str(root),stdin=subprocess.DEVNULL,stdout=logfile,
                       stderr=subprocess.STDOUT,start_new_session=True)
+                  spawned.append(proc)
               finally:
                   logfile.close()
               fd=os.open(pidfile,os.O_WRONLY|os.O_CREAT|os.O_TRUNC|os.O_NOFOLLOW,0o600)
@@ -196,12 +197,13 @@ jobs:
               print('PICM_DIRECT_CPU_WORKER_DEPLOYED_AND_RUNNING')
               print('PICM_PRIVATE_WORKER_BACKUP_STORED')
           except Exception:
-              if newproc is not None and newproc.poll() is None:
-                  newproc.terminate()
-                  try:
-                      newproc.wait(timeout=5)
-                  except subprocess.TimeoutExpired:
-                      newproc.kill()
+              for proc in spawned:
+                  if proc.poll() is None:
+                      proc.terminate()
+                      try:
+                          proc.wait(timeout=5)
+                      except subprocess.TimeoutExpired:
+                          proc.kill()
               if deployed:
                   tmp=root/('.rollback-'+run+'.py')
                   shutil.copy2(backup,tmp)
