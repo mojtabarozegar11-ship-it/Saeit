@@ -1,0 +1,82 @@
+name: MojPlayWin live store placement and sitemap audit 2026-10-20
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-store-sitemap-placement-readonly-20261020.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-revenue-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect safely only main-store template structure and sitemap section
+        run: |
+          timeout 65s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,re
+          base=Path('/home/zomorod2')
+          store=base/'Saeit-staging/core/templates/mojplaywin/store.html'
+          sitemap=base/'mojplaywin.com/design-preview-20261017/_mpw_sitemap_three_indexable_20261017.php'
+          for p in (store,sitemap):
+              if not p.is_file() or p.is_symlink(): raise RuntimeError('Main-site file not safe: '+p.name)
+          text=store.read_text('utf8','replace')
+          mark='<!-- MPW_TWO_BOOKS_PUBLIC_CATALOG_V1_START -->'
+          index=text.find(mark)
+          print('MPW_STORE_MARKER_AUDIT='+json.dumps({'marker_count':text.count(mark),'endblock_count':text.count('{% endblock %}'),'length':len(text),'sha256':hashlib.sha256(text.encode()).hexdigest(),'near_marker':text[max(0,index-450):index+500],'already_has_purchase_guide':'mpw-buyer-signup-guide-20261020' in text}))
+          raw=sitemap.read_text('utf8','replace')
+          snippets=[]
+          for i,line in enumerate(raw.splitlines(),1):
+              if any(k in line.lower() for k in ('<url>','<loc>','sitemap','http','store','foreach','header(')):
+                  if re.search(r'(?i)(secret|password|token|key|session|cookie|authorization)',line):continue
+                  snippets.append(str(i)+':'+line.strip()[:200])
+          print('MPW_SITEMAP_STRUCTURE='+json.dumps({'length':len(raw),'sha256':hashlib.sha256(raw.encode()).hexdigest(),'lines':snippets[:58]}))
+          PY
+      - name: Remove ephemeral SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
