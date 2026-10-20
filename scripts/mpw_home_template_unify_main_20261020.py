@@ -14,8 +14,8 @@ NAMES=('about-mojtaba-rozegar','about','agents','company','economy','industry','
 SLUGS=('website-doctor','landing-page-studio','ai-automation','business-spreadsheets','website-templates','social-media-kits','resume-builder','logo-studio','browser-games','marketing-ai','business-calculators','website-care')
 HEAD=re.compile(r'<header\b(?=[^>]*\bclass=["\x27](?:mw-site-nav|mpw-header)["\x27])[^>]*>[\s\S]*?</header\s*>',re.I)
 FOOT=re.compile(r'<footer\b(?=[^>]*\bclass=["\x27](?:mw-site-footer|mpw-footer)["\x27])[^>]*>[\s\S]*?</footer\s*>',re.I)
-ANY_HEADER=re.compile(r'<header\\b[^>]*>[\\s\\S]*?</header\\s*>',re.I)
-ANY_FOOTER=re.compile(r'<footer\\b[^>]*>[\\s\\S]*?</footer\\s*>',re.I)
+ANY_HEADER=re.compile(r'<header\b[^>]*>[\s\S]*?</header\s*>',re.I)
+ANY_FOOTER=re.compile(r'<footer\b[^>]*>[\s\S]*?</footer\s*>',re.I)
 STYLE=re.compile(r'<style\b[^>]*>([\s\S]*?)</style\s*>',re.I)
 LINK=re.compile(r'<link\b(?=[^>]*\brel=["\x27]stylesheet["\x27])[^>]*>',re.I)
 MARK='data-mpw-home-unified-20261020="v1"'
