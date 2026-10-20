@@ -125,9 +125,34 @@ def inspect_actual_products(root, lifecycle):
                     errors.append("ARTIFACT_HASH_MISMATCH")
                 with zipfile.ZipFile(archive) as z:
                     members=z.infolist()
-                    if not members or len(members)>80 or sum(x.file_size for x in members)>100*1024*1024:
+                    is_special=False
+                    if recipe=="fieldwork_ui_48_icons" and len(members)==100:
+                        audit=m.get("qa_measurements",{}) if isinstance(m,dict) else {}
+                        documented=m.get("files") if isinstance(m,dict) else None
+                        if isinstance(documented,list) and len(documented)==100:
+                            svg={x[:-4] for x in documented if isinstance(x,str) and x.endswith(".svg")}
+                            png={x[:-4] for x in documented if isinstance(x,str) and x.endswith(".png")}
+                            docs=set(documented)-{x for x in documented if isinstance(x,str) and x.endswith((".svg",".png"))}
+                            is_special=(m.get("family_id")=="F34"
+                                and isinstance(audit,dict)
+                                and audit.get("review_kind")=="separate_automated_technical_verification"
+                                and audit.get("validated_archive_members")==100
+                                and audit.get("archive_sha256")==actual_digest
+                                and audit.get("critical_defects")==[]
+                                and isinstance(audit.get("gates"),dict)
+                                and len(audit["gates"])==10
+                                and all(v is True for v in audit["gates"].values())
+                                and len(set(documented))==100
+                                and len(svg)==48 and svg==png
+                                and docs=={"README.md","LICENSE.txt","catalog.json","preview.html"}
+                                and {entry.filename for entry in members}==
+                                    {recipe+"/"+x for x in documented})
+                        if not is_special:
+                            errors.append("F34_EXACT_EVIDENCE_INVALID")
+                    if (not members or len(members)>(100 if is_special else 80)
+                            or sum(x.file_size for x in members)>100*1024*1024):
                         errors.append("ARCHIVE_LIMIT")
-                    else:
+                    if not errors:
                         for member in members:
                             name=member.filename
                             if (member.is_dir() or not name.startswith(recipe+"/")

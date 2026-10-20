@@ -73,6 +73,34 @@ class ReviewPacketTests(unittest.TestCase):
         self.assertFalse((self.root/"product-lifecycle"/"passports").exists())
         self.assertEqual(m.build(self.root)["technical_readiness"]["goods_inspected"],2)
 
+    def test_exact_f34_exception_requires_proven_verified_100_files(self):
+        import hashlib
+        import zipfile
+        recipe="fieldwork_ui_48_icons"
+        folder=self.root/"digital-products"/recipe
+        folder.mkdir(parents=True)
+        filenames=([f"icons/icon_{i:02d}.svg" for i in range(48)]
+                   +[f"icons/icon_{i:02d}.png" for i in range(48)]
+                   +["README.md","LICENSE.txt","catalog.json","preview.html"])
+        archive=folder/(recipe+"-internal-qa.zip")
+        with zipfile.ZipFile(archive,"w") as pack:
+            for name in filenames:pack.writestr(recipe+"/"+name,"real bytes")
+        sha=hashlib.sha256(archive.read_bytes()).hexdigest()
+        checks={"gate"+str(i):True for i in range(10)}
+        manifest={"recipe":recipe,"qa_status":"passed","family_id":"F34",
+          "source_sha256":"a"*64,"artifact_sha256":sha,"files":filenames,
+          "qa_measurements":{"review_kind":"separate_automated_technical_verification",
+            "validated_archive_members":100,"archive_sha256":sha,
+            "critical_defects":[],"gates":checks}}
+        meta=folder/"manufacturing_manifest.json"
+        meta.write_text(json.dumps(manifest))
+        self.assertEqual(m.build(self.root)["technical_readiness"]["technically_verified"],1)
+        manifest["qa_measurements"]["gates"]["gate0"]=False
+        meta.write_text(json.dumps(manifest))
+        self.assertEqual(m.build(self.root)["technical_readiness"]["technical_rework_required"],1)
+        dashboard=json.loads((self.root/"product-lifecycle"/"product-technical-readiness"/"dashboard.json").read_text())
+        self.assertIn("F34_EXACT_EVIDENCE_INVALID",dashboard["items"][0]["blockers"])
+
     def test_hash_tamper_is_blocked_without_approving_good_qa(self):
         import hashlib
         import zipfile
