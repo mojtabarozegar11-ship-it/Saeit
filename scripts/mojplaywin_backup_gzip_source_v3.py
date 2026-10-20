@@ -77,7 +77,7 @@ def mysql_command():
     verify = subprocess.run([
         "mariadb", "--no-defaults", "--batch", "--skip-column-names", *opts,
         "--database=" + db, "--connect-timeout=8",
-        "--execute=SELECT COUNT(*), COALESCE(SUM(ENGINE <> 'InnoDB'),0) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE'
+        "--execute=SELECT COUNT(*), COALESCE(SUM(ENGINE <> 'InnoDB'),0) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE'"
     ], env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=15, check=False)
     try:
         count, nontransactional = map(int, verify.stdout.decode("ascii").split())
@@ -149,8 +149,6 @@ def compress_process(command, *, env=None, out=None, max_raw=MAX_RAW_BYTES):
 
 
 def fixture():
-    payload = (b"synthetic backup fixture; no database or customer data\n" * 10000)
-    script = "import sys;sys.stdout.buffer.write(" + repr(payload) + ")"
     # Small fixture avoids the command-line argument size limit on Linux.
     script = "import sys;sys.stdout.buffer.write(b'V3 synthetic gzip test\\n'*20000)"
     target = io.BytesIO()
