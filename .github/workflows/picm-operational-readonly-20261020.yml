@@ -335,6 +335,56 @@ jobs:
               print(label+'_COUNT='+str(content.count(signature)))
           print('PICM_LIVE_TEMPLATE_VARIANT_DIAG_DONE')
           PY
+      - name: Render actual owner PICM Django workbench privately without modifying data
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 60s ssh -F "$WORK/config" picm-host 'bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          cd /home/zomorod2/Saeit-staging
+          found=0
+          for py in "$PWD/.venv/bin/python" "$PWD/venv/bin/python" /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python /home/zomorod2/virtualenv/Saeit/3.11/bin/python /home/zomorod2/virtualenv/mojplaywin.com/3.11/bin/python; do
+            if test -x "$py" && "$py" -c 'import django' >/dev/null 2>&1; then
+              found=1
+              "$py" - <<'PY'
+          import os
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from django.test import RequestFactory
+          from types import SimpleNamespace
+          from core.picm_access import owner_id
+          from core.picm_views import picm_workbench
+          owner=owner_id()
+          assert owner is not None, "PICM_OWNER_NOT_BOUND"
+          req=RequestFactory().get('/picm/workspace/')
+          req.user=SimpleNamespace(pk=int(owner),is_authenticated=True,is_active=True)
+          response=picm_workbench(req)
+          print('PICM_DJANGO_OWNER_RENDER_HTTP='+str(response.status_code))
+          assert response.status_code==200
+          html=response.content.decode('utf-8')
+          details={
+            'PICM_DJANGO_DEFAULT_TEXT_IMAGE':'id="mode" name="mode" value="text_image"' in html,
+            'PICM_DJANGO_TEXT_IMAGE_TILE_ACTIVE':'id="mode-text_image" type="button" aria-pressed="true"' in html,
+            'PICM_DJANGO_PHOTO_NOT_REQUIRED':'name="photo" id="photo" accept="image/png,image/jpeg" hidden' in html,
+            'PICM_DJANGO_PROMPT_VALIDATION':'form.noValidate=selected' in html,
+            'PICM_DJANGO_PRIVATE_POST':'fetch("/picm/api/submit/"' in html,
+            'PICM_DJANGO_TEXT_IMAGE_SCRIPT':'PICM private' in html or 'Owner-only, genuine PICM' in html,
+          }
+          for key,val in details.items():
+            print(key+'='+str(val))
+          assert all(details.values()),"PICM_DJANGO_TEMPLATE_OLDER_THAN_DISK"
+          print('PICM_LIVE_DJANGO_OWNER_NEW_UI_RENDER_CONFIRMED')
+          req.user=SimpleNamespace(pk=-3219889,is_authenticated=True,is_active=True)
+          print('PICM_DJANGO_NONOWNER_HTTP='+str(picm_workbench(req).status_code))
+          assert picm_workbench(req).status_code==403
+          PY
+              break
+            fi
+          done
+          test "$found" = 1 || { echo PICM_DJANGO_RUNTIME_NOT_FOUND; exit 33; }
+          REMOTE
       - name: Verify public PICM security boundaries read-only
         shell: bash
         run: |
