@@ -14,7 +14,7 @@ import re
 PERSON = "مجتبی روزگار"
 ROLES = ("author", "researcher", "scientific_researcher", "compiler", "producer", "maker", "seller")
 LABELS = ("نویسنده", "محقق", "پژوهشگر", "گردآورنده", "تهیه‌کننده", "سازنده", "فروشنده")
-SCHEMA_VERSION = "3.0"
+SCHEMA_VERSION = "4.0"
 SHA = re.compile(r"^[0-9a-f]{64}$")
 PRODUCT = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
@@ -56,12 +56,28 @@ def build_passport(product_id, verified_roles=None, ownership=None, evidence=Non
         if digest is not None and (not isinstance(digest, str) or not SHA.fullmatch(digest)):
             raise ValueError("PASSPORT_SOURCE_BINDING_INVALID")
     return {
-        "schema": "saeit.factory.private-product-passport.v3",
+        "schema": "saeit.factory.private-product-passport.v4",
         "schema_version": SCHEMA_VERSION,
         "product_id": product_id,
         "source_sha256": source_sha256,
         "artifact_sha256": artifact_sha256,
         "visibility": "private_passport_only",
+        # Owner-authorized standing POLICY SCOPE, not a signed contract or proof of title.
+        # Applies as a default to eligible current and future outputs, with no item-count cap.
+        "master_framework": {
+            "framework_id": "ZOMOROD-MASTER-PERSONAL-RIGHTS-20261020",
+            "framework_version": "1.0",
+            "policy_status": "owner_authorized_framework_not_a_signed_contract",
+            "coverage": "all_eligible_existing_and_future_outputs_without_count_limit",
+            "product_count_cap": None,
+            "requires_new_master_contract_for_each_product": False,
+            "contractual_end_date": None,
+            "operational_term": "indefinite_subject_to_mandatory_law_and_valid_termination",
+            "only_personally_owned_or_validly_acquired_rights_included": True,
+            "third_party_rights_not_automatically_transferred": True,
+            "individual_product_origin_and_license_check_required": True,
+            "valid_execution_and_authority_evidence_verified": False,
+        },
         "declared_person": PERSON,
         "declared_roles": dict(zip(ROLES, LABELS)),
         "declared_roles_evidence_status": "owner_statement_not_independently_verified",
@@ -78,7 +94,7 @@ def build_passport(product_id, verified_roles=None, ownership=None, evidence=Non
         "company_operational_permission": {
             "type": "limited_nonexclusive_operational_license_not_transfer_of_title",
             "scope": ["hosting", "promotion", "technical_delivery", "order_support"],
-            "duration": "indefinite_until_contractual_termination",
+            "duration": "indefinite_subject_to_mandatory_law_and_valid_termination",
             "cure_period_calendar_days": 15,
             "executed_agreement_verified": False,
         },
@@ -148,7 +164,7 @@ def ensure_private_passport(product_directory, manifest):
     record = build_passport(product_id, source_sha256=source_sha, artifact_sha256=archive_sha)
     if source_missing:
         record["source_provenance_status"] = "missing_original_source_sha_must_rework"
-    suffix = ".source_missing.personal_owner_v3.private.json" if source_missing else ".personal_owner_v3.private.json"
+    suffix = ".source_missing.personal_owner_v4.private.json" if source_missing else ".personal_owner_v4.private.json"
     path = folder / ("product_passport." + archive_sha + suffix)
     status = write_passport(path, record)
     # No modified public web content, store database, original ZIP, or payment state.
