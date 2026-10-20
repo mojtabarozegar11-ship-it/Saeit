@@ -176,6 +176,8 @@ def verify(run):
     os.chdir(APP)
     sys.path.insert(0, str(APP))
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    import django
+    django.setup()
     handler = importlib.import_module("mpw_commerce.product_checkout_page")._apply_two_book_strict_csp
     proof(handler)
     print("MPW_CSP_PATCH_VERIFIED=" + json.dumps({
