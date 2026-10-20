@@ -78,7 +78,7 @@ class PICMTextImageOwnerTests(TestCase):
         text=(ROOT / "templates/picm/text_image.js").read_text(encoding="utf-8")
         self.assertIn("۲۵۶", html)
         self.assertIn("حرکت سادهٔ عکس", html)
-        self.assertIn("فیلم واقعی تولید نمی‌شود", html)
+        self.assertIn("ساخت فیلم با حرکت واقعی افراد", html)
         self.assertIn("CPU", text)
         self.assertIn("authenticatedUrl", text)
         self.assertIn('photo.required=!selected', text)
