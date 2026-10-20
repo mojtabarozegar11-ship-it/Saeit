@@ -147,10 +147,12 @@ def build(root):
                     "Publish only after the separate current release-manifest gate passes."
                 ],
             }
-            location = queue/p.stem/(source_sha+".json")
+            packet_sha = hashlib.sha256(serialize(packet)).hexdigest()
+            location = queue/p.stem/(source_sha+"-"+packet_sha+".json")
             if save(location, packet, immutable=True):
                 counts["new_private_packets"] += 1
             packets.append({"work_order":p.stem,"source_sha256":source_sha,
+                            "packet_sha256":packet_sha,
                             "passport_complete":not missing})
         summary = {"schema":SCHEMA,"status":"pending_authentic_owner_and_specialist_evidence",
                    "counts":dict(sorted(counts.items())),"packets":packets,
