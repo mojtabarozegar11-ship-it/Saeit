@@ -88,8 +88,10 @@ jobs:
           assert data['sites_contacted']==0
           assert (root/'product-lifecycle/dashboard.json').is_file()
           for item in data['packets']:
-              file=folder/item['work_order']/(item['source_sha256']+'.json')
+              file=folder/item['work_order']/(item['source_sha256']+'-'+item['packet_sha256']+'.json')
               assert file.is_file() and not file.is_symlink()
+              import hashlib
+              assert hashlib.sha256(file.read_bytes()).hexdigest()==item['packet_sha256']
               assert json.loads(file.read_text())['commercial_release'] is False
           print('REAL_VPS_MANUFACTURING_ORDERS_PREPARED='+str(len(data['packets'])))
           print('REAL_VPS_RESEARCH_AWAITING_EVIDENCE='+str(data['counts'].get('research_waiting_for_real_evidence',0)))
