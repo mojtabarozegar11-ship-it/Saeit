@@ -66,6 +66,15 @@ def main():
             probe.user = user
             assert picm_reference_status(probe, ident).status_code == 200
             print("PICM_LIVE_PRIVATE_STAGE_OK_" + mode.upper())
+            # Keep one synthetic reference staged at a time. The private owner
+            # may already have real photos staged; never delete or count those
+            # as test artifacts, and avoid exhausting the three-photo limit.
+            with locked() as root:
+                for suffix in (".input", ".stage.json"):
+                    item = root / (ident + suffix)
+                    if item.is_file() and not item.is_symlink():
+                        item.unlink()
+            created.remove(ident)
         print("PICM_ALL_THREE_PHOTO_MODES_SITE_API_PROVEN")
     finally:
         with locked() as root:
