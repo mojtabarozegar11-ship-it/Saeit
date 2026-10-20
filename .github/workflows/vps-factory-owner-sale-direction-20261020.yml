@@ -1,0 +1,85 @@
+name: Factory owner conditional sale approval with live gate check
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/vps-factory-owner-sale-direction-20261020.yml]
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: factory-conditional-sale-direction
+  cancel-in-progress: false
+jobs:
+  record-and-check:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - name: Persist exact conditional owner direction privately on verified VPS
+        shell: bash
+        env:
+          VPS_KEY: \${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/owner-intent"
+          install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 100s ssh -T -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 python3 - <<'PY'
+          import json,os,hashlib,stat,tempfile
+          from pathlib import Path
+          root=Path.home()/"factory-runtime/private/autonomous-product-cycle"
+          assert root.is_dir() and not root.is_symlink()
+          life=root/"product-lifecycle"
+          assert life.is_dir() and not life.is_symlink()
+          dest=life/"owner-commercial-instructions"
+          if dest.is_symlink():raise RuntimeError("OWNER_INSTRUCTION_SYMLINK")
+          dest.mkdir(exist_ok=True,mode=0o700)
+          os.chmod(dest,0o700)
+          doc={"schema":"saeit.factory.owner-commercial-direction.v1",
+            "owner_instruction_date_utc":"2026-10-20",
+            "request_channel":"ChatGPT owner conversation",
+            "scope":"commercial publication for individual eligible factory products",
+            "in_principle_commercial_publication_authorized":True,
+            "individual_skus_rights_or_prices_approved_by_this_record":False,
+            "request_origin_signature_independently_verified":False,
+            "asset_license_evidence_still_required":True,
+            "qualified_domain_functional_qa_still_required":True,
+            "individual_product_release_gate_still_required":True,
+            "real_payment_receipt_and_delivery_checks_still_required":True,
+            "unreviewed_private_stock_publication_allowed":False,
+            "commercial_release_applied_by_this_record":False}
+          raw=(json.dumps(doc,sort_keys=True,separators=(',',':'))+"\n").encode()
+          target=dest/"20261020-commercial-direction.json"
+          if target.is_symlink():raise RuntimeError("OWNER_INSTRUCTION_FILE_SYMLINK")
+          if target.exists():
+            if target.read_bytes()!=raw:raise RuntimeError("OWNER_INSTRUCTION_IMMUTABILITY_CONFLICT")
+            status="already_recorded"
+          else:
+            fd,p=tempfile.mkstemp(prefix=".owner-",dir=str(dest))
+            try:
+              with os.fdopen(fd,"wb") as out:
+                out.write(raw);out.flush();os.fsync(out.fileno())
+              os.chmod(p,0o600)
+              if target.exists():raise RuntimeError("OWNER_INSTRUCTION_RACE")
+              os.replace(p,target)
+            finally:
+              if os.path.exists(p):os.unlink(p)
+            status="recorded_new"
+          assert target.read_bytes()==raw and stat.S_IMODE(target.stat().st_mode)==0o600
+          stock=root/"production-warehouse/stock-register.json"
+          life_status=life/"dashboard.json"
+          summary={}
+          for key,path in (("stock",stock),("lifecycle",life_status)):
+            if path.is_file() and not path.is_symlink():
+              data=json.loads(path.read_text())
+              fields=("finished_goods_versions","distribution_enabled","final_commercially_verified_stock","orders_by_stage","manufacturing_order_automation_complete")
+              summary[key]={k:data.get(k) for k in fields if k in data}
+          print("OWNER_COMMERCIAL_INSTRUCTION="+json.dumps({"state":status,"sha256":hashlib.sha256(raw).hexdigest(),"publication_performed":False,"rights_claimed":False},sort_keys=True))
+          print("FACTORY_COMMERCE_READINESS="+json.dumps(summary,sort_keys=True,default=str)[:2000])
+          print("OWNER_DIRECTION_PRIVATE_WRITE_VERIFIED=PASS")
+          PY
