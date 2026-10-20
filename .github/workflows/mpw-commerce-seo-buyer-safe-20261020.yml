@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/mpw-commerce-seo-buyer-safe-20261020.yml"
+      - "scripts/mpw_commerce_seo_buyer_20261020.py"
 permissions: {contents: read}
 concurrency:
   group: mpw-commercesitemap-mainonly
