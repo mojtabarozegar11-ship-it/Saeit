@@ -1,0 +1,24 @@
+name: Factory one-pass 1000 production support tools
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/vps-factory-1000-workbench-release-20261020.yml"]
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: saeit-onepass-1000-tool-workbench
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Execute 1000 distinct registered bindings and strict utility tests
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_1000_workbench.sh
+          python3 -m py_compile scripts/factory_1000_workbench.py
+          python3 -m unittest discover -s tests -p test_factory_1000_workbench.py -v
+          echo FACTORY_1000_TOOL_SUPPORT_CI=PASS
