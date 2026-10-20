@@ -81,6 +81,7 @@ jobs:
           stage="/home/githubops/factory-runtime/operations/.f34-commercial-pilot-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           timeout 40s ssh -T -F "$d/config" saeit-vps "umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
           scp -q -F "$d/config" scripts/factory_f34_commercial_pilot_20261020.py "saeit-vps:$stage/accept.py"
+          scp -q -F "$d/config" scripts/factory_f34_ultra_quality_20261020.py "saeit-vps:$stage/factory_f34_ultra_quality_20261020.py"
           want="$(sha256sum scripts/factory_f34_commercial_pilot_20261020.py|awk '{print $1}')"
           timeout 40s ssh -T -F "$d/config" saeit-vps "test ! -L '$stage/accept.py' && test \"\$(sha256sum '$stage/accept.py'|awk '{print \$1}')\" = '$want'"
           timeout 145s ssh -T -F "$d/config" saeit-vps \
