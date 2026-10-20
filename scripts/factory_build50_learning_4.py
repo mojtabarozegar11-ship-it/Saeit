@@ -210,7 +210,9 @@ def build(root,family):
         return {"passed":True,"outputs":files,"successful_checks":2}
     def assemble(item,ctx):
         folder=Path(ctx["folder"]);source_ext=(".html",".json",".docx")
-        members=sorted(p.name for p in folder.iterdir() if p.suffix in source_ext+(".pdf",))
+        members=sorted(task["id"]+ext for task in item["work_packages"]
+                       for ext in ((".html",".pdf") if family in ("F06","F07")
+                                   else ((".json",".pdf") if family=="F10" else (".docx",".pdf"))))
         (folder/"README.txt").write_text(
           "Fixed-scope original "+family+" offline educational samples. "+str(len(members))+
           " usable files. Source content and verification are included. Independent checks are automated only; "

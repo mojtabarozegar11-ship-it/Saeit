@@ -33,8 +33,8 @@ def answer(item):
 def check(folder,archive,product,family):
     folder=Path(folder)
     ext={"F06":".html","F07":".html","F10":".json","F11":".docx"}[family]
-    sources=sorted(folder.glob("*"+ext))
     pdfs=sorted(folder.glob("*.pdf"))
+    sources=[folder/(p.stem+ext) for p in pdfs]
     if len(sources)!=48 or len(pdfs)!=48:raise ValueError("LEARNING_REVIEW_EXPECTED_48_PAIRS")
     expected={p.name for p in sources+pdfs}|{"README.txt"}
     for file in sources+pdfs:
