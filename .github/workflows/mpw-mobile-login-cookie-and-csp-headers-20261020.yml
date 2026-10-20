@@ -12,7 +12,7 @@ jobs:
       - name: Read public HTTPS login form response headers without cookies or passwords
         run: |
           python3 - <<'PY'
-          import urllib.request,urllib.error,json,re
+          import urllib.request,urllib.error,urllib.parse,json
           for host in ('mojplaywin.com','www.mojplaywin.com'):
               url='https://'+host+'/accounts/login/?public_probe=20261020'
               for agent in ('Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/130 Mobile Safari/537.36','Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 ChatGPT WebView Mobile Safari/537.36'):
@@ -27,7 +27,7 @@ jobs:
                       print('MPW_MOBILE_LOGIN_CSP_COOKIE_AUDIT='+json.dumps({
                         'host':host,'agent':'in_app' if 'ChatGPT' in agent else 'chrome',
                         'status':r.status,'redirected_host':urllib.parse.urlparse(r.geturl()).hostname,
-                        'form_csrf':bool(re.search(r'name=["\\']csrfmiddlewaretoken["\\']',html)),
+                        'form_csrf':('csrfmiddlewaretoken' in html),
                         'client_guard':'mpw-csrf-fresh-submit-20261020' in html,
                         'cookies':cookies,
                         'csp_present':bool(csp),'csp':csp[:700],
