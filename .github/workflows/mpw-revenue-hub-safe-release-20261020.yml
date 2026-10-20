@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/mpw-revenue-hub-safe-release-20261020.yml"
+      - "scripts/mpw_revenue_hub_release_20261020.py"
 permissions: {contents: read}
 concurrency:
   group: mpw-revenue-hub-main-only
@@ -116,6 +117,19 @@ jobs:
           set -euo pipefail
           script="$(base64 -w0 scripts/mpw_revenue_hub_release_20261020.py)"
           timeout 120s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$script\"))' publish '$GITHUB_RUN_ID'" < "$RUNNER_TEMP/mpw-revenue-hub.tgz"
+      - name: Inspect published main-only static file permissions
+        run: |
+          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel python3 - <<'PY'
+          import os,json,stat
+          from pathlib import Path
+          root=Path('/home/zomorod2/mojplaywin.com')
+          for rel in ('earn','earn/index.html','earn/assets','earn/assets/style.css','earn/website-doctor','earn/website-doctor/index.html'):
+              p=root/rel
+              if not p.exists() or p.is_symlink():raise RuntimeError('Missing or symlinked '+rel)
+              st=p.stat()
+              print('MPW_EARN_REAL_STAT='+json.dumps(dict(path=rel,mode=oct(stat.S_IMODE(st.st_mode)),uid=st.st_uid,gid=st.st_gid,readable_world=bool(st.st_mode & stat.S_IROTH))))
+              if p.is_dir() and not (st.st_mode & stat.S_IXOTH):raise RuntimeError('Not traversable by webserver: '+rel)
+          PY
       - name: Verify every revenue page, metadata and protected routes
         run: |
           python3 - <<'PY'
