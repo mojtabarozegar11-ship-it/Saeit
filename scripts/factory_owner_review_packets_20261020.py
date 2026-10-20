@@ -94,6 +94,7 @@ def inspect_actual_products(root, lifecycle):
         source_sha=None
         manifest_digest=None
         actual_digest=None
+        expected=None
         if not manifest.is_file() or manifest.is_symlink():
             errors.append("MANUFACTURING_MANIFEST_MISSING")
         else:
@@ -131,7 +132,7 @@ def inspect_actual_products(root, lifecycle):
                             name=member.filename
                             if (member.is_dir() or not name.startswith(recipe+"/")
                                 or any(p in ("",".","..") for p in name.split("/"))
-                                or "\\\\" in name
+                                or "\\" in name
                                 or (member.external_attr>>16)&0o170000 == 0o120000):
                                 errors.append("ARCHIVE_MEMBER_UNSAFE")
                                 break
