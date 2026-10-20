@@ -9,7 +9,7 @@ NAMES=('about-mojtaba-rozegar','about','agents','company','economy','industry','
 SLUGS=('website-doctor','landing-page-studio','ai-automation','business-spreadsheets','website-templates','social-media-kits','resume-builder','logo-studio','browser-games','marketing-ai','business-calculators','website-care')
 LABELS=('Website Doctor','Landing Page Studio','AI Workflow Automation','Business Spreadsheets','Website Templates','Social Media Kits','Resume Builder','Logo & Brand Studio','Browser Games','Marketing Workspace','Business Calculators','Website Care')
 MARK='data-mpw-revenue-nav-20261020="true"'
-HEADER=re.compile(r'<header\b[^>]*class=["\x27]mw-site-nav["\x27][^>]*>[\s\S]*?</header\s*>',re.I)
+HEADER=re.compile(r'<header\b[^>]*class=["\x27](?:mw-site-nav|mpw-header)["\x27][^>]*>[\s\S]*?</header\s*>',re.I)
 def fail(s):raise RuntimeError(s)
 def digest(b):return hashlib.sha256(b).hexdigest()
 def paths():return [HOME]+[FOLDER/(n+'.html') for n in NAMES]
@@ -44,7 +44,7 @@ def patch(doc,header):
     if len(blocks)!=1:fail('Page header mismatch count='+str(len(blocks))+' length='+str(len(text))+' classes='+repr(re.findall(r'<header.{0,160}',text,re.I)[:3]))
     before=blocks[0].group(0)
     if MARK in text:fail('Menu already patched')
-    if 'mw-site-nav' not in before or 'mw-nav-panel' not in before:fail('Cannot safely unify this page')
+    if 'mw-site-nav' not in before and 'mpw-header' not in before:fail('Cannot safely unify this page')
     after=text[:blocks[0].start()]+header+text[blocks[0].end():]
     if after.count(MARK)!=1 or after.count('</header>')!=text.count('</header>'):fail('Header replacement differs structurally')
     for mark in ('<main','<footer'):
