@@ -118,6 +118,78 @@ class ReviewPacketTests(unittest.TestCase):
         self.assertEqual(result["technical_readiness"]["technical_rework_required"],1)
         self.assertIn("ARTIFACT_HASH_MISMATCH",dashboard["items"][0]["blockers"])
 
+    def test_81_authentic_native_files_pass_only_with_exact_manufacturing_and_machine_QA(self):
+        import hashlib,zipfile
+        recipe="unique_native_code_study"
+        folder=self.root/"digital-products"/recipe
+        folder.mkdir(parents=True)
+        files=[f"modules/tool_{i:03d}.py" for i in range(80)]+["README.md"]
+        archive=folder/(recipe+"-internal-qa.zip")
+        with zipfile.ZipFile(archive,"w",zipfile.ZIP_DEFLATED) as pack:
+            for idx,name in enumerate(files):
+                pack.writestr(recipe+"/"+name,("def original_%d(): return %d\n"%(idx,idx)).encode())
+        digest=hashlib.sha256(archive.read_bytes()).hexdigest()
+        checks={"gate"+str(i):True for i in range(10)}
+        manifest={"recipe":recipe,"qa_status":"passed","family_id":"F20",
+                  "source_sha256":"a"*64,"artifact_sha256":digest,"files":files,
+                  "owner_publication_approval":False,"public_listing_enabled":False,
+                  "qa_measurements":{"passed":True,"commercial_release":False,
+                                     "gates":checks,"critical_defects":[]}}
+        source=folder/"manufacturing_manifest.json"
+        source.write_text(json.dumps(manifest))
+        valid=m.build(self.root)
+        self.assertEqual(valid["technical_readiness"]["technically_verified"],1)
+        dashboard=json.loads((self.root/"product-lifecycle/product-technical-readiness/dashboard.json").read_text())
+        proof=dashboard["items"][0]
+        evidence=json.loads((self.root/"product-lifecycle/product-technical-readiness"/recipe/(proof["evidence_sha256"]+".json")).read_text())
+        self.assertTrue(evidence["extended_native_format_archive_verified"])
+        self.assertFalse(evidence["publication_allowed"])
+        self.assertFalse(evidence["customer_sale_enabled"])
+        manifest["qa_measurements"]["gates"]["gate0"]=False
+        source.write_text(json.dumps(manifest))
+        invalid=m.build(self.root)
+        self.assertEqual(invalid["technical_readiness"]["technical_rework_required"],1)
+        proof=json.loads((self.root/"product-lifecycle/product-technical-readiness/dashboard.json").read_text())["items"][0]
+        self.assertIn("ARCHIVE_LIMIT",proof["blockers"])
+        manifest["qa_measurements"]["gates"]["gate0"]=True
+        manifest["source_sha256"]="not-a-real-source-proof"
+        source.write_text(json.dumps(manifest))
+        invalid=m.build(self.root)
+        self.assertEqual(invalid["technical_readiness"]["technical_rework_required"],1)
+        proof=json.loads((self.root/"product-lifecycle/product-technical-readiness/dashboard.json").read_text())["items"][0]
+        self.assertIn("MANUFACTURING_SOURCE_HASH_INVALID",proof["blockers"])
+        self.assertIn("ARCHIVE_LIMIT",proof["blockers"])
+
+    def test_48_pair_native_media_must_have_distinct_signatures_and_actual_file_sha(self):
+        import io,zipfile
+        recipe="original_motion_48"
+        files=[f"clips/cue_{i:02d}.{ext}" for i in range(48) for ext in ("gif","mp4")]+["README.txt"]
+        zraw=io.BytesIO()
+        with zipfile.ZipFile(zraw,"w") as zipped:
+            for i in range(48):
+                zipped.writestr(recipe+f"/clips/cue_{i:02d}.gif",b"GIF89a"+i.to_bytes(2,"big")+b";")
+                zipped.writestr(recipe+f"/clips/cue_{i:02d}.mp4",b"\x00\x00\x00\x18ftypisom"+i.to_bytes(2,"big")+b"data")
+            zipped.writestr(recipe+"/README.txt","Not a release")
+        metadata={"family_id":"F37","qa_status":"passed","source_sha256":"a"*64,
+            "artifact_sha256":__import__("hashlib").sha256(zraw.getvalue()).hexdigest(),
+            "files":files,"public_listing_enabled":False,"owner_publication_approval":False,
+            "qa_measurements":{"passed":True,"commercial_release":False,
+                "gates":{"gate"+str(i):True for i in range(10)}}}
+        with zipfile.ZipFile(io.BytesIO(zraw.getvalue())) as package:
+            self.assertTrue(m.verified_extended_native_archive(
+                recipe,metadata,package.infolist(),metadata["artifact_sha256"],package))
+            metadata["family_id"]="F20"
+            self.assertTrue(m.verified_extended_native_archive(
+                recipe,metadata,package.infolist(),metadata["artifact_sha256"],package))
+            metadata["family_id"]="F37"
+        # One altered source with same name breaks exact-pair identity by
+        # invalidating the full source SHA despite an apparently valid header.
+        with zipfile.ZipFile(io.BytesIO(zraw.getvalue())) as package:
+            metadata["artifact_sha256"]="f"*64
+            self.assertFalse(m.verified_extended_native_archive(
+                recipe,metadata,package.infolist(),
+                __import__("hashlib").sha256(zraw.getvalue()).hexdigest(),package))
+
     def test_source_bound_passport_starter_retains_only_real_order_claims(self):
         report=m.build(self.root)
         starters=report["passport_starters"]
