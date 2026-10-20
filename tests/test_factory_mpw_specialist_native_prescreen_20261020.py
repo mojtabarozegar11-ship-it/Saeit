@@ -117,6 +117,45 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("MISSING_OR_UNSUPPORTED_FAMILY_PROVENANCE",
                       result["automated_technical_blockers"])
 
+    def test_missing_family_recovers_only_exact_original_qa_sha_without_stock_mutation(self):
+        product="legacy_calc"
+        version="a"*64
+        manifest,blob=self.add(product,version,None,{
+            "tool/main.py":b"def add(x,y): return x+y\n",
+            "tool/data.json":b'{"value":3}',
+            "tool/README.md":b"Original program."})
+        source=self.root/"digital-products"/product
+        source.mkdir(parents=True)
+        (source/(product+"-internal-qa.zip")).write_bytes(blob)
+        receipt={"recipe":product,"source_sha256":version,
+                 "artifact_sha256":manifest["artifact_sha256"],
+                 "family_id":"F20","qa_status":"passed"}
+        (source/"manufacturing_manifest.json").write_text(json.dumps(receipt))
+        repaired=specialist.assess(product,version,manifest,blob,courier,self.root)
+        self.assertTrue(repaired["automated_format_prescreen_passed"])
+        self.assertEqual(repaired["family_id"],"F20")
+        self.assertEqual(repaired["family_provenance_source"],"sha256_matched_original_manufacturing_qa")
+        self.assertFalse(repaired["commercial_release"])
+        before=(self.root/"production-warehouse/finished"/product/version/"warehouse_manifest.json").read_bytes()
+        run=specialist.run(self.root,courier,ENGINE)
+        self.assertEqual(run["counts"]["source_sha_matched_family_recoveries"],1)
+        self.assertEqual(specialist.run(self.root,courier,ENGINE)["counts"],run["counts"])
+        self.assertEqual((self.root/"production-warehouse/finished"/product/version/"warehouse_manifest.json").read_bytes(),before)
+        receipt["source_sha256"]="b"*64
+        (source/"manufacturing_manifest.json").write_text(json.dumps(receipt))
+        rejected=specialist.assess(product,version,manifest,blob,courier,self.root)
+        self.assertIn("MISSING_OR_UNSUPPORTED_FAMILY_PROVENANCE",rejected["automated_technical_blockers"])
+        receipt["source_sha256"]=version
+        receipt["family_id"]="F99"
+        (source/"manufacturing_manifest.json").write_text(json.dumps(receipt))
+        rejected=specialist.assess(product,version,manifest,blob,courier,self.root)
+        self.assertFalse(rejected["automated_format_prescreen_passed"])
+        receipt["family_id"]="F20"
+        (source/"manufacturing_manifest.json").write_text(json.dumps(receipt))
+        (source/(product+"-internal-qa.zip")).write_bytes(blob+b"corruption")
+        rejected=specialist.assess(product,version,manifest,blob,courier,self.root)
+        self.assertFalse(rejected["automated_format_prescreen_passed"])
+
     def test_real_work_order_evidence_packet_is_replay_safe_and_not_closed(self):
         version="1"*64
         manifest,stock=self.add("original_python_tool",version,"F20",{
