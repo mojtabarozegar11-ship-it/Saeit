@@ -42,7 +42,7 @@ def patch(s):
     if head is None or len(figs)!=1 or 'official_profile_20261016/portrait' not in figs[0] or 'Discuss a professional collaboration' not in block:raise RuntimeError('Primary source changed')
     pos=s.index('<div class="hero-visual">')
     vis,end=div_at(s,pos)
-    if m.end()>=pos or vis.count('<img')!=1 or '<h1 id="hero-title"' not in s[m.end():pos]:raise RuntimeError('Hero structure changed: order=%s img=%s heading=%s'%(m.end()<pos,vis.count('<img'),'<h1 id="hero-title"' in s[m.end():pos]))
+    if m.end()>=pos or vis.count('<img') not in (1,2) or '<h1 id="hero-title"' not in s[m.end():pos]:raise RuntimeError('Hero structure changed: order=%s img=%s heading=%s'%(m.end()<pos,vis.count('<img'),'<h1 id="hero-title"' in s[m.end():pos]))
     newblock=head.group()+'\n'+CSS+'\n<div class="mpw-profile-photo-pair">\n'+figs[0]+'\n'+vis+'\n</div>\n</section>'
     a=s[:m.start()]+newblock+s[m.end():pos]+s[end:]
     if a.count('<img')!=s.count('<img') or a.count('{%')!=s.count('{%') or 'PROFESSIONAL PROFILE' in a:raise RuntimeError('Unintended template content change')
