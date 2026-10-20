@@ -33,7 +33,7 @@ backup="$ops/backups/forty-execution-$stamp"
 install -d -m 700 "$backup"
 crontab -l > "$backup/crontab-before.txt"
 chmod 600 "$backup/crontab-before.txt"
-for name in factory_40_execution_controller.py factory_40_family_master.py factory_build50_family_bridge.py factory_build_50.py factory_specialist_pilots.py factory_specialist_formats.py factory_build50_f31_planner.py factory_f31_independent_review.py;do
+for name in factory_40_execution_controller.py factory_40_family_master.py factory_build50_family_bridge.py factory_build_50.py factory_specialist_pilots.py factory_specialist_formats.py factory_build50_f31_planner.py factory_f31_independent_review.py factory_batch5_build.py factory_batch5_specs.py factory_batch5_review.py;do
  test -s "$source_dir/$name" && test ! -L "$source_dir/$name"
  if test -f "$target/$name";then
   test ! -L "$target/$name"
@@ -44,6 +44,8 @@ for name in factory_40_execution_controller.py factory_40_family_master.py facto
  mv -f "$tmp" "$target/$name"
 done
 "$py" -B -m py_compile "$target"/*.py
+# Five additional executable engineering families, each with independent BUILD50 proof.
+"$py" -B "$target/factory_batch5_build.py" --factory-private "$private"
 # One genuine dated F31 kit per week; repeated ticks verify instead of duplicating.
 "$py" -B "$target/factory_build50_f31_planner.py" --factory-private "$private"
 # Admit only the fully proven package through the existing strict warehouse.
@@ -63,6 +65,12 @@ stock=json.loads((root/'production-warehouse/stock-register.json').read_text())
 assert stock['strict_build50_enabled'] is True
 assert any(r['product_id']==product and r['family_id']=='F31' and r['artifact_sha256']==manifest['artifact_sha256'] for r in stock['records'])
 print('F31_REAL_BUILD50_PRIVATE_STOCK=PASS')
+for family,slug in [('F20','validation_plugins'),('F21','developer_text_tools'),('F22','record_workflows'),('F25','synthetic_edge_fixtures'),('F28','engineering_calculators')]:
+ product='fieldwork_'+slug
+ manifest=json.loads((root/'digital-products'/product/'manufacturing_manifest.json').read_text())
+ assert manifest['family_id']==family and manifest['qa_status']=='passed'
+ assert any(r['product_id']==product and r['family_id']==family and r['artifact_sha256']==manifest['artifact_sha256'] for r in stock['records'])
+print('BATCH5_REAL_BUILD50_PRIVATE_STOCK=PASS')
 F31STOCK
  then stocked=1;break;fi
  sleep 2
@@ -94,6 +102,7 @@ umask 077
 exec 9>"$ops/.forty-execution-scheduler.lock"
 /usr/bin/flock -n 9 || exit 0
 exec >> "$ops/forty-execution.log" 2>&1
+/usr/bin/timeout 120s "$py" -B "$target/factory_batch5_build.py" --factory-private "$private" || echo BATCH5_PERIODIC_BUILD_REQUIRES_REWORK
 /usr/bin/timeout 90s "$py" -B "$target/factory_build50_f31_planner.py" --factory-private "$private" || echo F31_PERIODIC_BUILD_REQUIRES_REWORK
 exec "$py" -B "$target/factory_40_execution_controller.py" --factory-private "$private" --registry "$registry" --module-dir "$target" --toolchain-manifest "$toolchain"
 SH
