@@ -752,6 +752,8 @@ def triage_factory_stage1(root=VPS):
 PRODUCT_ORDER_SCHEMA="mpw.factory.three-product-requests.v1"
 PRODUCT_ORDER_ID=re.compile(r"^MPWREQ-[a-f0-9]{20}$")
 PRODUCT_ORDER_CYCLE=re.compile(r"^20[0-9]{6}$")
+SITE_PENDING_WORK_ORDER_LIMIT=9
+SITE_TRIAGE_SCHEMA="mpw.factory.native-site-order-technical-triage.v1"
 
 def three_site_product_requests(root=DEST,cycle=None):
     """Three ACTUAL private site-origin QA rework requests, not buyer purchases.
@@ -849,6 +851,167 @@ def three_site_product_requests(root=DEST,cycle=None):
     atomic(path,json_blob(doc))
     return json_blob(doc)
 
+def _native_order_engine(path=None):
+    engine_file=Path(path) if path else (
+        Path.home()/"factory-runtime/operations/production-instructions/generate-orders.py")
+    require(engine_file.is_file() and not engine_file.is_symlink(),
+            "SITE_ORDER_NATIVE_ENGINE_MISSING")
+    spec=importlib.util.spec_from_file_location("mpw_native_factory_wo_engine",engine_file)
+    engine=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(engine)
+    return engine
+
+
+def _site_order_proof(root,order,engine,proof_dir):
+    """Compute immutable factual engineering evidence, NOT a release attestation."""
+    ident=order.get("id")
+    product=order.get("source_product_id")
+    version=order.get("source_sha256")
+    original_sha=order.get("source_artifact_sha256")
+    require(isinstance(ident,str) and bool(engine.ORDER_RE.fullmatch(ident+".json"))
+            and isinstance(product,str) and RECIPE.fullmatch(product)
+            and isinstance(version,str) and SHA.fullmatch(version)
+            and isinstance(original_sha,str) and SHA.fullmatch(original_sha)
+            and order.get("origin")=="mojplaywin-site-qa-return"
+            and order.get("requesting_site")=="mojplaywin.com"
+            and order.get("instruction_kind")=="site_product_rework_work_order"
+            and order.get("manufacturing_qa_passed") is False
+            and order.get("publication_approved") is False
+            and order.get("public_distribution_allowed") is False,
+            "SITE_ORDER_SCOPE_OR_RELEASE_GATE_INVALID")
+    stock=root/"production-warehouse/finished"/product/version
+    clean_dir(stock)
+    manifest=json_file(stock/"warehouse_manifest.json",100000)
+    zipfile_path=stock/"product.zip"
+    require(zipfile_path.is_file() and not zipfile_path.is_symlink()
+            and 0 < zipfile_path.stat().st_size <= MAX_ZIP,"SITE_ORDER_ORIGINAL_ZIP_MISSING")
+    raw=zipfile_path.read_bytes()
+    verify_stock(manifest,product,version,raw)
+    require(manifest["artifact_sha256"]==original_sha,"SITE_ORDER_ORIGINAL_SHA_MISMATCH")
+    feedback=root/"design-intake/mojplaywin-stage1-quality-returns"/(product+"-"+version+".json")
+    ticket=json_file(feedback,100000)
+    require(ticket.get("schema")==RETURN_SCHEMA and ticket.get("tenant")==TENANT
+            and ticket.get("product_id")==product
+            and ticket.get("source_sha256")==version
+            and ticket.get("artifact_sha256")==original_sha
+            and ticket.get("status")=="return_for_qa_completion"
+            and ticket.get("issues")==list(ISSUES)
+            and ticket.get("published") is False
+            and ticket.get("factory_original_must_be_preserved") is True,
+            "SITE_ORDER_QUALITY_RETURN_UNVERIFIED")
+    companion=customer_companion(root,product,version,original_sha)
+    require(companion is not None,"SITE_ORDER_PRIVATE_TECHNICAL_PREVIEW_REQUIRED")
+    report,bundle=companion
+    kind=("static_native_review_only" if report.get("schema")==NATIVE_PREVIEW_SCHEMA
+          else "cli_smoke_tested_calculator_only")
+    proof={"schema":SITE_TRIAGE_SCHEMA,"tenant":TENANT,"work_order":ident,
+           "work_order_fingerprint":order["fingerprint"],
+           "source_product_id":product,"source_sha256":version,
+           "original_zip_sha256":original_sha,
+           "private_review_package_sha256":digest(bundle),
+           "review_scope":kind,"source_archive_integrity_verified":True,
+           "private_pack_independently_verified":True,
+           "source_version_preserved":True,"substantive_source_rebuild_verified":False,
+           "independent_domain_functionality_approved":False,
+           "asset_ownership_and_licenses_cleared":False,
+           "human_review_signed":False,"owner_publication_approved":False,
+           "manufacturing_qa_for_rework_passed":False,
+           "customer_sale_authorized":False,"public_distribution_allowed":False,
+           "remaining_issues":list(ISSUES),
+           "next_action":"qualified_specialist_review_then_actual_rework_if_required"}
+    p=proof_dir/(ident+".json")
+    if p.exists() or p.is_symlink():
+        require(json_file(p,100000)==proof,"SITE_ORDER_TRIAGE_RECEIPT_COLLISION")
+    else:
+        engine.atomic_json(p,proof)
+    return digest(json_blob(proof)),kind
+
+
+def triage_site_work_orders(root=VPS,engine_path=None):
+    """Advance genuine source-verified old WOs to a bounded specialist-review queue.
+
+    Only original source and QA receipts are validated here. No claimed repair,
+    specialist signature, finished product, purchase or commercial release.
+    """
+    root=Path(root)
+    clean_dir(root)
+    engine=_native_order_engine(engine_path)
+    area=root/"production-instructions"
+    orders=area/"orders"
+    clean_dir(area);clean_dir(orders)
+    proof_dir=area/"mojplaywin-source-technical-triage"
+    private_new(proof_dir)
+    locked=area/".orders.lock"
+    require(not locked.is_symlink(),"SITE_ORDER_TRIAGE_LOCK_SYMLINK")
+    outcomes={"source_orders_examined":0,"new_source_triages":0,
+              "prior_source_triages_reverified":0,
+              "triage_blocked_missing_technical_evidence":0,
+              "work_orders_completed_verified":0,
+              "manufacturing_qa_claimed":False,
+              "public_sales_approved":False,
+              "owner_rights_review_still_required":True}
+    with locked.open("a+b") as fd:
+        fcntl.flock(fd.fileno(),fcntl.LOCK_EX)
+        rows=[p for p in sorted(orders.iterdir())]
+        require(len(rows)<=engine.MAX_ORDERS,"SITE_ORDER_TRIAGE_CATALOG_LIMIT")
+        for p in rows:
+            require(p.is_file() and not p.is_symlink()
+                    and engine.ORDER_RE.fullmatch(p.name),"SITE_ORDER_TRIAGE_UNSAFE_FILENAME")
+            row=engine.validate_old(p)
+            if row.get("requesting_site")!="mojplaywin.com":
+                continue
+            require(row.get("origin")=="mojplaywin-site-qa-return",
+                    "SITE_ORDER_TRIAGE_FOREIGN_SITE_ORDER")
+            if row.get("status")=="completed_verified":
+                continue
+            outcomes["source_orders_examined"]+=1
+            try:
+                proof_sha,kind=_site_order_proof(root,row,engine,proof_dir)
+            except (RuntimeError,OSError,ValueError,KeyError,TypeError) as error:
+                outcomes["triage_blocked_missing_technical_evidence"]+=1
+                # Never invent a proof or loosen an order on an inspection failure.
+                continue
+            if row.get("status")=="blocked_rework":
+                require(row.get("technical_triage_evidence_sha256")==proof_sha,
+                        "SITE_ORDER_TRIAGE_STATE_EVIDENCE_MISMATCH")
+                outcomes["prior_source_triages_reverified"]+=1
+                continue
+            require(row.get("status") in ("issued","in_engineering"),
+                    "SITE_ORDER_TRIAGE_STATUS_UNEXPECTED")
+            record=dict(row,status="blocked_rework",
+                        technical_triage_evidence_sha256=proof_sha,
+                        technical_triage_scope=kind,
+                        rework_awaits_human_domain_and_rights_review=True)
+            engine.atomic_json(p,record)
+            outcomes["new_source_triages"]+=1
+    return {"schema":SITE_TRIAGE_SCHEMA,"tenant":TENANT,**outcomes}
+
+
+def _prior_site_order_has_real_triage(root,order):
+    """A status label by itself can NEVER free a backlog slot."""
+    if order.get("status")!="blocked_rework":
+        return False
+    version=order.get("source_sha256")
+    ident=order.get("id")
+    proof_file=root/"production-instructions/mojplaywin-source-technical-triage"/(ident+".json")
+    if not proof_file.exists():
+        return False
+    proof=json_file(proof_file,100000)
+    return (proof.get("schema")==SITE_TRIAGE_SCHEMA
+            and proof.get("tenant")==TENANT
+            and proof.get("work_order")==ident
+            and proof.get("work_order_fingerprint")==order.get("fingerprint")
+            and proof.get("source_product_id")==order.get("source_product_id")
+            and proof.get("source_sha256")==version
+            and proof.get("original_zip_sha256")==order.get("source_artifact_sha256")
+            and proof.get("source_archive_integrity_verified") is True
+            and proof.get("private_pack_independently_verified") is True
+            and proof.get("manufacturing_qa_for_rework_passed") is False
+            and proof.get("customer_sale_authorized") is False
+            and proof.get("owner_publication_approved") is False
+            and order.get("technical_triage_evidence_sha256")==digest(json_blob(proof)))
+
+
 def receive_three_product_requests(raw,root=VPS,engine_path=None,max_active=300):
     """Bind three verified site product rework orders to the existing native
     factory WO engine under its real lock; never count them as buyer orders.
@@ -904,11 +1067,7 @@ def receive_three_product_requests(raw,root=VPS,engine_path=None,max_active=300)
                 and original.get("issues")==list(ISSUES),
                 "THREE_ORDERS_UNVERIFIED_SITE_FEEDBACK")
         validated.append(row)
-    path=Path(engine_path) if engine_path else (
-        Path.home()/"factory-runtime/operations/production-instructions/generate-orders.py")
-    require(path.is_file() and not path.is_symlink(),"THREE_ORDERS_NATIVE_ENGINE_MISSING")
-    spec=importlib.util.spec_from_file_location("mpw_native_factory_wo_engine",path)
-    engine=importlib.util.module_from_spec(spec);spec.loader.exec_module(engine)
+    engine=_native_order_engine(engine_path)
     area=root/"production-instructions"
     orderdir=area/"orders"
     clean_dir(area);clean_dir(orderdir)
@@ -940,8 +1099,17 @@ def receive_three_product_requests(raw,root=VPS,engine_path=None,max_active=300)
                          and x["status"]!="completed_verified"]
             pending=sum(x["status"]!="completed_verified"
                         and not engine.consumes_research_capacity(x) for x in entries)
-            if other_active:
+            distinct_old={(x.get("source_product_id"),x.get("source_sha256"))
+                          for x in other_active}
+            overlap=any((x["product_id"],x["source_sha256"]) in distinct_old
+                        for x in validated)
+            if other_active and not all(
+                _prior_site_order_has_real_triage(root,x) for x in other_active):
                 action="waiting_for_prior_three_to_complete";order_ids=[]
+            elif len(other_active)+3>SITE_PENDING_WORK_ORDER_LIMIT:
+                action="waiting_for_bounded_site_capacity";order_ids=[]
+            elif overlap:
+                action="waiting_for_distinct_site_sources";order_ids=[]
             elif pending+3>max_active or len(entries)+3>engine.MAX_ORDERS:
                 action="waiting_for_native_capacity";order_ids=[]
             else:
@@ -1010,6 +1178,9 @@ def main():
     elif mode=="vps-triage":
         report=triage_factory_stage1()
         print("MPW_COURIER_FACTORY_TRIAGE="+json.dumps(report,sort_keys=True))
+    elif mode=="vps-site-order-triage":
+        report=triage_site_work_orders()
+        print("MPW_NATIVE_ORDER_EVIDENCE_TRIAGE="+json.dumps(report,sort_keys=True))
     elif mode=="site-three-orders-export":
         sys.stdout.buffer.write(three_site_product_requests())
     elif mode=="vps-three-orders-import":

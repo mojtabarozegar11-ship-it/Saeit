@@ -10,6 +10,7 @@ from unittest.mock import patch
 import zipfile
 
 from scripts import mpw_vps_warehouse_courier as courier
+from scripts import factory_native_customer_packager as native
 
 ENGINE=Path(__file__).resolve().parents[1]/"scripts/factory_continuous_production_orders.py"
 
@@ -20,6 +21,7 @@ def goods_zip():
     z=io.BytesIO()
     with zipfile.ZipFile(z,"w",zipfile.ZIP_DEFLATED) as f:
         f.writestr("product/readme.txt","QA review candidate only")
+        f.writestr("product/check.py","def validate():\n    return True\n")
     return z.getvalue()
 
 class ThreeRealProductRequests(unittest.TestCase):
@@ -137,6 +139,96 @@ class ThreeRealProductRequests(unittest.TestCase):
         back.write_text(json.dumps(row))
         with self.assertRaisesRegex(RuntimeError,"THREE_ORDERS_UNVERIFIED_SITE_FEEDBACK"):
             courier.receive_three_product_requests(raw,self.root,ENGINE)
+
+    def _extend_real_stock_to_twelve(self):
+        # Distinct three-source daily requests are possible, not overlapping
+        # when old work is held for legitimate specialist review.
+        exemplar,ver,base_manifest=self.products[0]
+        raw=(self.root/"production-warehouse/finished"/exemplar/ver/"product.zip").read_bytes()
+        for i in range(5,12):
+            product="farm_product_"+str(i)
+            version=digest("real source "+str(i))
+            dest=self.root/"production-warehouse/finished"/product/version
+            dest.mkdir(parents=True,mode=0o700)
+            manifest=dict(base_manifest,product_id=product,source_sha256=version)
+            (dest/"warehouse_manifest.json").write_text(json.dumps(manifest))
+            (dest/"product.zip").write_bytes(raw)
+            self.products.append((product,version,manifest))
+        courier.import_site(courier.export_factory(self.root),self.site)
+        courier.receive_factory_returns(courier.feedback_site(self.site),self.root)
+
+    def _private_preview_for_batch(self, batch):
+        for row in json.loads(batch)["requests"]:
+            item=row["product_id"];version=row["source_sha256"]
+            stock=self.root/"production-warehouse/finished"/item/version
+            manifest=json.loads((stock/"warehouse_manifest.json").read_text())
+            native.pack(self.root,item,version,manifest,(stock/"product.zip").read_bytes(),courier)
+
+    def test_real_provenance_triage_unlocks_exactly_three_without_faking_completion(self):
+        self._extend_real_stock_to_twelve()
+        first=courier.three_site_product_requests(self.site,cycle="20261019")
+        old=courier.receive_three_product_requests(first,self.root,ENGINE)
+        self.assertEqual(old["new_native_orders"],3)
+        self._private_preview_for_batch(first)
+        triaged=courier.triage_site_work_orders(self.root,ENGINE)
+        self.assertEqual(triaged["new_source_triages"],3)
+        self.assertEqual(triaged["work_orders_completed_verified"],0)
+        for name in old["native_product_orders"]:
+            p=self.root/"production-instructions/orders"/(name+".json")
+            rec=json.loads(p.read_text())
+            self.assertEqual(rec["status"],"blocked_rework")
+            self.assertFalse(rec["manufacturing_qa_passed"])
+            self.assertFalse(rec["publication_approved"])
+            ev=self.root/"production-instructions/mojplaywin-source-technical-triage"/(name+".json")
+            proof=json.loads(ev.read_text())
+            self.assertEqual(proof["review_scope"],"static_native_review_only")
+            self.assertFalse(proof["human_review_signed"])
+            self.assertFalse(proof["customer_sale_authorized"])
+            self.assertTrue(courier._prior_site_order_has_real_triage(self.root,rec))
+        second=courier.three_site_product_requests(self.site,cycle="20261020")
+        admitted=courier.receive_three_product_requests(second,self.root,ENGINE)
+        self.assertEqual(admitted["new_native_orders"],3)
+        self.assertEqual(admitted["status"],"three_native_product_orders_created")
+        self.assertEqual(len(admitted["native_product_orders"]),3)
+        replay=courier.receive_three_product_requests(second,self.root,ENGINE)
+        self.assertEqual(replay["new_native_orders"],0)
+        self.assertEqual(replay["status"],"already_admitted")
+        self.assertEqual(len(list((self.root/"production-instructions/orders").glob("WO-*.json"))),6)
+        # Third day cannot proceed before SECOND batch gets real source proof.
+        third=courier.three_site_product_requests(self.site,cycle="20261021")
+        hold=courier.receive_three_product_requests(third,self.root,ENGINE)
+        self.assertEqual(hold["status"],"waiting_for_prior_three_to_complete")
+        self._private_preview_for_batch(second)
+        rechecked=courier.triage_site_work_orders(self.root,ENGINE)
+        self.assertEqual(rechecked["new_source_triages"],3)
+        self.assertEqual(rechecked["prior_source_triages_reverified"],3)
+        third_admitted=courier.receive_three_product_requests(third,self.root,ENGINE)
+        self.assertEqual(third_admitted["new_native_orders"],3)
+        fourth=courier.three_site_product_requests(self.site,cycle="20261022")
+        # Nine unresolved orders are a HARD cap, even with valid evidence.
+        self._private_preview_for_batch(third)
+        courier.triage_site_work_orders(self.root,ENGINE)
+        cap=courier.receive_three_product_requests(fourth,self.root,ENGINE)
+        self.assertEqual(cap["status"],"waiting_for_bounded_site_capacity")
+        self.assertEqual(cap["new_native_orders"],0)
+        self.assertEqual(len(list((self.root/"production-instructions/orders").glob("WO-*.json"))),9)
+
+    def test_no_missing_proof_or_spoofed_blocked_status_can_free_old_three(self):
+        self._extend_real_stock_to_twelve()
+        first=courier.three_site_product_requests(self.site,cycle="20261019")
+        prior=courier.receive_three_product_requests(first,self.root,ENGINE)
+        next_=courier.three_site_product_requests(self.site,cycle="20261020")
+        empty=courier.triage_site_work_orders(self.root,ENGINE)
+        self.assertEqual(empty["new_source_triages"],0)
+        self.assertEqual(empty["triage_blocked_missing_technical_evidence"],3)
+        for name in prior["native_product_orders"]:
+            p=self.root/"production-instructions/orders"/(name+".json")
+            doc=json.loads(p.read_text());doc["status"]="blocked_rework"
+            p.write_text(json.dumps(doc))
+        rejected=courier.receive_three_product_requests(next_,self.root,ENGINE)
+        self.assertEqual(rejected["status"],"waiting_for_prior_three_to_complete")
+        self.assertEqual(rejected["new_native_orders"],0)
+        self.assertEqual(len(list((self.root/"production-instructions/orders").glob("WO-*.json"))),3)
 
     def test_three_new_companions_max_per_stock_transfer_tick(self):
         with patch.object(courier,"customer_companion") as source:

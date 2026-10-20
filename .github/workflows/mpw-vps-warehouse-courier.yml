@@ -133,6 +133,30 @@ jobs:
             "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-return" \
             < "$RUNNER_TEMP/mpw-qa-feedback.json"
           echo 'MPW_FACTORY_STAGE1_RETURN_CHANNEL=PASS'
+      - name: Prove old site work orders and classify actual specialist blockers before new intake
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-store-preflight"
+          source="$(base64 -w0 scripts/mpw_vps_warehouse_courier.py)"
+          timeout 95s ssh -T -F "$d/config" saeit-vps \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-site-order-triage" \
+            > "$RUNNER_TEMP/mpw-real-source-order-triage.jsonl"
+          python3 - <<'PY'
+          import os,json
+          from pathlib import Path
+          lines=Path(os.environ['RUNNER_TEMP']+'/mpw-real-source-order-triage.jsonl').read_text().splitlines()
+          assert len(lines)==1 and lines[0].startswith('MPW_NATIVE_ORDER_EVIDENCE_TRIAGE=')
+          value=json.loads(lines[0].split('=',1)[1])
+          assert value['schema']=='mpw.factory.native-site-order-technical-triage.v1'
+          assert value['tenant']=='mojplaywin-main'
+          assert value['work_orders_completed_verified']==0
+          assert value['manufacturing_qa_claimed'] is False
+          assert value['public_sales_approved'] is False
+          assert value['owner_rights_review_still_required'] is True
+          print('MPW_REAL_PRIOR_ORDER_TECHNICAL_TRIAGE='+json.dumps(value,sort_keys=True))
+          PY
       - name: Transfer THREE verified site-origin product rework orders to native VPS factory
         shell: bash
         run: |
@@ -230,5 +254,5 @@ jobs:
         shell: bash
         run: |
           rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
-          rm -f -- "$RUNNER_TEMP/mpw-factory-stock.tgz" "$RUNNER_TEMP/mpw-qa-feedback.json" "$RUNNER_TEMP/mpw-factory-stage1-triage.jsonl" "$RUNNER_TEMP/mpw-three-product-orders.json"
+          rm -f -- "$RUNNER_TEMP/mpw-factory-stock.tgz" "$RUNNER_TEMP/mpw-qa-feedback.json" "$RUNNER_TEMP/mpw-factory-stage1-triage.jsonl" "$RUNNER_TEMP/mpw-three-product-orders.json" "$RUNNER_TEMP/mpw-real-source-order-triage.jsonl"
 # Reconnect 2026-10-20: owner-requested bounded private warehouse/site receipts and three-workorder check; public release unchanged.
