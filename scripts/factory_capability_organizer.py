@@ -159,7 +159,7 @@ def run(root,registry,ops,source_repo):
     result={'schema':'saeit.factory.organized-capabilities.v1','observed_utc':datetime.now(timezone.utc).isoformat(),
       'family_count':40,'native_recipe_families':len(verified),'families':families,
       'candidate_engines_are_complete_builders':False,'toolchain':chain,'roles':role_rows,
-      'support_tool_bindings_available':cat['tools_count'] if cat else 0,'unique_support_operations':cat['shared_unique_operations'] if cat else 0,
+      'support_tool_bindings_available':cat['tools_count'] if cat else 0,'unique_support_operations':len({tool['operation'] for tool in cat['tools']}) if cat else 0,
       'real_family_support_invocations_this_cycle':total,'family_support_receipts':supports,
       'legacy':imported,'separate_agents_started':0,'commercial_release':False,'sites_modified':False}
     area=planner.private(root/'capability-organization');planner.save(area/'dashboard.json',result)
