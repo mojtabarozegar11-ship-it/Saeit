@@ -252,7 +252,7 @@ def manufacture(recipe, recipes_root, private_root):
     metadata.update(design_metadata)
     # A private per-revision sidecar is generated only after QA and hash checks.
     passport = ensure_manufacturing_private_passport(root, metadata)
-    metadata["private_passport_schema"] = "saeit.factory.private-product-passport.v3"
+    metadata["private_passport_schema"] = "saeit.factory.private-product-passport.v4"
     metadata["private_passport_file"] = passport["passport_file"]
     metadata["private_passport_sha256"] = passport["passport_sha256"]
     atomic_text(manifest_path, json.dumps(metadata, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
