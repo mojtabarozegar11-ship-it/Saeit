@@ -6,7 +6,9 @@ on:
       - "scripts/factory_cross_site_capabilities.py"
       - "tests/test_factory_cross_site_capabilities.py"
       - "scripts/factory_cross_site_cycle.py"
+      - "scripts/factory_site_federation.py"
       - "tests/test_factory_cross_site_cycle.py"
+      - "tests/test_factory_site_federation.py"
       - "deploy/install_factory_multisite_private.sh"
       - ".github/workflows/vps-factory-multisite-private-install.yml"
       - "docs/audits/two-sites-factory-capability-diff-2026-10-20.md"
@@ -18,7 +20,9 @@ on:
       - "scripts/factory_cross_site_capabilities.py"
       - "tests/test_factory_cross_site_capabilities.py"
       - "scripts/factory_cross_site_cycle.py"
+      - "scripts/factory_site_federation.py"
       - "tests/test_factory_cross_site_cycle.py"
+      - "tests/test_factory_site_federation.py"
       - "deploy/install_factory_multisite_private.sh"
       - ".github/workflows/vps-factory-multisite-private-install.yml"
       - ".github/workflows/factory-cross-site-capabilities.yml"
@@ -44,5 +48,6 @@ jobs:
           python -B scripts/factory_cross_site_capabilities.py --repo .
           python -B -m unittest discover -s tests -p 'test_factory_cross_site_capabilities.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_cross_site_cycle.py' -v
+          python -B -m unittest discover -s tests -p 'test_factory_site_federation.py' -v
           bash -n deploy/install_factory_multisite_private.sh
           python -B -m py_compile scripts/factory_cross_site_capabilities.py
