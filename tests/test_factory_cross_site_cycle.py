@@ -60,6 +60,22 @@ class CrossSitePrivateRuntimeTests(unittest.TestCase):
         result = MODULE.run(BASE, self.private)
         self.assertEqual(result["html_previews_scanned"], 0)
 
+    def test_observed_77_remote_modules_are_not_fake_factory_workers(self):
+        from datetime import datetime, timezone
+        report = self.private / "cross-site-capabilities" / "federation.json"
+        report.parent.mkdir(parents=True)
+        report.write_text(json.dumps({
+            "schema": "saeit.factory.site-federation.v1",
+            "received_utc": datetime.now(timezone.utc).isoformat(),
+            "module_slots_total": 77,
+            "matched_site_source_count": 38,
+        }))
+        result = MODULE.run(BASE, self.private)
+        self.assertEqual(result["federation"]["state"], "fresh_observed_remote_capabilities")
+        self.assertEqual(result["federation"]["module_slots"], 77)
+        self.assertEqual(result["federation"]["verified_factory_executions"], 0)
+        self.assertFalse(result["quality_or_commercial_release_granted"])
+
     def test_report_atomic_and_private(self):
         path = self.private / "reports" / "last.json"
         data = MODULE.run(BASE, self.private)
