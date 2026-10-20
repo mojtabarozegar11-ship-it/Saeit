@@ -4,7 +4,9 @@ on:
     paths:
       - "ops/factory-site-capabilities/legacy-candidates/**"
       - "scripts/factory_legacy_77_benchmark.py"
+      - "scripts/factory_legacy_77_cycle.py"
       - "tests/test_factory_legacy_77_benchmark.py"
+      - "tests/test_factory_legacy_77_cycle.py"
       - ".github/workflows/factory-legacy-77-benchmark.yml"
   push:
     branches: [main]
@@ -30,5 +32,6 @@ jobs:
         run: |
           set -euo pipefail
           python -B -m unittest discover -s tests -p 'test_factory_legacy_77_benchmark.py' -v
+          python -B -m unittest discover -s tests -p 'test_factory_legacy_77_cycle.py' -v
           python -B scripts/factory_legacy_77_benchmark.py
           echo "NO_LIVE_WEBSITE_OR_VPS_DEPLOYED=true"
