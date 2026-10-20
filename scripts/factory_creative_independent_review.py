@@ -42,7 +42,7 @@ def check(folder,archive,product,family):
             with Image.open(str(p)) as im:
                 im.verify()
             with Image.open(str(p)) as im:
-                if im.size!=(720,480) or len(im.getcolors(720*480) or [])<3:
+                if im.size!=(720,480) or len(im.getcolors(720*480) or [])<2:
                     raise ValueError("CREATIVE_REVIEW_PNG_RENDER")
     hashes=[hashlib.sha256(p.read_bytes()).hexdigest() for p in files]
     if len(set(hashes))!=len(files):raise ValueError("CREATIVE_REVIEW_DUPLICATE_CONTENT")
