@@ -26,6 +26,9 @@ class OwnerOnlyManualBackupPolicy(unittest.TestCase):
         self.assertIn("github.ref == 'refs/heads/main'", self.text)
         self.assertIn("github.actor == 'mojtabarozegar11-ship-it'", self.text)
         self.assertIn("inputs.approval == 'APPROVE-PRIVATE-BACKUP-NO-PUBLISH'", self.text)
+        self.assertIn("inputs.data_transit_acknowledged == true", self.text)
+        self.assertIn("data_transit_acknowledged:", self.text)
+        self.assertIn("default: false", self.text)
         self.assertIn("required: true", self.text)
 
     def test_scoped_script_and_non_release_evidence(self):
