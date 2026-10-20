@@ -87,13 +87,13 @@ jobs:
           stage="/home/zomorod2/.mojtaba-portrait-layout-$GITHUB_RUN_ID"
           timeout 25s ssh -T -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
           timeout 60s scp -q -F "$SSH_CONFIG" scripts/mojtaba_home_two_portraits_one_intro_20261020.py "saeit-host:$stage/patch.py"
-          timeout 60s ssh -T -F "$SSH_CONFIG" saeit-host "python3 '$stage/patch.py' check"
+          timeout 60s ssh -T -F "$SSH_CONFIG" saeit-host "/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python '$stage/patch.py' check"
       - name: Deploy home with owner backup
         id: install
         run: |
           set -euo pipefail
           stage="/home/zomorod2/.mojtaba-portrait-layout-$GITHUB_RUN_ID"
-          timeout 70s ssh -T -F "$SSH_CONFIG" saeit-host "python3 '$stage/patch.py' install '$GITHUB_RUN_ID'"
+          timeout 70s ssh -T -F "$SSH_CONFIG" saeit-host "/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python '$stage/patch.py' install '$GITHUB_RUN_ID'"
       - name: Verify live two original portraits before one introduction
         run: |
           python3 - <<'PY'
@@ -119,7 +119,7 @@ jobs:
         if: failure() && steps.install.outcome == 'success'
         run: |
           stage="/home/zomorod2/.mojtaba-portrait-layout-$GITHUB_RUN_ID"
-          timeout 70s ssh -T -F "$SSH_CONFIG" saeit-host "python3 '$stage/patch.py' rollback '$GITHUB_RUN_ID'"
+          timeout 70s ssh -T -F "$SSH_CONFIG" saeit-host "/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python '$stage/patch.py' rollback '$GITHUB_RUN_ID'"
       - name: Remove temporary patch without removing backup
         if: always()
         run: |
