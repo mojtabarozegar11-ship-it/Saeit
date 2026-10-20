@@ -76,7 +76,8 @@ jobs:
           timeout 40s ssh -T -F "$d/config" saeit-vps "umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
           scp -q -F "$d/config" scripts/factory_personal_owner_passport_policy_20261020.py "saeit-vps:$stage/factory_personal_owner_passport_policy_20261020.py"
           scp -q -F "$d/config" scripts/factory_private_passports_backfill_20261020.py "saeit-vps:$stage/backfill.py"
-          for script in factory_personal_owner_passport_policy_20261020.py factory_private_passports_backfill_20261020.py; do
+          scp -q -F "$d/config" scripts/factory_product_maker.py "saeit-vps:$stage/factory_product_maker.py"
+          for script in factory_personal_owner_passport_policy_20261020.py factory_private_passports_backfill_20261020.py factory_product_maker.py; do
             if [ "$script" = factory_private_passports_backfill_20261020.py ]; then target=backfill.py; else target="$script"; fi
             want="$(sha256sum "scripts/$script" | awk '{print $1}')"
             timeout 35s ssh -T -F "$d/config" saeit-vps "test ! -L '$stage/$target' && test \"\$(sha256sum '$stage/$target' | awk '{print \$1}')\" = '$want'"
@@ -97,6 +98,78 @@ jobs:
           print(data[1])
           print("FACTORY_PRIVATE_PASSPORT_VPS_EVIDENCE=PASS")
           PY
+          # Install the same audited policy used by backfill into the *future*
+          # factory maker runtime. No cron/site/order/checkout action. Atomic
+          # replacements with original backups and rollback on failed readback.
+          timeout 80s ssh -T -F "$d/config" saeit-vps "STAGED='$stage' PYTHONDONTWRITEBYTECODE=1 python3 -" <<'PYINSTALL'
+          from pathlib import Path
+          import importlib.util
+          import os
+          import shutil
+          import stat
+
+          stage = Path(os.environ["STAGED"])
+          live = Path.home() / "factory-runtime/operations/autonomous-product-runtime/scripts"
+          if not live.is_dir() or live.is_symlink():
+              raise RuntimeError("MASTER_POLICY_RUNTIME_DIRECTORY_UNSAFE")
+          names = ("factory_product_maker.py", "factory_personal_owner_passport_policy_20261020.py")
+          originals = {}
+          backup = stage / "pre-v4-live-backup"
+          backup.mkdir(mode=0o700, exist_ok=False)
+          for name in names:
+              src, dest = stage / name, live / name
+              if not src.is_file() or src.is_symlink() or dest.is_symlink():
+                  raise RuntimeError("MASTER_POLICY_RUNTIME_SOURCE_OR_TARGET_UNSAFE")
+              if name == "factory_product_maker.py" and not dest.is_file():
+                  raise RuntimeError("MASTER_POLICY_LIVE_MAKER_MISSING")
+              compile(src.read_text(encoding="utf8"), str(src), "exec")
+              originals[name] = dest.is_file()
+              if originals[name]:
+                  shutil.copy2(dest, backup / name)
+          tmp = []
+          changed = []
+          try:
+              for name in names:
+                  src, dest = stage / name, live / name
+                  staged = live / ("." + name + ".v4-" + str(os.getpid()))
+                  with staged.open("xb") as f:
+                      f.write(src.read_bytes())
+                      f.flush()
+                      os.fsync(f.fileno())
+                  staged.chmod(0o600)
+                  tmp.append(staged)
+              for name, staged in zip(names, tmp):
+                  os.replace(staged, live / name)
+                  changed.append(name)
+              spec = importlib.util.spec_from_file_location("master_owner_v4", str(live / names[1]))
+              module = importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(module)
+              evidence = module.build_passport("future_sample_1001")
+              master = evidence["master_framework"]
+              assert evidence["schema"] == "saeit.factory.private-product-passport.v4"
+              assert master["product_count_cap"] is None
+              assert master["contractual_end_date"] is None
+              assert master["valid_execution_and_authority_evidence_verified"] is False
+              assert evidence["company_operational_permission"]["executed_agreement_verified"] is False
+              assert evidence["third_party_rights_cleared"] is False
+              assert evidence["commercial_release_allowed"] is False
+              assert 'saeit.factory.private-product-passport.v4' in (live / names[0]).read_text(encoding="utf8")
+              for name in names:
+                  assert stat.S_IMODE((live / name).stat().st_mode) == 0o600
+              print("FACTORY_PERMANENT_MASTER_POLICY_RUNTIME_V4=PASS")
+          except BaseException:
+              for name in reversed(changed):
+                  if originals[name]:
+                      restore = live / ("." + name + ".restore-" + str(os.getpid()))
+                      shutil.copy2(backup / name, restore)
+                      os.replace(restore, live / name)
+                  else:
+                      (live / name).unlink(missing_ok=True)
+              raise
+          finally:
+              for p in tmp:
+                  p.unlink(missing_ok=True)
+          PYINSTALL
       - name: Delete ephemeral SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/passport-deploy"
