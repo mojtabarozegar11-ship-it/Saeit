@@ -29,7 +29,9 @@ CATALOG={'F18':'fieldwork_local_calculator_webapps','F19':'saas_launch_starter_2
  'F29':'fieldwork_editable_document_suite','F30':'fieldwork_editable_slide_suite',
  'F33':'fieldwork_vector_illustration_suite',
  'F06':'fieldwork_offline_operations_guides','F07':'fieldwork_arithmetic_mini_courses',
- 'F10':'fieldwork_arithmetic_assessment_packs','F11':'fieldwork_arithmetic_teacher_kits'}
+ 'F10':'fieldwork_arithmetic_assessment_packs','F11':'fieldwork_arithmetic_teacher_kits',
+ 'F36':'fieldwork_tileable_materials_48','F37':'fieldwork_animated_motion_48',
+ 'F39':'fieldwork_original_audio_cues_48'}
 BATCH={'F20','F21','F22','F25','F28'}
 
 def load(name):
@@ -181,17 +183,21 @@ def command_for(root,req):
         script={'F18':'factory_build50_f18_webapps.py','F19':'factory_build50_f19_web_template.py'}[family]
         command=[sys.executable,'-B',str(HERE/script),'--factory-private',str(root)]
     elif family=='F31':command=[sys.executable,'-B',str(HERE/'factory_build50_f31_planner.py'),'--factory-private',str(root),'--week',req['parameters']['week']]
-    elif family in ('F27','F34','F29','F30','F33','F06','F07','F10','F11'):
+    elif family in ('F27','F34','F29','F30','F33','F06','F07','F10','F11','F36','F37','F39'):
         manifest=Path(root).parent.parent/'operations/build-toolchain/toolchain-manifest.json'
         _,python=load('factory_specialist_pilots').toolchain(manifest)
         script={'F27':'factory_build50_workbook.py','F34':'factory_build50_f34_icon_kit.py',
           'F29':'factory_build50_creative_kits.py','F30':'factory_build50_creative_kits.py',
           'F33':'factory_build50_creative_kits.py',
           'F06':'factory_build50_learning_4.py','F07':'factory_build50_learning_4.py',
-          'F10':'factory_build50_learning_4.py','F11':'factory_build50_learning_4.py'}[family]
+          'F10':'factory_build50_learning_4.py','F11':'factory_build50_learning_4.py',
+          'F36':'factory_build50_native_media.py','F37':'factory_build50_native_media.py',
+          'F39':'factory_build50_native_media.py'}[family]
         command=[str(python),'-B',str(HERE/script),'--factory-private',str(root)]
         if family=='F27':command+=['--toolchain',str(manifest),'--worker'];timeout=210
         elif family in ('F29','F30','F33','F06','F07','F10','F11'):command+=['--family',family]
+        elif family in ('F36','F37','F39'):
+            command+=['--toolchain',str(manifest),'--family',family];timeout=240
     else:raise ValueError('PLANNER_EXECUTOR_NOT_ROUTED')
     return command,timeout
 

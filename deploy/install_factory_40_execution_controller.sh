@@ -33,7 +33,7 @@ backup="$ops/backups/forty-execution-$stamp"
 install -d -m 700 "$backup"
 crontab -l > "$backup/crontab-before.txt"
 chmod 600 "$backup/crontab-before.txt"
-for name in factory_40_execution_controller.py factory_40_family_master.py factory_build50_family_bridge.py factory_build_50.py factory_specialist_pilots.py factory_specialist_formats.py factory_build50_f31_planner.py factory_f31_independent_review.py factory_batch5_build.py factory_batch5_specs.py factory_batch5_review.py factory_product_planner.py factory_product_routes.py factory_build50_f18_webapps.py factory_f18_independent_review.py factory_capability_organizer.py factory_build50_f19_web_template.py factory_f19_independent_web_review.py factory_build50_f34_icon_kit.py factory_f34_independent_icon_review.py factory_build50_workbook.py factory_build50_creative_kits.py factory_creative_independent_review.py factory_build50_learning_4.py factory_learning_independent_review.py;do
+for name in factory_40_execution_controller.py factory_40_family_master.py factory_build50_family_bridge.py factory_build_50.py factory_specialist_pilots.py factory_specialist_formats.py factory_build50_f31_planner.py factory_f31_independent_review.py factory_batch5_build.py factory_batch5_specs.py factory_batch5_review.py factory_product_planner.py factory_product_routes.py factory_build50_f18_webapps.py factory_f18_independent_review.py factory_capability_organizer.py factory_build50_f19_web_template.py factory_f19_independent_web_review.py factory_build50_f34_icon_kit.py factory_f34_independent_icon_review.py factory_build50_workbook.py factory_build50_creative_kits.py factory_creative_independent_review.py factory_build50_learning_4.py factory_learning_independent_review.py factory_build50_native_media.py factory_native_media_review.py;do
  test -s "$source_dir/$name" && test ! -L "$source_dir/$name"
  if test -f "$target/$name";then
   test ! -L "$target/$name"
@@ -56,7 +56,7 @@ from pathlib import Path
 sys.path.insert(0,sys.argv[1])
 import factory_product_planner as planner
 root=Path(sys.argv[2]);proto=planner.load('factory_build_50')
-for family in ('F19','F27','F34','F29','F30','F33','F06','F07','F10','F11'):
+for family in ('F19','F27','F34','F29','F30','F33','F06','F07','F10','F11','F36','F37','F39'):
  result=planner.execute(root,{'family_id':family})
  if not planner.proof(root,planner.CATALOG[family],family,proto):
   raise RuntimeError('CATALOG_RECOVERY_FAILED:'+family+':'+str(result))
