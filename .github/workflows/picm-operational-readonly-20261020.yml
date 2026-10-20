@@ -234,6 +234,64 @@ jobs:
           fi
           echo PICM_CPANEL_INSPECTION_COMPLETE
           REMOTE
+      - name: Diagnose PICM user queue and quota safely without exposing prompts or IDs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 40s ssh -F "$WORK/config" picm-host 'python3 -' <<'PY'
+          import collections
+          import json
+          import time
+          from pathlib import Path
+          home=Path.home()
+          root=home/'.picm-queue'
+          print('PICM_QUEUE_ROOT_PRESENT='+str(root.is_dir() and not root.is_symlink()))
+          binding=root/'.owner-user-id'
+          owner=binding.read_text(encoding='utf-8').strip() if binding.is_file() and not binding.is_symlink() else None
+          print('PICM_OWNER_BOUND='+str(bool(owner)))
+          now=time.time()
+          counts=collections.Counter()
+          owner_24h=collections.Counter()
+          recent_age=[]
+          total=0
+          for path in root.glob('*.json'):
+              if path.is_symlink() or len(path.stem)!=32:
+                  continue
+              try:
+                  job=json.loads(path.read_text(encoding='utf-8'))
+              except (OSError,ValueError):
+                  counts['invalid']+=1
+                  continue
+              if not isinstance(job,dict) or job.get('id')!=path.stem: 
+                  counts['untrusted']+=1
+                  continue
+              total+=1
+              state=job.get('state')
+              if state not in ('queued','running','done','failed'):
+                  state='other'
+              counts[state]+=1
+              try:
+                  age=max(0,now-float(job.get('created',0)))
+              except (TypeError,ValueError):
+                  age=999999999
+              if owner and str(job.get('user_id'))==owner:
+                  if age<86400:owner_24h[state]+=1
+                  if age<172800:recent_age.append((age,state))
+          print('PICM_JOB_FILES_TOTAL='+str(total))
+          for state in ('queued','running','done','failed','other','invalid','untrusted'):
+              print('PICM_JOB_'+state.upper()+'_COUNT='+str(counts[state]))
+          print('PICM_OWNER_LAST_24H_TOTAL='+str(sum(owner_24h.values())))
+          for state in ('queued','running','done','failed'):
+              print('PICM_OWNER_LAST_24H_'+state.upper()+'='+str(owner_24h[state]))
+          for age,state in sorted(recent_age)[:5]:
+              print('PICM_RECENT_JOB_STATE='+state+';AGE_MINUTES='+str(int(age//60)))
+          template=home/'Saeit-staging/templates/picm/index.html'
+          js=home/'Saeit-staging/templates/picm/text_image.js'
+          print('PICM_LIVE_TEXT_IMAGE_CONTROLS='+str(template.is_file() and b'mode-text_image' in template.read_bytes()))
+          print('PICM_LIVE_TEXT_IMAGE_SCRIPT='+str(js.is_file() and b'/picm/api/submit/' in js.read_bytes()))
+          print('PICM_DIAGNOSTICS_READ_ONLY_COMPLETE')
+          PY
       - name: Verify public PICM security boundaries read-only
         shell: bash
         run: |
