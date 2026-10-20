@@ -66,7 +66,7 @@ assert(g.elapsed>oldElapsed);
 g=E.newGame();E.start(g);g.water=100;
 assert.equal(E.plant(g,0,0,'thorn').ok,true);
 g.enemies=[{id:8,row:0,x:165,hp:12,maxHp:12,speed:0,points:17,hurt:1,slow:0,phase:0}];
-E.advance(g,.1);
+for(let step=0;step<3;step++)E.advance(g,.1);
 assert.equal(g.enemies.length,0);assert.equal(g.score,17);
 g=E.newGame();E.start(g);g.water=100;
 g.enemies=[{id:9,row:1,x:500,hp:40,maxHp:40,speed:10,points:15,hurt:1,slow:0,phase:0}];
