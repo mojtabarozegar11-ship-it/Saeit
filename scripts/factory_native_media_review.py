@@ -14,8 +14,10 @@ GATES=("requirements","correctness","negative_cases","usability","accessibility"
 FORMATS={"F36":(".png",".exr"),"F37":(".gif",".mp4"),"F39":(".wav",".mp3")}
 
 def decode(ffmpeg,source):
+    source=Path(source)
+    explicit=["-f","image2","-c:v","exr"] if source.suffix==".exr" else []
     proc=subprocess.run([str(ffmpeg),"-hide_banner","-loglevel","error",
-         "-nostdin","-i",str(source),"-f","null","-"],stdout=subprocess.PIPE,
+         "-nostdin"]+explicit+["-i",str(source),"-f","null","-"],stdout=subprocess.PIPE,
          stderr=subprocess.PIPE,stdin=subprocess.DEVNULL,timeout=18)
     if proc.returncode:raise ValueError("MEDIA_REVIEW_CANNOT_DECODE:"+source.name)
 
