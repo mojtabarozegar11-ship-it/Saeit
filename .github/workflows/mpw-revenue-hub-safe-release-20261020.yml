@@ -130,7 +130,10 @@ jobs:
                       with urllib.request.urlopen(req,timeout=22) as response:
                           html=response.read(180000).decode('utf8','replace')
                           ok=response.status==200 and ('href="https://mojplaywin.com'+path+'"') in html and '</html>' in html and '<title>' in html
-                  except Exception:ok=False
+                          if not ok:print('MPW_PUBLIC_READBACK',path,response.status,response.geturl(),'canonical=',('href="https://mojplaywin.com'+path+'"') in html,'html_end=',('</html>' in html),'title=',('<title>' in html),'prefix=',repr(html[:135]))
+                  except Exception as exc:
+                      ok=False
+                      print('MPW_PUBLIC_ERROR',path,type(exc).__name__,getattr(exc,'code',None),str(exc)[:160])
                   if ok:break
                   time.sleep(3)
               if not ok:raise RuntimeError('Public revenue page failed: '+path)
