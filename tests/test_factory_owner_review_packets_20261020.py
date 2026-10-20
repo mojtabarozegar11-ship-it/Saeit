@@ -138,6 +138,72 @@ class ReviewPacketTests(unittest.TestCase):
         again=m.build(self.root)
         self.assertEqual(again["counts"].get("new_private_passport_starters",0),0)
 
+    def test_current_source_bound_specialist_QA_is_actionable_but_never_approved(self):
+        import hashlib
+        wo="WO-00000001"
+        source=self.orders/(wo+".json")
+        order=json.loads(source.read_text())
+        order.update(requesting_site="mojplaywin.com",source_product_id="original_python_product",
+                     source_sha256="b"*64,source_artifact_sha256="c"*64)
+        source.write_text(json.dumps(order))
+        instruction_sha=hashlib.sha256(source.read_bytes()).hexdigest()
+        qa={"schema":"saeit.factory.specialist-native-prescreen.v1",
+            "source_sha256":"b"*64,"original_factory_artifact_sha256":"c"*64,
+            "automated_format_prescreen_passed":False,
+            "automated_technical_blockers":["MISSING_OR_UNSUPPORTED_FAMILY_PROVENANCE"],
+            "commercial_release":False,"final_work_order_completed":False}
+        qa_dir=self.root/"design-state/mojplaywin-native-specialist-evidence/original_python_product"
+        qa_dir.mkdir(parents=True)
+        data=(json.dumps(qa,sort_keys=True,separators=(",",":"),ensure_ascii=False)+"\n").encode()
+        fingerprint=hashlib.sha256(data).hexdigest()
+        (qa_dir/("b"*64+"-"+fingerprint+".json")).write_bytes(data)
+        row={"schema":"saeit.factory.specialist-work-order-dossier.v1",
+             "work_order":wo,"source_work_order_sha256":instruction_sha,
+             "original_source_sha256":"b"*64,"source_artifact_sha256":"c"*64,
+             "specialist_prescreen_sha256":fingerprint,
+             "engineering_work_order_completed":False,"commercial_approval":False}
+        side=self.root/"production-instructions/mojplaywin-specialist-order-reports"
+        side.mkdir(parents=True)
+        (side/(wo+"-"+fingerprint+".json")).write_text(json.dumps(row))
+        result=m.build(self.root)
+        self.assertEqual(result["counts"]["site_origin_specialist_qa_linked"],1)
+        packet_path=self.root/"product-lifecycle/owner-review-queue"/wo
+        packet=json.loads(next(packet_path.glob("*.json")).read_text())
+        technical=packet["verified_private_technical_prescreen"]
+        self.assertEqual(technical["status"],"authentic_automated_format_evidence_available")
+        self.assertFalse(technical["format_prescreen_passed"])
+        self.assertIn("MISSING_OR_UNSUPPORTED_FAMILY_PROVENANCE",technical["technical_blockers"])
+        self.assertFalse(technical["expert_review_completed"])
+        self.assertFalse(technical["rights_approved"])
+        self.assertFalse(packet["commercial_release"])
+        original=json.loads(source.read_text());original["subject"]="new revision of real order"
+        source.write_text(json.dumps(original))
+        stale=m.build(self.root)
+        self.assertEqual(stale["counts"]["site_origin_specialist_qa_missing_or_stale"],1)
+        new_packet=[json.loads(p.read_text()) for p in packet_path.glob("*.json")]
+        self.assertTrue(any(p["verified_private_technical_prescreen"]["status"]==
+                            "technical_specialist_evidence_missing_or_stale" for p in new_packet))
+
+    def test_invalid_forged_specialist_sidecar_is_refused(self):
+        import hashlib
+        wo="WO-00000001"
+        p=self.orders/(wo+".json")
+        order=json.loads(p.read_text())
+        order.update(requesting_site="mojplaywin.com",source_product_id="original_python_product",
+                     source_sha256="b"*64,source_artifact_sha256="c"*64)
+        p.write_text(json.dumps(order))
+        checksum=hashlib.sha256(p.read_bytes()).hexdigest()
+        directory=self.root/"production-instructions/mojplaywin-specialist-order-reports"
+        directory.mkdir(parents=True)
+        (directory/(wo+"-"+"a"*64+".json")).write_text(json.dumps({
+            "schema":"saeit.factory.specialist-work-order-dossier.v1",
+            "work_order":wo,"source_work_order_sha256":checksum,
+            "original_source_sha256":"b"*64,"source_artifact_sha256":"f"*64,
+            "specialist_prescreen_sha256":"a"*64,
+            "engineering_work_order_completed":False,"commercial_approval":False}))
+        with self.assertRaisesRegex(RuntimeError,"OWNER_SPECIALIST_BAD_WORK_ORDER_EVIDENCE"):
+            m.build(self.root)
+
     def test_invalid_order_and_symlink_are_refused(self):
         (self.orders/"WO-00000003.json").write_text(json.dumps({
             "id":"WO-00000004","status":"issued"
