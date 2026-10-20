@@ -80,6 +80,14 @@ jobs:
           fi
           echo 'V3_ISOLATED_RESTORE_PERFORMED=false'
           echo 'V3_PUBLIC_RELEASE_AUTHORIZED=false'
+      - name: Measure source roots and database connectivity without exporting data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_consistent_db_preflight_readonly.py
+          python3 -m unittest discover -s tests -p test_mojplaywin_consistent_db_preflight_readonly.py
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 75s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/mojplaywin_consistent_db_preflight_readonly.py
       - name: Remove temporary SSH material
         if: always()
         shell: bash
