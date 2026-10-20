@@ -4,6 +4,10 @@ from pathlib import Path
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
+import subprocess
+import types
+import sys
 
 REPO=Path(__file__).resolve().parents[1]
 SCRIPTS=REPO/'scripts'
@@ -58,6 +62,33 @@ class RealFamilyAdmission(unittest.TestCase):
         self.assertFalse(report['warehouse_promotion_enabled'])
         self.assertEqual(report['customer_orders_created'],0)
         self.assertTrue((self.root/'production-family-management/forty-execution-dashboard.json').is_file())
+    def test_pilot_failures_refresh_dashboard_and_allow_next_tick(self):
+        pilot_module=types.SimpleNamespace(toolchain=lambda manifest: (self.root,Path(sys.executable)))
+        original_load=ctrl.load
+        def modules(name,path):
+            if name=='factory_40_verified_pilot_executor':return pilot_module
+            return original_load(name,path)
+        failures=[subprocess.TimeoutExpired(['pilot'],90),OSError('private launch detail'),
+                  subprocess.CompletedProcess(['pilot'],3,'','private stderr'),
+                  subprocess.CompletedProcess(['pilot'],0,'FACTORY_SPECIALIST_PILOT=[]','')]
+        reasons=['timeout','launch_error','nonzero_exit',None]
+        with patch.object(ctrl,'load',side_effect=modules):
+            for failure,reason in zip(failures,reasons):
+                with self.subTest(reason=reason):
+                    kwargs={'side_effect':failure} if isinstance(failure,Exception) else {'return_value':failure}
+                    with patch.object(ctrl.subprocess,'run',**kwargs):
+                        report=ctrl.run(self.root,REGISTRY,SCRIPTS,self.root/'manifest.json')
+                    saved=ctrl.read(self.root/'production-family-management/forty-execution-dashboard.json')
+                    self.assertEqual(saved['pilot_tick_result'],report['pilot_tick_result'])
+                    self.assertFalse(saved['pilot_tick_result']['confirmed_private_new_pilot'])
+                    self.assertEqual(saved['pilot_tick_result'].get('reason_type'),reason)
+                    self.assertEqual(saved['counts']['families_with_real_50_stage_products'],0)
+                    self.assertNotIn('private launch detail',json.dumps(saved))
+            # A subsequent healthy cron tick can reacquire the controller lock.
+            with patch.object(ctrl.subprocess,'run',return_value=subprocess.CompletedProcess(
+                ['pilot'],0,'FACTORY_SPECIALIST_PILOT={"status":"technical_pilots_verified"}','')):
+                report=ctrl.run(self.root,REGISTRY,SCRIPTS,self.root/'manifest.json')
+            self.assertEqual(report['pilot_tick_result']['status'],'technical_pilots_verified')
     def test_incomplete_registered_families_fail_closed(self):
         item=bridge.inventory(self.root,REGISTRY,proto,master)
         item['families'].pop()

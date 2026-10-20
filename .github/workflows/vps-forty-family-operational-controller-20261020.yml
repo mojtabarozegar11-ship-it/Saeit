@@ -2,7 +2,7 @@ name: Activate evidence-gated operational controller for all forty factory famil
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/vps-forty-family-operational-controller-20261020.yml"]
+    paths: [".github/workflows/vps-forty-family-operational-controller-20261020.yml", "scripts/factory_40_execution_controller.py", "tests/test_factory_40_execution_controller.py"]
 permissions: {contents: read}
 concurrency:
   group: saeit-forty-family-operational-controller-activation
@@ -97,6 +97,7 @@ jobs:
           assert d['store_publication_enabled'] is False
           assert d['warehouse_promotion_enabled'] is False
           assert d['customer_orders_created']==0
+          assert d['pilot_tick_result']['status'] in ('pilot_built','technical_pilots_verified'), 'pilot dispatch is unhealthy'
           cron=subprocess.check_output(['crontab','-l'],text=True)
           for marker in ('SAEIT_FACTORY_EVERY_MINUTE_V1','SAEIT_FACTORY_LIFECYCLE_12_V1',
             'SAEIT_FACTORY_FORTY_FAMILY_MASTER_V1','SAEIT_FACTORY_BUILD50_FORTY_FAMILY_BRIDGE_V1',

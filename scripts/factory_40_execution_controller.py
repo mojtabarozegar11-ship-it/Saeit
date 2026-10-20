@@ -134,25 +134,36 @@ def run(root,registry,module_dir,toolchain_manifest=None,pilot=True):
             pilotmod=load('factory_40_verified_pilot_executor',source)
             toolroot,python=pilotmod.toolchain(toolchain_manifest)
             if not python.is_file():raise RuntimeError('CTRL_INVALID_PINNED_TOOLCHAIN_PYTHON')
-            result=subprocess.run([str(python),'-B',str(source),
-                '--out',str(root),'--manifest',str(toolchain_manifest)],
-                cwd=str(module_dir),stdout=subprocess.PIPE,stderr=subprocess.PIPE,
-                text=True,timeout=90,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',
-                    OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1',
-                    FACTORY_TOOLCHAIN_BIN=str(toolroot/'bin')))
-            if result.returncode:
-                executed={'status':'pilot_failed','reason_type':'nonzero_exit',
-                          'exit_code':result.returncode}
+            try:
+                result=subprocess.run([str(python),'-B',str(source),
+                    '--out',str(root),'--manifest',str(toolchain_manifest)],
+                    cwd=str(module_dir),stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                    text=True,timeout=90,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',
+                        OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1',
+                        FACTORY_TOOLCHAIN_BIN=str(toolroot/'bin')))
+            except subprocess.TimeoutExpired:
+                executed={'status':'pilot_failed','reason_type':'timeout',
+                          'timeout_seconds':90,'confirmed_private_new_pilot':False}
+            except OSError:
+                executed={'status':'pilot_failed','reason_type':'launch_error',
+                          'confirmed_private_new_pilot':False}
             else:
-                try:
-                    line=next(line.split('=',1)[1] for line in result.stdout.splitlines()
-                              if line.startswith('FACTORY_SPECIALIST_PILOT='))
-                    body=json.loads(line)
-                    executed={'status':body.get('status','unknown'),
-                              'family':body.get('family'),
-                              'confirmed_private_new_pilot':body.get('status')=='pilot_built'}
-                except (StopIteration,ValueError):
-                    executed={'status':'pilot_receipt_not_parsable'}
+                if result.returncode:
+                    executed={'status':'pilot_failed','reason_type':'nonzero_exit',
+                              'exit_code':result.returncode,
+                              'confirmed_private_new_pilot':False}
+                else:
+                    try:
+                        line=next(line.split('=',1)[1] for line in result.stdout.splitlines()
+                                  if line.startswith('FACTORY_SPECIALIST_PILOT='))
+                        body=json.loads(line)
+                        if not isinstance(body,dict):raise ValueError('invalid receipt')
+                        executed={'status':body.get('status','unknown'),
+                                  'family':body.get('family'),
+                                  'confirmed_private_new_pilot':body.get('status')=='pilot_built'}
+                    except (StopIteration,ValueError):
+                        executed={'status':'pilot_receipt_not_parsable',
+                                  'confirmed_private_new_pilot':False}
             # The warehouse never learns an automatic false approval from pilots.
             evidence=bridge_module.inventory(root,registry,proto,master)
             rows,after=plan_state(evidence,profiles)
