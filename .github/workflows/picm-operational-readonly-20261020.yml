@@ -385,6 +385,32 @@ jobs:
           done
           test "$found" = 1 || { echo PICM_DJANGO_RUNTIME_NOT_FOUND; exit 33; }
           REMOTE
+      - name: Diagnose Passenger template cache age without a restart
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 35s ssh -F "$WORK/config" picm-host 'python3 -' <<'PY'
+          from pathlib import Path
+          home=Path.home()
+          app=home/'Saeit-staging'
+          docroot=home/'mojplaywin.com'
+          html=app/'templates/picm/index.html'
+          js=app/'templates/picm/text_image.js'
+          sources=[('PICM_LIVE_HTML',html),('PICM_LIVE_JS',js),
+                   ('PICM_PASSENGER_APP_RESTART',app/'tmp/restart.txt'),
+                   ('PICM_PASSENGER_DOCROOT_RESTART',docroot/'tmp/restart.txt')]
+          stats={}
+          for name,path in sources:
+            if path.is_file() and not path.is_symlink():
+              stats[name]=path.stat().st_mtime
+              print(name+'_LAST_UPDATE_EPOCH='+str(int(stats[name])))
+            else:
+              print(name+'_MISSING_OR_UNSAFE')
+          for name in ('PICM_PASSENGER_APP_RESTART','PICM_PASSENGER_DOCROOT_RESTART'):
+            if name in stats and 'PICM_LIVE_HTML' in stats:
+              print(name+'_OLDER_THAN_HTML='+str(stats[name]<stats['PICM_LIVE_HTML']))
+          PY
       - name: Verify public PICM security boundaries read-only
         shell: bash
         run: |
