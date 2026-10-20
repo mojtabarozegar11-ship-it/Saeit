@@ -1,0 +1,119 @@
+name: MojPlayWin real homepage theme on every main editorial and revenue page
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-all-main-home-template-unify-20261020.yml"
+permissions: {contents: read}
+concurrency:
+  group: mpw-home-native-comprehensive-unify
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test exact homepage theme copier without writing production
+        run: |
+          python3 -m py_compile scripts/mpw_home_template_unify_main_20261020.py
+          python3 scripts/mpw_home_template_unify_main_20261020.py selftest
+      - name: Baseline all existing original routes and protected subsites
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          paths=['/','/store/','/services/','/about/','/games/','/research/','/accounts/login/','/store/product/72/','/farnaz/','/saman/','/taniya/','/picm/']
+          states={}
+          for p in paths:
+              try:
+                  with urllib.request.urlopen('https://mojplaywin.com'+p,timeout=20) as r:states[p]=r.status
+              except urllib.error.HTTPError as e:states[p]=e.code
+          if any(x!=200 for x in states.values()):raise RuntimeError('Existing original site not healthy '+str(states))
+          open(os.environ['RUNNER_TEMP']+'/mpw-main-layout-baseline.json','w').write(json.dumps(states))
+          print('MPW_ALL_MAIN_THEME_BASELINE='+json.dumps(states))
+          PY
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-revenue-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Copy actual live homepage header, footer and CSS to 32 main-only pages
+        id: install
+        run: |
+          set -euo pipefail
+          timeout 125s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "python3 - publish '$GITHUB_RUN_ID'" < scripts/mpw_home_template_unify_main_20261020.py
+      - name: Public verification of homepage shell, 32 pages, JS tool integrity and siblings
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json,os,time
+          origin='https://mojplaywin.com'
+          names=('about-mojtaba-rozegar','about','agents','company','economy','industry','knowledge','market','research','services','studio','ventures-agriculture','ventures-cafe-restaurant','ventures-carpets','ventures-currency-crypto','ventures-ecommerce','ventures-fuel-station','ventures-hospitality','ventures-jewelry-gold')
+          slugs=('website-doctor','landing-page-studio','ai-automation','business-spreadsheets','website-templates','social-media-kits','resume-builder','logo-studio','browser-games','marketing-ai','business-calculators','website-care')
+          paths=['/design-preview-20261017/mpw-ten-editorials-20261018/pages/'+n+'.html' for n in names]
+          paths+=['/mpw-editorial/revenue/index.html']+['/mpw-editorial/revenue/'+slug+'/index.html' for slug in slugs]
+          for p in paths:
+              req=urllib.request.Request(origin+p+'?template_sync='+str(time.time_ns()),headers={'Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=21) as resp:
+                  html=resp.read(800000).decode('utf8','replace')
+                  if resp.status!=200 or html.count('data-mpw-home-unified-20261020="v1"')!=1 or 'mw-all-pages-menu' not in html or 'home-shared-v1.css' not in html:raise RuntimeError('Homepage theme missing '+p)
+                  if 'Mojtaba Roozegar' not in html:raise RuntimeError('Homepage legal footer missing '+p)
+                  if p.startswith('/mpw-editorial/revenue/') and p!='\/mpw-editorial/revenue/index.html' and p.endswith('/index.html'):
+                      if p!='/mpw-editorial/revenue/index.html' and 'id="mpw-functional-tool"' not in html:raise RuntimeError('Tool disappeared '+p)
+              print('MPW_HOME_THEME_LIVE='+p)
+          with urllib.request.urlopen(origin+'/mpw-editorial/revenue/assets/home-shared-v1.css',timeout=22) as r:
+              css=r.read(600000)
+              if r.status!=200 or len(css)<1500 or b'mw-site-nav' not in css:raise RuntimeError('Missing canonical home CSS')
+          baseline=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-main-layout-baseline.json'))
+          for path,status in baseline.items():
+              try:
+                  with urllib.request.urlopen(origin+path,timeout=20) as r:actual=r.status
+              except urllib.error.HTTPError as e:actual=e.code
+              if actual!=status:raise RuntimeError('Protected main or child route modified '+path)
+          print('MPW_32_PUBLIC_PAGES_WITH_ACTUAL_HOME_STYLE_AND_SUBSITES=PASS')
+          PY
+      - name: Restore all scoped main-only content if shell is not verified
+        if: failure() && steps.install.outcome == 'success'
+        run: timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_home_template_unify_main_20261020.py
+      - name: Cleanup only ephemeral relay keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
