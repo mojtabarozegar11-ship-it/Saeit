@@ -67,3 +67,70 @@ echo VPS_FACTORY_DISTRIBUTION_SCHEDULE=HOURLY_MINUTE_52
 echo VPS_FACTORY_PUBLIC_SITE_MODIFICATIONS=0
 echo VPS_FACTORY_SITE_RELEASE_REQUIRES_REVIEW=true
 echo VPS_FACTORY_NEW_SITE_REGISTRY_DYNAMIC=true
+
+# Activate only the imported read-only QA logic on the factory VPS.
+# No site worker, private cPanel source, external API, store, or payment is run.
+for item in \
+  scripts/factory_cross_site_capabilities.py \
+  scripts/factory_cross_site_cycle.py \
+  content/zomorod-v11/site_agents.php \
+  content/zomorod-v11/site_agent_workforce.php \
+  command_center/mpw_private_telemetry.py \
+  ops/factory-site-capabilities/zomorod/site_agents.php \
+  ops/factory-site-capabilities/zomorod/site_agent_workforce.php \
+  ops/factory-site-capabilities/mojplaywin/mpw_private_telemetry.py; do
+  test -s "$repo/$item" && test ! -L "$repo/$item"
+done
+"$python" -B "$repo/scripts/factory_cross_site_capabilities.py" --repo "$repo" >/dev/null
+cross="$ops/cross-site-factory-qa"
+test ! -L "$cross"
+install -d -m 700 "$cross"
+runner="$cross/run-hourly.sh"
+test ! -L "$runner"
+if test -f "$runner"; then
+  cp -p "$runner" "$ops/backups/cross-site-factory-runner-before-$stamp.sh"
+fi
+cat > "$runner" <<'CROSS_RUN'
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+base="$HOME/factory-runtime"
+repo="$base/operations/multisite-deploy-source"
+private="$base/private/autonomous-product-cycle"
+ops="$base/operations"
+exec 7>"$ops/cross-site-factory-qa/.cycle.lock"
+flock -n 7 || exit 0
+"$base/.venv/bin/python" -B "$repo/scripts/factory_cross_site_cycle.py" \
+  --repo "$repo" --factory-private "$private" \
+  --output "$private/cross-site-capabilities/last-report.json" \
+  >> "$ops/cross-site-factory-qa/private-cycle.log" 2>&1
+CROSS_RUN
+chmod 700 "$runner"
+bash -n "$runner"
+"$runner"
+"$python" -B - "$source_root/cross-site-capabilities/last-report.json" <<'PY'
+import json,sys
+from pathlib import Path
+data=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert data["schema"]=="saeit.factory.cross-site-live-cycle.v1"
+assert data["source_files_hash_verified"]==3
+assert data["source_copy_integrity"] is True
+assert data["roles_zomorod"]==11 and data["roles_mojplaywin_robots"]==11
+assert data["quality_or_commercial_release_granted"] is False
+assert data["website_files_modified"] is False
+print("CROSS_SITE_FACTORY_VPS_PRIVATE_SMOKE=PASS")
+print("CROSS_SITE_FACTORY_LOCAL_PREVIEWS_CHECKED="+str(data["html_previews_scanned"]))
+PY
+marker=SAEIT_CROSS_SITE_FACTORY_QA_V1
+crontab -l > "$cross/crontab-before-$stamp" 
+grep -v "$marker" "$cross/crontab-before-$stamp" > "$cross/crontab-after-$stamp" || true
+printf '41 * * * * /bin/bash %s # %s\n' "$runner" "$marker" >> "$cross/crontab-after-$stamp"
+chmod 600 "$cross/crontab-before-$stamp" "$cross/crontab-after-$stamp"
+test "$(crontab -l | sha256sum | awk '{print $1}')" = "$(sha256sum "$cross/crontab-before-$stamp" | awk '{print $1}')"
+crontab < "$cross/crontab-after-$stamp"
+test "$(crontab -l | grep -c "$marker")" -eq 1
+test "$(crontab -l | grep -c SAEIT_MULTISITE_CATALOG_V1)" -eq 1
+echo CROSS_SITE_FACTORY_IMPORTED_QA_ACTIVATED=TRUE
+echo CROSS_SITE_FACTORY_PRIVATE_HOURLY_CRON=ACTIVE
+echo CROSS_SITE_FACTORY_SITE_SERVICES_UNCHANGED=TRUE
+echo CROSS_SITE_FACTORY_MODULES_77_NOT_COPIED=TRUE
