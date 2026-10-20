@@ -44,8 +44,8 @@ def publish(run):
             name=m.name.removeprefix("./")
             if m.size>220000:fail("Oversized document")
             payload=tf.extractfile(m).read()
-            payload=payload.replace(b"/earn/",b"/mpw-editorial/revenue/")
             if len(payload)!=m.size:fail("Archive short read")
+            payload=payload.replace(b"/earn/",b"/mpw-editorial/revenue/")
             docs[name]=payload
     except (tarfile.TarError, OSError, UnicodeError) as exc:fail("Invalid archive: "+type(exc).__name__)
     if b"https://mojplaywin.com/mpw-editorial/revenue/" not in docs["earn/index.html"]:fail("Missing canonical main hub")
