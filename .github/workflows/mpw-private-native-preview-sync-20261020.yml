@@ -1,0 +1,161 @@
+name: Bounded private sync of all native product review previews to MojPlayWin
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-private-native-preview-sync-20261020.yml"
+      - "scripts/mpw_vps_warehouse_courier.py"
+      - "tests/test_factory_native_customer_packager.py"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-private-native-preview-sync-20261020.yml"
+      - "scripts/mpw_vps_warehouse_courier.py"
+      - "tests/test_factory_native_customer_packager.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-private-native-preview-all-pages-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify private source safety, bounded batches and tamper denial
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_vps_warehouse_courier.py scripts/factory_native_customer_packager.py
+          python3 -m unittest tests.test_factory_native_customer_packager -v
+          python3 -m unittest tests.test_mpw_vps_warehouse_courier -v
+          python3 -m unittest tests.test_mpw_three_bidirectional_orders -v
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('scripts/mpw_vps_warehouse_courier.py').read_text()
+          assert 'WAREHOUSE_PRIVATE_BATCH_PAGE_INVALID' in src
+          assert 'publicly_published' in src and 'commercial_release' in src
+          assert 'return_for_qa_completion' in src
+          assert 'publish_verified_factory_store_listing' not in src
+          print('MPW_PRIVATE_NATIVE_SYNC_OFFLINE_SAFETY=PASS')
+          PY
+  sync:
+    needs: preflight
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Prepare pinned identities without exposing credentials
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-preview-page-sync"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY;do
+            printf '%s' "${!item}" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/$item"
+            chmod 600 "$d/$item"
+            ssh-keygen -y -P '' -f "$d/$item" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -T -i "$d/VPS_KEY" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ServerAliveInterval 20
+            ServerAliveCountMax 3
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Transfer all 17 bounded pages of at most THREE native previews
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-preview-page-sync"
+          source="$(base64 -w0 scripts/mpw_vps_warehouse_courier.py)"
+          for page in $(seq 0 16);do
+            printf 'MPW_PRIVATE_PREVIEW_PAGE_START=%02d\n' "$page"
+            timeout 165s ssh -T -F "$d/config" saeit-vps \
+              "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-export-page-$page" \
+              > "$d/batch.tgz"
+            test -s "$d/batch.tgz"
+            size="$(stat -c '%s' "$d/batch.tgz")"
+            test "$size" -le 115343360
+            timeout 190s ssh -T -F "$d/config" saeit-cpanel \
+              "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' site-import" \
+              < "$d/batch.tgz"
+            rm -f "$d/batch.tgz"
+            printf 'MPW_PRIVATE_PREVIEW_PAGE_DELIVERED=%02d BYTES=%s\n' "$page" "$size"
+          done
+          echo MPW_NATIVE_PRIVATE_PAGED_TRANSFER_17=PASS
+      - name: Independently read back entire private recipient stock and deny all public release
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-preview-page-sync"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/home/zomorod2/.private_mojplaywin_main_agents/evolution_runtime_20261018/warehouse_courier')
+          assert root.is_dir() and not root.is_symlink()
+          receiving=root/'received'
+          assert receiving.is_dir() and not receiving.is_symlink()
+          native=buyer=0
+          for p in receiving.glob('*/*/customer_manifest.json'):
+              assert p.is_file() and not p.is_symlink()
+              report=json.loads(p.read_text())
+              qa=json.loads((p.parent/'site_qa.json').read_text())
+              assert qa['commercial_approved'] is False and qa['payment_enabled'] is False and qa['public_listing'] is False
+              if report['schema']=='saeit.factory.native-source-review-package.v1':
+                  assert report['native_structural_review_passed'] is True
+                  assert report['technical_buyer_package_verified'] is False
+                  assert report['commercial_release'] is False
+                  assert qa['native_private_structure_preview_verified'] is True
+                  assert qa['customer_bundle_verified'] is False
+                  native+=1
+              elif report['schema']=='saeit.factory.consumer-package.v1':
+                  assert report['technical_buyer_package_verified'] is True
+                  assert report['commercial_release'] is False
+                  buyer+=1
+              else:raise AssertionError('UNRECOGNIZED_PRIVATE_PACKAGE')
+          latest=json.loads((root/'status.json').read_text())
+          assert latest['tenant']=='mojplaywin-main'
+          assert latest['publicly_published']==0 and latest['store_product_created']==0 and latest['quality_approved']==0
+          assert native>=41 and buyer>=2,(native,buyer)
+          print('MPW_PRIVATE_NATIVE_SOURCE_PREVIEWS_VERIFIED='+str(native))
+          print('MPW_PRIVATE_CLI_TESTED_BUYER_BUNDLES_VERIFIED='+str(buyer))
+          print('MPW_PUBLIC_SHOP_AND_PAYMENT_CHANGES=ZERO')
+          print('MPW_NATIVE_FULL_PRIVATE_SITE_READBACK=PASS')
+          PY
+      - name: Erase private credentials and transient source bytes
+        if: always()
+        run: |
+          rm -rf -- "$RUNNER_TEMP/mpw-preview-page-sync"
