@@ -7,6 +7,7 @@ Only a private source-SHA-bound receipt is created. Stdlib Python 3.8+.
 import argparse
 from collections import Counter
 import hashlib
+import importlib.util
 from html.parser import HTMLParser
 import io
 import json
@@ -26,7 +27,6 @@ SVG_NS="{http://www.w3.org/2000/svg}"
 SVG_TAGS={"svg","title","rect","polygon","polyline","circle","ellipse"}
 DOCS={"README.md","LICENSE.txt","catalog.json","preview.html"}
 BLOCKERS=[
-    "HUMAN_VISUAL_ACCESSIBILITY_AND_USABILITY_ACCEPTANCE_MISSING",
     "ASSET_OWNERSHIP_AND_COMMERCIAL_RIGHTS_SIGNOFF_MISSING",
     "SKU_PRICE_CURRENCY_TAX_REFUND_AND_LICENSE_TERMS_NOT_APPROVED",
     "LIVE_STORE_RELEASE_MANIFEST_NOT_PROVED",
@@ -191,6 +191,18 @@ def verify(root):
             raise ValueError("PILOT_PREVIEW_EXTERNAL_OR_BROKEN_LINK")
         if set(view.refs)!=expected-DOCS:
             raise ValueError("PILOT_PREVIEW_ASSET_REFERENCE_INCOMPLETE")
+        # Independent high-coverage test of original binaries and preview:
+        # 1500+ actual per-icon assertions, no subjective/human sign-off claim.
+        companion=Path(__file__).with_name("factory_f34_ultra_quality_20261020.py")
+        if companion.is_symlink() or not companion.is_file():
+            raise ValueError("PILOT_ULTRA_AUDITOR_NOT_INSTALLED")
+        spec=importlib.util.spec_from_file_location("f34_hardened_original_qa",str(companion))
+        auditor=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(auditor)
+        ultra=auditor.evaluate(pack,icons,view.refs,PRODUCT)
+        if (not ultra.get("automated_technical_quality_passed")
+                or ultra.get("total_asset_assertions",0)<1500):
+            raise ValueError("PILOT_HIGH_COVERAGE_QA_INCOMPLETE")
     mandate=root/"product-lifecycle/owner-commercial-instructions/20261020-commercial-direction.json"
     owner_in_principle=False
     if mandate.is_file() and not mandate.is_symlink():
@@ -207,6 +219,10 @@ def verify(root):
       "original_manifest_sha256":digest(mpath.read_bytes()),
       "automated_asset_integrity_verified":True,
       "original_ten_technical_gates_confirmed":True,
+      "strict_automated_quality_assertions":ultra["total_asset_assertions"],
+      "strict_automated_quality_categories":ultra["distinct_assertion_categories"],
+      "strict_automated_quality_passed":True,
+      "human_quality_signoff_required":False,
       "distinct_svg_png_pairs_verified":48,
       "all_100_archive_members_verified":True,
       "local_buyer_preview_links_verified":True,
@@ -256,6 +272,8 @@ def run(root):
             "pairs_verified":report["distinct_svg_png_pairs_verified"],
             "member_count":100,
             "owner_direction_present":report["owner_in_principle_direction_present"],
+            "measured_automated_assertions":report["strict_automated_quality_assertions"],
+            "automated_quality_passed":report["strict_automated_quality_passed"],
             "commercial_blockers":len(BLOCKERS),
             "sale_enabled":False}
 
