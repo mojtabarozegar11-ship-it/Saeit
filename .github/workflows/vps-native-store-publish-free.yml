@@ -146,13 +146,14 @@ jobs:
           PY
           REMOTE
       - name: Stage release importer and narrowly update Django store card markup
+        id: stage
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/factory-store-preflight"
           ssh -F "$d/config" saeit-cpanel 'test -d "$HOME/.saeit-factory-inbox/bin" && test -d "$HOME/Saeit-staging/core/templates/core"'
           scp -F "$d/config" scripts/publish_verified_factory_store_listing.py saeit-cpanel:/home/zomorod2/.saeit-factory-inbox/bin/publish_verified_factory_store_listing.py.tmp
-          ssh -F "$d/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          ssh -F "$d/config" saeit-cpanel "GITHUB_RUN_ID=$GITHUB_RUN_ID bash -se" <<'REMOTE'
           set -euo pipefail
           umask 077
           bin="$HOME/.saeit-factory-inbox/bin"
@@ -169,12 +170,13 @@ jobs:
           test -f "$template"
           test ! -L "$template"
           mkdir -p "$bin/backups"
-          backup="$bin/backups/store-template-before-factory-$(date -u +%Y%m%dT%H%M%SZ).html"
+          backup="$bin/backups/store-template-before-factory-run-$GITHUB_RUN_ID.html"
+          test ! -e "$backup"
           cp -p "$template" "$backup"
           chmod 600 "$backup"
-          python3 - "$template" <<'PY'
+          python3 - "$template" "$backup" <<'PY'
           from pathlib import Path
-          import os,sys,tempfile
+          import os,sys,tempfile,hashlib
           p=Path(sys.argv[1])
           old='<article class="store-product-card"><small>{{ product.product_type }}</small><h3>{{ product.title }}</h3><strong>{{ product.price }} {{ product.currency }}</strong></article>'
           new='<article class="store-product-card"><small>{{ product.product_type }}</small><h3>{{ product.title }}</h3><strong>{{ product.price }} {{ product.currency }}</strong>{% if product.metadata.factory_recipe == "farm_enterprise_economics" and product.metadata.factory_status == "published_free" %}<p><a href="/factory-releases/farm-enterprise-economics-v1/" rel="noopener">Download free toolkit and view details</a></p>{% endif %}</article>'
@@ -187,6 +189,9 @@ jobs:
               try:
                   with os.fdopen(handle,"w",encoding="utf-8") as f:f.write(updated)
                   os.chmod(tmp,p.stat().st_mode & 0o777)
+                  marker=Path(sys.argv[2]+".changed")
+                  marker.write_text(hashlib.sha256(updated.encode("utf-8")).hexdigest()+"\n",encoding="ascii")
+                  os.chmod(marker,0o600)
                   os.replace(tmp,str(p))
               finally:
                   if os.path.exists(tmp):os.unlink(tmp)
@@ -254,6 +259,42 @@ jobs:
             test "$code" = 200
           done
           echo MOJPLAYWIN_NATIVE_STORE_PUBLICATION_VERIFIED
+      - name: Restore only the MojPlayWin store template if downstream checks fail
+        if: failure() && steps.stage.outcome != 'skipped'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-store-preflight"
+          test -s "$d/config"
+          ssh -F "$d/config" saeit-cpanel "GITHUB_RUN_ID=$GITHUB_RUN_ID bash -se" <<'REMOTE'
+          set -euo pipefail
+          backup="$HOME/.saeit-factory-inbox/bin/backups/store-template-before-factory-run-$GITHUB_RUN_ID.html"
+          target="$HOME/Saeit-staging/core/templates/core/store.html"
+          marker="$backup.changed"
+          if test ! -e "$marker"; then echo "STORE_NO_CHANGES_TO_RESTORE"; exit 0; fi
+          test -f "$backup" && test ! -L "$backup"
+          test -f "$target" && test ! -L "$target"
+          test -f "$marker" && test ! -L "$marker"
+          python3 - "$backup" "$target" "$marker" <<'PY'
+          import hashlib,os,sys,tempfile
+          from pathlib import Path
+          original,target,marker=map(Path,sys.argv[1:])
+          sha=marker.read_text(encoding="ascii").strip()
+          current=target.read_bytes()
+          if hashlib.sha256(current).hexdigest()!=sha:
+              raise SystemExit("STORE_ROLLBACK_CONCURRENT_CHANGE_REFUSED")
+          fd,name=tempfile.mkstemp(prefix=".store-rollback-",dir=str(target.parent))
+          try:
+              with os.fdopen(fd,"wb") as file:
+                  file.write(original.read_bytes());file.flush();os.fsync(file.fileno())
+              os.chmod(name,original.stat().st_mode & 0o777)
+              os.replace(name,target)
+              marker.unlink()
+          finally:
+              if os.path.exists(name):os.unlink(name)
+          print("FACTORY_STORE_TEMPLATE_SCOPED_ROLLBACK_VERIFIED")
+          PY
+          REMOTE
       - name: Clean temporary SSH keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
