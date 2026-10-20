@@ -114,6 +114,23 @@ class FastGpgTests(unittest.TestCase):
         self.assertFalse(archive.exists())
         self.assertFalse(manifest.exists())
 
+    def test_concurrent_complete_archive_creation_never_overwrites(self):
+        """Simulate another writer creating the complete name after preflight."""
+        archive, manifest = self.paths()
+        partial = archive.with_name(archive.name + ".partial")
+        keep = b"concurrently created archive; must not overwrite"
+        real_verify = enc.verify_stream
+        def race_on_verify(path, home, key):
+            outcome = real_verify(path, home, key)
+            archive.write_bytes(keep)
+            return outcome
+        with patch.object(enc, "verify_stream", side_effect=race_on_verify):
+            with self.assertRaises(FileExistsError):
+                self.store()
+        self.assertEqual(archive.read_bytes(), keep)
+        self.assertTrue(partial.exists())
+        self.assertFalse(manifest.exists())
+
     def test_missing_marker_never_completes(self):
         with self.assertRaises(RuntimeError):
             self.store(self.source[:-len(enc.MARKER)])
