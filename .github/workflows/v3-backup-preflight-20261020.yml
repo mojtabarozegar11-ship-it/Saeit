@@ -2,7 +2,7 @@ name: V3 isolated backup prerequisite audit (read only)
 on:
   push:
     branches: [automation/v3-order-cap-main-sync-20261020]
-    paths: [".github/workflows/v3-backup-preflight-20261020.yml"]
+    paths: [".github/workflows/v3-backup-preflight-20261020.yml", "scripts/v3_backup_bounded_source_probe.py"]
 permissions: {contents: read}
 concurrency:
   group: v3-backup-preflight-20261020
@@ -139,6 +139,16 @@ jobs:
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 75s ssh -T -F "$d/config" saeit-vps 'python3 - selftest' < scripts/mojplaywin_backup_encrypt_vps_gpg.py
           echo 'V3_GPG_SYNTHETIC_CRYPTO_PROBE_COMPLETE'
+      - name: Confirm real source-stream startup locally on cPanel without exporting private bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/v3_backup_bounded_source_probe.py
+          python3 scripts/v3_backup_bounded_source_probe.py fixture
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel 'python3 - mysql' < scripts/v3_backup_bounded_source_probe.py
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel 'python3 - files' < scripts/v3_backup_bounded_source_probe.py
+          echo 'V3_BOUNDED_SOURCE_PROBES_COMPLETE_NO_CUSTOMER_DATA_EXPORTED'
       - name: Remove temporary SSH material
         if: always()
         shell: bash
