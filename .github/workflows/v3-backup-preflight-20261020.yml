@@ -146,9 +146,18 @@ jobs:
           python3 -m py_compile scripts/v3_backup_bounded_source_probe.py
           python3 scripts/v3_backup_bounded_source_probe.py fixture
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
-          timeout 90s ssh -T -F "$d/config" saeit-cpanel 'python3 - mysql' < scripts/v3_backup_bounded_source_probe.py
-          timeout 90s ssh -T -F "$d/config" saeit-cpanel 'python3 - files' < scripts/v3_backup_bounded_source_probe.py
-          echo 'V3_BOUNDED_SOURCE_PROBES_COMPLETE_NO_CUSTOMER_DATA_EXPORTED'
+          source_failures=0
+          for kind in mysql files; do
+            if timeout 90s ssh -T -F "$d/config" saeit-cpanel "python3 - $kind" < scripts/v3_backup_bounded_source_probe.py; then
+              echo "V3_BOUNDED_SOURCE_$kind=PASS"
+            else
+              echo "V3_BOUNDED_SOURCE_$kind=BLOCKED"
+              source_failures=$((source_failures+1))
+            fi
+          done
+          echo "V3_BOUNDED_SOURCE_PROBE_FAILURES=$source_failures"
+          echo 'V3_NO_CUSTOMER_DATA_EXPORTED=true'
+          test "$source_failures" -eq 0
       - name: Remove temporary SSH material
         if: always()
         shell: bash
