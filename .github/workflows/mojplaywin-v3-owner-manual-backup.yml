@@ -10,6 +10,11 @@ on:
         description: "Type APPROVE-PRIVATE-BACKUP-NO-PUBLISH to authorize the backup"
         type: string
         required: true
+      data_transit_acknowledged:
+        description: "I understand compressed customer data passes through GitHub-hosted runner memory before VPS encryption; no data is intentionally logged or persisted by this workflow"
+        type: boolean
+        required: true
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -21,7 +26,8 @@ jobs:
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
       github.ref == 'refs/heads/main' &&
       github.actor == 'mojtabarozegar11-ship-it' &&
-      inputs.approval == 'APPROVE-PRIVATE-BACKUP-NO-PUBLISH'
+      inputs.approval == 'APPROVE-PRIVATE-BACKUP-NO-PUBLISH' &&
+      inputs.data_transit_acknowledged == true
     runs-on: ubuntu-24.04
     timeout-minutes: 300
     steps:
