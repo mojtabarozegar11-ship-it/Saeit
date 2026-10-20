@@ -1,0 +1,19 @@
+name: MojPlayWin customer CSRF mobile public-only probes
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-customer-csrf-mobile-public-probe-20261020.yml"
+permissions: {contents: read}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Probe mobile form CSRF same-origin vs www-origin with intentionally nonexistent account
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_customer_csrf_public_post_20261020.py
+          python3 scripts/mpw_customer_csrf_public_post_20261020.py
