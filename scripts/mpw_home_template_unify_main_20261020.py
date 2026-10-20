@@ -14,6 +14,8 @@ NAMES=('about-mojtaba-rozegar','about','agents','company','economy','industry','
 SLUGS=('website-doctor','landing-page-studio','ai-automation','business-spreadsheets','website-templates','social-media-kits','resume-builder','logo-studio','browser-games','marketing-ai','business-calculators','website-care')
 HEAD=re.compile(r'<header\b(?=[^>]*\bclass=["\x27](?:mw-site-nav|mpw-header)["\x27])[^>]*>[\s\S]*?</header\s*>',re.I)
 FOOT=re.compile(r'<footer\b(?=[^>]*\bclass=["\x27](?:mw-site-footer|mpw-footer)["\x27])[^>]*>[\s\S]*?</footer\s*>',re.I)
+ANY_HEADER=re.compile(r'<header\\b[^>]*>[\\s\\S]*?</header\\s*>',re.I)
+ANY_FOOTER=re.compile(r'<footer\\b[^>]*>[\\s\\S]*?</footer\\s*>',re.I)
 STYLE=re.compile(r'<style\b[^>]*>([\s\S]*?)</style\s*>',re.I)
 LINK=re.compile(r'<link\b(?=[^>]*\brel=["\x27]stylesheet["\x27])[^>]*>',re.I)
 MARK='data-mpw-home-unified-20261020="v1"'
@@ -60,11 +62,11 @@ def patch_html(key,raw,header,footer,links):
     text=raw.decode('utf8')
     if MARK in text or CSS_URL in text:fail('Page already unified: '+key)
     if not text.lstrip().lower().startswith('<!doctype html') or not text.lower().count('</head>')==1:fail('Invalid HTML '+key)
-    oldh=once(HEAD,text,key+' header')
-    oldf=once(FOOT,text,key+' footer')
+    oldh=once(ANY_HEADER if key.startswith('rev-') or key=='revenue-index' else HEAD,text,key+' header')
+    oldf=once(ANY_FOOTER if key.startswith('rev-') or key=='revenue-index' else FOOT,text,key+' footer')
     h=header.replace('<header ','<header '+MARK+' ',1)
     out=text[:oldh.start()]+h+text[oldh.end():]
-    oldf2=once(FOOT,out,key+' footer after header')
+    oldf2=once(ANY_FOOTER if key.startswith('rev-') or key=='revenue-index' else FOOT,out,key+' footer after header')
     out=out[:oldf2.start()]+footer+out[oldf2.end():]
     new_links=''.join('<link rel="stylesheet" href="'+href+'">' for href in links)
     new_links+='<link rel="stylesheet" href="'+CSS_URL+'?v=20261020">'
