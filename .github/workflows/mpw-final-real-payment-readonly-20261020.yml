@@ -102,6 +102,38 @@ jobs:
               if path.startswith('/store/product/') and status==404:raise RuntimeError('Published product checkout is missing')
           print('MPW_PAYMENT_ANONYMOUS_ROUTES_SMOKE=PASS')
           PY
+      - name: Inspect isolated micro TRX product prerequisites without writing data
+        run: |
+          set -euo pipefail
+          timeout 95s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,inspect,importlib.util,stat
+          from pathlib import Path
+          from types import SimpleNamespace
+          ROOT=Path('/home/zomorod2/Saeit-staging')
+          if ROOT.is_symlink() or not ROOT.is_dir():raise RuntimeError("Wrong app root")
+          os.chdir(ROOT);sys.path.insert(0,str(ROOT))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from core.models import Product,KnowledgeArticle
+          from mpw_commerce.fulfillment import _private_file
+          def out(tag,detail):print(tag+'='+json.dumps(detail,sort_keys=True,default=str))
+          out('MPW_MICRO_SCHEMA',{'product':[(f.name,f.get_internal_type(),f.null) for f in Product._meta.fields],'article':[(f.name,f.get_internal_type(),f.null) for f in KnowledgeArticle._meta.fields]})
+          out('MPW_MICRO_READER',{'file_resolver_source':inspect.getsource(_private_file)[:5500]})
+          for pk in (72,225):
+              p=Product.objects.select_related('knowledge_article').get(pk=pk)
+              m=p.metadata.get('mpw_commerce',{})
+              v=Path(_private_file(SimpleNamespace(product=p)))
+              out('MPW_MICRO_SOURCE',{'pk':pk,'private_file_exists':v.is_file(),'symlink':v.is_symlink(),
+                  'extension':v.suffix,'bytes':v.stat().st_size if v.is_file() else 0,
+                  'source_in_home':str(v).startswith('/home/zomorod2/'),
+                  'file_parent_writable':os.access(v.parent,os.W_OK),
+                  'file_parent_mode':oct(stat.S_IMODE(v.parent.stat().st_mode)),
+                  'enabled':m.get('enabled'), 'fulfillment':m.get('fulfillment'),
+                  'product_owner_assigned':p.owner_id is not None,
+                  'article_published':p.knowledge_article.published if p.knowledge_article_id else False})
+          out('MPW_MICRO_PDF_LIBS',{name:bool(importlib.util.find_spec(name)) for name in ('pypdf','PyPDF2','fitz')})
+          print('MPW_MICRO_PREFLIGHT_READONLY=PASS')
+          PY
       - name: Remove temporary SSH relay keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
