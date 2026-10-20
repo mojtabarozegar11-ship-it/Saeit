@@ -68,12 +68,34 @@ function show(r){
 }
 form.addEventListener('submit',e=>{
  e.preventDefault();const v={};keys.forEach(k=>v[k]=document.getElementById(k).value);
- try{show({...calculate(v),price:Number(v.price)})}catch(err){error.textContent=String(err.message);metricBox.replaceChildren();rows.replaceChildren();button.disabled=true;last=null}
+ try{show({...calculate(v),price:Number(v.price),inputs:v})}catch(err){error.textContent=String(err.message);metricBox.replaceChildren();rows.replaceChildren();button.disabled=true;last=null}
 });
 document.getElementById('reset').addEventListener('click',()=>{form.reset();form.requestSubmit()});
 document.getElementById('print').addEventListener('click',()=>window.print());
 button.addEventListener('click',()=>{if(!last)return;
- const csv='metric,value\r\n'+Object.entries(last).filter(([k])=>k!=='currency').map(([k,v])=>'"'+k+'","'+(v===null?'undefined':v)+'"').join('\r\n')+'\r\n';
+ const lines=[['metric','value','unit'],
+  ['currency',last.currency,'label'],
+  ['greenhouse_area',Number(last.inputs.area),'m2'],
+  ['expected_yield_per_m2',Number(last.inputs.yield),'kg/m2'],
+  ['unit_sale_price',Number(last.inputs.price),last.currency+'/kg'],
+  ['variable_cost_per_m2',Number(last.inputs.variable),last.currency+'/m2'],
+  ['fixed_cost',Number(last.inputs.fixed),last.currency],
+  ['rejected_yield',Number(last.inputs.reject),'percent'],
+  ['gross_yield',last.gross,'kg'],
+  ['saleable_yield',last.saleable,'kg'],
+  ['sales_revenue',last.revenue,last.currency],
+  ['total_cost',last.total,last.currency],
+  ['net_margin',last.margin,last.currency],
+  ['net_margin_per_area',last.marginPerArea,last.currency+'/m2'],
+  ['break_even_price_per_kg',last.breakEven,last.currency+'/kg']];
+ for(const yd of [-.2,0,.2])for(const pd of [-.1,0,.1]){
+  const code='yield_'+Math.round(yd*100)+'_price_'+Math.round(pd*100);
+  const revenue=last.saleable*(1+yd)*last.price*(1+pd);
+  lines.push(['stress_'+code+'_revenue',revenue,last.currency]);
+  lines.push(['stress_'+code+'_margin',revenue-last.total,last.currency]);
+ }
+ const quote=v=>'"'+String(v===null?'undefined':v).replace(/"/g,'""')+'"';
+ const csv='\uFEFF'+lines.map(line=>line.map(quote).join(',')).join('\r\n')+'\r\n';
  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');
  a.href=url;a.download='greenhouse-margin-f28.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200);
 });
