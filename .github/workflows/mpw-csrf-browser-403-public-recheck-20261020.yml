@@ -1,0 +1,13 @@
+name: MojPlayWin login CSRF mobile public verification 20261020
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/mpw-csrf-browser-403-public-recheck-20261020.yml]
+permissions: {contents: read}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/mpw_customer_csrf_public_post_20261020.py
