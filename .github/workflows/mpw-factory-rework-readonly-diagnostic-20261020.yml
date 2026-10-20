@@ -37,6 +37,9 @@ jobs:
           base=root/'design-state/mojplaywin-actual-technical-repair'
           stage=root/'design-intake/mojplaywin-stage1-quality-returns'
           orders=root/'production-instructions/orders'
+          from zipfile import ZipFile
+          from pathlib import PurePosixPath
+          archive_formats={}
           reasons=Counter(); states=Counter(); families=Counter()
           recipes=Counter(); evidence=Counter(); count=0; blocked=0
           files=sorted(stage.glob('*.json'))
@@ -61,7 +64,19 @@ jobs:
               assert stock.is_file() and not stock.is_symlink()
               manifest=json.loads(stock.read_text())
               family=manifest.get('family_id')
-              families[family if isinstance(family,str) and re.fullmatch('F[0-9]{2}',family) else 'UNDECLARED']+=1
+              fid=family if isinstance(family,str) and re.fullmatch('F[0-9]{2}',family) else 'UNDECLARED'
+              families[fid]+=1
+              archive=root/'production-warehouse/finished'/product/version/'product.zip'
+              assert archive.is_file() and not archive.is_symlink()
+              with ZipFile(archive) as z:
+                  members=z.infolist()
+                  assert len(members)<=300
+                  fmt=archive_formats.setdefault(fid,Counter())
+                  for item in members:
+                      ext=PurePosixPath(item.filename).suffix.lower() if not item.is_dir() else '(dir)'
+                      if not re.fullmatch(r'\\.[a-z0-9]{1,8}',ext or ''):
+                          ext='(none)'
+                      fmt[ext]+=1
               recipes['compatible' if re.fullmatch(r'(?:synth|sheet)_[a-f0-9]{24}',product) else 'other_native_product']+=1
               evidence['generated_recipe_present' if (root/'generated-product-recipes'/product/'design_receipt.json').is_file() else 'generated_recipe_absent']+=1
           order_states=Counter(); order_phases=Counter(); site_orders=0; legacy_cycles=Counter()
@@ -81,6 +96,8 @@ jobs:
           print('READONLY_REWORK_BLOCKED='+str(blocked))
           for name,counts in [('BLOCKERS',reasons),('STATUS',states),('FAMILY',families),('RECIPE_KIND',recipes),('RECIPE_EVIDENCE',evidence),('SITE_WORK_ORDER_STATUS',order_states),('SITE_WORK_ORDER_PHASE',order_phases),('SITE_WORK_ORDER_CYCLES',legacy_cycles)]:
               print('READONLY_'+name+'='+json.dumps(dict(sorted(counts.items())),sort_keys=True))
+          # Format names/counts only, never original file paths, titles or product content.
+          print('READONLY_FAMILY_FORMATS='+json.dumps({k:dict(sorted(v.items())) for k,v in sorted(archive_formats.items())},sort_keys=True))
           print('READONLY_SITE_WORK_ORDER_TOTAL='+str(site_orders))
           print('READONLY_AUDIT_NO_MUTATION=PASS')
           PY
