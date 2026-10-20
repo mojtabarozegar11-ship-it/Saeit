@@ -2,7 +2,11 @@ name: Factory one-pass 1000 production support tools
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/vps-factory-1000-workbench-release-20261020.yml"]
+    paths:
+      - ".github/workflows/vps-factory-1000-workbench-release-20261020.yml"
+      - "scripts/factory_1000_workbench.py"
+      - "tests/test_factory_1000_workbench.py"
+      - "deploy/install_factory_1000_workbench.sh"
   workflow_dispatch:
 permissions: {contents: read}
 concurrency:
