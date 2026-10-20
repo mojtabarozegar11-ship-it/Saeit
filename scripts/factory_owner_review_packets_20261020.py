@@ -251,6 +251,10 @@ def linked_specialist_review(root, wo, order, source_sha):
         matched.append({
             "status":"authentic_automated_format_evidence_available",
             "source_bound_specialist_sha256":fingerprint,
+            "source_family_id":result.get("family_id"),
+            "source_has_explicit_provenance_revision":(
+                result.get("family_provenance_source") in
+                ("warehouse_manifest","not_verified","sha256_matched_original_manufacturing_qa")),
             "source_original_provenance_restored":(
                 result.get("family_provenance_source")=="sha256_matched_original_manufacturing_qa"
                 and isinstance(result.get("family_provenance_receipt_sha256"),str)
@@ -271,6 +275,18 @@ def linked_specialist_review(root, wo, order, source_sha):
                 and all("MISSING_OR_UNSUPPORTED_FAMILY_PROVENANCE" in
                         x["technical_blockers"] for x in historical)):
             return restored[0]
+        # Source-bound prescreen JSON gained additive provenance fields.
+        # Keep historical immutable evidence; when every substantive decision
+        # and family identity agrees, selecting the explicit current schema is
+        # deterministic and does not silently treat a conflicting revision as QA.
+        old=matched[0]
+        substantive=("format_prescreen_passed","technical_blockers","source_family_id")
+        if all(all(row[key]==old[key] for key in substantive) for row in matched):
+            enhanced=[row for row in matched if row["source_has_explicit_provenance_revision"]]
+            if len(enhanced)==1:
+                return enhanced[0]
+            if len({row["source_bound_specialist_sha256"] for row in matched})==1:
+                return old
         raise RuntimeError("OWNER_SPECIALIST_MULTIPLE_CURRENT_QA")
     return matched[0] if matched else pending
 
