@@ -100,3 +100,4 @@ jobs:
       - name: Remove SSH key material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/factory-review-ssh"
+# Owner-requested next-stage private QA and release-gate verification, 2026-10-20; commercial permission unchanged.
