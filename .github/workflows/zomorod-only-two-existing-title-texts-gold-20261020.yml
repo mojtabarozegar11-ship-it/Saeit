@@ -56,7 +56,7 @@ jobs:
                   assert b'id="zm-home-dual-embossed-gold-20261020"' in data
                   block=data.split(b'<style id="zm-home-dual-embossed-gold-20261020">',1)[1].split(b'</style>',1)[0]
                   assert b'#ffe77f' in block and b'#fffef1' in block, 'Existing bright-gold frame CSS must remain'
-                   assert b'id="zm-home-two-embossed-gold-titles-20261020"' not in data, 'Title CSS already installed'
+                  assert b'id="zm-home-two-embossed-gold-titles-20261020"' not in data, 'Title CSS already installed'
                   assert b'ZOMOROD_ORBIT_DATA' in data
               print('PREFLIGHT_ROUTE_OK='+path,flush=True)
           with urlopen('https://zomorodmelal.ir/static/site/heroes/zomorod-fixed-cosmos-20261018.webp',timeout=25) as r:
@@ -171,12 +171,12 @@ jobs:
                   block=data.split(b'<style id="zm-home-dual-embossed-gold-20261020">',1)[1].split(b'</style>',1)[0]
                   assert b'#ffe77f' in block and b'#fffef1' in block and b'#fffde2' in block
                   assert b'#a57421' not in block and b'#65410e' not in block
-                   assert data.count(b'id="zm-home-two-embossed-gold-titles-20261020"')==1
-                   title_css=data.split(b'<style id="zm-home-two-embossed-gold-titles-20261020">',1)[1].split(b'</style>',1)[0]
-                   assert b'html body #main-view > .hero .hero-text h1' in title_css
-                   assert b'html body #main-view > .orbit-intro h2' in title_css
-                   assert b'#fffef4' in title_css and b'#ffe782' in title_css
-                   assert b'.topic-card' not in title_css
+                  assert data.count(b'id="zm-home-two-embossed-gold-titles-20261020"')==1
+                  title_css=data.split(b'<style id="zm-home-two-embossed-gold-titles-20261020">',1)[1].split(b'</style>',1)[0]
+                  assert b'html body #main-view > .hero .hero-text h1' in title_css
+                  assert b'html body #main-view > .orbit-intro h2' in title_css
+                  assert b'#fffef4' in title_css and b'#ffe782' in title_css
+                  assert b'.topic-card' not in title_css
                   found=True
                   break
               except Exception as exc:
