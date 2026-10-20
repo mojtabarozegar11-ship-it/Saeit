@@ -1,4 +1,17 @@
-{% extends 'brands/mojplaywin/base.html' %}{% block title %}{{ page.title }} — MojPlayWin{% endblock %}{% block meta_description %}{{ page.body|striptags|truncatechars:155 }}{% endblock %}{% block content %}<section class="mpw-page-hero"><span class="eyebrow">{{ page.kicker }}</span><h1>{{ page.headline }}</h1><p>{{ page.body }}</p><div class="mpw-lux-rule" aria-hidden="true"></div></section><div class="mpw-section-label">MOJPLAYWIN / CURATED</div><section class="mpw-page-grid">{% for title,meta,text in page.cards %}<article class="mpw-page-card"><small>{{ meta }}</small><h2>{{ title }}</h2><p>{{ text }}</p>{% if page_key == 'games' and forloop.first %}<a href="/games/first-realm/">View project →</a>{% endif %}</article>{% endfor %}</section>{% if page_key == 'agro-industry' %}
+{% extends 'brands/mojplaywin/base.html' %}{% block title %}{{ page.title }} — MojPlayWin{% endblock %}{% block meta_description %}{{ page.body|striptags|truncatechars:155 }}{% endblock %}{% block content %}<section class="mpw-page-hero"><span class="eyebrow">{{ page.kicker }}</span><h1>{{ page.headline }}</h1><p>{{ page.body }}</p><div class="mpw-lux-rule" aria-hidden="true"></div></section><div class="mpw-section-label">MOJPLAYWIN / CURATED</div><section class="mpw-page-grid">{% for title,meta,text in page.cards %}<article class="mpw-page-card"><small>{{ meta }}</small><h2>{{ title }}</h2><p>{{ text }}</p>{% if page_key == 'games' and forloop.first %}<a href="/games/first-realm/">View project →</a>{% endif %}</article>{% endfor %}</section>{% if page_key == 'games' %}
+<section class="mpw-page-cta" id="original-playable-games" aria-labelledby="original-playable-games-heading">
+<span class="eyebrow">ORIGINAL WEB GAMES · FREE PLAYABLE PREVIEWS</span>
+<h2 id="original-playable-games-heading">Play five original MojPlayWin browser games</h2>
+<p>Choose a game and play instantly on mobile or desktop. These independent web editions are free, require no login and store progress locally on your device.</p>
+<div class="mpw-page-grid">
+<article class="mpw-page-card"><small>TIMING · PRECISION</small><h3>Pulse Forge</h3><p>Stop the spark in the target zone.</p><a href="/game-releases/20261020/pulse-forge/index.html">Play Pulse Forge →</a></article>
+<article class="mpw-page-card"><small>PUZZLE · EXPLORATION</small><h3>Beacon Labyrinth</h3><p>Gather beacons and escape the maze.</p><a href="/game-releases/20261020/beacon-labyrinth/index.html">Play Beacon Labyrinth →</a></article>
+<article class="mpw-page-card"><small>MEMORY · PATTERNS</small><h3>Cipher Garden</h3><p>Repeat growing luminous sequences.</p><a href="/game-releases/20261020/cipher-garden/index.html">Play Cipher Garden →</a></article>
+<article class="mpw-page-card"><small>STRATEGY · DEFENSE</small><h3>Skyline Keeper</h3><p>Protect the skyline for twelve waves.</p><a href="/game-releases/20261020/skyline-keeper/index.html">Play Skyline Keeper →</a></article>
+<article class="mpw-page-card"><small>ARCADE · SPACE</small><h3>Nebula Salvage</h3><p>Recover orbital cargo before time runs out.</p><a href="/game-releases/20261020/nebula-salvage/index.html">Play Nebula Salvage →</a></article>
+</div>
+<p><small>Early-access browser games; no ads or payments. They are not yet released on Google Play.</small></p>
+</section>{% endif %}{% if page_key == 'agro-industry' %}
 <section class="mpw-venture-detail" aria-labelledby="mpw-venture-title">
   <header><span class="eyebrow">20% / CONNECTED VENTURES</span><h2 id="mpw-venture-title">Seven practical fields, one careful standard.</h2>
   <p>These are portfolio directions for research and future projects. The page does not claim active locations, product stock, exchange services, or operating businesses.</p></header>
