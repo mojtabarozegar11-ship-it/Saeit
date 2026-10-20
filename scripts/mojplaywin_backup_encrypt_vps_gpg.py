@@ -197,6 +197,8 @@ def verify_stream(target: Path, gpg_home: Path, key: bytes):
             raise RuntimeError("authenticated plaintext source footer absent")
         return n, digest.hexdigest()
     finally:
+        if proc.stdout is not None:
+            proc.stdout.close()
         if proc.poll() is None:
             proc.kill()
             proc.wait()
@@ -232,7 +234,11 @@ def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None =
     verified_total, verified_digest = verify_stream(partial, gnupg, key)
     if total != verified_total or digest != verified_digest:
         raise RuntimeError("OpenPGP round-trip integrity or size mismatch")
-    os.rename(partial, complete)
+    # Link promotion is atomic and refuses an existing destination (EEXIST).
+    # os.rename() would silently overwrite a concurrently created archive.
+    # Both paths are inside the same private backup directory/filesystem.
+    os.link(partial, complete, follow_symlinks=False)
+    os.unlink(partial)
     summary = {
         "kind": kind, "format": "OpenPGP-AES256-GPGv2",
         "source_encoding": source_encoding,
