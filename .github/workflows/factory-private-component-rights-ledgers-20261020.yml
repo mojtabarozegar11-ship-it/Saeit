@@ -1,0 +1,121 @@
+name: Private component hash rights ledgers on VPS and owner claimant addenda on cPanel
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_private_component_rights_ledger_20261020.py"
+      - "tests/test_factory_private_component_rights_ledger_20261020.py"
+      - ".github/workflows/factory-private-component-rights-ledgers-20261020.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/factory_private_component_rights_ledger_20261020.py"
+      - "tests/test_factory_private_component_rights_ledger_20261020.py"
+      - ".github/workflows/factory-private-component-rights-ledgers-20261020.yml"
+permissions: {contents: read}
+concurrency:
+  group: private-component-rights-ledgers-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test exact archive bytes, anti-traversal and merchant fail-closed
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile scripts/factory_private_component_rights_ledger_20261020.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_private_component_rights_ledger_20261020 tests.test_factory_commercial_evidence_readonly_20261020 -v
+          echo PRIVATE_RIGHTS_LEDGER_TESTS=PASS
+  private-rights-ledgers:
+    needs: test
+    if: github.event_name == 'push' && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish pinned relay to VPS and cPanel without disclosing credentials
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/commercial-evidence-audit"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Examine real private product archives and actual merchant rails without mutations
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/commercial-evidence-audit"
+          timeout 180s ssh -T -F "$d/config" saeit-vps 'PYTHONDONTWRITEBYTECODE=1 python3 - factory --root /home/githubops/factory-runtime/private/autonomous-product-cycle' < scripts/factory_commercial_evidence_readonly_20261020.py
+          timeout 100s ssh -T -F "$d/config" saeit-vps 'PYTHONDONTWRITEBYTECODE=1 python3 - rails --root /home/githubops/factory-runtime/private/autonomous-product-cycle' < scripts/factory_commercial_evidence_readonly_20261020.py
+          echo FACTORY_COMPONENT_RIGHTS_AND_PRIVATE_MERCHANT_RAILS_READBACK=PASS
+      - name: Inspect cPanel native merchant integration capabilities without reading secrets
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/commercial-evidence-audit"
+          timeout 110s ssh -T -F "$d/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 - cpanel' < scripts/factory_commercial_evidence_readonly_20261020.py
+          echo FACTORY_CPANEL_GATEWAY_METADATA_READONLY=PASS
+      - name: Append immutable component-level private SHA receipts on VPS; never modify source packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/commercial-evidence-audit"
+          stage="/home/githubops/factory-runtime/operations/.private-rights-ledgers-$GITHUB_RUN_ID"
+          timeout 20s ssh -T -F "$d/config" saeit-vps "test ! -e '$stage' && install -d -m 700 '$stage'"
+          for f in scripts/factory_commercial_evidence_readonly_20261020.py scripts/factory_private_component_rights_ledger_20261020.py;do
+            scp -q -F "$d/config" "$f" "saeit-vps:$stage/$(basename "$f")"
+            expected="$(sha256sum "$f" | awk '{print $1}')"
+            timeout 20s ssh -T -F "$d/config" saeit-vps "test \"$(sha256sum '$stage/$(basename "$f")' | awk '{print \$1}')\" = '$expected'"
+          done
+          timeout 210s ssh -T -F "$d/config" saeit-vps "PYTHONDONTWRITEBYTECODE=1 python3 -B '$stage/factory_private_component_rights_ledger_20261020.py' vps --root /home/githubops/factory-runtime/private/autonomous-product-cycle"
+          echo FACTORY_COMPONENT_RIGHTS_PRIVATE_VPS_LEDGER_CREATED=PASS
+      - name: Append five private corrected person-owner contexts on cPanel without rewriting prior rights records
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/commercial-evidence-audit"
+          timeout 120s ssh -T -F "$d/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -B - cpanel' < scripts/factory_private_component_rights_ledger_20261020.py
+          echo CPANEL_PERSONAL_OWNER_ADDENDA_PRIVATE=PASS
+      - name: Destroy transient SSH materials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/commercial-evidence-audit"
