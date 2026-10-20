@@ -2,7 +2,7 @@ name: MojPlayWin TRX guest safe settlement verifier source inspection
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/mpw-trx-guest-verifier-source-audit-20261020.yml"]
+    paths: [".github/workflows/mpw-trx-guest-verifier-source-audit-20261020.yml", "scripts/mpw_guest_trx_verifier_source_audit_20261020.py"]
 permissions: {contents: read}
 jobs:
   inspect:
