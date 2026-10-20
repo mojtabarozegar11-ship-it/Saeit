@@ -364,7 +364,7 @@ def add_tar(tar, name, raw):
     tar.addfile(info, io.BytesIO(raw))
 
 
-def export_factory(root=VPS):
+def export_factory(root=VPS, page=None):
     # Status to stderr only: stdout is the authenticated binary archive stream.
     print("MPW_VPS_EXPORT_BEGIN=PASS", file=sys.stderr, flush=True)
     records = stock_records(Path(root))
@@ -374,7 +374,14 @@ def export_factory(root=VPS):
     # Three buyer-format goods per courier cycle; retain every underlying
     # original stock record so the Stage-1 QA feedback contract is unchanged.
     eligible=sorted(k for k,v in companions.items() if v is not None)
-    if len(eligible)>3:
+    if page is not None:
+        require(type(page) is int and 0<=page<=16,"WAREHOUSE_PRIVATE_BATCH_PAGE_INVALID")
+        selected=set(eligible[page*3:page*3+3])
+        companions={key:(value if key in selected else None)
+                    for key,value in companions.items()}
+        print("MPW_NATIVE_BATCH_PAGE="+str(page)+
+              " SELECTED="+str(len(selected)), file=sys.stderr, flush=True)
+    elif len(eligible)>3:
         now=datetime.now(timezone.utc)
         pointer=((now.date().toordinal()*24+now.hour)*3)%len(eligible)
         selected={eligible[(pointer+i)%len(eligible)] for i in range(3)}
@@ -973,6 +980,10 @@ def main():
     mode=sys.argv[1]
     if mode=="vps-export":
         sys.stdout.buffer.write(export_factory())
+    elif mode.startswith("vps-export-page-"):
+        match=re.fullmatch(r"vps-export-page-(0|[1-9]|1[0-6])",mode)
+        require(match is not None, "WAREHOUSE_PRIVATE_BATCH_PAGE_INVALID")
+        sys.stdout.buffer.write(export_factory(page=int(match.group(1))))
     elif mode=="site-import":
         import_site(sys.stdin.buffer.read(MAX_PACKAGE+1))
         print("MPW_COURIER_SITE_INGEST=PASS", file=sys.stderr)
