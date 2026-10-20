@@ -88,7 +88,7 @@ def material(folder,stem,i,v,exe):
                 (-21+i%8*4,13+v*7,39-i%6*5))
     image.save(p,"PNG",optimize=True)
     ffmpeg_run(exe,"-i",str(p),"-frames:v","1","-c:v","exr",
-               "-pix_fmt","gbrpf32le",str(q))
+               "-pix_fmt","gbrpf32le","-f","image2",str(q))
     return [stem+".png",stem+".exr"]
 
 def motion(folder,stem,i,v,exe):
