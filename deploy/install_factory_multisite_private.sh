@@ -133,4 +133,64 @@ test "$(crontab -l | grep -c SAEIT_MULTISITE_CATALOG_V1)" -eq 1
 echo CROSS_SITE_FACTORY_IMPORTED_QA_ACTIVATED=TRUE
 echo CROSS_SITE_FACTORY_PRIVATE_HOURLY_CRON=ACTIVE
 echo CROSS_SITE_FACTORY_SITE_SERVICES_UNCHANGED=TRUE
-echo CROSS_SITE_FACTORY_MODULES_77_NOT_COPIED=TRUE
+echo CROSS_SITE_FACTORY_ORIGINAL_CPANEL_MODULES_NOT_COPIED=true
+
+# Quarantined, historical source-only capability evaluation.
+# This never launches site robots, generations or privileged factory agents.
+test -s "$repo/scripts/factory_legacy_77_benchmark.py"
+test -s "$repo/scripts/factory_legacy_77_cycle.py"
+test ! -L "$repo/ops/factory-site-capabilities/legacy-candidates"
+test ! -L "$repo/ops/factory-site-capabilities/legacy-candidates/mpw_v91_port/ORIGIN.json"
+"$python" -B "$repo/scripts/factory_legacy_77_benchmark.py" --syntax-only > /dev/null
+legacy="$ops/factory-heritage-77"
+test ! -L "$legacy"
+install -d -m 700 "$legacy"
+legacyrunner="$legacy/run-hourly.sh"
+test ! -L "$legacyrunner"
+if test -f "$legacyrunner"; then
+  cp -p "$legacyrunner" "$ops/backups/legacy77-runner-before-$stamp.sh"
+fi
+cat > "$legacyrunner" <<'HERITAGE_RUN'
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+base="$HOME/factory-runtime"
+ops="$base/operations"
+exec 7>"$ops/factory-heritage-77/.cycle.lock"
+flock -n 7 || exit 0
+"$base/.venv/bin/python" -B "$ops/multisite-deploy-source/scripts/factory_legacy_77_cycle.py" \
+  --repo "$ops/multisite-deploy-source" \
+  --output "$base/private/autonomous-product-cycle/cross-site-capabilities/legacy-77-last-report.json" \
+  >> "$ops/factory-heritage-77/last-cycle.log" 2>&1
+HERITAGE_RUN
+chmod 700 "$legacyrunner"
+bash -n "$legacyrunner"
+"$legacyrunner"
+"$python" -B - "$source_root/cross-site-capabilities/legacy-77-last-report.json" <<'PY'
+import json,sys
+from pathlib import Path
+d=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert d["schema"]=="saeit.factory.heritage-evaluation-cycle.v1"
+assert d["real_read_only_imports"]==77
+assert d["real_pure_function_probes"]>=14
+assert d["robot_source_roles_verified"]==11
+assert d["separate_agents_executed"]==0
+assert d["customer_product_published"] is False
+assert d["factory_prod_agents_replaced"] is False
+print("FACTORY_77_HISTORICAL_MODULES_REAL_VPS_SAFE_IMPORT=77")
+print("FACTORY_77_HISTORICAL_MODULE_FUNCTIONAL_PROBES="+str(d["real_pure_function_probes"]))
+print("FACTORY_11_ROBOT_SOURCE_ROLE_REGISTRY=VERIFIED")
+PY
+marker=SAEIT_FACTORY_HERITAGE_77_V1
+crontab -l > "$legacy/crontab-before-$stamp"
+grep -v "$marker" "$legacy/crontab-before-$stamp" > "$legacy/crontab-after-$stamp" || true
+printf '46 * * * * /bin/bash %s # %s\n' "$legacyrunner" "$marker" >> "$legacy/crontab-after-$stamp"
+chmod 600 "$legacy/crontab-before-$stamp" "$legacy/crontab-after-$stamp"
+test "$(crontab -l | sha256sum | awk '{print $1}')" = "$(sha256sum "$legacy/crontab-before-$stamp" | awk '{print $1}')"
+crontab < "$legacy/crontab-after-$stamp"
+test "$(crontab -l | grep -c "$marker")" -eq 1
+test "$(crontab -l | grep -c SAEIT_MULTISITE_CATALOG_V1)" -eq 1
+test "$(crontab -l | grep -c SAEIT_CROSS_SITE_FACTORY_QA_V1)" -eq 1
+echo FACTORY_77_HISTORICAL_MODULES_HOURLY_EVALUATION=ACTIVE
+echo FACTORY_77_SITE_ROBOT_PRODUCTION_ACTIVATION=false
+echo FACTORY_77_EXTERNAL_SITE_CONTENT_MODIFIED=false
