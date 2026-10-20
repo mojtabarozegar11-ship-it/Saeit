@@ -27,7 +27,8 @@ SCHEMA='saeit.factory.forty-family-operational-controller.v1'
 PILOT_IDS=('F10','F14','F19','F27','F29','F30','F31','F33','F34','F37','F39')
 FULL_PRODUCT_IDS={'F27':'capacity_planning_workbook',
                   'F19':'saas_launch_starter_2026',
-                  'F34':'fieldwork_ui_48_icons'}
+                  'F34':'fieldwork_ui_48_icons',
+                  'F31':'fieldwork_planner_weekly'}
 KNOWN_NATIVE_ADAPTERS={'F12':'android_sdk_gradle_signed_apk_aab',
  'F13':'desktop_os_build_and_installer','F16':'android_app_signing_and_testing',
  'F17':'desktop_platform_binary_build','F26':'real_model_training_benchmark',

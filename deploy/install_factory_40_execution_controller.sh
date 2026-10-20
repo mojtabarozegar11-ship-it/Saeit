@@ -33,7 +33,7 @@ backup="$ops/backups/forty-execution-$stamp"
 install -d -m 700 "$backup"
 crontab -l > "$backup/crontab-before.txt"
 chmod 600 "$backup/crontab-before.txt"
-for name in factory_40_execution_controller.py factory_40_family_master.py factory_build50_family_bridge.py factory_build_50.py factory_specialist_pilots.py factory_specialist_formats.py;do
+for name in factory_40_execution_controller.py factory_40_family_master.py factory_build50_family_bridge.py factory_build_50.py factory_specialist_pilots.py factory_specialist_formats.py factory_build50_f31_planner.py factory_f31_independent_review.py;do
  test -s "$source_dir/$name" && test ! -L "$source_dir/$name"
  if test -f "$target/$name";then
   test ! -L "$target/$name"
@@ -44,6 +44,30 @@ for name in factory_40_execution_controller.py factory_40_family_master.py facto
  mv -f "$tmp" "$target/$name"
 done
 "$py" -B -m py_compile "$target"/*.py
+# One genuine dated F31 kit per week; repeated ticks verify instead of duplicating.
+"$py" -B "$target/factory_build50_f31_planner.py" --factory-private "$private"
+# Admit only the fully proven package through the existing strict warehouse.
+stock="$ops/production-warehouse/factory_production_warehouse.py"
+test -s "$stock" && test ! -L "$stock"
+stocked=0
+for retry in 1 2 3 4 5;do
+ "$py" -B "$stock" --factory-private "$private" --strict-build50
+ if "$py" -B - "$private" <<'F31STOCK'
+import json,sys
+from pathlib import Path
+from datetime import date,timedelta
+root=Path(sys.argv[1]);today=date.today();week=today-timedelta(days=today.weekday())
+product='fieldwork_planner_'+week.strftime('%Y%m%d')
+manifest=json.loads((root/'digital-products'/product/'manufacturing_manifest.json').read_text())
+stock=json.loads((root/'production-warehouse/stock-register.json').read_text())
+assert stock['strict_build50_enabled'] is True
+assert any(r['product_id']==product and r['family_id']=='F31' and r['artifact_sha256']==manifest['artifact_sha256'] for r in stock['records'])
+print('F31_REAL_BUILD50_PRIVATE_STOCK=PASS')
+F31STOCK
+ then stocked=1;break;fi
+ sleep 2
+done
+test "$stocked" -eq 1
 # The inspect run must never start a producer; verify exact registration first.
 "$py" -B "$target/factory_40_execution_controller.py" --factory-private "$private" --registry "$registry" --module-dir "$target" --inspect-only
 # Now run exactly one bounded, real, version-verified specialist pilot step.
@@ -70,6 +94,7 @@ umask 077
 exec 9>"$ops/.forty-execution-scheduler.lock"
 /usr/bin/flock -n 9 || exit 0
 exec >> "$ops/forty-execution.log" 2>&1
+/usr/bin/timeout 90s "$py" -B "$target/factory_build50_f31_planner.py" --factory-private "$private" || echo F31_PERIODIC_BUILD_REQUIRES_REWORK
 exec "$py" -B "$target/factory_40_execution_controller.py" --factory-private "$private" --registry "$registry" --module-dir "$target" --toolchain-manifest "$toolchain"
 SH
 chmod 700 "$target/periodic-dispatch.sh"

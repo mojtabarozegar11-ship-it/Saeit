@@ -2,7 +2,7 @@ name: Activate evidence-gated operational controller for all forty factory famil
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/vps-forty-family-operational-controller-20261020.yml", "scripts/factory_40_execution_controller.py", "tests/test_factory_40_execution_controller.py"]
+    paths: [".github/workflows/vps-forty-family-operational-controller-20261020.yml", "scripts/factory_40_execution_controller.py", "tests/test_factory_40_execution_controller.py", "scripts/factory_build50_f31_planner.py", "scripts/factory_f31_independent_review.py", "tests/test_factory_build50_f31_planner.py", "deploy/install_factory_40_execution_controller.sh"]
 permissions: {contents: read}
 concurrency:
   group: saeit-forty-family-operational-controller-activation
@@ -22,6 +22,7 @@ jobs:
           python3 -m py_compile scripts/factory_40_execution_controller.py
           python3 -m unittest discover -s tests -p 'test_factory_40_execution_controller.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_build50_family_bridge.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_build50_f31_planner.py' -v
           python3 - <<'PY'
           from pathlib import Path
           p=Path('scripts/factory_40_execution_controller.py').read_text()
@@ -68,7 +69,7 @@ jobs:
           d="$RUNNER_TEMP/forty-proof-ssh"
           folder="/home/githubops/factory-runtime/operations/.forty-control-release-$GITHUB_RUN_ID"
           ssh -T -F "$d/config" saeit-factory-verified "umask 077; test ! -e '$folder'; mkdir -m 700 '$folder'"
-          for file in scripts/factory_40_execution_controller.py scripts/factory_40_family_master.py scripts/factory_build50_family_bridge.py scripts/factory_build_50.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py deploy/install_factory_40_execution_controller.sh; do
+          for file in scripts/factory_40_execution_controller.py scripts/factory_40_family_master.py scripts/factory_build50_family_bridge.py scripts/factory_build_50.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_build50_f31_planner.py scripts/factory_f31_independent_review.py deploy/install_factory_40_execution_controller.sh; do
             filename="$(basename "$file")"
             digest="$(sha256sum "$file" | awk '{print $1}')"
             scp -q -F "$d/config" "$file" "saeit-factory-verified:$folder/$filename"
@@ -97,6 +98,7 @@ jobs:
           assert d['store_publication_enabled'] is False
           assert d['warehouse_promotion_enabled'] is False
           assert d['customer_orders_created']==0
+          assert next(f for f in d['families'] if f['family_id']=='F31')['completed_50_stage_products']>=1
           assert d['pilot_tick_result']['status'] in ('pilot_built','technical_pilots_verified'), 'pilot dispatch is unhealthy'
           cron=subprocess.check_output(['crontab','-l'],text=True)
           for marker in ('SAEIT_FACTORY_EVERY_MINUTE_V1','SAEIT_FACTORY_LIFECYCLE_12_V1',
