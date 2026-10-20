@@ -88,6 +88,37 @@ jobs:
           echo 'V3_REAL_BACKUP_CREATED_BY_THIS_WORKFLOW=false'
           echo 'V3_ISOLATED_RESTORE_PERFORMED=false'
           echo 'V3_PUBLIC_RELEASE_AUTHORIZED=false'
+      - name: Read isolated database restore runtime prerequisites on VPS only
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 40s ssh -T -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          import json, os, shutil
+          from pathlib import Path
+          root=Path.home()/".private-mojplaywin-offhost-backups"
+          free=os.statvfs(root)
+          free_bytes=free.f_bavail*free.f_frsize
+          mem_bytes=None
+          try:
+              for line in Path("/proc/meminfo").read_text().splitlines():
+                  if line.startswith("MemAvailable:"):
+                      mem_bytes=int(line.split()[1])*1024
+                      break
+          except (OSError, ValueError):
+              pass
+          bins={name: bool(shutil.which(name)) for name in
+                ("docker","podman","mariadbd","mysqld","mariadb","mysql")}
+          print(json.dumps({"classification":"V3_VPS_ISOLATED_RESTORE_RUNTIME_READONLY",
+            "runtime_available_for_review":any(bins.get(n) for n in ("docker","podman","mariadbd","mysqld")),
+            "binary_availability":bins,
+            "at_least_10_gib_free_now":free_bytes>=10*1024**3,
+            "at_least_16_gib_free_now":free_bytes>=16*1024**3,
+            "at_least_2_gib_mem_available":mem_bytes is not None and mem_bytes>=2*1024**3,
+            "isolated_restore_performed":False,
+            "public_release_authorized":False},sort_keys=True))
+          PY
       - name: Remove temporary SSH credentials from runner
         if: always()
         shell: bash
