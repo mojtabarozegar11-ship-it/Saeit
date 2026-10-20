@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "scripts/factory_private_product_passport_policy_20261020.py"
+      - "scripts/factory_personal_owner_passport_policy_20261020.py"
       - "scripts/factory_private_passports_backfill_20261020.py"
       - "scripts/factory_product_maker.py"
       - "tests/test_factory_private_passport_20261020.py"
@@ -11,7 +11,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "scripts/factory_private_product_passport_policy_20261020.py"
+      - "scripts/factory_personal_owner_passport_policy_20261020.py"
       - "scripts/factory_private_passports_backfill_20261020.py"
       - "scripts/factory_product_maker.py"
       - "tests/test_factory_private_passport_20261020.py"
@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/factory_private_product_passport_policy_20261020.py scripts/factory_private_passports_backfill_20261020.py scripts/factory_product_maker.py
+          python3 -m py_compile scripts/factory_personal_owner_passport_policy_20261020.py scripts/factory_private_passports_backfill_20261020.py scripts/factory_product_maker.py
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_private_passport_20261020 tests.test_factory_product_maker -v
           echo FACTORY_PRIVATE_PASSPORT_CI=PASS
   private-vps-backfill:
@@ -74,9 +74,9 @@ jobs:
           chmod 600 "$d/config"
           stage="/home/githubops/factory-runtime/operations/.private-passports-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           timeout 40s ssh -T -F "$d/config" saeit-vps "umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
-          scp -q -F "$d/config" scripts/factory_private_product_passport_policy_20261020.py "saeit-vps:$stage/factory_private_product_passport_policy_20261020.py"
+          scp -q -F "$d/config" scripts/factory_personal_owner_passport_policy_20261020.py "saeit-vps:$stage/factory_personal_owner_passport_policy_20261020.py"
           scp -q -F "$d/config" scripts/factory_private_passports_backfill_20261020.py "saeit-vps:$stage/backfill.py"
-          for script in factory_private_product_passport_policy_20261020.py factory_private_passports_backfill_20261020.py; do
+          for script in factory_personal_owner_passport_policy_20261020.py factory_private_passports_backfill_20261020.py; do
             if [ "$script" = factory_private_passports_backfill_20261020.py ]; then target=backfill.py; else target="$script"; fi
             want="$(sha256sum "scripts/$script" | awk '{print $1}')"
             timeout 35s ssh -T -F "$d/config" saeit-vps "test ! -L '$stage/$target' && test \"\$(sha256sum '$stage/$target' | awk '{print \$1}')\" = '$want'"
