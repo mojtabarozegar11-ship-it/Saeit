@@ -104,22 +104,48 @@ jobs:
           install -d -m 700 "$dest"
           for f in bridge.py warehouse.py sender.py families.json;do test ! -L "$dest/$f";done
           REMOTE
-          scp -q -F "$d/config" scripts/zomorod_vps_warehouse_3order_bridge.py zm-vps:factory-runtime/operations/zomorod-site-bridge/bridge.py
+          # Keep the previous runner-backed bridge before replacing live VPS code.
+          # Atomic replacement of the changed bridge module prevents partial SCP writes.
+          ssh -T -F "$d/config" zm-vps bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          run="$1"
+          dest="$HOME/factory-runtime/operations/zomorod-site-bridge"
+          backup="$HOME/factory-runtime/operations/backups/zomorod-courier-$run"
+          test -d "$dest" && test ! -L "$dest"
+          test ! -L "$dest/bridge.py"
+          install -d -m 700 "$backup"
+          if test -f "$dest/bridge.py";then
+            cp -p "$dest/bridge.py" "$backup/bridge.before.py"
+            chmod 600 "$backup/bridge.before.py"
+            cmp -s "$dest/bridge.py" "$backup/bridge.before.py"
+            echo ZM_COURIER_PRIOR_CODE_SNAPSHOT=verified
+          fi
+          REMOTE
+          scp -q -F "$d/config" scripts/zomorod_vps_warehouse_3order_bridge.py zm-vps:factory-runtime/operations/zomorod-site-bridge/.bridge-candidate-$GITHUB_RUN_ID.py
           scp -q -F "$d/config" scripts/factory_production_warehouse.py zm-vps:factory-runtime/operations/zomorod-site-bridge/warehouse.py
           scp -q -F "$d/config" scripts/factory_store_sender.py zm-vps:factory-runtime/operations/zomorod-site-bridge/sender.py
           scp -q -F "$d/config" factory_config/forty_families.json zm-vps:factory-runtime/operations/zomorod-site-bridge/families.json
-          ssh -T -F "$d/config" zm-vps bash -se <<'REMOTE'
+          ssh -T -F "$d/config" zm-vps bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
           set -euo pipefail
+          run="$1"
           x="$HOME/factory-runtime/operations/zomorod-site-bridge"
           chmod 600 "$x/"*.py "$x/families.json"
-          python3 -B - "$x" <<'PY'
+          python3 -B - "$x" "$run" <<'PY'
           import ast,json,sys
           from pathlib import Path
           p=Path(sys.argv[1])
-          for f in ["bridge.py","warehouse.py","sender.py"]:ast.parse((p/f).read_text())
+          for f in ["warehouse.py","sender.py"]:ast.parse((p/f).read_text())
+          candidate=p/(".bridge-candidate-"+sys.argv[2]+".py")
+          assert candidate.is_file() and not candidate.is_symlink()
+          ast.parse(candidate.read_text())
           assert len(json.loads((p/"families.json").read_text())["profiles"])==40
           print("ZM_BRIDGE_VPS_40_FAMILY_REGISTRY_AND_ROBOT_READY=yes")
           PY
+          test ! -L "$x/.bridge-candidate-$run.py"
+          mv -f -- "$x/.bridge-candidate-$run.py" "$x/bridge.py"
+          chmod 600 "$x/bridge.py"
+          python3 -m py_compile "$x/bridge.py"
+          echo ZM_COURIER_ATOMIC_CODE_INSTALL=verified
           REMOTE
       - name: Diagnose live native factory order capacity and exact backlog safely
         shell: bash
