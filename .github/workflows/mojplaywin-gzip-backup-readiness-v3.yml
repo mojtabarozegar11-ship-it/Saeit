@@ -1,7 +1,7 @@
 name: V3 MojPlayWin private backup readiness - read only
 on:
   push:
-    branches: [fix/mpw-gzip-before-ssh-backup-20261020]
+    branches: [fix/mpw-gzip-before-ssh-backup-20261020, release/mpw-gpg-v3-owner-manual-20261020]
     paths:
       - ".github/workflows/mojplaywin-gzip-backup-readiness-v3.yml"
       - "scripts/mojplaywin_backup_gzip_destination_preflight_v3.py"
@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   check-private-backup-readiness-only:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/fix/mpw-gzip-before-ssh-backup-20261020'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/fix/mpw-gzip-before-ssh-backup-20261020' || github.ref == 'refs/heads/release/mpw-gpg-v3-owner-manual-20261020')
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
@@ -118,6 +118,19 @@ jobs:
             "at_least_2_gib_mem_available":mem_bytes is not None and mem_bytes>=2*1024**3,
             "isolated_restore_performed":False,
             "public_release_authorized":False},sort_keys=True))
+          PY
+      - name: Check source-side encryption tools to plan confidential backup transport
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import json,shutil
+          tools={name:shutil.which(name) is not None for name in ("gpg","openssl","age","gzip","tar","mariadb-dump")}
+          print(json.dumps({"classification":"V3_CPANEL_SOURCE_ENCRYPTION_TOOLS_READONLY",
+            "available":tools,"plaintext_transferred":False,
+            "backup_created":False,"release_permitted":False},sort_keys=True))
           PY
       - name: Remove temporary SSH credentials from runner
         if: always()
