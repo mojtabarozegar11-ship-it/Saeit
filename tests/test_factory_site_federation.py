@@ -78,8 +78,8 @@ class FactorySiteFederationTest(unittest.TestCase):
     def test_unverified_source_names_rejected(self):
         self.snapshot([{"path":"../key.py","sha256":"a"*64,"bytes":42}])
         # Escape attempts must not be matched or executed.
-        report=m.install_snapshot(self.snap,self.heritage,self.output)
-        self.assertEqual(report["matched_site_source_count"],0)
+        with self.assertRaisesRegex(ValueError, "UNSAFE_RELATIVE_SOURCE_PATH"):
+            m.install_snapshot(self.snap,self.heritage,self.output)
 
 if __name__=="__main__":
     unittest.main()
