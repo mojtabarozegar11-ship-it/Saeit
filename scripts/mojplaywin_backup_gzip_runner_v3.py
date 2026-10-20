@@ -43,7 +43,7 @@ def checked_config(path: Path):
 
 def script_bytes(path, basename):
     src = Path(path)
-    if src.is_symlink() or not src.is_file() or src.name != basename:
+    if src.is_symlink() or not src.is_file() or src.name != Path(basename).name:
         raise ValueError("UNEXPECTED_BACKUP_SOURCE")
     payload = src.read_bytes()
     if not 1024 < len(payload) <= 100000:
