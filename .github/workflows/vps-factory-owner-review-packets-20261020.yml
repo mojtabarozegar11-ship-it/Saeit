@@ -101,9 +101,9 @@ jobs:
           # Aggregate ZIP structure only; do not display customer content, manifests or secrets.
           import zipfile
           for name in ("fieldwork_vector_illustration_suite","fieldwork_ui_48_icons"):
-              folder=root/"digital-products"/name
-              manifest=folder/"manufacturing_manifest.json"
-              artifact=folder/(name+"-internal-qa.zip")
+              product_dir=root/"digital-products"/name
+              manifest=product_dir/"manufacturing_manifest.json"
+              artifact=product_dir/(name+"-internal-qa.zip")
               m=json.loads(manifest.read_text()) if manifest.is_file() and not manifest.is_symlink() else {}
               if artifact.is_file() and not artifact.is_symlink():
                   with zipfile.ZipFile(artifact) as archive:
@@ -114,6 +114,13 @@ jobs:
                              "family_id":m.get("family_id"),
                              "manifest_files":len(m.get("files",[])) if isinstance(m.get("files"),list) else None,
                              "qa_policy":(m.get("qa_measurements") or {}).get("review_kind") if isinstance(m.get("qa_measurements"),dict) else None}
+                      if name=="fieldwork_vector_illustration_suite":
+                          from collections import Counter
+                          from pathlib import PurePosixPath
+                          ext=Counter(PurePosixPath(x.filename).suffix.lower() or "(none)" for x in infos)
+                          stats["extension_counts"]=dict(sorted(ext.items()))
+                          stats["has_qa_gates"]=isinstance(m.get("qa_measurements"),dict)
+                          stats["is_approved_for_sale"]=m.get("owner_publication_approval")
                       print("REAL_VPS_DEFECT_ARCHIVE_STRUCTURE="+json.dumps(stats,sort_keys=True))
 
           assert len(defects)==technical["counts"].get("technical_rework_required",0)
