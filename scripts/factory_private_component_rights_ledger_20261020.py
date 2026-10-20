@@ -16,7 +16,6 @@ import tempfile
 import zipfile
 
 SHA = re.compile(r"^[0-9a-f]{64}$")
-LEGAL = "مجتبی گلستانی‌نیک"
 PROFESSIONAL = "مجتبی روزگار"
 
 
@@ -90,7 +89,7 @@ def vps_ledger(root):
             "components": components,
             "component_count": len(components),
             "declared_economic_rights_owner": PROFESSIONAL,
-            "owner_official_name_as_declared": LEGAL,
+            "owner_official_name": "identity_not_embedded_in_source_repository",
             "owner_identity_status": "owner_declaration_not_independently_authenticated",
             "company_role": "technology_and_sales_services_platform_not_rights_owner",
             "independent_creator_chain_of_title_verified": False,
@@ -154,7 +153,7 @@ def cpanel_legal_addenda(home):
             "historical_rights_dossier_sha256": digest(old_bytes),
             "historical_proposed_claimant_company_not_verified_as_owner": True,
             "owner_personal_rights_declared_professional_name": PROFESSIONAL,
-            "owner_legal_name_as_declared": LEGAL,
+            "owner_legal_name": "identity_not_embedded_in_source_repository",
             "company_services_platform_only": "شرکت کشت و صنعت زمرد ملل",
             "historical_legal_claimant_field_superseded_for_internal_policy": True,
             "original_historical_dossier_preserved_unchanged": True,
