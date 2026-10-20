@@ -13,11 +13,10 @@ FILES={
  'login':APP/'mpw_commerce/templates/mpw_commerce/customer_login.html',
 }
 OLD_PRODUCT='<p>Live payment methods appear only after provider and market controls are configured.</p><a class="primary" href="/crypto-payments/">Payment options</a>'
-NEW_PRODUCT='''{% if product.pk == 72 or product.pk == 225 %}{% if product.metadata.checkout_enabled and product.metadata.payment_live and product.metadata.asset_verified and product.metadata.license_verified %}
+NEW_PRODUCT='''{% if product.pk == 72 or product.pk == 225 %}
 <p>Sign in to receive an order-specific secure invoice for this verified digital book. Private delivery is granted only after independently confirmed payment.</p>
 <a class="primary" href="/store/product/{{ product.pk }}/checkout/">Secure checkout for this book</a>
 <a href="/accounts/register/">New customer? Create an account</a>
-{% else %}<p>Checkout for this product is not currently verified. Do not send money without a valid order invoice.</p><a href="/contact/">Ask about availability</a>{% endif %}
 {% else %}<p>Contact MojPlayWin to confirm purchasing and delivery availability for this product.</p><a href="/contact/">Enquire about this product</a>{% endif %}'''
 OLD_LOGIN='{% csrf_token %}{{ form.as_p }}'
 NEW_LOGIN='''{% csrf_token %}
