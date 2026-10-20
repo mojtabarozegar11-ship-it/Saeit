@@ -123,3 +123,5 @@ jobs:
       - name: Remove temporary SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mojplaywin-inventory-ssh"
+
+# Re-run after explicit owner conditional commercial authorization on 2026-10-20.
