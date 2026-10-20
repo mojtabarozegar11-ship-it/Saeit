@@ -2,7 +2,9 @@ name: Zomorod private factory catalog importer - scoped retry without new orders
 on:
   push:
     branches: [main]
-    paths: [.github/workflows/zomorod-private-catalog-import-only-20261020.yml]
+    paths:
+      - .github/workflows/zomorod-private-catalog-import-only-20261020.yml
+      - scripts/zomorod_factory_store_import.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,6 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Prepare pinned VPS relay and exact cPanel host identity
         shell: bash
         env:
@@ -56,6 +61,37 @@ jobs:
             ConnectTimeout 12
           EOF
           chmod 600 "$d/config"
+      - name: Install corrected importer in private cPanel directory only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-private-catalog-only"
+          python3 -B -m py_compile scripts/zomorod_factory_store_import.py
+          scp -q -F "$d/config" scripts/zomorod_factory_store_import.py zm-cpanel:".private/zomorod-business/.importer-repair-$GITHUB_RUN_ID.py"
+          ssh -T -F "$d/config" zm-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          run="$1"
+          dir="$HOME/.private/zomorod-business"
+          active="$dir/zomorod_factory_store_import.py"
+          incoming="$dir/.importer-repair-$run.py"
+          live="$dir/site_store.php"
+          test -f "$live" && test ! -L "$live"
+          test -f "$incoming" && test ! -L "$incoming"
+          test ! -L "$active"
+          before="$(sha256sum "$live" | cut -c1-64)"
+          python3 -B - "$incoming" <<'PY'
+          import ast,sys
+          ast.parse(open(sys.argv[1],encoding='utf8').read())
+          PY
+          backup="$HOME/.backups/zomorod-private-import-only/$run"
+          install -d -m 700 "$backup"
+          if test -f "$active"; then cp -p "$active" "$backup/importer.before.py"; chmod 600 "$backup/importer.before.py"; fi
+          chmod 600 "$incoming"
+          mv -f -- "$incoming" "$active"
+          test "$(sha256sum "$live" | cut -c1-64)" = "$before"
+          echo ZM_PRIVATE_IMPORTER_ATOMIC_REPAIR=verified
+          REMOTE
       - name: Inspect exact private inbox receipt errors and import only validated records
         shell: bash
         run: |

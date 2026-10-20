@@ -142,8 +142,18 @@ def import_catalog(root,dbfile,limit=6):
             paid_price_irr INTEGER CHECK(paid_price_irr IS NULL),
             PRIMARY KEY(product_id,source_sha256))""")
         imported=existing=scanned=0
+        invalid_archive_blocked=0
         for p in files:
-            info=validate_received(root,p)
+            try:
+                info=validate_received(root,p)
+            except ValueError as error:
+                # Preserve an oversized/overpopulated source archive for
+                # independent rework, but never allow it to block unrelated
+                # already verified private drafts. All OTHER errors fail closed.
+                if str(error)!="ARCHIVE_LIMIT":
+                    raise
+                invalid_archive_blocked+=1
+                continue
             if connection.execute('SELECT 1 FROM factory_drafts WHERE sha256=?',(info['sha256'],)).fetchone():
                 existing+=1
                 continue
@@ -189,6 +199,7 @@ def import_catalog(root,dbfile,limit=6):
         return {"imported":imported,"already":existing,"scanned":scanned,
                 "customer_bundles_new":consumer_new,
                 "customer_bundles_already":consumer_existing,
+                "invalid_archive_blocked":invalid_archive_blocked,
                 "public_customer_bundles":0}
     finally:connection.close()
 
