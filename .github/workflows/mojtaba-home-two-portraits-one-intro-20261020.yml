@@ -128,3 +128,5 @@ jobs:
             timeout 25s ssh -T -F "$RUNNER_TEMP/mojtaba-portrait-ssh/config" saeit-host "test -d '$stage' && test ! -L '$stage' && rm -f '$stage/patch.py' && rmdir '$stage'" || true
           fi
           rm -rf "$RUNNER_TEMP/mojtaba-portrait-ssh" || true
+
+# Re-run approved guarded deployment with Django dynamic hero image support.
