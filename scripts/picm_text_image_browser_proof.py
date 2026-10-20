@@ -73,7 +73,7 @@ async def main():
             await page.evaluate("""({data, id}) => {
                 const binary=atob(data);
                 const bytes=Uint8Array.from(binary,c=>c.charCodeAt(0));
-                window.proof={requests:[],code:202,bytes,id};
+                window.proof={requests:[],code:202,bytes,id,nativeFetch:window.fetch.bind(window)};
                 window.fetch=async (path,options={}) => {
                     window.proof.requests.push({path,method:options.method||"GET",
                         body:options.body||null,csrf:options.headers?.["X-CSRFToken"]||null,
