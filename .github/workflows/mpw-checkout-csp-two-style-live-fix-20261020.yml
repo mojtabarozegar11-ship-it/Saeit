@@ -114,3 +114,4 @@ jobs:
       - name: Destroy temporary SSH relay keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-csp-ssh"
+# rerun: exact CSP patch selftest string literal corrected before any live file write
