@@ -68,6 +68,53 @@ def save(path, value, immutable=False):
     return True
 
 
+def verified_extended_native_archive(recipe,manifest,members,actual_sha):
+    """Only SHA-bound, documented, machine-reviewed native packages exceed 80 ZIP items.
+
+    This is archive-integrity review only, not actual expert/rights assessment.
+    A large unknown or unreviewed ZIP remains QUARANTINED, never auto-approved.
+    """
+    if not 81<=len(members)<=201 or not isinstance(manifest,dict):
+        return False
+    if recipe=="fieldwork_ui_48_icons":
+        # F34 has its own stronger 48-pair, 100-member gate below.
+        return False
+    if not re.fullmatch(r"F(?:0[1-9]|[1-3][0-9]|40)",str(manifest.get("family_id",""))):
+        return False
+    if (not isinstance(manifest.get("source_sha256"),str)
+            or not re.fullmatch(r"[0-9a-f]{64}",manifest["source_sha256"])
+            or manifest.get("qa_status")!="passed"
+            or manifest.get("artifact_sha256")!=actual_sha
+            or manifest.get("public_listing_enabled") is not False
+            or manifest.get("owner_publication_approval") is not False):
+        return False
+    documented=manifest.get("files")
+    if (not isinstance(documented,list) or len(documented)!=len(members)
+            or any(not isinstance(x,str) for x in documented)
+            or len(set(documented))!=len(documented)):
+        return False
+    names=[m.filename for m in members]
+    if len(set(names))!=len(names) or set(names)!={recipe+"/"+x for x in documented}:
+        return False
+    reviewer=manifest.get("qa_measurements")
+    if not isinstance(reviewer,dict) or reviewer.get("passed") is not True:
+        return False
+    gates=reviewer.get("gates")
+    if (not isinstance(gates,dict) or len(gates)!=10
+            or any(value is not True for value in gates.values())
+            or reviewer.get("commercial_release") is not False):
+        return False
+    if reviewer.get("critical_defects",[]) not in ([],None):
+        return False
+    # Make sure claimed multiformat original work is not a single dummy file.
+    from pathlib import PurePosixPath
+    suffixes={PurePosixPath(x).suffix.lower() for x in documented}
+    if len(suffixes)<2 or not suffixes.intersection(
+            {".py",".xlsx",".ods",".svg",".png",".mp4",".gif",".wav",".mp3",".exr",".csv",".pdf",".json"}):
+        return False
+    return True
+
+
 def inspect_actual_products(root, lifecycle):
     """Proof-carrying private technical prescreen; never release authorization."""
     goods = root/"digital-products"
@@ -113,6 +160,7 @@ def inspect_actual_products(root, lifecycle):
                 m={}
                 expected=None
                 errors.append("MANUFACTURING_MANIFEST_INVALID")
+        is_extended=False
         if archive.is_symlink() or not archive.is_file():
             errors.append("PRODUCT_ARCHIVE_MISSING")
         elif not 100<=archive.stat().st_size<=25*1024*1024:
@@ -149,7 +197,10 @@ def inspect_actual_products(root, lifecycle):
                                     {recipe+"/"+x for x in documented})
                         if not is_special:
                             errors.append("F34_EXACT_EVIDENCE_INVALID")
-                    if (not members or len(members)>(100 if is_special else 80)
+                    is_extended=(not is_special and
+                        verified_extended_native_archive(recipe,m,members,actual_digest))
+                    if (not members or len(members)>(100 if is_special else
+                                    201 if is_extended else 80)
                             or sum(x.file_size for x in members)>100*1024*1024):
                         errors.append("ARCHIVE_LIMIT")
                     if not errors:
@@ -175,6 +226,7 @@ def inspect_actual_products(root, lifecycle):
             "source_sha256":source_sha if isinstance(source_sha,str) else None,
             "artifact_sha256":actual_digest,
             "technical_archive_integrity_verified":good,
+            "extended_native_format_archive_verified":is_extended,
             "technical_blockers":sorted(set(errors)),
             "independent_content_review":False,
             "rights_and_license_review":False,
