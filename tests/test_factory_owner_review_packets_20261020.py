@@ -47,6 +47,49 @@ class ReviewPacketTests(unittest.TestCase):
         self.assertEqual(candidates[0].stat().st_mode & 0o777,0o600)
         self.assertEqual(m.build(self.root)["counts"].get("new_private_packets",0),0)
 
+    def test_real_zip_sha_and_oversized_entry_count_are_not_falsely_certified(self):
+        import hashlib
+        import zipfile
+        for name,n in (("good_product",1),("bad_product",81)):
+            folder=self.root/"digital-products"/name
+            folder.mkdir(parents=True)
+            z=folder/(name+"-internal-qa.zip")
+            with zipfile.ZipFile(z,"w",zipfile.ZIP_DEFLATED) as pack:
+                for i in range(n):
+                    pack.writestr(name+"/item"+str(i)+".txt","real QA data")
+            archive_sha=hashlib.sha256(z.read_bytes()).hexdigest()
+            (folder/"manufacturing_manifest.json").write_text(json.dumps({
+                "recipe":name,"qa_status":"passed","source_sha256":"a"*64,
+                "artifact_sha256":archive_sha}))
+        result=m.build(self.root)
+        self.assertEqual(result["technical_readiness"]["goods_inspected"],2)
+        self.assertEqual(result["technical_readiness"]["technically_verified"],1)
+        self.assertEqual(result["technical_readiness"]["technical_rework_required"],1)
+        dashboard=json.loads((self.root/"product-lifecycle"/"product-technical-readiness"/"dashboard.json").read_text())
+        by_id={item["recipe"]:item for item in dashboard["items"]}
+        self.assertTrue(by_id["good_product"]["technical_ok"])
+        self.assertIn("ARCHIVE_LIMIT",by_id["bad_product"]["blockers"])
+        self.assertEqual(dashboard["commercial_approval_count"],0)
+        self.assertFalse((self.root/"product-lifecycle"/"passports").exists())
+        self.assertEqual(m.build(self.root)["technical_readiness"]["goods_inspected"],2)
+
+    def test_hash_tamper_is_blocked_without_approving_good_qa(self):
+        import hashlib
+        import zipfile
+        name="tampered_product"
+        folder=self.root/"digital-products"/name
+        folder.mkdir(parents=True)
+        z=folder/(name+"-internal-qa.zip")
+        with zipfile.ZipFile(z,"w") as pack:
+            pack.writestr(name+"/readme.txt","local source")
+        (folder/"manufacturing_manifest.json").write_text(json.dumps({
+            "recipe":name,"qa_status":"passed","source_sha256":"a"*64,
+            "artifact_sha256":"f"*64}))
+        result=m.build(self.root)
+        dashboard=json.loads((self.root/"product-lifecycle"/"product-technical-readiness"/"dashboard.json").read_text())
+        self.assertEqual(result["technical_readiness"]["technical_rework_required"],1)
+        self.assertIn("ARTIFACT_HASH_MISMATCH",dashboard["items"][0]["blockers"])
+
     def test_invalid_order_and_symlink_are_refused(self):
         (self.orders/"WO-00000003.json").write_text(json.dumps({
             "id":"WO-00000004","status":"issued"

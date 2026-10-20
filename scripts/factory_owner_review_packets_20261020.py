@@ -67,6 +67,107 @@ def save(path, value, immutable=False):
             os.unlink(name)
     return True
 
+
+def inspect_actual_products(root, lifecycle):
+    """Proof-carrying private technical prescreen; never release authorization."""
+    goods = root/"digital-products"
+    output = safe_dir(lifecycle/"product-technical-readiness")
+    counts=Counter()
+    items=[]
+    if not goods.exists():
+        folders=[]
+    else:
+        if goods.is_symlink() or not goods.is_dir():
+            raise RuntimeError("REVIEW_PRODUCT_STORAGE_UNSAFE")
+        folders=sorted(goods.iterdir())
+    if len(folders)>2000:
+        raise RuntimeError("REVIEW_PRODUCT_VOLUME_UNSAFE")
+    product_id = re.compile(r"^[a-z][a-z0-9_-]{1,80}$")
+    sha_re = re.compile(r"^[0-9a-f]{64}$")
+    for folder in folders:
+        if folder.is_symlink() or not folder.is_dir() or not product_id.fullmatch(folder.name):
+            raise RuntimeError("REVIEW_PRODUCT_FOLDER_UNSAFE")
+        recipe=folder.name
+        manifest=folder/"manufacturing_manifest.json"
+        archive=folder/(recipe+"-internal-qa.zip")
+        errors=[]
+        source_sha=None
+        manifest_digest=None
+        actual_digest=None
+        if not manifest.is_file() or manifest.is_symlink():
+            errors.append("MANUFACTURING_MANIFEST_MISSING")
+        else:
+            manifest_digest=hashlib.sha256(manifest.read_bytes()).hexdigest()
+            try:
+                m=load(manifest)
+                source_sha=m.get("source_sha256")
+                if m.get("recipe")!=recipe or m.get("qa_status")!="passed":
+                    errors.append("MANUFACTURING_QA_INCOMPLETE")
+                if not isinstance(source_sha,str) or not sha_re.fullmatch(source_sha):
+                    errors.append("MANUFACTURING_SOURCE_HASH_INVALID")
+                expected=m.get("artifact_sha256")
+                if not isinstance(expected,str) or not sha_re.fullmatch(expected):
+                    errors.append("ARTIFACT_HASH_INVALID")
+            except (RuntimeError,ValueError,OSError,TypeError) as exc:
+                m={}
+                expected=None
+                errors.append("MANUFACTURING_MANIFEST_INVALID")
+        if archive.is_symlink() or not archive.is_file():
+            errors.append("PRODUCT_ARCHIVE_MISSING")
+        elif not 100<=archive.stat().st_size<=25*1024*1024:
+            errors.append("PRODUCT_ARCHIVE_SIZE_UNSAFE")
+        else:
+            try:
+                import zipfile
+                actual_digest=hashlib.sha256(archive.read_bytes()).hexdigest()
+                if expected!=actual_digest:
+                    errors.append("ARTIFACT_HASH_MISMATCH")
+                with zipfile.ZipFile(archive) as z:
+                    members=z.infolist()
+                    if not members or len(members)>80 or sum(x.file_size for x in members)>100*1024*1024:
+                        errors.append("ARCHIVE_LIMIT")
+                    else:
+                        for member in members:
+                            name=member.filename
+                            if (member.is_dir() or not name.startswith(recipe+"/")
+                                or any(p in ("",".","..") for p in name.split("/"))
+                                or "\\\\" in name
+                                or (member.external_attr>>16)&0o170000 == 0o120000):
+                                errors.append("ARCHIVE_MEMBER_UNSAFE")
+                                break
+                        if not errors and z.testzip() is not None:
+                            errors.append("ARCHIVE_CRC_FAILED")
+            except (OSError,ValueError,zipfile.BadZipFile):
+                errors.append("ARCHIVE_READ_FAILED")
+        good=not errors
+        counts["technically_verified" if good else "technical_rework_required"]+=1
+        counts["goods_inspected"]+=1
+        item={
+            "schema":"saeit.factory.private-technical-readiness.v1",
+            "recipe":recipe,
+            "manufacturing_manifest_sha256":manifest_digest,
+            "source_sha256":source_sha if isinstance(source_sha,str) else None,
+            "artifact_sha256":actual_digest,
+            "technical_archive_integrity_verified":good,
+            "technical_blockers":sorted(set(errors)),
+            "independent_content_review":False,
+            "rights_and_license_review":False,
+            "specialist_quality_review":False,
+            "owner_publication_approval":False,
+            "customer_sale_enabled":False,
+            "publication_allowed":False
+        }
+        h=hashlib.sha256(serialize(item)).hexdigest()
+        directory=output/recipe
+        save(directory/(h+".json"),item,immutable=True)
+        items.append({"recipe":recipe,"evidence_sha256":h,"technical_ok":good,"blockers":item["technical_blockers"]})
+    summary={"schema":"saeit.factory.technical-readiness-dashboard.v1",
+             "counts":dict(sorted(counts.items())),"items":items,
+             "commercial_approval_count":0,"publications":0,"sales":0,
+             "requires_independent_review":True}
+    save(output/"dashboard.json",summary)
+    return summary
+
 def build(root):
     root = Path(root)
     if not root.is_dir() or root.is_symlink():
@@ -154,10 +255,13 @@ def build(root):
             packets.append({"work_order":p.stem,"source_sha256":source_sha,
                             "packet_sha256":packet_sha,
                             "passport_complete":not missing})
+        technical=inspect_actual_products(root,lifecycle)
         summary = {"schema":SCHEMA,"status":"pending_authentic_owner_and_specialist_evidence",
                    "counts":dict(sorted(counts.items())),"packets":packets,
                    "approval_records_written":0,"products_activated":0,
-                   "payments_created":0,"sites_contacted":0}
+                   "payments_created":0,"sites_contacted":0,
+                   "technical_readiness":technical["counts"],
+                   "technical_candidates_reviewed":len(technical["items"])}
         save(queue/"dashboard.json", summary)
         return summary
 
@@ -167,4 +271,5 @@ if __name__=="__main__":
     args=p.parse_args()
     outcome=build(args.factory_private_root)
     print("FACTORY_REVIEW_PACKETS="+json.dumps(outcome["counts"],sort_keys=True))
+    print("FACTORY_PRIVATE_GOODS_TECHNICAL_READINESS="+json.dumps(outcome["technical_readiness"],sort_keys=True))
     print("FACTORY_REVIEW_NO_AUTO_APPROVAL=PASS")
