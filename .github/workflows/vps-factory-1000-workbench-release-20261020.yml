@@ -62,7 +62,7 @@ jobs:
             expected="$(sha256sum "$source" | awk '{print $1}')"
             ssh_vps "test \"\$(sha256sum '$stage/$item' | awk '{print \$1}')\" = '$expected'"
           done
-          timeout 180s ssh_vps "bash '$stage/install_factory_1000_workbench.sh' '$stage'"
+          ssh_vps "timeout 180s bash '$stage/install_factory_1000_workbench.sh' '$stage'"
           ssh_vps 'python3 -' <<'PY'
           import hashlib,json
           from pathlib import Path
