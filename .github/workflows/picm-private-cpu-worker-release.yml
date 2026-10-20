@@ -1,0 +1,132 @@
+name: PICM Private CPU Worker Guarded Release
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+jobs:
+  check:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: activate PICM private CPU worker 2026-10-20'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure pinned relay and cPanel SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          WORK="$RUNNER_TEMP/picm-ssh"
+          install -d -m 700 "$WORK"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$WORK/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$WORK/host.key"
+          chmod 600 "$WORK/"*.key
+          ssh-keygen -y -P '' -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$WORK/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$WORK/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$WORK/config" <<EOF
+          Host picm-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          timeout 30s ssh -F "$WORK/config" picm-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$WORK/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat >> "$WORK/config" <<EOF
+          Host picm-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump picm-vps
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          echo PICM_RELAY_READY
+      - name: Compile and run isolated worker safety tests before remote changes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 -m pip install --disable-pip-version-check pytest
+          python3 -m py_compile ops/picm-vps/worker.py scripts/picm_private_worker_release.py
+          python3 -m pytest --noconftest -q tests/test_picm_worker_cpu.py
+      - name: Deny rollout while an owner's PICM queued image job is active
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 40s ssh -F "$WORK/config" picm-host 'python3 -' <<'PY'
+          from pathlib import Path
+          import json
+          root=Path.home()/'.picm-queue'
+          assert root.is_dir() and not root.is_symlink(), 'PICM_QUEUE_ROOT_UNSAFE'
+          active=0
+          for path in root.glob('*.json'):
+              if path.name.endswith('.stage.json') or path.is_symlink():
+                  continue
+              job=json.loads(path.read_text(encoding='utf-8'))
+              active += job.get('state') in ('queued', 'running')
+          print('PICM_ACTIVE_IMAGE_JOBS='+str(active))
+          assert active==0,'PICM_ACTIVE_USER_JOB_REFUSE'
+          PY
+      - name: Install only candidate worker and guarded release script in PICM directory
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          expected="$(sha256sum ops/picm-vps/worker.py | awk '{print $1}')"
+          timeout 30s ssh -F "$WORK/config" picm-vps 'test "$(id -un)" = githubops && test -d "$HOME/.local/share/saeit-picm" && test ! -L "$HOME/.local/share/saeit-picm"'
+          scp -q -F "$WORK/config" ops/picm-vps/worker.py "picm-vps:/home/githubops/.local/share/saeit-picm/worker.py.candidate.$GITHUB_RUN_ID"
+          scp -q -F "$WORK/config" scripts/picm_private_worker_release.py "picm-vps:/home/githubops/.local/share/saeit-picm/release-script.$GITHUB_RUN_ID.py"
+          timeout 75s ssh -F "$WORK/config" picm-vps \
+            "python3 /home/githubops/.local/share/saeit-picm/release-script.$GITHUB_RUN_ID.py $GITHUB_RUN_ID $expected"
+      - name: Confirm deployed worker exists and unauthenticated worker API is still denied
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 30s ssh -F "$WORK/config" picm-vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import os
+          root=Path.home()/'.local/share/saeit-picm'
+          pid=int((root/'worker.pid').read_text(encoding='ascii').strip())
+          os.kill(pid,0)
+          cmd=(Path('/proc')/str(pid)/'cmdline').read_bytes()
+          assert b'saeit-picm/worker.py' in cmd
+          assert b'def render_direct_cpu(' in (root/'worker.py').read_bytes()
+          print('PICM_NEW_CPU_WORKER_RUNNING')
+          PY
+          code="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' https://mojplaywin.com/picm/worker/health/ || true)"
+          test "$code" = 403
+          echo PICM_PRIVATE_API_STILL_FORBIDDEN_FOR_PUBLIC
+      - name: Remove only temporary candidate and deployment script
+        if: always()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/picm-ssh/config"; then
+            ssh -F "$RUNNER_TEMP/picm-ssh/config" -o ConnectTimeout=8 picm-vps \
+              "test ! -L /home/githubops/.local/share/saeit-picm/release-script.$GITHUB_RUN_ID.py && rm -f /home/githubops/.local/share/saeit-picm/release-script.$GITHUB_RUN_ID.py /home/githubops/.local/share/saeit-picm/worker.py.candidate.$GITHUB_RUN_ID" || true
+          fi
+      - name: Remove private connection files
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/picm-ssh"
