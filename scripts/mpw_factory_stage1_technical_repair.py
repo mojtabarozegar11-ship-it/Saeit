@@ -183,7 +183,7 @@ def run(root=ROOT,max_new=43):
                 if isinstance(product,str) and isinstance(version,str) and courier.RECIPE.fullmatch(product) and courier.SHA.fullmatch(version):
                     expected=root/"customer-packs"/product/version/"customer-package.zip"
                     candidate=not expected.exists()
-            allowed=candidate and repaired+blocked<max_new
+            allowed=candidate and repaired+native_new+blocked<max_new
             result=once(root,courier,packager,native,filename,row,allowed)
             if result["technical_zip_integrity_passed"]:checked+=1
             if result["new_customer_bundle_rebuilt"]:repaired+=1
