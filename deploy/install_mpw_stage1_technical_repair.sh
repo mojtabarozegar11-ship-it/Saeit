@@ -23,9 +23,11 @@ for file in $files;do
 done
 cp -p "$scheduler" "$backup/periodic-dispatch.sh"
 crontab -l > "$backup/crontab"
+install_stage=source_install
 rollback(){
  code=$?
  if test "$code" -ne 0;then
+  printf 'MPW_STAGE1_INSTALL_FAILURE_STAGE=%s EXIT_CODE=%s\n' "$install_stage" "$code" >&2
   for file in $files;do
    if test -f "$backup/$file";then cp -p "$backup/$file" "$target/$file";else rm -f "$target/$file";fi
   done
@@ -42,8 +44,18 @@ for file in $files;do
  test "$(sha256sum "$stage/$file"|cut -d' ' -f1)" = "$(sha256sum "$target/$file.new"|cut -d' ' -f1)"
  mv -f "$target/$file.new" "$target/$file"
 done
-test "$(df -Pm "$root"|tail -1|awk '{print $4}')" -ge 262144
+install_stage=disk_reserve
+# `df -Pk` reports KiB; 262144 KiB = 256 MiB (not 256 GiB).
+free_kib="$(df -Pk "$root" | awk 'END {print $4}')"
+case "$free_kib" in ''|*[!0-9]*) echo MPW_STAGE1_DISK_METRIC_INVALID >&2; exit 1;; esac
+if test "$free_kib" -lt 262144;then
+  printf 'MPW_STAGE1_DISK_INSUFFICIENT_KIB=%s REQUIRED_KIB=262144\n' "$free_kib" >&2
+  exit 1
+fi
+echo MPW_STAGE1_DISK_RESERVE_256MIB=PASS
+install_stage=technical_repair
 timeout 490s "$py" -B "$target/mpw_factory_stage1_technical_repair.py" --factory-private "$root" --max-new 43
+install_stage=verify_repair_receipts
 "$py" -B - "$root" <<'PY'
 import json,sys
 from pathlib import Path
@@ -69,6 +81,7 @@ print('VPS_MPW_ACTUAL_NEW_BUYER_BUNDLES='+str(report['new_customer_bundles_techn
 print('VPS_MPW_REPAIR_BLOCKED='+str(report['technical_package_attempts_blocked']))
 print('VPS_MPW_HUMAN_QA_UNRESOLVED='+str(report['independent_content_rights_review_still_required']))
 PY
+install_stage=scheduler_hook
 "$py" -B - "$scheduler" "$scheduler.new" "$py" <<'PY'
 from pathlib import Path
 import sys
@@ -82,7 +95,8 @@ assert contents.count('mpw_factory_stage1_technical_repair.py')==1
 dst.write_text(contents);dst.chmod(src.stat().st_mode&0o777)
 PY
 bash -n "$scheduler.new";mv -f "$scheduler.new" "$scheduler"
-test "$(crontab -l|sha256sum|cut -d' ' -f1)" = "$(sha256sum "$backup/crontab"|cut -d' ' -f1)"
+install_stage=cron_integrity
+ test "$(crontab -l|sha256sum|cut -d' ' -f1)" = "$(sha256sum "$backup/crontab"|cut -d' ' -f1)"
 trap - EXIT
 echo MPW_REAL_PRIVATE_TECHNICAL_REWORK_EXECUTION=PASS
 echo MPW_REPAIR_EXISTING_FIVE_MINUTE_SCHEDULER=PASS
