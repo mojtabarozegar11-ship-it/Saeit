@@ -42,11 +42,11 @@ def patch(s):
     if head is None or len(figs)!=1 or 'official_profile_20261016/portrait' not in figs[0] or 'Discuss a professional collaboration' not in block:raise RuntimeError('Primary source changed')
     pos=s.index('<div class="hero-visual">')
     vis,end=div_at(s,pos)
-    if m.end()>=pos or 'mojtaba-roozegar.jpg' not in vis or vis.count('<img')!=1 or '<h1 id="hero-title"' not in s[m.end():pos]:raise RuntimeError('Hero source changed')
+    if m.end()>=pos or vis.count('<img')!=1 or '<h1 id="hero-title"' not in s[m.end():pos]:raise RuntimeError('Hero structure changed: order=%s img=%s heading=%s'%(m.end()<pos,vis.count('<img'),'<h1 id="hero-title"' in s[m.end():pos]))
     newblock=head.group()+'\n'+CSS+'\n<div class="mpw-profile-photo-pair">\n'+figs[0]+'\n'+vis+'\n</div>\n</section>'
     a=s[:m.start()]+newblock+s[m.end():pos]+s[end:]
     if a.count('<img')!=s.count('<img') or a.count('{%')!=s.count('{%') or 'PROFESSIONAL PROFILE' in a:raise RuntimeError('Unintended template content change')
-    if not a.index('official_profile_20261016/portrait')<a.index('mojtaba-roozegar.jpg')<a.index('id="hero-title"'):raise RuntimeError('Required order failed')
+    if not a.index('official_profile_20261016/portrait')<a.index('class="hero-visual"')<a.index('id="hero-title"'):raise RuntimeError('Required order failed')
     return a
 def validate(s):
     sys.path.insert(0,str(APP));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
