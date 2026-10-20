@@ -90,6 +90,11 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/mpw_micro_trx_trial_inventory_readonly_20261020.py
           timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" < scripts/mpw_micro_trx_trial_inventory_readonly_20261020.py
+      - name: Diagnose real Android mobile customer login CSRF cookie and trusted origin without changing server
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_customer_mobile_csrf_403_readonly_20261020.py
+          timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" < scripts/mpw_customer_mobile_csrf_403_readonly_20261020.py
       - name: Verify anonymous two-book buyer routes and no false 404
         run: |
           python3 - <<'PY'
