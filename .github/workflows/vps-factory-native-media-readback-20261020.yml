@@ -1,0 +1,78 @@
+name: Read-only VPS native-media and private stock verification
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/vps-factory-native-media-readback-20261020.yml"
+permissions: {contents: read}
+jobs:
+  verify:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Establish pinned-host SSH without editing sites or production
+        env:
+          VPS_KEY: \${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/readback"
+          mkdir -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-readback
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ForwardAgent no
+          EOF
+          chmod 600 "$d/config"
+          ssh -T -F "$d/config" saeit-readback 'python3 -' <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          home=Path.home()/'factory-runtime'
+          private=home/'private/autonomous-product-cycle'
+          dashboard=json.loads((private/'production-family-management/forty-execution-dashboard.json').read_text('utf8'))
+          families=dashboard['families']
+          done=sorted(x['family_id'] for x in families if x['completed_50_stage_products']>0)
+          missing=sorted(x['family_id'] for x in families if not x['completed_50_stage_products'])
+          assert len(done)>=20 and len(done)+len(missing)==40
+          print('VERIFIED_50_STAGE_FAMILY_IDS='+','.join(done))
+          print('NO_VALIDATED_50_STAGE_FAMILY_IDS='+','.join(missing))
+          assert dashboard['commercial_release_enabled'] is False
+          assert dashboard['store_publication_enabled'] is False
+          assert dashboard['warehouse_promotion_enabled'] is False
+          names={'F36':'fieldwork_tileable_materials_48',
+                 'F37':'fieldwork_animated_motion_48',
+                 'F39':'fieldwork_original_audio_cues_48'}
+          stock=json.loads((private/'production-warehouse/stock-register.json').read_text('utf8'))
+          assert stock['strict_build50_enabled'] is True
+          for family,product in names.items():
+              assert family in done,family
+              folder=private/'digital-products'/product
+              receipt=json.loads((folder/'manufacturing_manifest.json').read_text('utf8'))
+              archive=folder/(product+'-internal-qa.zip')
+              assert receipt['family_id']==family and receipt['qa_status']=='passed'
+              assert receipt['public_listing_enabled'] is False
+              assert archive.is_file() and not archive.is_symlink()
+              sha=hashlib.sha256(archive.read_bytes()).hexdigest()
+              assert sha==receipt['artifact_sha256']
+              match=[x for x in stock['records'] if x['family_id']==family and
+                     x['product_id']==product and x['artifact_sha256']==sha]
+              print('FAMILY_PRIVATE_STOCK='+family+':'+('PASS' if match else 'NOT_STOCKED'))
+              if not match:raise RuntimeError('MISSING_STRICT_PRIVATE_STOCK:'+family)
+          print('VPS_VERIFIED_FAMILY_COUNT='+str(len(done)))
+          print('VPS_MISSING_FAMILY_COUNT='+str(len(missing)))
+          print('VPS_NATIVE_MEDIA_READ_ONLY_AUDIT=PASS')
+          PY
