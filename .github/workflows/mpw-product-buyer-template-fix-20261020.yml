@@ -106,6 +106,8 @@ jobs:
           python3 - <<'PY'
           import urllib.request,urllib.error,os,json,time,re
           origin='https://mojplaywin.com'
+          # Main Django Passenger restart can take multiple requests to serve new template bytes.
+          time.sleep(16)
           for product_id,product_title in ((72,'The Science and Practice of Chess Improvement'),(225,'Taniya and the Little Baker Worms')):
               path=f'/store/product/{product_id}/'
               req=urllib.request.Request(origin+path+'?verify_buyer='+str(time.time_ns()),headers={'Cache-Control':'no-cache'})
