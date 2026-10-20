@@ -104,7 +104,7 @@ async def main():
             await page.locator('a[download^="picm-ai-"]').wait_for(timeout=13000)
             data=await page.evaluate("""async () => {
                 const a=document.querySelector('a[download^="picm-ai-"]');
-                const png=await (await fetch(a.href)).arrayBuffer();
+                const png=await (await window.proof.nativeFetch(a.href)).arrayBuffer();
                 const events=window.proof.requests;
                 return {
                   name:a.download,
