@@ -63,7 +63,7 @@ def details(kind, *, home=None, stem=STEM):
         meta.get("ciphertext_roundtrip_integrity_verified") is not True or
         meta.get("encrypted_bytes") != archive.stat().st_size or
         type(meta.get("plaintext_bytes")) is not int or
-        not 1024 <= meta["plaintext_bytes"] <= MAX_BYTES or
+        not len(MARKER) + 20 <= meta["plaintext_bytes"] <= MAX_BYTES or
         type(meta.get("uncompressed_source_bytes")) is not int or
         not 1024 <= meta["uncompressed_source_bytes"] <= MAX_BYTES or
         not isinstance(meta.get("plaintext_sha256"), str) or
