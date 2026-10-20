@@ -77,8 +77,8 @@ class DisposableMariaDBRestore(unittest.TestCase):
         container = os.environ["MPW_RESTORE_FIXTURE_CONTAINER"]
         self.assertEqual(container, "mpw-v3-synthetic-restore-ci")
         sql = (
-            f"CREATE DATABASE \`{FIXTURE_SCHEMA}\`;\n"
-            f"USE \`{FIXTURE_SCHEMA}\`;\n"
+            f"CREATE DATABASE `{FIXTURE_SCHEMA}`;\n"
+            f"USE `{FIXTURE_SCHEMA}`;\n"
             "CREATE TABLE recovery_marker (id INT PRIMARY KEY, note VARCHAR(100));\n"
             + "".join(
                 f"INSERT INTO recovery_marker VALUES ({n}, 'synthetic-{n}');\n"
@@ -103,7 +103,7 @@ class DisposableMariaDBRestore(unittest.TestCase):
             self.assertEqual(run.returncode, 0, msg="synthetic SQL import did not succeed")
             query = subprocess.run(
                 ["docker","exec", container, "mariadb","-uroot","-N","-B",
-                 "-e", f"SELECT COUNT(*), SUM(id) FROM \`{FIXTURE_SCHEMA}\`.recovery_marker"],
+                 "-e", f"SELECT COUNT(*), SUM(id) FROM `{FIXTURE_SCHEMA}`.recovery_marker"],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15, check=False)
             self.assertEqual(query.returncode, 0)
             self.assertEqual(query.stdout.decode().strip(), "160\t12880")
