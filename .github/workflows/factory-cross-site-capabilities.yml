@@ -1,0 +1,38 @@
+name: Factory cross-site capability import audit
+on:
+  pull_request:
+    paths:
+      - "ops/factory-site-capabilities/**"
+      - "scripts/factory_cross_site_capabilities.py"
+      - "tests/test_factory_cross_site_capabilities.py"
+      - "docs/audits/two-sites-factory-capability-diff-2026-10-20.md"
+      - ".github/workflows/factory-cross-site-capabilities.yml"
+  push:
+    branches: [main]
+    paths:
+      - "ops/factory-site-capabilities/**"
+      - "scripts/factory_cross_site_capabilities.py"
+      - "tests/test_factory_cross_site_capabilities.py"
+      - ".github/workflows/factory-cross-site-capabilities.yml"
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "${{ matrix.python-version }}"
+      - name: Check all imported source hashes and truthful version comparison
+        run: |
+          set -euo pipefail
+          python -B scripts/factory_cross_site_capabilities.py --repo .
+          python -B -m unittest discover -s tests -p 'test_factory_cross_site_capabilities.py' -v
+          python -B -m py_compile scripts/factory_cross_site_capabilities.py
