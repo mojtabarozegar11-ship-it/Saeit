@@ -34,4 +34,14 @@ for name in ["mpw_commerce/login.html","mpw_commerce/register.html","mpw_commerc
   origin=tpl.origin.name if hasattr(tpl,"origin") else ""
   output("MPW_CSRF_TEMPLATE",{"name":name,"origin_rel":str(Path(origin).relative_to(APP)) if str(origin).startswith(str(APP)) else "<other-root>"})
  except Exception:pass
+
+for name in ("mpw_commerce/customer_login.html","mpw_commerce/customer_register.html"):
+ p=APP/"mpw_commerce/templates"/name
+ if p.is_file() and not p.is_symlink():
+  src=p.read_text("utf8","replace")
+  output("MPW_CSRF_TEMPLATE_SOURCE",{"name":name,"source":src[:18000]})
+  c=Client(enforce_csrf_checks=True)
+  route="/accounts/login/" if "login" in name else "/accounts/register/"
+  response=c.get(route,secure=True,HTTP_HOST="mojplaywin.com")
+  output("MPW_CSRF_LOGIN_SECURITY_HEADERS",{"name":name,"csp":response.get("Content-Security-Policy"),"cache_control":response.get("Cache-Control"),"xframe":response.get("X-Frame-Options")})
 print("MPW_CSRF_PRODUCTION_SOURCE_READONLY=PASS")
