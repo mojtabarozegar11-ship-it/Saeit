@@ -105,6 +105,34 @@ jobs:
         if: failure() && steps.publish_sample.outcome == 'success'
         run: |
           timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback" < scripts/mpw_native_trx_micro_trial_release_20261020.py
+      - name: Locate exact active product-detail CTA template for trial only
+        run: |
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,inspect
+          from pathlib import Path
+          ROOT=Path('/home/zomorod2/Saeit-staging');os.chdir(ROOT);sys.path.insert(0,str(ROOT))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.urls import resolve
+          for route in ('/store/product/779/','/commerce/book/779/'):
+              match=resolve(route);fn=inspect.unwrap(match.func)
+              print('MPW_MICRO_CTA_ROUTE='+json.dumps({'route':route,'module':fn.__module__,'function':fn.__name__}))
+              source=inspect.getsource(fn)
+              safe=[s[:180] for s in source.splitlines() if any(z in s.lower() for z in ('template','render(', 'checkout','product', 'login'))]
+              print('MPW_MICRO_CTA_HANDLER='+json.dumps({'route':route,'lines':safe[:45]}))
+          for parent in (ROOT/'core/templates',ROOT/'mpw_commerce/templates'):
+              if not parent.is_dir() or parent.is_symlink():continue
+              for p in parent.rglob('*.html'):
+                  if p.is_symlink() or not p.is_file():continue
+                  t=p.read_text('utf8','replace')
+                  keys=('Enquire about this product','Contact MojPlayWin to confirm','Secure order path.')
+                  for key in keys:
+                      pos=t.find(key)
+                      if pos>=0:
+                          print('MPW_MICRO_CTA_TEMPLATE='+json.dumps({'path':str(p.relative_to(ROOT)),'key':key,'snippet':t[max(0,pos-800):pos+700]}))
+                          break
+          print('MPW_MICRO_CTA_INSPECTION=PASS')
+          PY
       - name: Remove temporary SSH relay keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
