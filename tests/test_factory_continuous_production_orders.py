@@ -159,4 +159,32 @@ class ProductionOrderGeneratorTests(unittest.TestCase):
         self.assertEqual(report["pending_manufacturing_instructions"],0)
         self.assertFalse(report["distribution_enabled"])
 
+
+    def test_full_historical_journal_holds_without_issuing_15001(self):
+        """A full work-order journal must not create one more record or rewrite history."""
+        from unittest.mock import patch
+        self.seed([base_entry(44, [])])
+        folder = self.root / "production-instructions" / "orders"
+        folder.mkdir(parents=True)
+        entry = {
+            "schema": orders.SCHEMA,
+            "id": "WO-00000001",
+            "fingerprint": "%064x" % 1,
+            "status": "completed_verified",
+            "public_distribution_allowed": False,
+        }
+        path = folder / "WO-00000001.json"
+        orders.atomic_json(path, entry)
+        before = path.read_bytes()
+        with patch.object(orders, "MAX_ORDERS", 1):
+            outcome = orders.generate(self.root)
+        self.assertEqual(outcome["action"], "capacity_hold")
+        self.assertIsNone(outcome["id"])
+        self.assertEqual(outcome["pending"], 0)
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["WO-00000001.json"])
+        self.assertEqual(path.read_bytes(), before)
+        report, _ = self.get()
+        self.assertEqual(report["instructions_issued_total"], 1)
+        self.assertFalse(report["distribution_enabled"])
+
 if __name__=="__main__":unittest.main()
