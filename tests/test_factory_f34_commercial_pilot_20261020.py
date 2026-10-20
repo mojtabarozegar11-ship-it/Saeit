@@ -118,7 +118,7 @@ class CommercialPilotAcceptance(unittest.TestCase):
     def test_tampered_png_and_external_preview_fail_closed(self):
         bad=bytearray(png())
         bad[30]^=0x40
-        self.build({"icon_00.png":bytes(bad)})
+        self.build({"sprout_outline.png":bytes(bad)})
         with self.assertRaisesRegex(ValueError,"PILOT_PNG_CRC"):
             gate.verify(self.root)
         self.build({"preview.html":b'<html><body><img src="https://evil.example/x.png"></body></html>'})
