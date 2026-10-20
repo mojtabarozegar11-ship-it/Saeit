@@ -112,6 +112,23 @@ def verified_extended_native_archive(recipe,manifest,members,actual_sha,archive)
     if len(suffixes)<2 or not suffixes.intersection(
             {".py",".xlsx",".ods",".svg",".png",".mp4",".gif",".wav",".mp3",".exr",".csv",".pdf",".json"}):
         return False
+    required={
+        "F01":{".pdf",".epub"},"F02":{".pdf",".epub"},
+        "F03":{".pdf",".html",".epub"},"F04":{".docx",".pdf"},
+        "F05":{".xlsx",".pdf"},"F08":{".mp4",".vtt"},
+        "F09":{".mp3",".vtt"},"F14":{".html",".js"},
+        "F18":{".py",".js",".html",".json"},
+        "F19":{".html",".css"},
+        "F20":{".py",".json",".md"},"F21":{".py",".json",".md"},
+        "F22":{".py",".json",".md"},"F25":{".csv",".json",".md"},
+        "F27":{".xlsx",".ods"},"F28":{".py",".json",".md"},
+        "F31":{".html",".svg"},"F32":{".svg",".png",".pdf"},
+        "F33":{".svg",".png"},"F36":{".png",".exr"},
+        "F37":{".gif",".mp4"},"F38":{".mp4",".xml"},
+        "F39":{".wav",".mp3"}}
+    family=manifest["family_id"]
+    if family in required and not required[family].issubset(suffixes):
+        return False
     # 48-pair native multimedia bundles cannot be accepted from a mere list
     # of names or unverifiable review claims. Check actual member bytes,
     # paired stems, distinct content and container signatures.
