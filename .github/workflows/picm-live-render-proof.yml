@@ -144,7 +144,7 @@ jobs:
           test -f "$WORK/config" || exit 0
           ident="$(cat "$RUNNER_TEMP/picm-id")"
           [[ "$ident" =~ ^[a-f0-9]{32}$ ]] || exit 0
-          timeout 35s ssh -F "$WORK/config" picm-host "PICM_PROOF_ID=$ident python3 -c 'import os,pathlib; root=pathlib.Path(\"/home/zomorod2/.picm-queue\"); ident=os.environ[\"PICM_PROOF_ID\"]; import re; assert re.fullmatch(\"[a-f0-9]{32}\", ident); p=root/(ident+\".json\"); import json; record=json.loads(p.read_text()) if p.is_file() and not p.is_symlink() else {}; assert record.get(\"prompt\")==\"Green leaves in a sunny greenhouse\"; [(root/(ident+ext)).unlink(missing_ok=True) for ext in (\".json\", \".png\") if not (root/(ident+ext)).is_symlink()]; print(\"PICM_SYNTHETIC_JOB_REMOVED\")'" || echo PICM_SYNTHETIC_JOB_CLEANUP_NOT_CONFIRMED
+          timeout 35s ssh -F "$WORK/config" picm-host "PICM_PROOF_ID=$ident python3 -c 'import os,pathlib; root=pathlib.Path(\"/home/zomorod2/.picm-queue\"); ident=os.environ[\"PICM_PROOF_ID\"]; import re; assert re.fullmatch(\"[a-f0-9]{32}\", ident); p=root/(ident+\".json\"); import json; record=json.loads(p.read_text()) if p.is_file() and not p.is_symlink() else {}; assert str(record.get(\"prompt\",\"\")).startswith(\"Green leaves in a sunny greenhouse, \") and record.get(\"style\")==\"illustration\" and record.get(\"steps\")==1; [(root/(ident+ext)).unlink(missing_ok=True) for ext in (\".json\", \".png\") if not (root/(ident+ext)).is_symlink()]; print(\"PICM_SYNTHETIC_JOB_REMOVED\")'" || echo PICM_SYNTHETIC_JOB_CLEANUP_NOT_CONFIRMED
       - name: Remove temporary runner SSH materials
         if: always()
         shell: bash
