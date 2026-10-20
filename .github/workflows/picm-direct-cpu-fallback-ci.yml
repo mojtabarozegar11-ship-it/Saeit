@@ -1,0 +1,48 @@
+name: PICM Direct CPU Fallback Safety CI
+on:
+  push:
+    branches:
+      - fix/picm-direct-cpu-fallback-20261020
+    paths:
+      - ops/picm-vps/worker.py
+      - tests/test_picm_worker_cpu.py
+      - .github/workflows/picm-direct-cpu-fallback-ci.yml
+  pull_request:
+    paths:
+      - ops/picm-vps/worker.py
+      - tests/test_picm_worker_cpu.py
+      - .github/workflows/picm-direct-cpu-fallback-ci.yml
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: picm-isolated-test-only-secret
+      DEBUG: "False"
+      ALLOWED_HOSTS: localhost,127.0.0.1
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Test syntax and guarded CPU renderer
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r requirements.txt
+          python -m py_compile ops/picm-vps/worker.py tests/test_picm_worker_cpu.py
+          python -m pytest -q --noconftest tests/test_picm_worker_cpu.py
+      - name: Assert no VPS, site, paid provider or download operations
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('ops/picm-vps/worker.py').read_text()
+          assert 'shell=True' not in p
+          assert 'CPU_MODEL_SHA256' in p
+          assert 'CPU_MIN_KIB' in p
+          assert 'FACTORY' in p and 'factory_ok()' in p
+          assert 'start_comfy_if_needed()' in p
+          assert 'render_direct_cpu(prompt, steps)' in p
+          print('PICM_DIRECT_CPU_SAFETY_CONTRACT_OK')
+          PY

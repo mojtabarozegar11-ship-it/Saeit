@@ -1,0 +1,240 @@
+name: PICM Private CPU Image Worker Deployment
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: picm-private-worker-production
+  cancel-in-progress: false
+jobs:
+  check:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: deploy PICM direct CPU image worker 2026-10-20'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure pinned relay and cPanel SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          WORK="$RUNNER_TEMP/picm-ssh"
+          install -d -m 700 "$WORK"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$WORK/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$WORK/host.key"
+          chmod 600 "$WORK/"*.key
+          ssh-keygen -y -P '' -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$WORK/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$WORK/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$WORK/config" <<EOF
+          Host picm-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          timeout 30s ssh -F "$WORK/config" picm-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$WORK/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat >> "$WORK/config" <<EOF
+          Host picm-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump picm-vps
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          echo PICM_RELAY_READY
+      - name: Verify isolated PICM worker tests before deployment
+        shell: bash
+        env:
+          SECRET_KEY: picm-ephemeral-test-only-secret
+          DEBUG: 'False'
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: |
+          set -Eeuo pipefail
+          python3 -m py_compile ops/picm-vps/worker.py
+          python3 -m pip install -q -r requirements.txt
+          python3 -m pytest -q tests/test_picm_worker_cpu.py
+      - name: Reject busy private PICM image jobs on cPanel
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 30s ssh -F "$WORK/config" picm-host 'python3 -' <<'PY'
+          import json
+          from pathlib import Path
+          root=Path.home()/'.picm-queue'
+          if not root.is_dir() or root.is_symlink():
+              raise SystemExit('PICM_QUEUE_NOT_SAFE')
+          active=0
+          for p in root.glob('*.json'):
+              if p.is_symlink() or p.name.endswith('.stage.json'):
+                  continue
+              try:
+                  state=json.loads(p.read_text()).get('state')
+              except (OSError,ValueError,TypeError):
+                  continue
+              if state in ('queued','running'):
+                  active+=1
+          print('PICM_IMAGE_QUEUE_BUSY' if active else 'PICM_IMAGE_QUEUE_SAFE_TO_RESTART')
+          if active:
+              raise SystemExit(9)
+          PY
+      - name: Stage verified PICM Python worker only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 25s ssh -F "$WORK/config" picm-vps "test \"\$(id -un)\" = githubops && test -d \"\$HOME/.local/share/saeit-picm\""
+          scp -q -F "$WORK/config" ops/picm-vps/worker.py "picm-vps:/home/githubops/.local/share/saeit-picm/.candidate-$GITHUB_RUN_ID.py"
+          timeout 30s ssh -F "$WORK/config" picm-vps "python3 -m py_compile /home/githubops/.local/share/saeit-picm/.candidate-$GITHUB_RUN_ID.py"
+      - name: Atomic single-worker update with local backup and rollback
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 95s ssh -F "$WORK/config" picm-vps "PICM_RUN_ID=$GITHUB_RUN_ID python3 -" <<'PY'
+          import importlib.util
+          import os
+          from pathlib import Path
+          import shutil
+          import signal
+          import subprocess
+          import sys
+          import time
+
+          os.umask(0o077)
+          root=Path.home()/'.local/share/saeit-picm'
+          run=os.environ['PICM_RUN_ID']
+          assert run.isdigit()
+          target=root/'worker.py'
+          candidate=root/('.candidate-'+run+'.py')
+          pidfile=root/'worker.pid'
+          token=root/'worker-token'
+          backup_dir=root/'backups'
+          backup=backup_dir/('worker-'+run+'.py')
+          if not root.is_dir() or root.is_symlink() or target.is_symlink() or candidate.is_symlink() or pidfile.is_symlink():
+              raise RuntimeError('PICM_UNSAFE_SOURCE_OR_TARGET')
+          if not target.is_file() or not candidate.is_file() or not token.is_file() or token.is_symlink():
+              raise RuntimeError('PICM_WORKER_REQUIRED_FILE_MISSING')
+          spec=importlib.util.spec_from_file_location('picm_deploy_candidate',candidate)
+          module=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          if not module.factory_ok() or not module.ram_ok() or not module.direct_cpu_ready():
+              raise RuntimeError('PICM_RESOURCE_OR_CPU_MODEL_GUARD_BLOCKED')
+          oldpid=int(pidfile.read_text().strip())
+          cmdline=(Path('/proc')/str(oldpid)/'cmdline').read_bytes().replace(b'\0',b' ')
+          if str(target).encode() not in cmdline:
+              raise RuntimeError('PICM_WORKER_IDENTITY_MISMATCH')
+          backup_dir.mkdir(mode=0o700,exist_ok=True)
+          if backup_dir.is_symlink() or backup.exists() or backup.is_symlink():
+              raise RuntimeError('PICM_UNSAFE_BACKUP')
+          shutil.copy2(target,backup)
+          backup.chmod(0o600)
+          old_stopped=False
+          deployed=False
+          newproc=None
+          spawned=[]
+          def alive(pid):
+              try:
+                  os.kill(pid,0)
+                  return True
+              except ProcessLookupError:
+                  return False
+          def boot():
+              logfile=(root/'worker.log').open('ab',buffering=0)
+              try:
+                  proc=subprocess.Popen([sys.executable,'-u',str(target)],
+                      cwd=str(root),stdin=subprocess.DEVNULL,stdout=logfile,
+                      stderr=subprocess.STDOUT,start_new_session=True)
+                  spawned.append(proc)
+              finally:
+                  logfile.close()
+              fd=os.open(pidfile,os.O_WRONLY|os.O_CREAT|os.O_TRUNC|os.O_NOFOLLOW,0o600)
+              with os.fdopen(fd,'w') as dst:
+                  dst.write(str(proc.pid)+'\n')
+              time.sleep(9)
+              if proc.poll() is not None:
+                  raise RuntimeError('PICM_NEW_WORKER_EXITED')
+              cmdline=(Path('/proc')/str(proc.pid)/'cmdline').read_bytes().replace(b'\0',b' ')
+              if str(target).encode() not in cmdline:
+                  raise RuntimeError('PICM_NEW_WORKER_WRONG_PROCESS')
+              return proc
+          try:
+              os.kill(oldpid,signal.SIGTERM)
+              for _ in range(40):
+                  if not alive(oldpid):
+                      break
+                  time.sleep(.25)
+              if alive(oldpid):
+                  raise RuntimeError('PICM_OLD_WORKER_STOP_TIMEOUT')
+              old_stopped=True
+              os.replace(candidate,target)
+              target.chmod(0o600)
+              deployed=True
+              newproc=boot()
+              print('PICM_DIRECT_CPU_WORKER_DEPLOYED_AND_RUNNING')
+              print('PICM_PRIVATE_WORKER_BACKUP_STORED')
+          except Exception:
+              for proc in spawned:
+                  if proc.poll() is None:
+                      proc.terminate()
+                      try:
+                          proc.wait(timeout=5)
+                      except subprocess.TimeoutExpired:
+                          proc.kill()
+              if deployed:
+                  tmp=root/('.rollback-'+run+'.py')
+                  shutil.copy2(backup,tmp)
+                  os.replace(tmp,target)
+                  target.chmod(0o600)
+              if old_stopped:
+                  try:
+                      boot()
+                      print('PICM_OLD_PRIVATE_WORKER_RESTORED')
+                  except Exception:
+                      print('PICM_ROLLBACK_WORKER_RESTART_NEEDS_ATTENTION')
+              print('PICM_PRIVATE_WORKER_DEPLOY_FAILED_ROLLBACK_ATTEMPTED')
+              raise
+          PY
+      - name: Confirm public site has kept worker API private
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          code="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' https://mojplaywin.com/picm/worker/health/ || true)"
+          test "$code" = 403
+          code="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' https://mojplaywin.com/picm/login/ || true)"
+          test "$code" = 200
+          echo PICM_WORKER_PUBLIC_FORBIDDEN_AND_LOGIN_HEALTHY
+      - name: Remove only unused temporary PICM candidate
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/picm-ssh/config" ]]; then
+            ssh -F "$RUNNER_TEMP/picm-ssh/config" -o ConnectTimeout=8 picm-vps "test -f /home/githubops/.local/share/saeit-picm/.candidate-$GITHUB_RUN_ID.py && rm /home/githubops/.local/share/saeit-picm/.candidate-$GITHUB_RUN_ID.py || true" || true
+          fi
+      - name: Remove private connection files
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/picm-ssh"

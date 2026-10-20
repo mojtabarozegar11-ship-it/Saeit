@@ -19,7 +19,13 @@ on:
       - scripts/deploy_mojplaywin_picm.py
       - tests/test_picm_views.py
       - tests/test_picm_auth.py
+      - tests/test_picm_worker_cpu.py
       - scripts/deploy_picm_login.py
+      - .github/workflows/picm-safety-tests.yml
+  pull_request:
+    paths:
+      - ops/picm-vps/**
+      - tests/test_picm_worker_cpu.py
       - .github/workflows/picm-safety-tests.yml
   workflow_dispatch:
 permissions:
@@ -56,7 +62,7 @@ jobs:
           SECRET_KEY: picm-disposable-ci-secret
           DEBUG: "False"
           ALLOWED_HOSTS: localhost,127.0.0.1
-        run: pytest -q tests/test_picm_views.py tests/test_picm_auth.py tests/test_picm_storyboard.py tests/test_picm_story_assemble.py tests/test_picm_story_comfy.py
+        run: pytest -q tests/test_picm_views.py tests/test_picm_auth.py tests/test_picm_storyboard.py tests/test_picm_story_assemble.py tests/test_picm_story_comfy.py tests/test_picm_worker_cpu.py
       - name: Check Django system
         env:
           SECRET_KEY: picm-disposable-ci-secret
