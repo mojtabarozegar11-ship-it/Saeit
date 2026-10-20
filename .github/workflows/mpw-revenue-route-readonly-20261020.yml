@@ -65,6 +65,15 @@ jobs:
           for path in (root,root/'.htaccess',root/'mpw-editorial/index.html',root/'mpw-editorial',root/'earn',root/'passenger_wsgi.py',root/'design-preview-20261017'):
               result[str(path.relative_to(root) if path!=root else '.')]=dict(exists=path.exists(),symlink=path.is_symlink(),dir=path.is_dir(),file=path.is_file())
           print('MPW_DOCUMENT_ROOT_PATH_INVENTORY='+json.dumps(result))
+          for item in (root/'mpw-editorial',root/'mpw-editorial/index.html',root/'mpw-editorial/.htaccess',root/'design-preview-20261017',root/'.htaccess',root/'passenger_wsgi.py'):
+              if item.exists() and not item.is_symlink():
+                  st=item.stat()
+                  print('MPW_STATIC_FILE_PERMS='+json.dumps(dict(name=item.relative_to(root).as_posix(),mode=oct(stat.S_IMODE(st.st_mode)),uid=st.st_uid,gid=st.st_gid,is_dir=item.is_dir())))
+                  if item.name=='.htaccess' and item!=root/'.htaccess' and item.is_file():
+                      print('MPW_EDITORIAL_STATIC_HTACCESS='+json.dumps(item.read_text('utf8','replace').splitlines()[:70]))
+          for hidden in (root/'mpw-editorial/.user.ini',root/'mpw-editorial/.htaccess',root/'design-preview-20261017/.htaccess',root/'mpw-editorial/revenue'):
+              print('MPW_ADDITIONAL_FILE='+json.dumps(dict(path=hidden.relative_to(root).as_posix(),exists=hidden.exists(),symlink=hidden.is_symlink())))
+
           ht=(root/'.htaccess')
           if ht.is_file() and not ht.is_symlink():
               lines=ht.read_text('utf8','replace').splitlines()

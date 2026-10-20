@@ -1,0 +1,78 @@
+name: Commercialize all 40 families with measured private offers and strict sales gate
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_commerce40_admission.py"
+      - "tests/test_factory_commerce40_admission.py"
+      - "deploy/install_factory_commerce40_admission.sh"
+      - ".github/workflows/vps-factory-commercial40-onepass-20261020.yml"
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: saeit-factory-commercial40-admission
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate all 40 private commercial offers plus release denial and real ZIP tampering
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_commerce40_admission.sh
+          python3 -m py_compile scripts/factory_commerce40_admission.py
+          python3 -m unittest discover -s tests -p test_factory_commerce40_admission.py -v
+          echo FACTORY_COMMERCE40_40_PRIVATE_SKUS_AND_GATE_TESTS=PASS
+  release:
+    needs: test
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Pin host fingerprint, stage exact hashes and install offline commerce proposals
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/commerce40-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps(){ ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 githubops@178.239.147.150 "$@"; }
+          stage="/home/githubops/factory-runtime/operations/.commerce40-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh_vps "test ! -e '$stage' && mkdir -m 700 '$stage'"
+          for source in scripts/factory_commerce40_admission.py deploy/install_factory_commerce40_admission.sh;do
+            name="$(basename "$source")"
+            cat "$source" | ssh_vps "umask 077; cat > '$stage/$name'; chmod 600 '$stage/$name'"
+            wanted="$(sha256sum "$source" | cut -d' ' -f1)"
+            ssh_vps "test \"\$(sha256sum '$stage/$name' | cut -d' ' -f1)\" = '$wanted'"
+          done
+          ssh_vps "timeout 230s bash '$stage/install_factory_commerce40_admission.sh' '$stage'"
+          ssh_vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import json,subprocess
+          base=Path.home()/'factory-runtime'
+          root=base/'private/autonomous-product-cycle'
+          d=json.loads((root/'commercial40/dashboard.json').read_text())
+          assert d['private_commercial_sku_proposals']==40
+          assert d['commercially_approved_families']==0
+          assert d['sales_or_payments_processed']==0
+          assert len(list((root/'commercial40/offers').glob('F*.json')))==40
+          cron=subprocess.check_output(['crontab','-l'],text=True)
+          assert cron.count('SAEIT_FACTORY_FORTY_FAMILY_OPERATIONAL_DISPATCH_V1')==1
+          print('VPS_COMMERCE40_REAL_READBACK=PASS')
+          print('VPS_COMMERCE40_TECHNICAL_FAMILIES='+str(d['genuine_verified_product_families']))
+          print('VPS_COMMERCE40_LIVE_PAYMENTS=NOT_ENABLED')
+          PY

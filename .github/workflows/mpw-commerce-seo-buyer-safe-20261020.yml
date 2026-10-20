@@ -1,0 +1,123 @@
+name: MojPlayWin buyer signup guide and 13 revenue sitemap URLs safe release
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-commerce-seo-buyer-safe-20261020.yml"
+      - "scripts/mpw_commerce_seo_buyer_20261020.py"
+permissions: {contents: read}
+concurrency:
+  group: mpw-commercesitemap-mainonly
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test transactional and bounded patch without production writes
+        run: |
+          python3 -m py_compile scripts/mpw_commerce_seo_buyer_20261020.py
+          python3 scripts/mpw_commerce_seo_buyer_20261020.py selftest
+      - name: Baseline protected HTTP status and public sitemap entries
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,os,json
+          paths=['/','/store/','/sitemap.xml','/farnaz/','/saman/','/picm/','/taniya/']
+          status={}
+          for p in paths:
+              try:
+                  with urllib.request.urlopen('https://mojplaywin.com'+p,timeout=16) as r:status[p]=r.status
+              except urllib.error.HTTPError as e:status[p]=e.code
+          assert all(s==200 for s in status.values()),status
+          with urllib.request.urlopen('https://mojplaywin.com/sitemap.xml',timeout=18) as r:xml=r.read(500000).decode('utf8','replace')
+          assert '/mpw-editorial/revenue/index.html' not in xml
+          with open(os.environ['RUNNER_TEMP']+'/mpw-sitemap-status.json','w') as f:json.dump(status,f)
+          print('MPW_COMMERCE_SEO_BASELINE='+json.dumps(status))
+          PY
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-revenue-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Atomic install of only revenue hub buyer guide and main-site sitemap PHP
+        id: install
+        run: |
+          set -euo pipefail
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "python3 - publish '$GITHUB_RUN_ID'" < scripts/mpw_commerce_seo_buyer_20261020.py
+      - name: Validate all thirteen sitemap additions, buyer sign-up and protected routes
+        run: |
+          python3 - <<'PY'
+          import json,os,time,urllib.request,urllib.error
+          from xml.etree import ElementTree as ET
+          origin='https://mojplaywin.com'
+          routes=['/mpw-editorial/revenue/index.html']+[f'/mpw-editorial/revenue/{x}/index.html' for x in ('website-doctor','landing-page-studio','ai-automation','business-spreadsheets','website-templates','social-media-kits','resume-builder','logo-studio','browser-games','marketing-ai','business-calculators','website-care')]
+          expected={origin+p for p in routes}
+          done=False
+          for attempt in range(9):
+              with urllib.request.urlopen(urllib.request.Request(origin+'/sitemap.xml?__mpw_buyer_sitemap_read='+str(time.time_ns()),headers={'Cache-Control':'no-cache'}),timeout=19) as r:
+                  xml=r.read(500000)
+                  assert r.status==200
+              root=ET.fromstring(xml)
+              locs=[x.text for x in root.iter() if x.tag.split('}')[-1]=='loc']
+              done=all(locs.count(url)==1 for url in expected)
+              if done:break
+              time.sleep(3)
+          if not done:raise RuntimeError('New revenue URLs not found exactly once in production sitemap')
+          with urllib.request.urlopen(origin+'/mpw-editorial/revenue/index.html?commercecheck='+str(time.time_ns()),timeout=18) as r:
+              page=r.read(200000).decode('utf8','replace')
+              assert r.status==200 and page.count('id="mpw-book-account-steps-20261020"')==1
+              assert 'href="/accounts/register/"' in page and 'href="/accounts/login/"' in page
+          states=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-sitemap-status.json'))
+          for route,expected_code in states.items():
+              with urllib.request.urlopen(origin+route,timeout=19) as r:actual=r.status
+              if actual!=expected_code:raise RuntimeError('Protected route changed: '+route)
+          print('MPW_13_REVENUE_SITEMAP_AND_BUYER_ONBOARDING_LIVE=PASS;OTHER_ROUTES_UNCHANGED=PASS')
+          PY
+      - name: Restore only two main-site files if tests fail
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_commerce_seo_buyer_20261020.py
+      - name: Clean ephemeral SSH files
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
