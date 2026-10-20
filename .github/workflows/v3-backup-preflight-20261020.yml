@@ -103,6 +103,28 @@ jobs:
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 35s ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json Mysql list_databases' | python3 scripts/mojplaywin_mysql_quota_sanitize_readonly.py mysql
           timeout 35s ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json Quota get_local_quota_info' | python3 scripts/mojplaywin_mysql_quota_sanitize_readonly.py quota
+      - name: Inspect fixed GPGv2 archive candidates without reading backup contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          import json,stat
+          from pathlib import Path
+          root=Path.home()/".private-mojplaywin-offhost-backups"
+          kinds=("mysql","files")
+          output={"classification":"READ_ONLY_GPGV2_FIXED_BACKUP_METADATA","release_permitted":False}
+          for kind in kinds:
+              for suffix,label in ((".gpg.partial","partial"),(".gpg","complete"),(".manifest.json","manifest")):
+                  path=root/("mojplaywin_20261017_"+kind+"_gpgv2"+suffix)
+                  try:
+                      s=path.lstat()
+                      regular=stat.S_ISREG(s.st_mode) and s.st_uid==__import__("os").getuid()
+                      output[kind+"_"+label+"_bytes"]=s.st_size if regular else None
+                  except OSError:
+                      output[kind+"_"+label+"_bytes"]=None
+          print(json.dumps(output,sort_keys=True))
+          PY
       - name: Remove temporary SSH material
         if: always()
         shell: bash
