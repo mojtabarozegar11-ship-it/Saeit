@@ -1,0 +1,79 @@
+name: Factory provenance gap forensic source read only
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/vps-factory-provenance-gap-readonly-20261020.yml]
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  provenance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - name: SSH to actual VPS and inspect nine missing source-family contracts without mutation
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-provenance-forensics"
+          mkdir -m 700 -p "$d"
+          trap 'rm -rf "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          timeout 120s ssh -T -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 python3 - <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import hashlib,json,re
+          root=Path.home()/'factory-runtime/private/autonomous-product-cycle'
+          warehouse=root/'production-warehouse/finished'
+          families=re.compile(r'F(?:0[1-9]|[1-3][0-9]|40)\Z')
+          sha=re.compile(r'[0-9a-f]{64}\Z')
+          counts=Counter()
+          for folder in sorted(warehouse.iterdir()):
+              if not folder.is_dir() or folder.is_symlink():raise RuntimeError("PRODUCT_DIR_UNSAFE")
+              for version in sorted(folder.iterdir()):
+                  if not version.is_dir() or version.is_symlink() or not sha.fullmatch(version.name):raise RuntimeError("VERSION_DIR_UNSAFE")
+                  p=version/'warehouse_manifest.json'
+                  if not p.is_file() or p.is_symlink():raise RuntimeError("WAREHOUSE_MANIFEST_MISSING")
+                  m=json.loads(p.read_text())
+                  if m.get('family_id') is not None:continue
+                  counts['missing_original_family']+=1
+                  src=root/'digital-products'/folder.name/'manufacturing_manifest.json'
+                  original=root/'digital-products'/folder.name/(folder.name+'-internal-qa.zip')
+                  if not src.is_file() or src.is_symlink():
+                      counts['manufacturing_receipt_missing']+=1
+                      continue
+                  doc=json.loads(src.read_text())
+                  if doc.get('source_sha256')!=version.name or doc.get('artifact_sha256')!=m.get('artifact_sha256') or doc.get('recipe')!=folder.name:
+                      counts['manufacturing_receipt_mismatch']+=1
+                      continue
+                  counts['matching_manufacturing_receipt']+=1
+                  if not original.is_file() or original.is_symlink() or original.stat().st_size>25*1024*1024:
+                      counts['matching_original_zip_missing_or_oversize']+=1
+                      continue
+                  if hashlib.sha256(original.read_bytes()).hexdigest()!=m.get('artifact_sha256'):
+                      counts['original_zip_sha_mismatch']+=1
+                      continue
+                  counts['matching_original_qa_zip']+=1
+                  if families.fullmatch(str(doc.get('family_id',''))):
+                      counts['source_qa_family_recoverable']+=1
+                  else:
+                      counts['original_receipt_also_lacks_valid_family']+=1
+          orders=root/'production-instructions/orders'
+          for p in orders.glob('WO-*.json'):
+              if p.is_symlink() or not p.is_file():raise RuntimeError("ORDER_FILE_UNSAFE")
+              row=json.loads(p.read_text())
+              if row.get('requesting_site')!='mojplaywin.com':continue
+              counts['mojplaywin_orders']+=1
+              status=row.get('status')
+              if status in ('issued','blocked_rework','completed_verified'):
+                  counts['orders_'+status]+=1
+          print('REAL_VPS_MISSING_PROVENANCE_FORENSIC_COUNTS='+json.dumps(dict(sorted(counts.items())),sort_keys=True))
+          print('REAL_VPS_FORENSICS_NO_MANIFEST_OR_ORDER_MUTATION=PASS')
+          PY
