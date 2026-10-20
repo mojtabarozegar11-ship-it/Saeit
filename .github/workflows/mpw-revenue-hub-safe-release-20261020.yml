@@ -141,7 +141,7 @@ jobs:
                       print('MPW_NEW_EXPLICIT_FILE_READBACK',path,resp.status,resp.headers.get('Content-Type'),resp.read(250).decode('utf8','replace')[:75])
               except urllib.error.HTTPError as exc:
                   print('MPW_NEW_EXPLICIT_FILE_HTTP_ERROR',path,exc.code,exc.headers.get('Content-Type'),repr(exc.read(180).decode('utf8','replace')))
-          paths=['/mpw-editorial/revenue/']+['/mpw-editorial/revenue/'+p['slug']+'/' for p in data['offers']]
+          paths=['/mpw-editorial/revenue/index.html']+['/mpw-editorial/revenue/'+p['slug']+'/index.html' for p in data['offers']]
           for path in paths:
               ok=False
               for trial in range(5):

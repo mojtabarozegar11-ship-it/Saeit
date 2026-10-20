@@ -46,9 +46,13 @@ def publish(run):
             payload=tf.extractfile(m).read()
             if len(payload)!=m.size:fail("Archive short read")
             payload=payload.replace(b"/earn/",b"/mpw-editorial/revenue/")
+            routes=[b"/mpw-editorial/revenue/"]+[b"/mpw-editorial/revenue/"+slug.encode("ascii")+b"/" for slug in SLUGS]
+            for route in sorted(routes,key=len,reverse=True):
+                for tail in (b'"',b"'",b"</loc>"):
+                    payload=payload.replace(route+tail,route+b"index.html"+tail)
             docs[name]=payload
     except (tarfile.TarError, OSError, UnicodeError) as exc:fail("Invalid archive: "+type(exc).__name__)
-    if b"https://mojplaywin.com/mpw-editorial/revenue/" not in docs["earn/index.html"]:fail("Missing canonical main hub")
+    if b"https://mojplaywin.com/mpw-editorial/revenue/index.html" not in docs["earn/index.html"]:fail("Missing canonical main hub")
     if docs["earn/index.html"].count(b'/mpw-editorial/revenue/')<12:fail("Insufficient catalog links")
     if b"<urlset" not in docs["earn/sitemap.xml"]:fail("Invalid sitemap")
     stage.mkdir(mode=0o755)
