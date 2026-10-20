@@ -49,11 +49,18 @@ mv -f "$router.new" "$router"
 import pathlib,sys
 source=pathlib.Path(sys.argv[1]);output=pathlib.Path(sys.argv[2])
 text=source.read_text()
-marker='exec "$py" -B "$target/factory_40_execution_controller.py"'
-hook='/usr/bin/timeout 60s "$py" -B "$target/factory_tool_router.py" --factory-private "$private" --ops "$ops" --registry "$registry" --cycle || echo FACTORY_SUPPORT_ROUTER_REQUIRES_REVIEW\n'
-assert text.count(marker)==1,"SCHEDULER_MAIN_CONTROLLER_MARKER_MISSING"
+# Avoid assuming one exact controller command: the live scheduler has evolved.
+# Insert after strict-mode setup; router has its own lock and supports failure
+# isolation. Preserve the existing controller, lock, logging and cron unmodified.
+hook='/usr/bin/timeout 60s "$HOME/factory-runtime/.venv/bin/python" -B "$HOME/factory-runtime/operations/forty-execution/factory_tool_router.py" --factory-private "$HOME/factory-runtime/private/autonomous-product-cycle" --ops "$HOME/factory-runtime/operations" --registry "$HOME/factory-runtime/operations/forty-family-master/forty_families.json" --cycle || echo FACTORY_SUPPORT_ROUTER_REQUIRES_REVIEW\n'
+assert text.startswith('#!'),"SCHEDULER_SHEBANG_REQUIRED"
+lines=text.splitlines(keepends=True)
+strict=[i for i,line in enumerate(lines) if line.strip()=='set -euo pipefail']
+assert len(strict)==1,"SCHEDULER_STRICT_MODE_ANCHOR_REQUIRED"
 assert 'factory_tool_router.py' not in text or hook in text,"UNEXPECTED_OLD_ROUTER_HOOK"
-result=text if hook in text else text.replace(marker,hook+marker,1)
+if hook not in text:lines.insert(strict[0]+1,hook)
+result=''.join(lines)
+assert result.count("factory_tool_router.py")==1,"ROUTER_HOOK_DUPLICATE"
 output.write_text(result)
 output.chmod(source.stat().st_mode & 0o777)
 PY
