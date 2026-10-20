@@ -79,6 +79,21 @@ class PrivatePassportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "PASSPORT_ARTIFACT_SHA_MISMATCH"):
             policy.ensure_private_passport(folder, meta)
 
+    def test_legacy_stock_missing_source_sha_gets_incomplete_private_record(self):
+        _, folder, meta, _ = self.build()
+        legacy = dict(meta)
+        legacy.pop("source_sha256")
+        result = policy.ensure_private_passport(folder, legacy)
+        self.assertIn(".source_missing.private.json", result["passport_file"])
+        p = json.loads((folder / result["passport_file"]).read_text("utf8"))
+        self.assertIsNone(p["source_sha256"])
+        self.assertEqual(p["source_provenance_status"],
+                         "missing_original_source_sha_must_rework")
+        self.assertFalse(p["commercial_release_allowed"])
+        corrupt = dict(meta, source_sha256="not-a-real-hash")
+        with self.assertRaisesRegex(ValueError, "PASSPORT_SOURCE_SHA_MALFORMED"):
+            policy.ensure_private_passport(folder, corrupt)
+
     def test_public_or_unapproved_package_cannot_receive_verified_passport(self):
         _, folder, meta, _ = self.build()
         for name, value in (("public_listing_enabled", True),
