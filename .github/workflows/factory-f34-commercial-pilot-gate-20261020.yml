@@ -4,12 +4,14 @@ on:
     branches: [main]
     paths:
       - "scripts/factory_f34_commercial_pilot_20261020.py"
+      - "scripts/factory_f34_ultra_quality_20261020.py"
       - "tests/test_factory_f34_commercial_pilot_20261020.py"
       - ".github/workflows/factory-f34-commercial-pilot-gate-20261020.yml"
   pull_request:
     branches: [main]
     paths:
       - "scripts/factory_f34_commercial_pilot_20261020.py"
+      - "scripts/factory_f34_ultra_quality_20261020.py"
       - "tests/test_factory_f34_commercial_pilot_20261020.py"
       - ".github/workflows/factory-f34-commercial-pilot-gate-20261020.yml"
   workflow_dispatch:
@@ -28,7 +30,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/factory_f34_commercial_pilot_20261020.py
+          python3 -m py_compile scripts/factory_f34_commercial_pilot_20261020.py scripts/factory_f34_ultra_quality_20261020.py
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_f34_commercial_pilot_20261020 -v
           python3 - <<'PY'
           from pathlib import Path
@@ -81,8 +83,11 @@ jobs:
           stage="/home/githubops/factory-runtime/operations/.f34-commercial-pilot-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           timeout 40s ssh -T -F "$d/config" saeit-vps "umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
           scp -q -F "$d/config" scripts/factory_f34_commercial_pilot_20261020.py "saeit-vps:$stage/accept.py"
+          scp -q -F "$d/config" scripts/factory_f34_ultra_quality_20261020.py "saeit-vps:$stage/factory_f34_ultra_quality_20261020.py"
           want="$(sha256sum scripts/factory_f34_commercial_pilot_20261020.py|awk '{print $1}')"
           timeout 40s ssh -T -F "$d/config" saeit-vps "test ! -L '$stage/accept.py' && test \"\$(sha256sum '$stage/accept.py'|awk '{print \$1}')\" = '$want'"
+          want_ultra="$(sha256sum scripts/factory_f34_ultra_quality_20261020.py|awk '{print $1}')"
+          timeout 40s ssh -T -F "$d/config" saeit-vps "test ! -L '$stage/factory_f34_ultra_quality_20261020.py' && test \"\$(sha256sum '$stage/factory_f34_ultra_quality_20261020.py'|awk '{print \$1}')\" = '$want_ultra'"
           timeout 145s ssh -T -F "$d/config" saeit-vps \
             "PYTHONDONTWRITEBYTECODE=1 python3 -B '$stage/accept.py' --factory-private-root /home/githubops/factory-runtime/private/autonomous-product-cycle" \
             > "$d/pilot.txt"
@@ -93,7 +98,8 @@ jobs:
           assert lines[1]=="REAL_F34_PILOT_NO_FALSE_COMMERCIAL_RELEASE=PASS"
           data=json.loads(lines[0].split("=",1)[1])
           assert data["member_count"]==100 and data["pairs_verified"]==48
-          assert data["commercial_blockers"]==5 and data["sale_enabled"] is False
+          assert data["commercial_blockers"]==4 and data["sale_enabled"] is False
+          assert data["measured_automated_assertions"]>=1500 and data["automated_quality_passed"] is True
           assert data["owner_direction_present"] is True
           print(lines[0]);print(lines[1])
           PY
@@ -109,6 +115,8 @@ jobs:
               obj=json.loads(f.read_text())
               assert obj['product_id']=='fieldwork_ui_48_icons'
               assert obj['distinct_svg_png_pairs_verified']==48
+              assert obj['strict_automated_quality_assertions']>=1500
+              assert obj['human_quality_signoff_required'] is False
               assert obj['commercial_publication_allowed'] is False
               assert obj['sales_created']==0 and obj['buyer_access_enabled'] is False
               assert obj['original_zip_sha256'] in f.name
