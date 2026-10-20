@@ -1,0 +1,111 @@
+name: Restart only Mojtaba personal Passenger after portrait layout
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mojtaba-personal-portrait-passenger-refresh-20261020.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-v17-inner-pages-production
+  cancel-in-progress: false
+jobs:
+  refresh-personal-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && contains(github.event.head_commit.message, '[approved-mojtaba-personal-refresh-20261020]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Establish pinned relay for only independent personal Passenger app
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/personal-restart-ssh"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);s=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(s.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Confirm only edited independent personal home then refresh its Passenger instance
+        run: |
+          set -euo pipefail
+          timeout 35s ssh -T -F "$SSH_CONFIG" saeit-host '
+            set -eu
+            app=/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17
+            home="$app/templates/personal_site/core/home.html"
+            test -f "$app/manage.py"
+            test -f "$home" && test ! -L "$home"
+            grep -Fq "mpw-two-profile-portraits-20261020" "$home"
+            grep -Fq "mpw-profile-photo-pair" "$home"
+            ! grep -Fq "PROFESSIONAL PROFILE" "$home"
+            test -f /home/zomorod2/.backups/mojtaba-two-portraits-39433522000/home.before
+            test -d "$app/tmp" && test ! -L "$app/tmp"
+            touch "$app/tmp/restart.txt"
+            echo "ONLY_PERSONAL_PASSENGER_RESTART_REQUESTED=yes"
+          '
+      - name: Check uncached canonical and query site views and protected routes
+        run: |
+          python3 - <<'PY'
+          import os,time,urllib.request
+          root='https://mojplaywin.com/mojtaba.roozegar/'
+          for variant in ('canonical','query'):
+              ok=False
+              for i in range(1,9):
+                  u=root if variant=='canonical' else root+'?_after_restart='+os.environ['GITHUB_RUN_ID']+'-'+str(i)
+                  try:
+                      req=urllib.request.Request(u,headers={'User-Agent':'MojtabaAfterPassengerRestart/1.0','Cache-Control':'no-cache','Pragma':'no-cache'})
+                      with urllib.request.urlopen(req,timeout=20) as r:
+                          if r.status!=200:raise RuntimeError('HTTP status not 200')
+                          h=r.read(1200000).decode('utf8','replace')
+                      ok=('mpw-profile-photo-pair' in h and 'PROFESSIONAL PROFILE' not in h and h.index('official_profile_20261016/portrait')<h.index('mojtaba-roozegar.jpg')<h.index('id="hero-title"'))
+                      print('PERSONAL_RESTART_'+variant+'_'+str(i)+'='+str(ok),flush=True)
+                      if ok:break
+                  except Exception as e:print('READ_RETRY='+str(type(e).__name__),flush=True)
+                  time.sleep(5)
+              if not ok:raise SystemExit('PERSONAL_RESTART_PUBLIC_NOT_CONSISTENT_'+variant)
+          for u in ('https://mojplaywin.com/','https://mojplaywin.com/farnaz/','https://mojplaywin.com/picm/'):
+              with urllib.request.urlopen(urllib.request.Request(u,headers={'Cache-Control':'no-cache'}),timeout=20) as r:
+                  if r.status!=200:raise SystemExit('PROTECTED_ROUTE_DOWN '+u)
+              print('PROTECTED_200='+u)
+          print('PERSONAL_ONLY_RESTART_AND_LIVE_VERIFY=SUCCESS')
+          PY
+      - name: Erase temporary SSH secrets from runner
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/personal-restart-ssh"
