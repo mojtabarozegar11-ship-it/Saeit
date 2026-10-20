@@ -11,6 +11,10 @@ class Stage1Test(unittest.TestCase):
    v=worker.run(root,max_new=0)
    self.assertEqual(v["returned_products_inspected"],0)
    self.assertEqual(v["commercially_approved_returns"],0)
+   self.assertEqual(v["stage1_returns_remaining_open"],0)
+   self.assertEqual(v["source_product_rebuilds_verified"],0)
+   self.assertEqual(v["public_store_products_modified"],0)
+   self.assertEqual(v["new_native_private_previews_statically_validated"],0)
  def test_bad_budget(self):
   with tempfile.TemporaryDirectory() as t:
    with self.assertRaises(ValueError):
