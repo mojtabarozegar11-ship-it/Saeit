@@ -1,0 +1,140 @@
+name: MojPlayWin product and customer account exact homepage visual template release
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-django-customer-product-home-theme-20261020.yml"]
+permissions: {contents: read}
+concurrency:
+  group: mpw-account-product-main-shell
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate bounded brand template patch and Django-independent selftest
+        run: |
+          python3 -m py_compile scripts/mpw_django_customer_product_native_shell_20261020.py
+          python3 scripts/mpw_django_customer_product_native_shell_20261020.py selftest
+      - name: Record original public and protected child route statuses
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,os,json
+          paths=('/','/store/','/store/product/72/','/store/product/225/','/accounts/login/','/accounts/register/','/farnaz/','/saman/','/taniya/','/picm/')
+          states={}
+          for path in paths:
+              try:
+                  with urllib.request.urlopen('https://mojplaywin.com'+path,timeout=17) as r:states[path]=r.status
+              except urllib.error.HTTPError as e:states[path]=e.code
+          if any(x!=200 for x in states.values()):raise RuntimeError('Protected route not healthy before change: '+str(states))
+          open(os.environ['RUNNER_TEMP']+'/mpw-account-before.json','w').write(json.dumps(states))
+          print('MPW_ACCOUNT_THEME_BEFORE='+json.dumps(states))
+          PY
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-revenue-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Atomic three-template replacement with native Django template compilation
+        id: install
+        run: timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - publish '$GITHUB_RUN_ID'" < scripts/mpw_django_customer_product_native_shell_20261020.py
+      - name: Reload only the pinned MojPlayWin main Passenger app
+        run: |
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          root=Path('/home/zomorod2/mojplaywin.com');app=Path('/home/zomorod2/Saeit-staging')
+          w=root/'passenger_wsgi.py';p=app/'core/templates/brands/mojplaywin/base.html'
+          if root.is_symlink() or w.is_symlink() or not w.is_file() or p.is_symlink() or not p.is_file():raise RuntimeError('Untrusted Passenger app')
+          if "APP='/home/zomorod2/Saeit-staging'" not in w.read_text('utf8','replace'):raise RuntimeError('Passenger root changed')
+          if 'data-mpw-django-home-20261020' not in p.read_text('utf8','replace'):raise RuntimeError('Home theme missing')
+          folder=root/'tmp'
+          if folder.is_symlink():raise RuntimeError('Unsafe restart folder')
+          folder.mkdir(exist_ok=True)
+          target=folder/'restart.txt'
+          if target.is_symlink():raise RuntimeError('Unsafe restart marker')
+          target.touch()
+          print('MPW_MAIN_ONLY_DJANGO_NATIVE_HEADER_CACHE_RELOAD=REQUESTED')
+          PY
+      - name: Verify product pages and buyer account pages visually aligned and still functional
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,os,json,time
+          origin='https://mojplaywin.com'
+          paths=('/store/product/72/','/store/product/225/','/accounts/login/','/accounts/register/')
+          time.sleep(14)
+          for path in paths:
+              done=False
+              for attempt in range(12):
+                  req=urllib.request.Request(origin+path+'?visual_unify='+str(time.time_ns()),headers={'Cache-Control':'no-cache'})
+                  with urllib.request.urlopen(req,timeout=21) as resp:html=resp.read(400000).decode('utf8','replace');status=resp.status
+                  done=(status==200 and 'data-mpw-django-home-20261020="true"' in html and 'home-shared-v1.css' in html and 'mw-all-pages-menu' in html and 'Mojtaba Roozegar' in html)
+                  if done:break
+                  time.sleep(2)
+              if not done:raise RuntimeError('MojPlayWin native home shell not public at '+path)
+              if path.startswith('/store/product/') and f'href="{path[:-1]}/checkout/"' not in html:
+                  raise RuntimeError('Verified buyer checkout entry disappeared from '+path)
+              if path.startswith('/accounts/') and 'csrfmiddlewaretoken' not in html:raise RuntimeError('Auth CSRF form lost')
+              print('MPW_CUSTOMER_AND_PRODUCT_HOMEPAGE_THEME_LIVE='+path)
+          original=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-account-before.json'))
+          for path,code in original.items():
+              try:
+                  with urllib.request.urlopen(origin+path,timeout=20) as resp:got=resp.status
+              except urllib.error.HTTPError as e:got=e.code
+              if got!=code:raise RuntimeError('Protected child route status changed '+path)
+          print('MPW_DJANGO_PRODUCT_AUTH_HOME_SHELL_SIBLINGS_AND_BUY_CTA=PASS')
+          PY
+      - name: Restore only MojPlayWin branded templates if verification fails and restart
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          set -euo pipefail
+          timeout 85s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_django_customer_product_native_shell_20261020.py
+          timeout 35s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/home/zomorod2/mojplaywin.com/tmp/restart.txt')
+          if p.parent.is_dir() and not p.parent.is_symlink() and not p.is_symlink():p.touch()
+          print('MPW_BRANDED_HOME_TEMPLATE_ROLLBACK_RESTART=REQUESTED')
+          PY
+      - name: Remove all ephemeral relay keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
