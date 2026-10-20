@@ -45,10 +45,11 @@ function sync(){
   prompt.placeholder="مثلاً: یک مزرعه سرسبز در طلوع آفتاب، نور طبیعی، نمای نزدیک از خوشه‌های گندم";
   notice.textContent="ساخت واقعی تصویر با موتور CPU خصوصی VPS. خروجی آزمایشی ۲۵۶×۲۵۶ پیکسل است؛ کیفیت تجاری، 8K یا ساخت فیلم واقعی نیست. حداکثر دو درخواست در ۲۴ ساعت. ممکن است چند دقیقه منتظر بمانید.";
   button.textContent=active?"در حال پیگیری سفارش…":"ساخت عکس با هوش مصنوعی (آزمایشی)";
-  if(current){show("پیگیری سفارش خصوصی "+current+"؛ تا پایان پردازش این صفحه را باز نگه دارید.");}
-  else {show("شرح عکس و سبک را انتخاب کنید. در این حالت آپلود عکس لازم نیست.");}
 }
-document.querySelectorAll("[data-mode]").forEach(el=>el.addEventListener("click",sync));
+document.querySelectorAll("[data-mode]").forEach(el=>el.addEventListener("click",()=>{
+  sync();
+  if(isText())show(current?"آخرین سفارش خصوصی ذخیره است؛ برای پیگیری دوباره روی پیگیری آخرین سفارش بزنید.":"شرح عکس و سبک را انتخاب کنید. در این حالت آپلود عکس لازم نیست.");
+}));
 function delay(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
 function authenticatedUrl(raw,id){
   const exact="/picm/image/"+id+"/";
