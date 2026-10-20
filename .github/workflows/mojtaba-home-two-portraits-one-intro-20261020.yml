@@ -130,3 +130,5 @@ jobs:
           rm -rf "$RUNNER_TEMP/mojtaba-portrait-ssh" || true
 
 # Re-run approved guarded deployment with Django dynamic hero image support.
+
+# Honor Django conditional picture markup (both branches preserved).
