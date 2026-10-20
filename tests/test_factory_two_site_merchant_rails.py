@@ -32,6 +32,13 @@ class TwoSiteMerchantRails(unittest.TestCase):
       self.assertEqual(shahr["bank_account_provider"],"Bank Shahr")
       self.assertEqual(shahr["permitted_settlement_currencies"],["IRR"])
       self.assertEqual(shahr["psp_provider"],"not_yet_verified")
+      for route in (crypto,shahr):
+          self.assertEqual(route["declared_seller_type"],"natural_person_owner_not_company")
+          self.assertEqual(route["declared_seller_professional_name"],"مجتبی روزگار")
+          self.assertFalse(route["legal_seller_identity_independently_verified"])
+          self.assertFalse(route["merchant_gateway_contract_matches_declared_seller"])
+          self.assertFalse(route["settlement_beneficiary_matches_declared_seller_verified"])
+          self.assertIn("services_platform",route["company_role"])
       self.assertFalse(shahr["collect_customer_payment"])
       self.assertFalse(crypto["automatic_paid_entitlement"])
       self.assertFalse(result["bank_shahr_gateway_psp_verified"])
