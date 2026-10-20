@@ -37,7 +37,7 @@ class NotebookChecks(unittest.TestCase):
         self.assertIn('"--tile","128"',joined)
         self.assertIn("7680",joined)
         self.assertIn("Image.Resampling.LANCZOS",joined)
-        self.assertIn("not native 8K",self.prose.lower())
+        self.assertIn("not native 8k",self.prose.lower())
     def test_no_private_inputs_published_into_public_github(self):
         joined="\n".join(self.code)
         self.assertIn("files.upload()",joined)
