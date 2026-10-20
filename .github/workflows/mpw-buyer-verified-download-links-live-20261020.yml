@@ -1,0 +1,101 @@
+name: MojPlayWin verified paid downloads isolated source patch
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-buyer-verified-download-links-live-20261020.yml"]
+permissions: {contents: read}
+concurrency:
+  group: mpw-single-checkout-verified-download-contract
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate exact source patch with local selftests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_live_checkout_status_download_contract_20261020.py
+          python3 scripts/mpw_live_checkout_status_download_contract_20261020.py selftest
+          python3 -m unittest discover -s tests -p test_mpw_live_checkout_status_download_contract_20261020.py -v
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-revenue-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Preview exact one-file live source diff and verified Django paid and unpaid contracts
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - preview" < scripts/mpw_live_checkout_status_download_contract_20261020.py
+      - name: Publish one scoped source file after sealed private backup
+        id: publish
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - publish '$GITHUB_RUN_ID'" < scripts/mpw_live_checkout_status_download_contract_20261020.py
+      - name: Verify exact deployed hash, real Django reverse, and denial before payment
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify '$GITHUB_RUN_ID'" < scripts/mpw_live_checkout_status_download_contract_20261020.py
+      - name: Public main store and protected child route safety check
+        run: |
+          python3 - <<'PY'
+          import json,urllib.error,urllib.request
+          routes=['/','/store/','/store/product/72/','/store/product/225/','/accounts/login/','/farnaz/','/saman/','/taniya/','/picm/']
+          states={}
+          for route in routes:
+              req=urllib.request.Request('https://mojplaywin.com'+route,headers={'Cache-Control':'no-cache'})
+              try:
+                  with urllib.request.urlopen(req,timeout=18) as r:states[route]=r.status
+              except urllib.error.HTTPError as e:states[route]=e.code
+          print('MPW_VERIFIED_DOWNLOAD_RELEASE_HTTP='+json.dumps(states))
+          if any(status!=200 for status in states.values()):raise RuntimeError('Main or protected sibling route unhealthy')
+          PY
+      - name: Roll back only the checkout handler if verification fails
+        if: failure() && steps.publish.outcome == 'success'
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'" < scripts/mpw_live_checkout_status_download_contract_20261020.py
+      - name: Remove temporary SSH relay keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
