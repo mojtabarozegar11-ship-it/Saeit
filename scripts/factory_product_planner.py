@@ -25,7 +25,9 @@ HERE=Path(__file__).resolve().parent
 SCHEMA='saeit.factory.product-request.v1'
 CATALOG={'F18':'fieldwork_local_calculator_webapps','F19':'saas_launch_starter_2026','F20':'fieldwork_validation_plugins','F21':'fieldwork_developer_text_tools',
  'F22':'fieldwork_record_workflows','F25':'fieldwork_synthetic_edge_fixtures','F27':'capacity_planning_workbook',
- 'F28':'fieldwork_engineering_calculators','F34':'fieldwork_ui_48_icons'}
+ 'F28':'fieldwork_engineering_calculators','F34':'fieldwork_ui_48_icons',
+ 'F29':'fieldwork_editable_document_suite','F30':'fieldwork_editable_slide_suite',
+ 'F33':'fieldwork_vector_illustration_suite'}
 BATCH={'F20','F21','F22','F25','F28'}
 
 def load(name):
@@ -177,12 +179,15 @@ def command_for(root,req):
         script={'F18':'factory_build50_f18_webapps.py','F19':'factory_build50_f19_web_template.py'}[family]
         command=[sys.executable,'-B',str(HERE/script),'--factory-private',str(root)]
     elif family=='F31':command=[sys.executable,'-B',str(HERE/'factory_build50_f31_planner.py'),'--factory-private',str(root),'--week',req['parameters']['week']]
-    elif family in ('F27','F34'):
+    elif family in ('F27','F34','F29','F30','F33'):
         manifest=Path(root).parent.parent/'operations/build-toolchain/toolchain-manifest.json'
         _,python=load('factory_specialist_pilots').toolchain(manifest)
-        script={'F27':'factory_build50_workbook.py','F34':'factory_build50_f34_icon_kit.py'}[family]
+        script={'F27':'factory_build50_workbook.py','F34':'factory_build50_f34_icon_kit.py',
+          'F29':'factory_build50_creative_kits.py','F30':'factory_build50_creative_kits.py',
+          'F33':'factory_build50_creative_kits.py'}[family]
         command=[str(python),'-B',str(HERE/script),'--factory-private',str(root)]
         if family=='F27':command+=['--toolchain',str(manifest),'--worker'];timeout=210
+         elif family in ('F29','F30','F33'):command+=['--family',family]
     else:raise ValueError('PLANNER_EXECUTOR_NOT_ROUTED')
     return command,timeout
 

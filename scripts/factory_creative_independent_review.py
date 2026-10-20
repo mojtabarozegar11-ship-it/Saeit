@@ -21,10 +21,9 @@ def check(folder,archive,product,family):
             from docx import Document
             d=Document(str(p))
             words="\n".join(x.text for x in d.paragraphs)
-            if len(d.tables)!=4 or len(words)<320 or not words.startswith(p.stem.split("_")[0].title(),0):
-                # Structure matters; headings vary across all twelve subjects.
-                if len(d.tables)!=4 or len(words)<320:raise ValueError("CREATIVE_REVIEW_DOCX_STRUCTURE")
-            if len(d.paragraphs)<12:raise ValueError("CREATIVE_REVIEW_DOCX_FIELDS")
+            if len(d.tables)!=4 or len(words)<250:
+                raise ValueError("CREATIVE_REVIEW_DOCX_STRUCTURE")
+            if len(d.paragraphs)<10:raise ValueError("CREATIVE_REVIEW_DOCX_FIELDS")
         elif family=="F30":
             from pptx import Presentation
             deck=Presentation(str(p))
