@@ -163,6 +163,36 @@ class BridgeTests(unittest.TestCase):
   (pack_dir/(digest+".json")).write_text(json.dumps(data))
   with self.assertRaises(ValueError):imp.import_catalog(inbox,dbpath)
 
+ def test_oversized_archive_is_blocked_without_stalling_valid_private_draft(self):
+  inbox=self.root/"inbox";dbpath=self.root/"site_store.sqlite3"
+  with sqlite3.connect(dbpath) as db:
+   db.execute("CREATE TABLE products (id INTEGER)")
+   db.execute("CREATE TABLE payment_state (id INTEGER)")
+  for recipe,count in (("valid_book",1),("overfull_archive",81)):
+   folder=inbox/"packages"/recipe
+   folder.mkdir(parents=True)
+   original=folder/"temp.zip"
+   with zipfile.ZipFile(original,"w") as archive:
+    for n in range(count):
+     archive.writestr(recipe+f"/part-{n:03d}.txt","private technical QA")
+   sha=hashlib.sha256(original.read_bytes()).hexdigest()
+   original.rename(folder/(sha+".zip"))
+   (folder/(sha+".json")).write_text(json.dumps({
+    "recipe":recipe,"artifact_sha256":sha,"name":"Verified internal draft",
+    "qa_status":"passed","commercial_status":"private_internal_qa_pass_not_published",
+    "public_listing_enabled":False,"owner_publication_approval":False,"price":None}))
+   receipts=inbox/"receipts"/recipe
+   receipts.mkdir(parents=True)
+   (receipts/(sha+".json")).write_text(json.dumps({
+    "recipe":recipe,"sha256":sha,"status":"received_private"}))
+  result=imp.import_catalog(inbox,dbpath,limit=20)
+  self.assertEqual(result["imported"],1)
+  self.assertEqual(result["invalid_archive_blocked"],1)
+  with sqlite3.connect(dbpath) as db:
+   entries=db.execute("SELECT product_id,public_enabled,paid_price_irr FROM factory_drafts").fetchall()
+  self.assertEqual(entries,[("valid_book",0,None)])
+  self.assertEqual(imp.import_catalog(inbox,dbpath)["invalid_archive_blocked"],1)
+
  def test_delivery_does_not_count_previous_receipts_as_new_goods(self):
   import types
   root=self.root
