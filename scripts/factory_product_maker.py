@@ -7,6 +7,7 @@ written. No orders, network calls, AI API, publication, or token use. Python 3.8
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -109,6 +110,19 @@ def source_digest(source, files):
 QA_POLICY_VERSION = 4
 
 
+def ensure_manufacturing_private_passport(product_dir, manifest):
+    """Bind the owner's PRIVATE identity declaration to verified ZIP bytes."""
+    policy = Path(__file__).resolve().with_name(
+        "factory_private_product_passport_policy_20261020.py")
+    if policy.is_symlink() or not policy.is_file():
+        raise RuntimeError("PRIVATE_PASSPORT_POLICY_MISSING")
+    spec = importlib.util.spec_from_file_location("factory_product_passport_policy", str(policy))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.ensure_private_passport(product_dir, manifest)
+
+
+
 def verify_recipe(source, *, timeout=60, minimum_tests=1, evidence=None):
     """Require measured successful tests; never infer success from log text."""
     if isinstance(minimum_tests, bool) or not isinstance(minimum_tests, int) or minimum_tests < 1:
@@ -196,7 +210,9 @@ def manufacture(recipe, recipes_root, private_root):
             and prior_qa.get("policy_version") == QA_POLICY_VERSION
             and type(successful) is int and successful >= 1
             and zip_path.is_file() and prior.get("artifact_sha256") == previous_artifact_sha):
+        passport = ensure_manufacturing_private_passport(root, prior)
         return {"recipe": recipe, "changed": False, "qa_status": "passed",
+                "private_passport": passport["passport_file"],
                 "private_artifact": str(zip_path)}
     measurements = {}
     qa_status = verify_recipe(source, evidence=measurements)
@@ -234,10 +250,16 @@ def manufacture(recipe, recipes_root, private_root):
         "needs_content_and_market_review": True, "needs_storefront_adapter_verification": True,
     }
     metadata.update(design_metadata)
+    # A private per-revision sidecar is generated only after QA and hash checks.
+    passport = ensure_manufacturing_private_passport(root, metadata)
+    metadata["private_passport_schema"] = "saeit.factory.private-product-passport.v2"
+    metadata["private_passport_file"] = passport["passport_file"]
+    metadata["private_passport_sha256"] = passport["passport_sha256"]
     atomic_text(manifest_path, json.dumps(metadata, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
     return {"recipe": recipe,
             "changed": previous_artifact_sha != metadata["artifact_sha256"],
             "qa_refreshed": True, "qa_status": "passed",
+            "private_passport": passport["passport_file"],
             "private_artifact": str(zip_path)}
 
 
