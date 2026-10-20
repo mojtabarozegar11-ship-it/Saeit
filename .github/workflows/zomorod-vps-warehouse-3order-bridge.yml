@@ -37,6 +37,7 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_zomorod_warehouse_3order_bridge.py' -v
           python3 -m unittest discover -s tests -p 'test_existing_courier_customer_packages.py' -v
+          python3 -m unittest discover -s tests -p 'test_store_bridge.py' -v
           python3 -m py_compile scripts/factory_store_sender.py scripts/store_receiver.py scripts/zomorod_vps_warehouse_3order_bridge.py
           php -l content/zomorod-v11/site_store.php
           echo ZM_BRIDGE_TESTS=passed
