@@ -96,7 +96,21 @@ async def scenario(browser, html, mobile=False):
     await page.route("**/*",route)
     try:
         await page.goto(URL,wait_until="load")
-        await page.locator("#mode-text_image").click()
+        # Most users land here with no photo. The default must actually be
+        # usable before clicking any mode tile.
+        first=await page.evaluate("""() => ({
+            mode:document.getElementById('mode').value,
+            photoRequired:document.getElementById('photo').required,
+            photoHidden:document.getElementById('photo').hidden,
+            noValidate:document.getElementById('renderform').noValidate,
+            button:document.getElementById('submit').textContent
+        })""")
+        assert first["mode"]=="text_image" and first["photoHidden"] and not first["photoRequired"],first
+        assert first["noValidate"] and "ساخت عکس" in first["button"],first
+        await page.locator("#submit").click()
+        await page.wait_for_function("""() => document.getElementById('status')
+            .textContent.includes('متن (۴ تا ۵۸۰')""",timeout=3000)
+        assert not events,"Missing prompt must not submit"
         state=await page.evaluate("""() => ({
             mode:document.getElementById('mode').value,
             photoRequired:document.getElementById('photo').required,
