@@ -277,3 +277,4 @@ jobs:
       - name: Remove runner SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/saeit-store"
+# Reconnect 2026-10-20: re-run private 3-package VPS-to-cPanel bridge verification; never publish without QA/owner approval.
