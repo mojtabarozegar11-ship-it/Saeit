@@ -86,10 +86,15 @@ class ThousandOperationalTools(unittest.TestCase):
             self.assertEqual(out.stat().st_mode & 0o777,0o600)
             incoming=folder/"request.json";response=folder/"result.json"
             incoming.write_text(json.dumps({"text":" A  B "}),encoding="utf8")
-            m.main(["--registry",str(reg),"--tool-id","F40-T01","--input-file",str(incoming),"--output-file",str(response)])
+            m.main(["--registry",str(reg),"--tool-id","F40-T01","--workspace",str(folder),"--input-file",str(incoming),"--output-file",str(response)])
             data=json.loads(response.read_text(encoding="utf8"))
             self.assertEqual(data["result"]["normalized"],"A B")
             self.assertTrue(data["noncommercial"])
+            self.assertEqual(response.stat().st_mode & 0o777,0o600)
+            with self.assertRaisesRegex(ValueError,"WORKBENCH_PATH_OUTSIDE_PRIVATE_WORKSPACE"):
+                m.main(["--registry",str(reg),"--tool-id","F40-T01",
+                    "--workspace",str(folder),"--input-file","/etc/passwd",
+                    "--output-file",str(response)])
 
 if __name__=="__main__":
     unittest.main()
