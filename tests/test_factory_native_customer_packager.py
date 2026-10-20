@@ -83,6 +83,37 @@ class NativePreviewTest(unittest.TestCase):
         self.assertEqual(feedback["accepted_stage1_qa_returns"],1)
         self.assertFalse(feedback["factory_repair_executed"])
 
+    def test_two_private_pages_deliver_five_native_previews_without_publication(self):
+        for i in range(5):
+            ident="format_native_"+str(i)
+            ver=("%064x"%(i+99))
+            stock=self.root/"production-warehouse/finished"/ident/ver
+            stock.mkdir(parents=True)
+            manifest=dict(self.manifest,product_id=ident,source_sha256=ver)
+            (stock/"product.zip").write_bytes(self.original)
+            (stock/"warehouse_manifest.json").write_text(json.dumps(manifest))
+            native.pack(self.root,ident,ver,manifest,self.original,courier)
+        pages=[]
+        for index in (0,1):
+            raw=courier.export_factory(self.root,page=index)
+            batch=courier.unpack(raw)
+            selected=[x for x in batch if x[4] is not None]
+            pages.append(len(selected))
+        self.assertEqual(pages,[3,2])
+        with self.assertRaisesRegex(RuntimeError,"WAREHOUSE_PRIVATE_BATCH_PAGE_INVALID"):
+            courier.export_factory(self.root,page=17)
+        site=self.root/"site-staged"
+        site.mkdir(mode=0o700)
+        for index in (0,1):
+            result=courier.import_site(courier.export_factory(self.root,page=index),site)
+            self.assertEqual(result["publicly_published"],0)
+            self.assertEqual(result["store_product_created"],0)
+            self.assertEqual(result["quality_approved"],0)
+        manifest_paths=list(site.glob("received/*/*/customer_manifest.json"))
+        self.assertEqual(len(manifest_paths),5)
+        self.assertTrue(all(json.loads(p.read_text())["schema"]==native.SCHEMA
+                            for p in manifest_paths))
+
     def test_three_item_budget_does_not_expand_for_native_previews(self):
         inbox=self.root/"design-intake/mojplaywin-stage1-quality-returns"
         inbox.mkdir(parents=True)
