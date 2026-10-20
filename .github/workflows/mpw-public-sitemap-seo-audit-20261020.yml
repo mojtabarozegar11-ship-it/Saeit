@@ -1,0 +1,50 @@
+name: MojPlayWin public sitemap and SEO live audit 2026-10-20
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-public-sitemap-seo-audit-20261020.yml"]
+permissions: {contents: read}
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Inspect indexable routes without writes or changes
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,urllib.parse,xml.etree.ElementTree as ET,json,concurrent.futures,re
+          base='https://mojplaywin.com'
+          src=urllib.request.urlopen(base+'/sitemap.xml',timeout=20).read(400000)
+          root=ET.fromstring(src)
+          sitemap=[n.text.strip() for n in root.iter() if n.tag.rsplit('}',1)[-1]=='loc' and n.text and n.text.startswith(base+'/')]
+          new=[base+'/mpw-editorial/revenue/index.html']+[base+'/mpw-editorial/revenue/'+slug+'/index.html' for slug in ('website-doctor','landing-page-studio','ai-automation','business-spreadsheets','website-templates','social-media-kits','resume-builder','logo-studio','browser-games','marketing-ai','business-calculators','website-care')]
+          urls=list(dict.fromkeys([base+'/']+sitemap+new))
+          if len(urls)>80 or len(urls)<35:raise RuntimeError('Unexpected sitemap scope')
+          def check(url):
+              data=dict(path=url.removeprefix(base),status=0,canonical=False,description=False,title=False,html=False)
+              try:
+                  req=urllib.request.Request(url,headers={'User-Agent':'MojPlayWinMainOnlySEOAudit/1.0'})
+                  with urllib.request.urlopen(req,timeout=16) as r:
+                      data['status']=r.status;data['final_path']=r.geturl().removeprefix(base)
+                      html=r.read(210000).decode('utf8','replace')
+                      data['html']='<html' in html.lower()
+                      data['title']=bool(re.search(r'<title\\b',html,re.I))
+                      data['description']=bool(re.search(r'<meta\\s+name=["\\\']description["\\\']',html,re.I))
+                      data['canonical']=bool(re.search(r'<link\\b[^>]*rel=["\\\']canonical["\\\']',html,re.I))
+              except urllib.error.HTTPError as ex:
+                  data['status']=ex.code
+              except Exception as ex:
+                  data['error']=type(ex).__name__
+              return data
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:results=list(executor.map(check,urls))
+          bad=[r for r in results if r['status']!=200]
+          seo=[r for r in results if r['status']==200 and r['html'] and (not r['title'] or not r['description'] or not r['canonical'])]
+          print('MPW_SEO_AUDIT_TOTAL='+str(len(results)))
+          print('MPW_SEO_AUDIT_NON_200='+json.dumps(bad[:100]))
+          print('MPW_SEO_AUDIT_METADATA_GAPS='+json.dumps(seo[:100]))
+          print('MPW_SEO_AUDIT_STATUSES='+json.dumps({str(code):sum(r['status']==code for r in results) for code in sorted({r['status'] for r in results})}))
+          print('MPW_SEO_AUDIT_NEW_REVENUE_PAGES_STATUS='+json.dumps([dict(path=r['path'],status=r['status'],canonical=r['canonical'],description=r['description']) for r in results if r['path'].startswith('/mpw-editorial/revenue/')]))
+          PY
