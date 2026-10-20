@@ -1,0 +1,110 @@
+name: Activate evidence-gated operational controller for all forty factory families
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/vps-forty-family-operational-controller-20261020.yml"]
+permissions: {contents: read}
+concurrency:
+  group: saeit-forty-family-operational-controller-activation
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test honest 40-family admission, proof separation and safe script
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_40_execution_controller.sh
+          python3 -m py_compile scripts/factory_40_execution_controller.py
+          python3 -m unittest discover -s tests -p 'test_factory_40_execution_controller.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_build50_family_bridge.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/factory_40_execution_controller.py').read_text()
+          assert 'pilotmod.toolchain(toolchain_manifest)' in p
+          assert "'commercial_release_allowed':False" in p
+          assert "'warehouse_promotion_enabled':False" in p
+          assert "'store_publication_enabled':False" in p
+          assert "subprocess.run(" in p
+          print('FORTY_FAMILY_REAL_DISPATCH_ADMISSION_TEST=PASS')
+          PY
+      - name: Open host-key-verified SSH connection to existing private factory VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/forty-proof-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-factory-verified
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ServerAliveInterval 10
+            ServerAliveCountMax 2
+            ForwardAgent no
+          EOF
+          chmod 600 "$d/config"
+          ssh -T -F "$d/config" saeit-factory-verified 'set -eu; test "$(id -un)" = githubops; test -x "$HOME/factory-runtime/.venv/bin/python"; test -s "$HOME/factory-runtime/operations/forty-family-master/forty_families.json"; test "$(crontab -l | grep -c SAEIT_FACTORY_EVERY_MINUTE_V1)" -eq 1; echo BUILD50_VPS_EXISTING_FACTORY_VERIFIED'
+      - name: Stage complete pinned 40-family controller and exact required specialist tooling
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/forty-proof-ssh"
+          folder="/home/githubops/factory-runtime/operations/.forty-control-release-$GITHUB_RUN_ID"
+          ssh -T -F "$d/config" saeit-factory-verified "umask 077; test ! -e '$folder'; mkdir -m 700 '$folder'"
+          for file in scripts/factory_40_execution_controller.py scripts/factory_40_family_master.py scripts/factory_build50_family_bridge.py scripts/factory_build_50.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py deploy/install_factory_40_execution_controller.sh; do
+            filename="$(basename "$file")"
+            digest="$(sha256sum "$file" | awk '{print $1}')"
+            scp -q -F "$d/config" "$file" "saeit-factory-verified:$folder/$filename"
+            ssh -T -F "$d/config" saeit-factory-verified "test ! -L '$folder/$filename' && test \"\$(sha256sum '$folder/$filename' | awk '{print \$1}')\" = '$digest'"
+          done
+          echo FORTY_FAMILY_SOURCE_HASH_VERIFICATION=PASS
+      - name: Activate real controller and pilot work on VPS for all registered families
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/forty-proof-ssh"
+          folder="/home/githubops/factory-runtime/operations/.forty-control-release-$GITHUB_RUN_ID"
+          timeout 165s ssh -T -F "$d/config" saeit-factory-verified "bash '$folder/install_factory_40_execution_controller.sh' '$folder'"
+      - name: Verify actual VPS per-family queue plus previous factory jobs and no commercial forgery
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/forty-proof-ssh"
+          ssh -T -F "$d/config" saeit-factory-verified 'python3 -' <<'PY'
+          import json,subprocess
+          from pathlib import Path
+          h=Path.home()/'factory-runtime'
+          p=h/'private/autonomous-product-cycle/production-family-management/forty-execution-dashboard.json'
+          d=json.loads(p.read_text('utf8'))
+          assert d['registered_families']==40 and len(d['families'])==40
+          assert len({f['family_id'] for f in d['families']})==40
+          assert d['commercial_release_enabled'] is False
+          assert d['store_publication_enabled'] is False
+          assert d['warehouse_promotion_enabled'] is False
+          assert d['customer_orders_created']==0
+          cron=subprocess.check_output(['crontab','-l'],text=True)
+          for marker in ('SAEIT_FACTORY_EVERY_MINUTE_V1','SAEIT_FACTORY_LIFECYCLE_12_V1',
+            'SAEIT_FACTORY_FORTY_FAMILY_MASTER_V1','SAEIT_FACTORY_BUILD50_FORTY_FAMILY_BRIDGE_V1',
+            'SAEIT_FACTORY_FORTY_FAMILY_OPERATIONAL_DISPATCH_V1'):
+              assert cron.count(marker)==1,marker
+          print('FORTY_REAL_FAMILY_QUEUE_VERIFIED='+str(d['counts']['registered']))
+          print('FORTY_FULL_VERIFIED_EXECUTORS='+str(d['counts']['families_with_real_50_stage_products']))
+          print('FORTY_REAL_PRIVATE_PILOT_WORK='+json.dumps(d['pilot_tick_result'],sort_keys=True))
+          print('FORTY_OPERATIONAL_CRON_ACTIVE=PASS')
+          print('FORTY_NO_FALSE_SELLABLE_PRODUCTS=PASS')
+          PY
