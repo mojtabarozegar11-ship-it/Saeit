@@ -11,6 +11,8 @@ import hashlib
 import html
 import io
 import json
+import os
+import tempfile
 from pathlib import Path
 import re
 import sys
@@ -288,12 +290,43 @@ def selftest(cat):
     return {"tested":1000,"passed":1000,"failed":0,"scope":"synthetic_fixtures_not_commercial_QA",
             "id_hash":hashlib.sha256(json_bytes(sample_hashes)).hexdigest()}
 
+def scoped_path(workspace,path):
+    root=Path(workspace)
+    require(root.is_dir() and not root.is_symlink(),"WORKSPACE_INVALID")
+    root=root.resolve(strict=True)
+    candidate=Path(path)
+    require(candidate.is_absolute(),"ABSOLUTE_IO_PATH_REQUIRED")
+    target=candidate.resolve(strict=False)
+    try:
+        rel=target.relative_to(root)
+    except ValueError:
+        raise ValueError("WORKBENCH_PATH_OUTSIDE_PRIVATE_WORKSPACE")
+    require(bool(rel.parts),"ROOT_CANNOT_BE_TOOL_FILE")
+    node=root
+    for part in rel.parts:
+        node=node/part
+        require(not node.is_symlink(),"SYMLINK_TOOL_FILE_REFUSED")
+    return target
+
+def atomic_bytes(path,raw):
+    require(path.parent.is_dir() and not path.parent.is_symlink(),"OUTPUT_PARENT_INVALID")
+    require(not path.is_symlink(),"OUTPUT_SYMLINK")
+    fd,tmp=tempfile.mkstemp(prefix=".workbench-",dir=str(path.parent))
+    try:
+        with os.fdopen(fd,"wb") as stream:
+            stream.write(raw);stream.flush();os.fsync(stream.fileno())
+        os.chmod(tmp,0o600)
+        os.replace(tmp,str(path))
+    finally:
+        if os.path.exists(tmp):os.unlink(tmp)
+
 def main(argv=None):
     p=argparse.ArgumentParser()
     p.add_argument("--registry",required=True)
     p.add_argument("--catalog-out")
     p.add_argument("--selftest",action="store_true")
     p.add_argument("--tool-id")
+    p.add_argument("--workspace")
     p.add_argument("--input-file")
     p.add_argument("--output-file")
     a=p.parse_args(argv)
@@ -308,13 +341,14 @@ def main(argv=None):
         print("FACTORY_1000_CATALOG_REGISTERED="+str(cat["tools_count"]))
     if a.selftest:print("FACTORY_1000_QA="+json.dumps(selftest(cat),sort_keys=True))
     if a.tool_id:
-        require(bool(a.input_file) and bool(a.output_file),"RUN_IO_FILES_REQUIRED")
-        src=Path(a.input_file);dest=Path(a.output_file)
+        require(bool(a.workspace) and bool(a.input_file) and bool(a.output_file),"RUN_PRIVATE_WORKSPACE_AND_IO_REQUIRED")
+        src=scoped_path(a.workspace,a.input_file)
+        dest=scoped_path(a.workspace,a.output_file)
+        require(src!=dest,"INPUT_OUTPUT_MUST_DIFFER")
         require(src.is_file() and not src.is_symlink() and src.stat().st_size<=MAX_INPUT,"INPUT_FILE_INVALID")
         require(dest.parent.is_dir() and not dest.is_symlink(),"OUTPUT_FILE_INVALID")
         result=invoke(cat,a.tool_id,json.loads(src.read_text(encoding="utf8")))
-        dest.write_bytes(json_bytes(result)+b"\n")
-        dest.chmod(0o600)
+        atomic_bytes(dest,json_bytes(result)+b"\n")
         print("FACTORY_TOOL_EXECUTED="+a.tool_id)
     return 0
 
