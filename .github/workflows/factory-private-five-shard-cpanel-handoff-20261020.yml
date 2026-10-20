@@ -1,0 +1,158 @@
+name: Factory five private collections to cPanel - verified
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-private-five-shard-cpanel-handoff-20261020.yml
+      - scripts/factory_private_shard_receiver_20261020.py
+      - tests/test_factory_private_shard_receiver_20261020.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-factory-shards-to-cpanel-private
+  cancel-in-progress: false
+jobs:
+  private-transfer:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Independently test lossless transport and private-only receiver
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest tests.test_factory_zip_transport_shards_20261020 -v
+          python3 -B -m unittest tests.test_factory_private_shard_receiver_20261020 -v
+          python3 -B -m py_compile scripts/factory_private_shard_receiver_20261020.py
+      - name: Prepare pinned VPS relay and exact cPanel host identity
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/factory-shard-transfer"
+          install -d -m 700 "$d"
+            printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+            printf '%s' "$HOST_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh -i "$d/vps.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host zm-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host zm-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            ProxyJump zm-vps
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+          Host *
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            BatchMode yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 12
+          EOF
+          chmod 600 "$d/config"
+      - name: Export five existing SHA-proven VPS collections into protected ephemeral relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-shard-transfer"
+          timeout 100s ssh -T -F "$d/config" zm-vps bash -se <<'REMOTE' > "$d/five-shards.tar.gz"
+          set -euo pipefail
+          root="$HOME/factory-runtime/private/autonomous-product-cycle/product-lifecycle"
+          test -d "$root/private-transport-shards"
+          for recipe in fieldwork_arithmetic_assessment_packs fieldwork_arithmetic_mini_courses fieldwork_arithmetic_teacher_kits fieldwork_offline_operations_guides fieldwork_vector_illustration_suite; do
+            test -d "$root/private-transport-shards/$recipe"
+            test ! -L "$root/private-transport-shards/$recipe"
+          done
+          tar -C "$root" -czf - private-transport-shards
+          REMOTE
+          test -s "$d/five-shards.tar.gz"
+          bytes="$(stat -c %s "$d/five-shards.tar.gz")"
+          test "$bytes" -le 167772160
+          sha="$(sha256sum "$d/five-shards.tar.gz" | awk '{print $1}')"
+          printf 'FACTORY_PRIVATE_SHARD_TAR_SHA=%s\n' "$sha" >> "$GITHUB_ENV"
+          echo "PRIVATE_FACTORY_SHARD_TRANSFER_BYTES=$bytes"
+      - name: Deliver private ZIP collection only to isolated non-public cPanel inbox
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-shard-transfer"
+          ssh -T -F "$d/config" zm-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = "zomorod2"
+          root="$HOME/.saeit-factory-inbox"
+          test -d "$root" && test ! -L "$root"
+          install -d -m 700 "$root/private-shard-incoming" "$root/private-verified-transport"
+          test ! -L "$root/private-shard-incoming"
+          test ! -L "$root/private-verified-transport"
+          REMOTE
+          scp -q -F "$d/config" "$d/five-shards.tar.gz" \
+            "zm-cpanel:.saeit-factory-inbox/private-shard-incoming/$GITHUB_RUN_ID.tar.gz"
+          scp -q -F "$d/config" scripts/factory_private_shard_receiver_20261020.py \
+            "zm-cpanel:.saeit-factory-inbox/private-shard-incoming/verify-$GITHUB_RUN_ID.py"
+          timeout 130s ssh -T -F "$d/config" zm-cpanel bash -se -- "$GITHUB_RUN_ID" "$FACTORY_PRIVATE_SHARD_TAR_SHA" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          run="$1"
+          expected="$2"
+          root="$HOME/.saeit-factory-inbox"
+          source="$root/private-shard-incoming/$run.tar.gz"
+          code="$root/private-shard-incoming/verify-$run.py"
+          test -f "$source" && test ! -L "$source"
+          test -f "$code" && test ! -L "$code"
+          test "$(sha256sum "$source" | awk '{print $1}')" = "$expected"
+          chmod 600 "$source" "$code"
+          python3 -B "$code" --tar "$source" --private-root "$root/private-verified-transport"
+          test -s "$root/private-verified-transport/$expected/verification.json"
+          echo CPANEL_PRIVATE_COLLECTIONS_ONLY=PASS
+          REMOTE
+      - name: Independently read back cPanel SHA evidence and confirm sales remain disabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-shard-transfer"
+          timeout 45s ssh -T -F "$d/config" zm-cpanel python3 - "$FACTORY_PRIVATE_SHARD_TAR_SHA" <<'PY'
+          import json,sys
+          from pathlib import Path
+          expected=sys.argv[1]
+          root=Path.home()/'.saeit-factory-inbox/private-verified-transport'
+          file=root/expected/'verification.json'
+          assert file.is_file() and not file.is_symlink()
+          data=json.loads(file.read_text(encoding='utf8'))
+          assert data['schema']=='saeit.factory.cpanel-private-transport-proof.v1'
+          assert data['encrypted_transport_archive_sha256']==expected
+          assert data['products_verified']==5
+          assert data['shards_verified']==10
+          assert data['files_reconstructed']==485
+          assert data['private_reconstruction_passed'] is True
+          assert data['publicly_published'] is False
+          assert data['store_product_created'] is False
+          assert data['customer_payment_created'] is False
+          assert data['owner_publication_approval'] is False
+          print('REAL_CPANEL_PRIVATE_COLLECTION_RECEIPTS=5')
+          print('REAL_CPANEL_PRIVATE_SHARDS_VERIFIED=10')
+          print('REAL_CPANEL_PRIVATE_FILES_RECONSTRUCTED=485')
+          print('REAL_CPANEL_PUBLIC_SALES_ACTIVATED=0')
+          PY
+      - name: Erase only ephemeral CI relay credentials and artifacts
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/factory-shard-transfer"
