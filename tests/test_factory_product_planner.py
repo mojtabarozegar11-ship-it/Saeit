@@ -16,7 +16,7 @@ class ProductPlanner(unittest.TestCase):
     def test_all_forty_routes_plan_real_unexecuted_tasks(self):
         r=planner.cycle(self.root,REGISTRY)
         self.assertEqual(r['registered_family_routes'],40);self.assertEqual(r['unique_product_plans'],40)
-        self.assertEqual(len(r['families_awaiting_specialist_executor']),27)
+        self.assertEqual(len(r['families_awaiting_specialist_executor']),23)
         self.assertEqual(r['custom_product_executors_verified'],0)
         for path in (self.root/'product-planning/plans').glob('*.json'):
             p=planner.read(path);self.assertEqual(len(p['work_packages']),48)

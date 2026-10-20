@@ -33,7 +33,9 @@ FULL_PRODUCT_IDS={'F18':'fieldwork_local_calculator_webapps','F27':'capacity_pla
                   'F22':'fieldwork_record_workflows','F25':'fieldwork_synthetic_edge_fixtures',
                   'F28':'fieldwork_engineering_calculators',
                   'F29':'fieldwork_editable_document_suite','F30':'fieldwork_editable_slide_suite',
-                  'F33':'fieldwork_vector_illustration_suite'}
+                  'F33':'fieldwork_vector_illustration_suite',
+                  'F06':'fieldwork_offline_operations_guides','F07':'fieldwork_arithmetic_mini_courses',
+                  'F10':'fieldwork_arithmetic_assessment_packs','F11':'fieldwork_arithmetic_teacher_kits'}
 KNOWN_NATIVE_ADAPTERS={'F12':'android_sdk_gradle_signed_apk_aab',
  'F13':'desktop_os_build_and_installer','F16':'android_app_signing_and_testing',
  'F17':'desktop_platform_binary_build','F26':'real_model_training_benchmark',

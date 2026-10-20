@@ -2,7 +2,7 @@ name: Activate evidence-gated operational controller for all forty factory famil
 on:
   push:
     branches: [main]
-    paths: ["scripts/factory_build50_creative_kits.py", "scripts/factory_creative_independent_review.py", "tests/test_factory_build50_creative_kits.py", ".github/workflows/vps-forty-family-operational-controller-20261020.yml", "scripts/factory_40_execution_controller.py", "tests/test_factory_40_execution_controller.py", "scripts/factory_build50_f31_planner.py", "scripts/factory_f31_independent_review.py", "tests/test_factory_build50_f31_planner.py", "deploy/install_factory_40_execution_controller.sh", "scripts/factory_batch5_build.py", "scripts/factory_batch5_specs.py", "scripts/factory_batch5_review.py", "tests/test_factory_batch5.py", "scripts/factory_product_planner.py", "scripts/factory_product_routes.py", "tests/test_factory_product_planner.py", "scripts/factory_build50_f18_webapps.py", "scripts/factory_f18_independent_review.py", "scripts/factory_capability_organizer.py", "tests/test_factory_f18_and_organizer.py"]
+    paths: ["scripts/factory_build50_learning_4.py", "scripts/factory_learning_independent_review.py", "tests/test_factory_build50_learning_4.py", "scripts/factory_build50_creative_kits.py", "scripts/factory_creative_independent_review.py", "tests/test_factory_build50_creative_kits.py", ".github/workflows/vps-forty-family-operational-controller-20261020.yml", "scripts/factory_40_execution_controller.py", "tests/test_factory_40_execution_controller.py", "scripts/factory_build50_f31_planner.py", "scripts/factory_f31_independent_review.py", "tests/test_factory_build50_f31_planner.py", "deploy/install_factory_40_execution_controller.sh", "scripts/factory_batch5_build.py", "scripts/factory_batch5_specs.py", "scripts/factory_batch5_review.py", "tests/test_factory_batch5.py", "scripts/factory_product_planner.py", "scripts/factory_product_routes.py", "tests/test_factory_product_planner.py", "scripts/factory_build50_f18_webapps.py", "scripts/factory_f18_independent_review.py", "scripts/factory_capability_organizer.py", "tests/test_factory_f18_and_organizer.py"]
 permissions: {contents: read}
 concurrency:
   group: saeit-forty-family-operational-controller-activation
@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
       - name: Install isolated catalog QA dependencies
-        run: python -m pip install Pillow==11.3.0 openpyxl==3.1.5 python-docx==1.2.0 python-pptx==1.0.2
+        run: python -m pip install Pillow==11.3.0 openpyxl==3.1.5 python-docx==1.2.0 python-pptx==1.0.2 reportlab==4.4.3
       - name: Test honest 40-family admission, proof separation and safe script
         run: |
           set -euo pipefail
@@ -34,6 +34,7 @@ jobs:
           python3 -m unittest discover -s tests -p '*workbook*' -v
           python3 -m unittest discover -s tests -p 'test_factory_f18_and_organizer.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_build50_creative_kits.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_build50_learning_4.py' -v
           python3 - <<'PY'
           from pathlib import Path
           p=Path('scripts/factory_40_execution_controller.py').read_text()
@@ -80,7 +81,7 @@ jobs:
           d="$RUNNER_TEMP/forty-proof-ssh"
           folder="/home/githubops/factory-runtime/operations/.forty-control-release-$GITHUB_RUN_ID"
           ssh -T -F "$d/config" saeit-factory-verified "umask 077; test ! -e '$folder'; mkdir -m 700 '$folder'"
-          files=(scripts/factory_40_execution_controller.py scripts/factory_40_family_master.py scripts/factory_build50_family_bridge.py scripts/factory_build_50.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_build50_f31_planner.py scripts/factory_f31_independent_review.py scripts/factory_batch5_build.py scripts/factory_batch5_specs.py scripts/factory_batch5_review.py deploy/install_factory_40_execution_controller.sh scripts/factory_product_planner.py scripts/factory_product_routes.py scripts/factory_build50_f18_webapps.py scripts/factory_f18_independent_review.py scripts/factory_capability_organizer.py scripts/factory_build50_f19_web_template.py scripts/factory_f19_independent_web_review.py scripts/factory_build50_f34_icon_kit.py scripts/factory_f34_independent_icon_review.py scripts/factory_build50_workbook.py scripts/factory_build50_creative_kits.py scripts/factory_creative_independent_review.py)
+          files=(scripts/factory_40_execution_controller.py scripts/factory_40_family_master.py scripts/factory_build50_family_bridge.py scripts/factory_build_50.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_build50_f31_planner.py scripts/factory_f31_independent_review.py scripts/factory_batch5_build.py scripts/factory_batch5_specs.py scripts/factory_batch5_review.py deploy/install_factory_40_execution_controller.sh scripts/factory_product_planner.py scripts/factory_product_routes.py scripts/factory_build50_f18_webapps.py scripts/factory_f18_independent_review.py scripts/factory_capability_organizer.py scripts/factory_build50_f19_web_template.py scripts/factory_f19_independent_web_review.py scripts/factory_build50_f34_icon_kit.py scripts/factory_f34_independent_icon_review.py scripts/factory_build50_workbook.py scripts/factory_build50_creative_kits.py scripts/factory_creative_independent_review.py scripts/factory_build50_learning_4.py scripts/factory_learning_independent_review.py)
           # One bounded transfer replaces per-file SCP/SSH handshakes.
           tar -cf - --transform='s,.*/,,' "${files[@]}" | ssh -T -F "$d/config" saeit-factory-verified "umask 077; tar -xf - --no-same-owner --no-same-permissions -C '$folder'; chmod 600 '$folder'/*"
           manifest="$RUNNER_TEMP/forty-controller.sha256"
@@ -113,7 +114,7 @@ jobs:
           assert d['warehouse_promotion_enabled'] is False
           assert d['customer_orders_created']==0
           assert next(f for f in d['families'] if f['family_id']=='F31')['completed_50_stage_products']>=1
-          for fid in ('F18','F20','F21','F22','F25','F28','F29','F30','F33'):
+          for fid in ('F18','F20','F21','F22','F25','F28','F29','F30','F33','F06','F07','F10','F11'):
               assert next(f for f in d['families'] if f['family_id']==fid)['completed_50_stage_products']>=1
           assert d['pilot_tick_result']['status'] in ('pilot_built','technical_pilots_verified'), 'pilot dispatch is unhealthy'
           cron=subprocess.check_output(['crontab','-l'],text=True)
@@ -132,7 +133,7 @@ jobs:
           assert planner['custom_product_executors_verified']==0
           assert planner['verified_native_product_plans']>=9
           assert not planner['commercial_release']
-          assert len(planner['families_awaiting_specialist_executor'])==27
+          assert len(planner['families_awaiting_specialist_executor'])==23
           organized=json.loads((h/'private/autonomous-product-cycle/capability-organization/dashboard.json').read_text())
           assert organized['family_count']==40 and organized['native_recipe_families']>=10
           assert (organized['support_tool_bindings_available'],organized['unique_support_operations']) in ((1000,25),(3000,75))
