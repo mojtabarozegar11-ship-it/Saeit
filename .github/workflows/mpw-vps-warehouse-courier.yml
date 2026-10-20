@@ -231,3 +231,4 @@ jobs:
         run: |
           rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
           rm -f -- "$RUNNER_TEMP/mpw-factory-stock.tgz" "$RUNNER_TEMP/mpw-qa-feedback.json" "$RUNNER_TEMP/mpw-factory-stage1-triage.jsonl" "$RUNNER_TEMP/mpw-three-product-orders.json"
+# Reconnect 2026-10-20: owner-requested bounded private warehouse/site receipts and three-workorder check; public release unchanged.
