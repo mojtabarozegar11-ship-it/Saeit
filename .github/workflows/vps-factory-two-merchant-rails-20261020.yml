@@ -1,0 +1,78 @@
+name: Set private Bank Shahr and crypto payment rails apart for 40 product families
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_two_site_merchant_rails.py"
+      - "tests/test_factory_two_site_merchant_rails.py"
+      - "deploy/install_factory_two_site_merchant_rails.sh"
+      - ".github/workflows/vps-factory-two-merchant-rails-20261020.yml"
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: saeit-factory-two-site-merchant-rails
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test 80 private routes, currency separation, no false receipts and banking PSP non-assumption
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_two_site_merchant_rails.sh
+          python3 -m py_compile scripts/factory_two_site_merchant_rails.py
+          python3 -m unittest discover -s tests -p test_factory_two_site_merchant_rails.py -v
+          echo FACTORY_TWO_SITE_CROSS_PAYMENT_RAIL_TESTS=PASS
+  release:
+    needs: test
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install 40 private offers per merchant site, separate bank and on-chain payment contracts
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/two-rails-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps(){ ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 githubops@178.239.147.150 "$@"; }
+          stage="/home/githubops/factory-runtime/operations/ .two-rails-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh_vps "test ! -e '$stage' && mkdir -m 700 '$stage'"
+          for source in scripts/factory_two_site_merchant_rails.py deploy/install_factory_two_site_merchant_rails.sh;do
+            name="$(basename "$source")"
+            cat "$source" | ssh_vps "umask 077; cat > '$stage/$name'; chmod 600 '$stage/$name'"
+            wanted="$(sha256sum "$source" | cut -d' ' -f1)"
+            ssh_vps "test \"\$(sha256sum '$stage/$name' | cut -d' ' -f1)\" = '$wanted'"
+          done
+          ssh_vps "timeout 500s bash '$stage/install_factory_two_site_merchant_rails.sh' '$stage'"
+          ssh_vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import json,subprocess
+          base=Path.home()/'factory-runtime'
+          root=base/'private/autonomous-product-cycle'
+          d=json.loads((root/'merchant-rails/dashboard.json').read_text())
+          assert d['private_site_family_offer_routes']==80
+          assert d['live_charges']==0
+          assert d['sites_changed']==0
+          assert len(d['route_records'])==80 and d['site_count']==2
+          cron=subprocess.check_output(['crontab','-l'],text=True)
+          assert cron.count('SAEIT_FACTORY_FORTY_FAMILY_OPERATIONAL_DISPATCH_V1')==1
+          print('VPS_TWO_PAYMENT_PROVIDERS_ROUTED_SEPARATELY=PASS')
+          print('VPS_TWO_SITE_FAMILIES_WITH_TECHNICAL_PACKAGES='+str(d['families_with_technical_source']))
+          print('VPS_MOJ_CRYPTO_AND_SHAHR_LIVE_CHECKOUT=NOT_ENABLED')
+          PY
