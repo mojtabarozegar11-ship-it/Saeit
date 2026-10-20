@@ -78,6 +78,7 @@ class NativePreviewTest(unittest.TestCase):
         self.assertTrue(qa["native_private_structure_preview_verified"])
         self.assertFalse(qa["customer_bundle_verified"])
         self.assertFalse(qa["payment_enabled"])
+        (self.root/"design-intake").mkdir(mode=0o700)
         feedback=courier.receive_factory_returns(courier.feedback_site(site),self.root)
         self.assertEqual(feedback["accepted_stage1_qa_returns"],1)
         self.assertFalse(feedback["factory_repair_executed"])
