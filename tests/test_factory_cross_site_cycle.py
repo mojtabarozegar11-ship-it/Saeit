@@ -4,8 +4,10 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import sys
 
 BASE = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(BASE / "scripts"))
 SPEC = importlib.util.spec_from_file_location("cross_site_cycle", BASE / "scripts/factory_cross_site_cycle.py")
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
