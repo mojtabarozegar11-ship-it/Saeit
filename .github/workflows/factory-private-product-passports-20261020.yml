@@ -1,0 +1,102 @@
+name: Private product passports - test and VPS stock backfill
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_private_product_passport_policy_20261020.py"
+      - "scripts/factory_private_passports_backfill_20261020.py"
+      - "scripts/factory_product_maker.py"
+      - "tests/test_factory_private_passport_20261020.py"
+      - ".github/workflows/factory-private-product-passports-20261020.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/factory_private_product_passport_policy_20261020.py"
+      - "scripts/factory_private_passports_backfill_20261020.py"
+      - "scripts/factory_product_maker.py"
+      - "tests/test_factory_private_passport_20261020.py"
+      - ".github/workflows/factory-private-product-passports-20261020.yml"
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: saeit-private-passports-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify private SHA-bound passport contract and actual manufacturing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_private_product_passport_policy_20261020.py scripts/factory_private_passports_backfill_20261020.py scripts/factory_product_maker.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_private_passport_20261020 tests.test_factory_product_maker -v
+          echo FACTORY_PRIVATE_PASSPORT_CI=PASS
+  private-vps-backfill:
+    needs: tests
+    if: github.event_name != 'pull_request' && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate host pin and stage private passport code
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/passport-deploy"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          stage="/home/githubops/factory-runtime/operations/.private-passports-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          timeout 40s ssh -T -F "$d/config" saeit-vps "umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
+          scp -q -F "$d/config" scripts/factory_private_product_passport_policy_20261020.py "saeit-vps:$stage/factory_private_product_passport_policy_20261020.py"
+          scp -q -F "$d/config" scripts/factory_private_passports_backfill_20261020.py "saeit-vps:$stage/backfill.py"
+          for script in factory_private_product_passport_policy_20261020.py factory_private_passports_backfill_20261020.py; do
+            if [ "$script" = factory_private_passports_backfill_20261020.py ]; then target=backfill.py; else target="$script"; fi
+            want="$(sha256sum "scripts/$script" | awk '{print $1}')"
+            timeout 35s ssh -T -F "$d/config" saeit-vps "test ! -L '$stage/$target' && test \"\$(sha256sum '$stage/$target' | awk '{print \$1}')\" = '$want'"
+          done
+          timeout 180s ssh -T -F "$d/config" saeit-vps "PYTHONDONTWRITEBYTECODE=1 python3 -B '$stage/backfill.py' --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle --limit 1000" > "$d/backfill.log"
+          python3 - "$d/backfill.log" <<'PY'
+          import json,sys
+          data=open(sys.argv[1]).read().splitlines()
+          assert len(data)==2 and data[0].startswith("FACTORY_PRIVATE_PASSPORT_BACKFILL=")
+          assert data[1]=="FACTORY_COMMERCIAL_GATE_STILL_CLOSED=PASS"
+          summary=json.loads(data[0].split("=",1)[1])
+          assert summary["sale_enabled"] is False
+          assert summary["original_factory_packages_modified"] is False
+          assert summary["store_database_modified"] is False
+          assert summary["customer_payments_modified"] is False
+          assert summary["scanned"]>0
+          print(data[0])
+          print(data[1])
+          print("FACTORY_PRIVATE_PASSPORT_VPS_EVIDENCE=PASS")
+          PY
+      - name: Delete ephemeral SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/passport-deploy"
