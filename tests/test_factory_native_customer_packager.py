@@ -113,6 +113,16 @@ class NativePreviewTest(unittest.TestCase):
         self.assertEqual(len(manifest_paths),5)
         self.assertTrue(all(json.loads(p.read_text())["schema"]==native.SCHEMA
                             for p in manifest_paths))
+        # Last page omits earlier preview bytes; all earlier private QA must
+        # remain valid after source-only replay, not silently downgraded.
+        for p in manifest_paths:
+            qa=json.loads((p.parent/"site_qa.json").read_text())
+            self.assertTrue(qa["native_private_structure_preview_verified"])
+            self.assertFalse(qa["customer_bundle_verified"])
+            self.assertFalse(qa["public_listing"])
+        replay=courier.import_site(courier.export_factory(self.root,page=16),site)
+        self.assertEqual(replay["existing_native_private_previews_verified"],5)
+        self.assertEqual(replay["warehouse_versions_without_customer_bundle"],5)
 
     def test_three_item_budget_does_not_expand_for_native_previews(self):
         inbox=self.root/"design-intake/mojplaywin-stage1-quality-returns"
