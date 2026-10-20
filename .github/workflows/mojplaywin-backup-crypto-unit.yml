@@ -20,6 +20,8 @@ on:
       - "tests/test_mojplaywin_backup_destination_preflight_v3.py"
       - ".github/workflows/mojplaywin-v3-owner-manual-backup.yml"
       - "tests/test_mojplaywin_backup_owner_manual_workflow_v3.py"
+      - "scripts/mojplaywin_v3_backup_merge_trigger_audit.py"
+      - "tests/test_mojplaywin_v3_backup_merge_trigger_audit.py"
 permissions:
   contents: read
 jobs:
@@ -57,4 +59,6 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_pipeline_integration_v3.py' -v
           python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_destination_preflight_v3.py' -v
           python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_owner_manual_workflow_v3.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_v3_backup_merge_trigger_audit.py' -v
+          python3 scripts/mojplaywin_v3_backup_merge_trigger_audit.py
           echo V3_COMPRESSED_GPG_SYNTHETIC_RECOVERY_TESTS=PASS
