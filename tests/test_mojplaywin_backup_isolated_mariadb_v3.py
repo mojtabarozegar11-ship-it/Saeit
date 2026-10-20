@@ -77,19 +77,15 @@ class DisposableMariaDBRestore(unittest.TestCase):
         container = os.environ["MPW_RESTORE_FIXTURE_CONTAINER"]
         self.assertEqual(container, "mpw-v3-synthetic-restore-ci")
         sql = (
-            f"CREATE DATABASE IF NOT EXISTS \`{FIXTURE_SCHEMA}\`;\n"
-            f"USE \`{FIXTURE_SCHEMA}\`;\n"
-            "CREATE TABLE recovery_marker (id INT PRIMARY KEY, note VARCHAR(100));\n"
-            "INSERT INTO recovery_marker VALUES (1, 'test-only'), (2, 'isolated');\n"
-        ).encode() * 10
-        # Make CREATE and INSERT idempotency explicit for the fixture replay.
-        sql = (
             f"CREATE DATABASE \`{FIXTURE_SCHEMA}\`;\n"
             f"USE \`{FIXTURE_SCHEMA}\`;\n"
             "CREATE TABLE recovery_marker (id INT PRIMARY KEY, note VARCHAR(100));\n"
-            "INSERT INTO recovery_marker VALUES (1,'test-only'),(2,'isolated');\n"
+            + "".join(
+                f"INSERT INTO recovery_marker VALUES ({n}, 'synthetic-{n}');\n"
+                for n in range(1, 161)
+            )
         ).encode()
-        self.assertGreater(len(sql), 128)
+        self.assertGreater(len(sql), 1024)
         with tempfile.TemporaryDirectory(prefix="mpw-v3-synthetic-recovery-") as tmp:
             root = pathlib.Path(tmp)
             result = encrypt.store(io.BytesIO(pack(sql)), "mysql", root=root,
@@ -110,7 +106,7 @@ class DisposableMariaDBRestore(unittest.TestCase):
                  "-e", f"SELECT COUNT(*), SUM(id) FROM \`{FIXTURE_SCHEMA}\`.recovery_marker"],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15, check=False)
             self.assertEqual(query.returncode, 0)
-            self.assertEqual(query.stdout.decode().strip(), "2\t3")
+            self.assertEqual(query.stdout.decode().strip(), "160\t12880")
             source_files = root / "synthetic_site"
             source_files.mkdir()
             (source_files / "main.txt").write_bytes(b"synthetic private root content\n" * 120)
