@@ -10,13 +10,22 @@ import zipfile
 import zlib
 from scripts import factory_f34_commercial_pilot_20261020 as gate
 
-def png():
+def png(index=0):
+    """Synthetic real decodable RGBA artwork, one distinct geometry per ID."""
     def chunk(typ,data):
         return struct.pack(">I",len(data))+typ+data+struct.pack(">I",zlib.crc32(typ+data))
     hdr=struct.pack(">IIBBBBB",256,256,8,6,0,0,0)
+    rgb=bytes([30+(index*13)%180,40+(index*7)%170,50+(index*11)%160,255])
+    transparent=b"\x00\x00\x00\x00"
+    rows=[]
+    for y in range(256):
+        row=bytearray(b"\x00")
+        for x in range(256):
+            row.extend(rgb if 30<x<170+(index%37) and 35<y<188+(index%23)
+                       else transparent)
+        rows.append(bytes(row))
     return (b"\x89PNG\r\n\x1a\n"+chunk(b"IHDR",hdr)+
-            chunk(b"IDAT",zlib.compress(b"".join(b"\x00"+b"\xff\x00\x00\xff"*256 for _ in range(256))))+
-            chunk(b"IEND",b""))
+            chunk(b"IDAT",zlib.compress(b"".join(rows)))+chunk(b"IEND",b""))
 
 class CommercialPilotAcceptance(unittest.TestCase):
     def setUp(self):
@@ -33,13 +42,21 @@ class CommercialPilotAcceptance(unittest.TestCase):
     def build(self,broken=None):
         files={}
         icons=[]
-        for i in range(48):
-            key="icon_%02d"%i
-            svg=('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
-                 '<title>Icon example</title><circle cx="32" cy="32" r="14"/></svg>').encode()
+        from scripts import factory_f34_ultra_quality_20261020 as ultra
+        for i,(concept,variant) in enumerate(
+                (a,b) for a in ultra.CONCEPTS for b in ultra.VARIANTS):
+            key=concept+"_"+variant
+            color="#%06x"%(0x220000+i*3491)
+            svg=('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" '
+                 'role="img" aria-labelledby="icon-title">'
+                 '<title id="icon-title">'+concept+' '+variant+' icon</title>'
+                 '<circle cx="32" cy="32" r="20" fill="none" stroke="'+color+'" stroke-width="3"/>'
+                 '<polyline points="10,20 30,35 55,12" fill="none" stroke="'+color+'" stroke-width="2"/>'
+                 '</svg>').encode()
             files[key+".svg"]=svg
-            files[key+".png"]=png()
-            icons.append({"id":key,"concept":"icon","vector":key+".svg","raster":key+".png"})
+            files[key+".png"]=png(i)
+            icons.append({"id":key,"concept":concept,"treatment":variant,
+                          "vector":key+".svg","raster":key+".png"})
         files.update({
             "README.md":b"Original F34 QA example with forty-eight original icon variants. "*10,
             "LICENSE.txt":b"PRIVATE internal QA artifact. No commercial sale or redistribution granted.",
@@ -71,7 +88,9 @@ class CommercialPilotAcceptance(unittest.TestCase):
         original=self.zipfile.read_bytes()
         response=gate.run(self.root)
         self.assertEqual(response["pairs_verified"],48)
-        self.assertEqual(response["commercial_blockers"],5)
+        self.assertEqual(response["commercial_blockers"],4)
+        self.assertGreaterEqual(response["measured_automated_assertions"],1500)
+        self.assertTrue(response["automated_quality_passed"])
         self.assertFalse(response["sale_enabled"])
         self.assertFalse(response["owner_direction_present"])
         self.assertEqual(self.zipfile.read_bytes(),original)
@@ -82,6 +101,7 @@ class CommercialPilotAcceptance(unittest.TestCase):
         self.assertTrue(receipt["automated_asset_integrity_verified"])
         self.assertFalse(receipt["commercial_publication_allowed"])
         self.assertFalse(receipt["independent_license_and_asset_rights_signed"])
+        self.assertFalse(receipt["human_quality_signoff_required"])
 
     def test_owner_direction_is_not_per_sku_rights_and_sale(self):
         folder=self.root/"product-lifecycle/owner-commercial-instructions"
