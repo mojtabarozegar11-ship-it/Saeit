@@ -23,7 +23,7 @@ import time
 
 HERE=Path(__file__).resolve().parent
 SCHEMA='saeit.factory.product-request.v1'
-CATALOG={'F19':'saas_launch_starter_2026','F20':'fieldwork_validation_plugins','F21':'fieldwork_developer_text_tools',
+CATALOG={'F18':'fieldwork_local_calculator_webapps','F19':'saas_launch_starter_2026','F20':'fieldwork_validation_plugins','F21':'fieldwork_developer_text_tools',
  'F22':'fieldwork_record_workflows','F25':'fieldwork_synthetic_edge_fixtures','F27':'capacity_planning_workbook',
  'F28':'fieldwork_engineering_calculators','F34':'fieldwork_ui_48_icons'}
 BATCH={'F20','F21','F22','F25','F28'}
@@ -172,6 +172,7 @@ def admissible(capacity):
 def execute(root,req):
     family=req['family_id']
     if family in BATCH:command=[sys.executable,'-B',str(HERE/'factory_batch5_build.py'),'--family',family,'--factory-private',str(root)]
+    elif family=='F18':command=[sys.executable,'-B',str(HERE/'factory_build50_f18_webapps.py'),'--factory-private',str(root)]
     elif family=='F31':command=[sys.executable,'-B',str(HERE/'factory_build50_f31_planner.py'),'--factory-private',str(root),'--week',req['parameters']['week']]
     else:return {'status':'blocked_executor_not_routed','retry_after_seconds':3600}
     # Kill the whole child process group on timeout; leave evidence for safe retry.

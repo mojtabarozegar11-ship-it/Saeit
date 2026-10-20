@@ -25,7 +25,7 @@ import sys
 
 SCHEMA='saeit.factory.forty-family-operational-controller.v1'
 PILOT_IDS=('F10','F14','F19','F27','F29','F30','F31','F33','F34','F37','F39')
-FULL_PRODUCT_IDS={'F27':'capacity_planning_workbook',
+FULL_PRODUCT_IDS={'F18':'fieldwork_local_calculator_webapps','F27':'capacity_planning_workbook',
                   'F19':'saas_launch_starter_2026',
                   'F34':'fieldwork_ui_48_icons',
                   'F31':'fieldwork_planner_weekly',

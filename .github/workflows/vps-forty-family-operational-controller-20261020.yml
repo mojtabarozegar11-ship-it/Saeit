@@ -2,7 +2,7 @@ name: Activate evidence-gated operational controller for all forty factory famil
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/vps-forty-family-operational-controller-20261020.yml", "scripts/factory_40_execution_controller.py", "tests/test_factory_40_execution_controller.py", "scripts/factory_build50_f31_planner.py", "scripts/factory_f31_independent_review.py", "tests/test_factory_build50_f31_planner.py", "deploy/install_factory_40_execution_controller.sh", "scripts/factory_batch5_build.py", "scripts/factory_batch5_specs.py", "scripts/factory_batch5_review.py", "tests/test_factory_batch5.py", "scripts/factory_product_planner.py", "scripts/factory_product_routes.py", "tests/test_factory_product_planner.py"]
+    paths: [".github/workflows/vps-forty-family-operational-controller-20261020.yml", "scripts/factory_40_execution_controller.py", "tests/test_factory_40_execution_controller.py", "scripts/factory_build50_f31_planner.py", "scripts/factory_f31_independent_review.py", "tests/test_factory_build50_f31_planner.py", "deploy/install_factory_40_execution_controller.sh", "scripts/factory_batch5_build.py", "scripts/factory_batch5_specs.py", "scripts/factory_batch5_review.py", "tests/test_factory_batch5.py", "scripts/factory_product_planner.py", "scripts/factory_product_routes.py", "tests/test_factory_product_planner.py", "scripts/factory_build50_f18_webapps.py", "scripts/factory_f18_independent_review.py", "scripts/factory_capability_organizer.py", "tests/test_factory_f18_and_organizer.py"]
 permissions: {contents: read}
 concurrency:
   group: saeit-forty-family-operational-controller-activation
@@ -25,6 +25,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_factory_build50_f31_planner.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_batch5.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_product_planner.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_f18_and_organizer.py' -v
           python3 - <<'PY'
           from pathlib import Path
           p=Path('scripts/factory_40_execution_controller.py').read_text()
@@ -71,7 +72,7 @@ jobs:
           d="$RUNNER_TEMP/forty-proof-ssh"
           folder="/home/githubops/factory-runtime/operations/.forty-control-release-$GITHUB_RUN_ID"
           ssh -T -F "$d/config" saeit-factory-verified "umask 077; test ! -e '$folder'; mkdir -m 700 '$folder'"
-          files=(scripts/factory_40_execution_controller.py scripts/factory_40_family_master.py scripts/factory_build50_family_bridge.py scripts/factory_build_50.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_build50_f31_planner.py scripts/factory_f31_independent_review.py scripts/factory_batch5_build.py scripts/factory_batch5_specs.py scripts/factory_batch5_review.py deploy/install_factory_40_execution_controller.sh scripts/factory_product_planner.py scripts/factory_product_routes.py)
+          files=(scripts/factory_40_execution_controller.py scripts/factory_40_family_master.py scripts/factory_build50_family_bridge.py scripts/factory_build_50.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_build50_f31_planner.py scripts/factory_f31_independent_review.py scripts/factory_batch5_build.py scripts/factory_batch5_specs.py scripts/factory_batch5_review.py deploy/install_factory_40_execution_controller.sh scripts/factory_product_planner.py scripts/factory_product_routes.py scripts/factory_build50_f18_webapps.py scripts/factory_f18_independent_review.py scripts/factory_capability_organizer.py)
           # One bounded transfer replaces per-file SCP/SSH handshakes.
           tar -cf - --transform='s,.*/,,' "${files[@]}" | ssh -T -F "$d/config" saeit-factory-verified "umask 077; tar -xf - --no-same-owner --no-same-permissions -C '$folder'; chmod 600 '$folder'/*"
           manifest="$RUNNER_TEMP/forty-controller.sha256"
@@ -104,7 +105,7 @@ jobs:
           assert d['warehouse_promotion_enabled'] is False
           assert d['customer_orders_created']==0
           assert next(f for f in d['families'] if f['family_id']=='F31')['completed_50_stage_products']>=1
-          for fid in ('F20','F21','F22','F25','F28'):
+          for fid in ('F18','F20','F21','F22','F25','F28'):
               assert next(f for f in d['families'] if f['family_id']==fid)['completed_50_stage_products']>=1
           assert d['pilot_tick_result']['status'] in ('pilot_built','technical_pilots_verified'), 'pilot dispatch is unhealthy'
           cron=subprocess.check_output(['crontab','-l'],text=True)
@@ -123,7 +124,19 @@ jobs:
           assert planner['custom_product_executors_verified']==0
           assert planner['verified_native_product_plans']>=9
           assert not planner['commercial_release']
-          assert len(planner['families_awaiting_specialist_executor'])==31
+          assert len(planner['families_awaiting_specialist_executor'])==30
+          organized=json.loads((h/'private/autonomous-product-cycle/capability-organization/dashboard.json').read_text())
+          assert organized['family_count']==40 and organized['native_recipe_families']>=10
+          assert organized['support_tool_bindings_available']==1000
+          assert organized['real_family_support_invocations_this_cycle']==200
+          assert organized['legacy']['matching_modules']==77
+          assert len(organized['legacy']['robot_roles'])==11
+          assert not organized['commercial_release'] and not organized['sites_modified']
+          print('ORGANIZED_77_MODULES_AND_11_ROBOT_SOURCE_ROLES=PASS')
+          print('ORGANIZED_40_FAMILY_BUILDER_DISCOVERY=PASS')
+          print('ORGANIZED_REAL_SUPPORT_TOOL_EXECUTIONS=200')
+          print('ORGANIZED_NATIVE_PRODUCT_FAMILIES='+str(organized['native_recipe_families']))
+          print('ORGANIZED_BUILDER_MISSING_DEPENDENCIES='+json.dumps({f['family_id']:f['missing_engines'] for f in organized['families'] if f['missing_engines']}))
           print('PER_PRODUCT_ALL_FORTY_ROUTES=PASS')
           print('PER_PRODUCT_NATIVE_VERIFIED='+str(planner['verified_native_product_plans']))
           print('PER_PRODUCT_PLANS='+str(planner['unique_product_plans']))
