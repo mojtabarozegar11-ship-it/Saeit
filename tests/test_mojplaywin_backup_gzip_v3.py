@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from scripts import mojplaywin_backup_gzip_source_v3 as src
 from scripts import mojplaywin_backup_encrypt_vps_gpg as enc
+from scripts import mojplaywin_backup_gzip_recovery_v3 as recovery
 
 
 class FastSourceTests(unittest.TestCase):
@@ -125,6 +126,41 @@ class FastGpgTests(unittest.TestCase):
             enc.store(io.BytesIO(self.source), "mysql", root=self.base,
                       keyroot=self.base, minimum_free=0, stem="../outside",
                       source_encoding="gzip-with-footer-v1")
+
+    def test_independent_two_pass_recovery_reads_only_synthetic(self):
+        self.store()
+        self.assertFalse(recovery.both_ready(home=self.base))
+        files_payload = b"synthetic tar fixture (not a customer file)\n" * 4000
+        compressor = zlib.compressobj(1, zlib.DEFLATED, 31)
+        files_source = compressor.compress(files_payload) + compressor.flush() + enc.MARKER
+        enc.store(io.BytesIO(files_source), "files", root=self.base, keyroot=self.base,
+                  minimum_free=0, stem=self.stem, source_encoding="gzip-with-footer-v1")
+        self.assertTrue(recovery.both_ready(home=self.base))
+        buffer = io.BytesIO()
+        length = recovery.decode_archive("mysql", home=self.base, out=buffer)
+        self.assertEqual(length, len(self.payload))
+        self.assertEqual(buffer.getvalue(), self.payload)
+        files_buffer = io.BytesIO()
+        self.assertEqual(recovery.decode_archive("files", home=self.base, out=files_buffer),
+                         len(files_payload))
+        self.assertEqual(files_buffer.getvalue(), files_payload)
+
+    def test_recovery_rejects_tampered_encrypted_archive_and_manifest(self):
+        self.store()
+        target, manifest = self.paths()
+        damaged = bytearray(target.read_bytes())
+        damaged[len(damaged)//2] ^= 1
+        target.write_bytes(damaged)
+        with self.assertRaises(Exception):
+            recovery.decode_archive("mysql", home=self.base)
+        # Even a correct ciphertext must not be accepted with a forged manifest.
+        damaged[len(damaged)//2] ^= 1
+        target.write_bytes(damaged)
+        meta = json.loads(manifest.read_text())
+        meta["uncompressed_source_bytes"] += 1
+        manifest.write_text(json.dumps(meta))
+        with self.assertRaises(RuntimeError):
+            recovery.decode_archive("mysql", home=self.base)
 
     def test_traditional_gpg_backup_fixture_still_works(self):
         status = enc.store(io.BytesIO(b"older-format" * 200 + enc.MARKER), "files",
