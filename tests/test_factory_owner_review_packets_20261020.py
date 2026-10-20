@@ -187,7 +187,7 @@ class ReviewPacketTests(unittest.TestCase):
     def test_new_source_sha_bound_family_qa_supersedes_only_old_missing_family(self):
         import hashlib
         wo="WO-00000001"
-        order={"source_product_id":"legacy_product","source_sha256":"b"*64,
+        order={"requesting_site":"mojplaywin.com","source_product_id":"legacy_product","source_sha256":"b"*64,
                "source_artifact_sha256":"c"*64}
         root=self.root
         folder=root/"design-state/mojplaywin-native-specialist-evidence/legacy_product"
