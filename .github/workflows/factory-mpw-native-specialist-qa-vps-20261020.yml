@@ -1,0 +1,136 @@
+name: Factory real native-format QA and authentic six-WO evidence on VPS
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/factory-mpw-native-specialist-qa-vps-20261020.yml"
+      - "scripts/factory_mpw_specialist_native_prescreen_20261020.py"
+      - "tests/test_factory_mpw_specialist_native_prescreen_20261020.py"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/factory-mpw-native-specialist-qa-vps-20261020.yml"
+      - "scripts/factory_mpw_specialist_native_prescreen_20261020.py"
+      - "tests/test_factory_mpw_specialist_native_prescreen_20261020.py"
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: factory-native-technical-evidence-only-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Prove actual source-format tests, SHA-bound WO evidence and no approvals
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_mpw_specialist_native_prescreen_20261020.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_mpw_specialist_native_prescreen_20261020 -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_three_bidirectional_orders -v
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('scripts/factory_mpw_specialist_native_prescreen_20261020.py').read_text()
+          assert 'subprocess.run' not in source
+          assert 'eval(' not in source and 'exec(' not in source
+          assert '"commercial_release":False' in source
+          assert '"owner_sale_and_publication_permission":False' in source
+          assert '"final_work_order_completed":False' in source
+          assert 'source_artifact_sha256' in source
+          print('SPECIALIST_NATIVE_NO_RELEASE_NO_SOURCE_EXECUTION=PASS')
+          PY
+  vps:
+    needs: preflight
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install hash-pinned private QA utility and execute native product and WO inspection
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-native-prescreen-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ServerAliveInterval 20
+            ServerAliveCountMax 3
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          stage="/home/githubops/factory-runtime/operations/.specialist-review-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh -T -F "$d/config" saeit-vps "umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
+          scp -q -F "$d/config" scripts/factory_mpw_specialist_native_prescreen_20261020.py "saeit-vps:$stage/factory_mpw_specialist_native_prescreen_20261020.py"
+          scp -q -F "$d/config" scripts/mpw_vps_warehouse_courier.py "saeit-vps:$stage/mpw_vps_warehouse_courier.py"
+          for file in factory_mpw_specialist_native_prescreen_20261020.py mpw_vps_warehouse_courier.py;do
+            expected="$(sha256sum "scripts/$file" | awk '{print $1}')"
+            ssh -T -F "$d/config" saeit-vps "test ! -L '$stage/$file' && test \"\$(sha256sum '$stage/$file'|awk '{print \$1}')\" = '$expected'"
+          done
+          timeout 280s ssh -T -F "$d/config" saeit-vps \
+            "PYTHONDONTWRITEBYTECODE=1 python3 -B '$stage/factory_mpw_specialist_native_prescreen_20261020.py' --factory-private-root /home/githubops/factory-runtime/private/autonomous-product-cycle" \
+            > "$d/real-vps-review.jsonl"
+          python3 - "$d/real-vps-review.jsonl" <<'PY'
+          import json,sys
+          lines=open(sys.argv[1]).read().splitlines()
+          assert len(lines)==2 and lines[0].startswith('MPW_VPS_SPECIALIST_NATIVE_PRESCREEN=')
+          assert lines[1]=='MPW_VPS_SPECIALIST_NO_AUTO_COMMERCIAL_RELEASE=PASS'
+          report=json.loads(lines[0].split('=',1)[1])
+          counts=report['counts']
+          assert report['commercial_approval_count']==report['product_publications']==0
+          assert report['completed_manufacturing_work_orders_claimed']==0
+          assert report['original_warehouse_goods_mutated'] is False
+          assert counts['original_stock_checked']>=43
+          assert counts['site_origin_work_orders_evidence_linked']>=6
+          assert counts['prescreen_format_passed']+counts['prescreen_format_blocked']==counts['original_stock_checked']
+          print('REAL_VPS_SPECIALIST_COUNTS='+json.dumps(counts,sort_keys=True))
+          print('REAL_VPS_SPECIALIST_OWNER_AND_RIGHTS_HELD='+str(report['expert_reviews_pending']))
+          PY
+          timeout 70s ssh -T -F "$d/config" saeit-vps python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          root=Path.home()/'factory-runtime/private/autonomous-product-cycle'
+          folder=root/'design-state/mojplaywin-native-specialist-evidence'
+          dash=json.loads((folder/'dashboard.json').read_text())
+          assert dash['schema']=='saeit.factory.specialist-native-prescreen.v1'
+          assert dash['commercial_approval_count']==dash['product_publications']==0
+          count=0
+          for p in folder.glob('*/*.json'):
+              assert not p.is_symlink() and p.is_file()
+              d=json.loads(p.read_text())
+              assert d['commercial_release'] is False
+              assert d['final_work_order_completed'] is False
+              assert re.fullmatch(r'[0-9a-f]{64}-[0-9a-f]{64}\.json',p.name)
+              count+=1
+          assert count>=43
+          linked=list((root/'production-instructions/mojplaywin-specialist-order-reports').glob('WO-*.json'))
+          assert len(linked)>=6
+          assert all(json.loads(p.read_text())['engineering_work_order_completed'] is False for p in linked)
+          print('REAL_VPS_INDEPENDENT_PRIVATE_NATIVE_QA_READBACK='+str(count))
+          print('REAL_VPS_WORK_ORDER_SPECIALIST_PROOFS='+str(len(linked)))
+          print('REAL_VPS_NO_COMMERCE_OR_PUBLIC_SITE_MUTATION=PASS')
+          PY
+          echo FACTORY_NATIVE_QA_AND_SIX_WO_EVIDENCE_PROVED_ON_VPS=PASS
