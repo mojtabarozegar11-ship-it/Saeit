@@ -25,8 +25,8 @@ jobs:
           test -n "$VPS_KEY" && test -n "$HOST_KEY"
           d="$RUNNER_TEMP/zm-private-catalog-only"
           install -d -m 700 "$d"
-          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\\r\\n","\\n").replace("\\r","").replace("\\\\n","\\n").rstrip()+"\\n",end="")' > "$d/vps.key"
-          printf '%s' "$HOST_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\\r\\n","\\n").replace("\\r","").replace("\\\\n","\\n").rstrip()+"\\n",end="")' > "$d/host.key"
+            printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+            printf '%s' "$HOST_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
           chmod 600 "$d/"*.key
           ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
