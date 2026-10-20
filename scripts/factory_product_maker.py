@@ -113,7 +113,7 @@ QA_POLICY_VERSION = 4
 def ensure_manufacturing_private_passport(product_dir, manifest):
     """Bind the owner's PRIVATE identity declaration to verified ZIP bytes."""
     policy = Path(__file__).resolve().with_name(
-        "factory_private_product_passport_policy_20261020.py")
+        "factory_personal_owner_passport_policy_20261020.py")
     if policy.is_symlink() or not policy.is_file():
         raise RuntimeError("PRIVATE_PASSPORT_POLICY_MISSING")
     spec = importlib.util.spec_from_file_location("factory_product_passport_policy", str(policy))
@@ -252,7 +252,7 @@ def manufacture(recipe, recipes_root, private_root):
     metadata.update(design_metadata)
     # A private per-revision sidecar is generated only after QA and hash checks.
     passport = ensure_manufacturing_private_passport(root, metadata)
-    metadata["private_passport_schema"] = "saeit.factory.private-product-passport.v2"
+    metadata["private_passport_schema"] = "saeit.factory.private-product-passport.v3"
     metadata["private_passport_file"] = passport["passport_file"]
     metadata["private_passport_sha256"] = passport["passport_sha256"]
     atomic_text(manifest_path, json.dumps(metadata, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
