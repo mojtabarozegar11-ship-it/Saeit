@@ -7,6 +7,8 @@ on:
       - scripts/mpw_factory_stage1_technical_repair.py
       - tests/test_mpw_factory_stage1_technical_repair.py
       - deploy/install_mpw_stage1_technical_repair.sh
+      - scripts/factory_native_customer_packager.py
+      - tests/test_factory_native_customer_packager.py
   pull_request:
     branches: [main]
     paths:
@@ -17,6 +19,8 @@ on:
       - scripts/factory_customer_packager.py
       - scripts/factory_product_maker.py
       - deploy/install_mpw_stage1_technical_repair.sh
+      - scripts/factory_native_customer_packager.py
+      - tests/test_factory_native_customer_packager.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -52,6 +56,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_factory_stage1_technical_repair -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_vps_warehouse_courier -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_customer_packager -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_native_customer_packager -v
           bash -n deploy/install_mpw_stage1_technical_repair.sh
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_existing_courier_customer_packages -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_three_bidirectional_orders -v
@@ -126,7 +131,7 @@ jobs:
           d="$RUNNER_TEMP/factory-store-preflight"
           stage="/home/githubops/factory-runtime/operations/.mpw-real-repair-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           timeout 30s ssh -T -F "$d/config" saeit-vps "test ! -e '$stage' && mkdir -m 700 '$stage'"
-          for source in scripts/mpw_factory_stage1_technical_repair.py scripts/mpw_vps_warehouse_courier.py scripts/factory_customer_packager.py scripts/factory_product_maker.py deploy/install_mpw_stage1_technical_repair.sh;do
+          for source in scripts/mpw_factory_stage1_technical_repair.py scripts/mpw_vps_warehouse_courier.py scripts/factory_customer_packager.py scripts/factory_native_customer_packager.py scripts/factory_product_maker.py deploy/install_mpw_stage1_technical_repair.sh;do
             name="$(basename "$source")"
             cat "$source" | timeout 30s ssh -T -F "$d/config" saeit-vps "umask 077; cat > '$stage/$name'; chmod 600 '$stage/$name'"
             want="$(sha256sum "$source"|cut -d' ' -f1)"
@@ -149,6 +154,8 @@ jobs:
                'original_stock_zips_verified','new_customer_bundles_technically_repaired',
                'existing_customer_bundles_verified','technical_package_attempts_blocked',
                'technical_package_deferred_by_budget',
+                'new_native_private_previews_statically_validated',
+                'existing_native_private_previews_revalidated',
                'stage1_returns_remaining_open')},sort_keys=True))
           PY
       - name: Read SHA-verified VPS stock into ephemeral protected CI spool
