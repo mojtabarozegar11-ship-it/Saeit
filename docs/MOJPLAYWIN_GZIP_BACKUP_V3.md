@@ -59,3 +59,12 @@ The historical October 17 `.partial` archives are intentionally retained. No pro
 3. Run the private backup once. If either stream fails, preserve historical and current `.partial` files and do not retry with the same date.
 4. Verify both GPG manifests and their recovered content. Export a **secure copy of the decryption key outside the VPS** through an owner-approved secret-management channel; never expose it in chat or GitHub artifacts.
 5. Import into an isolated DB and safely reconstruct site files, then compare records, routes and required data. Document proof of the **actual** isolated restore and affected scopes before authorizing public store changes.
+
+## Explicit third-party data transit consent (required before using V3)
+
+Current V3 owner-only workflow streams the **compressed but not yet GPG-encrypted** MySQL and scoped file bytes through GitHub-hosted runner RAM, between two host-pinned SSH sessions. The stream is encrypted separately on each SSH hop, and the workflow does not intentionally store/log its content. Nevertheless, **the GitHub runner necessarily processes customer backup plaintext**. This is a real third-party data-handling consideration; calling this an end-to-end encrypted private-source-to-VPS stream would be inaccurate.
+
+The manual workflow therefore additionally requires a separate explicit, default-off `data_transit_acknowledged` confirmation from the owner. If that confirmation is not acceptable, do not run this workflow. Instead prepare an audited alternative that encrypts the GZIP stream on cPanel **before** leaving the source, using an owner-managed asymmetric public key; keep the private decryption key off cPanel and safely escrowed outside the VPS. A read-only cPanel check confirms GPG is available (see the latest V3 readiness run), but the source-side public-key design and actual asymmetric restore are **not yet implemented or approved**.
+
+The second requirement, independent off-VPS key escrow, is still unmet. A backup that cannot be decrypted after loss of the VPS is not independently recoverable. No key may be disclosed in workflow output, repository code, PR comments or ordinary ChatGPT messages.
+
