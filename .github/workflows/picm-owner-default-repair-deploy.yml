@@ -1,0 +1,197 @@
+name: PICM Owner No-Photo Default Mode Repair Deployment
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+jobs:
+  check:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: repair PICM owner default text image 2026-10-20'
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure pinned relay and cPanel SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          WORK="$RUNNER_TEMP/picm-ssh"
+          install -d -m 700 "$WORK"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$WORK/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$WORK/host.key"
+          chmod 600 "$WORK/"*.key
+          ssh-keygen -y -P '' -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$WORK/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$WORK/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$WORK/config" <<EOF
+          Host picm-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          timeout 30s ssh -F "$WORK/config" picm-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$WORK/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat >> "$WORK/config" <<EOF
+          Host picm-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump picm-vps
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          echo PICM_RELAY_READY
+      - name: Validate exactly two PICM template candidates
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 -m py_compile scripts/picm_owner_default_release.py
+          node --check templates/picm/text_image.js
+          python3 - <<'PY'
+          from pathlib import Path
+          from scripts.picm_owner_default_release import FILES,EXPECTED
+          html=Path('templates/picm/index.html').read_text(encoding='utf-8')
+          assert len(FILES)==2
+          assert EXPECTED["templates/picm/index.html"]=="22cb5168e04ad23c962b55c1661917bb564dfb5b"
+          assert "{% include 'picm/text_image.js' %}" in html
+          assert 'id="mode-text_image"' in html
+          print('PICM_OWNER_DEFAULT_SCOPED_FILES_APPROVED')
+          PY
+      - name: Confirm public baseline before touching shared Passenger application
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for entry in '200|/' '200|/picm/login/' '302|/picm/' '302|/picm/workspace/' '405|/picm/api/reference/' '403|/picm/worker/health/'; do
+            expected="$(printf '%s' "$entry" | cut -d '|' -f1)"
+            path="$(printf '%s' "$entry" | cut -d '|' -f2)"
+            actual="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path" || true)"
+            echo "PICM_BEFORE_STATUS=$path:$actual"
+            test "$actual" = "$expected"
+          done
+      - name: Stage only new PICM templates and guarded release script
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          stage="/home/zomorod2/.picm-owner-default-stage-$GITHUB_RUN_ID"
+          timeout 35s ssh -F "$WORK/config" picm-host \
+            "test \"\$(id -un)\" = zomorod2 && test ! -e $stage && install -d -m 700 $stage"
+          tar -cf "$RUNNER_TEMP/picm-ui.tar" \
+            scripts/picm_owner_default_release.py templates/picm/index.html templates/picm/text_image.js
+          scp -q -F "$WORK/config" "$RUNNER_TEMP/picm-ui.tar" "picm-host:$stage/site.tar"
+          timeout 35s ssh -F "$WORK/config" picm-host "tar -xf $stage/site.tar -C $stage"
+          echo PICM_OWNER_DEFAULT_STAGE_READY
+      - name: Install owner UI with current-file SHA guard and reversible backup
+        id: deploy_ui
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          stage="/home/zomorod2/.picm-owner-default-stage-$GITHUB_RUN_ID"
+          htmlsha="$(sha256sum templates/picm/index.html | awk '{print $1}')"
+          jssha="$(sha256sum templates/picm/text_image.js | awk '{print $1}')"
+          timeout 60s ssh -F "$WORK/config" picm-host \
+            "python3 $stage/scripts/picm_owner_default_release.py deploy $GITHUB_RUN_ID $htmlsha $jssha"
+      - name: Prove owner workspace renders actual controls and other users remain blocked
+        id: verify_ui
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 70s ssh -F "$WORK/config" picm-host 'bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          cd /home/zomorod2/Saeit-staging
+          found=0
+          for py in "$PWD/.venv/bin/python" "$PWD/venv/bin/python" /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python /home/zomorod2/virtualenv/Saeit/3.11/bin/python /home/zomorod2/virtualenv/mojplaywin.com/3.11/bin/python; do
+            if test -x "$py" && "$py" -c 'import django' >/dev/null 2>&1; then
+              found=1
+              "$py" - <<'PY'
+          import os
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from types import SimpleNamespace
+          from django.test import RequestFactory
+          from core.picm_access import owner_id
+          from core.picm_views import picm_workbench
+          bound=owner_id()
+          assert bound is not None, 'PICM_OWNER_BINDING_MISSING'
+          req=RequestFactory().get('/picm/workspace/')
+          req.user=SimpleNamespace(pk=int(bound),is_authenticated=True,is_active=True)
+          response=picm_workbench(req)
+          assert response.status_code==200
+          html=response.content.decode('utf-8')
+          assert 'id="mode-text_image"' in html
+          assert 'id="text-image-options"' in html
+          assert 'id="mode" name="mode" value="text_image"' in html
+          assert 'id="mode-text_image" type="button" aria-pressed="true"' in html
+          assert "form.noValidate=selected" in html
+          assert 'fetch("/picm/api/submit/"' in html
+          assert '"/picm/api/status/"+id+"/"' in html
+          assert "۲۵۶" in html
+          print('PICM_OWNER_DEFAULT_MODE_LIVE_RENDER_OK')
+          req.user=SimpleNamespace(pk=-99009,is_authenticated=True,is_active=True)
+          assert picm_workbench(req).status_code==403
+          print('PICM_UNRELATED_USERS_STILL_DENIED')
+          PY
+              break
+            fi
+          done
+          test "$found" = 1
+          REMOTE
+          alive=0
+          for attempt in $(seq 1 12); do
+            homepage="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' https://mojplaywin.com/ || true)"
+            login="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' https://mojplaywin.com/picm/login/ || true)"
+            workspace="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' https://mojplaywin.com/picm/workspace/ || true)"
+            worker="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' https://mojplaywin.com/picm/worker/health/ || true)"
+            if [[ "$homepage" == 200 && "$login" == 200 && "$workspace" == 302 && "$worker" == 403 ]]; then alive=1; break; fi
+            sleep 3
+          done
+          test "$alive" = 1
+          echo PICM_MAIN_AND_PRIVATE_HTTP_HEALTH_OK
+      - name: Roll back only PICM templates when verification fails
+        if: failure() && steps.deploy_ui.outcome == 'success'
+        shell: bash
+        run: |
+          WORK="$RUNNER_TEMP/picm-ssh"
+          if test -f "$WORK/config"; then
+            stage="/home/zomorod2/.picm-owner-default-stage-$GITHUB_RUN_ID"
+            timeout 50s ssh -F "$WORK/config" picm-host \
+              "python3 $stage/scripts/picm_owner_default_release.py rollback $GITHUB_RUN_ID" || echo PICM_ROLLBACK_NEEDS_OPERATOR
+          fi
+      - name: Remove only the private transfer stage
+        if: always()
+        shell: bash
+        run: |
+          WORK="$RUNNER_TEMP/picm-ssh"
+          if test -f "$WORK/config"; then
+            ssh -F "$WORK/config" -o ConnectTimeout=8 picm-host \
+              "test ! -L /home/zomorod2/.picm-owner-default-stage-$GITHUB_RUN_ID && rm -rf /home/zomorod2/.picm-owner-default-stage-$GITHUB_RUN_ID" || true
+          fi
+          rm -f -- "$RUNNER_TEMP/picm-ui.tar"
+      - name: Remove private connection files
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/picm-ssh"

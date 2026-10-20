@@ -1,0 +1,46 @@
+name: PICM Full Production Workbench Mobile Smoke
+on:
+  push:
+    branches: [fix/picm-owner-submit-browser-20261020]
+    paths:
+      - scripts/picm_full_workbench_mobile_proof.py
+      - scripts/picm_owner_default_release.py
+      - tests/test_picm_owner_default_release.py
+      - templates/picm/index.html
+      - templates/picm/text_image.js
+      - templates/picm/free_motion.js
+      - templates/picm/story_preview.js
+      - .github/workflows/picm-full-workbench-mobile-ci.yml
+  pull_request:
+    paths:
+      - scripts/picm_full_workbench_mobile_proof.py
+      - templates/picm/index.html
+      - templates/picm/text_image.js
+      - templates/picm/free_motion.js
+      - templates/picm/story_preview.js
+      - .github/workflows/picm-full-workbench-mobile-ci.yml
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install only required Django and Playwright test tooling
+        run: python -m pip install -r requirements.txt 'playwright>=1.51,<2'
+      - name: Test two-file deployment integrity and rollback
+        env:
+          SECRET_KEY: picm-private-ci-only-key
+          DEBUG: 'False'
+          ALLOWED_HOSTS: mojplaywin.com,localhost,127.0.0.1
+        run: python -m pytest -q --noconftest tests/test_picm_owner_default_release.py
+      - name: Run actual complete PICM owner browser flow in mobile and desktop Chrome
+        env:
+          SECRET_KEY: test-only-picm-submit-mobile-ci
+          DEBUG: 'False'
+          ALLOWED_HOSTS: mojplaywin.com,localhost,127.0.0.1
+        run: python scripts/picm_full_workbench_mobile_proof.py

@@ -31,6 +31,9 @@ function forget(){try{sessionStorage.removeItem(key)}catch(_e){}}
 function clearOutput(){if(objectUrl){URL.revokeObjectURL(objectUrl);objectUrl=null}}
 function sync(){
   const selected=isText();
+  // Only this mode relies on our explicit validation to display a readable
+  // error instead of silently aborting native form submission on mobile.
+  form.noValidate=selected;
   textOptions.hidden=!selected;
   photo.required=!selected;
   photo.hidden=selected;
