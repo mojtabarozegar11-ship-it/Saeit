@@ -41,8 +41,9 @@ def transform(kind,raw,h,f):
     out=src[:o.end()]+h+src[o.end():]
     out=out.replace('</main>','</main>'+f,1).replace('</head>',LINK+'</head>',1)
     if out.count(MARK)!=1 or out.count(LINK)!=1 or out.count('<main')!=src.count('<main'):fail('Unexpected body mutation')
-    for protected in ('{% csrf_token %}','<form','payment','download','<script'):
+    for protected in ('{% csrf_token %}','<form','<script'):
         if out.count(protected)!=src.count(protected):fail('Commerce asset content modified: '+protected)
+    if out.replace(h,'',1).replace(f,'',1).replace(LINK,'',1)!=src:fail('Original buyer commerce contents not preserved byte-for-byte')
     if kind=='product_checkout' and ('{% csrf_token %}' not in out or '<script' not in out):fail('Order security components missing')
     return out.encode('utf8')
 def compile_django(pages):
