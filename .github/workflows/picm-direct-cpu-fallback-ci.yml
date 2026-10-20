@@ -17,6 +17,10 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: picm-isolated-test-only-secret
+      DEBUG: "False"
+      ALLOWED_HOSTS: localhost,127.0.0.1
     timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
