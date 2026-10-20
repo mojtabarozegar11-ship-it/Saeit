@@ -19,6 +19,16 @@ The master document is **not limited to 68 products**, a fixed inventory, a prod
 
 Until an agreement is validly executed and authority verified, `valid_execution_and_authority_evidence_verified=false` and `company_operational_permission.executed_agreement_verified=false`. A draft file, Git commit, successful CI, successful VPS backfill or owner statement is **not** proof of execution. Person and company are distinct parties, even if represented by one individual. Required corporate authorization must be checked before dual-capacity signing.
 
+## Owner-attested 1398 founding documents — 2026 text is separate
+
+The user supplied a company memorandum, articles of association, company registration screenshots and confirmed that the **historical foundational company documents were signed in 1398**. This is recorded as an **owner attestation**, not an inspection of actual signatures or official registry certification. The user is not required to upload a signature image.
+
+- Declared registration: company "شرکت کشت و صنعت زمرد ملل", *با مسئولیت محدود*, national ID `14008746024`, registration number `3110`, registration date `1398/08/16`, Marvdasht, Fars. Evidence source is supplied documents/screenshots; official registry independently checked = **false**.
+- The newer master rights text was drafted/reconstructed in 1405; its newly added clauses may **not** be described as signed in 1398 just because historical company documents were signed then.
+- The company and web storefront are a **technical/commercial sales-services platform**, not the automatic owner of product IP or automatically the merchant-of-record. The individual is the declared seller; exact legal name, gateway acceptance, settlement and invoicing require specific verification before taking payment.
+- Keep existing v4 product passports immutable. Add an independent private, read-only-once corporate-context v1 sidecar per exact artifact revision; status remains declaration-only, commercial release remains false.
+- Do not push scans, private addresses, signatures or confidential contracts into GitHub.
+
 ## Permanent policy vs. per-product evidence
 
 The master framework remains standing and is not re-signed per product. Product-specific provenance is still necessary for reliable third-party and customer clearance:
