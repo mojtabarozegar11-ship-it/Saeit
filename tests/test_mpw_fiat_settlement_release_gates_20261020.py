@@ -82,5 +82,26 @@ class MerchantFiatGateTests(unittest.TestCase):
             self.assertFalse(payout_is_independently_verified(**changed), key)
 
 
+    def test_invoice_creation_will_not_open_provider_before_complete_release_gates(self):
+        from mpw_fiat_to_trx_20261020.provider_adapter import create_invoice, MerchantNotReady
+        partial = {
+            "MPW_FIAT_ONRAMP_APPROVED": "1",
+            "MPW_FIAT_TRX_PAYOUT_VERIFIED": "1",
+            "NOWPAYMENTS_API_KEY": "redacted",
+            "NOWPAYMENTS_IPN_SECRET": "redacted",
+        }
+        opened = []
+        def fake_open(*args, **kwargs):
+            opened.append(True)
+            raise AssertionError("The provider must not be contacted")
+        with self.assertRaises(MerchantNotReady):
+            create_invoice(
+                "MPWF-ABCDEF12345678", "7.50", "Chess",
+                "https://mojplaywin.com/ipn/",
+                "https://mojplaywin.com/ok/",
+                "https://mojplaywin.com/cancel/",
+                env=partial, opener=fake_open)
+        self.assertEqual(opened, [])
+
 if __name__ == "__main__":
     unittest.main()
