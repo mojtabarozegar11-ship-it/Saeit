@@ -15,6 +15,12 @@ class Stage1Test(unittest.TestCase):
   with tempfile.TemporaryDirectory() as t:
    with self.assertRaises(ValueError):
     worker.run(t,max_new=44)
+ def test_installer_reserves_256_mib_in_kib_and_reports_failure_stage(self):
+  script=(Path(__file__).resolve().parents[1]/"deploy"/"install_mpw_stage1_technical_repair.sh").read_text()
+  self.assertIn('df -Pk "$root"',script)
+  self.assertIn('test "$free_kib" -lt 262144',script)
+  self.assertNotIn('df -Pm "$root"',script)
+  self.assertIn('MPW_STAGE1_INSTALL_FAILURE_STAGE=',script)
  def test_no_human_approvals_in_outcome(self):
   with tempfile.TemporaryDirectory() as t:
    root=Path(t)
