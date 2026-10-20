@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""Build authentic, private owner-review packets for factory manufacturing orders.
+
+Strictly NO fabricated passport, review, evidence, product approval or website write.
+Existing factory orders and QA results stay unmodified. Python stdlib only.
+"""
+import argparse
+from collections import Counter
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import tempfile
+
+ORDER = re.compile(r"^WO-[0-9]{8}\.json$")
+SCHEMA = "saeit.factory.owner-review-queue.v1"
+PASSPORT_FIELDS = (
+    "work_order","title","product_type","version","origin","target_audience",
+    "problem_solved","deliverables","file_formats","language","scope",
+    "prerequisites","acceptance_criteria","sources","asset_licenses",
+    "technical_dependencies","stages_and_owners","resource_budget","sensitivity",
+    "producer_id","independent_reviewer_id","human_review_required"
+)
+
+def load(path):
+    p = Path(path)
+    if p.is_symlink() or not p.is_file() or p.stat().st_size > 500000:
+        raise RuntimeError("REVIEW_UNTRUSTED_SOURCE")
+    obj = json.loads(p.read_text(encoding="utf8"))
+    if not isinstance(obj, dict):
+        raise RuntimeError("REVIEW_EXPECTED_OBJECT")
+    return obj
+
+def safe_dir(path):
+    p = Path(path)
+    if p.is_symlink():
+        raise RuntimeError("REVIEW_SYMLINK_DIRECTORY")
+    p.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if not p.is_dir() or p.is_symlink():
+        raise RuntimeError("REVIEW_NOT_DIRECTORY")
+    os.chmod(p, 0o700)
+    return p
+
+def serialize(value):
+    return (json.dumps(value, sort_keys=True, ensure_ascii=False, indent=2)+"\n").encode("utf8")
+
+def save(path, value, immutable=False):
+    p = Path(path)
+    safe_dir(p.parent)
+    raw = serialize(value)
+    if p.is_symlink():
+        raise RuntimeError("REVIEW_SYMLINK_DESTINATION")
+    if p.exists() and immutable:
+        if p.read_bytes() != raw:
+            raise RuntimeError("REVIEW_IMMUTABLE_PACKET_CHANGED")
+        return False
+    fd, name = tempfile.mkstemp(prefix=".review-", dir=str(p.parent))
+    try:
+        with os.fdopen(fd,"wb") as stream:
+            stream.write(raw); stream.flush(); os.fsync(stream.fileno())
+        os.chmod(name, 0o600)
+        os.replace(name, p)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
+    return True
+
+def build(root):
+    root = Path(root)
+    if not root.is_dir() or root.is_symlink():
+        raise RuntimeError("REVIEW_FACTORY_ROOT_INVALID")
+    inbox = root/"production-instructions"/"orders"
+    if not inbox.is_dir() or inbox.is_symlink():
+        raise RuntimeError("REVIEW_INSTRUCTIONS_MISSING")
+    queue = safe_dir(root/"product-lifecycle"/"owner-review-queue")
+    lock_path = queue/".owner-review.lock"
+    if lock_path.is_symlink():
+        raise RuntimeError("REVIEW_LOCK_SYMLINK")
+    with lock_path.open("a+b") as lock:
+        os.fchmod(lock.fileno(), 0o600)
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        counts = Counter()
+        packets = []
+        files = sorted(inbox.iterdir())
+        if len(files)>15000:
+            raise RuntimeError("REVIEW_UNEXPECTED_ORDER_VOLUME")
+        for p in files:
+            if p.is_symlink() or not p.is_file() or not ORDER.fullmatch(p.name):
+                raise RuntimeError("REVIEW_UNEXPECTED_ORDER_SOURCE")
+            item = load(p)
+            if item.get("id") != p.stem or item.get("status") not in (
+                "issued", "in_engineering", "blocked_rework", "completed_verified"
+            ):
+                raise RuntimeError("REVIEW_BAD_ORDER_PROVENANCE")
+            if item.get("phase")=="research_rework":
+                counts["research_waiting_for_real_evidence"] += 1
+                continue
+            counts["manufacturing_orders"] += 1
+            source_sha = hashlib.sha256(p.read_bytes()).hexdigest()
+            passport_file = root/"product-lifecycle"/"passports"/(p.stem+".json")
+            passport = load(passport_file) if passport_file.exists() else {}
+            present = sorted(k for k in PASSPORT_FIELDS if passport.get(k) not in (None,"",[]))
+            missing = sorted(set(PASSPORT_FIELDS)-set(present))
+            if not passport:
+                counts["missing_passport"] += 1
+            elif missing:
+                counts["incomplete_passport"] += 1
+            else:
+                counts["passport_requires_independent_validation"] += 1
+            packet = {
+                "schema": SCHEMA, "work_order": p.stem,
+                "source_instruction_sha256": source_sha,
+                "source_state": item["status"],
+                "source_phase": str(item.get("phase","unclassified"))[:100],
+                "source_origin": str(item.get("origin","unclassified"))[:100],
+                "source_subject": str(item.get("subject",""))[:240],
+                "passport_fields_present": present,
+                "passport_fields_missing": missing,
+                "requires_real_sources": True,
+                "requires_independent_human_review": True,
+                "reviewer_signature_present": False,
+                "manufacturing_approval": False,
+                "commercial_release": False,
+                "store_publication": False,
+                "review_checklist": [
+                    "Supply genuine source evidence and verifiable artifact hashes.",
+                    "Complete product passport with real owners, formats, licenses and acceptance criteria.",
+                    "Perform independent specialist review under the existing signed gate.",
+                    "Create only authentic signed stage receipts; never auto-approve.",
+                    "Publish only after the separate current release-manifest gate passes."
+                ],
+            }
+            location = queue/p.stem/(source_sha+".json")
+            if save(location, packet, immutable=True):
+                counts["new_private_packets"] += 1
+            packets.append({"work_order":p.stem,"source_sha256":source_sha,
+                            "passport_complete":not missing})
+        summary = {"schema":SCHEMA,"status":"pending_authentic_owner_and_specialist_evidence",
+                   "counts":dict(sorted(counts.items())),"packets":packets,
+                   "approval_records_written":0,"products_activated":0,
+                   "payments_created":0,"sites_contacted":0}
+        save(queue/"dashboard.json", summary)
+        return summary
+
+if __name__=="__main__":
+    p=argparse.ArgumentParser()
+    p.add_argument("--factory-private-root", required=True)
+    args=p.parse_args()
+    outcome=build(args.factory_private_root)
+    print("FACTORY_REVIEW_PACKETS="+json.dumps(outcome["counts"],sort_keys=True))
+    print("FACTORY_REVIEW_NO_AUTO_APPROVAL=PASS")
