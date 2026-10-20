@@ -77,4 +77,23 @@ if file.is_file() and not file.is_symlink():
   'invoice_page_link':'/commerce/invoice/' in source,
   'receipt_url_binding':'receipt_url' in source,
   'uses_eth_and_trx':'ETH' in source and 'TRX' in source})
+from django.urls import resolve
+for route in ('/commerce/my-purchases/','/commerce/checkout/status/123/','/commerce/checkout/invoice/'):
+ try:
+  match=resolve(route)
+  target=inspect.unwrap(match.func)
+  mod=__import__(target.__module__,fromlist=['_'])
+  path=Path(mod.__file__)
+  source=path.read_text('utf8','replace')
+  tree=ast.parse(source)
+  node=next((n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name==target.__name__),None)
+  if node is None:
+   show('MPW_BILLING_HANDLER',{'route':route,'handler':target.__name__,'ast':False})
+   continue
+  code=ast.get_source_segment(source,node) or ''
+  sensitive=('password','private_key','api_key','mnemonic','authorization','bearer','credential')
+  lines=[('[redacted]' if any(s in line.lower() for s in sensitive) else line[:210]) for line in code.splitlines()[:135]]
+  show('MPW_BILLING_HANDLER',{'route':route,'module':target.__module__,'function':target.__name__,'lines':lines})
+ except Exception as exc:
+  show('MPW_BILLING_HANDLER',{'route':route,'exception_type':type(exc).__name__})
 print('MPW_BILLING_SOURCE_READONLY=PASS')
