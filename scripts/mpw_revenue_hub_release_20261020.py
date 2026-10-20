@@ -51,12 +51,14 @@ def publish(run):
     if docs["earn/index.html"].count(b'/earn/')<12:fail("Insufficient catalog links")
     if b"<urlset" not in docs["earn/sitemap.xml"]:fail("Invalid sitemap")
     stage.mkdir(mode=0o755)
+    stage.chmod(0o755)
     try:
         checks={}
         for path,body in docs.items():
             rel=Path(path).relative_to("earn")
             p=stage/rel
             p.parent.mkdir(parents=True,exist_ok=True)
+            p.parent.chmod(0o755)
             p.write_bytes(body)
             p.chmod(0o644)
             checks[str(rel)]=sha(body)
