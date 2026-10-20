@@ -1,0 +1,42 @@
+name: Factory site-order evidence and bounded queue regression
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/mpw_vps_warehouse_courier.py"
+      - "tests/test_mpw_three_bidirectional_orders.py"
+      - ".github/workflows/mpw-three-orders-evidence-ci-20261020.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/mpw_vps_warehouse_courier.py"
+      - "tests/test_mpw_three_bidirectional_orders.py"
+      - ".github/workflows/mpw-three-orders-evidence-ci-20261020.yml"
+permissions: {contents: read}
+jobs:
+  offline-verification:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Exercise independent evidence and bounded native work orders
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_three_bidirectional_orders -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_vps_warehouse_courier -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_native_customer_packager -v
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('scripts/mpw_vps_warehouse_courier.py').read_text()
+          assert 'SITE_PENDING_WORK_ORDER_LIMIT=9' in s
+          assert 'work_orders_completed_verified' in s
+          assert 'substantive_source_rebuild_verified' in s
+          assert 'customer_sale_authorized' in s
+          assert 'waiting_for_bounded_site_capacity' in s
+          assert 'SITE_TRIAGE_SCHEMA' in s
+          assert 'publish_verified_factory_store_listing' not in s
+          print('FACTORY_SITE_ORDER_REAL_PROVENANCE_AND_LIMIT_GATE=PASS')
+          PY
