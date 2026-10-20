@@ -17,7 +17,7 @@ def load(name, path):
     return module
 
 maker = load("passport_factory_maker", "scripts/factory_product_maker.py")
-policy = load("passport_policy", "scripts/factory_private_product_passport_policy_20261020.py")
+policy = load("passport_policy", "scripts/factory_personal_owner_passport_policy_20261020.py")
 
 
 class PrivatePassportTests(unittest.TestCase):
@@ -51,11 +51,14 @@ class PrivatePassportTests(unittest.TestCase):
         self.assertEqual(p["artifact_sha256"], meta["artifact_sha256"])
         self.assertEqual(p["declared_person"], "مجتبی روزگار")
         self.assertEqual(len(p["declared_roles"]), 7)
-        self.assertIsNone(p["economic_rights"])
+        self.assertEqual(p["economic_rights"][0]["party"], "مجتبی روزگار")
+        self.assertEqual(p["economic_rights"][0]["percent"], 100)
+        self.assertEqual(p["company_role"], "execution_technology_and_commercial_platform_only_not_rights_owner")
+        self.assertEqual(p["schema"], "saeit.factory.private-product-passport.v3")
         self.assertEqual(p["verified_roles"], [])
         self.assertFalse(p["commercial_release_allowed"])
         self.assertFalse(p["public_store_role_display"])
-        self.assertFalse(p["exclusive_sales_license"]["executed_agreement_verified"])
+        self.assertFalse(p["company_operational_permission"]["executed_agreement_verified"])
         with zipfile.ZipFile(str(folder / (self.slug + "-internal-qa.zip"))) as archive:
             self.assertFalse(any("passport" in name for name in archive.namelist()))
 
@@ -84,7 +87,7 @@ class PrivatePassportTests(unittest.TestCase):
         legacy = dict(meta)
         legacy.pop("source_sha256")
         result = policy.ensure_private_passport(folder, legacy)
-        self.assertIn(".source_missing.private.json", result["passport_file"])
+        self.assertIn(".source_missing.personal_owner_v3.private.json", result["passport_file"])
         p = json.loads((folder / result["passport_file"]).read_text("utf8"))
         self.assertIsNone(p["source_sha256"])
         self.assertEqual(p["source_provenance_status"],
@@ -104,14 +107,29 @@ class PrivatePassportTests(unittest.TestCase):
                 policy.ensure_private_passport(folder, changed)
 
     def test_owner_declaration_does_not_fabricate_rights_or_signed_license(self):
-        with self.assertRaisesRegex(ValueError, "PASSPORT_OWNERSHIP_SHARES_INVALID"):
+        with self.assertRaisesRegex(ValueError, "PASSPORT_PERSONAL_OWNER_DECLARATION_ONLY"):
             policy.build_passport(self.slug, ownership=[
                 {"party": "company", "percent": 60}, {"party": "person", "percent": 30}])
         with self.assertRaisesRegex(ValueError, "PASSPORT_ROLE_EVIDENCE_REQUIRED"):
             policy.build_passport(self.slug, verified_roles=["author"])
         declaration = policy.build_passport(self.slug)
         self.assertFalse(declaration["third_party_rights_cleared"])
-        self.assertIsNone(declaration["economic_rights"])
+        self.assertEqual(declaration["economic_rights"], [{
+            "party": "مجتبی روزگار",
+            "percent": 100,
+            "status": "owner_declared_pending_title_evidence",
+        }])
+        self.assertFalse(declaration["company_operational_permission"]["executed_agreement_verified"])
+        self.assertFalse(declaration["seller_legal_identity_and_payment_compliance_verified"])
+
+    def test_v3_sidecar_does_not_rewrite_historical_v2_record(self):
+        _, folder, meta, _ = self.build()
+        v2 = folder / ("product_passport." + meta["artifact_sha256"] + ".private.json")
+        v2.write_text('{"schema":"saeit.factory.private-product-passport.v2"}', encoding="utf8")
+        before = v2.read_bytes()
+        result = policy.ensure_private_passport(folder, meta)
+        self.assertIn(".personal_owner_v3.private.json", result["passport_file"])
+        self.assertEqual(v2.read_bytes(), before)
 
     def test_backfill_existing_versions_idempotently(self):
         _, folder, meta, passport = self.build()
