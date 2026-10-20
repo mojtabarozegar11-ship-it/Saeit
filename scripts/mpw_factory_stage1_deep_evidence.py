@@ -127,7 +127,7 @@ def validate_member(name,raw):
         must(root.tag.split("}")[-1].lower()=="svg","SVG_BAD_ROOT")
         return "svg_xml_root_parse"
     if ext in (".md",".txt",".html",".css",".js",".csv",".py"):
-        raw.decode("utf8-sig")
+        raw.decode("utf-8-sig")
         return "full_utf8_decoding"
     return "static_signature_only_requires_native_specialist_review"
 
