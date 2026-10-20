@@ -169,6 +169,45 @@ jobs:
           else:
               print('PICM_WORKER_LOG_MISSING')
           PY
+      - name: Classify previous private ComfyUI boot failure safely
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 35s ssh -F "$WORK/config" picm-vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import os, time
+          root=Path.home()/'comfyui-isolated'
+          python=root/'env-cpu/bin/python'
+          source=root/'source-v0.40.0/main.py'
+          controller=Path.home()/'.local/share/saeit-picm/control.sh'
+          print('PICM_PYTHON_READY' if python.is_file() and os.access(python,os.X_OK) else 'PICM_PYTHON_MISSING')
+          print('PICM_MAIN_READY' if source.is_file() else 'PICM_MAIN_MISSING')
+          print('PICM_CONTROLLER_READY' if controller.is_file() else 'PICM_CONTROLLER_MISSING')
+          pidfile=root/'.control/comfyui.pid'
+          if pidfile.is_file():
+              try:
+                  pid=int(pidfile.read_text().strip())
+                  alive=(Path('/proc')/str(pid)).is_dir()
+              except (OSError,ValueError):
+                  alive=False
+              print('PICM_COMFYUI_PID_ACTIVE' if alive else 'PICM_COMFYUI_PID_STALE')
+          else:
+              print('PICM_COMFYUI_PID_ABSENT')
+          p=root/'.control/comfyui.log'
+          if p.is_file() and not p.is_symlink():
+              tail=p.read_text(errors='replace').splitlines()[-600:]
+              print('PICM_COMFYUI_LAST_LOG_AGE_SECONDS='+str(int(time.time()-p.stat().st_mtime)))
+              print('PICM_COMFYUI_LOG_LINES_SCANNED='+str(len(tail)))
+              clues=['ModuleNotFoundError','No module named','ImportError','RuntimeError','PermissionError','Address already in use','Illegal instruction','Cannot allocate memory','No space left on device','Killed','Traceback','Failed to import','Error loading']
+              for phrase in clues:
+                  matches=sum(1 for line in tail if phrase.lower() in line.lower())
+                  if matches:
+                      print('PICM_COMFYUI_LOG_CLUE_'+phrase.upper().replace(' ','_')+'='+str(matches))
+              print('PICM_COMFYUI_LOG_SCAN_OK')
+          else:
+              print('PICM_COMFYUI_LOG_UNAVAILABLE')
+          PY
       - name: Check private cPanel PICM installation without reading private data
         shell: bash
         run: |
