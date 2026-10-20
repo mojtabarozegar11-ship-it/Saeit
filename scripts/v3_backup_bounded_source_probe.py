@@ -33,7 +33,7 @@ def connection():
             if file.is_symlink() or not file.is_file() or file.stat().st_size > 65536:
                 continue
             for line in file.read_text("utf8", errors="replace").splitlines():
-                m = re.match(r"^\\s*(?:export\\s+)?DATABASE_URL\\s*=\\s*(.*?)\\s*$", line)
+                m = re.match(r"^\s*(?:export\s+)?DATABASE_URL\s*=\s*(.*?)\s*$", line)
                 if m:
                     p = urlsplit(m.group(1).strip().strip('"').strip("'"))
                     if p.scheme.lower() not in ("mysql", "mariadb", "mysql2"):
@@ -131,6 +131,9 @@ def main():
     mode = sys.argv[1]
     if mode == "fixture":
         import tempfile
+        # Verify the env parser accepts the real syntax before any remote probing.
+        assert re.match(r"^\s*(?:export\s+)?DATABASE_URL\s*=\s*(.*?)\s*$",
+                        'export DATABASE_URL=mysql://sample:sample@localhost/sample')
         with tempfile.TemporaryDirectory() as temp:
             dummy = [sys.executable, "-c", "import sys;sys.stdout.buffer.write(b'x'*262144)"]
             probe = sample(dummy, ceiling=131072, seconds=5)
