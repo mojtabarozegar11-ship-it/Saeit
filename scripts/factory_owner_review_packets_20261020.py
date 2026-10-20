@@ -251,12 +251,26 @@ def linked_specialist_review(root, wo, order, source_sha):
         matched.append({
             "status":"authentic_automated_format_evidence_available",
             "source_bound_specialist_sha256":fingerprint,
+            "source_original_provenance_restored":(
+                result.get("family_provenance_source")=="sha256_matched_original_manufacturing_qa"
+                and isinstance(result.get("family_provenance_receipt_sha256"),str)
+                and bool(sha_re.fullmatch(result["family_provenance_receipt_sha256"]))
+                and proof.get("family_id")==result.get("family_id")),
             "format_prescreen_passed":result.get("automated_format_prescreen_passed") is True,
             "technical_blockers":blocks,
             "expert_review_completed":False,
             "rights_approved":False,
             "owner_release_approved":False})
     if len(matched)>1:
+        # The same immutable stock may have a historical missing-family prescreen
+        # followed by one hash-bound original-manufacturing-QA recovery. Retain
+        # historical evidence without mistaking it for a current conflicting QA.
+        restored=[x for x in matched if x["source_original_provenance_restored"]]
+        historical=[x for x in matched if not x["source_original_provenance_restored"]]
+        if (len(restored)==1 and len(historical)==len(matched)-1
+                and all("MISSING_OR_UNSUPPORTED_FAMILY_PROVENANCE" in
+                        x["technical_blockers"] for x in historical)):
+            return restored[0]
         raise RuntimeError("OWNER_SPECIALIST_MULTIPLE_CURRENT_QA")
     return matched[0] if matched else pending
 
