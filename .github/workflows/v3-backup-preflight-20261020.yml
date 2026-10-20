@@ -125,6 +125,20 @@ jobs:
                       output[kind+"_"+label+"_bytes"]=None
           print(json.dumps(output,sort_keys=True))
           PY
+      - name: Verify 8 MiB synthetic cPanel-to-VPS stream over pinned SSH, no customer data
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 -c 'import sys;sys.stdout.buffer.write(b\"R\"*8388608)'" |
+            timeout 60s ssh -T -F "$d/config" saeit-vps "python3 -c 'import sys;d=sys.stdin.buffer.read(8388609);assert len(d)==8388608 and d==b\"R\"*8388608;print(\"V3_PINNED_SSH_8M_SYNTHETIC_RELAY=PASS\")'"
+      - name: Verify synthetic GPG AES256 encrypt/decrypt on VPS only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 75s ssh -T -F "$d/config" saeit-vps 'python3 - selftest' < scripts/mojplaywin_backup_encrypt_vps_gpg.py
+          echo 'V3_GPG_SYNTHETIC_CRYPTO_PROBE_COMPLETE'
       - name: Remove temporary SSH material
         if: always()
         shell: bash
