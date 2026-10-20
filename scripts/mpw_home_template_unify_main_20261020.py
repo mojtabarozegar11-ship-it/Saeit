@@ -39,7 +39,7 @@ def once(regex,text,key):
     return hits[0]
 def shell():
     text=HOME.read_text('utf8')
-    if text.count(MARK) or not text.lstrip().lower().startswith('<!doctype html'):fail('Unexpected home source; leading='+repr(text[:70])+' marker_count='+str(text.count(MARK)))
+    if text.count(MARK) or '<!doctype html' not in text[:240].lower():fail('Unexpected home source; leading='+repr(text[:70])+' marker_count='+str(text.count(MARK)))
     h=once(HEAD,text,'home header').group(0)
     f=once(FOOT,text,'home footer').group(0)
     if 'mw-all-pages-menu' not in h or '12 Revenue Tools' not in h:fail('Corrected homepage revenue menu not present')
