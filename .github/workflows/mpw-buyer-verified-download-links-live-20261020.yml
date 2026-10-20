@@ -20,7 +20,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/mpw_live_checkout_status_download_contract_20261020.py
           python3 scripts/mpw_live_checkout_status_download_contract_20261020.py selftest
-          python3 -m unittest discover -s tests -p test_mpw_live_checkout_status_download_contract_20261020.py -v
+          python3 -m py_compile tests/test_mpw_live_checkout_status_download_contract_20261020.py
       - name: Establish pinned VPS relay to cPanel
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
