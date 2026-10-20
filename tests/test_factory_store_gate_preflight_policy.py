@@ -40,6 +40,21 @@ class NativeStoreGatePreflightPolicy(unittest.TestCase):
         self.assertNotIn('FactoryReleaseGate.objects.create(', text)
         self.assertNotIn('factory_managed=False', text)
 
+    def test_failure_rollback_is_exactly_scoped_and_hash_guarded(self):
+        source = FLOW.read_text(encoding="utf-8")
+        stage = "      - name: Stage release importer and narrowly update Django store card markup"
+        rollback = "      - name: Restore only the MojPlayWin store template if downstream checks fail"
+        clean = "      - name: Clean temporary SSH keys"
+        self.assertLess(source.index(stage), source.index(rollback))
+        self.assertLess(source.index(rollback), source.index(clean))
+        self.assertIn("if: failure() && steps.stage.outcome != 'skipped'", source)
+        self.assertIn('GITHUB_RUN_ATTEMPT=$GITHUB_RUN_ATTEMPT', source)
+        self.assertIn('store-template-before-factory-run-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.html', source)
+        self.assertIn('STORE_ROLLBACK_CONCURRENT_CHANGE_REFUSED', source)
+        self.assertIn('FACTORY_STORE_TEMPLATE_SCOPED_ROLLBACK_VERIFIED', source)
+        self.assertIn('if hashlib.sha256(current).hexdigest()!=sha:', source)
+        self.assertIn('os.replace(name,target)', source)
+
     def test_protected_django_site_deploy_remains_locked(self):
         text = (ROOT / ".github/workflows/mojplaywin-main-deploy.yml").read_text(encoding="utf-8")
         self.assertIn('if: ${{ false }}', text)
