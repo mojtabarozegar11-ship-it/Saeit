@@ -8,13 +8,42 @@ on:
       - "scripts/factory_zip_transport_shards_20261020.py"
       - "tests/test_factory_zip_transport_shards_20261020.py"
       - ".github/workflows/vps-factory-owner-review-packets-20261020.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/factory_owner_review_packets_20261020.py"
+      - "tests/test_factory_owner_review_packets_20261020.py"
+      - ".github/workflows/vps-factory-owner-review-packets-20261020.yml"
   workflow_dispatch:
 permissions: {contents: read}
 concurrency:
   group: saeit-private-owner-review-packets
   cancel-in-progress: false
 jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify source-linked owner's real specialist evidence and no licenses granted
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_owner_review_packets_20261020.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_owner_review_packets_20261020 -v
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('scripts/factory_owner_review_packets_20261020.py').read_text()
+          assert 'linked_specialist_review' in src
+          assert '"expert_review_completed":False' in src
+          assert '"owner_release_approved":False' in src
+          assert '"commercial_release": False' in src
+          assert 'verified_private_technical_prescreen' in src
+          print('OWNER_PACKET_REAL_EVIDENCE_INTEGRITY=PASS')
+          PY
   prepare:
+    needs: preflight
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 12
