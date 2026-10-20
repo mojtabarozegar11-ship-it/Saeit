@@ -1,0 +1,117 @@
+name: First F34 factory commercial pilot independent buyer archive gate
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_f34_commercial_pilot_20261020.py"
+      - "tests/test_factory_f34_commercial_pilot_20261020.py"
+      - ".github/workflows/factory-f34-commercial-pilot-gate-20261020.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/factory_f34_commercial_pilot_20261020.py"
+      - "tests/test_factory_f34_commercial_pilot_20261020.py"
+      - ".github/workflows/factory-f34-commercial-pilot-gate-20261020.yml"
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: factory-f34-one-source-pilot-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Execute real ZIP, PNG, SVG, SHA and buyer-preview negative tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_f34_commercial_pilot_20261020.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_f34_commercial_pilot_20261020 -v
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('scripts/factory_f34_commercial_pilot_20261020.py').read_text()
+          for forbidden in ("requests.post(","urllib.request","Product.objects","subprocess.run("):
+              assert forbidden not in src,forbidden
+          assert '"commercial_publication_allowed":False' in src
+          assert '"buyer_access_enabled":False' in src
+          assert '"independent_license_and_asset_rights_signed":False' in src
+          print("FACTORY_F34_REAL_ASSET_INDEPENDENT_GATE_CI=PASS")
+          PY
+  private-pilot:
+    needs: preflight
+    if: github.event_name != 'pull_request' && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Run original-asset technical acceptance and write SHA-bound private pilot on VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/f34-acceptance"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          stage="/home/githubops/factory-runtime/operations/.f34-commercial-pilot-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          timeout 40s ssh -T -F "$d/config" saeit-vps "umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
+          scp -q -F "$d/config" scripts/factory_f34_commercial_pilot_20261020.py "saeit-vps:$stage/accept.py"
+          want="$(sha256sum scripts/factory_f34_commercial_pilot_20261020.py|awk '{print $1}')"
+          timeout 40s ssh -T -F "$d/config" saeit-vps "test ! -L '$stage/accept.py' && test \"\$(sha256sum '$stage/accept.py'|awk '{print \$1}')\" = '$want'"
+          timeout 145s ssh -T -F "$d/config" saeit-vps \
+            "PYTHONDONTWRITEBYTECODE=1 python3 -B '$stage/accept.py' --factory-private-root /home/githubops/factory-runtime/private/autonomous-product-cycle" \
+            > "$d/pilot.txt"
+          python3 - "$d/pilot.txt" <<'PY'
+          import json,sys
+          lines=open(sys.argv[1]).read().splitlines()
+          assert len(lines)==2 and lines[0].startswith("REAL_F34_PILOT_COMMERCIAL_GATE=")
+          assert lines[1]=="REAL_F34_PILOT_NO_FALSE_COMMERCIAL_RELEASE=PASS"
+          data=json.loads(lines[0].split("=",1)[1])
+          assert data["member_count"]==100 and data["pairs_verified"]==48
+          assert data["commercial_blockers"]==5 and data["sale_enabled"] is False
+          assert data["owner_direction_present"] is True
+          print(lines[0]);print(lines[1])
+          PY
+          timeout 50s ssh -T -F "$d/config" saeit-vps python3 - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path.home()/'factory-runtime/private/autonomous-product-cycle'
+          where=root/'product-lifecycle/commercial-pilot-readiness'
+          files=list(where.glob('fieldwork_ui_48_icons-*.json'))
+          assert 1<=len(files)<=25
+          for f in files:
+              assert f.is_file() and not f.is_symlink()
+              obj=json.loads(f.read_text())
+              assert obj['product_id']=='fieldwork_ui_48_icons'
+              assert obj['distinct_svg_png_pairs_verified']==48
+              assert obj['commercial_publication_allowed'] is False
+              assert obj['sales_created']==0 and obj['buyer_access_enabled'] is False
+              assert obj['original_zip_sha256'] in f.name
+          print('REAL_F34_PRIVATE_PILOT_PASSPORT_READBACK='+str(len(files)))
+          print('REAL_F34_NO_SITE_PAYMENT_OR_FACTORY_ZIP_MUTATION=PASS')
+          PY
