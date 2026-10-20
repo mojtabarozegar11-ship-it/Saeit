@@ -4,7 +4,6 @@ import binascii
 import json
 import struct
 import sys
-import time
 import zlib
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,6 +17,7 @@ django.setup()
 from django.test import RequestFactory
 from django.core.files.uploadedfile import SimpleUploadedFile
 from core.picm_views import picm_reference_stage, picm_reference_status, locked
+from core.picm_access import owner_id
 
 
 def make_png():
@@ -35,11 +35,16 @@ def make_png():
 def main():
     image = make_png()
     factory = RequestFactory()
+    bound_owner = owner_id()
+    if bound_owner is None:
+        raise RuntimeError("PICM_OWNER_BINDING_MISSING")
+    # Use the existing bound owner ID, never a fake user. The authorization
+    # gate must remain intact; synthetic files are deleted in the finally block.
+    owner = SimpleNamespace(pk=int(bound_owner), is_authenticated=True, is_active=True)
     created = []
     try:
         for index, mode in enumerate(("image_edit", "image_video", "upscale_8k")):
-            user = SimpleNamespace(pk=-(int(time.time()) + 713000 + index),
-                                   is_authenticated=True)
+            user = owner
             prompt = "" if mode == "upscale_8k" else "Synthetic reference upload test"
             request = factory.post("/picm/api/reference/", data={
                 "mode": mode, "prompt": prompt,
