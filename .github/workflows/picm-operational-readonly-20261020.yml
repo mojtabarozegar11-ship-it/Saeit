@@ -1,0 +1,171 @@
+name: PICM Isolated Operations Read-Only Audit
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+jobs:
+  check:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: PICM isolated readiness audit 2026-10-20'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure pinned relay and cPanel SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          WORK="$RUNNER_TEMP/picm-ssh"
+          install -d -m 700 "$WORK"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$WORK/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$WORK/host.key"
+          chmod 600 "$WORK/"*.key
+          ssh-keygen -y -P '' -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$WORK/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$WORK/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$WORK/config" <<EOF
+          Host picm-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          timeout 30s ssh -F "$WORK/config" picm-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$WORK/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat >> "$WORK/config" <<EOF
+          Host picm-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump picm-vps
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          echo PICM_RELAY_READY
+      - name: Check ffmpeg binaries and encoder support without doing any render
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          for host in picm-host picm-vps; do
+            echo "PICM_VIDEO_HOST_CHECK_$host"
+            timeout 35s ssh -F "$WORK/config" "$host" 'bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          if command -v ffmpeg >/dev/null 2>&1; then
+            echo PICM_FFMPEG_PRESENT
+            ffmpeg -hide_banner -version 2>&1 | head -n 1
+            ffmpeg -hide_banner -encoders 2>/dev/null | grep -E 'libx264|mpeg4|libvpx|h264_' | head -n 10 || true
+          else
+            echo PICM_FFMPEG_NOT_PRESENT
+          fi
+          if command -v avconv >/dev/null 2>&1; then
+            echo PICM_AVCONV_PRESENT
+          else
+            echo PICM_AVCONV_MISSING
+          fi
+          echo PICM_READ_ONLY_ENCODER_CHECK_OK
+          REMOTE
+          done
+      - name: Inspect isolated VPS hardware and private PICM worker
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 45s ssh -F "$WORK/config" picm-vps 'bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          echo PICM_VPS_INSPECTION_START
+          echo "PICM_CPU_CORES=$(getconf _NPROCESSORS_ONLN)"
+          awk '/^model name/{print "PICM_CPU_MODEL="$0; exit}' /proc/cpuinfo || true
+          awk '/^MemTotal:|^MemAvailable:/{print "PICM_MEMORY="$0}' /proc/meminfo
+          df -Pk "$HOME" | awk 'NR==2{print "PICM_DISK_AVAILABLE_KB="$4}'
+          if command -v nvidia-smi >/dev/null 2>&1; then
+            echo PICM_NVIDIA_SMI_PRESENT
+            timeout 5s nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || echo PICM_NVIDIA_QUERY_UNAVAILABLE
+          elif test -e /dev/nvidia0; then
+            echo PICM_NVIDIA_DEVICE_PRESENT
+          else
+            echo PICM_NVIDIA_NOT_DETECTED
+          fi
+          if command -v lspci >/dev/null 2>&1; then lspci | grep -Ei 'VGA compatible|3D controller|Display controller' || true; fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          root=Path.home()/'.local/share/saeit-picm'
+          pidfile=root/'worker.pid'
+          token=root/'worker-token'
+          print('PICM_WORKER_TOKEN_FILE_PRESENT' if token.is_file() and not token.is_symlink() else 'PICM_WORKER_TOKEN_FILE_MISSING')
+          running=False
+          try:
+              pid=int(pidfile.read_text().strip())
+              cmdline=(Path('/proc')/str(pid)/'cmdline').read_bytes().replace(b'\0', b' ')
+              os.kill(pid, 0)
+              running=b'saeit-picm/worker.py' in cmdline
+          except (OSError,ValueError):
+              pass
+          print('PICM_WORKER_RUNNING' if running else 'PICM_WORKER_NOT_RUNNING')
+          print('PICM_COMFYUI_CODE_PRESENT' if (Path.home()/'comfyui-isolated/source-v0.40.0/main.py').is_file() else 'PICM_COMFYUI_CODE_NOT_FOUND')
+          PY
+          echo PICM_VPS_INSPECTION_COMPLETE
+          REMOTE
+      - name: Check private cPanel PICM installation without reading private data
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 40s ssh -F "$WORK/config" picm-host 'bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          echo PICM_CPANEL_INSPECTION_START
+          test -f "$HOME/Saeit-staging/core/picm_views.py" && echo PICM_VIEWS_INSTALLED || echo PICM_VIEWS_MISSING
+          test -f "$HOME/Saeit-staging/templates/picm/index.html" && echo PICM_WORKSPACE_TEMPLATE_INSTALLED || echo PICM_WORKSPACE_TEMPLATE_MISSING
+          if test -f "$HOME/.picm-queue/.owner-user-id" && test ! -L "$HOME/.picm-queue/.owner-user-id"; then
+            echo PICM_OWNER_BINDING_PRESENT
+          else
+            echo PICM_OWNER_BINDING_MISSING
+          fi
+          if test -f "$HOME/.picm-queue/worker-token" && test ! -L "$HOME/.picm-queue/worker-token"; then
+            echo PICM_HOST_WORKER_TOKEN_PRESENT
+          else
+            echo PICM_HOST_WORKER_TOKEN_MISSING
+          fi
+          if test -d "$HOME/.picm-queue"; then
+            count="$(find "$HOME/.picm-queue" -maxdepth 1 -type f -name '*.stage.json' | wc -l)"
+            echo "PICM_PRIVATE_PENDING_REFERENCE_COUNT=$count"
+          fi
+          echo PICM_CPANEL_INSPECTION_COMPLETE
+          REMOTE
+      - name: Verify public PICM security boundaries read-only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for entry in 'picm/login/|200' 'picm/|302' 'picm/workspace/|302' 'picm/api/reference/|405' 'picm/worker/health/|403'; do
+            path="$(printf '%s' "$entry" | cut -d '|' -f1)"
+            expected="$(printf '%s' "$entry" | cut -d '|' -f2)"
+            actual="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' "https://mojplaywin.com/$path" || true)"
+            echo "PICM_HTTP_STATUS=$path:$actual"
+            test "$actual" = "$expected" || exit 9
+          done
+          echo PICM_HTTP_SECURITY_BOUNDARIES_OK
+      - name: Remove private connection files
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/picm-ssh"
