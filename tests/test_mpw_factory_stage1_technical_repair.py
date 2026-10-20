@@ -1,0 +1,25 @@
+"""Tests for privately repairing available buyer packages without sale approval."""
+import tempfile,unittest,json
+from pathlib import Path
+from scripts import mpw_factory_stage1_technical_repair as worker
+from scripts import mpw_vps_warehouse_courier as courier
+class Stage1Test(unittest.TestCase):
+ def test_empty_queue(self):
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t)
+   (root/"design-intake/mojplaywin-stage1-quality-returns").mkdir(parents=True)
+   v=worker.run(root,max_new=0)
+   self.assertEqual(v["returned_products_inspected"],0)
+   self.assertEqual(v["commercially_approved_returns"],0)
+ def test_bad_budget(self):
+  with tempfile.TemporaryDirectory() as t:
+   with self.assertRaises(ValueError):
+    worker.run(t,max_new=44)
+ def test_no_human_approvals_in_outcome(self):
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t)
+   (root/"design-intake/mojplaywin-stage1-quality-returns").mkdir(parents=True)
+   v=worker.run(root,max_new=0)
+   self.assertFalse(v["site_sales_enabled"])
+   self.assertTrue(v["no_cross_tenant_modification"])
+if __name__=="__main__":unittest.main()

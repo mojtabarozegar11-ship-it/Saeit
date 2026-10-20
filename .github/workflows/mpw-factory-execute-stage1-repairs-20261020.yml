@@ -1,0 +1,267 @@
+name: MojPlayWin actual Stage1 technical repairs and private warehouse delivery
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-factory-execute-stage1-repairs-20261020.yml
+      - scripts/mpw_factory_stage1_technical_repair.py
+      - tests/test_mpw_factory_stage1_technical_repair.py
+      - deploy/install_mpw_stage1_technical_repair.sh
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-only-stage1-real-technical-repairs-courier
+  cancel-in-progress: false
+jobs:
+  courier:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prove transfer, quarantine and stage-one return contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_factory_stage1_technical_repair -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_vps_warehouse_courier -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_customer_packager -v
+          bash -n deploy/install_mpw_stage1_technical_repair.sh
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_existing_courier_customer_packages -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_three_bidirectional_orders -v
+          python3 -m py_compile scripts/mpw_vps_warehouse_courier.py
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('scripts/mpw_vps_warehouse_courier.py').read_text()
+          assert 'COMMERCIAL_PUBLICATION_APPROVAL_REQUIRED' in src
+          assert 'return_for_qa_completion' in src
+          assert 'publicly_published":0' in src
+          assert 'design-intake' in src
+          assert 'publish_verified_factory_store_listing' not in src
+          print('MPW_FACTORY_COURIER_SAFE_TESTS=PASS')
+          PY
+      - name: Prepare pinned SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/factory-store-preflight"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            key="$d/${item}.key"
+            printf '%s' "${!item}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$key"
+            chmod 600 "$key"
+            ssh-keygen -y -P '' -f "$key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Build and independently validate actual corrected buyer packages on VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-store-preflight"
+          stage="/home/githubops/factory-runtime/operations/.mpw-real-repair-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          timeout 30s ssh -T -F "$d/config" saeit-vps "test ! -e '$stage' && mkdir -m 700 '$stage'"
+          for source in scripts/mpw_factory_stage1_technical_repair.py scripts/mpw_vps_warehouse_courier.py scripts/factory_customer_packager.py scripts/factory_product_maker.py deploy/install_mpw_stage1_technical_repair.sh;do
+            name="$(basename "$source")"
+            cat "$source" | timeout 30s ssh -T -F "$d/config" saeit-vps "umask 077; cat > '$stage/$name'; chmod 600 '$stage/$name'"
+            want="$(sha256sum "$source"|cut -d' ' -f1)"
+            timeout 30s ssh -T -F "$d/config" saeit-vps "test \"\$(sha256sum '$stage/$name'|cut -d' ' -f1)\" = '$want'"
+          done
+          timeout 760s ssh -T -F "$d/config" saeit-vps "timeout 650s bash '$stage/install_mpw_stage1_technical_repair.sh' '$stage'"
+          timeout 40s ssh -T -F "$d/config" saeit-vps python3 - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path.home()/'factory-runtime/private/autonomous-product-cycle'
+          state=json.loads((root/'design-state/mojplaywin-actual-technical-repair/execution-status.json').read_text())
+          assert state['tenant']=='mojplaywin-main'
+          assert state['returned_products_inspected']<=50
+          assert state['stage1_returns_remaining_open']==state['returned_products_inspected']
+          assert state['source_product_rebuilds_verified']==0
+          assert state['commercially_approved_returns']==0
+          assert state['public_store_products_modified']==0
+          print('VPS_STAGE1_REAL_EXECUTED_REPAIRS='+json.dumps({
+            k:state[k] for k in ('returned_products_inspected',
+               'original_stock_zips_verified','new_customer_bundles_technically_repaired',
+               'existing_customer_bundles_verified','technical_package_attempts_blocked',
+               'technical_package_deferred_by_budget',
+               'stage1_returns_remaining_open')},sort_keys=True))
+          PY
+      - name: Read SHA-verified VPS stock into ephemeral protected CI spool
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-store-preflight"
+          source="$(base64 -w0 scripts/mpw_vps_warehouse_courier.py)"
+          timeout 160s ssh -T -F "$d/config" saeit-vps \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-export" \
+            > "$RUNNER_TEMP/mpw-factory-stock.tgz"
+          test -s "$RUNNER_TEMP/mpw-factory-stock.tgz"
+          size="$(stat -c %s "$RUNNER_TEMP/mpw-factory-stock.tgz")"
+          test "$size" -le 115343360
+          echo "MPW_FACTORY_ENCRYPTED_CHANNEL_EXPORT_BYTES=$size"
+      - name: Receive products privately on MojPlayWin and run independent QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-store-preflight"
+          source="$(base64 -w0 scripts/mpw_vps_warehouse_courier.py)"
+          timeout 180s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' site-import" \
+            < "$RUNNER_TEMP/mpw-factory-stock.tgz"
+          echo 'MPW_PRIVATE_WAREHOUSE_COURIER_INGEST=PASS'
+      - name: Collect only site QA return receipts and deliver to VPS stage one
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-store-preflight"
+          source="$(base64 -w0 scripts/mpw_vps_warehouse_courier.py)"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' site-feedback" \
+            > "$RUNNER_TEMP/mpw-qa-feedback.json"
+          python3 - <<'PY'
+          import json,os
+          data=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-qa-feedback.json'))
+          assert data.get('tenant')=='mojplaywin-main'
+          assert data.get('schema')=='mpw.factory.return-to-stage1.v1'
+          assert isinstance(data.get('returns'),list)
+          assert len(data['returns']) <= 50
+          print('MPW_FACTORY_QA_RETURN_RECEIPTS='+str(len(data['returns'])))
+          PY
+          timeout 75s ssh -T -F "$d/config" saeit-vps \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-return" \
+            < "$RUNNER_TEMP/mpw-qa-feedback.json"
+          echo 'MPW_FACTORY_STAGE1_RETURN_CHANNEL=PASS'
+      - name: Transfer THREE verified site-origin product rework orders to native VPS factory
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-store-preflight"
+          source="$(base64 -w0 scripts/mpw_vps_warehouse_courier.py)"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' site-three-orders-export" \
+            > "$RUNNER_TEMP/mpw-three-product-orders.json"
+          python3 - <<'PY'
+          import json,os
+          f=os.environ['RUNNER_TEMP']+'/mpw-three-product-orders.json'
+          data=json.load(open(f))
+          assert data['schema']=='mpw.factory.three-product-requests.v1'
+          assert data['tenant']=='mojplaywin-main'
+          assert data['exact_product_requests']==3
+          assert len(data['requests'])==3
+          assert {q['slot'] for q in data['requests']}=={1,2,3}
+          assert len({q['request_id'] for q in data['requests']})==3
+          assert all(q['paid_customer_purchase'] is False for q in data['requests'])
+          print('MPW_SITE_VERIFIED_PRODUCT_REQUESTS=3')
+          PY
+          timeout 95s ssh -T -F "$d/config" saeit-vps \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-three-orders-import" \
+            < "$RUNNER_TEMP/mpw-three-product-orders.json"
+          echo MPW_SITE_TO_FACTORY_THREE_PRODUCT_REQUESTS_DELIVERED=PASS
+      - name: Consume accepted returns as executable factory Stage-1 QA review jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-store-preflight"
+          source="$(base64 -w0 scripts/mpw_vps_warehouse_courier.py)"
+          timeout 90s ssh -T -F "$d/config" saeit-vps \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-triage" \
+            > "$RUNNER_TEMP/mpw-factory-stage1-triage.jsonl"
+          python3 - <<'PY'
+          import os,json
+          from pathlib import Path
+          lines=Path(os.environ['RUNNER_TEMP']+'/mpw-factory-stage1-triage.jsonl').read_text().splitlines()
+          assert len(lines)==1 and lines[0].startswith('MPW_COURIER_FACTORY_TRIAGE=')
+          report=json.loads(lines[0].split('=',1)[1])
+          assert report['tenant']=='mojplaywin-main'
+          assert report['factory_stage1_work_items']==report['actual_site_returns_accepted']
+          assert report['factory_stage1_work_items']>=0
+          assert report['commercial_approval_claimed'] is False
+          assert report['physical_rebuild_claimed'] is False
+          print('MPW_FACTORY_REAL_STAGE1_TRIAGE='+json.dumps(report,sort_keys=True))
+          PY
+      - name: Independently verify private recipient and first stage return count
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-store-preflight"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path('/home/zomorod2/.private_mojplaywin_main_agents/evolution_runtime_20261018/warehouse_courier/status.json')
+          v=json.loads(p.read_text())
+          assert v['tenant']=='mojplaywin-main'
+          assert v['publicly_published']==0
+          assert v['store_product_created']==0
+          assert v['quality_approved']==0
+          assert isinstance(v.get('new_customer_packages_received',0),int)
+          assert v.get('publicly_published')==0
+          print('MPW_FACTORY_INBOX_READBACK='+json.dumps(v,sort_keys=True))
+          PY
+          timeout 50s ssh -T -F "$d/config" saeit-vps python3 - <<'PY'
+          from pathlib import Path
+          import json
+          b=Path.home()/'factory-runtime/private/autonomous-product-cycle'
+          root=b/'design-intake/mojplaywin-stage1-quality-returns'
+          assert root.is_dir() and not root.is_symlink()
+          rows=[]
+          for p in sorted(root.glob('*.json')):
+              assert not p.is_symlink()
+              v=json.loads(p.read_text())
+              assert v['tenant']=='mojplaywin-main' and v['stage']==1
+              assert v['published'] is False
+              rows.append(v)
+          assert len(rows)<=50
+          state=b/'design-state/mojplaywin-stage1-qa-work/stage1-status.json'
+          assert state.is_file() and not state.is_symlink()
+          proof=json.loads(state.read_text())
+          assert proof['tenant']=='mojplaywin-main'
+          assert proof['factory_stage1_work_items']==len(rows)
+          assert proof['commercial_approval_claimed'] is False
+          assert proof['physical_rebuild_claimed'] is False
+          print('MPW_FACTORY_STAGE1_RETURN_READBACK='+json.dumps({
+              'records':len(rows),'retained_for_correction':True,
+              'factory_rebuild_claimed':False,'cross_tenant_changes':False},sort_keys=True))
+          PY
+      - name: Erase SSH credentials and all transferred product bytes
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
+          rm -f -- "$RUNNER_TEMP/mpw-factory-stock.tgz" "$RUNNER_TEMP/mpw-qa-feedback.json" "$RUNNER_TEMP/mpw-factory-stage1-triage.jsonl" "$RUNNER_TEMP/mpw-three-product-orders.json"
+# Reconnect 2026-10-20: owner-requested bounded private warehouse/site receipts and three-workorder check; public release unchanged.
