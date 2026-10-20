@@ -14,7 +14,7 @@ def verify_pair(folder,stem):
  require(doc["model_version_tested"] is None and doc["commercial_release"] is False,"FALSE_APPROVAL")
  require(doc["tests"]["real_negative_cases_rejected"]==5,"NO_NEGATIVE_TESTS")
  require(doc["tests"]["llm_model_inference_attempts"]==0,"UNSUPPORTED_MODEL_CLAIM")
- require(doc["tests"]["real_positive_case"]["source_count"]==1,"POSITIVE_TEST")
+ require(doc["tests"]["real_positive_case"]["reference_count"]==1,"POSITIVE_TEST")
  require("{{task_text}}" in text and "{{source_refs}}" in text,"MISSING_EDITABLE_PROMPT")
  require(len(text)>=750 and "No LLM model calls" in text,"UNTRUSTED_PROMPT_DISCLOSURE")
  require(set(doc["response_keys"])>=({"answer","limitations"} if doc["mode"]=="minimal" else {"assumptions","limitations"}),"RESPONSE_CONTRACT")
