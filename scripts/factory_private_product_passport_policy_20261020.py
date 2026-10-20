@@ -122,15 +122,23 @@ def ensure_private_passport(product_directory, manifest):
         raise ValueError("PASSPORT_PRODUCT_NOT_PRIVATE_QA_PASSED")
     source_sha = manifest.get("source_sha256")
     archive_sha = manifest.get("artifact_sha256")
-    if any(not isinstance(d, str) or not SHA.fullmatch(d) for d in (source_sha, archive_sha)):
-        raise ValueError("PASSPORT_SOURCE_SHA_INVALID")
+    if not isinstance(archive_sha, str) or not SHA.fullmatch(archive_sha):
+        raise ValueError("PASSPORT_ARTIFACT_SHA_INVALID")
+    # Historical stock may lack an original-source digest. Such goods can
+    # receive a clearly INCOMPLETE identity record, never rights clearance.
+    source_missing = source_sha is None
+    if not source_missing and (not isinstance(source_sha, str) or not SHA.fullmatch(source_sha)):
+        raise ValueError("PASSPORT_SOURCE_SHA_MALFORMED")
     archive = folder / (product_id + "-internal-qa.zip")
     if (archive.is_symlink() or not archive.is_file() or not
             0 < archive.stat().st_size <= 25 * 1024 * 1024
             or sha256_file(archive) != archive_sha):
         raise ValueError("PASSPORT_ARTIFACT_SHA_MISMATCH")
     record = build_passport(product_id, source_sha256=source_sha, artifact_sha256=archive_sha)
-    path = folder / ("product_passport." + archive_sha + ".private.json")
+    if source_missing:
+        record["source_provenance_status"] = "missing_original_source_sha_must_rework"
+    suffix = ".source_missing.private.json" if source_missing else ".private.json"
+    path = folder / ("product_passport." + archive_sha + suffix)
     status = write_passport(path, record)
     # No modified public web content, store database, original ZIP, or payment state.
     return {"status": status, "product_id": product_id,
