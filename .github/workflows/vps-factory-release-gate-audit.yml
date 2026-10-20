@@ -164,3 +164,4 @@ jobs:
       - name: Clean temporary SSH keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
+# Owner-requested next-stage private QA and release-gate verification, 2026-10-20; commercial permission unchanged.
