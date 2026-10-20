@@ -292,6 +292,49 @@ jobs:
           print('PICM_LIVE_TEXT_IMAGE_SCRIPT='+str(js.is_file() and b'/picm/api/submit/' in js.read_bytes()))
           print('PICM_DIAGNOSTICS_READ_ONLY_COMPLETE')
           PY
+      - name: Read-only classify exact current PICM template variants for guarded repair
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 45s ssh -F "$WORK/config" picm-host 'python3 -' <<'PY'
+          from pathlib import Path
+          import hashlib
+          base=Path.home()/'Saeit-staging/templates/picm'
+          markers={
+            "index.html":{
+              "PICM_HTML_DEFAULT_OLD":'<input type="hidden" id="mode" name="mode" value="image_edit">',
+              "PICM_HTML_DEFAULT_NEW":'<input type="hidden" id="mode" name="mode" value="text_image">',
+              "PICM_HTML_FILE_REQUIRED_OLD":'name="photo" id="photo" accept="image/png,image/jpeg" required',
+              "PICM_HTML_FILE_OPTIONAL_NEW":'name="photo" id="photo" accept="image/png,image/jpeg" hidden',
+              "PICM_HTML_AI_TILE_OLD":'id="mode-text_image" type="button" aria-pressed="false"',
+              "PICM_HTML_AI_TILE_NEW":'id="mode-text_image" type="button" aria-pressed="true"',
+              "PICM_HTML_EDIT_TILE_OLD":'id="mode-image_edit" type="button" aria-pressed="true"',
+              "PICM_HTML_EDIT_TILE_NEW":'id="mode-image_edit" type="button" aria-pressed="false"',
+              "PICM_HTML_AI_OPTIONS_OLD":'<div id="text-image-options" hidden>',
+              "PICM_HTML_AI_OPTIONS_NEW":'<div id="text-image-options">',
+            },
+            "text_image.js":{
+              "PICM_JS_NOVALIDATE_OLD":'  const selected=isText();\n  textOptions.hidden=!selected;',
+              "PICM_JS_NOVALIDATE_NEW":'form.noValidate=selected;',
+              "PICM_JS_REAL_POST":'fetch("/picm/api/submit/"',
+            }
+          }
+          for filename, signatures in markers.items():
+            f=base/filename
+            if f.is_symlink() or not f.is_file():
+              print("PICM_LIVE_ASSET_NOT_REGULAR="+filename)
+              continue
+            raw=f.read_bytes()
+            content=raw.decode('utf-8')
+            gitblob=hashlib.sha1(('blob '+str(len(raw))+'\0').encode()+raw).hexdigest()
+            print('PICM_LIVE_BLOB_SHA_'+filename.replace('.','_')+'='+gitblob)
+            print('PICM_LIVE_SHA256_'+filename.replace('.','_')+'='+hashlib.sha256(raw).hexdigest())
+            print('PICM_LIVE_BYTES_'+filename.replace('.','_')+'='+str(len(raw)))
+            for label,signature in signatures.items():
+              print(label+'_COUNT='+str(content.count(signature)))
+          print('PICM_LIVE_TEMPLATE_VARIANT_DIAG_DONE')
+          PY
       - name: Verify public PICM security boundaries read-only
         shell: bash
         run: |
