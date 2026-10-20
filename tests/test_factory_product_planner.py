@@ -38,7 +38,7 @@ class ProductPlanner(unittest.TestCase):
         # Existing catalog jobs must not be confused with this new requested date.
         actual=planner.execute
         with patch.object(planner,'resources',return_value=CAP),patch.object(planner,'execute',side_effect=lambda root,r: actual(root,r) if r['family_id']=='F31' else {'status':'blocked_executor_not_routed','retry_after_seconds':3600}):
-            for _ in range(6):r=planner.cycle(self.root,REGISTRY,dispatch=True,max_execute=2)
+            for _ in range(len(planner.CATALOG)+5):r=planner.cycle(self.root,REGISTRY,dispatch=True,max_execute=2)
         row=next(x for x in r['rows'] if x['request'].get('parameters',{}).get('week')=='2026-11-02')
         self.assertEqual(row['status'],'native_recipe_verified')
         self.assertEqual(row['proof']['verified_manufacturing_receipts'],50)

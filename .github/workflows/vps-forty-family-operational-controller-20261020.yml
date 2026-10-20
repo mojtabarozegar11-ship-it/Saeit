@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
       - name: Install isolated catalog QA dependencies
-        run: python -m pip install Pillow==11.3.0 openpyxl==3.1.5
+        run: python -m pip install Pillow==11.3.0 openpyxl==3.1.5 python-docx==1.2.0 python-pptx==1.0.2
       - name: Test honest 40-family admission, proof separation and safe script
         run: |
           set -euo pipefail
