@@ -5,6 +5,10 @@ on:
       - "ops/factory-site-capabilities/**"
       - "scripts/factory_cross_site_capabilities.py"
       - "tests/test_factory_cross_site_capabilities.py"
+      - "scripts/factory_cross_site_cycle.py"
+      - "tests/test_factory_cross_site_cycle.py"
+      - "deploy/install_factory_multisite_private.sh"
+      - ".github/workflows/vps-factory-multisite-private-install.yml"
       - "docs/audits/two-sites-factory-capability-diff-2026-10-20.md"
       - ".github/workflows/factory-cross-site-capabilities.yml"
   push:
@@ -13,6 +17,10 @@ on:
       - "ops/factory-site-capabilities/**"
       - "scripts/factory_cross_site_capabilities.py"
       - "tests/test_factory_cross_site_capabilities.py"
+      - "scripts/factory_cross_site_cycle.py"
+      - "tests/test_factory_cross_site_cycle.py"
+      - "deploy/install_factory_multisite_private.sh"
+      - ".github/workflows/vps-factory-multisite-private-install.yml"
       - ".github/workflows/factory-cross-site-capabilities.yml"
 permissions:
   contents: read
@@ -35,4 +43,6 @@ jobs:
           set -euo pipefail
           python -B scripts/factory_cross_site_capabilities.py --repo .
           python -B -m unittest discover -s tests -p 'test_factory_cross_site_capabilities.py' -v
+          python -B -m unittest discover -s tests -p 'test_factory_cross_site_cycle.py' -v
+          bash -n deploy/install_factory_multisite_private.sh
           python -B -m py_compile scripts/factory_cross_site_capabilities.py
