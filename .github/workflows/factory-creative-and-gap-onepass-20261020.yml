@@ -1,0 +1,78 @@
+name: One-pass real creative builders and 40-family engineering gap gates
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_30_gap_preflight.py"
+      - "tests/test_factory_30_gap_preflight.py"
+      - "deploy/install_factory_gap_onepass.sh"
+      - ".github/workflows/factory-creative-and-gap-onepass-20261020.yml"
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: saeit-real-creative-builders-and-gap-gates
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate real production sources, 40 x 48 contracts and negative QA
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_gap_onepass.sh
+          python3 -m py_compile scripts/factory_build50_creative_kits.py scripts/factory_creative_independent_review.py scripts/factory_30_gap_preflight.py
+          python3 -m unittest discover -s tests -p test_factory_30_gap_preflight.py -v
+          echo GAP_ONEPASS_SOURCE_TESTS=PASS
+  release:
+    needs: test
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Privately build three verified native technical products then install forty-family QA
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-gap-onepass";install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key";ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() { ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 githubops@178.239.147.150 "$@"; }
+          stage="/home/githubops/factory-runtime/operations/.family-gap-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh_vps "test ! -e '$stage' && mkdir -m 700 '$stage'"
+          for path in scripts/factory_build50_creative_kits.py scripts/factory_creative_independent_review.py scripts/factory_30_gap_preflight.py scripts/factory_product_routes.py deploy/install_factory_gap_onepass.sh;do
+            name="$(basename "$path")"
+            cat "$path" | ssh_vps "umask 077; cat > '$stage/$name'; chmod 600 '$stage/$name'"
+            wanted="$(sha256sum "$path"|cut -d' ' -f1)"
+            ssh_vps "test \"\$(sha256sum '$stage/$name'|cut -d' ' -f1)\" = '$wanted'"
+          done
+          ssh_vps "timeout 1100s bash '$stage/install_factory_gap_onepass.sh' '$stage'"
+          ssh_vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import json,subprocess
+          base=Path.home()/'factory-runtime';root=base/'private/autonomous-product-cycle';ops=base/'operations'
+          d=json.loads((root/'engineering-gaps/dashboard.json').read_text())
+          assert d['family_contracts_compiled']==40
+          assert all((root/'engineering-gaps'/('F%02d'%i)/'contract.json').is_file() for i in range(1,41))
+          assert 'F29' not in d['families_without_50stage_proof']
+          assert 'F30' not in d['families_without_50stage_proof']
+          assert 'F33' not in d['families_without_50stage_proof']
+          assert (ops/'forty-execution/periodic-dispatch.sh').read_text().count('factory_30_gap_preflight.py')==1
+          cron=subprocess.check_output(['crontab','-l'],text=True)
+          assert cron.count('SAEIT_FACTORY_FORTY_FAMILY_OPERATIONAL_DISPATCH_V1')==1
+          print('VPS_THREE_CREATIVE_REAL_BUILD50=PASS')
+          print('VPS_40_FAMILY_REAL_GAP_COMPILER=PASS')
+          print('VPS_MISSING_NATIVE_BUILDER_FAMILIES='+str(len(d['families_without_50stage_proof'])))
+          print('VPS_ZERO_AUTO_COMMERCIAL_RELEASE=PASS')
+          PY
