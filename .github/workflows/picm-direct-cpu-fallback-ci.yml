@@ -26,7 +26,7 @@ jobs:
       - name: Test syntax and guarded CPU renderer
         run: |
           set -euo pipefail
-          python -m pip install --disable-pip-version-check pytest
+          python -m pip install --disable-pip-version-check -r requirements.txt
           python -m py_compile ops/picm-vps/worker.py tests/test_picm_worker_cpu.py
           python -m pytest -q --noconftest tests/test_picm_worker_cpu.py
       - name: Assert no VPS, site, paid provider or download operations
