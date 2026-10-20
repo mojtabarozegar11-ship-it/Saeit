@@ -1,0 +1,62 @@
+name: Produce authentic independent evidence dossiers for 43 MojPlayWin returned products
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/mpw_stage1_independent_evidence.py"
+      - "tests/test_mpw_stage1_independent_evidence.py"
+      - "deploy/install_mpw_stage1_independent_evidence.sh"
+      - ".github/workflows/vps-mpw-stage1-43-independent-evidence-20261020.yml"
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: saeit-mpw-independent-stage1-43-dossiers
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Independently validate exact original source and three unforgeable review conditions
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_stage1_independent_evidence.py
+          bash -n deploy/install_mpw_stage1_independent_evidence.sh
+          python3 -m unittest tests.test_mpw_stage1_independent_evidence -v
+          echo MPW_STAGE1_THREE_PARTY_EVIDENCE_TESTS=PASS
+  release:
+    needs: test
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Source-bound installation and real 43-return QA dossier readback
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/mpw43-evidence-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps(){ ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 githubops@178.239.147.150 "$@"; }
+          stage="/home/githubops/factory-runtime/operations/.mpw-dossiers-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh_vps "test ! -e '$stage' && mkdir -m 700 '$stage'"
+          for file in scripts/mpw_stage1_independent_evidence.py scripts/mpw_factory_stage1_technical_repair.py scripts/mpw_vps_warehouse_courier.py deploy/install_mpw_stage1_independent_evidence.sh;do
+            name="$(basename "$file")"
+            cat "$file" | ssh_vps "umask 077; cat > '$stage/$name'; chmod 600 '$stage/$name'"
+            expected="$(sha256sum "$file"|cut -d' ' -f1)"
+            ssh_vps "test \"\$(sha256sum '$stage/$name'|cut -d' ' -f1)\" = '$expected'"
+          done
+          ssh_vps "timeout 330s bash '$stage/install_mpw_stage1_independent_evidence.sh' '$stage'"
