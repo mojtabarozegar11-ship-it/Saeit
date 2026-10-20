@@ -81,6 +81,26 @@ jobs:
         run: |
           set -euo pipefail
           timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - publish '$GITHUB_RUN_ID'" < scripts/mpw_product_buyer_template_fix_20261020.py
+      - name: Reload only pinned MojPlayWin main Passenger app to invalidate cached templates
+        id: reload
+        run: |
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          root=Path('/home/zomorod2/mojplaywin.com')
+          wsgi=root/'passenger_wsgi.py'
+          app=Path('/home/zomorod2/Saeit-staging')
+          p=app/'core/templates/brands/mojplaywin/product.html'
+          if root.is_symlink() or wsgi.is_symlink() or not wsgi.is_file() or not p.is_file() or p.is_symlink():raise RuntimeError('Main app identity invalid')
+          if "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):raise RuntimeError('App root changed')
+          if 'Secure checkout for this book' not in p.read_text('utf8','replace'):raise RuntimeError('Patch not installed')
+          dest=root/'tmp'
+          if dest.is_symlink():raise RuntimeError('Unsafe app tmp directory')
+          dest.mkdir(exist_ok=True)
+          marker=dest/'restart.txt'
+          if marker.is_symlink():raise RuntimeError('Unsafe app restart marker')
+          marker.touch()
+          print('MPW_MAIN_PASSENGER_CACHED_TEMPLATES_RELOAD=REQUESTED')
+          PY
       - name: Verify public purchase CTAs, product metadata and translated login
         run: |
           python3 - <<'PY'
@@ -110,7 +130,15 @@ jobs:
           PY
       - name: Restore only three MojPlayWin presentation templates if public smoke fails
         if: failure() && steps.install.outcome == 'success'
-        run: timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_product_buyer_template_fix_20261020.py
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_product_buyer_template_fix_20261020.py
+          timeout 30s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/home/zomorod2/mojplaywin.com/tmp/restart.txt')
+          if not p.parent.is_symlink() and not p.is_symlink() and p.parent.is_dir():p.touch()
+          print('MPW_MAIN_ONLY_REVERTED_TEMPLATE_CACHE_RELOAD=REQUESTED')
+          PY
       - name: Erase ephemeral SSH relay credentials
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
