@@ -21,8 +21,8 @@ for route in ("/accounts/login/","/accounts/register/"):
   c=Client(enforce_csrf_checks=True)
   g=c.get(route,secure=True,HTTP_HOST="mojplaywin.com",HTTP_USER_AGENT="Mozilla/5.0 Android Chrome/130 Mobile")
   body=g.content.decode("utf8","replace")
-  m=re.search(r'csrfmiddlewaretoken["\x27]\\s+value=["\x27]([^"\x27]+)',body)
-  if m is None:m=re.search(r'value=["\x27]([^"\x27]+)["\x27]\\s+name=["\x27]csrfmiddlewaretoken',body)
+  m=re.search(r'csrfmiddlewaretoken["\x27]\s+value=["\x27]([^"\x27]+)',body)
+  if m is None:m=re.search(r'value=["\x27]([^"\x27]+)["\x27]\s+name=["\x27]csrfmiddlewaretoken',body)
   csrf=m.group(1) if m else ""
   cookie=bool(g.cookies.get("csrftoken"))
   if not keep:c.cookies.clear()
