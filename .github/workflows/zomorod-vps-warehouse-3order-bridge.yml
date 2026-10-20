@@ -363,6 +363,28 @@ jobs:
               print("ZM_BRIDGE_NATIVE_FACTORY_ORDERS_VERIFIED=0")
               print("ZM_BRIDGE_NATIVE_CAPACITY_WAITING=yes")
           PY
+      - name: Restore private courier code after a failed bridge run
+        if: failure()
+        shell: bash
+        run: |
+          # Best-effort rollback of ONLY this scoped private module.
+          # Do not delete product files, original orders, receipts or approvals.
+          d="$RUNNER_TEMP/zm-site-factory-bridge"
+          if test -s "$d/config";then
+            timeout 40s ssh -T -F "$d/config" zm-vps bash -se -- "$GITHUB_RUN_ID" <<'REMOTE' || true
+          set -euo pipefail
+          run="$1"
+          dest="$HOME/factory-runtime/operations/zomorod-site-bridge"
+          backup="$HOME/factory-runtime/operations/backups/zomorod-courier-$run/bridge.before.py"
+          if test -s "$backup" && test ! -L "$backup" && test ! -L "$dest/bridge.py";then
+            cp -p "$backup" "$dest/.bridge-rollback-$run.py"
+            python3 -m py_compile "$dest/.bridge-rollback-$run.py"
+            mv -f -- "$dest/.bridge-rollback-$run.py" "$dest/bridge.py"
+            cmp -s "$dest/bridge.py" "$backup"
+            echo ZM_COURIER_PRIVATE_ROLLBACK=verified
+          fi
+          REMOTE
+          fi
       - name: Remove only ephemeral GitHub runner SSH keys
         if: always()
         shell: bash
