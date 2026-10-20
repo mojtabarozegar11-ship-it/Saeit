@@ -204,14 +204,140 @@ def import_catalog(root,dbfile,limit=6):
     finally:connection.close()
 
 
+
+def import_verified_private_shards(batch_dir, dbfile, verifier_file):
+    """Bridge independent private receiver proof into existing native store DB.
+
+    This is NOT a sale-ready product, a human review, or an owner signature.
+    No mutations to native products, payments, factory_drafts or public listings.
+    """
+    batch_dir=Path(batch_dir);dbfile=Path(dbfile);verifier_file=Path(verifier_file)
+    if (batch_dir.is_symlink() or not batch_dir.is_dir()
+            or dbfile.is_symlink() or not dbfile.is_file()
+            or verifier_file.is_symlink() or not verifier_file.is_file()):
+        raise ValueError("PRIVATE_SHARD_STORE_INPUT_UNSAFE")
+    if not SHA.fullmatch(batch_dir.name):
+        raise ValueError("PRIVATE_SHARD_BATCH_ID_INVALID")
+    receipt=batch_dir/"verification.json"
+    if receipt.is_symlink() or not receipt.is_file() or receipt.stat().st_size>100000:
+        raise ValueError("PRIVATE_SHARD_BATCH_RECEIPT_INVALID")
+    spec=importlib.util.spec_from_file_location("verified_private_shard_reader",str(verifier_file))
+    if spec is None or spec.loader is None:
+        raise ValueError("PRIVATE_SHARD_VERIFIER_UNAVAILABLE")
+    verifier=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(verifier)
+    proven=verifier.verify(batch_dir)
+    recorded=json.loads(receipt.read_text(encoding="utf8"))
+    if recorded!=dict(proven, encrypted_transport_archive_sha256=batch_dir.name):
+        raise ValueError("PRIVATE_SHARD_BATCH_RECEIPT_MISMATCH")
+    if (proven.get("products_verified")!=5 or proven.get("shards_verified")!=10
+            or proven.get("files_reconstructed")!=485
+            or proven.get("publicly_published") is not False
+            or proven.get("store_product_created") is not False
+            or proven.get("customer_payment_created") is not False
+            or proven.get("owner_publication_approval") is not False):
+        raise ValueError("PRIVATE_SHARD_RELEASE_OR_RECONSTRUCTION_UNSAFE")
+    products=proven["products"]
+    if len({p["recipe"] for p in products})!=5:
+        raise ValueError("PRIVATE_SHARD_PRODUCT_DUPLICATE")
+    record_sha=hashlib.sha256(receipt.read_bytes()).hexdigest()
+    with sqlite3.connect(str(dbfile),timeout=20) as db:
+        db.execute("PRAGMA busy_timeout=10000")
+        existing_tables={name for (name,) in db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        if not {"products","payment_state"}.issubset(existing_tables):
+            raise ValueError("NOT_NATIVE_ZOMOROD_STORE_DATABASE")
+        db.execute("""CREATE TABLE IF NOT EXISTS factory_private_shard_candidates(
+            recipe TEXT NOT NULL, original_zip_sha256 TEXT NOT NULL,
+            private_batch_sha256 TEXT NOT NULL, receiver_receipt_sha256 TEXT NOT NULL,
+            shards INTEGER NOT NULL, verified_files INTEGER NOT NULL,
+            technical_transport_verified INTEGER NOT NULL CHECK(technical_transport_verified=1),
+            release_state TEXT NOT NULL DEFAULT 'awaiting_evidence_and_human_review'
+               CHECK(release_state='awaiting_evidence_and_human_review'),
+            scientific_review TEXT NOT NULL DEFAULT 'not_verified'
+               CHECK(scientific_review='not_verified'),
+            rights_and_license_review TEXT NOT NULL DEFAULT 'not_verified'
+               CHECK(rights_and_license_review='not_verified'),
+            independent_specialist_review TEXT NOT NULL DEFAULT 'not_verified'
+               CHECK(independent_specialist_review='not_verified'),
+            owner_approval TEXT NOT NULL DEFAULT 'not_granted'
+               CHECK(owner_approval='not_granted'),
+            public_enabled INTEGER NOT NULL DEFAULT 0 CHECK(public_enabled=0),
+            paid_price_irr INTEGER DEFAULT NULL CHECK(paid_price_irr IS NULL),
+            PRIMARY KEY(recipe,original_zip_sha256))""")
+        db.execute("""CREATE TABLE IF NOT EXISTS factory_shard_evidence_queue(
+            recipe TEXT NOT NULL, original_zip_sha256 TEXT NOT NULL,
+            needs_scientific_or_functional_evidence INTEGER NOT NULL CHECK(needs_scientific_or_functional_evidence=1),
+            needs_rights_and_assets_chain INTEGER NOT NULL CHECK(needs_rights_and_assets_chain=1),
+            needs_independent_domain_review INTEGER NOT NULL CHECK(needs_independent_domain_review=1),
+            needs_owner_release_signature INTEGER NOT NULL CHECK(needs_owner_release_signature=1),
+            evidence_collection_state TEXT NOT NULL DEFAULT 'missing_verifiable_dossiers'
+              CHECK(evidence_collection_state='missing_verifiable_dossiers'),
+            independent_technical_package_check INTEGER NOT NULL CHECK(independent_technical_package_check=1),
+            PRIMARY KEY(recipe,original_zip_sha256))""")
+        new=already=0
+        for p in products:
+            recipe=p["recipe"]; original=p["original_sha256"]
+            if not SLUG.fullmatch(recipe) or not SHA.fullmatch(original):
+                raise ValueError("PRIVATE_SHARD_PRODUCT_ID_INVALID")
+            if type(p.get("shards")) is not int or type(p.get("reconstructed_files")) is not int:
+                raise ValueError("PRIVATE_SHARD_PRODUCT_COUNT_INVALID")
+            previous=db.execute(
+                "SELECT private_batch_sha256,receiver_receipt_sha256,shards,verified_files,"
+                "release_state,public_enabled,paid_price_irr FROM factory_private_shard_candidates "
+                "WHERE recipe=? AND original_zip_sha256=?",(recipe,original)).fetchone()
+            if previous:
+                # A prior identical artifact may have been transferred in another
+                # tar batch; SHA-bound receipt remains immutable for first intake.
+                if (previous[2:] != (p["shards"],p["reconstructed_files"],
+                        "awaiting_evidence_and_human_review",0,None)):
+                    raise ValueError("PRIVATE_SHARD_CANDIDATE_COLLISION")
+                already+=1
+            else:
+                db.execute("""INSERT INTO factory_private_shard_candidates
+                   (recipe,original_zip_sha256,private_batch_sha256,receiver_receipt_sha256,
+                    shards,verified_files,technical_transport_verified)
+                    VALUES(?,?,?,?,?,?,1)""",
+                    (recipe,original,batch_dir.name,record_sha,p["shards"],p["reconstructed_files"]))
+                new+=1
+            db.execute("""INSERT OR IGNORE INTO factory_shard_evidence_queue
+                (recipe,original_zip_sha256,needs_scientific_or_functional_evidence,
+                 needs_rights_and_assets_chain,needs_independent_domain_review,
+                 needs_owner_release_signature,independent_technical_package_check)
+                 VALUES(?,?,1,1,1,1,1)""",(recipe,original))
+        for row in db.execute("""SELECT recipe,original_zip_sha256 FROM factory_private_shard_candidates
+                WHERE public_enabled<>0 OR paid_price_irr IS NOT NULL
+                   OR scientific_review<>'not_verified' OR rights_and_license_review<>'not_verified'
+                   OR independent_specialist_review<>'not_verified' OR owner_approval<>'not_granted'"""):
+            raise ValueError("PRIVATE_SHARD_RELEASE_GATE_CHANGED")
+        return {"new_private_store_candidates":new,"previously_staged":already,
+                "private_batch_verified":True,"verified_products":len(products),
+                "verified_parts":proven["shards_verified"],
+                "source_files_verified":proven["files_reconstructed"],
+                "scientific_dossiers_independently_approved":0,
+                "legal_rights_dossiers_independently_approved":0,
+                "independent_domain_approvals":0,"owner_release_approvals":0,
+                "publications":0,"sales":0}
+
+
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("--inbox",required=True)
     p.add_argument("--store-db",required=True)
     p.add_argument("--limit",type=int,default=6)
+    p.add_argument("--verified-private-shard-batch")
+    p.add_argument("--private-shard-verifier")
     a=p.parse_args()
-    result=import_catalog(a.inbox,a.store_db,a.limit)
-    print("ZOMOROD_BRIDGE_PRIVATE_CATALOG="+json.dumps(result,sort_keys=True))
+    if a.verified_private_shard_batch:
+        if not a.private_shard_verifier:
+            raise ValueError("PRIVATE_SHARD_VERIFIER_REQUIRED")
+        result=import_verified_private_shards(a.verified_private_shard_batch,
+                                              a.store_db,a.private_shard_verifier)
+        print("ZOMOROD_OFFICIAL_PRIVATE_SHARD_STORE="+json.dumps(result,sort_keys=True))
+        print("ZOMOROD_SHARD_OWNER_APPROVAL=NOT_GRANTED")
+    else:
+        result=import_catalog(a.inbox,a.store_db,a.limit)
+        print("ZOMOROD_BRIDGE_PRIVATE_CATALOG="+json.dumps(result,sort_keys=True))
     print("ZOMOROD_BRIDGE_PUBLIC_ACTIVATIONS=0")
     print("ZOMOROD_BRIDGE_FAKE_PRICES=0")
 
