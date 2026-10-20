@@ -104,7 +104,7 @@ jobs:
               try:
                   u='https://mojplaywin.com/mojtaba.roozegar/?_pair='+os.environ['GITHUB_RUN_ID']+'-'+str(i)
                   with urllib.request.urlopen(urllib.request.Request(u,headers={'Cache-Control':'no-cache'}),timeout=25) as r:s=r.read(1200000).decode('utf8','replace')
-                  ok=('mpw-restore-profile-nav-after-photos-20261020' in s and 'PROFESSIONAL PROFILE' in s and 'Discuss a professional collaboration' in s and s.count('Find the information you need')==1 and 'Explore the professional profile' not in s and s.index('official_profile_20261016/portrait')<s.index('mojtaba-roozegar.jpg')<s.index('mpw-complete-standard-20261019-toc'))
+                  ok=('mpw-restore-profile-nav-after-photos-20261020' in s and 'PROFESSIONAL PROFILE' in s and 'Discuss a professional collaboration' in s and s.count('Find the information you need')==1 and 'id="mpw-standard-20261019-navigation"' not in s and s.index('official_profile_20261016/portrait')<s.index('mojtaba-roozegar.jpg')<s.index('mpw-complete-standard-20261019-toc'))
                   print('LIVE_VERIFY='+str(ok),flush=True)
                   if ok:break
               except Exception as e:print('RETRY='+repr(e),flush=True)
@@ -136,3 +136,5 @@ jobs:
 # Honor Django conditional picture markup (both branches preserved).
 
 # Retry recovery after strict original hero structure validation fix.
+
+# Exact duplicate navigation ID, not unrelated editorial link text.
