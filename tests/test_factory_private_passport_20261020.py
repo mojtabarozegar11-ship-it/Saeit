@@ -62,6 +62,35 @@ class PrivatePassportTests(unittest.TestCase):
         with zipfile.ZipFile(str(folder / (self.slug + "-internal-qa.zip"))) as archive:
             self.assertFalse(any("passport" in name for name in archive.namelist()))
 
+    def test_1398_founding_signature_claim_is_not_backdated_2026_master(self):
+        result, folder, meta, _ = self.build()
+        context_file = folder / policy.ensure_private_passport(folder, meta)["company_context_file"]
+        self.assertTrue(context_file.is_file())
+        self.assertEqual(context_file.stat().st_mode & 0o777, 0o600)
+        ctx = json.loads(context_file.read_text("utf8"))
+        self.assertEqual(ctx["company"]["national_id"], "14008746024")
+        self.assertEqual(ctx["company"]["registration_number"], "3110")
+        self.assertEqual(ctx["company"]["registration_date_jalali"], "1398/08/16")
+        self.assertEqual(ctx["historical_founding_documents"]["signed_year_jalali"], "1398")
+        self.assertEqual(ctx["historical_founding_documents"]["signature_status"],
+                         "owner_attested_signed_not_independently_verified")
+        self.assertFalse(ctx["historical_founding_documents"]["signature_image_required_for_internal_attestation"])
+        self.assertEqual(ctx["modern_master_document"]["reconstruction_year_jalali"], "1405")
+        self.assertFalse(ctx["modern_master_document"]["updated_wording_execution_verified"])
+        self.assertTrue(ctx["commercial_roles"]["personal_rights_not_assigned_to_company"])
+        self.assertFalse(ctx["official_registry_independently_verified"])
+        self.assertFalse(ctx["commercial_release_allowed"])
+        # The previous v4 passport is not amended or signed by this sidecar.
+        self.assertEqual(meta["private_passport_schema"], "saeit.factory.private-product-passport.v4")
+
+    def test_tampered_corporate_context_fails_closed(self):
+        _, folder, meta, _ = self.build()
+        result = policy.ensure_private_passport(folder, meta)
+        evidence_path = folder / result["company_context_file"]
+        evidence_path.write_text('{"falsely_verified":true}', "utf8")
+        with self.assertRaisesRegex(ValueError, "PASSPORT_EXISTING_EVIDENCE_MISMATCH"):
+            policy.ensure_private_passport(folder, meta)
+
     def test_cached_maker_revalidates_passport_without_rewriting(self):
         first, folder, meta, path = self.build()
         sha = policy.sha256_file(path)

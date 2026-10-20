@@ -104,6 +104,54 @@ def build_passport(product_id, verified_roles=None, ownership=None, evidence=Non
     }
 
 
+
+def build_corporate_context(product_id, artifact_sha256):
+    """Owner-declared 1398 company facts, not an official registry or signature validation.
+
+    Keep this separate from immutable v4 title passports. A 2026 reconstruction
+    is NOT backdated to 1398. This private record grants no sales permission.
+    """
+    if not isinstance(product_id, str) or not PRODUCT.fullmatch(product_id):
+        raise ValueError("CORPORATE_CONTEXT_PRODUCT_ID_INVALID")
+    if not isinstance(artifact_sha256, str) or not SHA.fullmatch(artifact_sha256):
+        raise ValueError("CORPORATE_CONTEXT_ARTIFACT_SHA_INVALID")
+    return {
+        "schema": "saeit.factory.private-corporate-context.v1",
+        "product_id": product_id,
+        "artifact_sha256": artifact_sha256,
+        "visibility": "private_only",
+        "company": {
+            "name": "شرکت کشت و صنعت زمرد ملل",
+            "legal_form_declared": "limited_liability_company",
+            "national_id": "14008746024",
+            "registration_number": "3110",
+            "registration_date_jalali": "1398/08/16",
+            "registration_city": "مرودشت",
+            "registration_province": "فارس",
+            "evidence_status": "owner_documents_and_search_screenshots_not_officially_verified",
+        },
+        "historical_founding_documents": {
+            "signed_year_jalali": "1398",
+            "signature_status": "owner_attested_signed_not_independently_verified",
+            "signature_image_required_for_internal_attestation": False,
+        },
+        "modern_master_document": {
+            "reconstruction_year_jalali": "1405",
+            "historical_1398_signature_does_not_execute_2026_added_clauses": True,
+            "updated_wording_execution_verified": False,
+        },
+        "commercial_roles": {
+            "company": "technology_and_sales_services_platform_not_automatic_ip_owner",
+            "seller": "natural_person_owner_declared_payment_alignment_pending",
+            "personal_rights_not_assigned_to_company": True,
+        },
+        "official_registry_independently_verified": False,
+        "seller_payment_compliance_verified": False,
+        "third_party_component_rights_cleared": False,
+        "commercial_release_allowed": False,
+    }
+
+
 def write_passport(path, passport):
     """Create only; reject overwrites and symlinks; preserve revision evidence."""
     target = Path(path)
@@ -167,9 +215,16 @@ def ensure_private_passport(product_directory, manifest):
     suffix = ".source_missing.personal_owner_v4.private.json" if source_missing else ".personal_owner_v4.private.json"
     path = folder / ("product_passport." + archive_sha + suffix)
     status = write_passport(path, record)
+    # Append-only corporate context stays PRIVATE and independent of immutable v4.
+    context = build_corporate_context(product_id, archive_sha)
+    context_path = folder / ("company_context." + archive_sha + ".v1.private.json")
+    context_status = write_passport(context_path, context)
     # No modified public web content, store database, original ZIP, or payment state.
     return {"status": status, "product_id": product_id,
             "passport_file": path.name, "passport_sha256": sha256_file(path),
+            "company_context_file": context_path.name,
+            "company_context_sha256": sha256_file(context_path),
+            "company_context_status": context_status,
             "commercial_release_allowed": False}
 
 
