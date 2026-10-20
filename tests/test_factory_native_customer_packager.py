@@ -122,7 +122,8 @@ class NativePreviewTest(unittest.TestCase):
             self.assertFalse(qa["public_listing"])
         replay=courier.import_site(courier.export_factory(self.root,page=16),site)
         self.assertEqual(replay["existing_native_private_previews_verified"],5)
-        self.assertEqual(replay["warehouse_versions_without_customer_bundle"],5)
+        # The setUp stock is a sixth source without a generated native preview.
+        self.assertEqual(replay["warehouse_versions_without_customer_bundle"],6)
 
     def test_three_item_budget_does_not_expand_for_native_previews(self):
         inbox=self.root/"design-intake/mojplaywin-stage1-quality-returns"
