@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
-"""VPS-only PICM worker: private HTTPS queue to localhost ComfyUI.
+"""VPS-only PICM worker: private HTTPS queue to guarded local CPU renderer.
 
 No inbound VPS port. No Termux. No arbitrary shell. Runs as githubops, outside
 the existing factory process, with a single non-blocking lock and guarded CPU.
 """
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import resource
+import signal
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -26,6 +30,14 @@ CONTROL = ROOT / "control.sh"
 FACTORY = HOME / "factory-runtime/operations/vps-only-loop.pid"
 HEX = re.compile(r"^[0-9a-f]{32}$")
 STEPS = {1, 2, 3}
+CPU_ROOT = HOME / "comfyui-isolated"
+CPU_BIN_DIR = CPU_ROOT / ".control/sd-cpp-runtime-sse2/bin"
+CPU_BIN = CPU_BIN_DIR / "sd-cli"
+CPU_MODEL = CPU_ROOT / "source-v0.40.0/models/checkpoints/segmind_tiny_sd_candidate.safetensors"
+CPU_STATE = CPU_ROOT / ".control/qa-render"
+CPU_MODEL_SHA256 = "92e00b860c409f8cfc521a94f779009c6ebd28bf07670bf50e747682ab7b3b72"
+CPU_MIN_KIB = 950_000
+CPU_MAX_SECONDS = 360
 
 
 def authorization():
@@ -76,6 +88,102 @@ def ram_ok():
     return False
 
 
+
+def free_kib():
+    try:
+        with open("/proc/meminfo", encoding="ascii") as mem:
+            for line in mem:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1])
+    except (OSError, ValueError):
+        pass
+    return 0
+
+
+def direct_cpu_ready():
+    """Prefer the preinstalled SSE2 backend over starting memory-heavy ComfyUI.
+
+    Never download a model, change the factory, or trust an unpinned checkpoint.
+    Missing CPU prerequisites fall back to the original localhost-only graph.
+    """
+    if not CPU_BIN.is_file() or not CPU_MODEL.is_file():
+        return False
+    if CPU_BIN.is_symlink() or CPU_MODEL.is_symlink() or not os.access(CPU_BIN, os.X_OK):
+        raise RuntimeError("PICM_CPU_BACKEND_UNSAFE")
+    digest = hashlib.sha256()
+    with CPU_MODEL.open("rb") as source:
+        for block in iter(lambda: source.read(4 * 1024 * 1024), b""):
+            digest.update(block)
+    if digest.hexdigest() != CPU_MODEL_SHA256:
+        raise RuntimeError("PICM_CPU_MODEL_INTEGRITY_FAILURE")
+    return True
+
+
+def cpu_child_limits():
+    os.nice(17)
+    resource.setrlimit(resource.RLIMIT_DATA, (2_850_000_000, 2_850_000_000))
+
+
+def render_direct_cpu(prompt, steps):
+    """Render one real 256px PNG without starting PyTorch/ComfyUI.
+
+    Locks against ComfyUI's own SSE2 render node, guards factory liveness,
+    bounds wall time and memory, and refuses placeholder images.
+    """
+    if not factory_ok() or not ram_ok():
+        raise RuntimeError("PICM_CPU_START_GUARD")
+    if CPU_STATE.is_symlink():
+        raise RuntimeError("PICM_CPU_UNSAFE_STATE")
+    CPU_STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(CPU_STATE, 0o700)
+    lockfile = CPU_STATE / "qa.lock"
+    if lockfile.is_symlink():
+        raise RuntimeError("PICM_CPU_UNSAFE_LOCK")
+    with lockfile.open("a+") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise RuntimeError("PICM_CPU_RENDER_BUSY") from exc
+        with tempfile.TemporaryDirectory(dir=str(CPU_STATE), prefix=".picm-") as work:
+            result = Path(work) / "result.png"
+            env = dict(os.environ, LD_LIBRARY_PATH=str(CPU_BIN_DIR), OMP_NUM_THREADS="1",
+                       OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1", MALLOC_ARENA_MAX="2")
+            args = [str(CPU_BIN), "-m", str(CPU_MODEL), "-p", prompt, "-W", "256",
+                    "-H", "256", "--steps", str(steps), "--seed", "42",
+                    "--cfg-scale", "7.0", "--sampling-method", "euler_a",
+                    "--diffusion-fa", "--vae-tiling", "--log-level", "error",
+                    "-o", str(result)]
+            with tempfile.TemporaryFile() as log:
+                child = subprocess.Popen(args, cwd=str(CPU_STATE), env=env,
+                                         stdin=subprocess.DEVNULL, stdout=log,
+                                         stderr=subprocess.STDOUT, start_new_session=True,
+                                         preexec_fn=cpu_child_limits)
+                limit = time.monotonic() + CPU_MAX_SECONDS
+                try:
+                    while child.poll() is None and time.monotonic() < limit:
+                        if not factory_ok() or free_kib() < CPU_MIN_KIB:
+                            raise RuntimeError("PICM_CPU_RUNTIME_GUARD")
+                        time.sleep(0.5)
+                    if child.poll() is None:
+                        raise RuntimeError("PICM_CPU_RENDER_TIMEOUT")
+                    if child.returncode != 0 or not result.is_file():
+                        raise RuntimeError("PICM_CPU_RENDER_FAILED")
+                    png = result.read_bytes()
+                    if (not 1024 <= len(png) <= 2_000_000
+                            or not png.startswith(b"\x89PNG\r\n\x1a\n")
+                            or struct.unpack(">II", png[16:24]) != (256, 256)):
+                        raise RuntimeError("PICM_CPU_INVALID_PNG")
+                    return png
+                finally:
+                    if child.poll() is None:
+                        os.killpg(child.pid, signal.SIGTERM)
+                        try:
+                            child.wait(timeout=8)
+                        except subprocess.TimeoutExpired:
+                            os.killpg(child.pid, signal.SIGKILL)
+                            child.wait(timeout=8)
+
+
 def start_comfy_if_needed():
     if not factory_ok() or not ram_ok():
         raise RuntimeError("FACTORY_OR_MEMORY_GUARD_BLOCKED")
@@ -99,6 +207,8 @@ def render(job):
             or type(steps) is not int or steps not in STEPS
             or not isinstance(prompt, str) or not 4 <= len(prompt) <= 650):
         raise RuntimeError("INVALID_JOB")
+    if direct_cpu_ready():
+        return render_direct_cpu(prompt, steps)
     start_comfy_if_needed()
     graph = {
         "1": {"class_type": "SaeitSafeCPURender",
@@ -149,7 +259,13 @@ def once():
     try:
         image = render(job)
     except Exception as exc:
-        print("PICM_RENDER_ERROR=" + type(exc).__name__, flush=True)
+        safe_code = str(exc)
+        permitted = {"PICM_CPU_BACKEND_UNSAFE", "PICM_CPU_MODEL_INTEGRITY_FAILURE",
+                     "PICM_CPU_START_GUARD", "PICM_CPU_UNSAFE_STATE", "PICM_CPU_UNSAFE_LOCK",
+                     "PICM_CPU_RENDER_BUSY", "PICM_CPU_RUNTIME_GUARD",
+                     "PICM_CPU_RENDER_TIMEOUT", "PICM_CPU_RENDER_FAILED", "PICM_CPU_INVALID_PNG"}
+        print("PICM_RENDER_ERROR=" + (safe_code if safe_code in permitted
+                                      else type(exc).__name__), flush=True)
         code, _ = query_api("/picm/worker/finish/" + ident + "/",
                             data=b"{}", lease=lease)
         return "PICM_JOB_REPORTED_FAILED_" + str(code)
