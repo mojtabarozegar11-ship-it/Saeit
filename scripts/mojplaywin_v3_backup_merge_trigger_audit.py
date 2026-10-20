@@ -27,6 +27,7 @@ CHANGED = (
     "tests/test_mojplaywin_backup_pipeline_integration_v3.py",
     "tests/test_mojplaywin_backup_runner_v3.py",
     "scripts/mojplaywin_v3_backup_merge_trigger_audit.py",
+    "tests/test_mojplaywin_v3_backup_merge_trigger_audit.py",
 )
 
 
