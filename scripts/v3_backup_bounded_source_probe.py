@@ -148,7 +148,19 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except Exception:
-        # Exception text may contain filesystem or SQL details, never print it.
-        print('V3_SOURCE_LOCAL_BOUNDED_PROBE_FAILED', file=sys.stderr)
+    except Exception as exc:
+        # Only fixed reason codes are released, never external SQL or file data.
+        safe = {
+            "source_database_scheme", "source_database_ambiguous",
+            "source_database_invalid", "source_file_roots_unverified",
+            "source_tar_unavailable", "source_dump_unavailable",
+            "source_database_listing_unverified", "source_database_mismatch",
+            "source_engine_probe_failed", "source_nontransactional_or_missing_tables",
+            "unsupported_mode", "unbounded_probe", "invalid_mode",
+        }
+        reason = str(exc) if isinstance(exc, (RuntimeError, ValueError)) and str(exc) in safe else "unclassified"
+        print(json.dumps({"classification": "V3_SOURCE_LOCAL_BOUNDED_PROBE_FAILED",
+                          "reason_code": reason, "backup_created": False,
+                          "source_bytes_sent_over_ssh": 0, "release_permitted": False},
+                         sort_keys=True), file=sys.stderr)
         raise SystemExit(1)
