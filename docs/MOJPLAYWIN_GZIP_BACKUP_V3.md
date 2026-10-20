@@ -42,3 +42,20 @@ The October 17 primary encrypted backup timed out after exactly **1,300 seconds 
 ## Operational hygiene
 
 The historical October 17 `.partial` archives are intentionally retained. No production payment, product, shared app restart or protected child-site path is modified. Existing Django/MySQL schema is not migrated.
+
+## October 20 verified readiness and actual limitations
+
+- **VPS read-only readiness:** https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39369175197 . Private backup directory, existing recovery key, GPG, >=10 GiB free, and unused `mojplaywin_20261020` names verified. It also definitively reported no complete archive pair.
+- **Isolated recovery runtime probe:** https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39369594141 . The current VPS user account has no Docker, Podman, MariaDB client/server or MySQL server binaries. Available memory >=2 GiB and free disk >=10 GiB; free disk was below 16 GiB at that probe. Hence an actual isolated SQL import **cannot be claimed on this VPS**.
+- **Temporary network-disabled MariaDB fixture:** https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39370013330 . Synthetic GPG SQL/TAR archives were decrypted; a disposable MariaDB instance restored a verified 160-row test table; safe TAR extraction and path-traversal rejection passed. Docker container had no network connectivity and was removed. No customer data was handled.
+- **Owner-only workflow staged:** `.github/workflows/mojplaywin-v3-owner-manual-backup.yml`. It only responds to GitHub **workflow_dispatch**, checks the exact repository, `main` ref, owner actor, and `APPROVE-PRIVATE-BACKUP-NO-PUBLISH` confirmation. It has no automatic push, scheduled, or PR backup trigger. Until reviewed and added to the default branch, GitHub's manual Run workflow interface does not expose it. Do not force-merge this PR in a way that triggers shared production deployments.
+- The manual workflow creates an encrypted, versioned **pair of scoped backup files**, runs GPG/gzip pair verification, and explicitly outputs `V3_REAL_ISOLATED_RESTORE_COMPLETED=false` and `V3_PUBLIC_RELEASE_AUTHORIZED=false`. A green job is not proof of real isolated database restoration.
+- Restoring the real SQL dump requires an owner-approved isolated MariaDB runtime. Because the VPS lacks one, prepare a private controlled VM/container outside the active cPanel tenants before any real restore. Do not route sensitive customer SQL to public CI logs or synthetic CI services; this would require an explicitly approved private-processing arrangement.
+
+### Operator safety checkpoints
+
+1. Read the latest PR checks and verify no cross-subsite main-branch workflow will deploy or restart shared Passenger solely because backup files merge.
+2. Obtain owner authorization to activate the manual backup workflow. Confirm the destination check still finds sufficient free disk, existing private recovery key, and no conflicting dated archives.
+3. Run the private backup once. If either stream fails, preserve historical and current `.partial` files and do not retry with the same date.
+4. Verify both GPG manifests and their recovered content. Export a **secure copy of the decryption key outside the VPS** through an owner-approved secret-management channel; never expose it in chat or GitHub artifacts.
+5. Import into an isolated DB and safely reconstruct site files, then compare records, routes and required data. Document proof of the **actual** isolated restore and affected scopes before authorizing public store changes.
