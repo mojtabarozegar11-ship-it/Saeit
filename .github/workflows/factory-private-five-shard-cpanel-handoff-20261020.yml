@@ -6,6 +6,8 @@ on:
       - .github/workflows/factory-private-five-shard-cpanel-handoff-20261020.yml
       - scripts/factory_private_shard_receiver_20261020.py
       - tests/test_factory_private_shard_receiver_20261020.py
+      - scripts/zomorod_factory_store_import.py
+      - tests/test_factory_shard_store_bridge_20261020.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -25,6 +27,7 @@ jobs:
           set -euo pipefail
           python3 -B -m unittest tests.test_factory_zip_transport_shards_20261020 -v
           python3 -B -m unittest tests.test_factory_private_shard_receiver_20261020 -v
+          python3 -B -m unittest tests.test_factory_shard_store_bridge_20261020 -v
           python3 -B -m py_compile scripts/factory_private_shard_receiver_20261020.py
       - name: Prepare pinned VPS relay and exact cPanel host identity
         shell: bash
@@ -152,6 +155,74 @@ jobs:
           print('REAL_CPANEL_PRIVATE_SHARDS_VERIFIED=10')
           print('REAL_CPANEL_PRIVATE_FILES_RECONSTRUCTED=485')
           print('REAL_CPANEL_PUBLIC_SALES_ACTIVATED=0')
+          PY
+      - name: Connect SHA-verified private collections to existing Zomorod native store importer
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-shard-transfer"
+          scp -q -F "$d/config" scripts/zomorod_factory_store_import.py \
+            "zm-cpanel:.private/zomorod-business/.verified-shard-importer-$GITHUB_RUN_ID.py"
+          timeout 120s ssh -T -F "$d/config" zm-cpanel bash -se -- "$GITHUB_RUN_ID" "$FACTORY_PRIVATE_SHARD_TAR_SHA" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          run="$1"; batch="$2"
+          private="$HOME/.private/zomorod-business"
+          inbox="$HOME/.saeit-factory-inbox"
+          active="$private/zomorod_factory_store_import.py"
+          candidate="$private/.verified-shard-importer-$run.py"
+          verifier="$inbox/private-shard-incoming/verify-$run.py"
+          store="$private/site_store.sqlite3"
+          live="$private/site_store.php"
+          test "$HOME" = /home/zomorod2
+          test -f "$live" && test ! -L "$live"
+          test -f "$store" && test ! -L "$store"
+          test -f "$candidate" && test ! -L "$candidate"
+          test -f "$verifier" && test ! -L "$verifier"
+          test ! -L "$active"
+          hash_before="$(sha256sum "$live" | cut -c1-64)"
+          python3 -B - "$candidate" <<'PY'
+          import ast,sys
+          ast.parse(open(sys.argv[1],encoding="utf8").read())
+          PY
+          back="$HOME/.backups/zomorod-private-shard-store/$run"
+          install -d -m 700 "$back"
+          if test -f "$active";then cp -p -- "$active" "$back/importer.before.py"; chmod 600 "$back/importer.before.py";fi
+          chmod 600 "$candidate"
+          mv -f -- "$candidate" "$active"
+          python3 -B "$active" --inbox "$inbox" --store-db "$store" \
+            --verified-private-shard-batch "$inbox/private-verified-transport/$batch" \
+            --private-shard-verifier "$verifier"
+          test "$(sha256sum "$live" | cut -c1-64)" = "$hash_before"
+          echo ZOMOROD_PRIVATE_SHARDS_OFFICIAL_IMPORTER_CONNECTED=PASS
+          REMOTE
+      - name: Verify native store has five actual private rows, no fabricated scientific, rights or owner approvals
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-shard-transfer"
+          timeout 40s ssh -T -F "$d/config" zm-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import sqlite3
+          db=Path.home()/'.private/zomorod-business/site_store.sqlite3'
+          assert db.is_file() and not db.is_symlink()
+          with sqlite3.connect("file:"+str(db)+"?mode=ro",uri=True) as c:
+              candidates=c.execute("SELECT COUNT(*),SUM(shards),SUM(verified_files) FROM factory_private_shard_candidates").fetchone()
+              required=c.execute("SELECT COUNT(*) FROM factory_shard_evidence_queue").fetchone()[0]
+              prohibited=c.execute("""SELECT COUNT(*) FROM factory_private_shard_candidates
+                 WHERE public_enabled<>0 OR paid_price_irr IS NOT NULL OR
+                 independent_specialist_review<>'not_verified' OR
+                 scientific_review<>'not_verified' OR rights_and_license_review<>'not_verified' OR
+                 owner_approval<>'not_granted'""").fetchone()[0]
+              assert candidates==(5,10,485),candidates
+              assert required==5 and prohibited==0
+              print("NATIVE_ZOMOROD_STORE_PRIVATE_PRODUCTS="+str(candidates[0]))
+              print("NATIVE_ZOMOROD_STORE_PRIVATE_SHARDS="+str(candidates[1]))
+              print("NATIVE_ZOMOROD_STORE_VERIFIED_SOURCE_FILES="+str(candidates[2]))
+              print("NATIVE_ZOMOROD_SCIENTIFIC_LEGAL_REVIEW_QUEUE="+str(required))
+              print("NATIVE_ZOMOROD_FALSE_APPROVALS="+str(prohibited))
+              print("NATIVE_ZOMOROD_PUBLIC_RELEASES=0")
           PY
       - name: Erase only ephemeral CI relay credentials and artifacts
         if: always()
