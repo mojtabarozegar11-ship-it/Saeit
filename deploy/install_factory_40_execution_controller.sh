@@ -103,6 +103,14 @@ for family,slug in [('F18','local_calculator_webapps'),('F20','validation_plugin
  assert manifest['family_id']==family and manifest['qa_status']=='passed'
  assert any(r['product_id']==product and r['family_id']==family and r['artifact_sha256']==manifest['artifact_sha256'] for r in stock['records'])
 print('BATCH5_REAL_BUILD50_PRIVATE_STOCK=PASS')
+for family,product in [('F36','fieldwork_tileable_materials_48'),
+ ('F37','fieldwork_animated_motion_48'),('F39','fieldwork_original_audio_cues_48')]:
+ manifest=json.loads((root/'digital-products'/product/'manufacturing_manifest.json').read_text())
+ assert manifest['family_id']==family and manifest['qa_status']=='passed'
+ assert manifest['qa_evidence']=='unit_tests_passed' and len(manifest['files'])==97
+ assert any(r['product_id']==product and r['family_id']==family and
+            r['artifact_sha256']==manifest['artifact_sha256'] for r in stock['records'])
+ print('NATIVE_MEDIA_STRICT_PRIVATE_STOCK='+family+':PASS')
 F31STOCK
  then stocked=1;break;fi
  sleep 2

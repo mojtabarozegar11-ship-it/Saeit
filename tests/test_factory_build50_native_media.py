@@ -28,11 +28,22 @@ class NativeMedia(unittest.TestCase):
                 self.assertTrue(proto.verify_attempt(home,state,plan["source_snapshot_sha256"]))
                 folder=Path(state["attempt_folder"]);zipname=product+"-internal-qa.zip"
                 self.assertTrue(review.check(folder,folder/zipname,product,family,ffmpeg)["passed"])
+                if family=="F36":
+                    review.decode(ffmpeg,folder/"dunes_subtle.exr")
                 self.assertEqual(maker.build(root,family,ffmpeg)["status"],
                                  "unchanged_verified_technical_product")
                 manifest=proto.read(root/"digital-products"/product/"manufacturing_manifest.json")
                 self.assertFalse(manifest["public_listing_enabled"])
                 self.assertFalse(manifest["owner_publication_approval"])
+                self.assertEqual(manifest["qa_evidence"],"unit_tests_passed")
+                self.assertEqual(len(manifest["files"]),97)
+                self.assertFalse(manifest["customer_order_required"])
+                warehouse=load("factory_production_warehouse")
+                result=warehouse.cycle(root,strict_build50=True)
+                self.assertGreaterEqual(result["stocked"],1)
+                register=proto.read(root/"production-warehouse"/"stock-register.json")
+                self.assertTrue(any(x["family_id"]==family and x["product_id"]==product
+                                    for x in register["records"]))
     def test_tamper_and_forged_receipt_rejected(self):
         ffmpeg=Path(shutil.which("ffmpeg"))
         with tempfile.TemporaryDirectory() as temp:

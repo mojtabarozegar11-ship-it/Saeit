@@ -1,0 +1,307 @@
+{
+  "updated": "2026-10-20",
+  "site": "https://mojplaywin.com",
+  "payment_state": "No payment is accepted within /earn/. Existing independently gated store checkouts must be verified.",
+  "offers": [
+    {
+      "slug": "website-doctor",
+      "title": "Website Doctor — Audit & Fix",
+      "short": "A focused website health assessment and an actionable repair plan.",
+      "price": "$49–$249 per project",
+      "status": "Request a quote",
+      "type": "service",
+      "intro": "Find the technical and commercial problems that stop visitors from becoming customers. Every engagement starts with a scoped review; changes are made only after authorization and a backup.",
+      "includes": [
+        "Broken links, mobile usability and speed review",
+        "SEO metadata and indexing diagnostic",
+        "Checkout and lead-path friction report",
+        "Prioritized fixes with before/after evidence"
+      ],
+      "process": [
+        "Share your site URL and main objective",
+        "Receive the agreed scope and price",
+        "Approve any changes before implementation"
+      ],
+      "faq": [
+        "Does this guarantee a ranking? No. Search performance depends on many factors.",
+        "Will you need my password? Do not send credentials by email. Secure access is arranged only after a confirmed order."
+      ],
+      "keywords": "website audit, website repair, technical SEO, conversion review"
+    },
+    {
+      "slug": "landing-page-studio",
+      "title": "Landing Page Studio",
+      "short": "Conversion-focused landing pages for products, services and campaigns.",
+      "price": "$199–$599 per project",
+      "status": "Request a quote",
+      "type": "service",
+      "intro": "Order a responsive landing page with clear messaging, accessible calls to action, and a measurable lead flow. Hosting and third-party subscriptions are priced separately.",
+      "includes": [
+        "One-page design with mobile-first layout",
+        "Offer copy, call to action and contact journey",
+        "Basic analytics and technical SEO setup",
+        "Cross-device checks and handover notes"
+      ],
+      "process": [
+        "Explain the audience and offer",
+        "Approve scope and first draft",
+        "Review tested preview before publishing"
+      ],
+      "faq": [
+        "Is hosting included? Only when explicitly stated in your quote.",
+        "Can I request revisions? Yes; the included revision count is listed before payment."
+      ],
+      "keywords": "landing page design, conversion landing page, business website"
+    },
+    {
+      "slug": "ai-automation",
+      "title": "AI Workflow Automation",
+      "short": "Safe, practical automations for repetitive business tasks.",
+      "price": "$149–$599 starting scope",
+      "status": "Request a quote",
+      "type": "service",
+      "intro": "We map one repeatable workflow, build a constrained prototype, and document where human approval is required. External API fees and provider subscriptions are excluded unless quoted.",
+      "includes": [
+        "Process and data mapping",
+        "One scoped automation or prototype",
+        "Approval controls and clear error handling",
+        "Testing, runbook and safe handover"
+      ],
+      "process": [
+        "Describe one repetitive task",
+        "Confirm data sources, constraints and expected result",
+        "Pilot on sample data before production access"
+      ],
+      "faq": [
+        "Does it run without human oversight? High-impact actions require explicit controls.",
+        "Can you connect my business accounts? Only with delegated authorization and supported APIs."
+      ],
+      "keywords": "AI automation, business workflows, AI agents, process automation"
+    },
+    {
+      "slug": "business-spreadsheets",
+      "title": "Business Spreadsheet Kits",
+      "short": "Useful editable spreadsheets for planning, pricing and operations.",
+      "price": "$9–$39 indicative kit pricing",
+      "status": "Preview / availability inquiry",
+      "type": "digital",
+      "intro": "Tools can cover cost of goods, profitability, inventory, project budgets and scenario planning. Each offered file must pass formula, compatibility and download checks before it is listed as purchasable.",
+      "includes": [
+        "Editable spreadsheet with documented assumptions",
+        "Example data and a quick-start guide",
+        "Checks for formulas, dates and currency formats",
+        "Version information and clear limitations"
+      ],
+      "process": [
+        "Choose the business task",
+        "Request a sample or current product availability",
+        "Purchase only when an active verified checkout is displayed"
+      ],
+      "faq": [
+        "Can the workbook replace an accountant? No; it supports planning, not regulated advice.",
+        "Is automatic delivery available? Only for individually verified products with active checkout."
+      ],
+      "keywords": "Excel templates, business spreadsheet, financial planning templates"
+    },
+    {
+      "slug": "website-templates",
+      "title": "Website Template Collection",
+      "short": "Responsive starter layouts for selected business niches.",
+      "price": "$19–$79 indicative price per license",
+      "status": "Preview / availability inquiry",
+      "type": "digital",
+      "intro": "Browse the concept for accessible web templates with instructions and clear licensing. Licenses, demos and packages become purchasable only after quality and rights reviews.",
+      "includes": [
+        "Responsive page layouts and reusable components",
+        "Installation and configuration instructions",
+        "Keyboard and mobile interaction checks",
+        "License scope and compatibility notes"
+      ],
+      "process": [
+        "Select the business use case",
+        "Review a live preview and compatibility",
+        "Use verified checkout when a package is released"
+      ],
+      "faq": [
+        "Does this include custom development? No; customization is quoted separately.",
+        "Is redistribution allowed? It depends on the license attached to the released file."
+      ],
+      "keywords": "HTML website templates, web design themes, landing page templates"
+    },
+    {
+      "slug": "social-media-kits",
+      "title": "Social Media Design Kits",
+      "short": "Reusable visuals and campaign assets with clear usage rights.",
+      "price": "$9–$29 indicative kit pricing",
+      "status": "Preview / availability inquiry",
+      "type": "digital",
+      "intro": "Create consistent posts and story formats for legitimate marketing. Each bundle should contain editable sources, platform dimensions and non-infringing assets.",
+      "includes": [
+        "Multiple post and story formats",
+        "Editable source file when supported",
+        "Short brand and resizing guide",
+        "Rights and export checks"
+      ],
+      "process": [
+        "Choose the platform and visual direction",
+        "Review previews and licensing",
+        "Purchase only a published tested bundle"
+      ],
+      "faq": [
+        "Are copyrighted logos included? No unauthorized third-party logos.",
+        "Can I request bespoke designs? Custom orders are separately quoted."
+      ],
+      "keywords": "social media templates, social content design, marketing kit"
+    },
+    {
+      "slug": "resume-builder",
+      "title": "International Resume Builder",
+      "short": "A guided CV and cover-letter experience for global applications.",
+      "price": "$5–$15 planned export pricing",
+      "status": "In development — join the inquiry list",
+      "type": "planned",
+      "intro": "A planned interactive resume tool to help applicants write clear, tailored professional materials. This listing is a product concept, not a working paid editor yet.",
+      "includes": [
+        "Role-specific structure and prompts",
+        "Readable ATS-conscious export concept",
+        "Privacy-first review of personal information",
+        "Cover letter draft and proofreading guidance"
+      ],
+      "process": [
+        "Send feedback about the roles you apply for",
+        "Review the feature preview when released",
+        "Export purchasing will open only after testing"
+      ],
+      "faq": [
+        "Does a CV guarantee a job? No.",
+        "Are uploads being collected now? No; do not email sensitive personal documents."
+      ],
+      "keywords": "resume builder, CV creator, ATS friendly resume"
+    },
+    {
+      "slug": "logo-studio",
+      "title": "AI Logo & Brand Studio",
+      "short": "A planned interactive brand concept builder.",
+      "price": "$9–$39 planned package pricing",
+      "status": "In development — inquire",
+      "type": "planned",
+      "intro": "A planned tool to turn a brand brief into distinct visual directions. Trademark clearance, originality and manual approval remain important.",
+      "includes": [
+        "Brand questionnaire concept",
+        "Color and typography direction",
+        "Logo preview and export plan",
+        "Usage-rights and similarity review"
+      ],
+      "process": [
+        "Share the business category and visual goals",
+        "Receive launch information when available",
+        "Verify rights and deliverables before any order"
+      ],
+      "faq": [
+        "Does generation grant trademark ownership? No; legal clearance is separate.",
+        "Can you design a custom logo now? Ask for a bespoke service quote."
+      ],
+      "keywords": "AI logo design, brand identity, business logo"
+    },
+    {
+      "slug": "browser-games",
+      "title": "Original Browser Games & Add-ons",
+      "short": "Playable entertainment with optional premium content.",
+      "price": "$3–$15 proposed add-on pricing",
+      "status": "Game catalog / paid add-ons planned",
+      "type": "planned",
+      "intro": "Explore original browser games. Premium packs or extras should never be advertised as available until working builds, accounts, payment and entitlement delivery are proven.",
+      "includes": [
+        "Accessible controls and short onboarding",
+        "Playable core experience before monetization",
+        "Optional paid extras without deceptive pressure",
+        "Cross-browser and mobile performance testing"
+      ],
+      "process": [
+        "Explore currently available free games",
+        "Send feedback about desired add-ons",
+        "Buy premium items only after live entitlement checks"
+      ],
+      "faq": [
+        "Is a premium purchase open now? Not through this offer page.",
+        "Are paid extras essential to play? The proposal favors optional content."
+      ],
+      "keywords": "browser games, indie games, game expansions"
+    },
+    {
+      "slug": "marketing-ai",
+      "title": "Marketing AI Content Workspace",
+      "short": "A planned subscription for marketing drafts and campaign planning.",
+      "price": "$9–$29/month proposed",
+      "status": "Subscription in development",
+      "type": "planned",
+      "intro": "A planned workspace for drafting campaigns, landing-page copy and social updates with human review. No subscription charges or automatic billing are active from this page.",
+      "includes": [
+        "Campaign brief and content drafting",
+        "Brand voice and approval workflow",
+        "Export and revision history concept",
+        "Clear usage limits and cancellation controls"
+      ],
+      "process": [
+        "Describe your preferred content workflow",
+        "Request pilot information",
+        "Subscribe only after the billing and cancellation flow is verified"
+      ],
+      "faq": [
+        "Is this active recurring billing? No.",
+        "Will it publish automatically? Only with explicit account permissions and user approval."
+      ],
+      "keywords": "AI marketing tools, content creator, marketing subscription"
+    },
+    {
+      "slug": "business-calculators",
+      "title": "Interactive Business Calculators",
+      "short": "Focused online calculators for pricing, margins and planning.",
+      "price": "$5–$29 indicative premium export pricing",
+      "status": "Preview / availability inquiry",
+      "type": "digital",
+      "intro": "Lightweight calculators can help compare margins, breakeven points and project budgets. Sample calculations are educational and should be verified for each business context.",
+      "includes": [
+        "Transparent formulas and input definitions",
+        "Mobile-friendly interactive experience concept",
+        "Exportable scenario report when released",
+        "Clear units, assumptions and limitations"
+      ],
+      "process": [
+        "Choose a decision you need to model",
+        "Review assumptions and sample outputs",
+        "Request an export or custom tool quote"
+      ],
+      "faq": [
+        "Is this financial advice? No.",
+        "Can you build a custom calculator? Custom development is available by quotation."
+      ],
+      "keywords": "profit calculator, margin calculator, business pricing tool"
+    },
+    {
+      "slug": "website-care",
+      "title": "Website Care & Maintenance",
+      "short": "Ongoing maintenance with a defined monthly service scope.",
+      "price": "$29–$99/month indicative quote",
+      "status": "Request a quote; no automatic subscription",
+      "type": "service",
+      "intro": "A maintenance plan for monitoring, safe updates and incident triage, subject to a written scope and support window. No recurring charges are collected from this listing.",
+      "includes": [
+        "Agreed uptime and security review cadence",
+        "Backups and restore checks as contracted",
+        "Change approval and update records",
+        "Monthly technical summary"
+      ],
+      "process": [
+        "Describe the technology stack and site criticality",
+        "Approve SLA, exclusions and price",
+        "Activate billing only after a signed service agreement"
+      ],
+      "faq": [
+        "Does this promise 100% uptime? No.",
+        "Is maintenance already running? Only after a service agreement is accepted."
+      ],
+      "keywords": "website maintenance, website care plan, site security updates"
+    }
+  ]
+}
