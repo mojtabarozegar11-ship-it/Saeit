@@ -16,7 +16,7 @@ exec 9>"$ops/.mpw-repair-install.lock";flock -w 35 9
 install -d -m 700 "$target" "$ops/backups"
 backup="$ops/backups/mpw-stage1-real-repair-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 install -d -m 700 "$backup"
-files="mpw_factory_stage1_technical_repair.py mpw_vps_warehouse_courier.py factory_customer_packager.py factory_native_customer_packager.py factory_product_maker.py"
+files="mpw_factory_stage1_technical_repair.py mpw_vps_warehouse_courier.py factory_customer_packager.py factory_native_customer_packager.py factory_product_maker.py mpw_factory_stage1_deep_evidence.py"
 for file in $files;do
  test -s "$stage/$file" && test ! -L "$stage/$file"
  if test -f "$target/$file";then test ! -L "$target/$file";cp -p "$target/$file" "$backup/$file";fi
@@ -55,6 +55,23 @@ fi
 echo MPW_STAGE1_DISK_RESERVE_256MIB=PASS
 install_stage=technical_repair
 timeout 490s "$py" -B "$target/mpw_factory_stage1_technical_repair.py" --factory-private "$root" --max-new 43
+install_stage=deep_native_source_evidence
+timeout 170s "$py" -B "$target/mpw_factory_stage1_deep_evidence.py" --factory-private "$root"
+"$py" -B - "$root" <<'PYQA'
+import json,sys
+from pathlib import Path
+base=Path(sys.argv[1])/'design-state/mojplaywin-source-specific-reviews'
+proof=json.loads((base/'status.json').read_text())
+assert proof["schema"]=="mpw.factory.stage1-deep-evidence.v1"
+assert proof["returned_versions"]==len(proof["results"])
+assert proof["independent_human_signoffs_verified"]==0
+assert proof["commercially_approved_versions"]==0
+assert proof["sites_or_payments_changed"]==0
+print("VPS_MPW_DEEP_REVIEW_FILE_CHECKS="+str(proof.get("deep_passed_files",0)))
+print("VPS_MPW_DEEP_REVIEW_TECHNICAL_DEFECTS="+str(proof.get("technical_member_defects",0)))
+print("VPS_MPW_DEEP_REVIEW_MISSING_SPECIALIST_TESTS="+str(proof.get("specialist_file_tests_remaining",0)))
+print("VPS_MPW_DEEP_REVIEW_CASES="+str(proof["returned_versions"]))
+PYQA
 install_stage=verify_repair_receipts
 "$py" -B - "$root" <<'PY'
 import json,sys
