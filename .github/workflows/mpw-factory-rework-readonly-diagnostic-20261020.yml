@@ -74,7 +74,7 @@ jobs:
                   fmt=archive_formats.setdefault(fid,Counter())
                   for item in members:
                       ext=PurePosixPath(item.filename).suffix.lower() if not item.is_dir() else '(dir)'
-                      if not re.fullmatch(r'\\.[a-z0-9]{1,8}',ext or ''):
+                      if not re.fullmatch(r'\.[a-z0-9]{1,8}',ext or ''):
                           ext='(none)'
                       fmt[ext]+=1
               recipes['compatible' if re.fullmatch(r'(?:synth|sheet)_[a-f0-9]{24}',product) else 'other_native_product']+=1
