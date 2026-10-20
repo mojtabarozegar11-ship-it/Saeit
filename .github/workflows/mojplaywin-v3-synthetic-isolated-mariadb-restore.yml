@@ -1,7 +1,7 @@
 name: V3 disposable MariaDB backup restore proof - SYNTHETIC ONLY
 on:
   push:
-    branches: [fix/mpw-gzip-before-ssh-backup-20261020]
+    branches: [fix/mpw-gzip-before-ssh-backup-20261020, release/mpw-gpg-v3-owner-manual-20261020]
     paths:
       - ".github/workflows/mojplaywin-v3-synthetic-isolated-mariadb-restore.yml"
       - "tests/test_mojplaywin_backup_isolated_mariadb_v3.py"
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   isolated-test-no-customer-data:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/fix/mpw-gzip-before-ssh-backup-20261020'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/fix/mpw-gzip-before-ssh-backup-20261020' || github.ref == 'refs/heads/release/mpw-gpg-v3-owner-manual-20261020')
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     env:
