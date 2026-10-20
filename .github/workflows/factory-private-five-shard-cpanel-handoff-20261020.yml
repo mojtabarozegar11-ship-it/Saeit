@@ -224,6 +224,49 @@ jobs:
               print("NATIVE_ZOMOROD_FALSE_APPROVALS="+str(prohibited))
               print("NATIVE_ZOMOROD_PUBLIC_RELEASES=0")
           PY
+      - name: Audit actual evidence document inventory inside the five real private products
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-shard-transfer"
+          timeout 65s ssh -T -F "$d/config" zm-cpanel python3 - "$FACTORY_PRIVATE_SHARD_TAR_SHA" <<'PY'
+          import json,re,sys
+          from pathlib import Path
+          batch=sys.argv[1]
+          base=Path.home()/'.saeit-factory-inbox/private-verified-transport'/batch/'private-transport-shards'
+          legal_terms=('license','licence','copyright','rights','permission','terms','attribution')
+          science_terms=('reference','bibliograph','citation','study','evidence','scientific',
+                         'methodology','research','sources','validation','unit_test','tests')
+          results=[]
+          for recipe in (
+              'fieldwork_arithmetic_assessment_packs',
+              'fieldwork_arithmetic_mini_courses',
+              'fieldwork_arithmetic_teacher_kits',
+              'fieldwork_offline_operations_guides',
+              'fieldwork_vector_illustration_suite',
+          ):
+              folder=base/recipe
+              versions=list(folder.iterdir())
+              assert len(versions)==1 and not versions[0].is_symlink()
+              doc=json.loads((versions[0]/'receipt.json').read_text(encoding='utf8'))
+              files=[v['name'].split('/')[-1].lower() for v in doc['files']]
+              names_legal=sorted({n for n in files if any(t in n for t in legal_terms)})
+              names_science=sorted({n for n in files if any(t in n for t in science_terms)})
+              # File names indicate possible supporting material, not truth, rights,
+              # authorship or an independent specialist's signed conclusion.
+              result={'recipe':recipe,'files_verified':len(files),
+                      'potential_rights_documents':names_legal[:15],
+                      'potential_scientific_documents':names_science[:15],
+                      'scientific_claims_independently_validated':False,
+                      'all_asset_rights_cleared':False,
+                      'qualified_human_reviewer_attested':False,
+                      'owner_release_signed':False}
+              results.append(result)
+          assert len(results)==5 and all(x['files_verified']==97 for x in results)
+          print('REAL_PRIVATE_CONTENT_EVIDENCE_INVENTORY='+json.dumps(results,sort_keys=True))
+          print('REAL_PRIVATE_HUMAN_APPROVALS=0')
+          print('REAL_PRIVATE_COMMERCIAL_RELEASES=0')
+          PY
       - name: Erase only ephemeral CI relay credentials and artifacts
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/factory-shard-transfer"
