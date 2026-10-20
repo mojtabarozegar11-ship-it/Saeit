@@ -80,7 +80,7 @@ jobs:
         id: install
         run: |
           set -euo pipefail
-          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "python3 - publish '$GITHUB_RUN_ID'" < scripts/mpw_product_buyer_template_fix_20261020.py
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - publish '$GITHUB_RUN_ID'" < scripts/mpw_product_buyer_template_fix_20261020.py
       - name: Verify public purchase CTAs, product metadata and translated login
         run: |
           python3 - <<'PY'
