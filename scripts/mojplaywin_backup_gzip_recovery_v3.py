@@ -165,11 +165,17 @@ def both_ready(*, home=None, stem=STEM):
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) != 2:
+        if len(sys.argv) not in (2, 4):
             raise RuntimeError("mode required")
         mode = sys.argv[1]
+        date = "20261020"
+        if len(sys.argv) == 4:
+            if sys.argv[2] != "--date" or not re.fullmatch(r"20\d{6}", sys.argv[3]):
+                raise RuntimeError("invalid version date")
+            date = sys.argv[3]
+        stem = "mojplaywin_" + date
         if mode == "check":
-            ok = both_ready()
+            ok = both_ready(stem=stem)
             print(json.dumps({"classification": "V3_BACKUP_METADATA_READY",
                               "both_scoped_streams_complete": ok,
                               "isolated_restore_verified": False,
@@ -177,7 +183,7 @@ if __name__ == "__main__":
                               "release_permitted": False}, sort_keys=True))
             raise SystemExit(0 if ok else 1)
         if mode == "validate":
-            count = {kind: decode_archive(kind) for kind in ("mysql", "files")}
+            count = {kind: decode_archive(kind, stem=stem) for kind in ("mysql", "files")}
             print(json.dumps({"classification": "V3_BACKUP_CONTENT_AUTHENTICATED",
                               "both_scoped_streams_crc_verified": True,
                               "raw_bytes_by_kind": count,
@@ -185,8 +191,8 @@ if __name__ == "__main__":
                               "release_permitted": False}, sort_keys=True))
         elif mode in ("mysql", "files"):
             # Two-pass validation: do not emit a byte before complete verification.
-            verified = decode_archive(mode)
-            emitted = decode_archive(mode, out=sys.stdout.buffer)
+            verified = decode_archive(mode, stem=stem)
+            emitted = decode_archive(mode, stem=stem, out=sys.stdout.buffer)
             if verified != emitted:
                 raise RuntimeError("private archive changed during extraction")
             print("V3_PRIVATE_RECOVERY_STREAM_VERIFIED_NO_PRODUCTION_WRITE", file=sys.stderr)
