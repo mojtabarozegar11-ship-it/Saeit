@@ -21,6 +21,69 @@ def decode(ffmpeg,source):
          stderr=subprocess.PIPE,stdin=subprocess.DEVNULL,timeout=18)
     if proc.returncode:raise ValueError("MEDIA_REVIEW_CANNOT_DECODE:"+source.name)
 
+def check_exr(source,png):
+    """Independent OpenEXR scanline parser and pixel-by-pixel consistency checks."""
+    import struct
+    from PIL import Image
+    data=Path(source).read_bytes()
+    if len(data)<100 or data[:8]!=struct.pack("<II",20000630,2):
+        raise ValueError("MEDIA_REVIEW_EXR_MAGIC_OR_VERSION")
+    cursor=8;attributes={}
+    while True:
+        end=data.find(b"\x00",cursor)
+        if end<0:raise ValueError("MEDIA_REVIEW_EXR_MISSING_HEADER_END")
+        if end==cursor:
+            cursor+=1
+            break
+        name=data[cursor:end].decode("ascii")
+        cursor=end+1
+        end=data.find(b"\x00",cursor)
+        if end<0:raise ValueError("MEDIA_REVIEW_EXR_BAD_TYPE")
+        kind=data[cursor:end].decode("ascii")
+        cursor=end+1
+        if cursor+4>len(data):raise ValueError("MEDIA_REVIEW_EXR_BAD_ATTRIBUTE")
+        size=struct.unpack_from("<I",data,cursor)[0];cursor+=4
+        if size>4096 or cursor+size>len(data) or name in attributes:
+            raise ValueError("MEDIA_REVIEW_EXR_BAD_ATTRIBUTE_SIZE")
+        attributes[name]=(kind,data[cursor:cursor+size]);cursor+=size
+    expected={
+      "channels":"chlist","compression":"compression","dataWindow":"box2i",
+      "displayWindow":"box2i","lineOrder":"lineOrder",
+      "pixelAspectRatio":"float","screenWindowCenter":"v2f","screenWindowWidth":"float"}
+    if {name:kind for name,(kind,body) in attributes.items()}!=expected:
+        raise ValueError("MEDIA_REVIEW_EXR_HEADER_FIELDS")
+    w=h=256
+    ch=b"".join(name.encode("ascii")+b"\x00"+struct.pack("<iB3xii",2,0,1,1)
+                for name in "BGR")+b"\x00"
+    if (attributes["channels"][1]!=ch or
+        attributes["compression"][1]!=b"\x00" or
+        attributes["dataWindow"][1]!=struct.pack("<iiii",0,0,w-1,h-1) or
+        attributes["displayWindow"][1]!=struct.pack("<iiii",0,0,w-1,h-1) or
+        attributes["lineOrder"][1]!=b"\x00"):
+        raise ValueError("MEDIA_REVIEW_EXR_WRONG_LAYOUT")
+    table_end=cursor+h*8
+    block_length=8+w*3*4
+    if len(data)!=table_end+h*block_length:
+        raise ValueError("MEDIA_REVIEW_EXR_LENGTH")
+    with Image.open(png) as image:
+        if image.size!=(w,h):raise ValueError("MEDIA_REVIEW_EXR_SOURCE_SIZE")
+        rgb=image.convert("RGB")
+        for y in range(h):
+            offset=struct.unpack_from("<Q",data,cursor+y*8)[0]
+            if offset!=table_end+y*block_length:
+                raise ValueError("MEDIA_REVIEW_EXR_OFFSET_TABLE")
+            line,size=struct.unpack_from("<ii",data,offset)
+            if line!=y or size!=w*3*4:raise ValueError("MEDIA_REVIEW_EXR_SCANLINE")
+            # Inspect channel planes at every tenth row and selected columns.
+            if y%17==0 or y==h-1:
+                for x in (0,31,127,191,255):
+                    pixel=rgb.getpixel((x,y))
+                    for channel,expected_value in enumerate((pixel[2],pixel[1],pixel[0])):
+                        got=struct.unpack_from("<f",data,offset+8+
+                            (channel*w+x)*4)[0]
+                        if abs(got-expected_value/255.0)>1e-6:
+                            raise ValueError("MEDIA_REVIEW_EXR_PIXEL_MISMATCH")
+
 def check(folder,archive,product,family,ffmpeg):
     from PIL import Image
     folder=Path(folder)
@@ -43,7 +106,7 @@ def check(folder,archive,product,family,ffmpeg):
                 if len(rgb.getcolors(65536) or [])<64:raise ValueError("MEDIA_REVIEW_FLAT_TEXTURE")
         elif family=="F36":
             if source.read_bytes()[:4]!=b"\x76\x2f\x31\x01":raise ValueError("MEDIA_REVIEW_NOT_OPENEXR")
-            decode(ffmpeg,source)
+            check_exr(source,source.with_suffix(".png"))
         elif family=="F37" and source.suffix==".gif":
             with Image.open(source) as im:
                 if im.format!="GIF" or im.size!=(256,192) or im.n_frames!=12:

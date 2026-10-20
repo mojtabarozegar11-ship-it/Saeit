@@ -69,6 +69,40 @@ def plan(proto,family,exe):
                       "Verify task-specific content variation and concrete measurements without assuming commercial clearance."]}
         for i,motif in enumerate(MOTIFS) for v,variant in enumerate(VARIANTS)]}
 
+def write_exr(file,image):
+    """OpenEXR v2 uncompressed scanline RGB float32, independent of FFmpeg codecs."""
+    width,height=image.size
+    if (width,height)!=(256,256) or image.mode!="RGB":
+        raise ValueError("MEDIA_EXR_UNSUPPORTED_GEOMETRY")
+    def cstr(value):return value.encode("ascii")+b"\x00"
+    def attribute(name,atype,body):
+        return cstr(name)+cstr(atype)+struct.pack("<I",len(body))+body
+    channels=b"".join(cstr(name)+struct.pack("<iB3xii",2,0,1,1)
+                       for name in "BGR")+b"\x00"
+    bounds=struct.pack("<iiii",0,0,width-1,height-1)
+    header=(struct.pack("<II",20000630,2)+
+            attribute("channels","chlist",channels)+
+            attribute("compression","compression",b"\x00")+
+            attribute("dataWindow","box2i",bounds)+
+            attribute("displayWindow","box2i",bounds)+
+            attribute("lineOrder","lineOrder",b"\x00")+
+            attribute("pixelAspectRatio","float",struct.pack("<f",1.0))+
+            attribute("screenWindowCenter","v2f",struct.pack("<ff",0.0,0.0))+
+            attribute("screenWindowWidth","float",struct.pack("<f",1.0))+
+            b"\x00")
+    row_length=width*3*4
+    base=len(header)+height*8
+    offsets=b"".join(struct.pack("<Q",base+y*(row_length+8))
+                     for y in range(height))
+    pixels=image.load()
+    payload=bytearray()
+    for y in range(height):
+        row=b"".join(struct.pack("<f",pixels[x,y][channel]/255.0)
+                     for channel in (2,1,0) for x in range(width))
+        payload.extend(struct.pack("<ii",y,len(row)))
+        payload.extend(row)
+    Path(file).write_bytes(header+offsets+payload)
+
 def material(folder,stem,i,v,exe):
     from PIL import Image
     size=256
@@ -87,8 +121,7 @@ def material(folder,stem,i,v,exe):
             pixels[x,y]=tuple(max(5,min(245,int(base+shift))) for shift in
                 (-21+i%8*4,13+v*7,39-i%6*5))
     image.save(p,"PNG",optimize=True)
-    ffmpeg_run(exe,"-i",str(p),"-frames:v","1","-c:v","exr",
-               "-pix_fmt","gbrpf32le","-f","image2",str(q))
+    write_exr(q,image)
     return [stem+".png",stem+".exr"]
 
 def motion(folder,stem,i,v,exe):

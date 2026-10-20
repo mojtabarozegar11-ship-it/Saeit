@@ -28,6 +28,8 @@ class NativeMedia(unittest.TestCase):
                 self.assertTrue(proto.verify_attempt(home,state,plan["source_snapshot_sha256"]))
                 folder=Path(state["attempt_folder"]);zipname=product+"-internal-qa.zip"
                 self.assertTrue(review.check(folder,folder/zipname,product,family,ffmpeg)["passed"])
+                if family=="F36":
+                    review.decode(ffmpeg,folder/"dunes_subtle.exr")
                 self.assertEqual(maker.build(root,family,ffmpeg)["status"],
                                  "unchanged_verified_technical_product")
                 manifest=proto.read(root/"digital-products"/product/"manufacturing_manifest.json")
