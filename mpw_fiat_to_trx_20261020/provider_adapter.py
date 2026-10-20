@@ -50,7 +50,8 @@ def _official_invoice_url(value):
 
 def create_invoice(order_id,price_usd,description,callback,success,cancel,*,env=None,opener=urlopen):
  e=os.environ if env is None else env
- if not ready(e):raise MerchantNotReady("Fiat-onramp TRX settlement is not merchant-approved")
+ if not ready(e) or not merchant_release_report(e)["release_permitted"]:
+  raise MerchantNotReady("Fiat-onramp checkout remains disabled until all independently verified merchant and release gates pass")
  payload=invoice_fields(order_id,price_usd,description,callback,success,cancel)
  # The processor's merchant payout configuration, NOT pay_currency in this invoice,
  # decides the TRX settlement wallet. Fiat acceptance must be activated at merchant level.
