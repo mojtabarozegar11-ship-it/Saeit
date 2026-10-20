@@ -202,7 +202,47 @@ def check_one(ext,raw):
     return "courier_static_syntax_and_signature_prescreen"
 
 
-def assess(product,version,manifest,raw,courier):
+def original_family_evidence(root,product,version,manifest,raw):
+    """Recover a missing family only from the exact original QA receipt and bytes.
+
+    Never infer from format, title, product name or another warehouse version.
+    Original stock is immutable; this is a new source-bound evidence revision.
+    """
+    if root is None or manifest.get("family_id") is not None:
+        return None
+    directory=Path(root)/"digital-products"/product
+    receipt=directory/"manufacturing_manifest.json"
+    artifact=directory/(product+"-internal-qa.zip")
+    if (directory.is_symlink() or not directory.is_dir()
+            or not receipt.is_file() or receipt.is_symlink()
+            or not artifact.is_file() or artifact.is_symlink()
+            or not 0<receipt.stat().st_size<=65536
+            or artifact.stat().st_size!=len(raw)):
+        return None
+    receipt_bytes=receipt.read_bytes()
+    try:
+        doc=json.loads(receipt_bytes)
+    except (ValueError,UnicodeError):
+        return None
+    if (not isinstance(doc,dict)
+            or doc.get("recipe")!=product
+            or doc.get("source_sha256")!=version
+            or doc.get("artifact_sha256")!=manifest.get("artifact_sha256")
+            or doc.get("qa_status")!="passed"):
+        return None
+    family=doc.get("family_id")
+    if family not in EXPECTED:
+        return None
+    digest=hashlib.sha256()
+    with artifact.open("rb") as fp:
+        for chunk in iter(lambda:fp.read(1024*1024),b""):
+            digest.update(chunk)
+    if digest.hexdigest()!=sha(raw):
+        return None
+    return family,sha(receipt_bytes)
+
+
+def assess(product,version,manifest,raw,courier,source_root=None):
     # First party authenticated warehouse invariants precede every specialist
     # evaluation. No archive contents are executed, repaired, or published.
     courier.verify_stock(manifest,product,version,raw)
@@ -213,6 +253,13 @@ def assess(product,version,manifest,raw,courier):
     except (RuntimeError,ValueError,KeyError,ET.ParseError,UnicodeError) as exc:
         blockers.append("ORIGINAL_NATIVE_STATIC_PRESCREEN_FAILED")
     fid=manifest.get("family_id")
+    family_provenance_source="warehouse_manifest" if fid in EXPECTED else "not_verified"
+    family_provenance_receipt_sha256=None
+    if fid is None and source_root is not None:
+        recovered=original_family_evidence(source_root,product,version,manifest,raw)
+        if recovered:
+            fid,family_provenance_receipt_sha256=recovered
+            family_provenance_source="sha256_matched_original_manufacturing_qa"
     if fid not in EXPECTED:
         blockers.append("MISSING_OR_UNSUPPORTED_FAMILY_PROVENANCE")
     with zipfile.ZipFile(io.BytesIO(raw)) as package:
@@ -244,6 +291,8 @@ def assess(product,version,manifest,raw,courier):
         "product_id":product,"source_sha256":version,
         "original_factory_artifact_sha256":sha(raw),
         "family_id":fid if isinstance(fid,str) and fid in EXPECTED else None,
+        "family_provenance_source":family_provenance_source,
+        "family_provenance_receipt_sha256":family_provenance_receipt_sha256,
         "source_integrity_verified":True,
         "static_and_container_checks_applied":dict(sorted(tested.items())),
         "format_counts":dict(sorted(formats.items())),
@@ -274,7 +323,7 @@ def run(root,courier,engine_path=None):
     dest=stage/"mojplaywin-native-specialist-evidence"
     courier.private_new(dest)
     for product,version,manifest,raw in courier.stock_records(root):
-        report=assess(product,version,manifest,raw,courier)
+        report=assess(product,version,manifest,raw,courier,root)
         fingerprint=sha(courier.json_blob(report))
         sub=dest/product
         courier.private_new(sub)
@@ -287,6 +336,8 @@ def run(root,courier,engine_path=None):
             courier.atomic(target,payload)
         results[(product,version)]=(fingerprint,report)
         counters["original_stock_checked"]+=1
+        if report["family_provenance_source"]=="sha256_matched_original_manufacturing_qa":
+            counters["source_sha_matched_family_recoveries"]+=1
         counters["prescreen_format_passed" if report["automated_format_prescreen_passed"]
                  else "prescreen_format_blocked"]+=1
         for issue in report["automated_technical_blockers"]:
