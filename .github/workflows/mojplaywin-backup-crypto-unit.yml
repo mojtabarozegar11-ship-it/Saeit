@@ -16,6 +16,8 @@ on:
       - "tests/test_mojplaywin_backup_gzip_v3.py"
       - "tests/test_mojplaywin_backup_runner_v3.py"
       - "tests/test_mojplaywin_backup_pipeline_integration_v3.py"
+      - "scripts/mojplaywin_backup_gzip_destination_preflight_v3.py"
+      - "tests/test_mojplaywin_backup_destination_preflight_v3.py"
 permissions:
   contents: read
 jobs:
@@ -51,4 +53,5 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_gzip_v3.py' -v
           python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_runner_v3.py' -v
           python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_pipeline_integration_v3.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_destination_preflight_v3.py' -v
           echo V3_COMPRESSED_GPG_SYNTHETIC_RECOVERY_TESTS=PASS
