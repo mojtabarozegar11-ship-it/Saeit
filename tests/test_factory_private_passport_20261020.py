@@ -54,7 +54,7 @@ class PrivatePassportTests(unittest.TestCase):
         self.assertEqual(p["economic_rights"][0]["party"], "مجتبی روزگار")
         self.assertEqual(p["economic_rights"][0]["percent"], 100)
         self.assertEqual(p["company_role"], "execution_technology_and_commercial_platform_only_not_rights_owner")
-        self.assertEqual(p["schema"], "saeit.factory.private-product-passport.v3")
+        self.assertEqual(p["schema"], "saeit.factory.private-product-passport.v4")
         self.assertEqual(p["verified_roles"], [])
         self.assertFalse(p["commercial_release_allowed"])
         self.assertFalse(p["public_store_role_display"])
@@ -87,7 +87,7 @@ class PrivatePassportTests(unittest.TestCase):
         legacy = dict(meta)
         legacy.pop("source_sha256")
         result = policy.ensure_private_passport(folder, legacy)
-        self.assertIn(".source_missing.personal_owner_v3.private.json", result["passport_file"])
+        self.assertIn(".source_missing.personal_owner_v4.private.json", result["passport_file"])
         p = json.loads((folder / result["passport_file"]).read_text("utf8"))
         self.assertIsNone(p["source_sha256"])
         self.assertEqual(p["source_provenance_status"],
@@ -122,14 +122,32 @@ class PrivatePassportTests(unittest.TestCase):
         self.assertFalse(declaration["company_operational_permission"]["executed_agreement_verified"])
         self.assertFalse(declaration["seller_legal_identity_and_payment_compliance_verified"])
 
-    def test_v3_sidecar_does_not_rewrite_historical_v2_record(self):
+    def test_v4_sidecar_preserves_historical_v2_and_v3_records(self):
         _, folder, meta, _ = self.build()
         v2 = folder / ("product_passport." + meta["artifact_sha256"] + ".private.json")
         v2.write_text('{"schema":"saeit.factory.private-product-passport.v2"}', encoding="utf8")
-        before = v2.read_bytes()
+        v3 = folder / ("product_passport." + meta["artifact_sha256"] + ".personal_owner_v3.private.json")
+        v3.write_text('{"schema":"saeit.factory.private-product-passport.v3"}', encoding="utf8")
+        before_v2, before_v3 = v2.read_bytes(), v3.read_bytes()
         result = policy.ensure_private_passport(folder, meta)
-        self.assertIn(".personal_owner_v3.private.json", result["passport_file"])
-        self.assertEqual(v2.read_bytes(), before)
+        self.assertIn(".personal_owner_v4.private.json", result["passport_file"])
+        self.assertEqual(v2.read_bytes(), before_v2)
+        self.assertEqual(v3.read_bytes(), before_v3)
+
+    def test_master_framework_covers_unlimited_future_products_without_fake_approval(self):
+        for index in range(125):
+            declaration = policy.build_passport("future_work_" + str(index))
+            master = declaration["master_framework"]
+            self.assertEqual(master["framework_id"], "ZOMOROD-MASTER-PERSONAL-RIGHTS-20261020")
+            self.assertIsNone(master["product_count_cap"])
+            self.assertIsNone(master["contractual_end_date"])
+            self.assertFalse(master["requires_new_master_contract_for_each_product"])
+            self.assertTrue(master["third_party_rights_not_automatically_transferred"])
+            self.assertTrue(master["individual_product_origin_and_license_check_required"])
+            self.assertFalse(master["valid_execution_and_authority_evidence_verified"])
+            self.assertFalse(declaration["third_party_rights_cleared"])
+            self.assertFalse(declaration["commercial_release_allowed"])
+            self.assertFalse(declaration["company_operational_permission"]["executed_agreement_verified"])
 
     def test_backfill_existing_versions_idempotently(self):
         _, folder, meta, passport = self.build()
