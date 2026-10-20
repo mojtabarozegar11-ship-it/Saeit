@@ -134,3 +134,5 @@ jobs:
 # Restore original profile exactly from verified pre-change backup and relocate one navigation.
 
 # Honor Django conditional picture markup (both branches preserved).
+
+# Retry recovery after strict original hero structure validation fix.
