@@ -65,5 +65,116 @@ class GreenhouseLabPilotTests(unittest.TestCase):
         self.assertIn("F28_OFFLINE_CALC_ACCEPTANCE=PASS", result.stdout)
 
 
+    def test_model_parity_with_existing_python_engine(self):
+        """Twenty deterministic scenarios must match the independent recipe engine."""
+        if not shutil.which("node"):
+            self.skipTest("Node.js unavailable")
+        import importlib.util
+        import json
+        import math
+        import random
+
+        path = ROOT / "product_recipes/greenhouse_crop_margin/calculator.py"
+        spec = importlib.util.spec_from_file_location("f28_reference_engine", path)
+        engine = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(engine)
+        rng = random.Random(28002026)
+        samples = [
+            {"area": 100, "yield": 10, "price": 3, "variable": 5,
+             "fixed": 500, "reject": 10, "currency": "USD"},
+            {"area": 1, "yield": 0, "price": 3, "variable": 0,
+             "fixed": 10, "reject": 0, "currency": "EUR"},
+            {"area": 100, "yield": 5, "price": 0, "variable": 0,
+             "fixed": 0, "reject": 100, "currency": "CAD"},
+        ]
+        for _ in range(17):
+            samples.append({
+                "area": rng.randint(1, 10000) / 10,
+                "yield": rng.randint(0, 400) / 10,
+                "price": rng.randint(0, 5000) / 100,
+                "variable": rng.randint(0, 10000) / 100,
+                "fixed": rng.randint(0, 200000),
+                "reject": rng.randint(0, 100),
+                "currency": "USD"
+            })
+        match = re.search(
+            r"const calculate=(function calculate\(v\)\{.*?\});\s*const keys=",
+            self.html, re.S
+        )
+        self.assertIsNotNone(match)
+        js = ("const calculate=" + match.group(1) + ";\n"
+              "const samples=" + json.dumps(samples) + ";\n"
+              "process.stdout.write(JSON.stringify(samples.map(calculate)));\n")
+        proc = subprocess.run(["node", "-e", js], capture_output=True,
+                              text=True, timeout=15, check=False)
+        self.assertEqual(proc.returncode, 0, proc.stderr[-1000:])
+        actual = json.loads(proc.stdout)
+        self.assertEqual(len(actual), len(samples))
+        fields = {
+            "gross": "gross_yield_kg",
+            "saleable": "saleable_yield_kg",
+            "revenue": "sales_revenue",
+            "total": "total_cost",
+            "margin": "net_margin",
+            "marginPerArea": "net_margin_per_m2",
+            "breakEven": "break_even_price_per_kg"
+        }
+        for scenario, produced in zip(samples, actual):
+            ref = engine.calculate({
+                "area_m2": scenario["area"],
+                "expected_yield_kg_per_m2": scenario["yield"],
+                "price_per_kg": scenario["price"],
+                "variable_cost_per_m2": scenario["variable"],
+                "fixed_cost_total": scenario["fixed"],
+                "rejection_rate_percent": scenario["reject"],
+                "currency": scenario["currency"],
+            })
+            self.assertEqual(produced["currency"], scenario["currency"])
+            for browser_key, engine_key in fields.items():
+                wanted = ref["results"][engine_key]
+                observed = produced[browser_key]
+                if wanted is None:
+                    self.assertIsNone(observed, (scenario, browser_key))
+                else:
+                    self.assertTrue(math.isclose(
+                        observed, float(wanted), rel_tol=1e-9,
+                        abs_tol=0.011
+                    ), (scenario, browser_key, wanted, observed))
+
+    def test_real_headless_browser_renders_numbers_and_nine_rows(self):
+        """Execute HTML in a headless desktop browser rather than just checking text."""
+        import os
+        import tempfile
+
+        chrome = next((shutil.which(name) for name in
+                       ("google-chrome", "chromium", "chromium-browser", "google-chrome-stable")
+                       if shutil.which(name)), None)
+        if not chrome:
+            if os.environ.get("GITHUB_ACTIONS") == "true":
+                self.fail("CI missing headless Chrome: F28 browser QA was not executed")
+            self.skipTest("Browser not installed in local environment")
+        with tempfile.TemporaryDirectory(prefix="f28-browser-") as tmp:
+            cmd = [
+                chrome, "--headless", "--no-sandbox",
+                "--disable-dev-shm-usage", "--disable-gpu",
+                "--disable-background-networking", "--no-first-run",
+                "--disable-extensions", "--disable-default-apps",
+                "--no-proxy-server", "--virtual-time-budget=2000",
+                "--user-data-dir=" + tmp, "--dump-dom", HTML.resolve().as_uri()
+            ]
+            proc = subprocess.run(cmd, capture_output=True, text=True,
+                                  timeout=35, check=False)
+            self.assertEqual(proc.returncode, 0, proc.stderr[-1000:])
+            dom = proc.stdout
+            self.assertIn("1,700.00 USD", dom, "Margin not calculated in browser")
+            self.assertIn("2,700.00 USD", dom, "Revenue not calculated in browser")
+            self.assertIn("900.00 kg", dom, "Saleable mass not calculated in browser")
+            self.assertIn("id=\"rows\"", dom)
+            rendered_rows = re.search(r'<tbody id="rows">(.*?)</tbody>', dom, re.S)
+            self.assertIsNotNone(rendered_rows, "Missing rendered matrix")
+            self.assertEqual(rendered_rows.group(1).count("<tr>"), 9)
+            self.assertNotIn('id="export" type="button" class="secondary" disabled', dom)
+
+
 if __name__ == "__main__":
     unittest.main()
