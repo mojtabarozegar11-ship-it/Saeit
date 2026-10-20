@@ -10,6 +10,18 @@ on:
       - "scripts/mojplaywin_backup_encrypt_vps_gpg.py"
       - "tests/test_mojplaywin_backup_gpg_v2.py"
       - ".github/workflows/mojplaywin-encrypted-backup-gpg-v2-20261017.yml"
+      - "scripts/mojplaywin_backup_gzip_source_v3.py"
+      - "scripts/mojplaywin_backup_gzip_recovery_v3.py"
+      - "scripts/mojplaywin_backup_gzip_runner_v3.py"
+      - "tests/test_mojplaywin_backup_gzip_v3.py"
+      - "tests/test_mojplaywin_backup_runner_v3.py"
+      - "tests/test_mojplaywin_backup_pipeline_integration_v3.py"
+      - "scripts/mojplaywin_backup_gzip_destination_preflight_v3.py"
+      - "tests/test_mojplaywin_backup_destination_preflight_v3.py"
+      - ".github/workflows/mojplaywin-v3-owner-manual-backup.yml"
+      - "tests/test_mojplaywin_backup_owner_manual_workflow_v3.py"
+      - "scripts/mojplaywin_v3_backup_merge_trigger_audit.py"
+      - "tests/test_mojplaywin_v3_backup_merge_trigger_audit.py"
 permissions:
   contents: read
 jobs:
@@ -35,3 +47,18 @@ jobs:
           command -v gpg
           python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_gpg_v2.py'
           python3 -m py_compile scripts/mojplaywin_backup_encrypt_vps_gpg.py
+      - name: Validate compressed transport, GPG recovery, CRC tamper and owner-runner guard using only fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_backup_gzip_source_v3.py scripts/mojplaywin_backup_gzip_recovery_v3.py scripts/mojplaywin_backup_gzip_runner_v3.py
+          python3 scripts/mojplaywin_backup_gzip_source_v3.py fixture
+          python3 scripts/mojplaywin_backup_gzip_runner_v3.py --ssh-config /dev/null --date 20261020 --fixture
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_gzip_v3.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_runner_v3.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_pipeline_integration_v3.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_destination_preflight_v3.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_owner_manual_workflow_v3.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_v3_backup_merge_trigger_audit.py' -v
+          python3 scripts/mojplaywin_v3_backup_merge_trigger_audit.py
+          echo V3_COMPRESSED_GPG_SYNTHETIC_RECOVERY_TESTS=PASS
