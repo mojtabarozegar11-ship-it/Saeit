@@ -121,7 +121,10 @@ class FactoryPrivateQAFailureIsolation(unittest.TestCase):
             'PRIVATE_SENDER_ROLLBACK_RESTORED',
             'FACTORY_STORE_RECEIPT_VERIFIED_COUNT=',
             'PRIVATE_NO_RECEIPT_VERIFIED',
-            'CPANEL_RECEIVER_RUNTIME_DRIFT_STOP',
+            'cp -p "$active" "$backup/receiver.before.py"',
+            'cmp -s "$active" "$backup/receiver.before.py"',
+            'mv -f -- "$incoming" "$active"',
+            'PRIVATE_CPANEL_RECEIVER_UPDATED_WITH_VERIFIED_BACKUP',
             'PRIVATE_CPANEL_RECEIVER_UNCHANGED',
         ):
             self.assertIn(required, workflow)
