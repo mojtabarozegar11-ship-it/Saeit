@@ -390,3 +390,4 @@ jobs:
         if: always()
         shell: bash
         run: rm -rf "$RUNNER_TEMP/zm-site-factory-bridge"
+# Reconnect 2026-10-20: owner-requested bounded private warehouse/site receipts and three-workorder check; public release unchanged.
