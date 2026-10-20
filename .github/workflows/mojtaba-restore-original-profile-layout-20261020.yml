@@ -1,0 +1,136 @@
+name: Mojtaba restore original profile and portrait layout plus move one nav
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mojtaba-restore-original-profile-layout-20261020.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-v17-inner-pages-production
+  cancel-in-progress: false
+jobs:
+  personal-home-release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[approved-mojtaba-profile-restore-20261020]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify script and current public HTML
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_personal_restore_profile_navs_photos_20261020.py
+          python3 - <<'PY'
+          import urllib.request
+          for u in ('https://mojplaywin.com/mojtaba.roozegar/','https://mojplaywin.com/','https://mojplaywin.com/farnaz/','https://mojplaywin.com/picm/'):
+              with urllib.request.urlopen(urllib.request.Request(u,headers={'Cache-Control':'no-cache'}),timeout=25) as r:
+                  if r.status!=200:raise SystemExit('BASELINE_STATUS_NOT_200 '+u)
+                  if u.endswith('/mojtaba.roozegar/'):
+                      s=r.read(1200000).decode('utf8','replace')
+                      if not all(x in s for x in ('mpw-primary-personal-profile-20261016','mpw-profile-photo-pair','hero-visual','mojtaba-roozegar.jpg')):raise SystemExit('SOURCE_CHANGED')
+              print('BEFORE_200='+u)
+          PY
+      - name: Establish pinned VPS relay to personal account
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mojtaba-portrait-ssh"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);s=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(s.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Stage and preflight independent Django home
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mojtaba-portrait-layout-$GITHUB_RUN_ID"
+          timeout 25s ssh -T -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 60s scp -q -F "$SSH_CONFIG" scripts/mojtaba_personal_restore_profile_navs_photos_20261020.py "saeit-host:$stage/patch.py"
+          timeout 60s ssh -T -F "$SSH_CONFIG" saeit-host "/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python '$stage/patch.py' check"
+      - name: Deploy home with owner backup
+        id: install
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mojtaba-portrait-layout-$GITHUB_RUN_ID"
+          timeout 70s ssh -T -F "$SSH_CONFIG" saeit-host "/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python '$stage/patch.py' install '$GITHUB_RUN_ID'"
+          timeout 35s ssh -T -F "$SSH_CONFIG" saeit-host "app=/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17; test -d \"\$app/tmp\" && touch \"\$app/tmp/restart.txt\""
+      - name: Verify live two original portraits before one introduction
+        run: |
+          python3 - <<'PY'
+          import os,time,urllib.request
+          ok=False
+          for i in range(1,7):
+              try:
+                  u='https://mojplaywin.com/mojtaba.roozegar/?_pair='+os.environ['GITHUB_RUN_ID']+'-'+str(i)
+                  with urllib.request.urlopen(urllib.request.Request(u,headers={'Cache-Control':'no-cache'}),timeout=25) as r:s=r.read(1200000).decode('utf8','replace')
+                  ok=('mpw-restore-profile-nav-after-photos-20261020' in s and 'PROFESSIONAL PROFILE' in s and 'Discuss a professional collaboration' in s and s.count('Find the information you need')==1 and 'Explore the professional profile' not in s and s.index('official_profile_20261016/portrait')<s.index('mojtaba-roozegar.jpg')<s.index('mpw-complete-standard-20261019-toc'))
+                  print('LIVE_VERIFY='+str(ok),flush=True)
+                  if ok:break
+              except Exception as e:print('RETRY='+repr(e),flush=True)
+              time.sleep(5)
+          if not ok:raise SystemExit('LIVE_VERIFY_FAILED')
+          for u in ('https://mojplaywin.com/','https://mojplaywin.com/farnaz/','https://mojplaywin.com/picm/'):
+              with urllib.request.urlopen(urllib.request.Request(u,headers={'Cache-Control':'no-cache'}),timeout=25) as r:
+                  if r.status!=200:raise SystemExit('PROTECTED_FAILED '+u)
+              print('AFTER_200='+u)
+          print('ORIGINAL_PHOTOS_AND_PROFILE_SINGLE_NAV_BELOW=LIVE_VERIFIED')
+          PY
+      - name: Roll back ONLY personal homepage if verification fails
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          stage="/home/zomorod2/.mojtaba-portrait-layout-$GITHUB_RUN_ID"
+          timeout 70s ssh -T -F "$SSH_CONFIG" saeit-host "/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python '$stage/patch.py' rollback '$GITHUB_RUN_ID'"
+          timeout 35s ssh -T -F "$SSH_CONFIG" saeit-host "app=/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17; test -d \"\$app/tmp\" && touch \"\$app/tmp/restart.txt\""
+      - name: Remove temporary patch without removing backup
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/mojtaba-portrait-ssh/config"; then
+            stage="/home/zomorod2/.mojtaba-portrait-layout-$GITHUB_RUN_ID"
+            timeout 25s ssh -T -F "$RUNNER_TEMP/mojtaba-portrait-ssh/config" saeit-host "test -d '$stage' && test ! -L '$stage' && rm -f '$stage/patch.py' && rmdir '$stage'" || true
+          fi
+          rm -rf "$RUNNER_TEMP/mojtaba-portrait-ssh" || true
+
+# Restore original profile exactly from verified pre-change backup and relocate one navigation.
+
+# Honor Django conditional picture markup (both branches preserved).
