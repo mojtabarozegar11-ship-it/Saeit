@@ -47,8 +47,8 @@ def patch(original):
     s=s[:a]+s[b:]
     h1=s.find('<h1 id="hero-title"')
     if h1<0:raise RuntimeError("Original hero title not found")
-    sections=list(re.finditer(r'<section\\b[^>]*>',s[:h1],re.I|re.S))
-    if not sections or not re.search(r'\\bhero\\b',sections[-1].group()):raise RuntimeError("Original hero section not identified")
+    sections=list(re.finditer(r'<section\b[^>]*>',s[:h1],re.I|re.S))
+    if not sections or not re.search(r'\bhero\b',sections[-1].group()):raise RuntimeError("Original hero section not identified")
     a,b,hero=take_tag(s,sections[-1].group())
     if "hero-visual" not in hero or "mojtaba-roozegar.jpg" not in hero and "mojtaba-roozegar" not in hero: 
         # Django templates may use a conditional image source, verified against original in any case
