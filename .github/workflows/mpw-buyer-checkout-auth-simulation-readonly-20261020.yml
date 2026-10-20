@@ -130,6 +130,18 @@ jobs:
               print('MPW_CSP_FUNCTION_SOURCE='+json.dumps({'lines':safe,'start':fn.lineno,'end':fn.end_lineno},ensure_ascii=False))
           else:
               print('MPW_CSP_FUNCTION_SOURCE='+json.dumps({'missing':True}))
+          from unittest.mock import patch
+          import re
+          for pk in (72,225):
+              r=RequestFactory().get(f'/store/product/{pk}/checkout/',secure=True,HTTP_HOST='mojplaywin.com')
+              r.user=SimpleNamespace(is_authenticated=True,is_active=True,pk=-1000,username='read-only-checkout-audit')
+              with patch('mpw_commerce.product_checkout_page._apply_two_book_strict_csp',side_effect=lambda response:response):
+                  response=product_checkout_page(r,pk)
+              body=response.content
+              scripts=re.findall(rb'<script(?:\\s[^>]*)?>(.*?)</script\\s*>',body,re.I|re.S)
+              styles=re.findall(rb'<style(?:\\s[^>]*)?>(.*?)</style\\s*>',body,re.I|re.S)
+              metas=re.findall(rb'<meta[^>]{0,220}charset[^>]{0,100}>',body,re.I)
+              print('MPW_CSP_MARKUP_SHAPE='+json.dumps({'product':pk,'body_bytes':len(body),'scripts':len(scripts),'styles':len(styles),'strict_charset':b'<meta charset="utf-8">' in body,'charset_tags':[x.decode('utf8','replace')[:130] for x in metas[:3]],'script_tag_count':len(re.findall(rb'<script\\b',body,re.I)),'style_tag_count':len(re.findall(rb'<style\\b',body,re.I)),'simulation_only':True}))
           print('MPW_CHECKOUT_DIAG_READONLY=PASS')
           PY
       - name: Remove encrypted SSH relay temporary files
