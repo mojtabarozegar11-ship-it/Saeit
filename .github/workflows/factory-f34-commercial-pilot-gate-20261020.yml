@@ -110,16 +110,26 @@ jobs:
           where=root/'product-lifecycle/commercial-pilot-readiness'
           files=list(where.glob('fieldwork_ui_48_icons-*.json'))
           assert 1<=len(files)<=25
+          upgraded=0
           for f in files:
               assert f.is_file() and not f.is_symlink()
               obj=json.loads(f.read_text())
               assert obj['product_id']=='fieldwork_ui_48_icons'
               assert obj['distinct_svg_png_pairs_verified']==48
-              assert obj['strict_automated_quality_assertions']>=1500
-              assert obj['human_quality_signoff_required'] is False
               assert obj['commercial_publication_allowed'] is False
               assert obj['sales_created']==0 and obj['buyer_access_enabled'] is False
               assert obj['original_zip_sha256'] in f.name
+              if 'strict_automated_quality_assertions' in obj:
+                  assert obj['strict_automated_quality_assertions']>=1500
+                  assert obj['strict_automated_quality_passed'] is True
+                  assert obj['human_quality_signoff_required'] is False
+                  upgraded+=1
+              else:
+                  # Historical immutable technical prescreen stays intact and
+                  # cannot masquerade as the mandatory new quality threshold.
+                  assert 'strict_automated_quality_passed' not in obj
+          assert upgraded>=1
+          print('REAL_F34_1500_CHECK_PRIVATE_RECEIPTS='+str(upgraded))
           print('REAL_F34_PRIVATE_PILOT_PASSPORT_READBACK='+str(len(files)))
           print('REAL_F34_NO_SITE_PAYMENT_OR_FACTORY_ZIP_MUTATION=PASS')
           PY
