@@ -189,4 +189,80 @@ class BridgeTests(unittest.TestCase):
   self.assertTrue(all(r["status"]=="received_private" for r in results))
   self.assertEqual(len(results),2)
 
+
+ def test_private_customer_courier_rotates_past_twenty_four_old_receipts(self):
+  import os,re,types
+  offer=self.root/"customer-packs"
+  delivered=set()
+  for n in range(30):
+   recipe=f"item_{n:02d}"
+   version=hashlib.sha256(recipe.encode()).hexdigest()
+   folder=offer/recipe/version
+   folder.mkdir(parents=True)
+   receipt=folder/"candidate_manifest.json"
+   receipt.write_text('{"is_candidate":true}')
+   # Explicit, reproducible newest-first order in the initial scan.
+   os.utime(receipt,(100000+n,100000+n))
+  calls=[]
+  def consumer(recipe,root,version,options,**kw):
+   calls.append(recipe)
+   if recipe=="item_00" and recipe not in delivered:
+    delivered.add(recipe)
+    return {"recipe":recipe,"version":version,"status":"received_private_customer"}
+   return {"recipe":recipe,"version":version,"status":"already_received_customer"}
+  sender=types.SimpleNamespace(
+   SLUG=re.compile(r"[a-z][a-z0-9_]{0,63}"),
+   SHA=re.compile(r"[0-9a-f]{64}"),
+   host_ssh_options=lambda *args:[],
+   verify_consumer_source=lambda *args:True,
+   deliver=lambda recipe,*args,**kwargs:{"status":"already_received"},
+   deliver_consumer=consumer)
+  first=bridge.deliver_customer_bundles(self.root,sender,self.root/"k",self.root/"h")
+  self.assertEqual(first,[])
+  self.assertEqual(calls, [f"item_{n:02d}" for n in range(29,5,-1)])
+  cursor=self.root/".zomorod-customer-courier.cursor.json"
+  self.assertTrue(cursor.exists())
+  self.assertEqual(cursor.stat().st_mode&0o777,0o600)
+  self.assertEqual(json.loads(cursor.read_text())["last_scanned"],
+                   "item_06:"+hashlib.sha256(b"item_06").hexdigest())
+  second=bridge.deliver_customer_bundles(self.root,sender,self.root/"k",self.root/"h")
+  self.assertEqual([x["recipe"] for x in second],["item_00"])
+  self.assertEqual([x["status"] for x in second],["received_private_customer"])
+  self.assertEqual(delivered,{"item_00"})
+  replay=bridge.deliver_customer_bundles(self.root,sender,self.root/"k",self.root/"h")
+  self.assertEqual(replay,[])
+  self.assertEqual(delivered,{"item_00"})
+
+ def test_private_customer_dry_run_does_not_advance_courier_cursor(self):
+  import re,types
+  recipe="item_01";version=hashlib.sha256(b"dry-run").hexdigest()
+  receipt=self.root/"customer-packs"/recipe/version/"candidate_manifest.json"
+  receipt.parent.mkdir(parents=True)
+  receipt.write_text('{"source":"unverified-test"}')
+  sender=types.SimpleNamespace(
+   SLUG=re.compile(r"[a-z][a-z0-9_]{0,63}"),
+   SHA=re.compile(r"[0-9a-f]{64}"),
+   host_ssh_options=lambda *args:[],
+   verify_consumer_source=lambda *args:True,
+   deliver=lambda *args,**kw:{"status":"dry_run_private_only"},
+   deliver_consumer=lambda *args,**kw:{"status":"dry_run_private_only"})
+  result=bridge.deliver_customer_bundles(self.root,sender,self.root/"k",self.root/"h",dry_run=True)
+  self.assertEqual(result[0]["status"],"dry_run_private_only")
+  self.assertFalse((self.root/".zomorod-customer-courier.cursor.json").exists())
+
+ def test_private_customer_courier_refuses_symlink_cursor(self):
+  import re,types
+  recipe="item_01";version=hashlib.sha256(b"symlink").hexdigest()
+  receipt=self.root/"customer-packs"/recipe/version/"candidate_manifest.json"
+  receipt.parent.mkdir(parents=True)
+  receipt.write_text("{}")
+  cursor=self.root/".zomorod-customer-courier.cursor.json"
+  cursor.symlink_to(receipt)
+  sender=types.SimpleNamespace(
+   SLUG=re.compile(r"[a-z][a-z0-9_]{0,63}"),
+   SHA=re.compile(r"[0-9a-f]{64}"),
+   host_ssh_options=lambda *args:[])
+  with self.assertRaisesRegex(ValueError,"CURSOR_UNSAFE"):
+   bridge.deliver_customer_bundles(self.root,sender,self.root/"k",self.root/"h")
+
 if __name__=="__main__":unittest.main()

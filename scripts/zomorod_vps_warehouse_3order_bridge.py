@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import re
 import sys
+import tempfile
 
 SCHEMA="saeit.factory.production-instructions.v1"
 CYCLE=re.compile(r"^(?P<day>[0-9]{4}-[0-9]{2}-[0-9]{2})(?:-r(?P<run>[0-9]{5,20}))?$")
@@ -292,13 +293,17 @@ def deliver_stock(factory_root,ware,warehouse_module,sender,ssh_key,ssh_hosts,ma
 
 
 def deliver_customer_bundles(root,sender,ssh_key,ssh_hosts,max_products=3,*,dry_run=False):
-    """Continue existing Zomorod courier after manufacturing: deliver *private*
-    buyer-ready candidate ZIPs, even where strict final warehouse admission is
-    correctly blocked pending 50-stage independent commercial approval.
+    """Fair, durable private-courier scan across the entire customer catalog.
+
+    A static newest-first scan capped at 3*8 would revisit the same 24 already
+    delivered records forever once a catalog grows. A private, locked cursor
+    advances after every bounded scan so older verified products get a turn.
+    The cursor is deliberately NOT a manufacturing/publication approval.
     """
     root=Path(root)
     offers=root/"customer-packs"
-    if offers.is_symlink():raise ValueError("CUSTOMER_CATALOG_SYMLINK")
+    if root.is_symlink() or not root.is_dir() or offers.is_symlink():
+        raise ValueError("CUSTOMER_CATALOG_SYMLINK")
     if max_products==0 or not offers.is_dir():return []
     options=sender.host_ssh_options(Path(ssh_key),Path(ssh_hosts))
     candidates=[]
@@ -313,25 +318,68 @@ def deliver_customer_bundles(root,sender,ssh_key,ssh_hosts,max_products=3,*,dry_
             if receipt.is_symlink() or not receipt.is_file():continue
             candidates.append((receipt.stat().st_mtime,recipe.name,version.name))
             if len(candidates)>4000:raise ValueError("CUSTOMER_CATALOG_CAPACITY_LIMIT")
-    # Newest candidates first; bounded scan avoids permanently re-shipping
-    # three old packages and ignoring new independently manufactured products.
     candidates.sort(key=lambda x:(x[0],x[1],x[2]),reverse=True)
-    shipped=[];scanned=0
-    for _,recipe,version in candidates:
-        if len(shipped)>=max_products or scanned>=min(len(candidates),max_products*8):break
-        scanned+=1
-        try:
-            sender.verify_consumer_source(root,recipe,version)
-            original=sender.deliver(recipe,root/"digital-products",options,dry_run=dry_run)
-            if original.get("status") not in ("received_private","already_received","dry_run_private_only"):
-                raise RuntimeError("CUSTOMER_ORIGINAL_NOT_RECEIVED")
-            item=sender.deliver_consumer(recipe,root,version,options,dry_run=dry_run)
-            if item.get("status")!="already_received_customer":
-                shipped.append(item)
-        except (OSError,ValueError,RuntimeError) as exc:
-            shipped.append({"recipe":recipe,"version":version,
-                            "status":"blocked_"+type(exc).__name__})
-    return shipped
+    if not candidates:return []
+    cursor=root/".zomorod-customer-courier.cursor.json"
+    mutex=root/".zomorod-customer-courier.lock"
+    if cursor.is_symlink() or mutex.is_symlink():
+        raise ValueError("CUSTOMER_COURIER_CURSOR_UNSAFE")
+    flags=os.O_CREAT|os.O_RDWR|getattr(os,"O_NOFOLLOW",0)
+    fd=os.open(mutex,flags,0o600)
+    with os.fdopen(fd,"r+b") as stream:
+        fcntl.flock(stream.fileno(),fcntl.LOCK_EX)
+        previous=None
+        if cursor.exists():
+            if cursor.is_symlink() or not cursor.is_file() or cursor.stat().st_size>1024:
+                raise ValueError("CUSTOMER_COURIER_CURSOR_UNSAFE")
+            saved=json.loads(cursor.read_text(encoding="utf8"))
+            if not isinstance(saved,dict) or saved.get("schema")!="saeit.zomorod.private-courier.v1":
+                raise ValueError("CUSTOMER_COURIER_CURSOR_INVALID")
+            previous=saved.get("last_scanned")
+            if not isinstance(previous,str) or not re.fullmatch(
+                r"[a-z][a-z0-9_]{0,63}:[0-9a-f]{64}",previous
+            ):
+                raise ValueError("CUSTOMER_COURIER_CURSOR_INVALID")
+        keys=[recipe+":"+version for _,recipe,version in candidates]
+        offset=(keys.index(previous)+1)%len(keys) if previous in keys else 0
+        rotated=candidates[offset:]+candidates[:offset]
+        shipped=[];scanned=0;last_scanned=None
+        for _,recipe,version in rotated:
+            if len(shipped)>=max_products or scanned>=min(len(candidates),max_products*8):break
+            scanned+=1
+            last_scanned=recipe+":"+version
+            try:
+                sender.verify_consumer_source(root,recipe,version)
+                original=sender.deliver(recipe,root/"digital-products",options,dry_run=dry_run)
+                if original.get("status") not in ("received_private","already_received","dry_run_private_only"):
+                    raise RuntimeError("CUSTOMER_ORIGINAL_NOT_RECEIVED")
+                item=sender.deliver_consumer(recipe,root,version,options,dry_run=dry_run)
+                if item.get("status")!="already_received_customer":
+                    shipped.append(item)
+            except (OSError,ValueError,RuntimeError) as exc:
+                shipped.append({"recipe":recipe,"version":version,
+                                "status":"blocked_"+type(exc).__name__})
+        if last_scanned is not None and not dry_run:
+            # Cursor writes do not change receipts, stock, approvals or payments.
+            # Preserve progress atomically so a failed/restarted workflow can
+            # resume without perpetually rescanning just the newest products.
+            payload=json.dumps({
+                "schema":"saeit.zomorod.private-courier.v1",
+                "last_scanned":last_scanned
+            },sort_keys=True).encode("utf8")+b"\n"
+            temp_fd,temp_path=tempfile.mkstemp(prefix=".courier-cursor-",dir=str(root))
+            try:
+                with os.fdopen(temp_fd,"wb") as out:
+                    os.fchmod(out.fileno(),0o600)
+                    out.write(payload)
+                    out.flush()
+                    os.fsync(out.fileno())
+                if cursor.is_symlink():
+                    raise ValueError("CUSTOMER_COURIER_CURSOR_UNSAFE")
+                os.replace(temp_path,cursor)
+            finally:
+                if os.path.exists(temp_path):os.unlink(temp_path)
+        return shipped
 
 
 def main():
