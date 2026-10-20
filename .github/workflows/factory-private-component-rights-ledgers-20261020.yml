@@ -106,7 +106,8 @@ jobs:
           for f in scripts/factory_commercial_evidence_readonly_20261020.py scripts/factory_private_component_rights_ledger_20261020.py;do
             scp -q -F "$d/config" "$f" "saeit-vps:$stage/$(basename "$f")"
             expected="$(sha256sum "$f" | awk '{print $1}')"
-            timeout 20s ssh -T -F "$d/config" saeit-vps "test \"$(sha256sum '$stage/$(basename "$f")' | awk '{print \$1}')\" = '$expected'"
+            actual="$(timeout 20s ssh -T -F "$d/config" saeit-vps "sha256sum '$stage/$(basename "$f")' | cut -d' ' -f1")"
+            test "$actual" = "$expected"
           done
           timeout 210s ssh -T -F "$d/config" saeit-vps "PYTHONDONTWRITEBYTECODE=1 python3 -B '$stage/factory_private_component_rights_ledger_20261020.py' vps --root /home/githubops/factory-runtime/private/autonomous-product-cycle"
           echo FACTORY_COMPONENT_RIGHTS_PRIVATE_VPS_LEDGER_CREATED=PASS
