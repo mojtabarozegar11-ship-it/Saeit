@@ -15,6 +15,7 @@ DIGEST = re.compile(r"^[0-9a-f]{64}$")
 MAX_ARCHIVE_BYTES = 25 * 1024 * 1024
 MAX_UNPACKED_BYTES = 100 * 1024 * 1024
 MAX_FILES = 80
+F34_EXACT_ICON_FILES = 100  # 48 SVG + 48 PNG + four documented files, private ONLY
 
 
 def secure_directory(path):
@@ -77,7 +78,34 @@ def validate_package(zip_file, manifest_file, recipe, expected_digest):
         raise ValueError("SHA256_MISMATCH")
     with zipfile.ZipFile(str(zip_file)) as archive:
         infos = archive.infolist()
-        if not infos or len(infos) > MAX_FILES:
+        # The new independently verified F34 icon pack contains exactly
+        # 48 SVG + 48 PNG + four documents. General products stay capped
+        # at 80 files; there is NO blanket relaxation of zip security.
+        if recipe == "fieldwork_ui_48_icons":
+            reviewer = manifest.get("qa_measurements")
+            members = manifest.get("files")
+            if (manifest.get("family_id") != "F34"
+                    or not isinstance(reviewer, dict)
+                    or reviewer.get("review_kind") != "separate_automated_technical_verification"
+                    or reviewer.get("validated_archive_members") != F34_EXACT_ICON_FILES
+                    or reviewer.get("archive_sha256") != expected_digest
+                    or reviewer.get("critical_defects") != []
+                    or not isinstance(reviewer.get("gates"), dict)
+                    or len(reviewer["gates"]) != 10
+                    or not all(value is True for value in reviewer["gates"].values())
+                    or not isinstance(members, list)
+                    or len(members) != F34_EXACT_ICON_FILES
+                    or len(set(members)) != F34_EXACT_ICON_FILES):
+                raise ValueError("F34_EVIDENCE_CONTRACT_INVALID")
+            svg = {name[:-4] for name in members if name.endswith(".svg")}
+            png = {name[:-4] for name in members if name.endswith(".png")}
+            docs = set(members) - {name for name in members if name.endswith((".svg", ".png"))}
+            if (len(svg) != 48 or svg != png
+                    or docs != {"README.md", "LICENSE.txt", "catalog.json", "preview.html"}
+                    or len(infos) != F34_EXACT_ICON_FILES
+                    or {item.filename for item in infos} != {recipe + "/" + name for name in members}):
+                raise ValueError("F34_EXACT_ICON_PACKAGE_INVALID")
+        elif not infos or len(infos) > MAX_FILES:
             raise ValueError("ARCHIVE_FILE_COUNT_INVALID")
         if sum(x.file_size for x in infos) > MAX_UNPACKED_BYTES:
             raise ValueError("ARCHIVE_EXPANSION_LIMIT")

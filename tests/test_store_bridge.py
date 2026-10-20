@@ -198,5 +198,85 @@ class BridgeTests(unittest.TestCase):
                 sender.sync(source, "unused", "unused", limit=3)
 
 
+    def make_private_f34_icon_archive(self, *, extra=False, review=True):
+        """Synthetic byte fixtures prove receiver contract, not actual icon QA."""
+        recipe = "fieldwork_ui_48_icons"
+        folder = self.root / recipe
+        folder.mkdir(exist_ok=True)
+        archive = folder / (recipe + "-internal-qa.zip")
+        names = [
+            concept + "_" + variant + suffix
+            for concept in ("sprout", "cloud", "shield", "package",
+                            "chart", "sun", "database", "flask",
+                            "globe", "heart", "gear", "compass")
+            for variant in ("outline", "tile", "stamped", "dual")
+            for suffix in (".svg", ".png")
+        ] + ["README.md", "LICENSE.txt", "catalog.json", "preview.html"]
+        with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            for name in names:
+                z.writestr(recipe + "/" + name, ("synthetic " + name).encode())
+            if extra:
+                z.writestr(recipe + "/unapproved_extra.svg", b"unexpected")
+        digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+        gates = {
+            key: True for key in (
+                "requirements", "correctness", "negative_cases", "usability",
+                "accessibility", "security", "compatibility", "provenance",
+                "specialist_review", "release_integrity"
+            )
+        }
+        if not review:
+            gates["release_integrity"] = False
+        manifest = dict(self.meta,
+            recipe=recipe, artifact_sha256=digest, family_id="F34", files=names,
+            qa_measurements={
+                "review_kind": "separate_automated_technical_verification",
+                "validated_archive_members": 100, "archive_sha256": digest,
+                "critical_defects": [], "gates": gates,
+            })
+        meta = folder / "manufacturing_manifest.json"
+        meta.write_text(json.dumps(manifest))
+        return recipe, archive, meta, digest
+
+    def test_exact_f34_100_member_archive_is_private_only(self):
+        recipe, archive, meta, digest = self.make_private_f34_icon_archive()
+        validated = receiver.validate_package(archive, meta, recipe, digest)
+        self.assertEqual(validated["qa_measurements"]["validated_archive_members"], 100)
+        staged = self.inbox / "incoming" / recipe
+        staged.mkdir(parents=True)
+        (staged / (digest + ".zip.partial")).write_bytes(archive.read_bytes())
+        (staged / (digest + ".json.partial")).write_bytes(meta.read_bytes())
+        receiver.finalize(self.inbox, recipe, digest)
+        self.assertTrue(receiver.status(self.inbox, recipe, digest))
+        receipt = json.loads(receiver.receipt_path(self.inbox, recipe, digest).read_text())
+        self.assertFalse(receipt["public_store_listing"])
+        self.assertFalse(receipt["database_written"])
+
+    def test_f34_more_than_100_members_is_rejected(self):
+        recipe, archive, meta, digest = self.make_private_f34_icon_archive(extra=True)
+        with self.assertRaisesRegex(ValueError, "F34_EXACT_ICON_PACKAGE_INVALID"):
+            receiver.validate_package(archive, meta, recipe, digest)
+
+    def test_f34_missing_independent_gate_is_rejected(self):
+        recipe, archive, meta, digest = self.make_private_f34_icon_archive(review=False)
+        with self.assertRaisesRegex(ValueError, "F34_EVIDENCE_CONTRACT_INVALID"):
+            receiver.validate_package(archive, meta, recipe, digest)
+
+    def test_all_other_recipes_remain_bound_to_80_members(self):
+        recipe = "normal_workbook"
+        folder = self.root / recipe
+        folder.mkdir()
+        archive = folder / "normal_workbook-internal-qa.zip"
+        with zipfile.ZipFile(archive, "w") as z:
+            for n in range(81):
+                z.writestr(recipe + "/entry_%02d.txt" % n, b"synthetic")
+        digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+        manifest = dict(self.meta, recipe=recipe, artifact_sha256=digest)
+        path = folder / "manufacturing_manifest.json"
+        path.write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, "ARCHIVE_FILE_COUNT_INVALID"):
+            receiver.validate_package(archive, path, recipe, digest)
+
+
 if __name__ == "__main__":
     unittest.main()
