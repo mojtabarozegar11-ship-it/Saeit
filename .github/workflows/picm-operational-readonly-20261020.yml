@@ -411,6 +411,36 @@ jobs:
             if name in stats and 'PICM_LIVE_HTML' in stats:
               print(name+'_OLDER_THAN_HTML='+str(stats[name]<stats['PICM_LIVE_HTML']))
           PY
+      - name: Classify private owner daily quota records as known synthetic tests only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 35s ssh -F "$WORK/config" picm-host 'python3 -' <<'PY'
+          import json,time
+          from pathlib import Path
+          root=Path.home()/'.picm-queue'
+          owner_file=root/'.owner-user-id'
+          assert owner_file.is_file() and not owner_file.is_symlink()
+          owner=owner_file.read_text(encoding='utf-8').strip()
+          now=time.time()
+          result={'synthetic_greenhouse':0,'synthetic_other_known':0,'other_or_unknown':0}
+          for p in root.glob('*.json'):
+              if p.is_symlink() or len(p.stem)!=32:continue
+              try:j=json.loads(p.read_text(encoding='utf-8'))
+              except (ValueError,OSError):continue
+              if not isinstance(j,dict) or str(j.get('user_id'))!=owner:continue
+              if now-float(j.get('created',0))>86400:continue
+              txt=str(j.get('prompt',''))
+              if txt.startswith('Green leaves in a sunny greenhouse, ') and j.get('style')=='illustration' and j.get('steps')==1:
+                  result['synthetic_greenhouse']+=1
+              elif txt.startswith('Lush green wheat fields in bright morning sunlight, ') and j.get('style')=='natural' and j.get('steps')==1:
+                  result['synthetic_other_known']+=1
+              else:result['other_or_unknown']+=1
+          for k,n in result.items():
+              print('PICM_RECENT_OWNER_'+k.upper()+'_COUNT='+str(n))
+          print('PICM_QUOTA_CLASSIFICATION_FINISHED_WITHOUT_PROMPT_DISCLOSURE')
+          PY
       - name: Verify public PICM security boundaries read-only
         shell: bash
         run: |
