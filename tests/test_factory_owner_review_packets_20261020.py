@@ -184,6 +184,44 @@ class ReviewPacketTests(unittest.TestCase):
         self.assertTrue(any(p["verified_private_technical_prescreen"]["status"]==
                             "technical_specialist_evidence_missing_or_stale" for p in new_packet))
 
+    def test_new_source_sha_bound_family_qa_supersedes_only_old_missing_family(self):
+        import hashlib
+        wo="WO-00000001"
+        order={"source_product_id":"legacy_product","source_sha256":"b"*64,
+               "source_artifact_sha256":"c"*64}
+        root=self.root
+        folder=root/"design-state/mojplaywin-native-specialist-evidence/legacy_product"
+        folder.mkdir(parents=True)
+        dossiers=root/"production-instructions/mojplaywin-specialist-order-reports"
+        dossiers.mkdir(parents=True)
+        work_order_sha="d"*64
+        for restored in (False,True):
+            data={"schema":"saeit.factory.specialist-native-prescreen.v1",
+                  "source_sha256":order["source_sha256"],
+                  "original_factory_artifact_sha256":order["source_artifact_sha256"],
+                  "automated_format_prescreen_passed":restored,
+                  "automated_technical_blockers":[] if restored else ["MISSING_OR_UNSUPPORTED_FAMILY_PROVENANCE"],
+                  "commercial_release":False,"final_work_order_completed":False,
+                  "family_id":"F20" if restored else None,
+                  "family_provenance_source":("sha256_matched_original_manufacturing_qa" if restored else "not_verified"),
+                  "family_provenance_receipt_sha256":"e"*64 if restored else None}
+            contents=m.serialize(data)
+            fingerprint=hashlib.sha256(contents).hexdigest()
+            (folder/(order["source_sha256"]+"-"+fingerprint+".json")).write_bytes(contents)
+            packet={"schema":"saeit.factory.specialist-work-order-dossier.v1",
+                    "work_order":wo,"source_work_order_sha256":work_order_sha,
+                    "original_source_sha256":order["source_sha256"],
+                    "source_artifact_sha256":order["source_artifact_sha256"],
+                    "specialist_prescreen_sha256":fingerprint,
+                    "family_id":data["family_id"],
+                    "engineering_work_order_completed":False,"commercial_approval":False}
+            (dossiers/(wo+"-"+fingerprint+".json")).write_text(json.dumps(packet))
+        chosen=m.linked_specialist_review(root,wo,order,work_order_sha)
+        self.assertTrue(chosen["format_prescreen_passed"])
+        self.assertTrue(chosen["source_original_provenance_restored"])
+        self.assertFalse(chosen["rights_approved"])
+        self.assertFalse(chosen["owner_release_approved"])
+
     def test_invalid_forged_specialist_sidecar_is_refused(self):
         import hashlib
         wo="WO-00000001"
