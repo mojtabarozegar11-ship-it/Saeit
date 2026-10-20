@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/mpw-all-main-home-template-unify-20261020.yml"
+      - "scripts/mpw_home_template_unify_main_20261020.py"
 permissions: {contents: read}
 concurrency:
   group: mpw-home-native-comprehensive-unify
