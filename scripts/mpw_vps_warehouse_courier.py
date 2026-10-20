@@ -364,7 +364,7 @@ def add_tar(tar, name, raw):
     tar.addfile(info, io.BytesIO(raw))
 
 
-def export_factory(root=VPS):
+def export_factory(root=VPS, page=None):
     # Status to stderr only: stdout is the authenticated binary archive stream.
     print("MPW_VPS_EXPORT_BEGIN=PASS", file=sys.stderr, flush=True)
     records = stock_records(Path(root))
@@ -374,7 +374,14 @@ def export_factory(root=VPS):
     # Three buyer-format goods per courier cycle; retain every underlying
     # original stock record so the Stage-1 QA feedback contract is unchanged.
     eligible=sorted(k for k,v in companions.items() if v is not None)
-    if len(eligible)>3:
+    if page is not None:
+        require(type(page) is int and 0<=page<=16,"WAREHOUSE_PRIVATE_BATCH_PAGE_INVALID")
+        selected=set(eligible[page*3:page*3+3])
+        companions={key:(value if key in selected else None)
+                    for key,value in companions.items()}
+        print("MPW_NATIVE_BATCH_PAGE="+str(page)+
+              " SELECTED="+str(len(selected)), file=sys.stderr, flush=True)
+    elif len(eligible)>3:
         now=datetime.now(timezone.utc)
         pointer=((now.date().toordinal()*24+now.hour)*3)%len(eligible)
         selected={eligible[(pointer+i)%len(eligible)] for i in range(3)}
@@ -503,6 +510,21 @@ def import_site(batch, root=DEST):
             atomic(version_dir/"product.zip",content)
             atomic(version_dir/"warehouse_manifest.json",json_blob(manifest))
             added += 1
+        # A deliberately sparse page transports at most 3 preview bundles.
+        # All other private, previously received companions MUST be reverified
+        # locally instead of getting their site QA status downgraded to "missing".
+        if customer is None:
+            old_manifest=version_dir/"customer_manifest.json"
+            old_zip=version_dir/"customer-package.zip"
+            if old_manifest.exists() or old_zip.exists():
+                require(old_manifest.is_file() and not old_manifest.is_symlink()
+                        and old_zip.is_file() and not old_zip.is_symlink(),
+                        "CUSTOMER_PRIVATE_PREVIOUS_PARTIAL_OR_UNSAFE")
+                old_report=json_file(old_manifest,100_000)
+                old_raw=old_zip.read_bytes()
+                validate_customer_companion(old_report,old_raw,product,version,
+                                            manifest["artifact_sha256"])
+                customer=(old_report,old_raw)
         native_preview=(customer is not None and customer[0].get("schema")==NATIVE_PREVIEW_SCHEMA)
         if customer is not None:
             candidate_report,candidate_zip=customer
@@ -973,6 +995,10 @@ def main():
     mode=sys.argv[1]
     if mode=="vps-export":
         sys.stdout.buffer.write(export_factory())
+    elif mode.startswith("vps-export-page-"):
+        match=re.fullmatch(r"vps-export-page-(0|[1-9]|1[0-6])",mode)
+        require(match is not None, "WAREHOUSE_PRIVATE_BATCH_PAGE_INVALID")
+        sys.stdout.buffer.write(export_factory(page=int(match.group(1))))
     elif mode=="site-import":
         import_site(sys.stdin.buffer.read(MAX_PACKAGE+1))
         print("MPW_COURIER_SITE_INGEST=PASS", file=sys.stderr)
