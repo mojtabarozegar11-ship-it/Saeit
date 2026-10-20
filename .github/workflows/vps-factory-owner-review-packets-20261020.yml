@@ -5,6 +5,8 @@ on:
     paths:
       - "scripts/factory_owner_review_packets_20261020.py"
       - "tests/test_factory_owner_review_packets_20261020.py"
+      - "scripts/factory_zip_transport_shards_20261020.py"
+      - "tests/test_factory_zip_transport_shards_20261020.py"
       - ".github/workflows/vps-factory-owner-review-packets-20261020.yml"
   workflow_dispatch:
 permissions: {contents: read}
@@ -25,6 +27,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/factory_owner_review_packets_20261020.py
           python3 -m unittest discover -s tests -p test_factory_owner_review_packets_20261020.py -v
+          python3 -m unittest discover -s tests -p test_factory_zip_transport_shards_20261020.py -v
           python3 - <<'PY'
           from pathlib import Path
           source=Path('scripts/factory_owner_review_packets_20261020.py').read_text()
@@ -66,9 +69,13 @@ jobs:
           stage="/home/githubops/factory-runtime/operations/.review-packet-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           ssh -T -F "$d/config" saeit-private-factory "umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
           scp -q -F "$d/config" scripts/factory_owner_review_packets_20261020.py "saeit-private-factory:$stage/review.py"
+          scp -q -F "$d/config" scripts/factory_zip_transport_shards_20261020.py "saeit-private-factory:$stage/shards.py"
           sha="$(sha256sum scripts/factory_owner_review_packets_20261020.py | awk '{print $1}')"
           ssh -T -F "$d/config" saeit-private-factory "test ! -L '$stage/review.py' && test \"\$(sha256sum '$stage/review.py' | awk '{print \$1}')\" = '$sha'"
           timeout 100s ssh -T -F "$d/config" saeit-private-factory "python3 -B '$stage/review.py' --factory-private-root /home/githubops/factory-runtime/private/autonomous-product-cycle"
+          shard_sha="$(sha256sum scripts/factory_zip_transport_shards_20261020.py | awk '{print $1}')"
+          ssh -T -F "$d/config" saeit-private-factory "test ! -L '$stage/shards.py' && test \"\$(sha256sum '$stage/shards.py' | awk '{print \$1}')\" = '$shard_sha'"
+          timeout 100s ssh -T -F "$d/config" saeit-private-factory "python3 -B '$stage/shards.py' --factory-private-root /home/githubops/factory-runtime/private/autonomous-product-cycle"
           echo OWNER_REVIEW_PACKET_STAGE=COMPLETED
       - name: Validate actual VPS packets, no modified production approvals
         shell: bash
@@ -148,6 +155,31 @@ jobs:
               assert json.loads(file.read_text())['commercial_release'] is False
           print('REAL_VPS_MANUFACTURING_ORDERS_PREPARED='+str(len(data['packets'])))
           print('REAL_VPS_RESEARCH_AWAITING_EVIDENCE='+str(data['counts'].get('research_waiting_for_real_evidence',0)))
+          shards_root=root/'product-lifecycle/private-transport-shards'
+          verified_parts=0
+          verified_files=0
+          for name in (
+              'fieldwork_arithmetic_assessment_packs',
+              'fieldwork_arithmetic_mini_courses',
+              'fieldwork_arithmetic_teacher_kits',
+              'fieldwork_offline_operations_guides',
+              'fieldwork_vector_illustration_suite',
+          ):
+              manufacture=root/'digital-products'/name/'manufacturing_manifest.json'
+              record=json.loads(manufacture.read_text())
+              digest=record['artifact_sha256']
+              receipt=shards_root/name/digest/'receipt.json'
+              assert receipt.is_file() and not receipt.is_symlink()
+              doc=json.loads(receipt.read_text())
+              assert doc['reconstruction_verified'] is True
+              assert doc['public_distribution_allowed'] is False
+              assert doc['commercial_review_complete'] is False
+              assert all(s['members']<=80 for s in doc['parts'])
+              verified_parts+=len(doc['parts'])
+              verified_files+=len(doc['files'])
+          print('REAL_VPS_PRIVATE_SHARD_PRODUCTS=5')
+          print('REAL_VPS_PRIVATE_SHARD_PARTS='+str(verified_parts))
+          print('REAL_VPS_PRIVATE_SHARD_FILES='+str(verified_files))
           print('REAL_VPS_REVIEW_PACKET_NO_FALSE_PUBLICATION=PASS')
           PY
       - name: Remove SSH key material
