@@ -25,6 +25,8 @@ from pathlib import Path
 
 EXPECTED_SOURCE = "scripts/mojplaywin_backup_gzip_source_v3.py"
 EXPECTED_DEST = "scripts/mojplaywin_backup_encrypt_vps_gpg.py"
+EXPECTED_PREFLIGHT = "scripts/mojplaywin_backup_gzip_destination_preflight_v3.py"
+EXPECTED_RECOVERY = "scripts/mojplaywin_backup_gzip_recovery_v3.py"
 
 
 EXPECTED_HOSTS = {
@@ -155,10 +157,54 @@ def remote_command(encoded, kind, *, stem=None):
                 "scope={'__name__':'v3_backup_receiver'};"
                 "exec(base64.b64decode(payload),scope);"
                 "receipt=scope['store'](sys.stdin.buffer,kind,stem=stem,"
-                "source_encoding='gzip-with-footer-v1');"
+                "source_encoding='gzip-with-footer-v1',minimum_free=8*1024**3);"
                 "print(json.dumps(receipt,sort_keys=True))")
         arguments = [encoded, kind, stem]
     return "python3 -c " + shlex.quote(code) + " " + " ".join(map(shlex.quote, arguments))
+
+
+
+def read_remote_json(config, payload, *, mode, date, timeout=90):
+    """Only fixed code and fixed arguments; never log stdin or remote error."""
+    if mode not in ("preflight", "validate"):
+        raise ValueError("invalid remote check mode")
+    if not re.fullmatch(r"20\d{6}", date):
+        raise ValueError("invalid remote check date")
+    if mode == "preflight":
+        # Preflight consumes no source bytes and writes no archive.
+        command = "python3 - " + shlex.quote(date)
+        args = ["ssh", "-T", "-F", str(config), "saeit-vps", command]
+        stdin = payload
+    else:
+        code = ("import base64,sys;"
+                "payload,day=sys.argv[1:3];"
+                "sys.argv=['recovery','validate','--date',day];"
+                "exec(base64.b64decode(payload))")
+        command = ("python3 -c " + shlex.quote(code) + " "
+                   + shlex.quote(base64.b64encode(payload).decode("ascii")) + " "
+                   + shlex.quote(date))
+        args = ["ssh", "-T", "-F", str(config), "saeit-vps", command]
+        stdin = None
+    result = subprocess.run(args, input=stdin, stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL, timeout=timeout, check=False)
+    if result.returncode or len(result.stdout) > 4096:
+        raise RuntimeError("PRIVATE_REMOTE_CHECK_FAILED")
+    try:
+        report = json.loads(result.stdout.decode("ascii"))
+    except (ValueError, UnicodeError):
+        raise RuntimeError("INVALID_PRIVATE_REMOTE_CHECK_REPORT") from None
+    if report.get("release_permitted") is not False:
+        raise RuntimeError("REMOTE_CHECK_RELEASE_GATE_INVALID")
+    if mode == "preflight":
+        if (report.get("classification") != "PRIVATE_VPS_BACKUP_DESTINATION_PREFLIGHT"
+                or report.get("safe_to_begin_scoped_backup") is not True):
+            raise RuntimeError("REMOTE_BACKUP_PREFLIGHT_BLOCKED")
+    else:
+        if (report.get("classification") != "V3_BACKUP_CONTENT_AUTHENTICATED"
+                or report.get("both_scoped_streams_crc_verified") is not True
+                or report.get("isolated_restore_verified") is not False):
+            raise RuntimeError("REMOTE_PAIR_CONTENT_UNVERIFIED")
+    return report
 
 
 def transfer(config, source, receiver, kind, *, stem, timeout=7200):
@@ -214,6 +260,8 @@ def main():
     p.add_argument("--date", required=True)
     p.add_argument("--source", default=EXPECTED_SOURCE)
     p.add_argument("--receiver", default=EXPECTED_DEST)
+    p.add_argument("--preflight", default=EXPECTED_PREFLIGHT)
+    p.add_argument("--recovery", default=EXPECTED_RECOVERY)
     p.add_argument("--owner-approved", action="store_true")
     p.add_argument("--fixture", action="store_true")
     args = p.parse_args()
@@ -222,19 +270,30 @@ def main():
     stem = "mojplaywin_" + args.date
     source = script_bytes(args.source, EXPECTED_SOURCE)
     receiver = script_bytes(args.receiver, EXPECTED_DEST)
+    preflight_file = Path(args.preflight)
+    recovery_file = Path(args.recovery)
+    preflight = base64.b64decode(script_bytes(preflight_file, EXPECTED_PREFLIGHT))
+    recovery = base64.b64decode(script_bytes(recovery_file, EXPECTED_RECOVERY))
     if args.fixture:
         for kind in ("mysql", "files"):
             a = remote_command(source, kind)
             b = remote_command(receiver, kind, stem=stem)
             assert "python3 -c " in a and "python3 -c " in b
+        assert re.fullmatch(r"20\d{6}", args.date)
+        assert preflight and recovery
         print("V3_BACKUP_DRIVER_FIXTURE=PASS")
         return
     if not args.owner_approved:
         raise RuntimeError("EXPLICIT_OWNER_BACKUP_APPROVAL_REQUIRED")
     config = checked_config(Path(args.ssh_config))
+    read_remote_json(config, preflight, mode="preflight", date=args.date)
+    print("V3_PRIVATE_BACKUP_DESTINATION_PREFLIGHT=PASS")
     for kind in ("mysql", "files"):
         receipt = transfer(config, source, receiver, kind, stem=stem)
         print(json.dumps(receipt, sort_keys=True))
+    read_remote_json(config, recovery, mode="validate", date=args.date,
+                     timeout=7200)
+    print("V3_ENCRYPTED_SOURCE_PAIR_AUTHENTICATED=PASS")
     print("V3_PRIVATE_SCOPED_BACKUP_ENCRYPTED_AND_VERIFIED; ISOLATED_RESTORE_STILL_REQUIRED")
 
 
