@@ -194,6 +194,46 @@ def inspect_actual_products(root, lifecycle):
     save(output/"dashboard.json",summary)
     return summary
 
+def make_passport_starter(queue_root, work_order, record, instruction_sha, missing):
+    """Write a verifiable source *starter*, not a passport or approval."""
+    claims={}
+    # Only bounded text actually present in this exact work instruction.
+    # The claimant is the work order, not an independent reviewer.
+    mapping={"title":"subject","origin":"origin","product_type":"product_type",
+             "target_audience":"target_audience","language":"language",
+             "scope":"scope","problem_solved":"problem_solved"}
+    for target,source in mapping.items():
+        value=record.get(source)
+        if isinstance(value,str) and value.strip() and len(value)<=240:
+            claims[target]={"value":value.strip(),"source":"work_order_claim",
+                            "independently_verified":False}
+    family=record.get("family_id")
+    if isinstance(family,str) and re.fullmatch(r"F[0-9]{2}",family):
+        claims["factory_family_id"]={"value":family,"source":"work_order_claim",
+                                     "independently_verified":False}
+    doc={"schema":"saeit.factory.passport-starter.v1",
+         "work_order":work_order,"source_instruction_sha256":instruction_sha,
+         "source_state":record["status"],"candidate_fields":claims,
+         "passport_fields_missing":missing,
+         "requires_independent_source_verification":True,
+         "requires_real_asset_license_evidence":True,
+         "requires_independent_reviewer":True,
+         "human_review_signature_verified":False,
+         "is_official_product_passport":False,
+         "commercial_release":False,"store_publication":False,
+         "manual_actions":[
+             "Verify subject and technical scope against the actual manufactured artifact.",
+             "Provide source-linked research and original asset licensing evidence.",
+             "Identify the independent specialist and record a genuinely signed review.",
+             "Complete missing fields in the official passport only after verification.",
+             "Keep all release gates closed until separate owner authorization."]}
+    digest=hashlib.sha256(serialize(doc)).hexdigest()
+    path=queue_root/work_order/(instruction_sha+"-"+digest+".json")
+    is_new=save(path,doc,immutable=True)
+    return {"work_order":work_order,"starter_sha256":digest,
+            "source_sha256":instruction_sha,"created":is_new,
+            "candidate_field_count":len(claims)}
+
 def build(root):
     root = Path(root)
     if not root.is_dir() or root.is_symlink():
@@ -213,6 +253,8 @@ def build(root):
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
         counts = Counter()
         packets = []
+        starters=[]
+        starter_root=safe_dir(lifecycle/"passport-starters")
         files = sorted(inbox.iterdir())
         if len(files)>15000:
             raise RuntimeError("REVIEW_UNEXPECTED_ORDER_VOLUME")
@@ -245,6 +287,9 @@ def build(root):
                 if passport.get("producer_id")==passport.get("independent_reviewer_id"):
                     missing_keys.add("independent_reviewer_id")
             missing = sorted(missing_keys)
+            starter=make_passport_starter(starter_root,p.stem,item,source_sha,missing)
+            starters.append(starter)
+            if starter["created"]:counts["new_private_passport_starters"]+=1
             if not passport:
                 counts["missing_passport"] += 1
             elif missing:
@@ -284,6 +329,7 @@ def build(root):
         technical=inspect_actual_products(root,lifecycle)
         summary = {"schema":SCHEMA,"status":"pending_authentic_owner_and_specialist_evidence",
                    "counts":dict(sorted(counts.items())),"packets":packets,
+                   "passport_starters":starters,
                    "approval_records_written":0,"products_activated":0,
                    "payments_created":0,"sites_contacted":0,
                    "technical_readiness":technical["counts"],
