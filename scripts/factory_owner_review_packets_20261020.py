@@ -74,7 +74,10 @@ def build(root):
     inbox = root/"production-instructions"/"orders"
     if not inbox.is_dir() or inbox.is_symlink():
         raise RuntimeError("REVIEW_INSTRUCTIONS_MISSING")
-    queue = safe_dir(root/"product-lifecycle"/"owner-review-queue")
+    lifecycle = root/"product-lifecycle"
+    if lifecycle.is_symlink():
+        raise RuntimeError("REVIEW_LIFECYCLE_SYMLINK")
+    queue = safe_dir(lifecycle/"owner-review-queue")
     lock_path = queue/".owner-review.lock"
     if lock_path.is_symlink():
         raise RuntimeError("REVIEW_LOCK_SYMLINK")
@@ -99,10 +102,22 @@ def build(root):
                 continue
             counts["manufacturing_orders"] += 1
             source_sha = hashlib.sha256(p.read_bytes()).hexdigest()
-            passport_file = root/"product-lifecycle"/"passports"/(p.stem+".json")
+            passport_file = lifecycle/"passports"/(p.stem+".json")
+            if passport_file.parent.is_symlink():
+                raise RuntimeError("REVIEW_PASSPORT_FOLDER_SYMLINK")
             passport = load(passport_file) if passport_file.exists() else {}
             present = sorted(k for k in PASSPORT_FIELDS if passport.get(k) not in (None,"",[]))
-            missing = sorted(set(PASSPORT_FIELDS)-set(present))
+            missing_keys = set(PASSPORT_FIELDS)-set(present)
+            if passport:
+                if passport.get("schema")!="saeit.factory.product-passport.v1":
+                    missing_keys.add("valid_product_passport_schema")
+                if passport.get("work_order")!=p.stem:
+                    missing_keys.add("work_order")
+                if passport.get("human_review_required") is not True:
+                    missing_keys.add("human_review_required")
+                if passport.get("producer_id")==passport.get("independent_reviewer_id"):
+                    missing_keys.add("independent_reviewer_id")
+            missing = sorted(missing_keys)
             if not passport:
                 counts["missing_passport"] += 1
             elif missing:
@@ -120,7 +135,7 @@ def build(root):
                 "passport_fields_missing": missing,
                 "requires_real_sources": True,
                 "requires_independent_human_review": True,
-                "reviewer_signature_present": False,
+                "independent_review_signature_verified": False,
                 "manufacturing_approval": False,
                 "commercial_release": False,
                 "store_publication": False,
