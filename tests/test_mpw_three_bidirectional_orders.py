@@ -77,6 +77,30 @@ class ThreeRealProductRequests(unittest.TestCase):
         self.assertEqual(same["native_product_orders"],first["native_product_orders"])
         self.assertEqual(courier.three_site_product_requests(self.site,cycle="20261019"),raw)
 
+    def test_same_day_batch_stays_stable_when_factory_stock_grows(self):
+        first=courier.three_site_product_requests(self.site,cycle="20261019")
+        name,version,_=self.products[0]
+        original=self.root/"production-warehouse/finished"/name/version
+        new_name="farm_product_5"
+        new_version=digest("genuinely new source six")
+        dest=self.root/"production-warehouse/finished"/new_name/new_version
+        dest.mkdir(parents=True,mode=0o700)
+        manifest=json.loads((original/"warehouse_manifest.json").read_text())
+        manifest.update(product_id=new_name,source_sha256=new_version)
+        (dest/"warehouse_manifest.json").write_text(json.dumps(manifest))
+        (dest/"product.zip").write_bytes((original/"product.zip").read_bytes())
+        courier.import_site(courier.export_factory(self.root),self.site)
+        self.assertEqual(courier.three_site_product_requests(self.site,cycle="20261019"),first)
+
+    def test_tampered_persisted_site_batch_still_fails_closed(self):
+        courier.three_site_product_requests(self.site,cycle="20261019")
+        receipt=self.site/"product-orders-outbound"/"20261019.json"
+        original=json.loads(receipt.read_text())
+        original["requests"][0]["artifact_sha256"]="f"*64
+        receipt.write_text(json.dumps(original))
+        with self.assertRaisesRegex(RuntimeError,"THREE_ORDERS_SITE_RECEIPT_CONFLICT"):
+            courier.three_site_product_requests(self.site,cycle="20261019")
+
     def test_no_backlog_explosion_before_first_three_are_completed(self):
         first=courier.three_site_product_requests(self.site,cycle="20261019")
         courier.receive_three_product_requests(first,self.root,ENGINE)

@@ -645,8 +645,36 @@ def three_site_product_requests(root=DEST,cycle=None):
     private_new(outbound)
     path=outbound/(cycle+".json")
     if path.exists() or path.is_symlink():
-        require(json_file(path)==doc,"THREE_ORDERS_SITE_RECEIPT_CONFLICT")
-    else:atomic(path,json_blob(doc))
+        # A site's verified stock may grow during the same UTC day. Once a
+        # three-product batch exists, NEVER replace it based on today's changing
+        # candidate count/rotation. Revalidate every original receipt against
+        # the live private QA source before replaying the unchanged batch.
+        previous=json_file(path,100_000)
+        require(isinstance(previous,dict) and set(previous)==set(doc)
+                and all(previous[k]==v for k,v in doc.items() if k!="requests"),
+                "THREE_ORDERS_SITE_RECEIPT_CONFLICT")
+        stored=previous.get("requests")
+        require(isinstance(stored,list) and len(stored)==3,
+                "THREE_ORDERS_SITE_RECEIPT_CONFLICT")
+        valid_sources=set(candidates)
+        for slot,row in enumerate(stored,1):
+            require(isinstance(row,dict) and set(row)==set(rows[0]),
+                    "THREE_ORDERS_SITE_RECEIPT_CONFLICT")
+            product=row.get("product_id")
+            version=row.get("source_sha256")
+            sha=row.get("artifact_sha256")
+            require(row.get("slot")==slot
+                    and (product,version,sha) in valid_sources
+                    and row.get("request_id")==
+                        "MPWREQ-"+digest((cycle+"|"+product+"|"+version).encode())[:20]
+                    and row.get("kind")=="verified_site_product_quality_rework"
+                    and row.get("paid_customer_purchase") is False
+                    and row.get("public_distribution") is False,
+                    "THREE_ORDERS_SITE_RECEIPT_CONFLICT")
+        require(len({row["request_id"] for row in stored})==3,
+                "THREE_ORDERS_SITE_RECEIPT_CONFLICT")
+        return json_blob(previous)
+    atomic(path,json_blob(doc))
     return json_blob(doc)
 
 def receive_three_product_requests(raw,root=VPS,engine_path=None,max_active=300):
