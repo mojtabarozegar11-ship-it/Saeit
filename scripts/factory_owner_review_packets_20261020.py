@@ -194,6 +194,73 @@ def inspect_actual_products(root, lifecycle):
     save(output/"dashboard.json",summary)
     return summary
 
+def linked_specialist_review(root, wo, order, source_sha):
+    """Ground the owner's checklist in ACTUAL independent source-bound QA evidence.
+
+    An engineering prescreen is never a scientist's opinion, rights clearance,
+    formal product passport, or authorization to publish.
+    """
+    if order.get("requesting_site")!="mojplaywin.com":
+        return None
+    pending={"status":"technical_specialist_evidence_missing_or_stale",
+             "format_prescreen_passed":False,
+             "technical_blockers":["CURRENT_SOURCE_BOUND_ENGINEERING_QA_REQUIRED"],
+             "expert_review_completed":False,
+             "rights_approved":False,"owner_release_approved":False}
+    root=Path(root)
+    records=root/"production-instructions/mojplaywin-specialist-order-reports"
+    if not records.is_dir() or records.is_symlink():
+        return pending
+    hits=sorted(records.glob(wo+"-*.json"))
+    if len(hits)>32:
+        raise RuntimeError("OWNER_SPECIALIST_EVIDENCE_VOLUME_UNSAFE")
+    sha_re=re.compile(r"^[a-f0-9]{64}$")
+    matched=[]
+    for path in hits:
+        proof=load(path)
+        if proof.get("source_work_order_sha256")!=source_sha:
+            continue
+        if (proof.get("schema")!="saeit.factory.specialist-work-order-dossier.v1"
+            or proof.get("work_order")!=wo
+            or proof.get("original_source_sha256")!=order.get("source_sha256")
+            or proof.get("source_artifact_sha256")!=order.get("source_artifact_sha256")
+            or proof.get("engineering_work_order_completed") is not False
+            or proof.get("commercial_approval") is not False):
+            raise RuntimeError("OWNER_SPECIALIST_BAD_WORK_ORDER_EVIDENCE")
+        fingerprint=proof.get("specialist_prescreen_sha256")
+        product=order.get("source_product_id")
+        version=order.get("source_sha256")
+        if (not isinstance(fingerprint,str) or not sha_re.fullmatch(fingerprint)
+                or not isinstance(product,str) or
+                not re.fullmatch(r"[a-z][a-z0-9_]{1,63}",product)
+                or not isinstance(version,str) or not sha_re.fullmatch(version)):
+            raise RuntimeError("OWNER_SPECIALIST_INVALID_SOURCE_BINDING")
+        actual=root/"design-state/mojplaywin-native-specialist-evidence"/product/(version+"-"+fingerprint+".json")
+        result=load(actual)
+        if (hashlib.sha256(actual.read_bytes()).hexdigest()!=fingerprint
+            or result.get("schema")!="saeit.factory.specialist-native-prescreen.v1"
+            or result.get("original_factory_artifact_sha256")!=order.get("source_artifact_sha256")
+            or result.get("source_sha256")!=version
+            or result.get("commercial_release") is not False
+            or result.get("final_work_order_completed") is not False):
+            raise RuntimeError("OWNER_SPECIALIST_PRODUCT_QA_EVIDENCE_MISMATCH")
+        blocks=result.get("automated_technical_blockers")
+        if not isinstance(blocks,list) or len(blocks)>50 or any(
+            not isinstance(t,str) or not re.fullmatch(r"[A-Z0-9_]{3,90}",t) for t in blocks):
+            raise RuntimeError("OWNER_SPECIALIST_BAD_BLOCKER_LIST")
+        matched.append({
+            "status":"authentic_automated_format_evidence_available",
+            "source_bound_specialist_sha256":fingerprint,
+            "format_prescreen_passed":result.get("automated_format_prescreen_passed") is True,
+            "technical_blockers":blocks,
+            "expert_review_completed":False,
+            "rights_approved":False,
+            "owner_release_approved":False})
+    if len(matched)>1:
+        raise RuntimeError("OWNER_SPECIALIST_MULTIPLE_CURRENT_QA")
+    return matched[0] if matched else pending
+
+
 def make_passport_starter(queue_root, work_order, record, instruction_sha, missing):
     """Write a verifiable source *starter*, not a passport or approval."""
     claims={}
@@ -296,6 +363,10 @@ def build(root):
                 counts["incomplete_passport"] += 1
             else:
                 counts["passport_requires_independent_validation"] += 1
+            specialist=linked_specialist_review(root,p.stem,item,source_sha)
+            if specialist is not None:
+                counts["site_origin_specialist_qa_linked" if specialist["status"]=="authentic_automated_format_evidence_available"
+                       else "site_origin_specialist_qa_missing_or_stale"]+=1
             packet = {
                 "schema": SCHEMA, "work_order": p.stem,
                 "source_instruction_sha256": source_sha,
@@ -305,6 +376,7 @@ def build(root):
                 "source_subject": str(item.get("subject",""))[:240],
                 "passport_fields_present": present,
                 "passport_fields_missing": missing,
+                "verified_private_technical_prescreen":specialist,
                 "requires_real_sources": True,
                 "requires_independent_human_review": True,
                 "independent_review_signature_verified": False,
@@ -313,6 +385,7 @@ def build(root):
                 "store_publication": False,
                 "review_checklist": [
                     "Supply genuine source evidence and verifiable artifact hashes.",
+                    "Address verified technical format blockers, including missing original factory family provenance.",
                     "Complete product passport with real owners, formats, licenses and acceptance criteria.",
                     "Perform independent specialist review under the existing signed gate.",
                     "Create only authentic signed stage receipts; never auto-approve.",
