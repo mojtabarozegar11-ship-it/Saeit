@@ -153,7 +153,7 @@ jobs:
           d="$RUNNER_TEMP/factory-store-preflight"
           ssh -F "$d/config" saeit-cpanel 'test -d "$HOME/.saeit-factory-inbox/bin" && test -d "$HOME/Saeit-staging/core/templates/core"'
           scp -F "$d/config" scripts/publish_verified_factory_store_listing.py saeit-cpanel:/home/zomorod2/.saeit-factory-inbox/bin/publish_verified_factory_store_listing.py.tmp
-          ssh -F "$d/config" saeit-cpanel "GITHUB_RUN_ID=$GITHUB_RUN_ID bash -se" <<'REMOTE'
+          ssh -F "$d/config" saeit-cpanel "GITHUB_RUN_ID=$GITHUB_RUN_ID GITHUB_RUN_ATTEMPT=$GITHUB_RUN_ATTEMPT bash -se" <<'REMOTE'
           set -euo pipefail
           umask 077
           bin="$HOME/.saeit-factory-inbox/bin"
@@ -170,7 +170,7 @@ jobs:
           test -f "$template"
           test ! -L "$template"
           mkdir -p "$bin/backups"
-          backup="$bin/backups/store-template-before-factory-run-$GITHUB_RUN_ID.html"
+          backup="$bin/backups/store-template-before-factory-run-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.html"
           test ! -e "$backup"
           cp -p "$template" "$backup"
           chmod 600 "$backup"
@@ -266,9 +266,9 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/factory-store-preflight"
           test -s "$d/config"
-          ssh -F "$d/config" saeit-cpanel "GITHUB_RUN_ID=$GITHUB_RUN_ID bash -se" <<'REMOTE'
+          ssh -F "$d/config" saeit-cpanel "GITHUB_RUN_ID=$GITHUB_RUN_ID GITHUB_RUN_ATTEMPT=$GITHUB_RUN_ATTEMPT bash -se" <<'REMOTE'
           set -euo pipefail
-          backup="$HOME/.saeit-factory-inbox/bin/backups/store-template-before-factory-run-$GITHUB_RUN_ID.html"
+          backup="$HOME/.saeit-factory-inbox/bin/backups/store-template-before-factory-run-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.html"
           target="$HOME/Saeit-staging/core/templates/core/store.html"
           marker="$backup.changed"
           if test ! -e "$marker"; then echo "STORE_NO_CHANGES_TO_RESTORE"; exit 0; fi
