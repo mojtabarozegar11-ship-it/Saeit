@@ -485,6 +485,7 @@ def import_site(batch, root=DEST):
     private_new(root / "returns")
     added, previous = 0, 0
     customer_added,customer_existing,customer_missing=0,0,0
+    native_preview_added=native_preview_existing=0
     rows = []
     for product, version, manifest, content, customer in products:
         parent = root/"received"/product
@@ -502,6 +503,7 @@ def import_site(batch, root=DEST):
             atomic(version_dir/"product.zip",content)
             atomic(version_dir/"warehouse_manifest.json",json_blob(manifest))
             added += 1
+        native_preview=(customer is not None and customer[0].get("schema")==NATIVE_PREVIEW_SCHEMA)
         if customer is not None:
             candidate_report,candidate_zip=customer
             candidate_zip_path=version_dir/"customer-package.zip"
@@ -512,12 +514,14 @@ def import_site(batch, root=DEST):
                         and digest(candidate_zip_path.read_bytes())==candidate_report["package_sha256"]
                         and json_file(candidate_manifest_path)==candidate_report,
                         "CUSTOMER_PREVIOUS_RECEIPT_CONFLICT")
-                customer_existing+=1
+                if native_preview:native_preview_existing+=1
+                else:customer_existing+=1
             else:
                 atomic(candidate_zip_path,candidate_zip)
                 atomic(candidate_manifest_path,json_blob(candidate_report))
-                customer_added+=1
-        else:
+                if native_preview:native_preview_added+=1
+                else:customer_added+=1
+        if customer is None or native_preview:
             customer_missing+=1
         # This independent QA does NOT invent a content, licensing or owner
         # approval. Missing commercial verification returns to stage one.
@@ -525,7 +529,8 @@ def import_site(batch, root=DEST):
         qa = {"schema": SCHEMA,"tenant":TENANT,"product_id":product,
               "version":version,"artifact_sha256":manifest["artifact_sha256"],
               "technical_zip_verified":True,
-              "customer_bundle_verified":customer is not None,
+              "customer_bundle_verified":customer is not None and not native_preview,
+              "native_private_structure_preview_verified":bool(native_preview),
               "customer_package_sha256":(customer[0]["package_sha256"] if customer else None),
               "commercial_approved":False,
               "qa_state":"requires_factory_stage1_rework","issue_codes":issues,
@@ -552,6 +557,8 @@ def import_site(batch, root=DEST):
               "duplicate_versions_skipped":previous,
               "new_customer_packages_received":customer_added,
               "existing_customer_packages_verified":customer_existing,
+              "new_native_private_previews_received":native_preview_added,
+              "existing_native_private_previews_verified":native_preview_existing,
               "warehouse_versions_without_customer_bundle":customer_missing,
               "quality_approved":0,
               "pending_stage1_return":len(rows),"publicly_published":0,
