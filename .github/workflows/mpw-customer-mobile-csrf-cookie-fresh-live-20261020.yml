@@ -1,0 +1,180 @@
+name: MojPlayWin isolated customer mobile CSRF cookie and fresh token repair
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-customer-mobile-csrf-cookie-fresh-live-20261020.yml"
+permissions: {contents: read}
+concurrency:
+  group: mpw-customer-auth-csrf-two-templates-only
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test exact two-template patch syntax and JavaScript without production writes
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_customer_mobile_csrf_fresh_form_release_20261020.py
+          python3 scripts/mpw_customer_mobile_csrf_fresh_form_release_20261020.py selftest
+          python3 - <<'PY'
+          import importlib.util,os
+          p='scripts/mpw_customer_mobile_csrf_fresh_form_release_20261020.py'
+          s=importlib.util.spec_from_file_location('mpw_csrf_fix',p)
+          m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+          with open(os.environ['RUNNER_TEMP']+'/mpw-csrf-guard.js','w') as file:
+              file.write(m.SCRIPT.split('>',1)[1].rsplit('</script>',1)[0])
+          assert 'csrfmiddlewaretoken' in m.SCRIPT
+          assert 'same-origin' in m.SCRIPT
+          PY
+          node --check "$RUNNER_TEMP/mpw-csrf-guard.js"
+      - name: Record protected main and sibling URL responses before customer-form release
+        run: |
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error,os
+          paths=['/','/store/','/store/product/779/','/accounts/login/','/accounts/register/','/farnaz/','/saman/','/taniya/','/picm/']
+          before={}
+          for path in paths:
+              try:
+                  with urllib.request.urlopen(urllib.request.Request('https://mojplaywin.com'+path,headers={'Cache-Control':'no-cache'}),timeout=18) as r:
+                      before[path]=r.status
+              except urllib.error.HTTPError as e:before[path]=e.code
+          print('MPW_CSRF_BEFORE_HTTP='+json.dumps(before))
+          if any(v!=200 for v in before.values()):raise RuntimeError('Protected baseline already unhealthy')
+          with open(os.environ['RUNNER_TEMP']+'/mpw-csrf-baseline.json','w') as f:json.dump(before,f)
+          PY
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-revenue-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Preview exact live two-template source and fail if changed from observed
+        run: |
+          set -euo pipefail
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - preview" < scripts/mpw_customer_mobile_csrf_fresh_form_release_20261020.py
+      - name: Install only MojPlayWin customer login and register forms with sealed per-file backups
+        id: publish
+        run: |
+          set -euo pipefail
+          timeout 85s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - publish '$GITHUB_RUN_ID'" < scripts/mpw_customer_mobile_csrf_fresh_form_release_20261020.py
+      - name: Validate installed Django customer forms with CSRF enforced
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify '$GITHUB_RUN_ID'" < scripts/mpw_customer_mobile_csrf_fresh_form_release_20261020.py
+      - name: Restart only verified MojPlayWin main Passenger app template cache
+        id: restart
+        run: |
+          set -euo pipefail
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          root=Path('/home/zomorod2/mojplaywin.com')
+          wsgi=root/'passenger_wsgi.py'
+          login=Path('/home/zomorod2/Saeit-staging/mpw_commerce/templates/mpw_commerce/customer_login.html')
+          reg=Path('/home/zomorod2/Saeit-staging/mpw_commerce/templates/mpw_commerce/customer_register.html')
+          if any(p.is_symlink() for p in (root,wsgi,login,reg)):
+              raise RuntimeError('Pinned production paths contain symlink')
+          if "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):
+              raise RuntimeError('Wrong main Passenger binding')
+          if not all('mpw-csrf-fresh-submit-20261020' in p.read_text('utf8') for p in (login,reg)):
+              raise RuntimeError('Verified customer form files not present')
+          tmp=root/'tmp'
+          if tmp.is_symlink():raise RuntimeError('Unsafe Passenger tmp path')
+          tmp.mkdir(exist_ok=True)
+          marker=tmp/'restart.txt'
+          if marker.is_symlink():raise RuntimeError('Unsafe Passenger restart path')
+          marker.touch()
+          print('MPW_CSRF_MAIN_APP_ONLY_RELOAD=REQUESTED')
+          PY
+      - name: Verify live mobile buyer login and registration render with cookies and no subsite regression
+        run: |
+          python3 - <<'PY'
+          import json,os,time,urllib.request,urllib.error
+          base='https://mojplaywin.com'
+          target=['/accounts/login/','/accounts/register/']
+          for route in target:
+              matched=False
+              for attempt in range(7):
+                  req=urllib.request.Request(base+route+'?csrf_mobile_release='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt),
+                    headers={'Cache-Control':'no-cache','User-Agent':'Mozilla/5.0 Android Chrome/130 Mobile Safari/537.36'})
+                  with urllib.request.urlopen(req,timeout=18) as r:
+                      html=r.read(220000).decode('utf8','replace')
+                      cookie_headers=r.headers.get_all('Set-Cookie') or []
+                      matched=r.status==200 and 'mpw-csrf-fresh-submit-20261020' in html and 'name="csrfmiddlewaretoken"' in html and any(x.startswith('csrftoken=') for x in cookie_headers)
+                  if matched:break
+                  time.sleep(3)
+              if not matched:raise RuntimeError('Customer CSRF recovery not live on '+route)
+              print('MPW_CSRF_MOBILE_LIVE='+route)
+          with open(os.environ['RUNNER_TEMP']+'/mpw-csrf-baseline.json') as f:before=json.load(f)
+          after={}
+          for route in before:
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(base+route,headers={'Cache-Control':'no-cache'}),timeout=18) as r:after[route]=r.status
+              except urllib.error.HTTPError as e:after[route]=e.code
+          print('MPW_CSRF_AFTER_HTTP='+json.dumps(after))
+          if after!=before:raise RuntimeError('Protected site or sibling status changed')
+          print('MPW_CSRF_BROWSER_CUSTOMER_FORMS_AND_SIBLINGS=PASS')
+          PY
+      - name: Verify real public CSRF rejects cookie-free POST but accepts valid cookie
+        run: |
+          set -euo pipefail
+          python3 scripts/mpw_customer_csrf_public_post_20261020.py
+      - name: Restore exact two original customer templates if any postpublish gate fails
+        if: failure() && steps.publish.outcome == 'success'
+        run: |
+          set -euo pipefail
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'" < scripts/mpw_customer_mobile_csrf_fresh_form_release_20261020.py
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          root=Path('/home/zomorod2/mojplaywin.com')
+          wsgi=root/'passenger_wsgi.py'
+          if root.is_symlink() or wsgi.is_symlink() or "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):
+              raise RuntimeError('Unexpected main Passenger app')
+          target=root/'tmp/restart.txt'
+          if target.parent.is_dir() and not target.is_symlink():target.touch()
+          print('MPW_CSRF_MAIN_APP_ROLLBACK_RELOAD=REQUESTED')
+          PY
+      - name: Erase temporary SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
