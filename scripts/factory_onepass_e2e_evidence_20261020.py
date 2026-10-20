@@ -95,8 +95,8 @@ def run(root,ops,registry,run_id):
         ticks.append({"invocations":tick["support_invocations_this_tick"],
               "completed_queue":tick["queued_requests"]["completed"],
               "rejected_queue":tick["queued_requests"]["rejected"]})
-        if all((output/(ident+".json")).is_file() for ident in expected) and
-           (rejected/(negative+".json")).is_file():
+        if (all((output/(ident+".json")).is_file() for ident in expected)
+                and (rejected/(negative+".json")).is_file()):
             break
     response_proofs=[]
     for ident,wanted in expected.items():
