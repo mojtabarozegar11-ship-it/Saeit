@@ -127,6 +127,48 @@ jobs:
           PY
           echo PICM_VPS_INSPECTION_COMPLETE
           REMOTE
+      - name: Read PICM factory guard and sanitized worker failure diagnostics
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 35s ssh -F "$WORK/config" picm-vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import os, urllib.request
+          home=Path.home()
+          pidfile=home/'factory-runtime/operations/vps-only-loop.pid'
+          valid=False
+          try:
+              pid=int(pidfile.read_text().strip())
+              os.kill(pid,0)
+              valid=True
+          except (OSError,ValueError):
+              pass
+          print('PICM_FACTORY_GUARD_RUNNING' if valid else 'PICM_FACTORY_GUARD_BLOCKED')
+          try:
+              with open('/proc/meminfo',encoding='ascii') as f:
+                  avail=next(int(l.split()[1]) for l in f if l.startswith('MemAvailable:'))
+              print('PICM_RAM_GUARD_PASS' if avail>=2850000 else 'PICM_RAM_GUARD_BLOCKED')
+              print('PICM_RAM_AVAILABLE_KB='+str(avail))
+          except (OSError,StopIteration):
+              print('PICM_RAM_GUARD_UNKNOWN')
+          try:
+              with urllib.request.urlopen('http://127.0.0.1:18188/system_stats',timeout=3) as r:
+                  print('PICM_COMFYUI_ALREADY_RUNNING' if r.status==200 else 'PICM_COMFYUI_UNKNOWN_RESPONSE')
+          except Exception:
+              print('PICM_COMFYUI_NOT_CURRENTLY_RUNNING')
+          logfile=home/'.local/share/saeit-picm/worker.log'
+          if logfile.is_file() and not logfile.is_symlink():
+              safe=[]
+              for line in logfile.read_text(errors='replace').splitlines()[-300:]:
+                  if line.startswith(('PICM_RENDER_ERROR=', 'PICM_JOB_REPORTED_FAILED_', 'PICM_WORKER_RECOVERABLE_ERROR=', 'PICM_JOB_DELIVERED_', 'PICM_QUEUE_EMPTY', 'PICM_JOB_CLAIMED')):
+                      safe.append(line[:130])
+              print('PICM_SANITIZED_RECENT_LOG_START')
+              print('\n'.join(safe[-30:]))
+              print('PICM_SANITIZED_RECENT_LOG_END')
+          else:
+              print('PICM_WORKER_LOG_MISSING')
+          PY
       - name: Check private cPanel PICM installation without reading private data
         shell: bash
         run: |
