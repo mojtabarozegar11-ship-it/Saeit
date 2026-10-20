@@ -228,7 +228,10 @@ def add_tar(tar, name, raw):
 
 
 def export_factory(root=VPS):
+    # Status to stderr only: stdout is the authenticated binary archive stream.
+    print("MPW_VPS_EXPORT_BEGIN=PASS", file=sys.stderr, flush=True)
     records = stock_records(Path(root))
+    print("MPW_VPS_EXPORT_STOCK_VERIFIED="+str(len(records)), file=sys.stderr, flush=True)
     companions = {(p,v):customer_companion(root,p,v,m["artifact_sha256"])
                   for p,v,m,raw in records}
     # Three buyer-format goods per courier cycle; retain every underlying
@@ -241,7 +244,9 @@ def export_factory(root=VPS):
         companions={key:(value if key in selected else None)
                     for key,value in companions.items()}
     stream = io.BytesIO()
-    with tarfile.open(fileobj=stream, mode="w:gz") as tar:
+    # Stored products are already ZIP-compressed; gzip level 1 avoids expensive
+    # recompression on the low-CPU VPS without relaxing any archive/QA checks.
+    with tarfile.open(fileobj=stream, mode="w:gz", compresslevel=1) as tar:
         index = {"schema": SCHEMA, "tenant": TENANT, "created_utc": stamp(),
                  "inventory_count": len(records),
                  "items": [{"product_id":p, "version":v,
@@ -262,6 +267,7 @@ def export_factory(root=VPS):
                 add_tar(tar, name + "customer-package.zip", customer_bytes)
     value = stream.getvalue()
     require(len(value) <= MAX_PACKAGE, "WAREHOUSE_TRANSFER_TOO_LARGE")
+    print("MPW_VPS_EXPORT_TRANSFER_BYTES="+str(len(value)), file=sys.stderr, flush=True)
     return value
 
 
