@@ -59,7 +59,9 @@ root=Path(sys.argv[2]);proto=planner.load('factory_build_50')
 for family in ('F19','F27','F34','F29','F30','F33','F06','F07','F10','F11','F36','F37','F39'):
  result=planner.execute(root,{'family_id':family})
  if not planner.proof(root,planner.CATALOG[family],family,proto):
-  raise RuntimeError('CATALOG_RECOVERY_FAILED:'+family+':'+str(result))
+  statefile=root/'build-50'/planner.CATALOG[family]/'state.json'
+  defects=planner.read(statefile).get('defects',[]) if statefile.exists() else ['no_attempt_state']
+  raise RuntimeError('CATALOG_RECOVERY_FAILED:'+family+':'+str(result)+':defects='+str(defects))
  print('CATALOG_ROUTE_AND_RECEIPTS_VERIFIED='+family)
 RESTORECATALOG
 # The restored catalog loop verifies real receipts for three new fixed-scope suites.
