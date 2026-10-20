@@ -41,7 +41,7 @@ def new_menu(header):
 def patch(doc,header):
     text=doc.decode('utf8')
     blocks=list(HEADER.finditer(text))
-    if len(blocks)!=1:fail('Page header mismatch')
+    if len(blocks)!=1:fail('Page header mismatch count='+str(len(blocks))+' length='+str(len(text))+' classes='+repr(re.findall(r'<header.{0,160}',text,re.I)[:3]))
     before=blocks[0].group(0)
     if MARK in text:fail('Menu already patched')
     if 'mw-site-nav' not in before or 'mw-nav-panel' not in before:fail('Cannot safely unify this page')
