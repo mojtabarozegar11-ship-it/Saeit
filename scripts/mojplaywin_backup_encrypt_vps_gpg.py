@@ -163,7 +163,8 @@ def encrypt_stream_to_file(stream, target: Path, gpg_home: Path, key: bytes, *, 
         proc.stdin.close()
         if proc.wait(timeout=120):
             raise RuntimeError("GPG encryption process failed")
-        if total < 1024 + len(MARKER) or tail != MARKER:
+        minimum_encoded = 20 if verifier is not None else 1024
+        if total < minimum_encoded + len(MARKER) or tail != MARKER:
             raise RuntimeError("source completion footer absent")
         if verifier is not None:
             verifier.finish()
