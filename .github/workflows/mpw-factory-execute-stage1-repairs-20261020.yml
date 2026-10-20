@@ -70,7 +70,7 @@ jobs:
     needs: preflight
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -158,7 +158,8 @@ jobs:
           umask 077
           d="$RUNNER_TEMP/factory-store-preflight"
           source="$(base64 -w0 scripts/mpw_vps_warehouse_courier.py)"
-          timeout 160s ssh -T -F "$d/config" saeit-vps \
+          echo MPW_VPS_STOCK_EXPORT_START=PASS
+          timeout 360s ssh -T -F "$d/config" -o ServerAliveInterval=20 -o ServerAliveCountMax=3 saeit-vps \
             "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-export" \
             > "$RUNNER_TEMP/mpw-factory-stock.tgz"
           test -s "$RUNNER_TEMP/mpw-factory-stock.tgz"
