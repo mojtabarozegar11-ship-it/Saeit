@@ -7,6 +7,12 @@ on:
       - "tests/test_factory_two_site_merchant_rails.py"
       - "deploy/install_factory_two_site_merchant_rails.sh"
       - ".github/workflows/vps-factory-two-merchant-rails-20261020.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/factory_two_site_merchant_rails.py"
+      - "tests/test_factory_two_site_merchant_rails.py"
+      - ".github/workflows/vps-factory-two-merchant-rails-20261020.yml"
   workflow_dispatch:
 permissions: {contents: read}
 concurrency:
