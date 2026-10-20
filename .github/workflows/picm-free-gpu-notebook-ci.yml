@@ -1,0 +1,26 @@
+name: PICM Optional Free GPU Notebook Safety
+on:
+  push:
+    branches: [feature/picm-free-gpu-workbench-20261020]
+    paths:
+      - ops/picm-gpu/PICM_Free_GPU_Video_and_AI_Upscale.ipynb
+      - tests/test_picm_free_gpu_notebook.py
+      - .github/workflows/picm-free-gpu-notebook-ci.yml
+  pull_request:
+    paths:
+      - ops/picm-gpu/PICM_Free_GPU_Video_and_AI_Upscale.ipynb
+      - tests/test_picm_free_gpu_notebook.py
+      - .github/workflows/picm-free-gpu-notebook-ci.yml
+permissions:
+  contents: read
+jobs:
+  notebook:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate notebook syntax, bounded resources, truthful descriptions and source privacy
+        run: python -m unittest discover -s tests -p test_picm_free_gpu_notebook.py -v
