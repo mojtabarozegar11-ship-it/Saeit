@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/mpw-unify-all-revenue-navigation-20261020.yml"
+      - "scripts/mpw_integrated_revenue_navigation_20261020.py"
 permissions: {contents: read}
 concurrency:
   group: mpw-menu-exact-static-main
