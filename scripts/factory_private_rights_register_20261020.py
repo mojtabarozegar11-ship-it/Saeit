@@ -90,7 +90,7 @@ def register(batch,verifier,dbpath,out):
  summary={"schema":"saeit.factory.private-rights-summary.v1","batch_sha256":batch.name,
   "products":index,"asset_hashes_documented":485,
   "independent_legal_approvals":0,"owner_publication_approvals":0,"publications":0}
- save(out/"rights-summary.json",dump(summary))
+ save(out/(batch.name+".rights-summary.json"),dump(summary))
  with sqlite3.connect(str(dbpath),timeout=15) as db:
   db.execute("""CREATE TABLE IF NOT EXISTS factory_private_rights_evidence(
    recipe TEXT NOT NULL, artifact_sha256 TEXT NOT NULL,dossier_sha256 TEXT NOT NULL,
