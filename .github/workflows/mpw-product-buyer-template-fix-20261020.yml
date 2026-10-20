@@ -2,7 +2,7 @@ name: MojPlayWin branded product secure checkout and English login exact templat
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/mpw-product-buyer-template-fix-20261020.yml"]
+    paths: [".github/workflows/mpw-product-buyer-template-fix-20261020.yml", "scripts/mpw_product_buyer_template_fix_20261020.py"]
 permissions: {contents: read}
 concurrency:
   group: mpw-buyer-only-template-fix
