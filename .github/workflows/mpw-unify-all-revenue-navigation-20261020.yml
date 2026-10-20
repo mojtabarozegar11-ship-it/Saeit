@@ -89,7 +89,7 @@ jobs:
           import urllib.request,urllib.error,json,os,time
           domain='https://mojplaywin.com'
           slugs=('website-doctor','landing-page-studio','ai-automation','business-spreadsheets','website-templates','social-media-kits','resume-builder','logo-studio','browser-games','marketing-ai','business-calculators','website-care')
-          checked_routes=('/','/store/','/services/','/about/','/knowledge/','/research/','/industry/','/economy/','/studio/','/agents/','/company/','/market/','/ventures/carpets/','/ventures/jewelry-gold/')
+          checked_routes=('/','/design-preview-20261017/mpw-ten-editorials-20261018/pages/research.html','/design-preview-20261017/mpw-ten-editorials-20261018/pages/services.html','/design-preview-20261017/mpw-ten-editorials-20261018/pages/industry.html','/design-preview-20261017/mpw-ten-editorials-20261018/pages/about.html')
           for path in checked_routes:
               req=urllib.request.Request(domain+path+'?mpw_new_menu='+str(time.time_ns()),headers={'Cache-Control':'no-cache'})
               with urllib.request.urlopen(req,timeout=20) as resp:html=resp.read(600000).decode('utf8','replace')
