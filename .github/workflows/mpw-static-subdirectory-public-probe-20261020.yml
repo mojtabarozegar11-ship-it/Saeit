@@ -1,0 +1,114 @@
+name: MojPlayWin safe temporary static subdirectory probe
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-static-subdirectory-public-probe-20261020.yml"]
+permissions: {contents: read}
+jobs:
+  probe:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-revenue-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Make a temporary public test in already served editorial directory
+        id: install
+        run: |
+          timeout 40s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel python3 - "$GITHUB_RUN_ID" <<'PY'
+          import os,re,json,stat
+          from pathlib import Path
+          import sys
+          rid=sys.argv[1]
+          if not re.fullmatch('[0-9]{8,20}',rid):raise SystemExit('Bad run')
+          root=Path('/home/zomorod2/mojplaywin.com')
+          base=root/'mpw-editorial'
+          if not base.is_dir() or base.is_symlink() or not (base/'index.html').is_file():raise RuntimeError('Unverified static base')
+          dest=base/('__mpw_probe_'+rid)
+          if dest.exists() or dest.is_symlink():raise RuntimeError('Probe collision')
+          dest.mkdir(mode=0o755);dest.chmod(0o755)
+          page=dest/'index.html'
+          page.write_text('<!doctype html><html lang="en"><head><title>MojPlayWin Probe</title></head><body>MPW_TEMPORARY_STATIC_PROBE_'+rid+'</body></html>')
+          page.chmod(0o644)
+          print('MPW_PROBE_FILES='+json.dumps(dict(directory=str(dest.relative_to(root)),mode=oct(stat.S_IMODE(dest.stat().st_mode)),page_mode=oct(stat.S_IMODE(page.stat().st_mode)))))
+          PY
+      - name: Public HTTP test new file within known served editorial directory
+        run: |
+          python3 - <<'PY'
+          import os,time,urllib.request,urllib.error
+          rid=os.environ['GITHUB_RUN_ID'];url='https://mojplaywin.com/mpw-editorial/__mpw_probe_'+rid+'/index.html'
+          for trial in range(3):
+              try:
+                  req=urllib.request.Request(url+'?probe='+str(time.time_ns()),headers={'Cache-Control':'no-cache'})
+                  with urllib.request.urlopen(req,timeout=15) as r:
+                      body=r.read(4000).decode('utf8','replace')
+                      print('MPW_STATIC_PROBE_RESPONSE',r.status,r.geturl(),r.headers.get('Content-Type'),'MARKER_FOUND='+str('MPW_TEMPORARY_STATIC_PROBE_'+rid in body))
+                      if 'MPW_TEMPORARY_STATIC_PROBE_'+rid in body:break
+              except urllib.error.HTTPError as e:
+                  print('MPW_STATIC_PROBE_HTTP_ERROR',e.code,'SERVER='+str(e.headers.get('Server')),'CONTENT_TYPE='+str(e.headers.get('Content-Type')),'BODY='+repr(e.read(270).decode('utf8','replace')))
+              time.sleep(2)
+          else:raise RuntimeError('Public probe not accessible')
+          print('MPW_KNOWN_STATIC_DIRECTORY_SUPPORTS_NEW_SUBDIRECTORY=true')
+          PY
+      - name: Remove only the temporary test directory
+        if: always() && steps.install.outcome == 'success'
+        run: |
+          timeout 40s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel python3 - "$GITHUB_RUN_ID" <<'PY'
+          from pathlib import Path
+          import re,sys
+          rid=sys.argv[1]
+          if not re.fullmatch('[0-9]{8,20}',rid):raise RuntimeError('Invalid release')
+          p=Path('/home/zomorod2/mojplaywin.com/mpw-editorial')/('__mpw_probe_'+rid)
+          if not p.is_dir() or p.is_symlink():raise RuntimeError('Unexpected probe path')
+          children=list(p.iterdir())
+          if len(children)!=1 or children[0].name!='index.html' or children[0].is_symlink():raise RuntimeError('Probe directory changed, refuse cleanup')
+          if 'MPW_TEMPORARY_STATIC_PROBE_'+rid not in children[0].read_text():raise RuntimeError('Probe marker changed')
+          children[0].unlink();p.rmdir()
+          print('MPW_STATIC_PROBE_CLEANED=PASS')
+          PY
+      - name: Remove ephemeral runner keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
