@@ -94,6 +94,10 @@ jobs:
               import hashlib
               assert hashlib.sha256(path.read_bytes()).hexdigest()==item['evidence_sha256']
           print('REAL_VPS_PRIVATE_GOODS_TECHNICAL_QA='+json.dumps(technical['counts'],sort_keys=True))
+          defects=[{"recipe":item["recipe"],"blockers":item["blockers"]}
+                   for item in technical["items"] if not item["technical_ok"]]
+          print('REAL_VPS_PRIVATE_TECHNICAL_REWORK='+json.dumps(defects,sort_keys=True))
+          assert len(defects)==technical["counts"].get("technical_rework_required",0)
           assert data['approval_records_written']==0
           assert data['products_activated']==0 and data['payments_created']==0
           assert data['sites_contacted']==0
