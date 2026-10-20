@@ -25,6 +25,9 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_factory_build50_f31_planner.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_batch5.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_product_planner.py' -v
+          python3 -m unittest discover -s tests -p '*f19*' -v
+          python3 -m unittest discover -s tests -p '*f34*' -v
+          python3 -m unittest discover -s tests -p '*workbook*' -v
           python3 -m unittest discover -s tests -p 'test_factory_f18_and_organizer.py' -v
           python3 - <<'PY'
           from pathlib import Path
@@ -127,7 +130,7 @@ jobs:
           assert len(planner['families_awaiting_specialist_executor'])==30
           organized=json.loads((h/'private/autonomous-product-cycle/capability-organization/dashboard.json').read_text())
           assert organized['family_count']==40 and organized['native_recipe_families']>=10
-          assert organized['support_tool_bindings_available']==1000
+          assert (organized['support_tool_bindings_available'],organized['unique_support_operations']) in ((1000,25),(3000,75))
           assert organized['real_family_support_invocations_this_cycle']==200
           assert organized['legacy']['matching_modules']==77
           assert len(organized['legacy']['robot_roles'])==11
