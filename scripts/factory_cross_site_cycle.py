@@ -6,7 +6,7 @@ Reports real existing HTML preview quality, verifies exact site-source copies,
 and represents inaccessible private site telemetry as unknown.
 """
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
 import os
 from pathlib import Path
@@ -64,6 +64,20 @@ def run(repo, private):
                                "issues": result["issues"], "sha256": result["html_sha256"],
                                "commercial_quality_approved": False})
                 break
+    federation_file = root / "cross-site-capabilities" / "federation.json"
+    federation = {"state": "unknown", "module_slots": None, "verified_factory_executions": 0}
+    if federation_file.exists():
+        if federation_file.is_symlink() or federation_file.stat().st_size > 1100000:
+            raise RuntimeError("FEDERATION_EVIDENCE_UNSAFE")
+        evidence = json.loads(federation_file.read_text(encoding="utf-8"))
+        if evidence.get("schema") != "saeit.factory.site-federation.v1":
+            raise RuntimeError("FEDERATION_SCHEMA_UNTRUSTED")
+        date = datetime.fromisoformat(evidence["received_utc"].replace("Z", "+00:00"))
+        fresh = date.tzinfo is not None and timedelta(seconds=-60) <= datetime.now(timezone.utc)-date <= timedelta(hours=2)
+        federation = {"state": "fresh_observed_remote_capabilities" if fresh else "stale",
+                      "module_slots": evidence.get("module_slots_total"),
+                      "verified_factory_executions": 0,
+                      "source_matches": evidence.get("matched_site_source_count", 0)}
     return {
         "schema": SCHEMA,
         "observed_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -76,6 +90,7 @@ def run(repo, private):
         "html_previews_scanned": len(checks),
         "html_previews": checks,
         "factory_product_directories_sampled": examined,
+        "federation": federation,
         "site_live_telemetry": {"zomorodmelal": "unobserved",
                                 "mojplaywin": "unobserved"},
         "site_monitoring_performed": False,
