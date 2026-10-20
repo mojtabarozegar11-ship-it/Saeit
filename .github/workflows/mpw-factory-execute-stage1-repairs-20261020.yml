@@ -7,21 +7,44 @@ on:
       - scripts/mpw_factory_stage1_technical_repair.py
       - tests/test_mpw_factory_stage1_technical_repair.py
       - deploy/install_mpw_stage1_technical_repair.sh
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-factory-execute-stage1-repairs-20261020.yml
+      - scripts/mpw_factory_stage1_technical_repair.py
+      - tests/test_mpw_factory_stage1_technical_repair.py
+      - tests/test_factory_customer_packager.py
+      - scripts/factory_customer_packager.py
+      - scripts/factory_product_maker.py
+      - deploy/install_mpw_stage1_technical_repair.sh
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: mpw-only-stage1-real-technical-repairs-courier
+  group: mpw-only-stage1-real-technical-repairs-courier-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  courier:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 12
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Set up pinned Python for deterministic offline tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned F27 workbook test dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check 'openpyxl==3.1.5'
+          python3 - <<'PY'
+          import openpyxl
+          assert openpyxl.__version__ == "3.1.5", openpyxl.__version__
+          print("F27_OPENPYXL_READY=PASS")
+          PY
       - name: Prove transfer, quarantine and stage-one return contracts
         shell: bash
         run: |
@@ -43,6 +66,15 @@ jobs:
           assert 'publish_verified_factory_store_listing' not in src
           print('MPW_FACTORY_COURIER_SAFE_TESTS=PASS')
           PY
+  courier:
+    needs: preflight
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Prepare pinned SSH identities
         shell: bash
         env:
