@@ -6,6 +6,7 @@
 <title>PICM | MojPlayWin AI Image Studio</title>
 <style>
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 :root{font-family:Tahoma,"Segoe UI",system-ui,sans-serif;background:#090f1f;color:#edf1ff;color-scheme:dark}
 body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 85% 2%,#28305a 0,transparent 45%),#090f1f}
 header{display:flex;align-items:center;justify-content:space-between;gap:14px;border-bottom:1px solid #34415c;padding:17px clamp(16px,4vw,64px)}
@@ -48,11 +49,12 @@ footer{margin-top:29px;color:#8696b6;font-size:12px}
 <main>
 <div class="eyebrow">PICM · PRIVATE PHOTO WORKSPACE</div>
 <h1>استودیوی عکس و ویدیو</h1>
-<p class="lead">عکس مرجع خود را انتخاب کنید و حالت مورد نظر را مشخص کنید. یک عکس بدهید، روایت را بنویسید و گزینهٔ «عکس + داستان ← فیلم» را انتخاب کنید. برنامهٔ صحنه‌ها خصوصی آماده می‌شود؛ تا زمان اتصال پردازشگر GPU، فیلم واقعی تولید نمی‌شود.</p>
+<p class="lead">برای ساخت واقعی تصویر آزمایشی، گزینهٔ «متن ← عکس» را انتخاب کنید و فقط شرح تصویر را بنویسید. ویرایش دستی و ساخت ویدیوی ساده در مرورگر هم فعال است. ساخت فیلم با حرکت واقعی افراد و کیفیت 8K همچنان به موتور پردازشی مجزا نیاز دارد.</p>
 <div class="layout">
 <section class="panel">
 <h2>تنظیمات پروژه</h2>
 <div class="modes" role="group" aria-label="انتخاب نوع پردازش">
+<button class="mode" id="mode-text_image" type="button" aria-pressed="false" data-mode="text_image"><strong>متن ← عکس واقعی</strong><small>Private CPU AI · 256px</small></button>
 <button class="mode" id="mode-image_edit" type="button" aria-pressed="true" data-mode="image_edit"><strong>عکس + متن ← عکس</strong><small>Photo Editing</small></button>
 <button class="mode" id="mode-image_video" type="button" aria-pressed="false" data-mode="image_video"><strong>حرکت سادهٔ عکس</strong><small>Pan / Zoom Only</small></button>
 <button class="mode" id="mode-story_video" type="button" aria-pressed="false" data-mode="story_video"><strong>عکس + داستان ← فیلم</strong><small>Story to Film · GPU Pending</small></button>
@@ -77,6 +79,14 @@ footer{margin-top:29px;color:#8696b6;font-size:12px}
 <input type="range" id="photo-saturation" min="0" max="165" value="108" step="3">
 <p class="hint">ویرایش رایگان و دستی عکس: نور، کنتراست و رنگ؛ خروجی JPEG با حفظ تناسب تصویر و حداکثر ضلع ۲۰۴۸ پیکسل. این قابلیت مولد هوش مصنوعی نیست.</p>
 </div>
+<div id="text-image-options" hidden>
+<label for="picm-ai-style">سبک تصویر ساخته‌شده</label>
+<select id="picm-ai-style"><option value="natural">طبیعی</option><option value="cinematic" selected>سینمایی</option><option value="illustration">تصویرسازی</option><option value="product">عکاسی محصول</option></select>
+<label for="picm-ai-steps">مراحل پردازش (زمان بیشتر ممکن است)</label>
+<select id="picm-ai-steps"><option value="1" selected>۱ مرحله · آزمایشی سریع‌تر</option><option value="2">۲ مرحله · کندتر</option><option value="3">۳ مرحله · کندتر</option></select>
+<p class="hint">تصویر واقعی با مدل CPU خصوصی ساخته می‌شود؛ اندازهٔ فعلی ۲۵۶×۲۵۶ پیکسل است و کیفیت حرفه‌ای ندارد. سهمیهٔ فعلی: {{ picm_daily_limit }} درخواست در ۲۴ ساعت.</p>
+<button id="picm-text-resume" type="button" hidden class="stop-video">پیگیری آخرین سفارش عکس</button>
+</div>
 <div id="story-options" hidden>
 <label for="story-duration">مدت فیلم داستانی</label>
 <select id="story-duration"><option value="5">۵ ثانیه</option><option value="10">۱۰ ثانیه</option><option value="30">۳۰ ثانیه</option><option value="60" selected>۶۰ ثانیه</option></select>
@@ -98,12 +108,12 @@ footer{margin-top:29px;color:#8696b6;font-size:12px}
 </form>
 </section>
 <section class="panel">
-<h2>پیش‌نمایش عکس مرجع</h2>
+<h2>پیش‌نمایش و خروجی خصوصی</h2>
 <div class="preview" id="preview">
 <svg viewBox="0 0 64 64" aria-hidden="true"><rect x="6" y="9" width="52" height="46" rx="6" stroke-width="2"/><circle cx="20" cy="23" r="5" stroke-width="2"/><path d="M9 48 26 31 36 41 45 33 55 47" stroke-width="2"/></svg>
 <span>ابتدا یک عکس آپلود کنید</span>
 </div>
-<p class="section-caption">پیش‌نمایش تصویر در مرورگر شما نمایش داده می‌شود. عکس روی سایت عمومی منتشر نمی‌شود.</p>
+<p class="section-caption">فایل ورودی یا تصویر تولیدشده تنها داخل میز کار خصوصی شما نمایش داده می‌شود؛ تصاویر تولیدی برای دانلود فقط به حساب مالک قابل دسترسی‌اند.</p>
 <p id="status" class="status" role="status" aria-live="polite">آمادهٔ انتخاب عکس مرجع.</p>
 </section>
 </div>
@@ -156,4 +166,5 @@ window.addEventListener('pagehide',()=>{if(objectURL)URL.revokeObjectURL(objectU
 </script>
 <script>{% include 'picm/free_motion.js' %}</script>
 <script>{% include 'picm/story_preview.js' %}</script>
+<script>{% include 'picm/text_image.js' %}</script>
 </body></html>
