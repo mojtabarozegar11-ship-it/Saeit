@@ -54,8 +54,8 @@ def html_gate(raw):
         def handle_starttag(self,tag,attrs):
             self.tags[tag]+=1
             for k,v in attrs:
-                if k in ("href","src") and isinstance(v,str) and
-                        v.strip().lower().startswith(("http://","https://","//","javascript:")):
+                if (k in ("href","src") and isinstance(v,str) and
+                        v.strip().lower().startswith(("http://","https://","//","javascript:"))):
                     self.external.append(k)
     # Broken markup is a specialist blocker, not a browser execution.
     text=raw.decode("utf-8-sig")
