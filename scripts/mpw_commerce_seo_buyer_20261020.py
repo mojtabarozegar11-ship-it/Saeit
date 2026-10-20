@@ -132,7 +132,7 @@ def rollback(run):
 def selftest():
     src=b'<!doctype html><html><body><main><h1>12 offers</h1>Details, terms &amp; next steps</main></body></html>'
     target=patch_page(src)
-    assert target.replace(SNIPPET.encode(),'')==src and target.count(PAGE_ID.encode())==1
+    assert target.replace(SNIPPET.encode(),b'')==src and target.count(PAGE_ID.encode())==1
     sample=b"<?php\n$paths = ['/old/'];\nheader('X-MPW-Sitemap-Augmentation: three-indexable-main-pages');\n$foo='https://mojplaywin.com/sitemap.xml?__mpw_sitemap_passthru=1';\nforeach ($paths as $path) { echo $path; }\n"
     newer=patch_sitemap(sample)
     assert newer.count(SITEMAP_ID.encode())==1
