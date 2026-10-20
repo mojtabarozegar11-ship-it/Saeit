@@ -1,0 +1,110 @@
+name: Zomorod private factory catalog importer - scoped retry without new orders
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-private-catalog-import-only-20261020.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zm-private-factory-catalog-import-only
+  cancel-in-progress: false
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Prepare pinned VPS relay and exact cPanel host identity
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-private-catalog-only"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\\r\\n","\\n").replace("\\r","").replace("\\\\n","\\n").rstrip()+"\\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\\r\\n","\\n").replace("\\r","").replace("\\\\n","\\n").rstrip()+"\\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh -i "$d/vps.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host zm-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host zm-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            ProxyJump zm-vps
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+          Host *
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            BatchMode yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 12
+          EOF
+          chmod 600 "$d/config"
+      - name: Inspect exact private inbox receipt errors and import only validated records
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-private-catalog-only"
+          timeout 100s ssh -T -F "$d/config" zm-cpanel python3 - <<'PY'
+          import importlib.util,json,re,sqlite3
+          from collections import Counter
+          from pathlib import Path
+          base=Path('/home/zomorod2')
+          home=base/'.private/zomorod-business'
+          inbox=base/'.saeit-factory-inbox'
+          source=home/'zomorod_factory_store_import.py'
+          db=home/'site_store.sqlite3'
+          assert source.is_file() and not source.is_symlink()
+          assert db.is_file() and not db.is_symlink()
+          assert inbox.is_dir() and not inbox.is_symlink()
+          spec=importlib.util.spec_from_file_location('zm_private_importer',str(source))
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          counts=Counter()
+          folder=inbox/'receipts'
+          if folder.is_dir():
+              for family in folder.iterdir():
+                  if not family.is_dir() or family.is_symlink():
+                      counts['UNSAFE_RECEIPT_DIRECTORY']+=1
+                      continue
+                  for p in family.iterdir():
+                      try:m.validate_received(inbox,p)
+                      except Exception as exc:
+                          value=str(exc)
+                          code=value if re.fullmatch('[A-Z0-9_]{3,100}',value) else type(exc).__name__
+                          counts[code]+=1
+          print('ZM_PRIVATE_INBOX_VALIDATION_ERRORS='+json.dumps(dict(counts),sort_keys=True))
+          try:
+              report=m.import_catalog(inbox,db,limit=20)
+          except Exception as exc:
+              value=str(exc)
+              code=value if re.fullmatch('[A-Z0-9_]{3,100}',value) else type(exc).__name__
+              print('ZM_PRIVATE_IMPORT_BLOCKER='+code)
+              raise SystemExit(1)
+          assert isinstance(report,dict)
+          with sqlite3.connect('file:'+str(db)+'?mode=ro',uri=True) as c:
+              for table in ('factory_drafts','factory_consumer_candidates'):
+                  n=c.execute('SELECT COUNT(*) FROM '+table+' WHERE public_enabled<>0 OR paid_price_irr IS NOT NULL').fetchone()[0]
+                  assert n==0,'COMMERCIAL_GATE_CHANGED'
+          print('ZM_PRIVATE_CATALOG_IMPORTED='+json.dumps(report,sort_keys=True))
+          print('ZM_PRIVATE_SITE_PUBLICATION_ENABLED=false')
+          print('ZM_NEW_NATIVE_FACTORY_ORDERS_CREATED=0')
+          PY
+      - name: Remove temporary credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zm-private-catalog-only"
