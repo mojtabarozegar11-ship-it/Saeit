@@ -7,6 +7,8 @@ on:
       - scripts/factory_private_shard_receiver_20261020.py
       - tests/test_factory_private_shard_receiver_20261020.py
       - scripts/zomorod_factory_store_import.py
+      - scripts/factory_private_rights_register_20261020.py
+      - tests/test_factory_private_rights_register_20261020.py
       - tests/test_factory_shard_store_bridge_20261020.py
   workflow_dispatch:
 permissions:
@@ -28,6 +30,7 @@ jobs:
           python3 -B -m unittest tests.test_factory_zip_transport_shards_20261020 -v
           python3 -B -m unittest tests.test_factory_private_shard_receiver_20261020 -v
           python3 -B -m unittest tests.test_factory_shard_store_bridge_20261020 -v
+          python3 -B -m unittest tests.test_factory_private_rights_register_20261020 -v
           python3 -B -m py_compile scripts/factory_private_shard_receiver_20261020.py
       - name: Prepare pinned VPS relay and exact cPanel host identity
         shell: bash
@@ -266,6 +269,73 @@ jobs:
           print('REAL_PRIVATE_CONTENT_EVIDENCE_INVENTORY='+json.dumps(results,sort_keys=True))
           print('REAL_PRIVATE_HUMAN_APPROVALS=0')
           print('REAL_PRIVATE_COMMERCIAL_RELEASES=0')
+          PY
+      - name: Document SHA-bound private rights and chain of title for five products
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-shard-transfer"
+          scp -q -F "$d/config" scripts/factory_private_rights_register_20261020.py \
+            "zm-cpanel:.saeit-factory-inbox/private-shard-incoming/rights-$GITHUB_RUN_ID.py"
+          timeout 120s ssh -T -F "$d/config" zm-cpanel bash -se -- "$GITHUB_RUN_ID" "$FACTORY_PRIVATE_SHARD_TAR_SHA" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          run="$1";batch="$2"
+          test "$(id -un)" = "zomorod2"
+          private="$HOME/.private/zomorod-business"
+          inbox="$HOME/.saeit-factory-inbox"
+          program="$inbox/private-shard-incoming/rights-$run.py"
+          verifier="$inbox/private-shard-incoming/verify-$run.py"
+          input="$inbox/private-verified-transport/$batch"
+          out="$private/rights-evidence"
+          store="$private/site_store.sqlite3"
+          test -f "$program" && test ! -L "$program"
+          test -f "$verifier" && test ! -L "$verifier"
+          test -f "$store" && test ! -L "$store"
+          test -d "$input" && test ! -L "$input"
+          test ! -L "$out"
+          chmod 600 "$program"
+          python3 -B "$program" --batch "$input" --verifier "$verifier" --db "$store" --out "$out"
+          REMOTE
+      - name: Read back all five private rights dossiers without legal or owner approvals
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-shard-transfer"
+          timeout 40s ssh -T -F "$d/config" zm-cpanel python3 - "$FACTORY_PRIVATE_SHARD_TAR_SHA" <<'PY'
+          import json,sqlite3,sys
+          from pathlib import Path
+          home=Path.home()
+          root=home/'.private/zomorod-business'
+          batch=sys.argv[1]
+          summary=root/'rights-evidence'/(batch+'.rights-summary.json')
+          assert summary.is_file() and not summary.is_symlink()
+          doc=json.loads(summary.read_text(encoding='utf8'))
+          assert doc['schema']=='saeit.factory.private-rights-summary.v1'
+          assert len(doc['products'])==5 and doc['asset_hashes_documented']==485
+          assert doc['independent_legal_approvals']==0 and doc['owner_publication_approvals']==0
+          for item in doc['products']:
+              candidate=root/'rights-evidence'/item['sha256']/(item['dossier_sha256']+'.rights.json')
+              assert candidate.is_file() and not candidate.is_symlink()
+              body=json.loads(candidate.read_text(encoding='utf8'))
+              assert body['asset_count']==97 and not body['commercial_distribution_allowed']
+              assert not body['claimant_chain_of_title_verified']
+              assert not body['independent_legal_review_signed']
+              assert not body['owner_publication_approval']
+              form=root/'rights-evidence'/item['sha256']/(item['dossier_sha256']+'.UNSIGNED.txt')
+              assert form.is_file() and not form.is_symlink()
+          db=root/'site_store.sqlite3'
+          with sqlite3.connect('file:'+str(db)+'?mode=ro',uri=True) as conn:
+              registered=conn.execute('SELECT COUNT(*) FROM factory_private_rights_evidence').fetchone()[0]
+              assert registered==5
+              illegal=conn.execute('SELECT COUNT(*) FROM factory_private_rights_evidence WHERE owner_release_signed<>0 OR legal_clearance_verified<>0 OR public_enabled<>0').fetchone()[0]
+              assert illegal==0
+          print('REAL_CPANEL_SHA_LINKED_COPYRIGHT_DOSSIERS='+str(registered))
+          print('REAL_CPANEL_RIGHTS_EVIDENCE_ASSET_HASHES='+str(doc['asset_hashes_documented']))
+          print('REAL_CPANEL_RIGHTS_SIGNED_LICENSES=0')
+          print('REAL_CPANEL_RIGHTS_OWNER_RELEASES=0')
+          print('REAL_CPANEL_RIGHTS_PUBLICATIONS=0')
           PY
       - name: Erase only ephemeral CI relay credentials and artifacts
         if: always()
