@@ -158,7 +158,7 @@ def build(root,family):
     return {'family_id':family,'product_id':product,'status':'technical_50_stage_build_completed','completed_stages':50,'files':len(files),'commercial_release':False}
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--factory-private',required=True);args=p.parse_args()
-    results=[build(args.factory_private,f) for f in ('F20','F21','F22','F25','F28')]
+    p=argparse.ArgumentParser();p.add_argument('--factory-private',required=True);p.add_argument('--family',choices=('F20','F21','F22','F25','F28'));args=p.parse_args()
+    results=[build(args.factory_private,f) for f in ((args.family,) if args.family else ('F20','F21','F22','F25','F28'))]
     print('BATCH5_BUILD50='+json.dumps(results,sort_keys=True))
     if any(x['status']=='technical_rework_required' for x in results):raise SystemExit(2)

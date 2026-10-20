@@ -2,7 +2,7 @@ name: Activate evidence-gated operational controller for all forty factory famil
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/vps-forty-family-operational-controller-20261020.yml", "scripts/factory_40_execution_controller.py", "tests/test_factory_40_execution_controller.py", "scripts/factory_build50_f31_planner.py", "scripts/factory_f31_independent_review.py", "tests/test_factory_build50_f31_planner.py", "deploy/install_factory_40_execution_controller.sh", "scripts/factory_batch5_build.py", "scripts/factory_batch5_specs.py", "scripts/factory_batch5_review.py", "tests/test_factory_batch5.py"]
+    paths: [".github/workflows/vps-forty-family-operational-controller-20261020.yml", "scripts/factory_40_execution_controller.py", "tests/test_factory_40_execution_controller.py", "scripts/factory_build50_f31_planner.py", "scripts/factory_f31_independent_review.py", "tests/test_factory_build50_f31_planner.py", "deploy/install_factory_40_execution_controller.sh", "scripts/factory_batch5_build.py", "scripts/factory_batch5_specs.py", "scripts/factory_batch5_review.py", "tests/test_factory_batch5.py", "scripts/factory_product_planner.py", "scripts/factory_product_routes.py", "tests/test_factory_product_planner.py"]
 permissions: {contents: read}
 concurrency:
   group: saeit-forty-family-operational-controller-activation
@@ -24,6 +24,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_factory_build50_family_bridge.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_build50_f31_planner.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_batch5.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_product_planner.py' -v
           python3 - <<'PY'
           from pathlib import Path
           p=Path('scripts/factory_40_execution_controller.py').read_text()
@@ -70,19 +71,22 @@ jobs:
           d="$RUNNER_TEMP/forty-proof-ssh"
           folder="/home/githubops/factory-runtime/operations/.forty-control-release-$GITHUB_RUN_ID"
           ssh -T -F "$d/config" saeit-factory-verified "umask 077; test ! -e '$folder'; mkdir -m 700 '$folder'"
-          for file in scripts/factory_40_execution_controller.py scripts/factory_40_family_master.py scripts/factory_build50_family_bridge.py scripts/factory_build_50.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_build50_f31_planner.py scripts/factory_f31_independent_review.py scripts/factory_batch5_build.py scripts/factory_batch5_specs.py scripts/factory_batch5_review.py deploy/install_factory_40_execution_controller.sh; do
-            filename="$(basename "$file")"
-            digest="$(sha256sum "$file" | awk '{print $1}')"
-            scp -q -F "$d/config" "$file" "saeit-factory-verified:$folder/$filename"
-            ssh -T -F "$d/config" saeit-factory-verified "test ! -L '$folder/$filename' && test \"\$(sha256sum '$folder/$filename' | awk '{print \$1}')\" = '$digest'"
+          files=(scripts/factory_40_execution_controller.py scripts/factory_40_family_master.py scripts/factory_build50_family_bridge.py scripts/factory_build_50.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_build50_f31_planner.py scripts/factory_f31_independent_review.py scripts/factory_batch5_build.py scripts/factory_batch5_specs.py scripts/factory_batch5_review.py deploy/install_factory_40_execution_controller.sh scripts/factory_product_planner.py scripts/factory_product_routes.py)
+          # One bounded transfer replaces per-file SCP/SSH handshakes.
+          tar -cf - --transform='s,.*/,,' "${files[@]}" | ssh -T -F "$d/config" saeit-factory-verified "umask 077; tar -xf - --no-same-owner --no-same-permissions -C '$folder'; chmod 600 '$folder'/*"
+          manifest="$RUNNER_TEMP/forty-controller.sha256"
+          : > "$manifest"
+          for file in "${files[@]}";do
+            printf '%s  %s\n' "$(sha256sum "$file" | awk '{print $1}')" "$(basename "$file")" >> "$manifest"
           done
+          ssh -T -F "$d/config" saeit-factory-verified "cd '$folder'; sha256sum -c -" < "$manifest"
           echo FORTY_FAMILY_SOURCE_HASH_VERIFICATION=PASS
       - name: Activate real controller and pilot work on VPS for all registered families
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/forty-proof-ssh"
           folder="/home/githubops/factory-runtime/operations/.forty-control-release-$GITHUB_RUN_ID"
-          timeout 165s ssh -T -F "$d/config" saeit-factory-verified "bash '$folder/install_factory_40_execution_controller.sh' '$folder'"
+          timeout 240s ssh -T -F "$d/config" saeit-factory-verified "bash '$folder/install_factory_40_execution_controller.sh' '$folder'"
       - name: Verify actual VPS per-family queue plus previous factory jobs and no commercial forgery
         run: |
           set -euo pipefail
@@ -113,4 +117,17 @@ jobs:
           print('FORTY_REAL_PRIVATE_PILOT_WORK='+json.dumps(d['pilot_tick_result'],sort_keys=True))
           print('FORTY_OPERATIONAL_CRON_ACTIVE=PASS')
           print('FORTY_NO_FALSE_SELLABLE_PRODUCTS=PASS')
+          planner=json.loads((h/'private/autonomous-product-cycle/product-planning/dashboard.json').read_text('utf8'))
+          assert planner['registered_family_routes']==40
+          assert planner['unique_product_plans']>=40
+          assert planner['custom_product_executors_verified']==0
+          assert planner['verified_native_product_plans']>=9
+          assert not planner['commercial_release']
+          assert len(planner['families_awaiting_specialist_executor'])==31
+          print('PER_PRODUCT_ALL_FORTY_ROUTES=PASS')
+          print('PER_PRODUCT_NATIVE_VERIFIED='+str(planner['verified_native_product_plans']))
+          print('PER_PRODUCT_PLANS='+str(planner['unique_product_plans']))
+          print('PER_PRODUCT_LEGACY_ORDERS_SCANNED='+str(planner['existing_orders_scanned']))
+          print('PER_PRODUCT_RESOURCE_HOLDS='+json.dumps(planner['resource_holds']))
+          print('PER_PRODUCT_QUALIFICATION_REQUEST='+json.dumps(next(r for r in planner['rows'] if r['request'].get('parameters',{}).get('week')==json.loads((h/'private/autonomous-product-cycle/product-planning/intake/qualification-next-week.json').read_text())['parameters']['week'])['status']))
           PY
