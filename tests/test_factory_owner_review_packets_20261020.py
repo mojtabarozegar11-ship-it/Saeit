@@ -118,6 +118,26 @@ class ReviewPacketTests(unittest.TestCase):
         self.assertEqual(result["technical_readiness"]["technical_rework_required"],1)
         self.assertIn("ARTIFACT_HASH_MISMATCH",dashboard["items"][0]["blockers"])
 
+    def test_source_bound_passport_starter_retains_only_real_order_claims(self):
+        report=m.build(self.root)
+        starters=report["passport_starters"]
+        self.assertEqual(len(starters),1)
+        self.assertEqual(report["counts"]["new_private_passport_starters"],1)
+        meta=starters[0]
+        starter=self.root/"product-lifecycle"/"passport-starters"/meta["work_order"]/(meta["source_sha256"]+"-"+meta["starter_sha256"]+".json")
+        data=json.loads(starter.read_text())
+        self.assertEqual(data["schema"],"saeit.factory.passport-starter.v1")
+        self.assertEqual(data["candidate_fields"]["title"]["value"],"Original offline worksheet")
+        self.assertFalse(data["candidate_fields"]["title"]["independently_verified"])
+        self.assertNotIn("asset_licenses",data["candidate_fields"])
+        self.assertFalse(data["is_official_product_passport"])
+        self.assertFalse(data["commercial_release"])
+        self.assertFalse(data["human_review_signature_verified"])
+        self.assertFalse((self.root/"product-lifecycle"/"passports").exists())
+        self.assertEqual(starter.stat().st_mode&0o777,0o600)
+        again=m.build(self.root)
+        self.assertEqual(again["counts"].get("new_private_passport_starters",0),0)
+
     def test_invalid_order_and_symlink_are_refused(self):
         (self.orders/"WO-00000003.json").write_text(json.dumps({
             "id":"WO-00000004","status":"issued"
