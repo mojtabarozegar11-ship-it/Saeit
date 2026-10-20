@@ -118,6 +118,18 @@ jobs:
               except Exception as e:
                   stack=[{'file':Path(f.filename).name,'function':f.name,'line':f.lineno} for f in traceback.extract_tb(e.__traceback__)[-10:]]
                   print('MPW_CHECKOUT_RENDER='+json.dumps({'product':pk,'exception':type(e).__name__,'stack':stack,'read_only':True}))
+          import ast,re
+          source=(root/'mpw_commerce/product_checkout_page.py').read_text('utf8','replace')
+          tree=ast.parse(source)
+          fn=next((node for node in tree.body if isinstance(node,ast.FunctionDef) and node.name=='_apply_two_book_strict_csp'),None)
+          if fn is not None:
+              snippet=ast.get_source_segment(source,fn) or ''
+              safe=[]
+              for line in snippet.splitlines()[:95]:
+                  safe.append('[sensitive_line_redacted]' if re.search(r'password|private_key|api_key|mnemonic|secret|token|credential|wallet_address',line,re.I) else line[:210])
+              print('MPW_CSP_FUNCTION_SOURCE='+json.dumps({'lines':safe,'start':fn.lineno,'end':fn.end_lineno},ensure_ascii=False))
+          else:
+              print('MPW_CSP_FUNCTION_SOURCE='+json.dumps({'missing':True}))
           print('MPW_CHECKOUT_DIAG_READONLY=PASS')
           PY
       - name: Remove encrypted SSH relay temporary files
