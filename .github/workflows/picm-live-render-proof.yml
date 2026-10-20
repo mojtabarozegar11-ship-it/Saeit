@@ -97,8 +97,11 @@ jobs:
           from types import SimpleNamespace
           django.setup()
           from core.picm_views import picm_submit
+          from core.picm_access import owner_id
+          bound=owner_id()
+          assert bound is not None, 'PICM_OWNER_BINDING_MISSING'
           req=RequestFactory().post('/picm/api/submit/',data=json.dumps({'prompt':'Green leaves in a sunny greenhouse','style':'illustration','steps':1}),content_type='application/json')
-          req.user=SimpleNamespace(pk=-int(__import__('time').time()*1000),is_authenticated=True)
+          req.user=SimpleNamespace(pk=int(bound),is_authenticated=True,is_active=True)
           response=picm_submit(req)
           assert response.status_code==202, response.status_code
           ident=json.loads(response.content)['id']
@@ -131,6 +134,17 @@ jobs:
           done
           echo PICM_RENDER_NOT_COMPLETED_WITHIN_TEST_WINDOW
           exit 9
+      - name: Delete only this synthetic PICM proof after checking result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          test -f "$RUNNER_TEMP/picm-id" || exit 0
+          test -f "$WORK/config" || exit 0
+          ident="$(cat "$RUNNER_TEMP/picm-id")"
+          [[ "$ident" =~ ^[a-f0-9]{32}$ ]] || exit 0
+          timeout 35s ssh -F "$WORK/config" picm-host "PICM_PROOF_ID=$ident python3 -c 'import os,pathlib; root=pathlib.Path(\"/home/zomorod2/.picm-queue\"); ident=os.environ[\"PICM_PROOF_ID\"]; import re; assert re.fullmatch(\"[a-f0-9]{32}\", ident); p=root/(ident+\".json\"); import json; record=json.loads(p.read_text()) if p.is_file() and not p.is_symlink() else {}; assert record.get(\"prompt\")==\"Green leaves in a sunny greenhouse\"; [(root/(ident+ext)).unlink(missing_ok=True) for ext in (\".json\", \".png\") if not (root/(ident+ext)).is_symlink()]; print(\"PICM_SYNTHETIC_JOB_REMOVED\")'" || echo PICM_SYNTHETIC_JOB_CLEANUP_NOT_CONFIRMED
       - name: Remove temporary runner SSH materials
         if: always()
         shell: bash
