@@ -87,3 +87,21 @@ Research: [Official TronWeb signMessageV2 + verifyMessageV2](https://tronweb.net
 ### Independent cryptographic compatibility gate
 
 An additional isolated CI job signs a **test-only** UTF-8 challenge with the official, pinned `tronweb@6.5.1` JavaScript SDK, then verifies the resulting real TronWeb V2 signature using the Python server's own Keccak/secp256k1 implementation (`tools/moj_tronweb_sign_fixture.cjs`, `tools/moj_tronweb_verify_fixture.py`). This test makes **no RPC calls and sends no funds**. It is stronger than using two Python functions based on the same assumptions. If it fails, wallet ownership must remain unapproved until the discrepancy is resolved.
+
+
+## 21 October 2026 — automatic mock gateway → Django E2E contract
+
+`tests/test_moj_commerce_gateway_e2e.py` exercises actual `mpw_tron_pro`
+`InvoiceLedger.issue()` (single merchant-controlled address), bounded
+`reconcile_pending()`, finalized fake **body plus receipt** (never mainnet),
+atomic paid+outbox creation, `drain_outbox()` real HMAC-signed delivery
+request, Django `receive_tron_fulfillment()`, independent second finalized
+read, idempotent entitlement and buyer-only 300-second signed ZIP download.
+Synthetic cases test unavailable merchant receiver/retry, missing receipt and
+wrong destination. Calls to external RPC and HTTP are replaced ONLY in the
+isolated test harness; no production code accepts browser-provided proofs.
+This does **not** prove live site fulfillment or wallet custody.
+
+The TronWeb interoperability script now injects the repository root into
+`sys.path` before Django setup; CI remains the source of truth for an actual
+cryptographic cross-language pass/failure.

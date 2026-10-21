@@ -26,7 +26,7 @@ jobs:
           python -m compileall -q moj_commerce
           python -m django makemigrations moj_commerce --check --dry-run --settings=moj_commerce.test_settings
       - name: Run isolated secure merchant/wallet/chain/payment/delivery tests
-        run: python -m django test tests.test_moj_commerce tests.test_moj_commerce_wallet tests.test_moj_commerce_tron_verifier --settings=moj_commerce.test_settings --verbosity 2
+        run: python -m django test tests.test_moj_commerce tests.test_moj_commerce_wallet tests.test_moj_commerce_tron_verifier tests.test_moj_commerce_gateway_e2e --settings=moj_commerce.test_settings --verbosity 2
       - name: Declare that this CI does not deploy or handle money
         run: echo 'Isolated source checks only; deployment not configured.'
 

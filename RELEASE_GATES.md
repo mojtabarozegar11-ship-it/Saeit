@@ -25,3 +25,15 @@
 - [ ] Audit, separately approve and configure production checker, wallet ownership challenge in real seller onboarding, customer order/quote creation and webhook signed delivery; checkout/worker integration still absent from live source.
 - [ ] Production PostgreSQL migrations with backup/restore and zero-downtime cutover, rate limits, signed challenge anti-abuse, seller KYC/risk and merchant suspension, monitoring.
 - [ ] Test one real authorized small mainnet TRX purchase through to private download and receipt, using independent test buyer; currently no such evidence.
+
+
+### Integration regression added on 2026-10-21
+
+- [ ] Confirm actual GitHub Actions run completes: synthetic TRX invoice→
+  automatic scan→signed store POST→Django entitlement→private ZIP download,
+  including disabled store recovery and non-final/misaddressed payment.
+- [ ] Confirm TronWeb V2 cross-language test passes after test-script import
+  path repair. This is cryptographic fixture evidence, NOT proof a human
+  merchant signed in their wallet.
+- [ ] Obtain live cPanel `mpw_commerce` source and inspect mapped routes;
+  current URLConf intentionally not mounted.
