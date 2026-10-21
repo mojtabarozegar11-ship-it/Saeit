@@ -115,7 +115,7 @@ jobs:
             if test -e "$target/$file" || test -L "$target/$file"; then
               test -f "$target/$file" && test ! -L "$target/$file"
               cp -p -- "$target/$file" "$backup/$file"
-              test "$(sha256sum "$target/$file" | cut -d\x27 \x27 -f1)" = "$(sha256sum "$backup/$file" | cut -d\x27 \x27 -f1)"
+              test "$(sha256sum "$target/$file" | cut -d' ' -f1)" = "$(sha256sum "$backup/$file" | cut -d' ' -f1)"
             else
               : > "$backup/$file.absent"
             fi
