@@ -1,0 +1,105 @@
+name: Factory private 10-second bounded autonomous maintenance
+on:
+  push:
+    branches: [feature/factory-10s-bounded-orchestrator-20261022]
+    paths:
+      - scripts/factory_10s_cycle.py
+      - tests/test_factory_10s_cycle.py
+      - deploy/install_factory_10s_cycle.sh
+      - .github/workflows/factory-ten-second-private-20261022.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-private-factory-10second-deploy
+  cancel-in-progress: false
+jobs:
+  private-cycle-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate 10-second boundaries, serialization, schedule and no public release
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_10s_cycle.sh
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_factory_10s_cycle.py -v
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          for p in ["scripts/factory_10s_cycle.py",
+                    "scripts/factory_autonomous_jump_repair_v1.py",
+                    "scripts/factory_qa_native_rebuild_bridge_20261021.py",
+                    "scripts/factory_ten_generation_builder_v1.py",
+                    "scripts/factory_f19_ten_generations_v1.py"]:
+              ast.parse(Path(p).read_text(encoding="utf8"))
+          print("FACTORY_10S_STATIC_AND_TEST_QA=PASS")
+          print("FACTORY_10S_PUBLICATION=0")
+          PY
+  install-private-vps:
+    needs: private-cycle-qa
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/factory-10s-bounded-orchestrator-20261022'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Establish existing pinned VPS bridge without site access
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory10"
+          install -d -m 700 "$d"
+          test -n "$VPS_KEY"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo FACTORY_10S_PINNED_SSH=PASS
+      - name: Install solely in private VPS factory with rollback and no site writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory10"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          host="githubops@178.239.147.150"
+          stage="/home/githubops/factory-runtime/operations/.factory10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          timeout 35s ssh -T "${opts[@]}" "$host" "umask 077; test ! -e '$stage' && mkdir -m 700 '$stage'"
+          tar -cf - scripts/factory_10s_cycle.py scripts/factory_autonomous_jump_repair_v1.py scripts/factory_qa_native_rebuild_bridge_20261021.py scripts/factory_product_maker.py scripts/factory_personal_owner_passport_policy_20261020.py scripts/factory_ten_generation_builder_v1.py scripts/factory_f19_ten_generations_v1.py scripts/factory_build_50.py factory_config/forty_families.json deploy/install_factory_10s_cycle.sh | timeout 45s ssh -T "${opts[@]}" "$host" "tar -xf - -C '$stage'"
+          for file in scripts/factory_10s_cycle.py scripts/factory_autonomous_jump_repair_v1.py scripts/factory_qa_native_rebuild_bridge_20261021.py scripts/factory_product_maker.py scripts/factory_personal_owner_passport_policy_20261020.py scripts/factory_ten_generation_builder_v1.py scripts/factory_f19_ten_generations_v1.py scripts/factory_build_50.py factory_config/forty_families.json deploy/install_factory_10s_cycle.sh; do
+            expected="$(sha256sum "$file" | cut -d' ' -f1)"
+            actual="$(timeout 20s ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$file' | cut -d' ' -f1")"
+            test "$expected" = "$actual"
+          done
+          echo FACTORY_10S_STAGE_SHA256=PASS
+          timeout 105s ssh -T "${opts[@]}" "$host" "/bin/bash '$stage/deploy/install_factory_10s_cycle.sh' '$stage'"
+      - name: Observe independent cron pulses after installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory10"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          host="githubops@178.239.147.150"
+          path="/home/githubops/factory-runtime/private/autonomous-product-cycle/quality-excellence/ten-second-control/state.json"
+          previous="$(timeout 25s ssh -T "${opts[@]}" "$host" "python3 -c 'import json;print(json.load(open(\"$path\"))[\"ticks\"])'")"
+          sleep 75
+          current="$(timeout 25s ssh -T "${opts[@]}" "$host" "python3 -c 'import json;print(json.load(open(\"$path\"))[\"ticks\"])'")"
+          test "$((current - previous))" -ge 2
+          echo FACTORY_10S_REAL_CRON_PULSE_ADVANCE="$((current - previous))"
+          echo FACTORY_10S_VPS_ACTIVE=PASS
+          echo FACTORY_10S_SITE_DEPLOYMENT_ACTIONS=0
+      - name: Erase ephemeral runner SSH key
+        if: always()
+        run: |
+          test ! -d "$RUNNER_TEMP/factory10" || rm -rf -- "$RUNNER_TEMP/factory10"
