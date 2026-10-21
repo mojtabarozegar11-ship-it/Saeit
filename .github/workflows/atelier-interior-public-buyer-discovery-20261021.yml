@@ -66,5 +66,12 @@ jobs:
                   scrubbed=re.sub(r"(?is)<script.*?</script>|<style.*?</style>","",raw)
                   print("ATELIER_PUBLIC_CONTEXT_"+label+"="+json.dumps(scrubbed[:1800]))
           print("ATELIER_CHECKOUT_REFS="+json.dumps(re.findall(r".{0,90}(?:checkout|purchase|payment|contact).{0,100}",ptxt,re.I)[:12]))
+          from hashlib import sha256
+          for label,path in [("store","/store/"),("product","/store/product/879/")]:
+              for suff in ["","?atelier_probe_20261021=979"]:
+                  req=Request("https://mojplaywin.com"+path+suff,headers={"User-Agent":"AtelierCacheSafetyProbe/1.0","Cache-Control":"no-cache"})
+                  with urlopen(req,timeout=25) as resp:
+                      body=resp.read(200000).decode("utf8","replace")
+                      print("ATELIER_PUBLIC_CACHE="+json.dumps({"page":label,"cache_bust":bool(suff),"status":resp.status,"age":resp.headers.get("Age",""),"cache_control":resp.headers.get("Cache-Control","")[:70],"cf_cache_status":resp.headers.get("CF-Cache-Status",""),"etag":resp.headers.get("ETag","")[:60],"sha":sha256(body.encode()).hexdigest()[:14]},sort_keys=True))
           assert store==200 and product==200
           PY
