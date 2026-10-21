@@ -73,7 +73,7 @@ jobs:
           timeout 35s ssh -F "$sshdir/config" saeit-vps 'test "$(id -un)" = githubops && echo VPS_RELAY_AUTH_OK; test -d "$HOME/factory-runtime" && echo VPS_FACTORY_RUNTIME_PRESENT || echo VPS_FACTORY_RUNTIME_UNKNOWN'
           timeout 45s ssh -F "$sshdir/config" saeit-host 'set -eu; test "$(id -un)" = zomorod2; echo CPANEL_PROXYJUMP_AUTH_OK; test -d /home/zomorod2/Saeit-staging; echo STAGING_ROOT_PRESENT; if test -f /home/zomorod2/Saeit-staging/manage.py; then echo STAGING_DJANGO_SOURCE_PRESENT; else echo STAGING_DJANGO_SOURCE_NOT_AT_ROOT; fi; if test -x /home/zomorod2/Saeit-staging/.venv/bin/python; then echo STAGING_VENV_PRESENT; else echo STAGING_VENV_NOT_AT_ROOT; fi; test -d /home/zomorod2/Saeit && echo PRODUCTION_PATH_PRESENT_READ_ONLY || echo PRODUCTION_PATH_UNKNOWN'
           # No database enumeration, connection with credentials, file inspection, or remote file writes.
-          timeout 55s ssh -F "$sshdir/config" saeit-host 'sh -c '"'"'
+          timeout 55s ssh -F "$sshdir/config" saeit-host '
             set +e
             echo "V11_PERMISSION_DIAG_BEGIN"
             if test -x /usr/local/cpanel/bin/uapi; then echo "UAPI_EXECUTABLE_YES"; else echo "UAPI_EXECUTABLE_NO"; fi
@@ -83,7 +83,7 @@ jobs:
             case "$uapi_out" in
               *"Permission denied"*|*"permission denied"*) echo "UAPI_CATEGORY_PERMISSION_DENIED";;
               *"not found"*|*"No such file"*) echo "UAPI_CATEGORY_NOT_FOUND";;
-              *"Died at"*|*"Can't locate"*) echo "UAPI_CATEGORY_PERL_RUNTIME";;
+              *"Died at"*|*"Cannot locate"*) echo "UAPI_CATEGORY_PERL_RUNTIME";;
               *"not enabled"*|*"Feature is disabled"*) echo "UAPI_CATEGORY_DISABLED";;
               *"Access denied"*|*"not authorized"*) echo "UAPI_CATEGORY_ACCESS_DENIED";;
               *"Cannot connect"*|*"Connection refused"*) echo "UAPI_CATEGORY_BACKEND_UNAVAILABLE";;
@@ -100,5 +100,5 @@ jobs:
               fi
             else echo "PG_ISREADY_BINARY_NO"; fi
             echo "V11_PERMISSION_DIAG_READONLY_DONE"
-          '"'"''
+          '
           echo 'V11_NO_PRODUCTION_WRITE_NO_DATABASE_ENUMERATION_NO_CREDENTIAL_OUTPUT'
