@@ -84,20 +84,36 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect existing CSRF template state without changing customer pages
+        id: inspect
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - inspect" < scripts/mpw_customer_csrf_referrer_repair_20261021.py)"
+          printf '%s\n' "$response"
+          current="$(printf '%s\n' "$response" | sed -n 's/^MPW_CSRF_TEMPLATE_STATE=//p')"
+          case "$current" in
+            already_fixed|needs_patch) printf 'state=%s\n' "$current" >> "$GITHUB_OUTPUT" ;;
+            *) echo 'MPW_CSRF_TEMPLATE_STATE_UNVERIFIED'; exit 1 ;;
+          esac
       - name: Preview two-template Referer privacy update with CSRF still enforced
+        if: steps.inspect.outputs.state == 'needs_patch'
         run: |
           set -euo pipefail
           timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - preview" < scripts/mpw_customer_csrf_referrer_repair_20261021.py
       - name: Install same-origin referrer on main login and signup forms with private backups
+        if: steps.inspect.outputs.state == 'needs_patch'
         id: publish
         run: |
           set -euo pipefail
           timeout 85s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - install '$GITHUB_RUN_ID'" < scripts/mpw_customer_csrf_referrer_repair_20261021.py
       - name: Validate installed Django customer forms with CSRF enforced
+        if: steps.inspect.outputs.state == 'needs_patch'
         run: |
           set -euo pipefail
           timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify '$GITHUB_RUN_ID'" < scripts/mpw_customer_csrf_referrer_repair_20261021.py
       - name: Restart only verified MojPlayWin main Passenger app template cache
+        if: steps.inspect.outputs.state == 'needs_patch'
         id: restart
         run: |
           set -euo pipefail
