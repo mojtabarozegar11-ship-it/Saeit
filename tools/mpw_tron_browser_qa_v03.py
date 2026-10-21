@@ -102,6 +102,21 @@ def main():
         assert 'Switch your wallet to TRON Mainnet' in page.locator('#feedback').text_content()
         results.append('mock_wrong_chain: PASS blocked before signing/broadcast')
         page.close()
+
+        # The buyer must see distinct final TRON payment and merchant delivery.
+        page=browser.new_page(viewport={'width':390,'height':844})
+        errors=[];page.on('pageerror', lambda exc: errors.append(str(exc)))
+        page.set_content(stripped_html(render_checkout(INVOICE,token=TEST_TOKEN).decode()))
+        page.add_style_tag(content=css)
+        page.evaluate('''window.fetch=async()=>({ok:true,status:200,json:async()=>({status:'paid',payment_confirmed:true,fulfillment:'delivered',txid:'a'.repeat(64),monitoring:'running'})});''')
+        page.add_script_tag(content=js)
+        page.wait_for_function("document.getElementById('fulfillment-notice').dataset.status === 'delivered'",timeout=3500)
+        assert page.locator('#stage-done').get_attribute('class').find('done')>=0
+        assert page.locator('#tronlink-pay').is_disabled()
+        assert 'Digital delivery confirmed' in page.locator('#fulfillment-notice').text_content()
+        assert not errors,errors
+        results.append('mock_fulfilled_order: PASS payment-finality and merchant-delivery shown separately; no double-send')
+        page.close()
         browser.close()
     print('\n'.join(results))
     (root/'browser_qa_results.txt').write_text('\n'.join(results)+'\n')

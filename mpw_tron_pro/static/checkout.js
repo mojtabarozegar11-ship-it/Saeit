@@ -43,9 +43,9 @@
     if (trust) { trust.setAttribute('aria-disabled', 'true'); trust.removeAttribute('href'); trust.setAttribute('tabindex','-1'); }
   }
   function phase(name) {
-    const quote = el('phase-quote'), chain = el('phase-chain'), final = el('phase-final');
-    if (!quote || !chain || !final) return;
-    for (const item of [quote, chain, final]) {item.classList.remove('active','done');}
+    const quote = el('phase-quote'), chain = el('phase-chain'), final = el('phase-final'), delivery = el('phase-delivery');
+    if (!quote || !chain || !final || !delivery) return;
+    for (const item of [quote, chain, final, delivery]) {item.classList.remove('active','done');}
     quote.classList.add('done');
     if (name === 'paid') {chain.classList.add('done'); final.classList.add('active');}
     else if (name === 'checking') {chain.classList.add('active');}
@@ -71,11 +71,26 @@
     phase(status);
     if (status === 'paid' || status === 'expired' || status === 'underpaid' || status === 'overpaid') disableSend();
     if (status === 'paid') {
-      if (el('stage-done')) el('stage-done').classList.add('done');
       if (el('verify-button')) el('verify-button').disabled = true;
       if (el('txid')) el('txid').disabled = true;
     }
   };
+  function updateDelivery(status) {
+    const box = el('fulfillment-notice');
+    if (!box) return;
+    box.dataset.status = status;
+    const delivered = status === 'delivered';
+    const queued = status === 'pending_delivery';
+    box.textContent = delivered
+      ? '✓ Digital delivery confirmed by MojPlayWin. Access your product from your purchase library.'
+      : queued ? 'TRX confirmed. The delivery agent is processing your purchase automatically.'
+      : 'Payment is confirmed, but the store delivery integration is not active. Contact support with your order number; do not pay again.';
+    if (delivered) {
+      el('stage-done')?.classList.add('done');
+      el('phase-final')?.classList.add('done');
+      el('phase-delivery')?.classList.add('active');
+    }
+  }
   function proofLink(txid) {
     if (!/^[a-f0-9]{64}$/.test(txid || '')) return;
     const section = el('receipt-proof'), link = el('receipt-link');
@@ -113,7 +128,7 @@
       config.status = 'expired'; changeStatus('expired');
     }
   }
-  if (config.status === 'paid') changeStatus('paid');
+  if (config.status === 'paid') { changeStatus('paid'); updateDelivery(config.fulfillment); }
   else if (needsReview()) changeStatus(config.status);
   updateTime();
   if (!config.preview) setInterval(updateTime,1000);
@@ -127,7 +142,10 @@
       monitorStatus(state.monitoring);
       if (state.status === 'paid' && state.payment_confirmed === true) {
         config.status = 'paid'; changeStatus('paid'); proofLink(state.txid);
-        msg('Finalized TRON transfer verified. The merchant store must now release the product.', 'paid');
+        updateDelivery(state.fulfillment);
+        msg(state.fulfillment === 'delivered'
+          ? 'Payment and digital delivery confirmed.'
+          : 'Payment confirmed. Automatic delivery is awaiting store acknowledgement.', 'paid');
       } else if (state.status === 'underpaid' || state.status === 'overpaid') {
         config.status = state.status; changeStatus(state.status);
         msg('A finalized transfer was detected but does not match the invoice. Do not pay again; contact support.', 'error');
@@ -155,7 +173,8 @@
       const state = await response.json();
       if (response.ok && state.status === 'paid') {
         config.status = 'paid'; changeStatus('paid'); proofLink(state.txid || txid);
-        msg('Finalized TRX transfer verified. Your merchant order is recorded as paid.', 'paid');
+        updateDelivery('pending_delivery');
+        msg('TRX verified. Automatic delivery is pending store acknowledgement.', 'paid');
         return true;
       }
       if (response.ok && ['underpaid','overpaid'].includes(state.status)) {

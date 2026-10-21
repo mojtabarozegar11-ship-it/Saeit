@@ -48,3 +48,9 @@
 @media(max-width:385px){.guide-node{font-size:9px}.quick-pay{padding:12px}.alt-divider{display:none}}
 
 .monitoring-notice{font-size:11px;color:#6d7992;background:#f5f7fc;border:1px solid #e2e8f3;padding:9px 12px;border-radius:10px;margin-top:12px}.monitoring-notice.running{color:#136643;border-color:#c9e9d6;background:#f0faf4}.monitoring-notice.degraded{color:#a66022;border-color:#fae4c5;background:#fffaef}
+
+/* v0.4 automation: explicit payment-versus-delivery acknowledgement */
+.fulfillment-notice{margin:14px 0;padding:15px 17px;border-radius:13px;border:1px solid #b8c6d8;background:#f2f6ff;color:#1c365b;font-size:.86rem;line-height:1.6;font-weight:600}
+.fulfillment-notice[data-status=delivered]{background:#e8f9ef;border-color:#7bca9f;color:#17623b}
+.fulfillment-notice[data-status=not_integrated]{background:#fff1ed;border-color:#f1b2a4;color:#873827}
+@media (max-width:480px){.live-status-guide{flex-wrap:wrap;justify-content:center;gap:8px}.live-status-guide .guide-rule{display:none}.live-status-guide .guide-node{flex:1 1 39%;min-width:0}}

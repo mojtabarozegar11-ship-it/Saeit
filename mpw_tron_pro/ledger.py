@@ -5,6 +5,7 @@ for multi-worker, high-throughput production. No private keys or sweep functions
 """
 from __future__ import annotations
 import hashlib
+import json
 import re
 import secrets
 import sqlite3
@@ -55,6 +56,28 @@ CREATE TABLE IF NOT EXISTS invoice_verify_attempts (
     requested_ms INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_verify_attempts ON invoice_verify_attempts(invoice_id, requested_ms);
+CREATE TABLE IF NOT EXISTS invoice_scan_state (
+  invoice_id INTEGER PRIMARY KEY REFERENCES invoices(id),
+  next_scan_ms INTEGER NOT NULL DEFAULT 0,
+  last_scanned_ms INTEGER NOT NULL DEFAULT 0,
+  failures INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ix_scan_due ON invoice_scan_state(next_scan_ms);
+CREATE TABLE IF NOT EXISTS delivery_outbox (
+  invoice_id INTEGER PRIMARY KEY REFERENCES invoices(id),
+  event_id TEXT UNIQUE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','leased','delivered')),
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_ms INTEGER NOT NULL DEFAULT 0,
+  lease_token TEXT,
+  leased_until_ms INTEGER NOT NULL DEFAULT 0,
+  receipt_id TEXT,
+  last_error TEXT,
+  created_ms INTEGER NOT NULL,
+  updated_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_delivery_due ON delivery_outbox(status,next_attempt_ms,leased_until_ms);
+
 CREATE TABLE IF NOT EXISTS scan_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     recorded_ms INTEGER NOT NULL,
@@ -161,11 +184,100 @@ class InvoiceLedger:
             row = db.execute('SELECT * FROM invoices WHERE merchant_order_id=?', (order_id,)).fetchone()
             return dict(row) if row else None
 
+    @staticmethod
+    def _paid_event_id(invoice_id: int, txid: str) -> str:
+        return 'mpwtr_' + hashlib.sha256(
+            ('mpw:trx:paid:v1:' + str(invoice_id) + ':' + txid).encode('ascii')).hexdigest()
+
+    def _enqueue_locked(self, db, invoice_id: int, txid: str, now_ms: int) -> None:
+        # Invoice settlement and fulfillment intent are one atomic DB transaction.
+        db.execute('''INSERT OR IGNORE INTO delivery_outbox
+            (invoice_id,event_id,created_ms,updated_ms) VALUES(?,?,?,?)''',
+            (invoice_id,self._paid_event_id(invoice_id,txid),now_ms,now_ms))
+
+    def defer_scan(self, invoice_id: int, *, failures=0, now_ms: int | None = None):
+        '''Bound fair background work. One broken old invoice must not starve new invoices.'''
+        if type(invoice_id) is not int or invoice_id <= 0 or type(failures) is not int or failures < 0:
+            raise CheckoutError('Invalid scan attempt')
+        now = int(time.time()*1000) if now_ms is None else now_ms
+        with self._connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            previous = db.execute('SELECT failures FROM invoice_scan_state WHERE invoice_id=?',
+                                  (invoice_id,)).fetchone()
+            fails = min(10, (previous['failures'] if previous else 0) + 1) if failures else 0
+            delay = min(300000, 20000 * (2 ** min(fails,4)))
+            db.execute('''INSERT INTO invoice_scan_state(invoice_id,next_scan_ms,last_scanned_ms,failures)
+                VALUES (?,?,?,?) ON CONFLICT(invoice_id) DO UPDATE SET
+                next_scan_ms=excluded.next_scan_ms,last_scanned_ms=excluded.last_scanned_ms,
+                failures=excluded.failures''', (invoice_id,now+delay,now,fails))
+            db.commit()
+
+    def fulfillment_state(self, invoice_id: int) -> str:
+        with self._connect() as db:
+            row=db.execute('SELECT status FROM delivery_outbox WHERE invoice_id=?', (invoice_id,)).fetchone()
+        return ('delivered' if row['status']=='delivered' else 'pending_delivery') if row else 'not_integrated'
+
+    def claim_delivery(self, *, now_ms: int | None=None) -> dict | None:
+        '''Atomic lease with crash recovery and stable event IDs for idempotent merchant delivery.'''
+        now = int(time.time()*1000) if now_ms is None else now_ms
+        lease = secrets.token_urlsafe(32)
+        with self._connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('''SELECT o.*,i.merchant_order_id,i.txid,i.block_number,i.paid_ms,
+                    i.amount_sun,i.address,i.usd,i.product_title
+                FROM delivery_outbox o JOIN invoices i ON i.id=o.invoice_id
+                WHERE i.status='paid' AND i.txid IS NOT NULL AND
+                  ((o.status='queued' AND o.next_attempt_ms<=?) OR
+                   (o.status='leased' AND o.leased_until_ms<=?))
+                ORDER BY o.created_ms LIMIT 1''', (now,now)).fetchone()
+            if row is None:
+                db.rollback()
+                return None
+            db.execute('''UPDATE delivery_outbox SET status='leased',lease_token=?,
+                leased_until_ms=?,attempts=attempts+1,updated_ms=? WHERE invoice_id=?''',
+                (lease,now+120000,now,row['invoice_id']))
+            db.commit()
+        return {**dict(row),'lease_token':lease}
+
+    def finish_delivery(self, invoice_id: int, lease: str, *, receipt_id=None,
+                        error=None, now_ms: int | None=None):
+        if type(invoice_id) is not int or invoice_id<=0 or not isinstance(lease,str):
+            raise CheckoutError('Invalid delivery claim')
+        if (receipt_id is None) == (error is None):
+            raise CheckoutError('Exactly one delivery outcome required')
+        now = int(time.time()*1000) if now_ms is None else now_ms
+        with self._connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute('''SELECT attempts FROM delivery_outbox WHERE invoice_id=? AND
+                status='leased' AND lease_token=?''', (invoice_id,lease)).fetchone()
+            if row is None:
+                db.rollback()
+                raise CheckoutError('Delivery lease expired or changed')
+            if receipt_id is not None:
+                if not isinstance(receipt_id,str) or not re.fullmatch(r'[A-Za-z0-9_-]{8,128}',receipt_id):
+                    db.rollback();raise CheckoutError('Invalid merchant delivery receipt')
+                db.execute('''UPDATE delivery_outbox SET status='delivered',receipt_id=?,
+                    lease_token=NULL,leased_until_ms=0,last_error=NULL,updated_ms=?
+                    WHERE invoice_id=?''',(receipt_id,now,invoice_id))
+            else:
+                if not isinstance(error,str) or not re.fullmatch(r'[A-Za-z0-9_. -]{1,100}',error):
+                    db.rollback();raise CheckoutError('Invalid delivery error category')
+                delay=min(3600000,20000*(2**min(8,row['attempts']-1)))
+                db.execute('''UPDATE delivery_outbox SET status='queued',next_attempt_ms=?,
+                    lease_token=NULL,leased_until_ms=0,last_error=?,updated_ms=?
+                    WHERE invoice_id=?''',(now+delay,error,now,invoice_id))
+            db.commit()
+
+    def delivery_backlog(self) -> dict:
+        with self._connect() as db:
+            rows=db.execute('SELECT status,COUNT(*) AS n FROM delivery_outbox GROUP BY status').fetchall()
+        return {r['status']:r['n'] for r in rows}
+
     def record_scan_run(self, counts: dict, *, now_ms: int | None = None) -> None:
         """Persist scanner liveness, not a fabricated payment success signal."""
         now = int(time.time() * 1000) if now_ms is None else now_ms
         scanned = counts['scanned']; settled = counts['settled']
-        failures = counts['failed_scans'] + counts['requires_review']
+        failures = counts['failed_scans'] + counts['requires_review'] + counts.get('delivery_retry',0)
         if any(type(n) is not int or n < 0 for n in (now,scanned,settled,failures)):
             raise CheckoutError('Invalid scan counters')
         success = int(failures == 0)
@@ -199,11 +311,12 @@ class InvoiceLedger:
                 review = db.execute('''SELECT kind, amount_sun FROM payment_observations
                    WHERE invoice_id=? ORDER BY id DESC LIMIT 1''', (invoice['id'],)).fetchone()
             status = review['kind'] if review else ('expired' if now > invoice['expires_ms'] else 'pending')
+        fulfillment = self.fulfillment_state(invoice['id']) if status == 'paid' else 'not_integrated'
         return {'status': status, 'expires_ms': invoice['expires_ms'],
                 'server_now_ms': now, 'order_id': invoice['merchant_order_id'],
                 'network': 'tron-mainnet', 'currency': 'TRX',
                 'payment_confirmed': status == 'paid',
-                'fulfillment': 'not_integrated', 'monitoring': self.monitoring(now_ms=now)}
+                'fulfillment': fulfillment, 'monitoring': self.monitoring(now_ms=now)}
 
     def allow_verification(self, invoice_id: int, *, now_ms: int | None = None) -> bool:
         """Bound invoice-triggered RPC calls: 4/minute, 24/hour."""
@@ -279,6 +392,7 @@ class InvoiceLedger:
                     raise CheckoutError('Transaction already claimed') from exc
                 if changed.rowcount != 1:
                     raise CheckoutError('Concurrent settlement rejected')
+                self._enqueue_locked(db,invoice['id'],proof.txid,int(time.time()*1000))
                 db.commit()
                 return dict(db.execute('SELECT * FROM invoices WHERE id=?',
                                        (invoice['id'],)).fetchone())
@@ -321,15 +435,19 @@ class InvoiceLedger:
                     raise CheckoutError('Discovered transaction already claimed') from exc
                 if changed.rowcount != 1:
                     raise CheckoutError('Invoice concurrently changed')
+                self._enqueue_locked(db,invoice_id,proof.txid,int(time.time()*1000))
                 db.commit()
                 return dict(db.execute('SELECT * FROM invoices WHERE id=?', (invoice_id,)).fetchone())
             except Exception:
                 db.rollback()
                 raise
 
-    def pending(self, *, limit=30) -> list[dict]:
+    def pending(self, *, limit=30, now_ms: int | None=None) -> list[dict]:
         if type(limit) is not int or not 1 <= limit <= 100:
             raise CheckoutError('Invalid scan limit')
+        now = int(time.time()*1000) if now_ms is None else now_ms
         with self._connect() as db:
-            return [dict(row) for row in db.execute(
-                "SELECT * FROM invoices WHERE status='pending' ORDER BY issued_ms LIMIT ?", (limit,))]
+            return [dict(row) for row in db.execute('''SELECT i.* FROM invoices i
+                LEFT JOIN invoice_scan_state s ON s.invoice_id=i.id
+                WHERE i.status='pending' AND COALESCE(s.next_scan_ms,0)<=?
+                ORDER BY COALESCE(s.last_scanned_ms,0),i.issued_ms LIMIT ?''', (now,limit))]

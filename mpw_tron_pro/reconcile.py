@@ -84,12 +84,15 @@ def reconcile_pending(ledger, *, max_invoices=20, api_key='', discover=incoming_
     # A pilot runner only; production must use a durable cursor and alerting.
     for invoice in pending:
         counts['scanned'] += 1
+        prior_failures = counts['failed_scans']
         try:
             candidates = discover(invoice['address'], invoice['issued_ms'], invoice['expires_ms'], api_key=api_key)
         except CheckoutError:
             counts['failed_scans'] += 1
+            ledger.defer_scan(invoice['id'],failures=1)
             continue
         for txid in candidates:
+            tx = receipt = None
             try:
                 tx, receipt = fetch(txid, api_key=api_key)
                 # The ledger requires the bearer capability; in server-side jobs
@@ -98,6 +101,9 @@ def reconcile_pending(ledger, *, max_invoices=20, api_key='', discover=incoming_
                 counts['settled'] += 1
                 break
             except CheckoutError:
+                if tx is None or receipt is None:
+                    counts['failed_scans'] += 1
+                    continue
                 try:
                     discrepancy = ledger.record_mismatched_payment(invoice['id'], txid, tx, receipt)
                     if discrepancy['new']:
@@ -107,4 +113,5 @@ def reconcile_pending(ledger, *, max_invoices=20, api_key='', discover=incoming_
                     counts['requires_review'] += 1
             except (OSError, TimeoutError):
                 counts['failed_scans'] += 1
+        ledger.defer_scan(invoice['id'],failures=1 if counts['failed_scans']>prior_failures else 0)
     return counts

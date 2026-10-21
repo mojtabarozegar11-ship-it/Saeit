@@ -103,7 +103,8 @@ def render_checkout(invoice: dict | None, *, token='', preview=False):
     cfg = {'preview': preview, 'token': token if not preview else '',
            'address': data['address'], 'amount': amount, 'expires': expires,
            'status': data['status'], 'amountSun': data['amount_sun'],
-           'serverNow': int(time.time()*1000), 'monitoring': data.get('monitoring','not_configured')}
+           'serverNow': int(time.time()*1000), 'monitoring': data.get('monitoring','not_configured'),
+           'fulfillment':data.get('fulfillment','not_paid')}
     config = json.dumps(cfg, separators=(',', ':'), ensure_ascii=False).replace('<', '\\u003c')
     values = {
         'TRX_AMOUNT': escape(amount), 'USD_AMOUNT': escape(data['usd']),
@@ -117,7 +118,7 @@ def render_checkout(invoice: dict | None, *, token='', preview=False):
         'TRUST_DISABLED': 'aria-disabled="true" tabindex="-1"' if not wallet_ready else '',
         'WALLET_DISABLED': 'disabled' if not wallet_ready else '',
         'INIT_MESSAGE': 'PREVIEW ONLY — DO NOT SEND FUNDS. No live invoice exists.' if preview else (
-            'Payment confirmed on the TRON blockchain. Fulfillment is handled by merchant store.' if data['status'] == 'paid' else
+            'On-chain payment confirmed. Digital delivery is being processed automatically when store integration is active.' if data['status'] == 'paid' else
             'Amount mismatch found in a finalized transfer. Contact support; do not pay again.'
             if data['status'] in ('underpaid','overpaid') else
             'Invoice expired. Do not begin a new transfer.' if data['status']=='expired' else
@@ -195,7 +196,8 @@ class TronGatewayApp:
                     return self.json_response(start, '404 Not Found', {'error': 'Invoice not found'})
                 buyer_state = self.ledger.public_state(invoice)
                 return self.response(start, '200 OK', render_checkout({**invoice, 'status':buyer_state['status'],
-                    'monitoring':buyer_state['monitoring']},
+                    'monitoring':buyer_state['monitoring'],
+                    'fulfillment':buyer_state['fulfillment']},
                     token=match.group(1)), 'text/html; charset=utf-8')
             match = re.fullmatch(r'/api/status/([A-Za-z0-9_-]{40,100})', path)
             if method == 'GET' and match:
@@ -221,7 +223,7 @@ class TronGatewayApp:
                 if invoice['status'] == 'paid':
                     if secrets.compare_digest(invoice['txid'] or '', txid):
                         return self.json_response(start, '200 OK', {'status':'paid','txid':txid,
-                            'message':'Payment was already finalized. Store handles fulfillment.'})
+                            'message':'Payment verified. Waiting for confirmed store delivery.'})
                     return self.json_response(start, '409 Conflict', {'status':'paid',
                         'message':'This invoice was already paid with a different transaction.'})
                 if not self.ledger.allow_verification(invoice['id']):
@@ -241,7 +243,7 @@ class TronGatewayApp:
                     return self.json_response(start, '202 Accepted', {'status': review['status'],
                         'message': 'Transfer received, but amount differs. Do not pay again; contact merchant support.'})
                 return self.json_response(start, '200 OK', {'status': saved['status'],
-                    'txid': txid, 'message': 'On-chain payment finality established. Purchase delivery is managed by the store.'})
+                    'txid': txid, 'message': 'On-chain payment confirmed. Automatic delivery is queued pending store acknowledgement.'})
             return self.json_response(start, '404 Not Found', {'error': 'Not found'})
         except CheckoutError as exc:
             # Never auto-fulfill or report success if a proof, quote, or address is ambiguous.

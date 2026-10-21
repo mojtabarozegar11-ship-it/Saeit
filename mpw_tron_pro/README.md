@@ -88,3 +88,51 @@ E2E, security review and owner-approved deployment. **Do not merge as production
 **Do not merge, enable, present as a real payment processor, or publish public wallet addresses until these gates are satisfied.** Never use a prior GitHub/cPanel status log as proof of an actual completed payment.
 
 References: [Trust Wallet deep linking](https://developer.trustwallet.com/developer/develop-for-trust/deeplinking); [TRON DApp integration](https://developers.tron.network/docs/tronlink-integration); [TRON confirmation semantics](https://developers.tron.network/docs/confirmation-semantics); [TRON network chain ID](https://developers.tron.network/reference/eth_chainid).
+
+## v0.4 — autonomous payment-to-product delivery pipeline (21 October 2026)
+
+**STAGED / NOT LIVE.** Improvements focus on the automation engine, not another design skin.
+
+### New verified lifecycle
+
+1. Store creates a merchant-authenticated invoice; merchant-only TRON receiving addresses are reserved atomically. Buyer can leave checkout after approving a wallet transfer. There is no requirement to paste a transaction ID when the monitoring worker is running.
+2. Background `reconcile_pending` checks bounded address histories, takes only successful solidified mainnet native-TRX transfer proofs, and marks one invoice PAID exactly once. The scanner has **per-invoice durable due-times** and bounded exponential backoff so a stuck old order does not indefinitely starve new orders. Invalid RPC responses never promote a payment.
+3. In the **same SQL transaction** as payment settlement, the engine inserts one immutable `delivery_outbox` event (a `mpwtr_*` event ID stable across retries). If the SQL commit fails, neither payment nor delivery event succeeds.
+4. The same worker run (with single-instance filesystem lock) attempts outbound **server-to-server, HMAC-SHA256-signed** fulfillment to the **pinned** HTTPS endpoint `/api/payments/tron/fulfill/` on `mojplaywin.com`. It sends no wallet keys and never transfers crypto itself.
+5. The store must verify the exact signature, check the real customer order and product in its own DB, and atomically grant **one** unique entitlement for the `event_id`/`order_id`. Only a verified JSON receipt containing exactly the same event/order, plus `status=delivered` and a durable `delivery_id`, is accepted. An HTTP 200 alone is not enough.
+6. A timeout, missing reply, crashed worker or lost acknowledgement leaves the same event in a **retryable queue**. Exclusive durable claims have a 120-second lease and bounded exponential retry delay. Every retry uses the **same event ID**, requiring the merchant to implement idempotent fulfillment. The buyer sees distinct payment and delivery states; never a fictitious download link.
+
+### Before connecting commercial customers
+
+- The live `mpw_commerce` code on cPanel (not mirrored in this Git repository) MUST implement and independently test the real store-side fulfillment endpoint. `store_receiver_contract.py` validates signed input but DOES NOT create product entitlements; the real Django handler must use its own order/ownership/stock checks with `transaction.atomic()` and a unique constraint. Do not install this router in live checkout until audit and backups.
+- **A single Trust Wallet address is NOT a pool of one-time receiver addresses.** Dedicated-address invoice allocation currently remains mandatory. No deterministic address generation was enabled without confirmed user key custody. This is a remaining operational blocker, not something solved by CSS or HMAC.
+- PostgreSQL conversion, one-time schema migrations, key rotation, high-throughput concurrency, crawler pagination/RPC rate ceilings, staged product fulfillment, observability and human exception review remain release gates. SQLite here is pilot-only.
+- TRON mainnet settlement/refund and real mobile wallet acceptance must pass independent live tests before the owner authorizes production routing. No real transfer or product release has been claimed in v0.4.
+
+### Autopilot operator contract (OFF by default)
+
+A trusted and audited scheduler on the private VPS may run **one bounded, locked cycle** through:
+
+```bash
+python -m mpw_tron_pro.worker --once
+```
+
+Required **server-only environment** (set using a secret manager, not shell history):
+
+- `MPW_TRON_DB` — protected, initialized local pilot database (production replacement: PostgreSQL)
+- `MPW_TRON_LOCK` — lock file path alongside the private DB (folder mode `0700`)
+- `MPW_TRON_API_KEY` — optional mainnet indexer/RPC key (provider terms/rate limits apply)
+- `MPW_STORE_DELIVERY_ENDPOINT` — exact trusted `https://mojplaywin.com/api/payments/tron/fulfill/`
+- `MPW_STORE_WEBHOOK_SECRET` — strong separate shared secret also configured in the actual store; never exposed to browser or git
+
+**NOT scheduled**: one-minute VPS cron with a lease/lock, alerts, TLS/SSH access, monitoring and auto-restart are not provisioned. Running this command now would not magically enable a live checkout. Do not schedule from GitHub Actions or send credentials to CI.
+
+### Evidence
+
+`python -m unittest discover -s tests -p 'test_mpw_tron*.py' -q` — 93 isolated tests succeeded; no external funds.
+
+`python tools/browser_qa.py` — Chromium 390px + 1440px previews, one simulated wallet send, rejected wrong-chain, and simulated paid+delivered status (no real wallet or TRON network). The full synthetic event pipeline test covers **detected transfer → solidified proof → paid order + atomic outbox → signed store validation → idempotent entitlement acknowledgement**, with mock chain data and a mock merchant handler. This is engineering evidence, not a successful live sale.
+
+### Security boundaries
+
+Receiver handler rejects invalid HMAC, JSON duplicate keys, wrong network and changed amounts. Outbound delivery refuses HTTP, foreign domains, query-string redirect targets and nonstandard endpoints; redirects are explicitly disabled. No mnemonic, private key, hot signing or withdrawal route. Incoming non-exact payments remain manual-review and cannot auto-unlock products.
