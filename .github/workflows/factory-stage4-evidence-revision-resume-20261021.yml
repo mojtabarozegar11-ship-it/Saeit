@@ -1,0 +1,163 @@
+name: Stage4 evidence-change revalidation guard
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/factory_stage4_evidence_revision_resume_20261021.py
+      - tests/test_factory_stage4_evidence_revision_resume_20261021.py
+      - .github/workflows/factory-stage4-evidence-revision-resume-20261021.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_stage4_evidence_revision_resume_20261021.py
+      - tests/test_factory_stage4_evidence_revision_resume_20261021.py
+      - .github/workflows/factory-stage4-evidence-revision-resume-20261021.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stage4-evidence-change-revalidation
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test guarded revalidation rules
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_stage4_evidence_revision_resume_20261021.py
+          python3 -B -m unittest discover -s tests -p test_factory_stage4_evidence_revision_resume_20261021.py -v
+          echo STAGE4_EVIDENCE_REVALIDATION_CONTRACT=PASS
+
+  guarded-vps-patch:
+    needs: contract
+    if: github.event_name != 'pull_request' && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Authenticate the pinned VPS host
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/stage4-evidence-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo STAGE4_VPS_HOST_IDENTITY=PASS
+      - name: Transfer the tested guard and verify its hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/stage4-evidence-ssh"
+          stage="/home/githubops/factory-runtime/operations/.stage4-evidence-$GITHUB_RUN_ID"
+          timeout 35s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12 githubops@178.239.147.150 "set -eu; test ! -e '$stage'; install -d -m 700 '$stage'"
+          timeout 35s scp -q -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" scripts/factory_stage4_evidence_revision_resume_20261021.py "githubops@178.239.147.150:$stage/guard.py"
+          wanted="$(sha256sum scripts/factory_stage4_evidence_revision_resume_20261021.py | cut -d' ' -f1)"
+          have="$(timeout 30s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" githubops@178.239.147.150 "sha256sum '$stage/guard.py' | cut -d' ' -f1")"
+          test "$wanted" = "$have"
+          echo STAGE4_GUARD_SOURCE_HASH_MATCH=PASS
+      - name: Apply the exact-preimage guarded patch and write a durable VPS receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/stage4-evidence-ssh"
+          stage="/home/githubops/factory-runtime/operations/.stage4-evidence-$GITHUB_RUN_ID"
+          timeout 100s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12 githubops@178.239.147.150 "bash -se -- '$GITHUB_RUN_ID' '$GITHUB_SHA' '$GITHUB_REPOSITORY' '$GITHUB_RUN_ATTEMPT' '$have'" <<'REMOTE'
+          set -euo pipefail
+          run_id="$1"
+          commit_sha="$2"
+          repository="$3"
+          run_attempt="$4"
+          script_sha="$5"
+          base="/home/githubops/factory-runtime"
+          stage="$base/operations/.stage4-evidence-$run_id"
+          target="$base/django-app/core/autonomous_brain.py"
+          backup_root="$base/backups/stage4-evidence-revisions"
+          receipt_dir="$base/operations/evidence/stage4-revisions"
+          test "$(id -un)" = githubops
+          test -f "$stage/guard.py" && test ! -L "$stage/guard.py"
+          test -f "$target" && test ! -L "$target"
+          install -d -m 700 "$backup_root" "$receipt_dir"
+          test ! -L "$backup_root" && test ! -L "$receipt_dir"
+          result="$(python3 -B "$stage/guard.py" --target "$target" --backup-root "$backup_root")"
+          printf '%s\n' "$result"
+          RESULT="$result" RUN_ID="$run_id" COMMIT_SHA="$commit_sha" REPOSITORY="$repository" RUN_ATTEMPT="$run_attempt" SCRIPT_SHA="$script_sha" TARGET="$target" BACKUP_ROOT="$backup_root" RECEIPT_DIR="$receipt_dir" python3 -B - <<'PY'
+          import hashlib, json, os, time
+          from pathlib import Path
+          raw=os.environ["RESULT"]
+          prefix="STAGE4_REVISION_ONLY_RETRY_GUARD="
+          assert raw.startswith(prefix), "PATCH_RESULT_PREFIX_INVALID"
+          result=json.loads(raw[len(prefix):])
+          target=Path(os.environ["TARGET"])
+          source=target.read_bytes()
+          source_sha=hashlib.sha256(source).hexdigest()
+          compile(source.decode("utf8"),str(target),"exec")
+          assert result.get("source_sha256")==source_sha, "PATCH_SOURCE_HASH_MISMATCH"
+          assert b"revised_evidence" in source and b"current_evidence != prior_evidence" in source, "PATCH_LOGIC_NOT_PRESENT"
+          assert b"<= 100" in source, "EVIDENCE_CAP_NOT_PRESERVED"
+          backup_sha=result.get("backup_sha256")
+          backup_path=None
+          if result.get("patched"):
+              assert backup_sha and len(backup_sha)==64
+              backup=Path(os.environ["BACKUP_ROOT"])/("autonomous_brain-"+backup_sha[:24]+".before.py")
+              assert backup.is_file() and not backup.is_symlink()
+              assert hashlib.sha256(backup.read_bytes()).hexdigest()==backup_sha, "BACKUP_HASH_MISMATCH"
+              backup_path=str(backup)
+          elif result.get("already_patched"):
+              assert backup_sha is None
+          else:
+              raise AssertionError("PATCH_NOT_APPLIED")
+          receipt={
+            "schema":"saeit.factory.stage4-evidence-revision.v1",
+            "created_unix":int(time.time()),
+            "repository":os.environ["REPOSITORY"],
+            "commit_sha":os.environ["COMMIT_SHA"],
+            "github_run_id":int(os.environ["RUN_ID"]),
+            "github_run_attempt":int(os.environ["RUN_ATTEMPT"]),
+            "guard_script_sha256":os.environ["SCRIPT_SHA"],
+            "target":str(target),
+            "target_sha256":source_sha,
+            "backup_path":backup_path,
+            "backup_sha256":backup_sha,
+            "patched":bool(result.get("patched")),
+            "already_patched":bool(result.get("already_patched")),
+            "revalidation_requires_changed_real_evidence":True,
+            "per_evaluation_evidence_cap":100,
+            "public_or_commercial_approval_created":False,
+            "sale_or_publication_authorized":False,
+          }
+          payload=(json.dumps(receipt,sort_keys=True,separators=(",",":"))+"\n").encode()
+          digest=hashlib.sha256(payload).hexdigest()
+          folder=Path(os.environ["RECEIPT_DIR"])
+          path=folder/("stage4-"+os.environ["RUN_ID"]+"-"+digest[:16]+".json")
+          fd=os.open(str(path),os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+          with os.fdopen(fd,"wb") as f:
+              f.write(payload);f.flush();os.fsync(f.fileno())
+          assert hashlib.sha256(path.read_bytes()).hexdigest()==digest
+          print("STAGE4_PATCHED="+str(receipt["patched"]).lower())
+          print("STAGE4_ALREADY_PATCHED="+str(receipt["already_patched"]).lower())
+          print("STAGE4_CAP_100_PRESERVED=true")
+          print("STAGE4_DURABLE_RECEIPT="+str(path))
+          print("STAGE4_RECEIPT_SHA256="+digest)
+          PY
+      - name: Remove temporary runner credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/stage4-evidence-ssh"
