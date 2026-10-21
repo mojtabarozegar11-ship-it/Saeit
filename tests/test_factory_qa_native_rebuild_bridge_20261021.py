@@ -485,6 +485,18 @@ class RealPrivateDocumentEditionTests(unittest.TestCase):
         self.assertFalse((self.root/"quality-excellence/document-edition-sources"/(
             "edition_"+self.artifact_hash[:24]+"_v02")).exists())
 
+
+    def test_source_byte_tampering_blocks_skip_and_next_volume(self):
+        self.bind({"chapters/%03d.md"%i:b"Document and source test." for i in range(207)})
+        self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
+                         "private_document_edition_built")
+        head="edition_"+self.artifact_hash[:24]
+        base=self.root/"quality-excellence/document-edition-sources"
+        (base/(head+"_v01")/"index.html").write_text("tampered source now")
+        result=m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker)
+        self.assertEqual(result,"document_volume_existing_receipt_unverified")
+        self.assertFalse((base/(head+"_v02")).exists())
+
     def test_unbound_and_tampered_archives_never_get_new_product(self):
         self.bind({"bundle/file.txt":b"legitimate doc"})
         self.order["source_quality_receipt_sha256"]="0"*64
