@@ -1,0 +1,81 @@
+{
+  "schema": "mojplaywin.product-preview.v1",
+  "sku": "atelier-interior-kit-v1",
+  "title": "Atelier Interior — Client-Ready Website Kit",
+  "vertical": "interior_design",
+  "edition": "1.0",
+  "status": "preview_only",
+  "demo_url": "https://atelier-interior-kit-demo.mojtaba-rozegar11.chatgpt.site/",
+  "preview_image_url": "https://atelier-interior-kit-demo.mojtaba-rozegar11.chatgpt.site/assets/hero.jpg",
+  "private_download_archive": "atelier-interior-kit-v1.zip",
+  "private_download_sha256": "f17eb13a5e546c5ca9974885b30b6d8b5bc44ecf5474edf75b544f8f7d254d3d",
+  "price": null,
+  "checkout_enabled": false,
+  "paid_delivery_enabled": false,
+  "sellable_asset_in_public_repository": false,
+  "functionality": [
+    "responsive_portfolio",
+    "editable_studio_identity_and_colors",
+    "project_gallery",
+    "whatsapp_quote_request_handoff",
+    "standalone_site_zip_export"
+  ],
+  "evidence": {
+    "demo_http": "200_verified_2026-10-21",
+    "archive_integrity": "local_unzip_integrity_passed_2026-10-21",
+    "browser_qa": "manual_demo_review_2026-10-21",
+    "payment_checkout": "not_tested",
+    "customer_download": "not_tested"
+  },
+  "commercial_release_requirements": [
+    "Owner-approved price and currency",
+    "Confirmed license and image rights for resale",
+    "Private delivery of exact SHA-256 verified archive",
+    "Independent QA and production release gate",
+    "Verified checkout, receipt, and authenticated customer download"
+  ],
+  "pricing_recommendation": {
+    "researched_at": "2026-10-21",
+    "currency": "USD",
+    "regular_price": 17,
+    "introductory_price": 6.8,
+    "introductory_cap_paid_sales": null,
+    "pricing_status": "owner_selected_price_proposal_not_active_checkout_price",
+    "comparables": [
+      {
+        "name": "Architekta HTML",
+        "observed_price_usd": 7,
+        "url": "https://themeforest.net/item/architekta-interior-architecture-html-template/60588934",
+        "note": "lower-priced comparison"
+      },
+      {
+        "name": "Ukainpro HTML",
+        "observed_price_usd": 16,
+        "url": "https://themeforest.net/item/ukainpro-interior-design-architecture-portfolio-template-responsive-html5-design/24155024"
+      },
+      {
+        "name": "Luxine HTML",
+        "observed_price_usd": 24,
+        "url": "https://themeforest.net/item/luxine-architecture-interior-design-html-template/61263583"
+      },
+      {
+        "name": "Interno HTML",
+        "observed_price_usd": 29,
+        "url": "https://themeforest.net/item/interno-architecture-interior-html-template/49661168"
+      },
+      {
+        "name": "Interior Designs Framer",
+        "observed_price_usd": 69,
+        "url": "https://www.framer.com/marketplace/templates/interior-designs/",
+        "note": "CMS-capable, not like-for-like static HTML"
+      }
+    ],
+    "rationale": "Owner selected a $17 standard price with a 60% promotional discount ($6.80 payable). Benchmarked against current interior-design templates; discounted price is promotional and may have payment-fee constraints.",
+    "trx_settlement": "invoice_quoted_at_payment_time_no_fixed_trx_amount",
+    "discount_percent": 60,
+    "discounted_price": 6.8,
+    "promotion_start": null,
+    "promotion_end": null,
+    "promotion_note": "Promotion duration and genuine prior/base price presentation must be confirmed before enabling public discounted checkout."
+  }
+}
