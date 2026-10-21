@@ -2,6 +2,18 @@
   "schema": "saeit.factory.family-registry.v1",
   "registration_date": "2026-10-19",
   "principle": "Registration is not proof of a working producer or commercially approved stock.",
+  "quality_1000_policy": {
+    "schema": "saeit.factory.quality-1000.v1",
+    "minimum_verified_quality_score": 1000,
+    "maximum_quality_score": 1000,
+    "noncompensatory_pillars": 12,
+    "zero_critical_defects_required": true,
+    "every_family_specialist_gate_required": true,
+    "independent_human_certification_required": true,
+    "document_completeness_is_not_certification": true,
+    "automatic_publication_permitted": false,
+    "quality_scorecard_module": "scripts/factory_quality_1000_scorecard.py"
+  },
   "distribution_enabled": false,
   "commercial_auto_approval": false,
   "readiness_policy": "awaiting_executor_validation_until_real_trial_and_independent_qa",
