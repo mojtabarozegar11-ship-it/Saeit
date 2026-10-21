@@ -86,6 +86,17 @@ class ExtractedCustomerQATests(unittest.TestCase):
                     self.output / "digital-products" / recipe, recipe)
                 self.assertEqual(result["customer_zip_extract_test"], "passed")
 
+    def test_vps_installer_copies_new_mandatory_customer_qa(self):
+        # Deployment must use the same sources tested on GitHub.
+        installer = (ROOT / "deploy" / "install_autonomous_factory_products.sh").read_text(encoding="utf8")
+        module = "factory_verified_customer_cycle_20261021.py"
+        self.assertIn('test -f "$repo/scripts/' + module + '"', installer)
+        self.assertIn('test ! -L "$repo/scripts/' + module + '"', installer)
+        self.assertIn("factory_vps_product_cycle.py \\\n         " + module + " \\\n", installer)
+        self.assertIn('"$scripts/' + module + '"', installer)
+        self.assertIn('"$python" "$scripts/factory_vps_product_cycle.py"', installer)
+
+
 
 if __name__ == "__main__":
     unittest.main()
