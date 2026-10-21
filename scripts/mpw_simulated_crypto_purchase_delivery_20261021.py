@@ -180,6 +180,38 @@ with contextlib.ExitStack() as st, tempfile.TemporaryDirectory(prefix='mpw-deliv
   if type(e).__name__!='SettlementRejected':raise
  else:raise RuntimeError('Forged unfinalized proof passed!')
  assert len(records['receipt'])==0 and order.status=='pending'
+ # Independent negative settlement matrix: test real deployed verification
+ # implementation without touching live models, ledger, orders, or customer files.
+ from datetime import timedelta as _td
+ bad_cases={
+  'wrong_order':{'order_id':order.pk+1},
+  'wrong_network':{'network':'ethereum-mainnet'},
+  'wrong_sender':{'sender':'T'+'X'*33},
+  'wrong_recipient':{'recipient':'T'+'Z'*33},
+  'wrong_amount':{'amount_atomic':invoice.amount_atomic-1},
+  'over_amount':{'amount_atomic':invoice.amount_atomic+1},
+  'not_final':{'finalized':False},
+  'status_truthy_string':{'finalized':'true'},
+  'wrong_tx':{'tx_hash':'e5'*32},
+  'wrong_backend':{'backend':'untrusted-oracle'},
+  'wrong_time_before_invoice':{'block_timestamp':invoice.issued_at-_td(seconds=1)},
+  'wrong_time_after_expiry':{'block_timestamp':invoice.expires_at+_td(seconds=1)},
+  'absent_finalization_time':{'block_timestamp':None},
+  'ambiguous_amount_type':{'amount_atomic':str(invoice.amount_atomic)},
+ }
+ rejected_checks=[]
+ for label,change in bad_cases.items():
+  def bad_verifier(inv,transaction_hash,delta=change):
+   return {**final_chain_proof(inv,transaction_hash),**delta}
+  try:
+   S.settle_order_invoice(invoice.pk,tx,trusted_chain_verifier=bad_verifier)
+  except S.SettlementRejected:
+   rejected_checks.append(label)
+  else:
+   raise RuntimeError('Invalid proof unexpectedly settled the order: '+label)
+  assert order.status=='pending' and invoice.status=='awaiting'
+  assert not records['receipt'] and not records['ledger'] and not records['grant']
+ assert len(rejected_checks)==len(bad_cases)
  state=S.settle_order_invoice(invoice.pk,tx,trusted_chain_verifier=final_chain_proof)
  assert state=='paid' and invoice.status=='paid' and order.status=='paid'
  assert len(records['receipt'])==1 and len(records['ledger'])==1 and len(records['grant'])==1
@@ -195,6 +227,32 @@ with contextlib.ExitStack() as st, tempfile.TemporaryDirectory(prefix='mpw-deliv
  replay=S.settle_order_invoice(invoice.pk,tx,trusted_chain_verifier=final_chain_proof)
  assert replay=='already_paid'
  assert len(records['receipt'])==1 and len(records['ledger'])==1 and len(records['grant'])==1
+ try:S.settle_order_invoice(invoice.pk,'c6'*32,trusted_chain_verifier=final_chain_proof)
+ except S.SettlementRejected:pass
+ else:raise RuntimeError('Attempt to reuse paid invoice with a different tx was accepted')
+ # Once a paid order loses any required financial evidence or fulfillment record,
+ # the same real authorization function must deny access immediately.
+ saved_receipts=list(records['receipt'])
+ records['receipt'].clear()
+ assert E.can_access_purchased_digital_item(item.pk,order.customer_id) is False
+ records['receipt'][:]=saved_receipts
+ saved_ledger=list(records['ledger'])
+ records['ledger'].clear()
+ assert E.can_access_purchased_digital_item(item.pk,order.customer_id) is False
+ records['ledger'][:]=saved_ledger
+ saved_grants=list(records['grant'])
+ records['grant'].clear()
+ # A OneToOne instance cache is already populated in the fixture; separately
+ # revoke the object-level entitlement to exercise the missing grant path.
+ prior_grant=getattr(item,'mpw_fulfillment',None)
+ if prior_grant is not None:
+  delattr(item,'mpw_fulfillment')
+ try:
+  assert E.can_access_purchased_digital_item(item.pk,order.customer_id) is False
+ finally:
+  if prior_grant is not None:item.mpw_fulfillment=prior_grant
+ records['grant'][:]=saved_grants
+ assert E.can_access_purchased_digital_item(item.pk,order.customer_id) is True
  foreign=RequestFactory().get('/commerce/checkout/status/'+str(order.pk)+'/',secure=True,HTTP_HOST='mojplaywin.com')
  foreign.user=SimpleNamespace(pk=777777,is_authenticated=True,is_active=True)
  assert V.checkout_status(foreign,order.pk).status_code==404
@@ -212,4 +270,7 @@ with contextlib.ExitStack() as st, tempfile.TemporaryDirectory(prefix='mpw-deliv
   'before_payment_download_denied':True,'after_payment_status_download_link':True,
   'private_fake_pdf_bytes_received':len(output),
   'other_buyer_denied':True,'same_transaction_replayed_once_only':True,
+  'invalid_payment_proofs_rejected':rejected_checks,
+  'different_transaction_replay_denied':True,
+  'receipt_ledger_or_grant_missing_denies_download':True,
   'real_funds':0,'production_purchases_created':0,'actual_paid_delivery_proven':False},sort_keys=True))
