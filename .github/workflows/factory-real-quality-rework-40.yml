@@ -8,9 +8,11 @@ on:
       - "tests/test_factory_quality_signed_approval_v1.py"
       - "scripts/factory_quality_production_workorders_v1.py"
       - "scripts/factory_qa_native_rebuild_bridge_20261021.py"
+      - "scripts/factory_autonomous_jump_repair_v1.py"
       - "scripts/factory_recover_missing_original_recipes_20261021.py"
       - "tests/test_factory_recover_missing_original_recipes_20261021.py"
       - "tests/test_factory_qa_native_rebuild_bridge_20261021.py"
+      - "tests/test_factory_autonomous_jump_repair_v1.py"
       - "tests/test_factory_quality_production_workorders_v1.py"
       - "scripts/factory_commercial_quality_release_guard_v1.py"
       - "tests/test_factory_commercial_quality_release_guard_v1.py"
@@ -49,6 +51,7 @@ jobs:
           python3 -B -m unittest discover -s tests -p test_factory_commercial_quality_release_guard_v1.py -v
           python3 -B -m unittest discover -s tests -p test_factory_quality_production_workorders_v1.py -v
           python3 -B -m unittest discover -s tests -p test_factory_qa_native_rebuild_bridge_20261021.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_autonomous_jump_repair_v1.py -v
           python3 -B -m unittest discover -s tests -p test_factory_recover_missing_original_recipes_20261021.py -v
           python3 -B -m unittest discover -s tests -p test_factory_global_premium_quality_gate.py -v
           python3 -m py_compile scripts/factory_global_quality_triage_v2.py
@@ -76,6 +79,7 @@ jobs:
           scp -q "${opts[@]}" scripts/factory_quality_1000_v2.py githubops@178.239.147.150:"$stage/score1000.py"
           scp -q "${opts[@]}" scripts/factory_quality_production_workorders_v1.py githubops@178.239.147.150:"$stage/workorders.py"
           scp -q "${opts[@]}" scripts/factory_qa_native_rebuild_bridge_20261021.py githubops@178.239.147.150:"$stage/native-rebuild.py"
+          scp -q "${opts[@]}" scripts/factory_autonomous_jump_repair_v1.py githubops@178.239.147.150:"$stage/jump-repair.py"
           scp -q "${opts[@]}" scripts/factory_recover_missing_original_recipes_20261021.py githubops@178.239.147.150:"$stage/source-recovery.py"
           scp -q "${opts[@]}" scripts/factory_product_maker.py githubops@178.239.147.150:"$stage/factory_product_maker.py"
           scp -q "${opts[@]}" scripts/factory_personal_owner_passport_policy_20261020.py githubops@178.239.147.150:"$stage/factory_personal_owner_passport_policy_20261020.py"
@@ -107,13 +111,24 @@ jobs:
           echo FACTORY_ORIGINAL_SOURCE_RECOVERY_HASH_BOUND=COMPLETED
           # Only source-backed, genuinely executed offline technical QA rebuilds;
           # original factory stock and public release state remain unchanged.
-          timeout 145s ssh -T "${opts[@]}" githubops@178.239.147.150 \
-            python3 -B "$stage/native-rebuild.py" \
+          # Two bounded 3-product repair waves plus independent candidate ZIP / hash / original-QA reinspection.
+          for pair in "scripts/factory_autonomous_jump_repair_v1.py:jump-repair.py" "scripts/factory_qa_native_rebuild_bridge_20261021.py:native-rebuild.py" "factory_config/forty_families.json:families.json"; do
+            local_file="${pair%%:*}"
+            remote_file="${pair#*:}"
+            test "$(sha256sum "$local_file" | cut -d' ' -f1)" = "$(timeout 35s ssh -T "${opts[@]}" githubops@178.239.147.150 "sha256sum '$stage/$remote_file' | cut -d' ' -f1")"
+          done
+          echo FACTORY_JUMP_REPAIR_SOURCE_PINNING=PASS
+          timeout 480s ssh -T "${opts[@]}" githubops@178.239.147.150 \
+            python3 -B "$stage/jump-repair.py" \
             --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle \
+            --families "$stage/families.json" \
             --source-root /home/githubops/factory-runtime/private/autonomous-product-cycle/generated-product-recipes \
-            --maker "$stage/factory_product_maker.py" --additional-source-root /home/githubops/factory-runtime/operations/autonomous-product-runtime/product_recipes --additional-source-root /home/githubops/factory-runtime/private/autonomous-product-cycle/recovered-original-product-recipes --limit 2
+            --maker "$stage/factory_product_maker.py" --bridge "$stage/native-rebuild.py" \
+            --additional-source-root /home/githubops/factory-runtime/operations/autonomous-product-runtime/product_recipes \
+            --additional-source-root /home/githubops/factory-runtime/private/autonomous-product-cycle/recovered-original-product-recipes \
+            --rounds 2 --limit 3
           echo FACTORY_NATIVE_TECHNICAL_REBUILD_CANDIDATES_INSPECTED=YES
           echo FACTORY_QUALITY_RELEASE_THRESHOLD=1000/1000
           echo FACTORY_PUBLIC_PRODUCT_UPLOAD=NONE
           echo FACTORY_PAYMENT_CHANGE=NONE
-          ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; rm -f -- '$stage/rework.py' '$stage/quality.py' '$stage/families.json' '$stage/score1000.py' '$stage/quality_100_criteria.json' '$stage/workorders.py' '$stage/native-rebuild.py' '$stage/source-recovery.py' '$stage/factory_product_maker.py' '$stage/factory_personal_owner_passport_policy_20261020.py'; rmdir -- '$stage'"
+          ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; rm -f -- '$stage/rework.py' '$stage/quality.py' '$stage/families.json' '$stage/score1000.py' '$stage/quality_100_criteria.json' '$stage/workorders.py' '$stage/native-rebuild.py' '$stage/jump-repair.py' '$stage/source-recovery.py' '$stage/factory_product_maker.py' '$stage/factory_personal_owner_passport_policy_20261020.py'; rmdir -- '$stage'"
