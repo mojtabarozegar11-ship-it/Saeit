@@ -265,6 +265,7 @@ class BridgeTests(unittest.TestCase):
         recipe, archive, meta, digest = self.make_private_f34_icon_archive()
         validated = receiver.validate_package(archive, meta, recipe, digest)
         self.assertEqual(validated["qa_measurements"]["validated_archive_members"], 100)
+        self.assertEqual(sender.verify_source(meta, archive, recipe), digest)
         staged = self.inbox / "incoming" / recipe
         staged.mkdir(parents=True)
         (staged / (digest + ".zip.partial")).write_bytes(archive.read_bytes())
@@ -279,11 +280,15 @@ class BridgeTests(unittest.TestCase):
         recipe, archive, meta, digest = self.make_private_f34_icon_archive(extra=True)
         with self.assertRaisesRegex(ValueError, "F34_EXACT_ICON_PACKAGE_INVALID"):
             receiver.validate_package(archive, meta, recipe, digest)
+        with self.assertRaisesRegex(ValueError, "PACKAGE_F34_EXACT_MEMBERS_REQUIRED"):
+            sender.verify_source(meta, archive, recipe)
 
     def test_f34_missing_independent_gate_is_rejected(self):
         recipe, archive, meta, digest = self.make_private_f34_icon_archive(review=False)
         with self.assertRaisesRegex(ValueError, "F34_EVIDENCE_CONTRACT_INVALID"):
             receiver.validate_package(archive, meta, recipe, digest)
+        with self.assertRaisesRegex(ValueError, "PACKAGE_F34_EXACT_QA_REQUIRED"):
+            sender.verify_source(meta, archive, recipe)
 
     def test_all_other_recipes_remain_bound_to_80_members(self):
         recipe = "normal_workbook"
