@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 from urllib.request import Request,urlopen
 
 API_URL="https://api.nowpayments.io/v1/invoice"
+MIN_URL="https://api.nowpayments.io/v1/min-amount?currency_from=trx&currency_to=trx&fiat_equivalent=usd"
 SUPPORTED_ACCOUNT_CODE="NOWPAYMENTS"
 class MerchantNotReady(RuntimeError):pass
 class ProviderError(RuntimeError):pass
@@ -65,12 +66,50 @@ def _official_invoice_url(value):
   raise ProviderError("Unexpected invoice provider domain")
  return value
 
-def create_invoice(order_id,price_usd,description,callback,success,cancel,*,env=None,opener=urlopen):
+def live_trx_minimum_usd(env, *, opener=urlopen):
+ """Fetch fresh provider minimum in USD equivalent for native TRX -> TRX.
+
+ Cryptocurrency minimums do not prove that fiat/card on-ramp is authorized.
+ Reject stale/malformed responses; NEVER guess or substitute a hardcoded quote.
+ """
+ if not env.get("NOWPAYMENTS_API_KEY"):
+  raise MerchantNotReady("Merchant API key is missing")
+ request=Request(MIN_URL,method="GET",headers={
+  "Accept":"application/json","x-api-key":env["NOWPAYMENTS_API_KEY"],
+  "User-Agent":"MojPlayWin-TRX-Minimum/1"})
+ try:
+  with opener(request,timeout=12) as response:raw=response.read(4097)
+ except Exception as exc:
+  raise MerchantNotReady("The processor minimum could not be independently verified") from exc
+ if len(raw)>4096:raise MerchantNotReady("Oversized processor minimum response")
+ try:
+  result=json.loads(raw.decode("utf8"))
+  if not isinstance(result,dict):raise ValueError("Invalid minimum response object")
+  for name,expected in (("currency_from","trx"),("currency_to","trx")):
+   if name in result and str(result[name]).lower()!=expected:
+    raise ValueError("Wrong payment network/currency in minimum response")
+  amount=result["fiat_equivalent"]
+  if type(amount) not in (str,int,float):raise ValueError("Invalid fiat minimum type")
+  minimum=Decimal(str(amount))
+  if not minimum.is_finite() or minimum<=0 or minimum>Decimal("1000"):
+   raise ValueError("Invalid processor minimum amount")
+ except (KeyError,ValueError,TypeError,UnicodeDecodeError,InvalidOperation) as exc:
+  raise MerchantNotReady("Unverifiable processor minimum fiat equivalent") from exc
+ return minimum
+
+
+def create_invoice(order_id,price_usd,description,callback,success,cancel,*,env=None,opener=urlopen,min_opener=urlopen):
  e=os.environ if env is None else env
  if not ready(e):raise MerchantNotReady("Fiat-onramp TRX settlement or provider minimum is not merchant-approved")
  payload=invoice_fields(order_id,price_usd,description,callback,success,cancel)
- if Decimal(payload["price_amount"])<_approved_minimum(e):
-  raise MerchantNotReady("Order is below the approved processor minimum; do not charge")
+ price=Decimal(payload["price_amount"])
+ if price<_approved_minimum(e):
+  raise MerchantNotReady("Order is below the merchant-approved minimum; do not charge")
+ # Never use a static merchant threshold instead of the provider's live minimum.
+ # This validates the native TRX crypto rail only; independent fiat/card approval
+ # and confirmed merchant TRX settlement remain mandatory.
+ if price<live_trx_minimum_usd(e,opener=min_opener):
+  raise MerchantNotReady("Order is below the live TRX network payment minimum")
  # The processor's merchant payout configuration, NOT pay_currency in this invoice,
  # decides the TRX settlement wallet. Fiat acceptance must be activated at merchant level.
  data=json.dumps(payload,separators=(",",":")).encode("utf8")
