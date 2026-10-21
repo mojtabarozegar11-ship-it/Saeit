@@ -1,0 +1,41 @@
+name: MOJ1 dependency and static guard audit
+on:
+  push:
+    branches: ['moj1/shasta-pilot-20261021']
+    paths:
+      - '.github/workflows/moj1-security-deps.yml'
+      - 'experiments/moj1-pilot/package.json'
+      - 'experiments/moj1-pilot/package-lock.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect-dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned dependencies without lifecycle scripts
+        working-directory: experiments/moj1-pilot
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Report production and development advisory findings
+        working-directory: experiments/moj1-pilot
+        shell: bash
+        run: |
+          npm audit --json > "$RUNNER_TEMP/moj1-audit.json" || true
+          node -e '
+          const fs = require("node:fs");
+          const p = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/moj1-audit.json", "utf8"));
+          if (!p.metadata?.vulnerabilities || !p.vulnerabilities) process.exit(1);
+          console.log("MOJ1_DEPENDENCY_AUDIT=" + JSON.stringify(p.metadata.vulnerabilities));
+          for (const [name, info] of Object.entries(p.vulnerabilities)) {
+            console.log("MOJ1_ADVISORY_PACKAGE=" + name + " severity=" + info.severity + " direct=" + info.isDirect + " fixAvailable=" + JSON.stringify(info.fixAvailable));
+          }
+          '
+      - name: No Mainnet credentials are used
+        run: echo 'MOJ1_SECURITY_AUDIT_MODE=NO_CHAIN_AND_NO_SECRET'
