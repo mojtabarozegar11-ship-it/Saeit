@@ -1,7 +1,7 @@
 name: MOJ Commerce v1.2 production MariaDB read-only prerequisites (NO DEPLOY)
 on:
   push:
-    branches: ['feature/moj-commerce-v12-mariadb-isolated-20261022']
+    branches: ['fix/moj-commerce-v12-symlink-safety-20261022']
     paths:
       - '.github/workflows/moj-commerce-v12-cpanel-readonly.yml'
       - 'tools/moj_commerce_v12_live_mariadb_readonly.py'
@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   verify-no-deploy:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/moj-commerce-v12-mariadb-isolated-20261022'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/fix/moj-commerce-v12-symlink-safety-20261022'
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
