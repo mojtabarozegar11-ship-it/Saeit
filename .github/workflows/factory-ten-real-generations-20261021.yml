@@ -77,13 +77,13 @@ jobs:
           host="githubops@178.239.147.150"
           stage="/home/githubops/factory-runtime/operations/.ten-generations-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           timeout 35s ssh -T "${opts[@]}" "$host" "umask 077; test ! -e '$stage' && mkdir -m 700 '$stage'"
-          for file in factory_ten_generation_builder_v1.py factory_product_maker.py factory_personal_owner_passport_policy_20261020.py; do
+          for file in factory_ten_generation_builder_v1.py factory_product_maker.py factory_personal_owner_passport_policy_20261020.py factory_recipe_designer.py; do
             scp -q "${opts[@]}" "scripts/$file" "$host:$stage/$file"
             expected="$(sha256sum "scripts/$file" | cut -d' ' -f1)"
             actual="$(timeout 35s ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$file' | cut -d' ' -f1")"
             test "$expected" = "$actual"
           done
-          echo FACTORY_TEN_GENERATION_DEPLOYED_FILE_HASHES_VERIFIED=3
+          echo FACTORY_TEN_GENERATION_DEPLOYED_FILE_HASHES_VERIFIED=4
           timeout 1100s ssh -T "${opts[@]}" "$host" "bash -se -- '$stage'" <<'REMOTE'
           set -euo pipefail
           umask 077
@@ -100,6 +100,49 @@ jobs:
           flock -w 180 8
           exec 9>"$private/.production-cycle.lock"
           flock -w 60 9
+          # Bring one genuinely compiler-owned F28 source from its prior
+          # tested revision to v3 before admitting it to 10-genuine-generation QA.
+          # The designer preserves the old source in private revisions and rolls back.
+          "$python" -B - "$stage" "$private/generated-product-recipes" <<'PY'
+          import importlib.util, json, sys
+          from pathlib import Path
+          stage=Path(sys.argv[1])
+          recipes=Path(sys.argv[2])
+          def load(name):
+              spec=importlib.util.spec_from_file_location(name,stage/(name+".py"))
+              module=importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(module)
+              return module
+          designer=load("factory_recipe_designer")
+          maker=load("factory_product_maker")
+          engine=load("factory_ten_generation_builder_v1")
+          ready=None
+          attempts=0
+          errors=[]
+          for source in sorted(recipes.iterdir()):
+              if source.is_symlink() or not source.is_dir() or not source.name.startswith("synth_"):
+                  continue
+              try:
+                  receipt=designer.read(source/"design_receipt.json")
+                  if receipt.get("family_id")!="F28":
+                      continue
+                  if receipt.get("generator_capability_revision")!="verified-summary-v3":
+                      if attempts>=6:continue
+                      attempts+=1
+                      designer.evolve_recipe(source.name,recipes)
+                  digest,family=engine.original_identity(source,maker)
+                  if family=="F28":
+                      ready={"recipe":source.name,"sha256":digest}
+                      break
+              except (ValueError,RuntimeError,OSError) as error:
+                  errors.append({"recipe":source.name,"reason":str(error)[:120]})
+          if ready is None:
+              print("FACTORY_TEN_F28_VALID_SOURCE=0")
+              print("FACTORY_TEN_F28_EVOLUTION_BLOCKERS="+json.dumps(errors[:6]))
+              raise RuntimeError("F28_VERIFIED_SOURCE_UNAVAILABLE")
+          print("FACTORY_TEN_F28_VALID_SOURCE=1")
+          print("FACTORY_TEN_F28_VERIFIED_SOURCE="+json.dumps(ready,sort_keys=True))
+          PY
           "$python" -B "$stage/factory_ten_generation_builder_v1.py" \
             --private-root "$private" \
             --source-root "$private/generated-product-recipes" \
