@@ -22,8 +22,8 @@ class Command(BaseCommand):
         seconds = options['older_than_seconds']
         if not 300 <= seconds <= 86400:
             raise CommandError('Recovery age outside allowed range')
-        if connection.vendor != 'postgresql':
-            raise CommandError('Recovery requires PostgreSQL advisory lock')
+        if connection.vendor not in ('postgresql', 'mysql'):
+            raise CommandError('Recovery requires PostgreSQL or MySQL/MariaDB session lock')
         cutoff = timezone.now() - timedelta(seconds=seconds)
         if not options['apply']:
             total = ScannerRun.objects.filter(
