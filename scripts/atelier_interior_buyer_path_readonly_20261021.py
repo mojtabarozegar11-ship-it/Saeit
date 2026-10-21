@@ -110,4 +110,10 @@ for path in [app/"core"/"templates"/"brands"/"mojplaywin"/"product.html",app/"co
     if path.is_file():
         raw=path.read_text("utf8")
         print("ATELIER_TARGET_TPL_HINT="+json.dumps({"name":path.name,"size":len(raw),"key_positions":{term:raw.find(term) for term in ("{% elif product.pk == 72 or product.pk == 225 %}","mpw-two-books","mpw-book-pay-note","{% endblock %}")},"end_snippet":raw[-650:]}))
+
+import hashlib
+production=Path("/home/zomorod2/Saeit")
+for rel in ["core/templates/brands/mojplaywin/product.html","core/templates/mojplaywin/store.html","mpw_commerce/product_checkout_page.py"]:
+    paths=[app/rel,production/rel]
+    print("ATELIER_DEPLOYED_TPL_PARITY="+json.dumps({"rel":rel,"staging":paths[0].is_file(),"production":paths[1].is_file(),"identical":all(t.is_file() for t in paths) and hashlib.sha256(paths[0].read_bytes()).digest()==hashlib.sha256(paths[1].read_bytes()).digest()}))
 print("ATELIER_READONLY_VIEW_INSPECT=PASS")
