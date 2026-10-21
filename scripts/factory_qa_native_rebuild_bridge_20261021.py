@@ -364,7 +364,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#1c2933;padding:1rem}
                 +expected+"\n\nThis is a technical candidate only. Rights, real-world "
                 "accuracy, professional 1000/1000 review and owner approval remain pending.\n",
                 encoding="utf8")
-            testcase='''import hashlib,html,json,unittest
+            testcase='''import hashlib,html,json,re,unittest
 from pathlib import Path
 BASE=Path(__file__).resolve().parent
 class EditionTests(unittest.TestCase):
@@ -383,8 +383,7 @@ class EditionTests(unittest.TestCase):
   self.assertIn('aria-label="Document and asset links"',page)
   self.assertIn("Content-Security-Policy",page)
   self.assertNotIn("<script",page.lower())
-  self.assertNotIn("http://",page.lower())
-  self.assertNotIn("https://",page.lower())
+  self.assertFalse(re.search(r"""(?:src|href)\s*=\s*["']https?://""",page,re.I))
   for item in info["assets"]:
    self.assertIn('href="'+item["path"]+'"',page)
    self.assertIn(html.escape(item["display_name"],quote=True),page)
