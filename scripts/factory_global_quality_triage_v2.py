@@ -195,12 +195,14 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
                 previous=json.loads(old_file.read_text(encoding="utf8")) if old_file.is_file() and not old_file.is_symlink() else {}
             except (ValueError,OSError,TypeError):
                 previous={}
-            prior_codes=set(previous.get("defects",[])) if isinstance(previous,dict) else set()
+            valid_previous=(isinstance(previous,dict) and previous.get("schema")==REWORK
+                            and previous.get("recipe")==name)
+            prior_codes=set(previous.get("defects",[])) if valid_previous else set()
             actual_codes=set(record.get("defects",[]))
-            source_changed=(previous.get("source_manifest_sha256")!=record.get("source_manifest_sha256")
-                            if isinstance(previous,dict) else False)
-            evidence_changed=(previous.get("candidate_evidence_dossier_sha256")!=record.get("candidate_evidence_dossier_sha256")
-                              if isinstance(previous,dict) else False)
+            source_changed=(valid_previous and
+                previous.get("source_manifest_sha256")!=record.get("source_manifest_sha256"))
+            evidence_changed=(valid_previous and
+                previous.get("candidate_evidence_dossier_sha256")!=record.get("candidate_evidence_dossier_sha256"))
             versioned_change=bool(source_changed or evidence_changed)
             closed=sorted(prior_codes-actual_codes) if versioned_change else []
             if prior_codes-actual_codes and not versioned_change:
