@@ -13,6 +13,17 @@ import zipfile
 HEX = re.compile(r"^[a-f0-9]{64}$")
 PRODUCT = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 SCHEMA = "saeit.factory.ai-evidence-workpapers.v1"
+OWNER_DELEGATION = {
+    "principal": "Mojtaba Roozegar",
+    "authority_state": "OWNER_DECLARED_AGENT_AUTHORIZATION",
+    "authorized_agent": "saeit-autonomous-evidence-analyst",
+    "agent_signatory_identity": "saeit-autonomous-evidence-analyst",
+    "signing_capacity": "automated_agent_acting_on_behalf_of_owner",
+    "attribution": "owner_principal_for_factory_evidence_workpapers",
+    "scope": "private_factory_vps_ai_evidence_workpapers",
+    "owner_private_key_or_signature_image_used": False,
+    "human_or_licensed_professional_certification": False,
+}
 ROLE_KEYWORDS = {
     "market_benchmark_supplier": ("market", "competitor", "benchmark", "pricing", "price", "industry"),
     "innovation_provenance_supplier": ("patent", "provenance", "origin", "author", "copyright", "novelty"),
@@ -143,8 +154,12 @@ def build_dossier(root, policy, recipe, source_sha, artifact_sha, supplier):
         "artifact_sha256": artifact_sha,
         "warehouse_manifest_sha256": supplier.hash_bytes(
             (version / "warehouse_manifest.json").read_bytes()),
+        "owner_delegation": dict(OWNER_DELEGATION),
+        "owner_attributed_agent_action": True,
         "evidence_agent": {
             "name": "saeit-autonomous-evidence-analyst",
+            "signatory_identity": "saeit-autonomous-evidence-analyst",
+            "signing_capacity": "automated_agent_acting_on_behalf_of_owner",
             "version": 1,
             "roles_run": sorted(ROLE_KEYWORDS),
             "agent_generated_workpapers": len(routes),
@@ -223,6 +238,8 @@ def run(root, catalog_path, supplier_path):
                "agent_roles": len(ROLE_KEYWORDS), "receipts": results,
                "rejected": rejected,
                "release_decision": "HUMAN_AND_EXTERNAL_EVIDENCE_STILL_REQUIRED",
+               "owner_attributed_agent_action": True,
+               "owner_delegation": dict(OWNER_DELEGATION),
                "professional_certification": False}
     print("FACTORY_AI_EVIDENCE_AGENT=" + json.dumps(summary, sort_keys=True))
     if not results:
