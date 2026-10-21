@@ -82,6 +82,12 @@ class Item:
   self.id=self.pk
   self.order=order
   self.product=fake_product
+  self._simulate_missing_grant=False
+ def __getattribute__(self,name):
+  if name=='mpw_fulfillment' and object.__getattribute__(self,'_simulate_missing_grant'):
+   # Django's missing OneToOne reverse relation raises the model DoesNotExist.
+   raise GrantModel.DoesNotExist('Simulated missing paid digital grant')
+  return object.__getattribute__(self,name)
 item=Item()
 order.items=Query([item])
 FakeOrder.objects=Query([order])
@@ -242,15 +248,12 @@ with contextlib.ExitStack() as st, tempfile.TemporaryDirectory(prefix='mpw-deliv
  records['ledger'][:]=saved_ledger
  saved_grants=list(records['grant'])
  records['grant'].clear()
- # A OneToOne instance cache is already populated in the fixture; separately
- # revoke the object-level entitlement to exercise the missing grant path.
- prior_grant=getattr(item,'mpw_fulfillment',None)
- if prior_grant is not None:
-  delattr(item,'mpw_fulfillment')
+ # The fake ORM must mimic Django's absent reverse OneToOne descriptor.
+ item._simulate_missing_grant=True
  try:
   assert E.can_access_purchased_digital_item(item.pk,order.customer_id) is False
  finally:
-  if prior_grant is not None:item.mpw_fulfillment=prior_grant
+  item._simulate_missing_grant=False
  records['grant'][:]=saved_grants
  assert E.can_access_purchased_digital_item(item.pk,order.customer_id) is True
  foreign=RequestFactory().get('/commerce/checkout/status/'+str(order.pk)+'/',secure=True,HTTP_HOST='mojplaywin.com')
