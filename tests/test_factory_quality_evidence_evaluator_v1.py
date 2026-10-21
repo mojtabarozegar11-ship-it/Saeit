@@ -6,7 +6,10 @@ import tempfile
 import unittest
 import zipfile
 
-PATH = Path(__file__).resolve().parents[1] / "scripts" / "factory_quality_evidence_evaluator_v1.py"
+ROOT = Path(__file__).resolve().parents[1]
+PATH = ROOT / "scripts" / "factory_quality_evidence_evaluator_v1.py"
+if not PATH.is_file():
+    PATH = Path(__file__).with_name("factory_quality_evidence_evaluator_v1.py")
 spec = importlib.util.spec_from_file_location("evaluator", PATH)
 e = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(e)
