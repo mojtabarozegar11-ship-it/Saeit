@@ -31,6 +31,82 @@ def money(value):
     return str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
+def granular_costs(data, area):
+    """Use explicit greenhouse cost drivers without double-counting legacy totals."""
+    required = (
+        "crop", "season", "water_liters_per_m2", "water_cost_per_liter",
+        "energy_kwh_per_m2", "energy_cost_per_kwh",
+        "labor_hours_per_m2", "labor_cost_per_hour",
+        "climate_control_kwh_per_m2", "climate_control_cost_per_kwh",
+        "other_variable_cost_per_m2",
+    )
+    if not any(key in data for key in required):
+        return None
+    missing = [key for key in required if key not in data]
+    if missing:
+        raise ValueError("granular resource model requires all fields: " + ", ".join(missing))
+    if "variable_cost_per_m2" in data:
+        raise ValueError("remove legacy variable_cost_per_m2 to prevent cost double counting")
+    for key in ("crop", "season"):
+        value = data[key]
+        if not isinstance(value, str) or not value.strip() or len(value.strip()) > 100 or not value.isprintable():
+            raise ValueError(key + ": a bounded crop/season label is required")
+    rates = {
+        key: number(data[key], key, minimum=0, maximum="100000000")
+        for key in required if key not in ("crop", "season")
+    }
+    unit_costs = {
+        "water": rates["water_liters_per_m2"] * rates["water_cost_per_liter"],
+        "energy": rates["energy_kwh_per_m2"] * rates["energy_cost_per_kwh"],
+        "labor": rates["labor_hours_per_m2"] * rates["labor_cost_per_hour"],
+        "climate_control": rates["climate_control_kwh_per_m2"] * rates["climate_control_cost_per_kwh"],
+        "other": rates["other_variable_cost_per_m2"],
+    }
+    breakdown = {name: area * amount for name, amount in unit_costs.items()}
+    return {
+        "crop": data["crop"].strip(), "season": data["season"].strip(),
+        "unit_rates": rates, "variable_cost": sum(breakdown.values()),
+        "cost_breakdown": breakdown,
+    }
+
+
+def uncertainty_model(settings, *, area, yield_rate, price, rejection, total_cost):
+    """Exploratory, seeded independent triangular inputs; not market calibration."""
+    import random
+    if not isinstance(settings, dict):
+        raise ValueError("uncertainty must be an object")
+    y_min = number(settings.get("yield_min_kg_per_m2"), "yield_min_kg_per_m2", minimum=0, maximum="100000000")
+    y_max = number(settings.get("yield_max_kg_per_m2"), "yield_max_kg_per_m2", minimum=0, maximum="100000000")
+    p_min = number(settings.get("price_min_per_kg"), "price_min_per_kg", minimum=0, maximum="100000000")
+    p_max = number(settings.get("price_max_per_kg"), "price_max_per_kg", minimum=0, maximum="100000000")
+    if not y_min <= yield_rate <= y_max or not p_min <= price <= p_max:
+        raise ValueError("triangular mode must be within its stated min/max")
+    seed = settings.get("seed", 0)
+    if type(seed) is not int or not 0 <= seed < 2**31:
+        raise ValueError("seed must be a bounded non-negative integer")
+    rng = random.Random(seed)
+    iterations = 2000
+    usable_factor = Decimal(1) - rejection / Decimal(100)
+    margins = []
+    for _ in range(iterations):
+        sampled_yield = Decimal(str(rng.triangular(float(y_min), float(y_max), float(yield_rate))))
+        sampled_price = Decimal(str(rng.triangular(float(p_min), float(p_max), float(price))))
+        margins.append(area * sampled_yield * usable_factor * sampled_price - total_cost)
+    margins.sort()
+    negatives = sum(value < 0 for value in margins)
+    return {
+        "method": "seeded_independent_triangular_monte_carlo",
+        "sample_count": iterations,
+        "seed": seed,
+        "p05_net_margin": money(margins[int((iterations - 1) * 0.05)]),
+        "median_net_margin": money(margins[int((iterations - 1) * 0.50)]),
+        "p95_net_margin": money(margins[int((iterations - 1) * 0.95)]),
+        "negative_margin_percent_model_only": money(Decimal(negatives) * 100 / iterations),
+        "uncertainty_inputs_market_calibrated": False,
+        "assumption": "Yield and selling price are independent triangular inputs entered by the user; this is not a validated probability forecast.",
+    }
+
+
 def calculate(data):
     if not isinstance(data, dict):
         raise ValueError("input must be a JSON object")
@@ -38,8 +114,6 @@ def calculate(data):
     yield_rate = number(data.get("expected_yield_kg_per_m2"),
                         "expected_yield_kg_per_m2", minimum=0)
     price = number(data.get("price_per_kg"), "price_per_kg", minimum=0)
-    variable_cost_rate = number(data.get("variable_cost_per_m2"),
-                                "variable_cost_per_m2", minimum=0)
     fixed_cost = number(data.get("fixed_cost_total"), "fixed_cost_total", minimum=0)
     rejection = number(data.get("rejection_rate_percent", 0),
                        "rejection_rate_percent", minimum=0, maximum=100)
@@ -47,20 +121,30 @@ def calculate(data):
     if not currency or len(currency) > 12 or not currency.isascii() or not currency.replace("_", "").isalnum():
         raise ValueError("currency must be an ISO code or clearly labeled unit")
 
+    granular = granular_costs(data, area)
+    if granular is None:
+        variable_cost_rate = number(data.get("variable_cost_per_m2"),
+                                    "variable_cost_per_m2", minimum=0)
+        variable_cost = area * variable_cost_rate
+    else:
+        variable_cost = granular["variable_cost"]
+        variable_cost_rate = variable_cost / area
+
     gross_yield = area * yield_rate
     saleable_yield = gross_yield * (Decimal(1) - rejection / Decimal(100))
     revenue = saleable_yield * price
-    variable_cost = area * variable_cost_rate
     total_cost = variable_cost + fixed_cost
     margin = revenue - total_cost
     break_even_price = None if saleable_yield == 0 else money(total_cost / saleable_yield)
-    return {
-        "version": "1.0",
+    result = {
+        "version": "2.0" if granular else "1.0",
+        "model_scope": "resource_explicit_uncalibrated" if granular else "legacy_aggregate_cost",
+        "market_data_independently_validated": False,
         "currency": currency,
         "assumptions": [
-            "Area, yield, price, cost, and rejection rate are supplied by the user.",
-            "Yield and price are treated as constant across the entered growing area.",
-            "Taxes, financing, depreciation, labor not included in cost inputs, and seasonality are excluded.",
+            "Area, yield, price, rejection and all costs are user-supplied; there are no live market feeds.",
+            "Yield and price are treated as constant across the entered growing area in the base case.",
+            "Taxes, financing, depreciation and any unentered expenses are excluded.",
             "Results are scenarios, not guaranteed production or profitability.",
         ],
         "inputs": {
@@ -83,6 +167,20 @@ def calculate(data):
             "break_even_reachable": saleable_yield > 0,
         },
     }
+    if granular:
+        result["inputs"]["crop"] = granular["crop"]
+        result["inputs"]["season"] = granular["season"]
+        result["inputs"]["resource_rates"] = {key: str(value) for key, value in granular["unit_rates"].items()}
+        result["results"]["resource_cost_breakdown"] = {
+            key: money(value) for key, value in granular["cost_breakdown"].items()
+        }
+    if "uncertainty" in data:
+        if granular is None:
+            raise ValueError("uncertainty analysis requires a complete explicit crop/season resource model")
+        result["results"]["uncertainty"] = uncertainty_model(
+            data["uncertainty"], area=area, yield_rate=yield_rate, price=price,
+            rejection=rejection, total_cost=total_cost)
+    return result
 
 
 def main(argv=None):
