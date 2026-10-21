@@ -85,6 +85,7 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
     assert root.is_dir() and not root.is_symlink()
     module=load_module(Path(policy))
     score_module=load_module(Path(scorecard_file) if scorecard_file else Path(__file__).with_name("factory_quality_1000_v2.py"))
+    integrity_module=load_module(Path(__file__).with_name("factory_measured_zip_evidence_v1.py"))
     profiles=module.load_registry(Path(registry))
     assert len(profiles)==40
     out=root/"quality-excellence"/"rework"
@@ -134,10 +135,18 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
                     raise ValueError("FAMILY_ID_CONFLICT")
                 candidate=dict(candidate,family_id=family,artifact={
                     "path":zipfile.name,"sha256":existing_hash or ""})
+                # Independently *measure* criterion Q068 from the actual ZIP bytes;
+                # never accept an arbitrary text dossier as proof of ZIP integrity.
+                measured=integrity_module.measured_zip_evidence(folder,name,zipfile,doc)
+                dossier=candidate.get("criteria_evidence")
+                dossier=dict(dossier) if isinstance(dossier,dict) else {}
+                dossier.pop("Q068",None)
+                if measured:
+                    dossier["Q068"]=measured
                 verdict=module.inspect(candidate,folder,profiles,doc)
                 status,actual,pending=classify(verdict)
                 card=score_module.grade(verdict,exact_build_sha256=existing_hash,
-                                        criteria_evidence=candidate.get("criteria_evidence"),
+                                        criteria_evidence=dossier,
                                         evidence_root=folder)
                 score_module.require_no_false_certification(card)
                 if not isinstance(manifest_sha,str) or not HEX.fullmatch(manifest_sha):
@@ -158,6 +167,7 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
                     "verified_artifact_integrity":bool(
                         isinstance(manifest_sha,str) and HEX.fullmatch(manifest_sha)
                         and existing_hash==manifest_sha),
+                    "measured_zip_integrity_Q068":measured,
                     "quality_1000_scorecard":card,
                     "quality_group_count":100,
                     "quality_points_per_group":10,
