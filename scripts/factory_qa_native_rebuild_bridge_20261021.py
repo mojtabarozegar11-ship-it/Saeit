@@ -214,6 +214,9 @@ def reauthor_document_delivery(root,recipe,order,maker):
             or not archive.is_file() or not qa.is_file()
             or not isinstance(expected,str) or not HEX.fullmatch(expected)):
         return "unverifiable_original_archive"
+    dest=None
+    package_dir=None
+    receipt_file=None
     try:
         if (sha(qa.read_bytes())!=order.get("source_quality_receipt_sha256")
                 or checked_json(qa).get("artifact_sha256")!=expected):
@@ -236,18 +239,22 @@ def reauthor_document_delivery(root,recipe,order,maker):
             p.mkdir(mode=0o700,parents=True,exist_ok=True)
         dest=source_parent/code
         receipt_file=receipt_parent/(code+".json")
+        package_dir=package_parent/code
         if dest.exists() or dest.is_symlink():
             if receipt_file.is_file() and not receipt_file.is_symlink():
                 prior=checked_json(receipt_file)
                 if (prior.get("source_customer_archive_sha256")==expected
                     and prior.get("commercial_release_authorized") is False
                     and prior.get("technical_manufacturer_qa_passed") is True):
-                    out=package_parent/code/"manufacturing_manifest.json"
-                    if out.is_file() and not out.is_symlink():
+                    out=package_dir/"manufacturing_manifest.json"
+                    package=package_dir/(code+"-internal-qa.zip")
+                    if (not package_dir.is_symlink() and out.is_file() and not out.is_symlink()
+                            and package.is_file() and not package.is_symlink()):
                         meta=checked_json(out)
                         if (meta.get("qa_status")=="passed"
                                 and meta.get("source_sha256")==prior.get("new_source_sha256")
-                                and meta.get("artifact_sha256")==prior.get("new_artifact_sha256")):
+                                and meta.get("artifact_sha256")==prior.get("new_artifact_sha256")
+                                and maker.sha256_file(package)==prior.get("new_artifact_sha256")):
                             return "already_issued_private_edition"
             return "existing_edition_requires_engineering_review"
         ALLOWED={".md",".txt",".pdf",".docx",".epub",".csv",".json",
@@ -414,6 +421,12 @@ class EditionTests(unittest.TestCase):
         return "private_document_edition_built"
     except (OSError,ValueError,UnicodeError,RuntimeError,TypeError,
             zipfile.BadZipFile,KeyError,EOFError,NotImplementedError):
+        # A transient build/receipt failure must not strand an unreceipted
+        # source or partial package. The next hourly pass can recreate it from
+        # the same independently hash-bound original archive.
+        for candidate in (dest,package_dir):
+            if candidate is not None and candidate.is_dir() and not candidate.is_symlink():
+                shutil.rmtree(candidate)
         return "document_edition_failed_needs_engineering"
 
 
