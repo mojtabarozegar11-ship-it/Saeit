@@ -34,6 +34,8 @@ def submit(base,path):
   "csfr_cookie_issued":"csrftoken" in cookie_names,"token_present":bool(token),
   "csp_header":(headers.get("Content-Security-Policy") or "")[:1350],
   "cache_control":headers.get("Cache-Control",""),
+  "referrer_policy_header":headers.get("Referrer-Policy",""),
+  "referrer_meta_no_referrer":bool(re.search(r'<meta\\s+name=["\\x27]referrer["\\x27]\\s+content=["\\x27]no-referrer',html,re.I)),
   "vary":headers.get("Vary",""),
   "refresh_script_present":"mpw-csrf-fresh-submit-20261020" in html,
  }
