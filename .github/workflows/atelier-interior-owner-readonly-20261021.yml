@@ -1,0 +1,134 @@
+name: Atelier Interior owner sale-readiness live readonly probe
+on:
+  push:
+    branches: [feature/atelier-sale-readiness-20261021]
+    paths:
+      - ".github/workflows/atelier-interior-owner-readonly-20261021.yml"
+      - "scripts/atelier_interior_release_probe_20261021.py"
+  pull_request:
+    paths:
+      - ".github/workflows/atelier-interior-owner-readonly-20261021.yml"
+      - "scripts/atelier_interior_release_probe_20261021.py"
+permissions: {contents: read}
+concurrency:
+  group: atelier-interior-evidence-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Prove strict ZIP safety gates without touching any live system
+        run: |
+          set -euo pipefail
+          python3 -B scripts/atelier_interior_release_probe_20261021.py selftest
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('scripts/atelier_interior_release_probe_20261021.py').read_text()
+          assert '98bffad4ccf36f84c7924ca77e4a8b473b42f33a8fce4d85cefe2367afc097aa' in src
+          assert 'atelier-interior-kit-v1-repacked.zip' in src
+          assert 'Product.objects.filter(title=TITLE)' in src
+          assert 'customer_payment_and_download_tested": False' in src
+          print('ATELIER_EXACT_PRODUCT_AND_NO_FALSE_CHECKOUT_CLAIM=PASS')
+          PY
+  inspect_existing_server:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/atelier-sale-readiness-20261021' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate read-only demo and live store are reachable
+        run: |
+          python3 - <<'PY'
+          from urllib.request import urlopen, Request
+          for url in ('https://atelier-interior-kit-demo.mojtaba-rozegar11.chatgpt.site/',
+                      'https://mojplaywin.com/store/'):
+              with urlopen(Request(url,headers={'User-Agent':'AtelierReadOnlyProbe/1.0'}),timeout=20) as r:
+                  if r.status!=200:raise RuntimeError('Live demo/store not available')
+                  print('ATELIER_PUBLIC_READONLY_HTTP='+str(r.status))
+          PY
+      - name: Check if existing public demo can supply identical source bytes for private stocking
+        run: |
+          python3 - <<'PY'
+          from hashlib import sha256
+          from urllib.request import urlopen,Request
+          from urllib.error import HTTPError,URLError
+          import json
+          base='https://atelier-interior-kit-demo.mojtaba-rozegar11.chatgpt.site/'
+          expected={
+           'index.html':'2950456f4ba3071d00b861767ceda50252aff9579252875addb0acd5969b9cd2',
+           'styles.css':'bc8f9ab0be977088c92f1633ba970df33d4bb5933e7d076b27df34f122732f93',
+           'app.js':'0045283de195bc3f5410fba58ec2e97de69a1c147d96b748bc3ff134559b4a58',
+           'config.js':'577effc087437708550b585a77270b61ab1959c77a17f0858d85ca41b0853129',
+           'README.md':'5c403edd6fd7a320cc66dc9c5bc7e6bde32872e707d2a02c248c376fcd746e88',
+           'robots.txt':'16ceb5ee3e0dc13aa9adf31a3ebbe45a1d965b8c2b9f72eaf84e5911e140ed95',
+           'assets/hero.jpg':'3360ede9e80d057131f8d9ddef260a5a4af8eecd3b0f28ee7d9ae2a1ed1cbdbc',
+           'assets/tile-0.jpg':'91ec8bcdd2fd8e2b43cb55702fa3a38ef4b5ef85c31c2df08123cdc898f49c7b',
+           'assets/tile-1.jpg':'6db5973a18c38b7c1726e9cf4093468b8ccfa8b317a780ab79089bc3505c62fb',
+           'assets/tile-2.jpg':'8b6c33eb06026ddc83331b908c663d53ac34f27fee75edfdbd3ffa49f3c78506',
+           'assets/tile-3.jpg':'e4917ecb05a728fd404ac498955d7044d3b0ad7302bfcbeac634e065b8060b90'
+          }
+          result={}
+          for path,wanted in expected.items():
+              try:
+                  with urlopen(Request(base+path,headers={'User-Agent':'AtelierSourceIntegrityProbe/1.0'}),timeout=18) as r:
+                      raw=r.read(12500000)
+                      result[path]=(r.status==200 and sha256(raw).hexdigest()==wanted)
+              except (HTTPError,URLError,TimeoutError,OSError):
+                  result[path]=False
+          print('ATELIER_ORIGINAL_PUBLIC_MEMBER_PARITY='+json.dumps(result,sort_keys=True))
+          print('ATELIER_ORIGINAL_PUBLIC_MEMBER_MATCH_COUNT='+str(sum(result.values()))+'/'+str(len(result)))
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect exact ZIP and native commercial path on cPanel read-only
+        run: |
+          set -euo pipefail
+          timeout 105s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel             "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -"             < scripts/atelier_interior_release_probe_20261021.py
