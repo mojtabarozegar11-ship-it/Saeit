@@ -90,6 +90,36 @@ class OriginalSourceRecoveryTests(unittest.TestCase):
     def test_missing_source_tests_is_not_a_valid_buildable_recipe(self):
         self.seed(files={"README.md":b"# X", "main.py":b"print(1)"})
         self.assertEqual(self.run_recovery()["totals"]["unrecoverable_with_current_provenance"],1)
+    def test_previously_recovered_source_must_remain_byte_exact(self):
+        self.assertEqual(self.run_recovery()["totals"]["restored"], 1)
+        target=self.root/"recovered-original-product-recipes"/self.recipe
+        (target/"README.md").write_bytes(b"tampered source, no longer verified")
+        result=self.run_recovery()
+        self.assertEqual(result["totals"]["unrecoverable_with_current_provenance"], 1)
+        self.assertEqual(result["totals"]["remediation_RECOVERY_PREVIOUS_FILES_MISMATCH"], 1)
+        self.assertNotIn("previously_recovered", result["totals"])
+        self.assertEqual((target/"README.md").read_bytes(),
+                         b"tampered source, no longer verified")
+
+    def test_previous_recovery_missing_receipt_never_counts_as_success(self):
+        self.assertEqual(self.run_recovery()["totals"]["restored"], 1)
+        proof=self.root/"recovered-original-product-recipes"/(".recovery-"+self.recipe+".json")
+        proof.unlink()
+        result=self.run_recovery()
+        self.assertEqual(result["totals"]["unrecoverable_with_current_provenance"], 1)
+        self.assertNotIn("previously_recovered", result["totals"])
+        self.assertFalse(proof.exists())
+
+    def test_previous_recovery_with_changed_qa_workorder_is_invalid(self):
+        self.assertEqual(self.run_recovery()["totals"]["restored"], 1)
+        order=self.workorder/"current.json"
+        work=json.loads(order.read_text())
+        work["unresolved_technical_or_domain_defects"]=["P0_BUILD_HASH_MISMATCH"]
+        order.write_text(json.dumps(work))
+        result=self.run_recovery()
+        self.assertEqual(result["totals"]["remediation_RECOVERY_PREVIOUS_PROOF_MISMATCH"], 1)
+        self.assertNotIn("previously_recovered", result["totals"])
+
     def test_preexisting_symlink_target_is_not_overwritten(self):
         target=self.root/"recovered-original-product-recipes";target.mkdir()
         (target/self.recipe).symlink_to(self.product,target_is_directory=True)
