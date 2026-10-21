@@ -204,7 +204,8 @@ def compile_recipe(spec, recipes):
                   'design_method':'bounded_arithmetic_program_synthesis',
                   'search_states_evaluated':searched,'training_examples':len(train),
                   'heldout_examples_passed':len(holdout),'general_ai_invention':False,
-                  'scientific_review_completed':False,'commercial_release':False}
+                  'scientific_review_completed':False,'commercial_release':False,
+                   'generator_capability_revision':'verified-batch-v2'}
     if destination.exists():
         saved = read(destination/'design_receipt.json')
         if saved.get('functional_sha256') != functional_hash:
@@ -244,13 +245,26 @@ def calculate(data):
         raise ValueError('RESULT_OUT_OF_RANGE')
     return {'result': str(result), 'unit': %r}
 
+# BATCH_API_V2_START
+def calculate_batch(records):
+    # A bad row aborts the bounded batch without returning a partial result.
+    if not isinstance(records,list) or not 1 <= len(records) <= 100:
+        raise ValueError('BATCH_INPUT_LIMIT_EXCEEDED')
+    return {'count':len(records), 'results':[calculate(row) for row in records]}
+# BATCH_API_V2_END
+
 if __name__ == '__main__':
-    print(json.dumps(calculate(json.load(sys.stdin)), sort_keys=True))
+    incoming=json.load(sys.stdin)
+    print(json.dumps(calculate_batch(incoming) if isinstance(incoming,list)
+                     else calculate(incoming), sort_keys=True))
 ''' % (names,spec['inputs'],expression(tree),spec['output_unit'])
     examples = spec['training_examples']+spec['acceptance_examples']
     tests = '''import unittest
 from decimal import Decimal
 from calculator import calculate
+# BATCH_TESTS_V2_START
+from calculator import calculate_batch
+# BATCH_TESTS_V2_END
 EXAMPLES = %r
 class GeneratedAcceptanceTests(unittest.TestCase):
     def test_reference_cases(self):
@@ -266,12 +280,27 @@ class GeneratedAcceptanceTests(unittest.TestCase):
             sample = dict(EXAMPLES[0]['inputs'])
             sample[next(iter(sample))] = value
             with self.assertRaises(ValueError): calculate(sample)
+    # BATCH_TESTS_V2_START
+    def test_customer_batch_matches_single_results(self):
+        rows=[item['inputs'] for item in EXAMPLES[:3]]
+        observed=calculate_batch(rows)
+        self.assertEqual(observed['count'],len(rows))
+        self.assertEqual(observed['results'],[calculate(item) for item in rows])
+    def test_customer_batch_rejects_limits_and_invalid_rows(self):
+        for bad in ([],[{}], [{}]*101, None, {}, 'x'):
+            with self.assertRaises(ValueError): calculate_batch(bad)
+        sample=dict(EXAMPLES[0]['inputs'])
+        sample[next(iter(sample))]=True
+        with self.assertRaises(ValueError):
+            calculate_batch([EXAMPLES[0]['inputs'],sample])
+    # BATCH_TESTS_V2_END
 ''' % examples
     readme = '# '+spec['title']+'\n\n'+spec['problem']+'\n\n'
     readme += 'Method: bounded arithmetic program synthesis; not a general AI invention.\n\n'
     readme += 'Inputs: '+json.dumps(spec['inputs'],ensure_ascii=False)+'\n\n'
     readme += 'Output unit: '+spec['output_unit']+'\n\n'+spec['limitations']+'\n\n'
     readme += 'Run: python calculator.py < example_inputs.json\n\n'
+    readme += 'Bounded batch usage: provide a JSON array of 1-100 complete input objects on stdin; invalid entries reject the whole batch.\n\n'
     readme += 'Technical prototype; scientific, usability and commercial review remain pending.\n'
     stage = Path(tempfile.mkdtemp(prefix='.candidate-',dir=str(recipes)))
     try:
