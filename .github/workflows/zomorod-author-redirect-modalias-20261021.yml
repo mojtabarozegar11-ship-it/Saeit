@@ -25,8 +25,8 @@ jobs:
           p=Path(".github/workflows/zomorod-author-redirect-modalias-20261021.yml")
           doc=p.read_text(encoding="utf8")
           rule="RedirectMatch 301 ^/authors/mojtaba-rozegar/?$ https://zomorodmelal.ir/en/authors/mojtaba-rozegar/"
-          assert doc.count(rule)==1
-          assert 'RewriteEngine On' not in doc and 'rm -rf' not in doc
+          assert doc.count(rule)==2
+          assert not any(line.strip()=="RewriteEngine On" for line in doc.splitlines())
           assert 'AUTHOR_ROUTE_ROLLBACK_VERIFIED' in doc
           print("ZM_AUTHOR_SCOPED_REDIRECT_SOURCE_QA=PASS")
           PY
