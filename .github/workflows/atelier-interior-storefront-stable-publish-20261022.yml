@@ -1,0 +1,151 @@
+name: Atelier 879 stable storefront card and checkout CTA only
+on:
+  push:
+    branches: [feature/atelier-sale-readiness-20261021]
+    paths:
+      - ".github/workflows/atelier-interior-storefront-stable-publish-20261022.yml"
+permissions: {contents: read}
+concurrency:
+  group: atelier-879-native-zip-payment-publish
+  cancel-in-progress: false
+jobs:
+  enable_exact_verified_zip_purchase:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/feature/atelier-sale-readiness-20261021' &&
+      startsWith(github.event.head_commit.message, '[owner-atelier-stable-storefront-20261022]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Compile guarded exact-template script and selftest
+        run: |
+          set -euo pipefail
+          python3 -B scripts/atelier_interior_native_store_cta_20261021.py selftest
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Verify public protected-path baseline
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/atelier-879-native-before"
+          for p in / /store/ /mojtaba.roozegar/ /picm/ /saman/ /farnaz/; do
+            s="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$p" || true)"
+            test "$s" != 000
+            printf '%s=%s\n' "$p" "$s" >> "$RUNNER_TEMP/atelier-879-native-before"
+          done
+      - name: Publish one product CTA and one store card only
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          src64="$(base64 -w0 scripts/atelier_interior_native_store_cta_20261021.py)"
+          call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
+          timeout 100s ssh -T -F "$d/config" saeit-cpanel \
+            "ATELIER_OWNER_EXACT_CTA=20261021-owner-879 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c '$call' '$src64' activate"
+      - name: Reload exact Passenger app's cached templates via existing verified marker
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          src64="$(base64 -w0 scripts/atelier_interior_passenger_reload_20261021.py)"
+          call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel \
+            "ATELIER_OWNER_PASSENGER_TEMPLATE_RELOAD=owner-879-20261021 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c '$call' '$src64'"
+      - name: Poll stable public HTML until BOTH card and detail CTA are actually served
+        run: |
+          set -euo pipefail
+          good=0
+          for attempt in $(seq 1 24); do
+            scode="$(curl -sS --max-time 15 -o "$RUNNER_TEMP/atelier-store-stable.html" -w '%{http_code}' "https://mojplaywin.com/store/?atelier_catalog_probe=$attempt" || true)"
+            pcode="$(curl -sS --max-time 15 -o "$RUNNER_TEMP/atelier-product-stable.html" -w '%{http_code}' "https://mojplaywin.com/store/product/879/?atelier_catalog_probe=$attempt" || true)"
+            if test "$scode" = 200 && test "$pcode" = 200 && \
+                grep -Fq 'atelier-original-vector-879' "$RUNNER_TEMP/atelier-store-stable.html" && \
+                grep -Fq '/store/product/879/checkout/' "$RUNNER_TEMP/atelier-store-stable.html" && \
+                grep -Fq '/store/product/879/checkout/' "$RUNNER_TEMP/atelier-product-stable.html" && \
+                grep -Fq 'Demo photos are not included' "$RUNNER_TEMP/atelier-product-stable.html"; then
+              good=$((good+1))
+              echo "ATELIER_PUBLIC_CTA_PROBE=PASS attempt=$attempt consecutive=$good"
+            else
+              good=0
+              echo "ATELIER_PUBLIC_CTA_PROBE=WAIT attempt=$attempt store=$scode product=$pcode"
+            fi
+            if test "$good" -ge 4; then break; fi
+            sleep 8
+          done
+          test "$good" -ge 4
+          : > "$RUNNER_TEMP/atelier-879-native-after"
+          for p in / /store/ /mojtaba.roozegar/ /picm/ /saman/ /farnaz/; do
+            s="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$p" || true)"
+            printf '%s=%s\n' "$p" "$s" >> "$RUNNER_TEMP/atelier-879-native-after"
+          done
+          cmp "$RUNNER_TEMP/atelier-879-native-before" "$RUNNER_TEMP/atelier-879-native-after"
+          checkout="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' https://mojplaywin.com/store/product/879/checkout/)"
+          case "$checkout" in 302|303) ;; *) echo "EXPECTED_CUSTOMER_LOGIN_FOR_CHECKOUT_$checkout"; exit 1;; esac
+          download="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' https://mojplaywin.com/commerce/download/879/)"
+          test "$download" != 200 && test "$download" != 000
+          echo "ATELIER_STABLE_PUBLIC_CATALOG=PASS product=879 price_usd=6.80 signed_in_checkout_required=true guest_zip_denied=true real_customer_paid_tested=false"
+      - name: Restore exact two templates on any failure
+        if: failure()
+        continue-on-error: true
+        run: |
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          src64="$(base64 -w0 scripts/atelier_interior_native_store_cta_20261021.py)"
+          call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
+          timeout 100s ssh -T -F "$d/config" saeit-cpanel \
+            "ATELIER_OWNER_EXACT_CTA_ROLLBACK=20261021-owner-879 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c '$call' '$src64' rollback"
+      - name: Refresh Passenger templates back to exact backup version after any failure
+        if: failure()
+        continue-on-error: true
+        run: |
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          src64="$(base64 -w0 scripts/atelier_interior_passenger_reload_20261021.py)"
+          call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel \
+            "ATELIER_OWNER_PASSENGER_TEMPLATE_RELOAD=owner-879-20261021 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c '$call' '$src64'"
+# Scope: two exact templates + existing Passenger restart marker only; NEVER touch product database.
+
+# Owner-scoped final release after verified cached Django loader and rollback routines.
+
+# Owner final direct-store-checkout launch attempt, no unsupported detail-page requirement.
