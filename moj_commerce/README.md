@@ -105,3 +105,16 @@ This does **not** prove live site fulfillment or wallet custody.
 The TronWeb interoperability script now injects the repository root into
 `sys.path` before Django setup; CI remains the source of truth for an actual
 cryptographic cross-language pass/failure.
+
+## v0.4: buyer-created seller-isolated TRX checkout (source only)
+
+See `STAGE_V04_RELEASE_GATES.md`. New `checkout.py`, `checkout_views.py`,
+`scan_purchases.py`, migration `0003_scanning_state.py` and management command
+`moj_commerce_scan_once` integrate automatic buyer order issuance to the same
+merchant-scoped Django/PG source of truth, with a one-time TRON address per
+seller/order. This intentionally **does not use** the old global SQLite ledger
+for new multi-merchant invoices. All runtime capabilities remain disabled by
+settings. The scanner fetches a solidified TRX body + receipt before signing
+an event and re-verifies at the Django receiver. Legacy source still has no
+approved live cPanel checkout mapping, production wallet stock, periodic worker,
+or customer money test. These features must not be declared live.

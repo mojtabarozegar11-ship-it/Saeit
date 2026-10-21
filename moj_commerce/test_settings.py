@@ -29,3 +29,9 @@ MOJ_COMMERCE_PRIVATE_ROOT = ''
 # Synthetic legacy tests may use manual fake addresses; prod default is True.
 MOJ_COMMERCE_REQUIRE_SIGNED_WALLET = False
 MOJ_COMMERCE_TRONGRID_API_KEY = ''
+
+# All operational switches OFF in source/test settings unless explicitly overridden.
+MOJ_COMMERCE_CHECKOUT_ENABLED = False
+MOJ_COMMERCE_SCANNER_ENABLED = False
+MOJ_COMMERCE_REQUIRE_FILE_PRESENT = True
+MOJ_COMMERCE_TRX_RATE_PROVIDER = None

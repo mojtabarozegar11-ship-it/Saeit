@@ -117,3 +117,28 @@ class Entitlement(models.Model):
         constraints = [
             models.CheckConstraint(condition=Q(max_downloads__gte=1) & Q(max_downloads__lte=20), name='moj_download_limit'),
         ]
+
+
+class PurchaseScanState(models.Model):
+    """Durable invoice scan scheduling in the SAME database as the buyer's order."""
+    id = models.BigAutoField(primary_key=True)
+    purchase = models.OneToOneField(Purchase, on_delete=models.CASCADE,
+                                    related_name='scan_state')
+    next_scan_ms = models.BigIntegerField(default=0, db_index=True)
+    last_scan_ms = models.BigIntegerField(default=0)
+    failures = models.PositiveSmallIntegerField(default=0)
+
+
+class PaymentDiscrepancy(models.Model):
+    """A finalized payment to this invoice address with wrong Sun amount.
+
+    A discrepancy is NEVER automatically credited, refunded or delivered.
+    """
+    id = models.BigAutoField(primary_key=True)
+    purchase = models.ForeignKey(Purchase, on_delete=models.PROTECT,
+                                 related_name='payment_discrepancies')
+    txid = models.CharField(max_length=64, unique=True)
+    amount_sun = models.BigIntegerField()
+    kind = models.CharField(max_length=12, choices=[('underpaid','Underpaid'),
+                                                    ('overpaid','Overpaid')])
+    observed_at = models.DateTimeField(auto_now_add=True)

@@ -1,8 +1,13 @@
 from django.urls import path
 from .views import buyer_download, buyer_download_link, receive_tron_fulfillment
 from .wallet_views import create_wallet_challenge, verify_wallet_challenge
+from .checkout_views import create_buyer_checkout, buyer_checkout_status
 
 urlpatterns = [
+    path('moj-commerce/merchants/<uuid:merchant_id>/products/<int:product_id>/checkout/',
+         create_buyer_checkout, name='moj-commerce-buyer-checkout'),
+    path('moj-commerce/orders/<str:order_ref>/status/',
+         buyer_checkout_status, name='moj-commerce-checkout-status'),
     # Include under site root ONLY after operator review; no duplicate public routes.
     path('moj-commerce/merchants/<uuid:merchant_id>/addresses/<int:address_id>/challenge/',
          create_wallet_challenge, name='moj-commerce-wallet-challenge'),
