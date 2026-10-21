@@ -33,5 +33,10 @@ if __name__=='__main__':
       ('www-origin-cookie-preserved','https://www.mojplaywin.com',True),
       ('same-origin-cookie-missing','https://mojplaywin.com',False)]
     result=[probe(*case) for case in scenarios]
-    if result[0]==403:raise RuntimeError('Standard mobile-style POST with valid CSRF cookie is blocked')
+    # Nonexistent credentials must never authenticate; cookie-bearing CSRF POST must
+    # reach the login validator, while a missing CSRF cookie must be rejected.
+    if result[0] not in (200,400,401,302):
+        raise RuntimeError('Standard mobile-style login POST failed (CSRF or server error): '+str(result[0]))
+    if result[2]!=403:
+        raise RuntimeError('Cookie-free login POST unexpectedly bypassed CSRF protection: '+str(result[2]))
     print('MPW_CSRF_PUBLIC_POST_SAFE_DIAGNOSTIC=PASS')
