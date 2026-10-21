@@ -1,0 +1,41 @@
+name: Factory leap - verified site intake and bounded staging
+on:
+  push:
+    branches: [fix/factory-leap-verified-intake-20261021]
+    paths:
+      - scripts/mpw_vps_warehouse_courier.py
+      - scripts/factory_product_planner.py
+      - tests/test_mpw_three_bidirectional_orders.py
+      - tests/test_factory_product_planner.py
+      - .github/workflows/factory-leap-intake-regression-20261021.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/mpw_vps_warehouse_courier.py
+      - scripts/factory_product_planner.py
+      - tests/test_mpw_three_bidirectional_orders.py
+      - tests/test_factory_product_planner.py
+      - .github/workflows/factory-leap-intake-regression-20261021.yml
+permissions:
+  contents: read
+jobs:
+  regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install pinned offline spreadsheet QA dependency
+        run: python3 -m pip install --disable-pip-version-check 'openpyxl==3.1.5'
+      - name: Compile real production modules
+        run: |
+          python3 -m py_compile scripts/mpw_vps_warehouse_courier.py scripts/factory_product_planner.py
+      - name: Test version-diverse private intake without fake signoff
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest tests.test_mpw_three_bidirectional_orders -v
+          python3 -B -m unittest tests.test_factory_product_planner -v
+          python3 -B -m unittest tests.test_mpw_vps_warehouse_courier -v
+          python3 -B -m unittest tests.test_factory_continuous_production_orders -v
+          echo SITE_REQUESTS_REPLAY_SAFE=PASS
+          echo FACTORY_QA_AND_COMMERCIAL_RIGHTS_NOT_AUTO_APPROVED=true
