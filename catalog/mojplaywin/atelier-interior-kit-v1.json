@@ -1,0 +1,37 @@
+{
+  "schema": "mojplaywin.product-preview.v1",
+  "sku": "atelier-interior-kit-v1",
+  "title": "Atelier Interior — Client-Ready Website Kit",
+  "vertical": "interior_design",
+  "edition": "1.0",
+  "status": "preview_only",
+  "demo_url": "https://atelier-interior-kit-demo.mojtaba-rozegar11.chatgpt.site/",
+  "preview_image_url": "https://atelier-interior-kit-demo.mojtaba-rozegar11.chatgpt.site/assets/hero.jpg",
+  "private_download_archive": "atelier-interior-kit-v1.zip",
+  "private_download_sha256": "f17eb13a5e546c5ca9974885b30b6d8b5bc44ecf5474edf75b544f8f7d254d3d",
+  "price": null,
+  "checkout_enabled": false,
+  "paid_delivery_enabled": false,
+  "sellable_asset_in_public_repository": false,
+  "functionality": [
+    "responsive_portfolio",
+    "editable_studio_identity_and_colors",
+    "project_gallery",
+    "whatsapp_quote_request_handoff",
+    "standalone_site_zip_export"
+  ],
+  "evidence": {
+    "demo_http": "200_verified_2026-10-21",
+    "archive_integrity": "local_unzip_integrity_passed_2026-10-21",
+    "browser_qa": "manual_demo_review_2026-10-21",
+    "payment_checkout": "not_tested",
+    "customer_download": "not_tested"
+  },
+  "commercial_release_requirements": [
+    "Owner-approved price and currency",
+    "Confirmed license and image rights for resale",
+    "Private delivery of exact SHA-256 verified archive",
+    "Independent QA and production release gate",
+    "Verified checkout, receipt, and authenticated customer download"
+  ]
+}
