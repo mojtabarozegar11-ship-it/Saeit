@@ -55,8 +55,12 @@ def submit(base,path):
  except urllib.error.HTTPError as ex:ok=ex.code
  # Deliberately bad token/cookie should fail CSRF (test no invalid account).
  jar.clear()
+ # urllib mutates Request with a Cookie header on first use. NEVER reuse it
+ # after clearing cookie jar, or a false-negative CSRF test may result.
+ absent=urllib.request.Request(dest,data=raw,headers=hdr,method="POST")
+ assert not absent.has_header("Cookie")
  try:
-  with client.open(req,timeout=24) as res:missing=res.status
+  with client.open(absent,timeout=24) as res:missing=res.status
  except urllib.error.HTTPError as ex:missing=ex.code
  emit({**h,"empty_valid_csrf_POST":ok,"cookie_deleted_POST":missing,
        "valid_cookie_passes_csrf":ok!=403,"missing_cookie_fails_csrf":missing==403})
