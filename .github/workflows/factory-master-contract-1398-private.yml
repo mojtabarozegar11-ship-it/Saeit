@@ -65,6 +65,16 @@ jobs:
                         "status","--workspace",str(workspace)],
                         capture_output=True,text=True,check=True,timeout=15).stdout)
           assert verified["contract_year_correction_ledger_verified"]
+          attested=json.loads(subprocess.run([sys.executable,"-B",str(script),
+                        "attest-terms","--workspace",str(workspace)],
+                        capture_output=True,text=True,check=True,timeout=15).stdout)
+          assert attested["current_terms_same_as_original_1398_owner_attested"] is True
+          assert attested["new_clauses_after_1398_owner_attested"] is False
+          assert attested["independent_signed_original_comparison"] is False
+          assert attested["sale_or_quality_clearance"] is False
+          print("VPS_MASTER_1398_ALL_TERMS_UNCHANGED_OWNER_ATTESTED=true")
+          print("VPS_MASTER_1398_LATER_CLAUSES_OWNER_ATTESTED=false")
+          print("VPS_MASTER_1398_ATTESTATION_RECEIPT_SHA256="+attested["attestation_sha256"])
           print("VPS_OWNER_MASTER_CONTRACT_ORIGINAL_YEAR=1398")
           print("VPS_TYPING_REVISION_YEAR=1405")
           print("VPS_LEGAL_CORRECTION_LEDGER=VERIFIED")
