@@ -163,6 +163,47 @@ class InvoiceLedger:
                 db.rollback()
                 raise
 
+    def settle_discovered(self, invoice_id: int, txid: str, tx: dict, receipt: dict) -> dict:
+        """Server-only background reconciliation without exposing buyer capability.
+
+        Proof is computed OUTSIDE the write lock; atomic state check revalidates
+        the same original address and expected amount before marking paid.
+        """
+        if type(invoice_id) is not int or invoice_id <= 0:
+            raise CheckoutError('Invalid internal invoice identifier')
+        with self._connect() as db:
+            row = db.execute('SELECT * FROM invoices WHERE id=?', (invoice_id,)).fetchone()
+        if row is None:
+            raise CheckoutError('Invoice missing')
+        invoice = dict(row)
+        expected = ExpectedTransfer(txid, invoice['address'], invoice['amount_sun'],
+                                    invoice['issued_ms'], invoice['expires_ms'])
+        proof = verify_finalized_trx(tx, receipt, expected)
+        with self._connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            try:
+                current = db.execute('SELECT * FROM invoices WHERE id=?', (invoice_id,)).fetchone()
+                if current is None or current['address'] != proof.recipient or current['amount_sun'] != proof.amount_sun:
+                    raise CheckoutError('Invoice proof no longer matches original quote')
+                if current['status'] == 'paid':
+                    if current['txid'] == txid:
+                        db.rollback()
+                        return dict(current)
+                    raise CheckoutError('Invoice already settled with a different payment')
+                try:
+                    changed = db.execute("""UPDATE invoices SET status='paid', txid=?,block_number=?,paid_ms=?
+                        WHERE id=? AND status='pending' AND txid IS NULL""",
+                        (proof.txid, proof.block_number, proof.block_ms, invoice_id))
+                except sqlite3.IntegrityError as exc:
+                    raise CheckoutError('Discovered transaction already claimed') from exc
+                if changed.rowcount != 1:
+                    raise CheckoutError('Invoice concurrently changed')
+                db.commit()
+                return dict(db.execute('SELECT * FROM invoices WHERE id=?', (invoice_id,)).fetchone())
+            except Exception:
+                db.rollback()
+                raise
+
     def pending(self, *, limit=30) -> list[dict]:
         if type(limit) is not int or not 1 <= limit <= 100:
             raise CheckoutError('Invalid scan limit')

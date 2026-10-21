@@ -244,3 +244,69 @@ class TestWebSecurity(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+class TestAutoDiscovery(unittest.TestCase):
+    class Response:
+        status = 200
+        def __init__(self, obj): self.buffer = io.BytesIO(json.dumps(obj).encode('utf8'))
+        def __enter__(self): return self
+        def __exit__(self, *args): return None
+        def read(self, size): return self.buffer.read(size)
+
+    def test_incoming_candidate_requires_confirmed_index(self):
+        from mpw_tron_pro.reconcile import incoming_candidates
+        seen_urls = []
+        def fake(req, timeout):
+            seen_urls.append(req.full_url)
+            return self.Response({'success': True, 'data': [{'txID': TX}], 'meta': {}})
+        self.assertEqual(incoming_candidates(A1, ISSUED, ISSUED + 600000, opener=fake), [TX])
+        self.assertIn('only_confirmed=true', seen_urls[0]); self.assertIn('only_to=true', seen_urls[0])
+
+    def test_incoming_candidate_pagination(self):
+        from mpw_tron_pro.reconcile import incoming_candidates
+        replies = iter([
+            {'success': True, 'data': [{'txID': TX}], 'meta': {'fingerprint':'abc01'}},
+            {'success': True, 'data': [{'txID': 'b'*64}], 'meta': {}},
+        ])
+        self.assertEqual(incoming_candidates(A1, ISSUED, ISSUED + 600000,
+                         opener=lambda req, timeout: self.Response(next(replies))), [TX, 'b'*64])
+
+    def test_incoming_candidate_fails_closed_on_malformed_index(self):
+        from mpw_tron_pro.reconcile import incoming_candidates
+        with self.assertRaises(CheckoutError): incoming_candidates(A1, ISSUED, ISSUED + 600000,
+            opener=lambda req,timeout: self.Response({'success':False,'data':[],'meta':{}}))
+
+    def test_incoming_candidate_fails_closed_if_too_many_pages(self):
+        from mpw_tron_pro.reconcile import incoming_candidates
+        counter = iter(range(100))
+        def fake(req,timeout):
+            return self.Response({'success':True, 'data':[{'txID':TX}],
+                                  'meta': {'fingerprint':f'page{next(counter)}'}})
+        with self.assertRaises(CheckoutError):
+            incoming_candidates(A1, ISSUED, ISSUED + 600000, opener=fake,max_pages=2)
+
+    def test_auto_reconcile_requires_real_finalized_proof(self):
+        from mpw_tron_pro.reconcile import reconcile_pending
+        with tempfile.TemporaryDirectory() as folder:
+            ledger=InvoiceLedger(Path(folder)/'db.sqlite')
+            ledger.initialize();ledger.add_public_address(A1)
+            inv=ledger.issue(merchant_order_id='MPW-ORDER-00001',product_title='Game',
+                             usd='4.00',usd_per_trx='.32',now_ms=ISSUED)
+            scan=lambda address,issued,expires,api_key: [TX]
+            fetch=lambda txid,api_key: records()
+            outcome=reconcile_pending(ledger,discover=scan,fetch=fetch)
+            self.assertEqual(outcome['settled'],1)
+            self.assertEqual(ledger.by_token(inv.token)['status'],'paid')
+
+    def test_auto_reconcile_does_not_settle_invalid_payment(self):
+        from mpw_tron_pro.reconcile import reconcile_pending
+        with tempfile.TemporaryDirectory() as folder:
+            ledger=InvoiceLedger(Path(folder)/'db.sqlite')
+            ledger.initialize();ledger.add_public_address(A1)
+            inv=ledger.issue(merchant_order_id='MPW-ORDER-00001',product_title='Game',
+                             usd='4.00',usd_per_trx='.32',now_ms=ISSUED)
+            outcome=reconcile_pending(ledger,discover=lambda *args,**kwargs:[TX],
+                    fetch=lambda *args,**kwargs:records(amount=SUN-1))
+            self.assertEqual(outcome['settled'],0)
+            self.assertEqual(outcome['requires_review'],1)
+            self.assertEqual(ledger.by_token(inv.token)['status'],'pending')
