@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import resource
+import site
 import signal
 from pathlib import Path
 import re
@@ -140,6 +141,12 @@ def inspect_product(folder, recipe, *, timeout=90):
         safe_env = {"PATH": os.defpath, "LANG": "C.UTF-8",
                     "HOME": str(root), "PYTHONNOUSERSITE": "1",
                     "PYTHONDONTWRITEBYTECODE": "1"}
+        # Some pinned commercial QA tools (e.g. openpyxl) are installed in
+        # the runner's user-site rather than its system/venv site. Supply only
+        # this known Python library directory, never inherited PYTHONPATH.
+        user_site = site.getusersitepackages()
+        if isinstance(user_site, str) and Path(user_site).is_dir():
+            safe_env["PYTHONPATH"] = user_site
         with subprocess.Popen(
                 [sys.executable, "-B", "-c", RUNNER, str(evidence)],
                 cwd=str(extracted), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
