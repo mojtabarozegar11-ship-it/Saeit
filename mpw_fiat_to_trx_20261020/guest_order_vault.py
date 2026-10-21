@@ -60,8 +60,13 @@ def _utc_second(now):
         raise GuestOrderError("Invalid wall-clock timestamp")
     return now
 
-def create_order(db, *, product_id, price_usd, client_nonce, now=None):
-    """An idempotent POST; retry returns existing id but NEVER reissues a bearer secret."""
+def create_order(db, *, product_id, price_usd, client_nonce, now=None,
+                 previous_claim=None):
+    """Trusted-internal order creator. Browser MUST NOT control the product price.
+
+    Safe retry returns the bearer claim only if the browser already knows it.
+    Normal no-claim retries never mint or disclose a new private claim.
+    """
     if type(product_id) is not int or not 0 < product_id <= 100000000:
         raise GuestOrderError("Invalid product")
     amount = _parse_price(price_usd)
@@ -72,16 +77,32 @@ def create_order(db, *, product_id, price_usd, client_nonce, now=None):
     order_id = "MPWF-" + secrets.token_hex(18)
     db.execute("BEGIN IMMEDIATE")
     try:
+        # Prune only abandoned, never-invoiced orders; do not destroy evidence
+        # for paid, disputed, or provider-issued invoices.
+        db.execute("DELETE FROM fiat_guest_orders WHERE state='created' "
+                   "AND invoice_id IS NULL AND expires_at<?", (clock-86400,))
         existing = db.execute(
-            "SELECT order_id,product_id,price_usd,expires_at FROM fiat_guest_orders "
+            "SELECT order_id,product_id,price_usd,expires_at,claim_digest FROM fiat_guest_orders "
             "WHERE client_nonce_digest=?", (nonce_sha,)
         ).fetchone()
         if existing:
             if existing[1] != product_id or existing[2] != amount:
                 raise GuestOrderError("Idempotency key cannot change product or price")
+            recovered = None
+            if previous_claim is not None:
+                supplied = _fingerprint(previous_claim, "buyer claim")
+                if not hmac.compare_digest(existing[4], supplied):
+                    raise GuestOrderError("Cannot recover order without valid private claim")
+                recovered = previous_claim
             db.commit()
-            return {"order_id": existing[0], "claim": None,
+            return {"order_id": existing[0], "claim": recovered,
                     "reused": True, "expires_at": existing[3]}
+        pending = db.execute(
+            "SELECT count(*) FROM fiat_guest_orders WHERE expires_at>? "
+            "AND state IN ('created','awaiting_payment')", (clock,)
+        ).fetchone()[0]
+        if pending >= 1200:
+            raise GuestOrderError("Guest checkout is temporarily at capacity")
         db.execute(
             "INSERT INTO fiat_guest_orders "
             "(order_id,product_id,price_usd,client_nonce_digest,claim_digest,created_at,expires_at) "
@@ -95,6 +116,30 @@ def create_order(db, *, product_id, price_usd, client_nonce, now=None):
     except BaseException:
         db.rollback()
         raise
+
+
+def create_catalog_order(db, *, product_id, client_nonce, trusted_catalog_quote,
+                         now=None, previous_claim=None):
+    """Server-only catalog boundary: never accept client-supplied prices.
+
+    Caller must supply a trusted product lookup backed by the production catalog,
+    asset/license/QC publication gates, and approved currency. This callable is
+    never allowed to be a callback controlled by an HTTP request.
+    """
+    if type(product_id) is not int or not 0 < product_id <= 100000000:
+        raise GuestOrderError("Invalid product")
+    if not callable(trusted_catalog_quote):
+        raise GuestOrderError("Trusted catalog quote required")
+    quote = trusted_catalog_quote(product_id)
+    if (type(quote) is not dict or quote.get("approved") is not True or
+            quote.get("currency") != "USD" or
+            type(quote.get("product_id")) is not int or
+            quote["product_id"] != product_id):
+        raise GuestOrderError("Product is not approved for merchant guest checkout")
+    return create_order(
+        db, product_id=product_id, price_usd=quote.get("price_usd"),
+        client_nonce=client_nonce, now=now, previous_claim=previous_claim,
+    )
 
 def _private_order(db, order_id, claim):
     if not isinstance(order_id, str) or not ORDER_ID.fullmatch(order_id):
