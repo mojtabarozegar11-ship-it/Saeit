@@ -94,8 +94,8 @@ jobs:
           python -m pip download --disable-pip-version-check --only-binary=:all: --dest "$RUNNER_TEMP/moj-commerce-v12-wheels/wheelhouse" 'Django>=5.2,<5.3' 'eth-keys>=0.6,<0.8' 'eth-hash[pycryptodome]>=0.7,<1'
           wheels="$RUNNER_TEMP/moj-commerce-v12-wheels.tar.gz"
           tar -C "$RUNNER_TEMP/moj-commerce-v12-wheels" -czf "$wheels" wheelhouse
-          release="mc10-$(git rev-parse --short=12 HEAD)"
-          [[ "$release" =~ ^mc10-[0-9a-f]{12}$ ]] || exit 1
+          release="mc12-$(git rev-parse --short=12 HEAD)"
+          [[ "$release" =~ ^mc12-[0-9a-f]{12}$ ]] || exit 1
           staging="/home/zomorod2/Saeit-staging/moj-commerce-v12-sandbox"
           destination="$staging/$release"
           timeout 45s ssh -F "$sshdir/config" saeit-host "set -eu; test -d /home/zomorod2/Saeit-staging; umask 077; test ! -L /home/zomorod2/Saeit-staging; test ! -L '$staging'; mkdir -p -m 700 '$staging'; test ! -e '$destination'; mkdir -m 700 '$destination'"
