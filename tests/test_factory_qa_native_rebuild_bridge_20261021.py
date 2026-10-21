@@ -399,6 +399,19 @@ class RealPrivateDocumentEditionTests(unittest.TestCase):
                 "private_document_edition_built")
             self.assertEqual(build.call_count,2)
 
+    def test_all_assets_below_hard_zip_bound_survive_edition_build(self):
+        self.bind({"bundle/file_%03d.txt"%i:("Document %d\n"%i).encode()
+                   for i in range(81)})
+        status=m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker)
+        self.assertEqual(status,"private_document_edition_built")
+        new_id="edition_"+self.artifact_hash[:24]
+        meta=json.loads((self.root/"quality-excellence/document-edition-private-stock"
+                         /new_id/"manufacturing_manifest.json").read_text())
+        edition=json.loads((self.root/"quality-excellence/document-edition-sources"
+                            /new_id/"metadata.json").read_text())
+        self.assertEqual(len(edition["assets"]),81)
+        self.assertEqual(meta["qa_status"],"passed")
+
     def test_unbound_and_tampered_archives_never_get_new_product(self):
         self.bind({"bundle/file.txt":b"legitimate doc"})
         self.order["source_quality_receipt_sha256"]="0"*64
