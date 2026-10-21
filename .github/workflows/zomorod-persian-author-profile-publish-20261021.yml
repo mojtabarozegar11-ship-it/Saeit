@@ -160,7 +160,7 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
           echo "PINNED_SAEIT_RELAY_VERIFIED=yes"
-      - name: Stage, publish and verify only the Persian profile and sitemap URL
+      - name: Enrich the indexed English author profile and redirect the broken Persian route
         shell: bash
         run: |
           set -euo pipefail
@@ -188,10 +188,10 @@ jobs:
           cp -p "$profile" "$backup/profile.original.html"
           cp -p "$root_htaccess" "$backup/htaccess.original"
           sha256sum "$web/index.html" > "$backup/protected.root-index.sha256"
-          expected_profile=""
-          expected_htaccess=""
           profile_installed=0
           htaccess_installed=0
+          expected_profile=""
+          expected_htaccess=""
           rollback() {
             rc=$?
             trap - EXIT
@@ -208,53 +208,64 @@ jobs:
           python3 - "$source" "$profile" "$sha" <<'PY'
           from pathlib import Path
           import json,re,sys
-          src=Path(sys.argv[1]).read_text(encoding='utf-8')
+          source=Path(sys.argv[1]).read_text(encoding="utf-8")
           target=Path(sys.argv[2])
-          original=target.read_text(encoding='utf-8')
+          original=target.read_text(encoding="utf-8")
+          english="https://zomorodmelal.ir/en/authors/mojtaba-rozegar/"
+          image="https://zomorodmelal.ir/static/site/zomorod-about/ceo-mojtaba-rozegar.webp"
+          assert original.count("</body>")==1 and original.count("</head>")==1
+          assert re.search(r'<link\b[^>]*rel=["\']canonical["\'][^>]*href=["\']'+re.escape(english)+r'["\']',original,re.I)
+          assert "application/ld+json" not in original
           marker='id="mojtaba-roozegar-official-profile-20261021"'
           assert marker not in original
-          assert original.count('</main>')==1 and original.count('</head>')==1
-          assert 'Mojtaba Rozegar' in original and 'rel="canonical"' in original
-          section=re.search(r'(<section class="profile"[\s\S]*?</section>)',src)
-          style=re.search(r'(<style>[\s\S]*?</style>)',src)
-          data=re.search(r'<script type="application/ld\+json">\s*(.*?)\s*</script>',src,re.S)
-          assert section and style and data
-          fragment=style.group(1)+'\n'+section.group(1)
-          fragment=fragment.replace('<section class="profile"', '<section '+marker+' class="profile"',1)
-          ld=json.loads(data.group(1))
-          english='https://zomorodmelal.ir/en/authors/mojtaba-rozegar/'
-          ld['url']=english
-          ld['name']='Mojtaba Roozegar (Mojtaba Rozegar) | Zomorod Melal'
-          ld['inLanguage']='en'
-          ld['mainEntity']['@id']=english+'#person'
-          ld['mainEntity']['url']=english
-          schema='<script type="application/ld+json">'+json.dumps(ld,ensure_ascii=False,separators=(',',':'))+'</script>'
-          head_tags=[
-            '<meta property="og:image" content="https://zomorodmelal.ir/static/site/zomorod-about/ceo-mojtaba-rozegar.webp">',
-            '<meta property="og:image:alt" content="Mojtaba Roozegar, Mojtaba Rozegar (مجتبی روزگار), official profile photograph">',
-            '<meta property="og:title" content="Mojtaba Roozegar (Mojtaba Rozegar) | Zomorod Melal">',
-            '<meta name="twitter:card" content="summary_large_image">',
-            '<meta name="twitter:image" content="https://zomorodmelal.ir/static/site/zomorod-about/ceo-mojtaba-rozegar.webp">',
-            schema,
+          ld={
+            "@context":"https://schema.org","@type":"ProfilePage","url":english,
+            "name":"Mojtaba Roozegar (Mojtaba Rozegar) | Zomorod Melal","inLanguage":"en",
+            "mainEntity":{
+              "@type":"Person","@id":english+"#person","name":"Mojtaba Roozegar",
+              "alternateName":["Mojtaba Roozegar","Mojtaba Rozegar","مجتبی روزگار","روزگار","Roozegar","Rozegar"],
+              "url":english,"image":image,
+              "description":"Mojtaba Roozegar (also written Mojtaba Rozegar), researcher and chief executive of Zomorod Melal Agricultural and Industrial Company.",
+              "jobTitle":["Researcher","Chief Executive Officer"],
+              "worksFor":{"@type":"Organization","name":"Zomorod Melal Agricultural and Industrial Company","url":"https://zomorodmelal.ir/"},
+              "sameAs":["https://mojplaywin.com/mojtaba.roozegar/","https://zomorodmelal.ir/about/"]
+            }
+          }
+          schema='<script type="application/ld+json">'+json.dumps(ld,ensure_ascii=False,separators=(",",":"))+'</script>'
+          def set_meta(html,attr,value,tag):
+              pat=re.compile(r'<meta\b(?=[^>]*\b'+attr+r'\s*=\s*["\']'+re.escape(value)+r'["\'])[^>]*>',re.I)
+              found=list(pat.finditer(html))
+              if len(found)>1: raise ValueError("duplicate metadata: "+value)
+              if found:
+                  m=found[0];return html[:m.start()]+tag+html[m.end():]
+              return html.replace("</head>",tag+"\n</head>",1)
+          html=original
+          title=re.compile(r'<title\b[^>]*>[\s\S]*?</title>',re.I)
+          assert len(title.findall(html))==1
+          html=title.sub("<title>Mojtaba Roozegar (Mojtaba Rozegar) | Zomorod Melal</title>",html,count=1)
+          metas=[
+            ("name","description",'<meta name="description" content="Official profile of Mojtaba Roozegar (Mojtaba Rozegar), researcher and CEO of Zomorod Melal; also known as مجتبی روزگار, Roozegar and Rozegar.">'),
+            ("property","og:title",'<meta property="og:title" content="Mojtaba Roozegar (Mojtaba Rozegar) | Zomorod Melal">'),
+            ("property","og:description",'<meta property="og:description" content="Official profile of Mojtaba Roozegar (Mojtaba Rozegar), researcher and CEO of Zomorod Melal.">'),
+            ("property","og:image",'<meta property="og:image" content="'+image+'">'),
+            ("property","og:image:alt",'<meta property="og:image:alt" content="Mojtaba Roozegar, Mojtaba Rozegar (مجتبی روزگار), official profile photograph">'),
+            ("name","twitter:card",'<meta name="twitter:card" content="summary_large_image">'),
+            ("name","twitter:image",'<meta name="twitter:image" content="'+image+'">'),
           ]
-          def set_meta(html,key,new_tag):
-              pat=re.compile(r'<meta\b(?=[^>]*\b'+key+r'=["\'])[^>]*>',re.I)
-              matches=list(pat.finditer(html))
-              if len(matches)>1: raise ValueError('duplicate '+key+' metadata')
-              if matches:
-                  m=matches[0];return html[:m.start()]+new_tag+html[m.end():]
-              return html.replace('</head>',new_tag+'\n</head>',1)
-          for k,tag in (('property="og:image"',head_tags[0]),('property="og:image:alt"',head_tags[1]),('property="og:title"',head_tags[2]),('name="twitter:card"',head_tags[3]),('name="twitter:image"',head_tags[4])):
-              html=original if k=='property="og:image"' else html
-              html=set_meta(html,k,tag)
-          assert 'application/ld+json' not in html
-          html=html.replace('</head>',schema+'\n</head>',1)
-          html=html.replace('</main>',fragment+'\n</main>',1)
-          tmp=target.with_name(target.name+'.seo-next.'+sys.argv[3])
-          tmp.write_text(html,encoding='utf-8')
-          tmp.chmod(target.stat().st_mode&0o777)
-          tmp.replace(target)
-          print('ENGLISH_AUTHOR_PHOTO_AND_BIO_STAGED=yes')
+          for attr,value,tag in metas: html=set_meta(html,attr,value,tag)
+          html=html.replace("</head>",schema+"\n</head>",1)
+          section="""<section id="mojtaba-roozegar-official-profile-20261021" class="mr-profile" aria-labelledby="mr-profile-title">
+          <style>.mr-profile{display:grid;grid-template-columns:minmax(180px,280px) minmax(0,1fr);gap:28px;align-items:center;margin:36px 0;padding:24px;border:1px solid #c7a75b;border-radius:16px;background:#f7f4ed;color:#25251f}.mr-profile img{display:block;width:100%;height:auto;aspect-ratio:4/5;object-fit:cover;object-position:50% 28%;border-radius:12px}.mr-profile h1{margin:0 0 8px}.mr-profile .mr-alias{direction:ltr;text-align:left}.mr-profile a{margin-right:14px}@media(max-width:650px){.mr-profile{grid-template-columns:1fr}.mr-profile figure{max-width:280px;margin:auto}}</style>
+          <figure><img src="IMAGE" alt="Mojtaba Roozegar, Mojtaba Rozegar (مجتبی روزگار), researcher and CEO of Zomorod Melal" width="500" height="620" loading="eager" fetchpriority="high" decoding="async"><figcaption>Official profile photograph of Mojtaba Roozegar</figcaption></figure>
+          <div><p>Official author and leadership profile</p><h1 id="mr-profile-title">Mojtaba Roozegar</h1>
+          <p class="mr-alias" lang="en">Mojtaba Roozegar · also written Mojtaba Rozegar</p>
+          <p lang="fa" dir="rtl">مجتبی روزگار؛ محقق، پژوهشگر و مدیرعامل شرکت کشت و صنعت زمرد ملل.</p>
+          <p>Mojtaba Roozegar (also spelled Mojtaba Rozegar, Roozegar or Rozegar) is a researcher and the chief executive of Zomorod Melal Agricultural and Industrial Company. His professional profile connects research and agricultural development with the company’s work.</p>
+          <nav aria-label="Official profile links"><a href="https://zomorodmelal.ir/about/">About Zomorod Melal</a><a href="https://mojplaywin.com/mojtaba.roozegar/">Personal website</a></nav></div></section>""".replace("IMAGE",image)
+          html=html.replace("</body>",section+"\n</body>",1)
+          out=target.with_name(target.name+".seo-next."+sys.argv[3])
+          out.write_text(html,encoding="utf-8");out.chmod(target.stat().st_mode&0o777);out.replace(target)
+          print("ENGLISH_AUTHOR_PHOTO_BIO_SCHEMA=staged")
           PY
           profile_installed=1
           expected_profile="$(sha256sum "$profile" | cut -d' ' -f1)"
@@ -264,10 +275,9 @@ jobs:
           p=Path(sys.argv[1]);raw=p.read_bytes()
           rule=b'RedirectMatch 301 ^/authors/mojtaba-rozegar/?$ https://zomorodmelal.ir/en/authors/mojtaba-rozegar/'
           assert rule not in raw
-          updated=rule+bytes([10])+raw
-          tmp=p.with_name(p.name+'.redirect-next.'+sys.argv[2])
-          tmp.write_bytes(updated);tmp.chmod(p.stat().st_mode&0o777);tmp.replace(p)
-          print('PERSIAN_AUTHOR_301_STAGED=yes')
+          tmp=p.with_name(p.name+".redirect-next."+sys.argv[2])
+          tmp.write_bytes(rule+bytes([10])+raw);tmp.chmod(p.stat().st_mode&0o777);tmp.replace(p)
+          print("PERSIAN_AUTHOR_301_STAGED=yes")
           PY
           htaccess_installed=1
           expected_htaccess="$(sha256sum "$root_htaccess" | cut -d' ' -f1)"
@@ -278,21 +288,19 @@ jobs:
           dest_code="$(curl -k -sS --max-time 25 --resolve 'zomorodmelal.ir:443:127.0.0.1' -o "$backup/origin-profile.html" -w '%{http_code}' "https://zomorodmelal.ir/en/authors/mojtaba-rozegar/?seo_verify=$sha" || true)"
           echo "ENGLISH_AUTHOR_ORIGIN_HTTP=$dest_code"
           test "$dest_code" = 200
-          for token in 'mojtaba-roozegar-official-profile-20261021' 'Mojtaba Roozegar' 'Mojtaba Rozegar' 'مجتبی روزگار' '"@type":"ProfilePage"'; do
-            grep -Fq "$token" "$backup/origin-profile.html"
-          done
+          for token in 'mojtaba-roozegar-official-profile-20261021' 'Mojtaba Roozegar' 'Mojtaba Rozegar' 'مجتبی روزگار' 'Roozegar' 'Rozegar' '"@type":"ProfilePage"';do grep -Fq "$token" "$backup/origin-profile.html";done
           imgcode="$(curl -sS -L --max-time 25 -o "$backup/live-photo.webp" -w '%{http_code}' "https://zomorodmelal.ir/static/site/zomorod-about/ceo-mojtaba-rozegar.webp?seo_verify=$sha" || true)"
-          echo "PERSIAN_PROFILE_IMAGE_HTTP=$imgcode"
+          echo "PROFILE_IMAGE_HTTP=$imgcode"
           test "$imgcode" = 200
           test "$(sha256sum "$backup/live-photo.webp" | cut -d' ' -f1)" = "482cad022c1739a464d17f0e023c69fcd6971d72bc67881f8ec24218bd2d8e41"
-          (cd "$web"; sha256sum -c --status "$backup/protected.root-index.sha256")
+          (cd "$web";sha256sum -c --status "$backup/protected.root-index.sha256")
           echo "ROOT_INDEX_UNCHANGED=yes"
           edge_code="$(curl -sS --max-time 25 -o "$backup/public-redirect.body" -w '%{http_code}' "https://zomorodmelal.ir/authors/mojtaba-rozegar/?seo_verify=$sha" || true)"
           echo "PERSIAN_AUTHOR_PUBLIC_EDGE_HTTP=$edge_code"
-          if test "$edge_code" != 301 && test "$edge_code" != 404; then exit 1; fi
+          if test "$edge_code" != 301 && test "$edge_code" != 404;then exit 1;fi
           trap - EXIT
-          echo "PERSIAN_AUTHOR_REDIRECT_AND_ENGLISH_PROFILE_ORIGIN=verified"
-          echo "ENGLISH_PROFILE_PHOTO_AND_SCHEMA=verified"
+          echo "PERSIAN_ROUTE_REDIRECT_AND_ENGLISH_PROFILE_ORIGIN=verified"
+          echo "PHOTO_AND_SCHEMA=verified"
           echo "PUBLIC_EDGE_HTTP=$edge_code"
           echo "BACKUP=$backup"
           REMOTE
