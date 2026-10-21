@@ -1,4 +1,4 @@
-name: MojPlayWin isolated customer mobile CSRF cookie and fresh token repair
+name: MojPlayWin mobile register CSRF same-origin referrer repair
 on:
   push:
     branches: [main]
@@ -16,22 +16,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
-      - name: Test exact two-template patch syntax and JavaScript without production writes
+      - name: Validate single-meta-policy customer-form patch and security contract
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/mpw_customer_mobile_csrf_fresh_form_release_20261020.py
-          python3 scripts/mpw_customer_mobile_csrf_fresh_form_release_20261020.py selftest
-          python3 - <<'PY'
-          import importlib.util,os
-          p='scripts/mpw_customer_mobile_csrf_fresh_form_release_20261020.py'
-          s=importlib.util.spec_from_file_location('mpw_csrf_fix',p)
-          m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
-          with open(os.environ['RUNNER_TEMP']+'/mpw-csrf-guard.js','w') as file:
-              file.write(m.SCRIPT.split('>',1)[1].rsplit('</script>',1)[0])
-          assert 'csrfmiddlewaretoken' in m.SCRIPT
-          assert 'same-origin' in m.SCRIPT
-          PY
-          node --check "$RUNNER_TEMP/mpw-csrf-guard.js"
+          python3 -m py_compile scripts/mpw_customer_csrf_referrer_repair_20261021.py
+          python3 scripts/mpw_customer_csrf_referrer_repair_20261021.py selftest
+          echo 'MPW_CUSTOMER_REFERRER_SELFTEST=PASS'
       - name: Record protected main and sibling URL responses before customer-form release
         run: |
           python3 - <<'PY'
@@ -90,19 +80,19 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
-      - name: Preview exact live two-template source and fail if changed from observed
+      - name: Preview two-template Referer privacy update with CSRF still enforced
         run: |
           set -euo pipefail
-          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - preview" < scripts/mpw_customer_mobile_csrf_fresh_form_release_20261020.py
-      - name: Install only MojPlayWin customer login and register forms with sealed per-file backups
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - preview" < scripts/mpw_customer_csrf_referrer_repair_20261021.py
+      - name: Install same-origin referrer on main login and signup forms with private backups
         id: publish
         run: |
           set -euo pipefail
-          timeout 85s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - publish '$GITHUB_RUN_ID'" < scripts/mpw_customer_mobile_csrf_fresh_form_release_20261020.py
+          timeout 85s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - install '$GITHUB_RUN_ID'" < scripts/mpw_customer_csrf_referrer_repair_20261021.py
       - name: Validate installed Django customer forms with CSRF enforced
         run: |
           set -euo pipefail
-          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify '$GITHUB_RUN_ID'" < scripts/mpw_customer_mobile_csrf_fresh_form_release_20261020.py
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify '$GITHUB_RUN_ID'" < scripts/mpw_customer_csrf_referrer_repair_20261021.py
       - name: Restart only verified MojPlayWin main Passenger app template cache
         id: restart
         run: |
@@ -117,8 +107,8 @@ jobs:
               raise RuntimeError('Pinned production paths contain symlink')
           if "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):
               raise RuntimeError('Wrong main Passenger binding')
-          if not all('mpw-csrf-fresh-submit-20261020' in p.read_text('utf8') for p in (login,reg)):
-              raise RuntimeError('Verified customer form files not present')
+          if not all('<meta name="referrer" content="same-origin">' in p.read_text('utf8') and 'mpw-csrf-fresh-submit-20261020' in p.read_text('utf8') for p in (login,reg)):
+              raise RuntimeError('Verified same-origin Referer policy not deployed')
           tmp=root/'tmp'
           if tmp.is_symlink():raise RuntimeError('Unsafe Passenger tmp path')
           tmp.mkdir(exist_ok=True)
@@ -141,7 +131,7 @@ jobs:
                   with urllib.request.urlopen(req,timeout=18) as r:
                       html=r.read(220000).decode('utf8','replace')
                       cookie_headers=r.headers.get_all('Set-Cookie') or []
-                      matched=r.status==200 and 'mpw-csrf-fresh-submit-20261020' in html and 'name="csrfmiddlewaretoken"' in html and any(x.startswith('csrftoken=') for x in cookie_headers)
+                      matched=(r.status==200 and '<meta name="referrer" content="same-origin">' in html and 'name="csrfmiddlewaretoken"' in html and any(x.startswith('csrftoken=') for x in cookie_headers))
                   if matched:break
                   time.sleep(3)
               if not matched:raise RuntimeError('Customer CSRF recovery not live on '+route)
@@ -156,15 +146,16 @@ jobs:
           if after!=before:raise RuntimeError('Protected site or sibling status changed')
           print('MPW_CSRF_BROWSER_CUSTOMER_FORMS_AND_SIBLINGS=PASS')
           PY
-      - name: Verify real public CSRF rejects cookie-free POST but accepts valid cookie
+      - name: Verify real public CSRF rejects no-cookie POST and accepts secured cookie
         run: |
           set -euo pipefail
           python3 scripts/mpw_customer_csrf_public_post_20261020.py
+          python3 scripts/mpw_registration_csrf_public_probe_20261021.py
       - name: Restore exact two original customer templates if any postpublish gate fails
         if: failure() && steps.publish.outcome == 'success'
         run: |
           set -euo pipefail
-          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'" < scripts/mpw_customer_mobile_csrf_fresh_form_release_20261020.py
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'" < scripts/mpw_customer_csrf_referrer_repair_20261021.py
           timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel python3 - <<'PY'
           from pathlib import Path
           root=Path('/home/zomorod2/mojplaywin.com')
