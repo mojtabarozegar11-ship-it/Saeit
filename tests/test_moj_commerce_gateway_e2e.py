@@ -201,6 +201,15 @@ class GatewayToPrivateDeliveryTests(TestCase):
         self.assertEqual(result2['delivered'],1)
         self.assertEqual(Entitlement.objects.filter(purchase=self.order).count(),1)
 
+    def test_non_boolean_receiver_flag_fails_closed_before_processing(self):
+        # Misparsed environment strings must never open the authenticated receiver.
+        with override_settings(MOJ_COMMERCE_RECEIVER_ENABLED='false'):
+            reply = self.client.post(reverse('moj-commerce-tron-fulfill'),
+                data='{}', content_type='application/json')
+        self.assertEqual(reply.status_code, 503)
+        self.assertEqual(reply.json()['error'], 'receiver_not_enabled')
+        self.assertFalse(Entitlement.objects.exists())
+
     def test_unfinalized_receipt_does_not_release_file(self):
         self.raw, self.receipt = self.transaction_records()
         self.receipt = {}
