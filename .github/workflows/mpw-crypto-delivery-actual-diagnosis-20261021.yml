@@ -5,6 +5,7 @@ on:
     paths:
       - scripts/mpw_delivery_runtime_evidence_readonly_20261021.py
       - scripts/mpw_crypto_prepurchase_engineering_audit_20261021.py
+      - scripts/mpw_simulated_crypto_purchase_delivery_20261021.py
       - .github/workflows/mpw-crypto-delivery-actual-diagnosis-20261021.yml
   workflow_dispatch:
 permissions: {contents: read}
@@ -74,6 +75,14 @@ jobs:
           timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-delivery-evidence-ssh/config" saeit-cpanel \
             "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" \
             < scripts/mpw_crypto_prepurchase_engineering_audit_20261021.py
+      - name: Simulate forged chain proofs and missing paid-entitlement records, no actual payments
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_simulated_crypto_purchase_delivery_20261021.py
+          timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-delivery-evidence-ssh/config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" \
+            < scripts/mpw_simulated_crypto_purchase_delivery_20261021.py
       - name: Remove temporary relay keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-delivery-evidence-ssh"
