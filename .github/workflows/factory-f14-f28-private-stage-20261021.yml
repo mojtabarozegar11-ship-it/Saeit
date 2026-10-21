@@ -40,6 +40,29 @@ jobs:
           node --check pilot_f14/product_recipes/rootline_bloom_defense/engine.js
           node --check pilot_f14/product_recipes/rootline_bloom_defense/game.js
           echo TWO_GENUINE_PRODUCT_SOURCE_TESTS=PASS
+      - name: Strict independent 1024 financial + 1024 game scenarios, 256 invalid cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check ops/scripts/factory_f14_qa1024_game_20261021.js
+          python3 -B ops/scripts/factory_f14_f28_qa1000_20261021.py \
+            --f14 pilot_f14 --f28 pilot_f28 \
+            --report "$RUNNER_TEMP/f14-f28-qa1000.json"
+          python3 - "$RUNNER_TEMP/f14-f28-qa1000.json" <<'PY'
+          import json,sys
+          q=json.load(open(sys.argv[1]))
+          assert q['financial_oracle_scenarios']>=1024
+          assert q['financial_malicious_and_invalid_rejected']>=256
+          assert q['game_simulations']>=1024
+          assert q['game_deterministic_replay_verified']>=1024
+          assert q['game_assertion_failures']==0
+          assert q['all_technical_checks_passed'] is True
+          assert all(q[key] is False for key in (
+              'specialist_review_passed','rights_cleared','commercially_approved',
+              'payment_enabled','publicly_published','owner_publication_approval',
+              'release_eligible'))
+          print("F14_F28_1000_CASES_EACH_STRICT_GATE=PASS")
+          PY
       - name: Create bounded manifest and exact-hash original product files
         shell: bash
         run: |
