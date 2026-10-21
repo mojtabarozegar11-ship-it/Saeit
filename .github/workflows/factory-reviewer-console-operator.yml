@@ -20,7 +20,11 @@ on:
         default: domain_specialist
   push:
     branches: [main]
-    paths: [".github/workflows/factory-reviewer-console-operator.yml"]
+    paths:
+      - ".github/workflows/factory-reviewer-console-operator.yml"
+      - "scripts/factory_family_evidence_suppliers_v1.py"
+      - "scripts/factory_quality_evidence_supplier_v1.py"
+      - "scripts/factory_quality_reviewer_console_v1.py"
 permissions: {contents: read}
 concurrency:
   group: factory-reviewer-console-private-operator
