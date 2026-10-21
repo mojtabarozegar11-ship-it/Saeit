@@ -4,6 +4,7 @@ on:
     branches: [feature/atelier-sale-readiness-20261021]
     paths:
       - ".github/workflows/atelier-interior-cpanel-buyer-readonly-20261021.yml"
+      - "scripts/atelier_interior_buyer_path_readonly_20261021.py"
 permissions: {contents: read}
 jobs:
   inspect_buy_path:
