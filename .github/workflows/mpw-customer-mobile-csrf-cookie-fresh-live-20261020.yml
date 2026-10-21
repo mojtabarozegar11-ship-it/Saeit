@@ -1,9 +1,13 @@
 name: MojPlayWin mobile register CSRF same-origin referrer repair
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
       - ".github/workflows/mpw-customer-mobile-csrf-cookie-fresh-live-20261020.yml"
+      - "scripts/mpw_customer_csrf_referrer_repair_20261021.py"
+      - "scripts/mpw_registration_csrf_public_probe_20261021.py"
+      - "tests/test_mpw_registration_referrer_detector_20261021.py"
 permissions: {contents: read}
 concurrency:
   group: mpw-customer-auth-csrf-two-templates-only
