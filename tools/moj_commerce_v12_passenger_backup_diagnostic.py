@@ -95,6 +95,11 @@ def classify_absolute_link_target(target):
         within = target[len(prefix):]
         if _parts(within) is not None:
             return 'within_archive_roots'
+    # Owned-but-unbacked paths must stay quarantined until separately recovered.
+    if target.startswith('/home/zomorod2/'):
+        return 'tenant_unbacked'
+    if target.startswith('/home/'):
+        return 'other_account_home'
     # Deployment interpreter / system environment is NOT part of the archive.
     if target.startswith(('/opt/alt/', '/usr/', '/bin/', '/lib/', '/lib64/')):
         return 'runtime_dependency'
@@ -106,6 +111,7 @@ def classify_archive(stream):
              'hardlinks': 0, 'unsafe_member_paths': 0, 'duplicate_paths': 0,
              'absolute_link_targets': 0, 'absolute_within_archive_roots': 0,
              'absolute_runtime_dependency': 0, 'absolute_external_other': 0,
+             'absolute_tenant_unbacked': 0, 'absolute_other_account_home': 0,
              'relative_link_escape': 0,
              'missing_hardlink_targets': 0, 'nested_link_targets': 0,
              'special_members': 0, 'file_bytes_total': 0,
