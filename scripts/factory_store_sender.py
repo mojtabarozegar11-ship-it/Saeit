@@ -103,6 +103,14 @@ def call(command, *, allowed=(0,), timeout=40, stage="unknown"):
         # A receiver may emit a single documented, fixed validation code.
         # Never print arbitrary remote stderr, paths, command arguments or keys.
         if stage == "finalize" and completed.returncode == 1:
+            safe_class = re.search(
+                r"(?m)^STORE_RECEIVER_ERROR=(ValueError|JSONDecodeError|BadZipFile|"
+                r"OSError|FileNotFoundError|PermissionError)$",
+                completed.stderr or "",
+            )
+            if safe_class:
+                print("FACTORY_STORE_RECEIVER_ERROR_CLASS=" + safe_class.group(1),
+                      file=sys.stderr)
             found = re.search(r"(?m)^STORE_RECEIVER_SAFE_REASON=([A-Z0-9_]{3,80})$",
                               completed.stderr or "")
             allowed_reasons = {
