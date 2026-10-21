@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from scripts.mojplaywin_restore_files_isolated_runner import recover, safe_parts
-from scripts.mojplaywin_recovery_stream_vps import readiness
+from scripts.mojplaywin_recovery_stream_vps import readiness, discover, STEM_RE, NEW_MANIFEST_RE
 
 
 def fixture(members):
@@ -50,6 +50,21 @@ class RecoveryIsolationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 recover(buf,base)
             self.assertFalse((Path(td)/"outside").exists())
+
+    def test_discovery_fails_closed_without_exact_verified_pair(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)/".private-mojplaywin-offhost-backups"
+            root.mkdir(mode=0o700)
+            names=[
+                "mojplaywin_20261021T153000Z_1111111111111111_mysql_gpgv2.manifest.json",
+                "mojplaywin_20261021T153100Z_2222222222222222_mysql_gpgv2.manifest.json",
+            ]
+            for name in names:
+                (root/name).write_text("{}", encoding="utf-8")
+            with self.assertRaises(RuntimeError):
+                discover(Path(td))
+        self.assertIsNone(STEM_RE.fullmatch("../other-site"))
+        self.assertIsNotNone(NEW_MANIFEST_RE.fullmatch(names[0]))
 
     def test_metadata_no_archive_no_restore_claim(self):
         with tempfile.TemporaryDirectory() as td:
