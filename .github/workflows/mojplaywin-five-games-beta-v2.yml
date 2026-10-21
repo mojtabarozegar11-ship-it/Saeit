@@ -1,0 +1,157 @@
+name: Deploy five enhanced MojPlayWin beta games
+on:
+  pull_request:
+    paths:
+      - "site_releases/mojplaywin/games-20261021/**"
+      - "scripts/deploy_mpw_five_browser_games_v2.py"
+      - "tests/test_mpw_five_browser_games_v2_release.py"
+      - ".github/workflows/mojplaywin-five-games-beta-v2.yml"
+  push:
+    branches: [main]
+    paths:
+      - "site_releases/mojplaywin/games-20261021/**"
+      - "scripts/deploy_mpw_five_browser_games_v2.py"
+      - "tests/test_mpw_five_browser_games_v2_release.py"
+      - ".github/workflows/mojplaywin-five-games-beta-v2.yml"
+permissions:
+  contents: read
+concurrency:
+  group: isolated-mojplaywin-games-20261021
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify five original game pages and parse inline JavaScript
+        run: |
+          python -m py_compile scripts/deploy_mpw_five_browser_games_v2.py
+          python -m unittest discover -s tests -p 'test_mpw_five_browser_games_v2_release.py' -v
+      - name: Assert exclusively additive static deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'PassengerEnabled off' scripts/deploy_mpw_five_browser_games_v2.py
+          grep -Fq 'if DEST.exists():' scripts/deploy_mpw_five_browser_games_v2.py
+          test -f site_releases/mojplaywin/games-20261021/index.html
+          test -f site_releases/mojplaywin/games-20261021/sitemap.xml
+  deploy:
+    if: github.event_name == 'push'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure pinned GitHub Actions to VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "${VPS_KEY:-}" && -n "${HOST_KEY:-}" ]] || { echo 'SSH credentials missing'; exit 1; }
+          VPS_KEY="${VPS_KEY//\\n/$'\n'}"
+          HOST_KEY="${HOST_KEY//\\n/$'\n'}"
+          WORK="$RUNNER_TEMP/mpw-five-ssh"
+          install -d -m 700 "$WORK"
+          printf '%s\n' "$VPS_KEY" > "$WORK/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$WORK/host.key"
+          chmod 600 "$WORK/"*.key
+          ssh-keygen -y -P "" -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$WORK/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null > "$WORK/vps.known"
+          test -s "$WORK/vps.known"
+          VPS_FP="$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$VPS_FP" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]] || { echo 'VPS host pin mismatch'; exit 1; }
+          cat > "$WORK/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          HOST_SCAN="$(timeout 30s ssh -F "$WORK/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          [[ -n "$HOST_SCAN" ]] || { echo 'cPanel host key unavailable'; exit 1; }
+          printf '%s\n' "$HOST_SCAN" > "$WORK/host.known"
+          HOST_FP="$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$HOST_FP" == "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]] || { echo 'cPanel host pin mismatch'; exit 1; }
+          cat >> "$WORK/config" <<EOF
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+      - name: Confirm live pages and safe site root before changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in / /games/ /store/; do
+            [[ "$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path")" == "200" ]]
+          done
+          ssh -F "$RUNNER_TEMP/mpw-five-ssh/config" saeit-host 'test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && test ! -L /home/zomorod2/mojplaywin.com/game-releases && test ! -e /home/zomorod2/mojplaywin.com/game-releases/20261021'
+      - name: Package only five standalone games and isolated installer
+        shell: bash
+        run: |
+          tar -cf "$RUNNER_TEMP/mpw-five-games.tar" scripts/deploy_mpw_five_browser_games_v2.py site_releases/mojplaywin/games-20261021
+      - name: Transfer to temporary cPanel staging using verified relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mpw-five-ssh"
+          ssh -F "$WORK/config" saeit-host "install -d -m 700 /home/zomorod2/.mpw-games-$GITHUB_RUN_ID"
+          scp -F "$WORK/config" "$RUNNER_TEMP/mpw-five-games.tar" "saeit-host:/home/zomorod2/.mpw-games-$GITHUB_RUN_ID/package.tar"
+          ssh -F "$WORK/config" saeit-host "tar -xf /home/zomorod2/.mpw-games-$GITHUB_RUN_ID/package.tar -C /home/zomorod2/.mpw-games-$GITHUB_RUN_ID"
+      - name: Publish additively to a new static-only games namespace
+        id: install
+        shell: bash
+        run: |
+          ssh -F "$RUNNER_TEMP/mpw-five-ssh/config" saeit-host "python3 /home/zomorod2/.mpw-games-$GITHUB_RUN_ID/scripts/deploy_mpw_five_browser_games_v2.py deploy $GITHUB_RUN_ID $GITHUB_SHA"
+      - name: Verify all six public pages plus untouched homepage, games and store
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          for slug in pulse-forge beacon-labyrinth cipher-garden skyline-keeper nebula-salvage; do
+            for i in {1..5}; do
+              if curl -fsSL --max-time 20 "https://mojplaywin.com/game-releases/20261021/$slug/index.html" -o "$RUNNER_TEMP/$slug.html"; then break; fi
+              sleep 2
+            done
+            grep -Fq '<html lang="en">' "$RUNNER_TEMP/$slug.html"
+            grep -Fq 'localStorage' "$RUNNER_TEMP/$slug.html"
+          done
+          curl -fsSL --max-time 20 https://mojplaywin.com/game-releases/20261021/index.html | grep -Fq 'Five Original Browser Games'
+          curl -fsSL --max-time 20 https://mojplaywin.com/game-releases/20261021/sitemap.xml | grep -Fq '<urlset'
+          for path in / /games/ /store/; do
+            [[ "$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path")" == "200" ]]
+          done
+          echo 'FIVE_NEW_GAME_PAGES_PUBLIC_NO_EXISTING_PAGES_CHANGED'
+      - name: Retain failed release in offline backup on failed smoke
+        if: failure() && steps.install.outcome == 'success' && steps.smoke.outcome == 'failure'
+        shell: bash
+        run: |
+          ssh -F "$RUNNER_TEMP/mpw-five-ssh/config" saeit-host "python3 /home/zomorod2/.mpw-games-$GITHUB_RUN_ID/scripts/deploy_mpw_five_browser_games_v2.py rollback $GITHUB_RUN_ID $GITHUB_SHA"
+      - name: Remove owned temporary deployment files
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/mpw-five-ssh/config" ]]; then
+            ssh -F "$RUNNER_TEMP/mpw-five-ssh/config" -o ConnectTimeout=10 saeit-host "rm -rf /home/zomorod2/.mpw-games-$GITHUB_RUN_ID" || true
+          fi
+          rm -rf -- "$RUNNER_TEMP/mpw-five-ssh" "$RUNNER_TEMP/mpw-five-games.tar"
