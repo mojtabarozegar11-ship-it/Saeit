@@ -18,6 +18,7 @@ def assess_scanner_alerts(snapshot: dict) -> dict:
     codes = [f'scanner_{status}'] if status != 'healthy' else []
     for key, code, minimum in (
         ('overdue_scans', 'scan_backlog', 'warning'),
+        ('missing_scan_states', 'missing_scan_schedule', 'critical'),
         ('orders_with_repeated_scan_failures', 'scan_retry_exhaustion', 'critical'),
         ('payment_discrepancies', 'payment_requires_manual_review', 'warning'),
     ):
