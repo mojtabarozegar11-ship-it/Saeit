@@ -63,6 +63,40 @@ def report_from_payload(payload):
     return result
 
 
+def estimate_missing_backup_roots(domain_docroots):
+    """Bounded low-priority read-only size inventory; no path output."""
+    outside=[]
+    for root_string in domain_docroots:
+        p=Path(root_string)
+        if not p.is_absolute() or '..' in p.parts or (p!=HOME and HOME not in p.parents):
+            continue
+        if any(p==r or r in p.parents for r in BACKED_ROOTS):
+            continue
+        if p.is_symlink() or not p.is_dir():
+            continue
+        outside.append(p)
+    minimum=[]
+    for p in sorted(set(outside),key=lambda p:(len(p.parts),str(p))):
+        if not any(p==r or r in p.parents for r in minimum):
+            minimum.append(p)
+    summary={'minimal_additional_backup_roots':len(minimum),
+             'estimated_bytes':0,'complete_size_estimate':True,
+             'copy_or_snapshot_performed':False}
+    for root in minimum:
+        try:
+            run=subprocess.run(['nice','-n','15','du','-skx','--',str(root)],
+                               capture_output=True,timeout=25,check=False)
+            if run.returncode:
+                raise ValueError('du_unavailable')
+            size=int(run.stdout.split()[0])
+            if size<0:
+                raise ValueError('invalid_size')
+            summary['estimated_bytes']+=size*1024
+        except (OSError,ValueError,IndexError,subprocess.TimeoutExpired):
+            summary['complete_size_estimate']=False
+    return summary
+
+
 def inspect_live_symlinks(domain_docroots):
     """Summarize LIVE metadata only; a current symlink is not a backup attestation."""
     outside=[]
@@ -121,8 +155,9 @@ def main():
         payload=json.loads(p.stdout)
         report=report_from_payload(payload)
         if report['cpanel_domaininfo_success']:
-            report['live_link_inventory']=inspect_live_symlinks(list(
-                _domain_records(payload.get('result',{}).get('data'))))
+            domain_roots=list(_domain_records(payload.get('result',{}).get('data')))
+            report['live_link_inventory']=inspect_live_symlinks(domain_roots)
+            report['additional_site_backup_size']=estimate_missing_backup_roots(domain_roots)
         print(json.dumps(report,sort_keys=True))
     except (ValueError,OSError,subprocess.TimeoutExpired,TypeError):
         print(json.dumps({'classification':'MOJ_COMMERCE_V12_DOMAININFO_UNVERIFIED',
