@@ -264,10 +264,14 @@ def reauthor_document_delivery(root,recipe,order,maker):
                 rel=PurePosixPath(filename)
                 if (filename.startswith("/") or "\\" in filename or
                     rel.is_absolute() or ".." in rel.parts or not rel.parts or
-                    item.is_dir() or stat.S_ISLNK(item.external_attr>>16) or
+                    stat.S_ISLNK(item.external_attr>>16) or
                     (item.flag_bits&1) or filename in visited or len(filename)>260):
                     return "unsafe_document_archive_member"
                 visited.add(filename)
+                # Directory entries are common in authentic delivery ZIPs.
+                # They are never materialized and cannot affect safe new paths.
+                if item.is_dir():
+                    continue
                 suffix=rel.suffix.lower()
                 if suffix not in ALLOWED:
                     omitted+=1
