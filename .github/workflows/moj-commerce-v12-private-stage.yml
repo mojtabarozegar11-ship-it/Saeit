@@ -1,0 +1,117 @@
+name: MOJ Commerce v1.0 private staging Django smoke (NO LIVE DEPLOY)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/moj-commerce-v12-staging-smoke.yml'
+      - 'moj_commerce/STAGING_V12.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj-commerce-v12-private-staging
+  cancel-in-progress: false
+jobs:
+  verify-relay:
+    # Untrusted fork PRs never receive infrastructure credentials.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'mojtabarozegar11-ship-it') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verified relay and isolated offline-Django smoke tests over pinned ProxyJump
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ -n "$VPS_KEY" && -n "$HOST_KEY" ]] || { echo 'PREFLIGHT_BLOCKED_MISSING_KEY'; exit 1; }
+          sshdir="$RUNNER_TEMP/moj-commerce-v12-ssh"
+          mkdir -p "$sshdir"
+          trap 'rm -f "$sshdir/vps.key" "$sshdir/host.key" "$sshdir/config" "$sshdir/vps.known" "$sshdir/host.known" "$sshdir/host.candidate"; rmdir "$sshdir" 2>/dev/null || true' EXIT
+          printf '%s\n' "$VPS_KEY" > "$sshdir/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$sshdir/host.key"
+          python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); t=p.read_text().replace(chr(13)+chr(10),chr(10)).strip(); p.write_text(t.replace(chr(92)+"n",chr(10))+chr(10))' "$sshdir/vps.key"
+          python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); t=p.read_text().replace(chr(13)+chr(10),chr(10)).strip(); p.write_text(t.replace(chr(92)+"n",chr(10))+chr(10))' "$sshdir/host.key"
+          chmod 600 "$sshdir"/*
+          ssh-keygen -y -P '' -f "$sshdir/vps.key" > /dev/null
+          ssh-keygen -y -P '' -f "$sshdir/host.key" > /dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$sshdir/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$sshdir/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          {
+            echo "Host saeit-vps"
+            echo "  HostName 178.239.147.150"
+            echo "  User githubops"
+            echo "  Port 22"
+            echo "  IdentityFile $sshdir/vps.key"
+            echo "  UserKnownHostsFile $sshdir/vps.known"
+            echo "  StrictHostKeyChecking yes"
+            echo "Host saeit-host"
+            echo "  HostName zohal.pws-dns.net"
+            echo "  User zomorod2"
+            echo "  Port 1396"
+            echo "  IdentityFile $sshdir/host.key"
+            echo "  UserKnownHostsFile $sshdir/host.known"
+            echo "  ProxyJump saeit-vps"
+            echo "  StrictHostKeyChecking yes"
+            echo "Host *"
+            echo "  BatchMode yes"
+            echo "  IdentitiesOnly yes"
+            echo "  ForwardAgent no"
+            echo "  RequestTTY no"
+            echo "  ConnectTimeout 10"
+            echo "  ConnectionAttempts 1"
+          } > "$sshdir/config"
+          chmod 600 "$sshdir/config"
+          timeout 30s ssh -F "$sshdir/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net 2>/dev/null' > "$sshdir/host.candidate"
+          test "$(ssh-keygen -lf "$sshdir/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$sshdir/host.candidate" "$sshdir/host.known"
+          timeout 35s ssh -F "$sshdir/config" saeit-vps 'test "$(id -un)" = githubops && echo VPS_RELAY_AUTH_OK; test -d "$HOME/factory-runtime" && echo VPS_FACTORY_RUNTIME_PRESENT || echo VPS_FACTORY_RUNTIME_UNKNOWN'
+          timeout 45s ssh -F "$sshdir/config" saeit-host 'set -eu; test "$(id -un)" = zomorod2; echo CPANEL_PROXYJUMP_AUTH_OK; test -d /home/zomorod2/Saeit-staging; echo STAGING_ROOT_PRESENT; if test -f /home/zomorod2/Saeit-staging/manage.py; then echo STAGING_DJANGO_SOURCE_PRESENT; else echo STAGING_DJANGO_SOURCE_NOT_AT_ROOT; fi; if test -x /home/zomorod2/Saeit-staging/.venv/bin/python; then echo STAGING_VENV_PRESENT; else echo STAGING_VENV_NOT_AT_ROOT; fi; test -d /home/zomorod2/Saeit && echo PRODUCTION_PATH_PRESENT_READ_ONLY || echo PRODUCTION_PATH_UNKNOWN'
+          # Remote writes are confined to a NEW non-public, versioned staging sandbox.
+          stage_python="$(timeout 45s ssh -F "$sshdir/config" saeit-host 'set -eu; for p in /opt/alt/python311/bin/python3.11 /opt/alt/python311/bin/python3 /usr/local/bin/python3.11 /usr/bin/python3.11; do if test -x "$p" && "$p" -c "import sys; sys.exit(sys.version_info[:2] != (3, 11))" 2>/dev/null; then printf "%s" "$p"; exit 0; fi; done; exit 19')"
+          case "$stage_python" in /opt/alt/python311/bin/python3.11|/opt/alt/python311/bin/python3|/usr/local/bin/python3.11|/usr/bin/python3.11) ;; *) echo 'STAGE_PYTHON311_MISSING'; exit 1 ;; esac
+          timeout 45s ssh -F "$sshdir/config" saeit-host 'set -eu; test "$(df -Pk /home/zomorod2/Saeit-staging | awk '"'"'NR==2{print $4}'"'"')" -gt 262144; echo STAGING_PYTHON311_AND_DISK_OK'
+          git ls-files -s moj_commerce mpw_tron_pro tests | awk '$1 != "100644" { bad=1 } END { exit bad }'
+          test -f tests/test_moj_commerce_gateway_e2e.py
+          archive="$RUNNER_TEMP/moj-commerce-v12-tests.tar.gz"
+          git archive --format=tar HEAD moj_commerce mpw_tron_pro tests/__init__.py tests/test_moj_commerce*.py | gzip -n > "$archive"
+          test -s "$archive"
+          tar -tzf "$archive" > "$RUNNER_TEMP/moj-commerce-v12-files.list"
+          grep -Fqx 'moj_commerce/apps.py' "$RUNNER_TEMP/moj-commerce-v12-files.list"
+          grep -Fqx 'mpw_tron_pro/store_receiver_contract.py' "$RUNNER_TEMP/moj-commerce-v12-files.list"
+          grep -Fqx 'tests/test_moj_commerce_gateway_e2e.py' "$RUNNER_TEMP/moj-commerce-v12-files.list"
+          grep -Fqx 'tests/test_moj_commerce_mariadb_v12.py' "$RUNNER_TEMP/moj-commerce-v12-files.list"
+          if grep -Fq '../' "$RUNNER_TEMP/moj-commerce-v12-files.list"; then exit 1; fi
+          if grep -Eq '^/' "$RUNNER_TEMP/moj-commerce-v12-files.list"; then exit 1; fi
+          mkdir -p "$RUNNER_TEMP/moj-commerce-v12-wheels/wheelhouse"
+          python -m pip download --disable-pip-version-check --only-binary=:all: --dest "$RUNNER_TEMP/moj-commerce-v12-wheels/wheelhouse" 'Django>=5.2,<5.3' 'eth-keys>=0.6,<0.8' 'eth-hash[pycryptodome]>=0.7,<1'
+          wheels="$RUNNER_TEMP/moj-commerce-v12-wheels.tar.gz"
+          tar -C "$RUNNER_TEMP/moj-commerce-v12-wheels" -czf "$wheels" wheelhouse
+          release="mc10-$(git rev-parse --short=12 HEAD)"
+          [[ "$release" =~ ^mc10-[0-9a-f]{12}$ ]] || exit 1
+          staging="/home/zomorod2/Saeit-staging/moj-commerce-v12-sandbox"
+          destination="$staging/$release"
+          timeout 45s ssh -F "$sshdir/config" saeit-host "set -eu; test -d /home/zomorod2/Saeit-staging; umask 077; test ! -L /home/zomorod2/Saeit-staging; test ! -L '$staging'; mkdir -p -m 700 '$staging'; test ! -e '$destination'; mkdir -m 700 '$destination'"
+          timeout 240s ssh -F "$sshdir/config" saeit-host "umask 077; cat > '$destination/source.tar.gz'" < "$archive"
+          echo STAGING_V12_SOURCE_TRANSFER_OK
+          timeout 240s ssh -F "$sshdir/config" saeit-host "umask 077; cat > '$destination/wheels.tar.gz'" < "$wheels"
+          echo STAGING_V12_WHEELS_TRANSFER_OK
+          source_digest="$(sha256sum "$archive" | awk '{print $1}')"
+          wheel_digest="$(sha256sum "$wheels" | awk '{print $1}')"
+          remote_source_digest="$(timeout 45s ssh -F "$sshdir/config" saeit-host "sha256sum '$destination/source.tar.gz'" | awk '{print $1}')"
+          remote_wheel_digest="$(timeout 45s ssh -F "$sshdir/config" saeit-host "sha256sum '$destination/wheels.tar.gz'" | awk '{print $1}')"
+          test "$source_digest" = "$remote_source_digest"
+          test "$wheel_digest" = "$remote_wheel_digest"
+          timeout 135s ssh -F "$sshdir/config" saeit-host "set -eu; cd '$destination'; tar -xzf source.tar.gz; tar -xzf wheels.tar.gz; test -f moj_commerce/test_settings.py; test -f mpw_tron_pro/store_receiver_contract.py; test -f tests/test_moj_commerce_gateway_e2e.py; '$stage_python' -m venv .venv; .venv/bin/python -m pip install --disable-pip-version-check --no-index --find-links=wheelhouse 'Django>=5.2,<5.3' 'eth-keys>=0.6,<0.8' 'eth-hash[pycryptodome]>=0.7,<1'"
+          timeout 180s ssh -F "$sshdir/config" saeit-host "set -eu; cd '$destination'; env -i PATH=/usr/bin:/bin MOJ_COMMERCE_TEST_POSTGRES=0 MOJ_COMMERCE_TEST_MYSQL=0 .venv/bin/python -m django makemigrations moj_commerce --check --dry-run --settings=moj_commerce.test_settings; env -i PATH=/usr/bin:/bin MOJ_COMMERCE_TEST_POSTGRES=0 .venv/bin/python -m django test tests.test_moj_commerce tests.test_moj_commerce_wallet tests.test_moj_commerce_tron_verifier tests.test_moj_commerce_gateway_e2e tests.test_moj_commerce_checkout_v04 tests.test_moj_commerce_operations_v05 tests.test_moj_commerce_operations_v06 tests.test_moj_commerce_quorum_v07 tests.test_moj_commerce_self_repair_v08 tests.test_moj_commerce_mariadb_v12 --settings=moj_commerce.test_settings --verbosity 1; echo STAGING_ISOLATED_DJANGO_SMOKE_PASS"
+          echo "STAGING_SANDBOX_NAME=$release"
+          echo "STAGING_SOURCE_SHA256=$source_digest"
+          echo "STAGING_WHEELS_SHA256=$wheel_digest"
+          echo 'STAGING_NO_PRODUCTION_WRITE_NO_LIVE_PAYMENT_NO_PUBLIC_ROUTE'
