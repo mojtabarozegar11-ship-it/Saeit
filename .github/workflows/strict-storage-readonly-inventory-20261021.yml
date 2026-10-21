@@ -1,0 +1,152 @@
+name: Strict read-only host and VPS storage inventory 2026-10-21
+on:
+  push:
+    branches: [audit/safe-storage-20261021]
+    paths:
+      - .github/workflows/strict-storage-readonly-inventory-20261021.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: strict-storage-readonly-inventory
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare pinned and verified relay identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/safe-storage-20261021"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host zm-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host zm-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            ProxyJump zm-vps
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 12
+          EOF
+          chmod 600 "$d/config"
+          ssh -F "$d/config" zm-vps 'timeout 12s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo PINNED_RELAY_VERIFIED=yes
+      - name: Inspect VPS scoped storage without deleting or moving anything
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/safe-storage-20261021"
+          timeout 180s ssh -T -F "$d/config" zm-vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import os, subprocess, time
+          h=Path.home()
+          print("INVENTORY_TARGET=VPS")
+          print("INVENTORY_TIME_UTC="+time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime()))
+          def usage(p):
+              if not p.is_dir() or p.is_symlink(): return "absent_or_symlink"
+              try:
+                  x=subprocess.run(["du","-sk","--",str(p)],capture_output=True,text=True,timeout=35,check=True)
+                  return x.stdout.split()[0]
+              except Exception: return "unavailable"
+          for label,rel in (("factory_runtime","factory-runtime"),("factory_private","factory-runtime/private"),("factory_operations","factory-runtime/operations"),("pip_cache",".cache/pip"),("npm_cache",".npm/_cacache"),("npx_cache",".npm/_npx"),("uv_cache",".cache/uv"),("gradle_cache",".gradle/caches")):
+              print("VPS_SCOPE_KB_"+label.upper()+"="+usage(h/rel))
+          disk=subprocess.run(["df","-Pk",str(h)],capture_output=True,text=True,timeout=10)
+          print("VPS_DF_KB="+(disk.stdout.splitlines()[-1] if disk.returncode==0 else "unavailable"))
+          ps=subprocess.run(["ps","-u",str(os.getuid()),"-o","args="],capture_output=True,text=True,timeout=10)
+          active=sum(any(tag in line.lower() for tag in ("pip install","npm install","npm ci","gradle build","webpack","collectstatic","manage.py migrate")) for line in ps.stdout.splitlines())
+          print("VPS_ACTIVE_BUILD_PROCESS_COUNT="+str(active))
+          print("VPS_READONLY_DONE=yes")
+          PY
+      - name: Inspect cPanel storage and protected site roots without modifying content
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/safe-storage-20261021"
+          timeout 220s ssh -T -F "$d/config" zm-host 'python3 -' <<'PY'
+          from pathlib import Path
+          import os, subprocess, time
+          h=Path.home()
+          assert str(h)=="/home/zomorod2"
+          print("INVENTORY_TARGET=CPANEL")
+          print("INVENTORY_TIME_UTC="+time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime()))
+          def usage(p):
+              if not p.is_dir() or p.is_symlink(): return "absent_or_symlink"
+              try:
+                  x=subprocess.run(["du","-sk","--",str(p)],capture_output=True,text=True,timeout=45,check=True)
+                  return x.stdout.split()[0]
+              except Exception: return "unavailable"
+          protected=(("production_source","Saeit"),("staging","Saeit-staging"),("primary_public","public_html"),("mojplaywin","mojplaywin.com"),("legacy_v91","saeit_v91"),("backups",".backups"))
+          for label,rel in protected:
+              print("HOST_PROTECTED_KB_"+label.upper()+"="+usage(h/rel))
+          disposable=(("pip_cache",".cache/pip"),("npm_cache",".npm/_cacache"),("npx_cache",".npm/_npx"),("gradle_cache",".gradle/caches"),("uv_cache",".cache/uv"))
+          for label,rel in disposable:
+              print("HOST_DISPOSABLE_CANDIDATE_KB_"+label.upper()+"="+usage(h/rel))
+          cache_names={"__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache"}
+          skip={".git",".venv","node_modules","media","staticfiles","backups","var",".backups"}
+          for label,rel in (("PRODUCTION_SOURCE","Saeit"),("STAGING","Saeit-staging"),("LEGACY_V91","saeit_v91")):
+              root=h/rel
+              count=0
+              total=0
+              if root.is_dir() and not root.is_symlink():
+                  for base,dirs,files in os.walk(root,followlinks=False):
+                      depth=len(Path(base).relative_to(root).parts)
+                      nextdirs=[]
+                      for name in dirs:
+                          p=Path(base)/name
+                          if p.is_symlink(): continue
+                          if name in cache_names:
+                              s=usage(p)
+                              if s.isdigit(): count+=1; total+=int(s)
+                          elif name not in skip and depth<10:
+                              nextdirs.append(name)
+                      dirs[:]=nextdirs
+              print("HOST_SOURCE_CACHE_"+label+"_COUNT="+str(count))
+              print("HOST_SOURCE_CACHE_"+label+"_KB="+str(total))
+          ps=subprocess.run(["ps","-u","zomorod2","-o","args="],capture_output=True,text=True,timeout=10)
+          active=sum(any(tag in line.lower() for tag in ("pip install","npm install","npm ci","gradle build","webpack","collectstatic","manage.py migrate")) for line in ps.stdout.splitlines())
+          print("HOST_ACTIVE_BUILD_PROCESS_COUNT="+str(active))
+          print("HOST_READONLY_DONE=yes")
+          PY
+      - name: Verify main public site responses
+        shell: bash
+        run: |
+          for url in https://zomorodmelal.ir/ https://zomorodmelal.ir/agents/ https://mojplaywin.com/ https://mojplaywin.com/games/; do
+            code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "$url" || true)"
+            echo "BASELINE_HTTP=$url:$code"
+          done
+      - name: Remove temporary runner-only SSH credentials
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/safe-storage-20261021"
+          if test -d "$d" && test ! -L "$d"; then
+            rm -f -- "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+            rmdir -- "$d" || true
+          fi
