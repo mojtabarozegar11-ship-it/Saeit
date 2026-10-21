@@ -104,6 +104,26 @@ jobs:
               "") echo "UAPI_HELP_NO_OUTPUT";;
               *) echo "UAPI_HELP_OTHER";;
             esac
+                        control_out=$(/usr/local/cpanel/bin/uapi --output=json Variables get_session_information name=host 2>&1)
+            control_rc=$?
+            if test "$control_rc" -eq 0; then echo "UAPI_CONTROL_RC_ZERO"; else echo "UAPI_CONTROL_RC_NONZERO"; fi
+            case "$control_out" in
+              *"\\\"result\\\""*) echo "UAPI_CONTROL_JSON_RESULT_TOKEN";;
+              *"No such file"*|*"not found"*) echo "UAPI_CONTROL_CATEGORY_NOT_FOUND";;
+              *"Permission denied"*|*"Access denied"*) echo "UAPI_CONTROL_CATEGORY_ACCESS";;
+              "") echo "UAPI_CONTROL_NO_OUTPUT";;
+              *) echo "UAPI_CONTROL_OTHER";;
+            esac
+            features_as_user=$(/usr/local/cpanel/bin/uapi --user=zomorod2 --output=json Features list_features_like pattern=postgres 2>&1)
+            features_as_user_rc=$?
+            if test "$features_as_user_rc" -eq 0; then echo "UAPI_EXPLICIT_USER_FEATURE_RC_ZERO"; else echo "UAPI_EXPLICIT_USER_FEATURE_RC_NONZERO"; fi
+            case "$features_as_user" in
+              *"\\\"result\\\""*) echo "UAPI_EXPLICIT_USER_FEATURE_JSON_RESULT_TOKEN";;
+              *"not found"*|*"No such file"*) echo "UAPI_EXPLICIT_USER_FEATURE_NOT_FOUND";;
+              *"Permission denied"*|*"Access denied"*) echo "UAPI_EXPLICIT_USER_FEATURE_ACCESS";;
+              "") echo "UAPI_EXPLICIT_USER_FEATURE_NO_OUTPUT";;
+              *) echo "UAPI_EXPLICIT_USER_FEATURE_OTHER";;
+            esac
                         if command -v pg_isready >/dev/null 2>&1; then
               echo "PG_ISREADY_BINARY_YES"
               if PGCONNECT_TIMEOUT=3 timeout 8s pg_isready -q -h 127.0.0.1 -p 5432 >/dev/null 2>&1; then
