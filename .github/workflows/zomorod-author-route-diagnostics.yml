@@ -110,11 +110,11 @@ jobs:
           else
             echo "EMPTY_STALE_ROUTE_DIRECTORY_REMOVED=already_absent"
           fi
+          REMOTE
           for path in about/ robots.txt sitemap.xml company/; do
             public_code="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/$path?route_compare=$GITHUB_SHA" || true)"
             echo "PUBLIC_COMPARE_HTTP=$path $public_code"
           done
-          REMOTE
           headers="$RUNNER_TEMP/author-route.headers"
           body="$RUNNER_TEMP/author-route.html"
           code="$(curl -sS --max-time 25 -D "$headers" -o "$body" -w '%{http_code}' "https://zomorodmelal.ir/authors/mojtaba-rozegar/?route_verify=$GITHUB_SHA" || true)"
