@@ -76,6 +76,34 @@ class CorrectContractYear(unittest.TestCase):
             self.assertTrue(old.issubset(set(ledger.iterdir())))
             self.assertEqual(first,m.attest_dual_capacity(root))
             self.assertEqual(len(list(ledger.glob("master-two-capacities-1398-*.json"))),1)
+    def test_company_seal_owner_reports_on_original_contract_not_independently_verified(self):
+        record=m.company_seal_attestation()
+        self.assertEqual(record["contract_year_jalali"],1398)
+        self.assertTrue(record["owner_attests_company_seal_present_on_original_1398_contract"])
+        self.assertFalse(record["seal_photo_or_impression_received"])
+        self.assertFalse(record["original_seal_independently_authenticated"])
+        self.assertFalse(record["authenticity_or_contract_enforceability_certified"])
+        self.assertFalse(record["digital_owner_or_specialist_signatures_created"])
+        self.assertFalse(record["commercial_publication_authorized"])
+    def test_seal_receipt_append_only_and_requires_prior_dual_capacity(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d); ledger=root/"legal-capacity";ledger.mkdir()
+            with self.assertRaisesRegex(ValueError,"DUAL_CAPACITY_OWNER_ATTESTATION_REQUIRED"):
+                m.attest_company_seal(root)
+            (ledger/"capacity-original.json").write_text(json.dumps({"sha256":m.BEFORE}))
+            m.install(root)
+            m.attest_terms(root)
+            with self.assertRaisesRegex(ValueError,"DUAL_CAPACITY_OWNER_ATTESTATION_REQUIRED"):
+                m.attest_company_seal(root)
+            m.attest_dual_capacity(root)
+            before={x:x.read_bytes() for x in ledger.iterdir()}
+            outcome=m.attest_company_seal(root)
+            self.assertTrue(outcome["owner_attested_1398_contract_contains_company_seal"])
+            self.assertFalse(outcome["original_seal_independently_verified"])
+            self.assertFalse(outcome["commercial_release_allowed"])
+            self.assertEqual(outcome,m.attest_company_seal(root))
+            self.assertEqual(len(list(ledger.glob("master-company-seal-1398-*.json"))),1)
+            self.assertTrue(all(p.read_bytes()==contents for p,contents in before.items()))
     def test_missing_original_evidence_never_forces_date_overwrite(self):
         with tempfile.TemporaryDirectory() as d:
             w=Path(d);cap=w/"legal-capacity";cap.mkdir()
