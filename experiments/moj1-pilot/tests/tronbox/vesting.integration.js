@@ -8,6 +8,14 @@ const MojVestingVault = artifacts.require('MojVestingVault');
 const MojAssets = artifacts.require('MojAssets');
 
 contract('MOJ1 token and team vault', (accounts) => {
+  async function expectRevert(txPromise) {
+    // TronBox returns a transaction ID even when a TVM state-changing call reverts.
+    // Query the actual TVM receipt; a returned tx ID is not execution success.
+    const txId = await txPromise;
+    const info = await tronWeb.trx.getTransactionInfo(txId);
+    assert.equal(info?.receipt?.result, 'REVERT', 'transaction must revert in TVM');
+  }
+
   it('funds the vault and exposes immutable cliff / duration math', async () => {
     const token = await MojCoin.new(accounts[0]);
     const allocation = '10000000000000000000000000000'; // 10 billion * 10^18
@@ -52,15 +60,11 @@ contract('MOJ1 token and team vault', (accounts) => {
     const start = Math.floor(Date.now() / 1000) + 3600;
     const vault = await MojVestingVault.new(token.address, accounts[1], allocation, start, 86400, 86400);
 
-    let rejectedUnfunded = false;
-    try { await vault.release(); } catch (error) { rejectedUnfunded = true; }
-    assert.equal(rejectedUnfunded, true, 'unfunded vault must reject release');
+    await expectRevert(vault.release());
     assert.equal((await vault.released()).toString(), '0');
 
     await token.transfer(vault.address, allocation);
-    let rejectedBeforeCliff = false;
-    try { await vault.release(); } catch (error) { rejectedBeforeCliff = true; }
-    assert.equal(rejectedBeforeCliff, true, 'pre-cliff release must be rejected');
+    await expectRevert(vault.release());
     assert.equal((await vault.released()).toString(), '0');
     assert.equal((await token.balanceOf(vault.address)).toString(), allocation);
     assert.equal((await token.balanceOf(accounts[1])).toString(), '0');
@@ -68,15 +72,11 @@ contract('MOJ1 token and team vault', (accounts) => {
 
   it('rejects invalid NFT metadata and a former NFT owner minting', async () => {
     const collection = await MojAssets.new(accounts[0]);
-    let rejectedBlank = false;
-    try { await collection.safeMint(accounts[1], ''); } catch (error) { rejectedBlank = true; }
-    assert.equal(rejectedBlank, true, 'blank NFT metadata must fail');
+    await expectRevert(collection.safeMint(accounts[1], ''));
     assert.equal((await collection.balanceOf(accounts[1])).toString(), '0');
 
     await collection.transferOwnership(accounts[1]);
-    let rejectedFormerOwner = false;
-    try { await collection.safeMint(accounts[1], 'ipfs://former-owner-test'); } catch (error) { rejectedFormerOwner = true; }
-    assert.equal(rejectedFormerOwner, true, 'former owner must not mint');
+    await expectRevert(collection.safeMint(accounts[1], 'ipfs://former-owner-test'));
     assert.equal((await collection.balanceOf(accounts[1])).toString(), '0');
   });
 
