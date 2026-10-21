@@ -2,7 +2,9 @@ name: MojPlayWin approved GPGv2 compressed MySQL completion and isolated restore
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/mojplaywin-gpgv2-fast-mysql-and-restore-20261021.yml"]
+    paths:
+      - ".github/workflows/mojplaywin-gpgv2-fast-mysql-and-restore-20261021.yml"
+      - "scripts/mojplaywin_backup_encrypt_vps_gpg.py"
 permissions:
   contents: read
 concurrency:
