@@ -33,19 +33,20 @@ class SevenGapTests(unittest.TestCase):
         self.assertTrue(all(all(x not in item["walls"] for x in [0,1,2,3,4,5,11,17,23,29,35]) for item in levels))
         self.assertEqual(len({tuple(x["walls"]) for x in levels}),48)
     def test_f40_no_fake_mp3(self):
-        oldvoice=gap.audio_available;oldff=gap.media_ffmpeg
+        oldvoice=gap.audio_available;oldff=gap.media_ffmpeg;oldfl=gap.ffmpeg_flite
         try:
             gap.audio_available=lambda:None
             gap.media_ffmpeg=lambda:None
+            gap.ffmpeg_flite=lambda x:False
             with tempfile.TemporaryDirectory() as folder:
                 result=gap.create(Path(folder),"F40")
                 self.assertNotEqual(result["status"],"verified_synthesized_mp3_and_vtt_private_pilot")
-                self.assertIn("espeak/espeak-ng voice engine and ffmpeg native MP3 encoder",
+                self.assertIn("espeak/espeak-ng or FFmpeg libflite speech filter, plus MP3 encoder",
                               result["unresolved_native_or_specialist_gates"])
                 product=Path(folder)/"engineering-gaps"/"seven-builders"/result["product_id"]
                 self.assertFalse(list(product.rglob("*.mp3")))
         finally:
-            gap.audio_available=oldvoice;gap.media_ffmpeg=oldff
+            gap.audio_available=oldvoice;gap.media_ffmpeg=oldff;gap.ffmpeg_flite=oldfl
     def test_f23_native_builder_not_substituted(self):
         with tempfile.TemporaryDirectory() as folder:
             result=gap.create(Path(folder),"F23")
