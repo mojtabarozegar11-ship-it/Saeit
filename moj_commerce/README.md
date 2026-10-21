@@ -55,3 +55,18 @@ CI: `.github/workflows/moj-commerce-isolated-ci.yml`; source checks only, no SSH
 ## 30-day commercial validation gate
 
 Interview 15 actual sellers and proceed to a paid pilot only if 3 evidence-backed seller commitments are secured. Start with one network (TRON), one asset (native TRX), one format (ZIP), one merchant owner with written approval. The planned USD 19 subscription and USD 99 setup fee are hypotheses, not verified revenue. Track successful delivery, manual support load, wrong-credit=0, double-grant=0, and independently verified net contribution. Do not advertise readiness from passing tests.
+
+## Dedicated PostgreSQL concurrency gate
+
+The isolated PR CI also starts PostgreSQL 16 to verify real row-level locking,
+repeated simultaneous signed deliveries, exactly-once entitlement creation and
+cross-order duplicate txid rejection. SQLite is not a valid proof of locking:
+Django documents that `select_for_update` has no effect on SQLite.
+
+```bash
+MOJ_COMMERCE_TEST_POSTGRES=1 python -m django test \
+  tests.test_moj_commerce_postgres --settings=moj_commerce.test_settings
+```
+
+CI's Postgres password is test-only and never used on cPanel. This remains a
+synthetic proof, not an actual blockchain deposit or authorization for funds.

@@ -3,7 +3,7 @@ on:
   pull_request:
     paths:
       - 'moj_commerce/**'
-      - 'tests/test_moj_commerce.py'
+      - 'tests/test_moj_commerce*.py'
       - '.github/workflows/moj-commerce-isolated-ci.yml'
   workflow_dispatch:
 permissions:
@@ -29,3 +29,34 @@ jobs:
         run: python -m django test tests.test_moj_commerce --settings=moj_commerce.test_settings --verbosity 2
       - name: Declare that this CI does not deploy or handle money
         run: echo 'Isolated source checks only; deployment not configured.'
+
+  postgres-lock-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: moj_commerce_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d moj_commerce_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      MOJ_COMMERCE_TEST_POSTGRES: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PostgreSQL and Django isolated test packages
+        run: python -m pip install 'Django>=5.2,<5.3' 'psycopg[binary]>=3.2,<4'
+      - name: Verify PostgreSQL locking, replay defense and isolated functional delivery
+        run: python -m django test tests.test_moj_commerce_postgres --settings=moj_commerce.test_settings --verbosity 2

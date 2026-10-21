@@ -11,7 +11,7 @@
 | Authenticated buyer link | Django signed token + 5min + download quota | HTTP and session QA against real site |
 | Live order binding | Not connected | Actual site ORM/checkout mapping with buyer, seller, exact USD/Sun, unique address |
 | Automatic monitoring | TRON Autopilot draft worker only | Durable PostgreSQL worker, recovery, independent health checks and alerts |
-| Idempotent entitlement grant | Code with DB uniqueness + select_for_update | PostgreSQL concurrency tests, crash-recovery and replay proof |
+| Idempotent entitlement grant | Code with DB uniqueness + select_for_update | PostgreSQL concurrency CI proof (separate job) plus crash-recovery and replay proof |
 | Finance and compliance | Not assessed | Merchant eligibility, legal reviews, return/refund paths, sanctions/jurisdiction review |
 | Paid mainnet E2E | None | Explicitly approved small test, buyer receipt, download and rollback proof |
 

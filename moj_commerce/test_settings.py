@@ -14,7 +14,12 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
 ]
-DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}}
+DATABASES = (
+    {'default': {'ENGINE': 'django.db.backends.postgresql', 'NAME': 'moj_commerce_ci',
+                 'USER': 'postgres', 'PASSWORD': 'postgres', 'HOST': '127.0.0.1', 'PORT': '5432'}}
+    if os.environ.get('MOJ_COMMERCE_TEST_POSTGRES') == '1'
+    else {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}}
+)
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 MOJ_COMMERCE_RECEIVER_ENABLED = False
 MOJ_COMMERCE_FULFILL_SECRET = ''
