@@ -16,6 +16,7 @@ def load(name):
 designer=load('factory_recipe_designer')
 maker=load('factory_product_maker')
 warehouse=load('factory_production_warehouse')
+customer=load('factory_verified_customer_cycle_20261021')
 SEEDS=ROOT/'factory_config'/'design_opportunities.json'
 
 class DesignerTests(unittest.TestCase):
@@ -36,6 +37,8 @@ class DesignerTests(unittest.TestCase):
         self.assertEqual(module.calculate({'batch_units':20,'parallel_workers':3,'batch_minutes':4})['result'],'15.00')
         made=maker.manufacture(result['recipe'],self.root/'recipes',self.root/'digital-products')
         self.assertTrue(made['changed'])
+        receipt=customer.inspect_product(self.root/'digital-products'/result['recipe'],result['recipe'])
+        customer.persist_pending(self.root,receipt)
         archive, manifest=warehouse.inspect_source(self.root,result['recipe'])
         self.assertTrue(archive.is_file())
         self.assertGreaterEqual(manifest['qa_measurements']['successful_tests'],5)
