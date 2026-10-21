@@ -243,6 +243,29 @@ def reauthor_document_delivery(root,recipe,order,maker):
         package_dir=package_parent/code
         if dest.exists() or dest.is_symlink():
             if (dest.is_dir() and not dest.is_symlink()
+                    and not receipt_file.exists() and not receipt_file.is_symlink()):
+                try:
+                    orphan=checked_json(dest/"metadata.json")
+                except (OSError,ValueError,UnicodeError):
+                    orphan={}
+                if (orphan.get("schema")=="saeit.factory.private-document-edition.v1"
+                        and orphan.get("original_recipe")==recipe
+                        and orphan.get("original_artifact_sha256")==expected
+                        and orphan.get("new_recipe")==code
+                        and orphan.get("new_technical_source_created") is True):
+                    if package_dir.is_symlink():
+                        return "unsafe_document_edition_root"
+                    if package_dir.exists():
+                        if not package_dir.is_dir():
+                            return "existing_edition_requires_engineering_review"
+                        shutil.rmtree(package_dir)
+                    # A deterministic, metadata-bound source with no receipt is
+                    # an interrupted prior attempt. Rebuild it from the verified
+                    # original ZIP instead of stranding the QA order.
+                    shutil.rmtree(dest)
+                else:
+                    return "existing_edition_requires_engineering_review"
+            elif (dest.is_dir() and not dest.is_symlink()
                     and receipt_file.is_file() and not receipt_file.is_symlink()):
                 prior=checked_json(receipt_file)
                 if (prior.get("source_customer_archive_sha256")==expected
