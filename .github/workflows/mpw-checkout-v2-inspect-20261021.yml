@@ -65,7 +65,8 @@ jobs:
           base=Path('/home/zomorod2/Saeit-staging')
           for rel in ['mpw_commerce/templates/mpw_commerce/product_checkout.html',
                       'mpw_commerce/templates/mpw_commerce/purchased_downloads.html',
-                      'mpw_commerce/templates/mpw_commerce/customer_login.html']:
+                      'mpw_commerce/templates/mpw_commerce/customer_login.html',
+                      'core/templates/brands/mojplaywin/checkout.html']:
               p=base/rel
               if not p.is_file() or p.is_symlink():raise RuntimeError('Missing or unsafe template')
               s=p.read_text('utf8','replace')
