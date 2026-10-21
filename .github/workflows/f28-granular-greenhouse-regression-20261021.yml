@@ -8,6 +8,9 @@ on:
       - product_recipes/greenhouse_crop_margin/README.md
       - product_recipes/greenhouse_crop_margin/example_inputs.json
       - scripts/factory_f28_private_build_cycle_20261021.py
+      - scripts/factory_f28_private_warehouse_intake_20261021.py
+      - scripts/factory_production_warehouse.py
+      - tests/test_factory_f28_private_warehouse_intake_20261021.py
       - tests/test_factory_f28_private_cycle_20261021.py
       - scripts/factory_product_maker.py
       - scripts/factory_personal_owner_passport_policy_20261020.py
@@ -20,6 +23,9 @@ on:
       - product_recipes/greenhouse_crop_margin/README.md
       - product_recipes/greenhouse_crop_margin/example_inputs.json
       - scripts/factory_f28_private_build_cycle_20261021.py
+      - scripts/factory_f28_private_warehouse_intake_20261021.py
+      - scripts/factory_production_warehouse.py
+      - tests/test_factory_f28_private_warehouse_intake_20261021.py
       - tests/test_factory_f28_private_cycle_20261021.py
       - scripts/factory_product_maker.py
       - scripts/factory_personal_owner_passport_policy_20261020.py
@@ -44,6 +50,7 @@ jobs:
           python3 -m py_compile product_recipes/greenhouse_crop_margin/calculator.py scripts/factory_f28_private_build_cycle_20261021.py
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s product_recipes/greenhouse_crop_margin -p test_calculator.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_f28_private_cycle_20261021 -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_f28_private_warehouse_intake_20261021 -v
           python3 - <<'PY'
           from pathlib import Path
           module=Path("product_recipes/greenhouse_crop_margin/calculator.py").read_text()
@@ -164,6 +171,45 @@ jobs:
           print("F28_VPS_INDEPENDENT_TECHNICAL_BLACKBOX_SCENARIOS=2")
           print("F28_VPS_1000_QUALITY_CLEARANCE=NOT_GRANTED")
           PYCHECK
+          REMOTE
+      - name: Stock hash-verified F28 ZIP in locked central private warehouse and create pending expert QA ticket
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/f28-private"
+          opts=(-i "$d/key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          host="githubops@178.239.147.150"
+          stage="/home/githubops/factory-runtime/operations/f28-granular-candidates/$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          for file in factory_production_warehouse.py factory_f28_private_warehouse_intake_20261021.py; do
+            source="scripts/$file"
+            scp -q "${opts[@]}" "$source" "$host:$stage/scripts/$file"
+            want="$(sha256sum "$source" | cut -d' ' -f1)"
+            got="$(ssh -T "${opts[@]}" "$host" "sha256sum '$stage/scripts/$file' | cut -d' ' -f1")"
+            test "$want" = "$got"
+          done
+          timeout 100s ssh -T "${opts[@]}" "$host" "bash -se -- '$stage'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          stage="$1"
+          python="$HOME/factory-runtime/.venv/bin/python"
+          central="/home/githubops/factory-runtime/private/autonomous-product-cycle"
+          test -d "$central" && test ! -L "$central"
+          PYTHONDONTWRITEBYTECODE=1 "$python" -B "$stage/scripts/factory_f28_private_warehouse_intake_20261021.py" \
+            --candidate "$stage/product-cycle" --factory-root "$central" \
+            --warehouse-module "$stage/scripts/factory_production_warehouse.py"
+          "$python" -B - "$stage/product-cycle/private-central-intake-receipt.json" <<'PYVERIFY'
+          import json,sys
+          from pathlib import Path
+          doc=json.loads(Path(sys.argv[1]).read_text())
+          assert doc["stock_version_verified"] is True
+          assert doc["quality_ticket_created_or_confirmed"] is True
+          assert doc["professional_quality_1000_approved"] is False
+          assert doc["commerce_enabled"] is False and doc["public_listing_enabled"] is False
+          print("F28_CENTRAL_PRIVATE_WAREHOUSE_STOCKED_OR_PRESENT=PASS")
+          print("F28_INDEPENDENT_QUALITY_1000_REVIEW=PENDING")
+          print("F28_PUBLICATION=BLOCKED")
+          PYVERIFY
           REMOTE
       - name: Remove ephemeral SSH credentials
         if: always()
