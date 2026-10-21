@@ -83,7 +83,9 @@ def check(manifest):
         item = item if isinstance(item, dict) else {}
         candidate = item.get("path", "")
         path = pathlib.Path(candidate) if isinstance(candidate, str) and candidate else pathlib.Path("/")
-        if not path.is_file() or not item.get("sha256"):
+        if path.is_symlink():
+            errors.append(key + ": unsafe symlink")
+        elif not path.is_file() or not item.get("sha256"):
             errors.append(key + ": missing file or digest")
         elif sha(path) != item["sha256"]:
             errors.append(key + ": SHA256 mismatch")
@@ -111,7 +113,7 @@ def check(manifest):
                         p = pathlib.PurePosixPath(name)
                         total += item.file_size
                         if (not name or name in names or name.startswith("/")
-                                or "\\\\" in name or p.is_absolute() or ".." in p.parts
+                                or chr(92) in name or p.is_absolute() or ".." in p.parts
                                 or item.file_size > 40 * 1024 * 1024
                                 or total > 150 * 1024 * 1024
                                 or stat.S_ISLNK(item.external_attr >> 16)):
