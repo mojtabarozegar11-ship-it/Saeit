@@ -57,6 +57,18 @@ class FactoryWarehouseTests(unittest.TestCase):
         self.assertEqual(result["held"],1)
         self.assertIn("CUSTOMER_PACKAGE_QA_NOT_VERIFIED",self.register()["needs_rework_or_review"][0]["reason"])
 
+    def test_forged_build50_snapshot_cannot_bypass_customer_zip_qa(self):
+        recipe="farm_enterprise_economics"
+        maker.manufacture(recipe,self.recipes,self.private/"digital-products")
+        manifest_file=self.private/"digital-products"/recipe/"manufacturing_manifest.json"
+        m=json.loads(manifest_file.read_text())
+        forged={"product_id":recipe,"build_50_verified":True,
+                "source_sha256":m["source_sha256"],"artifact_sha256":m["artifact_sha256"],
+                "source_receipt_sha256":warehouse.digest(manifest_file)}
+        with self.assertRaisesRegex(RuntimeError,"BUILD50_INDEPENDENT_PROOF_INVALID"):
+            warehouse.stock_one(self.private,recipe,self.private/"production-warehouse",
+                                quality_snapshot=forged)
+
     def test_quality_snapshot_cannot_authorize_a_later_artifact_version(self):
         recipe='farm_enterprise_economics';self.manufacture(recipe)
         receipt=self.private/'digital-products'/recipe/'manufacturing_manifest.json'
