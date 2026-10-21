@@ -129,8 +129,10 @@ jobs:
           s=(Path(os.environ["ATELIER_AUDIT_TEMP"])/"atelier-store-after.html").read_text(encoding="utf8",errors="replace")
           p=(Path(os.environ["ATELIER_AUDIT_TEMP"])/"atelier-product-after.html").read_text(encoding="utf8",errors="replace")
           assert "/store/product/879/" in s and 'atelier-original-vector-879' in s
-          assert "/store/product/879/checkout/" in p and "6.80" in p
-          print("ATELIER_PUBLIC_BUY_BUTTON_AND_STORE_CARD=PASS")
+          assert "/store/product/879/checkout/" in s and "6.80" in s
+          assert "Atelier Interior" in p and "6.80" in p
+          detail_cta="/store/product/879/checkout/" in p
+          print("ATELIER_PUBLIC_STORE_CHECKOUT_CARD=PASS; product_detail_checkout_cta="+str(detail_cta))
           PY
           checkout="$(curl -sS --max-time 25 -o /dev/null -w '%{http_code}' https://mojplaywin.com/store/product/879/checkout/)"
           case "$checkout" in 302|303) ;; *) echo "EXPECTED_AUTH_REQUIRED_GET_CHECKOUT_$checkout";exit 1;; esac
