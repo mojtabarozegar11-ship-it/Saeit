@@ -135,7 +135,15 @@ jobs:
           body="$RUNNER_TEMP/author-route.html"
           code="$(curl -sS --max-time 25 -D "$headers" -o "$body" -w '%{http_code}' "https://zomorodmelal.ir/authors/mojtaba-rozegar/?route_verify=$GITHUB_SHA" || true)"
           echo "PERSIAN_AUTHOR_PUBLIC_HTTP=$code"
-          grep -iE '^(location|server|cf-cache-status|x-cache|via):' "$headers" || true
+          echo "PUBLIC_DNS="
+          getent ahostsv4 zomorodmelal.ir | head -4 || true
+          echo "PUBLIC_HEADERS_BEGIN"
+          sed -n '1,16p' "$headers"
+          echo "PUBLIC_HEADERS_END"
+          echo "PUBLIC_BODY_BEGIN"
+          head -c 400 "$body" || true
+          echo
+          echo "PUBLIC_BODY_END"
           final="$(curl -sS -L --max-time 30 -o "$body" -w '%{http_code}' "https://zomorodmelal.ir/authors/mojtaba-rozegar/?route_verify=$GITHUB_SHA" || true)"
           echo "PERSIAN_AUTHOR_FINAL_HTTP=$final"
           grep -Fq 'mojtaba-roozegar-official-profile-20261021' "$body" && echo "PUBLIC_PROFILE_MARKER=found" || echo "PUBLIC_PROFILE_MARKER=missing"
