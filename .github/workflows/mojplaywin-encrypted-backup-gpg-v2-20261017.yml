@@ -93,8 +93,8 @@ jobs:
           errors=0
           for kind in mysql files; do
             echo "Starting $kind: only private pinned SSH streams; no SQL/media/keys printed"
-            if (timeout 1300s ssh -T -F "$d/config" saeit-cpanel "python3 -c '$python_call' '$src64' '$kind'" |
-                timeout 1300s ssh -T -F "$d/config" saeit-vps "python3 -c '$python_call' '$dst64' '$kind'"); then
+            if (timeout 1300s ssh -C -T -F "$d/config" saeit-cpanel "python3 -c '$python_call' '$src64' '$kind'" |
+                timeout 1300s ssh -C -T -F "$d/config" saeit-vps "python3 -c '$python_call' '$dst64' '$kind'"); then
               echo "$kind: authenticated private GPG archive and complete source footer verified"
             else
               echo "$kind: backup NOT VERIFIED; production unchanged; no overwrites"
