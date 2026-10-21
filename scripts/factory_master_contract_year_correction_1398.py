@@ -164,9 +164,61 @@ def attest_dual_capacity(workspace):
         "prior_immutable_ledgers_preserved":True
     }
 
+def company_seal_attestation():
+    """Owner-reported historic company seal, NOT independent seal authentication."""
+    return {
+        "schema":"saeit.factory.master-contract-company-seal-owner-attestation.v1",
+        "contract_year_jalali":1398,
+        "owner_confirmation_date":"2026-10-21",
+        "company_name":"شرکت کشت و صنعت زمرد ملل",
+        "owner_attests_company_seal_present_on_original_1398_contract":True,
+        "owner_attests_signed_as_individual_and_company_representative":True,
+        "seal_photo_or_impression_received":False,
+        "original_seal_independently_authenticated":False,
+        "historic_company_signatory_authority_independently_verified":False,
+        "typed_1405_wording_is_not_new_contract":True,
+        "same_human_two_roles_not_independent_quality_reviewers":True,
+        "authenticity_or_contract_enforceability_certified":False,
+        "digital_owner_or_specialist_signatures_created":False,
+        "commercial_publication_authorized":False,
+        "prior_contract_sha256":AFTER,
+    }
+
+def attest_company_seal(workspace):
+    """Append immutable owner statement without modifying prior historical records."""
+    folder=Path(workspace)/"legal-capacity"
+    if folder.is_symlink() or not folder.is_dir():
+        raise ValueError("ORIGINAL_LEDGER_REQUIRED")
+    dual_blob=(json.dumps(dual_capacity_attestation(),sort_keys=True,
+               ensure_ascii=False,separators=(",",":"))+"\n").encode()
+    prior=[p for p in folder.glob("master-two-capacities-1398-*.json")
+           if p.is_file() and not p.is_symlink() and p.read_bytes()==dual_blob]
+    if len(prior)!=1:
+        raise ValueError("DUAL_CAPACITY_OWNER_ATTESTATION_REQUIRED")
+    blob=(json.dumps(company_seal_attestation(),sort_keys=True,
+          ensure_ascii=False,separators=(",",":"))+"\n").encode()
+    digest=hashlib.sha256(blob).hexdigest()
+    target=folder/("master-company-seal-1398-"+digest[:24]+".json")
+    if target.is_symlink():raise ValueError("UNSAFE_SEAL_RECEIPT")
+    if target.exists():
+        if target.read_bytes()!=blob:raise ValueError("IMMUTABLE_SEAL_RECEIPT_CONFLICT")
+    else:
+        with target.open("xb") as output:
+            output.write(blob);output.flush();os.fsync(output.fileno())
+        os.chmod(target,0o600)
+    return {
+        "owner_attested_1398_contract_contains_company_seal":True,
+        "original_seal_independently_verified":False,
+        "real_signature_authentication_completed":False,
+        "signed_qa_certificate_created":False,
+        "commercial_release_allowed":False,
+        "receipt_sha256":digest,
+        "prior_history_immutable":True,
+    }
+
 if __name__=="__main__":
     parser=argparse.ArgumentParser()
-    parser.add_argument("command",choices=["install","status","attest-terms","attest-dual-capacity"])
+    parser.add_argument("command",choices=["install","status","attest-terms","attest-dual-capacity","attest-company-seal"])
     parser.add_argument("--workspace",required=True)
     args=parser.parse_args()
-    print(json.dumps(install(args.workspace) if args.command=="install" else attest_terms(args.workspace) if args.command=="attest-terms" else attest_dual_capacity(args.workspace) if args.command=="attest-dual-capacity" else status(args.workspace),sort_keys=True,ensure_ascii=False))
+    print(json.dumps(install(args.workspace) if args.command=="install" else attest_terms(args.workspace) if args.command=="attest-terms" else attest_dual_capacity(args.workspace) if args.command=="attest-dual-capacity" else attest_company_seal(args.workspace) if args.command=="attest-company-seal" else status(args.workspace),sort_keys=True,ensure_ascii=False))
