@@ -18,7 +18,7 @@ jobs:
       github.ref == 'refs/heads/main' &&
       startsWith(github.event.head_commit.message, '[approved-backup-gpgv2-fast-20261021]')
     runs-on: ubuntu-latest
-    timeout-minutes: 115
+    timeout-minutes: 255
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
@@ -77,7 +77,7 @@ jobs:
           mv "$d/host.candidate" "$d/host.known"
       - name: Back up missing MySQL independently with gzip-1 before the SSH transfer and decryptable GPG AES256 on VPS
         shell: bash
-        timeout-minutes: 54
+        timeout-minutes: 105
         run: |
           set -euo pipefail
           umask 077
@@ -88,8 +88,8 @@ jobs:
           echo "MYSQL_GPGV2_TRANSFER=started; transport=gzip-level1-before-SSH; destination=AES256-GPG; no plaintext files"
           # gzip is produced in the cPanel process and expanded only inside the VPS process.
           # Pipefail covers source mysql dump, gzip, ssh, gunzip and GPG archive verification.
-          timeout 3050s ssh -T -F "$d/config" saeit-cpanel "bash -o pipefail -c \"python3 -c '$call' '$src64' mysql | gzip -1 -c\"" |
-            timeout 3050s ssh -T -F "$d/config" saeit-vps "bash -o pipefail -c \"gzip -dc | python3 -c '$call' '$dst64' mysql\""
+          timeout 6000s ssh -T -F "$d/config" saeit-cpanel "bash -o pipefail -c \"python3 -c '$call' '$src64' mysql | gzip -1 -c\"" |
+            timeout 6000s ssh -T -F "$d/config" saeit-vps "bash -o pipefail -c \"gzip -dc | python3 -c '$call' '$dst64' mysql\""
           echo "MYSQL_GPGV2_TRANSFER=verified_complete_new_name"
       - name: Demand exactly one complete independent AES256 SQL+files manifest pair
         shell: bash
@@ -101,7 +101,7 @@ jobs:
           timeout 50s ssh -T -F "$d/config" saeit-vps "python3 -c '$call' '$script64' check"
       - name: Restore database on isolated temporary Docker with network disabled and restore app files to private runner
         shell: bash
-        timeout-minutes: 53
+        timeout-minutes: 110
         run: |
           set -euo pipefail
           umask 077
@@ -135,9 +135,9 @@ jobs:
           done
           test "$ready" = 1 || { echo "NO-GO: isolated MariaDB container did not start"; exit 1; }
           echo "MariaDB sandbox ready: no published port, container network disabled"
-          timeout 2400s ssh -T -F "$d/config" saeit-vps \
+          timeout 5500s ssh -T -F "$d/config" saeit-vps \
             "python3 -c '$call' '$stream64' mysql" |
-            timeout 2400s docker exec -i "$label" mariadb --no-defaults -uroot --binary-mode
+            timeout 5500s docker exec -i "$label" mariadb --no-defaults -uroot --binary-mode
           table_count=$(docker exec "$label" mariadb --no-defaults -uroot --batch --skip-column-names \
             -e "SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA NOT IN ('mysql','performance_schema','information_schema','sys') AND TABLE_TYPE='BASE TABLE'")
           schema_count=$(docker exec "$label" mariadb --no-defaults -uroot --batch --skip-column-names \
@@ -150,9 +150,9 @@ jobs:
           chmod 700 "$restore_dir"
           free=$(df -PB1 "$RUNNER_TEMP" | awk 'NR == 2 {print $4}')
           test "$free" -ge 6000000000 || { echo "NO-GO: not enough room for isolated file restore"; exit 1; }
-          timeout 2400s ssh -T -F "$d/config" saeit-vps \
+          timeout 5500s ssh -T -F "$d/config" saeit-vps \
             "python3 -c '$call' '$stream64' files" |
-            timeout 2400s python3 scripts/mojplaywin_restore_files_isolated_runner.py "$restore_dir"
+            timeout 5500s python3 scripts/mojplaywin_restore_files_isolated_runner.py "$restore_dir"
           echo "PASS: ciphertext verified by GPG+SHA256, SQL imported and queried in isolated MariaDB, both main filesystem roots extracted."
           echo "LIMIT: unknown independent subsites are NOT certified; backup key has no verified copy outside VPS."
           echo "LIMIT: test container and temporary plaintext restored files are being removed; production never written."
