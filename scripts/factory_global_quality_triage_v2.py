@@ -170,6 +170,8 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
                     "defects":sorted(set(actual)),
                     "external_audit_pending":sorted(set(pending)),
                     "rework_actions":sorted(set(plan(c) for c in actual)),
+                    "candidate_evidence_dossier_sha256":(sha(candidate_file.read_bytes())
+                        if candidate_file.is_file() and not candidate_file.is_symlink() else None),
                     "source_manifest_sha256":sha(manifest_path.read_bytes()),
                     "policy_sha256":sha(Path(policy).read_bytes()),
                     "registry_sha256":sha(Path(registry).read_bytes())
@@ -185,6 +187,29 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
             assert not folder_out.is_symlink()
             folder_out.mkdir(parents=True,exist_ok=True,mode=0o700)
             os.chmod(folder_out,0o700)
+            # Version/evidence-bound progress proof: never close an issue just
+            # because the scoring policy or file label changed. A repaired
+            # source or changed evidence dossier must pass a fresh rerun.
+            old_file=folder_out/"current.json"
+            try:
+                previous=json.loads(old_file.read_text(encoding="utf8")) if old_file.is_file() and not old_file.is_symlink() else {}
+            except (ValueError,OSError,TypeError):
+                previous={}
+            prior_codes=set(previous.get("defects",[])) if isinstance(previous,dict) else set()
+            actual_codes=set(record.get("defects",[]))
+            source_changed=(previous.get("source_manifest_sha256")!=record.get("source_manifest_sha256")
+                            if isinstance(previous,dict) else False)
+            evidence_changed=(previous.get("candidate_evidence_dossier_sha256")!=record.get("candidate_evidence_dossier_sha256")
+                              if isinstance(previous,dict) else False)
+            versioned_change=bool(source_changed or evidence_changed)
+            closed=sorted(prior_codes-actual_codes) if versioned_change else []
+            if prior_codes-actual_codes and not versioned_change:
+                record["unverified_criterion_drops"]=sorted(prior_codes-actual_codes)
+                record["commercial_release_allowed"]=False
+            record["verified_against_new_version_or_dossier"]=versioned_change
+            record["detected_defect_rechecks_after_change"]=closed
+            record["closed_by_independent_expert"]=False
+            record["rework_closeout_status"]="INDEPENDENT_SIGNOFF_STILL_REQUIRED"
             immutable_blob=(json.dumps(record,sort_keys=True,ensure_ascii=False,indent=2)+"\n").encode()
             key=sha(immutable_blob)
             receipt=folder_out/("rework-"+key[:24]+".json")
