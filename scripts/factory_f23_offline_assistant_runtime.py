@@ -57,7 +57,10 @@ def answer(question,cards):
     ranked=[]
     for i,row in enumerate(cards):
         common=set(query).intersection(docs[i])
-        score=sum((1+math.log((49-df[word]+0.5)/(df[word]+0.5))) for word in common)
+        # Stable BM25-style positive IDF. Generic common words contribute
+        # almost nothing rather than penalizing a genuinely exact local query.
+        # We intentionally do not infer quality from returned text.
+        score=sum(math.log(1.0+(48-df[word]+0.5)/(df[word]+0.5)) for word in common)
         # Query must provide meaningful details instead of broad suggestions.
         ranked.append((score,len(common),row["id"],i))
     best=max(ranked,key=lambda x:(x[0],x[1],x[2]))
