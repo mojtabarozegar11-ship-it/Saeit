@@ -91,6 +91,56 @@ def original_source(root,recipe):
         if (product/"manufacturing_manifest.json").is_file() and not (product/"manufacturing_manifest.json").is_symlink():
             yield product
 
+def verify_previous_recovery(root, result_root, recipe, order, order_path, target):
+    """Fail closed on stale, incomplete or altered private recovered source.
+
+    A folder alone is never evidence of a successful prior recovery.
+    Verify the original immutable archive, exact target bytes and bound
+    private receipt before reporting idempotent success.
+    """
+    proof = result_root / (".recovery-" + recipe + ".json")
+    receipt = document(proof)
+    products = list(original_source(root, recipe))
+    if len(products) != 1:
+        raise ValueError("RECOVERY_PREVIOUS_STOCK_UNVERIFIABLE")
+    product = products[0]
+    meta = document(product / "manufacturing_manifest.json")
+    if (meta.get("recipe") != recipe or meta.get("qa_status") != "passed"
+        or meta.get("commercial_status") != "private_internal_qa_pass_not_published"
+        or meta.get("public_listing_enabled") is not False
+        or meta.get("owner_publication_approval") is not False
+        or meta.get("artifact_sha256") != order.get("artifact_sha256")):
+        raise ValueError("RECOVERY_PREVIOUS_STOCK_UNVERIFIABLE")
+    files, source_sha, archive_sha = source_from_zip(
+        recipe, product / (recipe + "-internal-qa.zip"), meta)
+    if (receipt.get("schema") != "saeit.factory.exact-source-recovery.v1"
+        or receipt.get("recipe") != recipe
+        or receipt.get("source_sha256") != source_sha
+        or receipt.get("internal_artifact_sha256") != archive_sha
+        or receipt.get("quality_workorder_sha256") != digest(order_path.read_bytes())
+        or receipt.get("source_hash_verified_against_original_manifest") is not True
+        or receipt.get("old_product_mutated") is not False
+        or receipt.get("technical_qa_retested") is not False
+        or receipt.get("professional_quality_1000_approved") is not False
+        or receipt.get("commercial_release_allowed") is not False):
+        raise ValueError("RECOVERY_PREVIOUS_PROOF_MISMATCH")
+    observed = set()
+    for node in target.rglob("*"):
+        if node.is_symlink() or (not node.is_file() and not node.is_dir()):
+            raise ValueError("RECOVERY_PREVIOUS_FILES_UNTRUSTED")
+        if not node.is_file():
+            continue
+        name = node.relative_to(target).as_posix()
+        if (name not in files or node.stat().st_size != len(files[name])
+            or node.read_bytes() != files[name]):
+            raise ValueError("RECOVERY_PREVIOUS_FILES_MISMATCH")
+        observed.add(name)
+        if len(observed) > 256:
+            raise ValueError("RECOVERY_PREVIOUS_FILES_UNTRUSTED")
+    if observed != set(files):
+        raise ValueError("RECOVERY_PREVIOUS_FILES_MISMATCH")
+
+
 def recover(root,*,limit=3,other_roots=()):
     root=Path(root)
     if root.is_symlink() or not root.is_dir():raise ValueError("RECOVERY_PRIVATE_ROOT_UNSAFE")
@@ -128,6 +178,7 @@ def recover(root,*,limit=3,other_roots=()):
                 stats["existing_original_source"]+=1
                 continue
             if target.is_dir():
+                verify_previous_recovery(root,result_root,recipe,order,order_path,target)
                 stats["previously_recovered"]+=1
                 continue
             if stats["restored"]>=limit:
@@ -205,6 +256,10 @@ def recover(root,*,limit=3,other_roots=()):
                 "RECOVERY_CONCURRENT_SOURCE_EXISTS","RECOVERY_DESTINATION_SYMLINK",
                 "RECOVERY_STOCK_SYMLINK","RECOVERY_UNSAFE_STOCK_ROOT",
                 "RECOVERY_LINK_OR_DIR_FORBIDDEN",
+                "RECOVERY_PREVIOUS_STOCK_UNVERIFIABLE",
+                "RECOVERY_PREVIOUS_PROOF_MISMATCH",
+                "RECOVERY_PREVIOUS_FILES_UNTRUSTED",
+                "RECOVERY_PREVIOUS_FILES_MISMATCH",
             }
             detail=str(exc) if type(exc) is ValueError else ""
             reason=detail if detail in allowed else (
