@@ -288,7 +288,10 @@ def reauthor_document_delivery(root,recipe,order,maker):
         if not entries or not any(ext in {".txt",".md",".pdf",".docx",".epub"}
                                   for _,ext,_ in entries):
             return "no_supported_document_content"
-        if len(entries)>80:
+        # Keep private QA ZIP within the 256-member sender/receiver gate:
+        # 200 assets + index, metadata, README and executable QA source.
+        # Unpacked input remains limited to 48 MiB independently.
+        if len(entries)>200:
             return "document_asset_count_over_limit"
         source_stage=Path(tempfile.mkdtemp(prefix=".document-edition-",dir=str(source_parent)))
         try:
@@ -296,6 +299,9 @@ def reauthor_document_delivery(root,recipe,order,maker):
             assets=source_stage/"assets"
             assets.mkdir(mode=0o700)
             verified=[];nav=[];previews=[]
+            # Bound generated inline HTML size; link ALL original supported
+            # assets even when previews are omitted for memory/size safety.
+            preview_bytes_remaining=1_500_000
             for index,(original,ext,payload) in enumerate(entries,1):
                 safe="file_%03d%s"%(index,ext)
                 target=assets/safe
@@ -309,8 +315,9 @@ def reauthor_document_delivery(root,recipe,order,maker):
                                  "display_name":label})
                 nav.append('<li><a href="assets/%s" download>%s</a> <small>(%s)</small></li>'%
                            (safe,html_escape(label,quote=True),html_escape(ext)))
-                if ext in TEXT and len(payload)<=200000:
+                if ext in TEXT and 0<len(payload)<=200000 and len(payload)<=preview_bytes_remaining:
                     content=payload.decode("utf8","replace")
+                    preview_bytes_remaining-=len(payload)
                     previews.append('<section aria-label="Text preview"><h2>%s</h2><pre>%s</pre></section>'%
                         (html_escape(label,quote=True),html_escape(content)))
             title=recipe.replace("_"," ").title()
