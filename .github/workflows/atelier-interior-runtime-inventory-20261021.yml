@@ -79,6 +79,8 @@ jobs:
           result={'sku':'atelier-interior-kit-v1','read_only':True,'app_available':True}
           result['product_fields']=[f.name for f in Product._meta.get_fields() if getattr(f,'concrete',False)]
           result['exact_product_count']=sum(1 for p in Product.objects.filter(title='Atelier Interior — Client-Ready Website Kit')[:5] if isinstance(p.metadata,dict) and p.metadata.get('sku')=='atelier-interior-kit-v1')
+          owner_ids=[p.owner_id for p in Product.objects.filter(pk__in=(72,225)).order_by('pk')]
+          result['reference_owner_consistent']=len(owner_ids)==2 and owner_ids[0] is not None and owner_ids[0]==owner_ids[1]
           result['reference_books']={}
           for k in (72,225):
            p=Product.objects.filter(pk=k).first()
