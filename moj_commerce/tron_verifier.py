@@ -41,7 +41,7 @@ def independently_verify_finalized_trx(event, purchase, *, fetch=finalized_recor
         expected.validate()  # validates genuine TRON Base58Check address
         key = (getattr(settings, 'MOJ_COMMERCE_TRONGRID_API_KEY', '')
                if api_key is None else api_key)
-        if (not isinstance(key, str) or len(key) > 512 or '\\n' in key or '\\r' in key):
+        if (not isinstance(key, str) or len(key) > 512 or '\n' in key or '\r' in key):
             raise CommerceUnavailable('Invalid read-only TRON API configuration')
         # fetch() must be a trusted backend adapter. Never take RPC URLs from an event.
         try:
