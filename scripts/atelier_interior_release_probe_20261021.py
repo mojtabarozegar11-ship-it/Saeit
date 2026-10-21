@@ -15,10 +15,10 @@ import zipfile
 
 SKU = "atelier-interior-kit-v1"
 TITLE = "Atelier Interior — Client-Ready Website Kit"
-SHA256 = "f17eb13a5e546c5ca9974885b30b6d8b5bc44ecf5474edf75b544f8f7d254d3d"
+SHA256 = "98bffad4ccf36f84c7924ca77e4a8b473b42f33a8fce4d85cefe2367afc097aa"
 SALE_PRICE = "6.80"
 REGULAR_PRICE = "17.00"
-ARCHIVE_NAME = "atelier-interior-kit-v1.zip"
+ARCHIVE_NAME = "atelier-interior-kit-v1-repacked.zip"
 ROOT = Path("/home/zomorod2")
 APP = ROOT / "Saeit-staging"
 SITE = ROOT / "mojplaywin.com"
