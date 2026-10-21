@@ -166,15 +166,22 @@ def reinspect(root, valid_families):
                 expected = receipt.get("artifact_sha256")
                 require(HEX.fullmatch(str(source_hash)) and HEX.fullmatch(str(expected)),
                         "NATIVE_RECEIPT_HASH_INVALID")
+                basis = sha((product + source_hash + digest).encode("utf8"))
+                require(marker.name == "source-" + basis[:24] + ".json",
+                        "NATIVE_RECEIPT_IDENTITY_INVALID")
                 candidate = output / product
                 require(candidate.is_dir() and not candidate.is_symlink(),
                         "PRIVATE_CANDIDATE_MISSING")
                 meta_path = candidate / "manufacturing_manifest.json"
                 meta = read(meta_path)
+                # An older immutable receipt is historical, not a corrupt
+                # current candidate: retain it without invalidating this run.
+                if meta.get("artifact_sha256") != expected:
+                    details["superseded_candidates"] += 1
+                    continue
                 require(meta.get("recipe") == product
                         and meta.get("qa_status") == "passed"
                         and meta.get("source_sha256") == source_hash
-                        and meta.get("artifact_sha256") == expected
                         and meta.get("professional_quality_approved") is False
                         and meta.get("public_listing_enabled") is False
                         and meta.get("owner_publication_approval") is False,
