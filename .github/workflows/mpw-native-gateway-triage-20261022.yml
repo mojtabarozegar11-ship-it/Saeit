@@ -9,7 +9,7 @@ permissions: {contents: read}
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
@@ -84,6 +84,15 @@ jobs:
         run: |
           set -euo pipefail
           timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-gateway100-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" < scripts/mpw_payment_final_readiness_inspector.py
+      - name: Verify real public signup and login CSRF using EMPTY invalid submissions only
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_registration_csrf_public_probe_20261021.py
+          python3 scripts/mpw_registration_csrf_public_probe_20261021.py
+      - name: Exercise real settlement and protected delivery functions with in-memory fake proof only
+        run: |
+          set -euo pipefail
+          timeout 110s ssh -T -F "$RUNNER_TEMP/mpw-gateway100-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" < scripts/mpw_simulated_crypto_purchase_delivery_20261021.py
       - name: Remove private SSH relay material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-gateway100-ssh"
