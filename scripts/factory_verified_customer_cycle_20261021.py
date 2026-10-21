@@ -166,7 +166,7 @@ def persist_pending(private_root, receipt):
     target = root / "customer-extracted-acceptance" / recipe / sha / "technical-receipt.json"
     target.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
     require(not target.parent.is_symlink() and not target.is_symlink(), "UNSAFE_RECEIPT_TARGET")
-    quality = root / "quality-excellence" / "private-intake-review" / recipe / sha / "pending.json"
+    quality = root / "quality-excellence" / "customer-extracted-review" / recipe / sha / "pending.json"
     quality.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
     require(not quality.parent.is_symlink() and not quality.is_symlink(), "UNSAFE_QUALITY_TARGET")
     ticket = {"schema": SCHEMA, "recipe": recipe,
