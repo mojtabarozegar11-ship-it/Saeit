@@ -24,6 +24,7 @@ from core.knowledge_views import knowledge_article_detail, knowledge_book_detail
 
 urlpatterns = [
     path("", services, name="home"),
+    path("authors/mojtaba-rozegar/", RedirectView.as_view(url="/en/authors/mojtaba-rozegar/", permanent=True), name="mojtaba_roozegar_author_profile"),
     path("ghanadi/", TemplateView.as_view(template_name="core/ghanadi.html"), name="ghanadi"),
     path("agriculture/", agriculture_index, name="agriculture"),
     path("agriculture/assets/zomorod-olive-v1/<str:filename>.webp", zomorod_hero_image, name="agriculture_hero_asset"),
