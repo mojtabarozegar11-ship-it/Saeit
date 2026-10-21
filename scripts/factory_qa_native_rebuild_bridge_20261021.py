@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""Bounded QA-to-native-rebuild bridge. No authorizations, sales or false QA closeout.
+
+Consumes REAL VPS 1000-point private workorders. Where a factory-owned source
+has changed, or an archived ZIP is mechanically broken, rebuilds a fresh private
+candidate with the existing tested manufacturer. Never edits original warehouse.
+Nonmechanical quality findings remain open for verifiable work by specialists.
+"""
+import argparse
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import re
+
+RECIPE=re.compile(r"^[a-z][a-z0-9_]{1,65}$")
+HEX=re.compile(r"^[0-9a-f]{64}$")
+MECHANICAL=("P0_BUILD_", "P0_ARTIFACT_", "P0_TECHNICAL_")
+SCHEMA="saeit.factory.qa-native-rebuild-bridge.v1"
+
+def sha(raw):
+    return hashlib.sha256(raw).hexdigest()
+
+def load_maker(path):
+    if path.is_symlink() or not path.is_file():raise ValueError("PINNED_MAKER_NOT_PRESENT")
+    spec=importlib.util.spec_from_file_location("saeit_qa_rebuild_pinned_maker",str(path))
+    mod=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+def checked_json(path):
+    if path.is_symlink() or not path.is_file() or path.stat().st_size>2_000_000:
+        raise ValueError("UNSAFE_SOURCE_EVIDENCE")
+    doc=json.loads(path.read_text(encoding="utf8"))
+    if not isinstance(doc,dict):raise ValueError("INVALID_EVIDENCE_DOCUMENT")
+    return doc
+
+def atomic_receipt(path,doc):
+    blob=(json.dumps(doc,ensure_ascii=False,sort_keys=True,separators=(",",":"))+"\n").encode()
+    digest=sha(blob)
+    dest=path/("repair-"+digest[:24]+".json")
+    if dest.is_symlink():raise ValueError("REPAIR_RECEIPT_SYMLINK")
+    if dest.exists():
+        if dest.read_bytes()!=blob:raise ValueError("REPAIR_RECEIPT_CONFLICT")
+    else:
+        path.mkdir(parents=True,mode=0o700,exist_ok=True)
+        with dest.open("xb") as f:
+            f.write(blob);f.flush();os.fsync(f.fileno())
+        os.chmod(dest,0o600)
+    return digest
+
+def execute(root,source_root,maker_path,*,limit=2):
+    root=Path(root);source_root=Path(source_root);maker_path=Path(maker_path)
+    if not root.is_dir() or root.is_symlink():raise ValueError("PRIVATE_FACTORY_ROOT_INVALID")
+    if not source_root.is_dir() or source_root.is_symlink():raise ValueError("PRIVATE_SOURCE_ROOT_INVALID")
+    if type(limit) is not int or not 1<=limit<=3:raise ValueError("BOUNDED_CAP_REQUIRED")
+    maker=load_maker(maker_path)
+    workorders=root/"quality-excellence"/"production-workorders"
+    if not workorders.is_dir() or workorders.is_symlink():
+        raise ValueError("ACTUAL_QA_WORKORDERS_NOT_PRESENT")
+    output=root/"quality-excellence"/"rebuilt-technical-candidates"
+    output.mkdir(parents=True,mode=0o700,exist_ok=True)
+    if output.is_symlink():raise ValueError("UNSAFE_REBUILD_DESTINATION")
+    receipts=root/"quality-excellence"/"native-rebuild-receipts"
+    if receipts.is_symlink():raise ValueError("UNSAFE_REPAIR_RECEIPT_ROOT")
+    totals={"orders_seen":0,"sources_available":0,"source_changed":0,
+            "rebuild_attempted":0,"technical_candidates_verified":0,
+            "unchanged_or_human_only":0,"missing_source":0,"failed":0}
+    orders=[]
+    for folder in sorted(workorders.iterdir()):
+        if folder.is_symlink() or not folder.is_dir() or not RECIPE.fullmatch(folder.name):
+            continue
+        current=folder/"current.json"
+        if not current.is_file() or current.is_symlink():continue
+        order=checked_json(current)
+        if order.get("schema")!="saeit.factory.production-rework-order.v1" or order.get("recipe")!=folder.name:
+            continue
+        orders.append((folder.name,order))
+    for recipe,order in orders:
+        totals["orders_seen"]+=1
+        source=source_root/recipe
+        if source.is_symlink() or not source.is_dir():
+            totals["missing_source"]+=1
+            continue
+        try:
+            _,files=maker.inspect_recipe(source)
+            source_hash=maker.source_digest(source,files)
+        except (OSError,ValueError,RuntimeError,UnicodeError):
+            totals["missing_source"]+=1
+            continue
+        totals["sources_available"]+=1
+        original=root/"digital-products"/recipe/"manufacturing_manifest.json"
+        prior=checked_json(original) if original.is_file() else {}
+        changed=prior.get("source_sha256")!=source_hash
+        mechanical=any(isinstance(code,str) and code.startswith(MECHANICAL)
+                       for code in order.get("unresolved_technical_or_domain_defects",[]))
+        if not changed and not mechanical:
+            totals["unchanged_or_human_only"]+=1
+            continue
+        if changed:totals["source_changed"]+=1
+        receipt_folder=receipts/recipe
+        if receipt_folder.is_symlink():raise ValueError("UNSAFE_RECIPE_RECEIPT")
+        # Per exact source + QA order. A repeated failed build may be retried on
+        # the next authorized run; successful immutable receipts are idempotent.
+        basis=sha((recipe+source_hash+order["source_quality_receipt_sha256"]).encode())
+        proof=receipt_folder/("source-"+basis[:24]+".json")
+        if proof.is_file() and not proof.is_symlink():
+            prior_proof=checked_json(proof)
+            if prior_proof.get("status")=="technical_candidate_verified":
+                continue
+        if totals["rebuild_attempted"]>=limit:continue
+        totals["rebuild_attempted"]+=1
+        try:
+            result=maker.manufacture(recipe,source_root,output)
+            target=output/recipe
+            meta=checked_json(target/"manufacturing_manifest.json")
+            package=target/(recipe+"-internal-qa.zip")
+            if (meta.get("qa_status")!="passed" or meta.get("source_sha256")!=source_hash
+                or not package.is_file() or package.is_symlink()
+                or maker.sha256_file(package)!=meta.get("artifact_sha256")
+                or result.get("qa_status")!="passed"):
+                raise ValueError("REBUILD_TECHNICAL_QA_NOT_VERIFIED")
+            record={"schema":SCHEMA,"recipe":recipe,"source_sha256":source_hash,
+                    "source_order_sha256":order["source_quality_receipt_sha256"],
+                    "artifact_sha256":meta["artifact_sha256"],
+                    "source_changed":changed,
+                    "status":"technical_candidate_verified",
+                    "independent_quality_1000_passed":False,
+                    "commercial_release_authorized":False,
+                    "original_stock_mutated":False}
+            atomic_receipt(receipt_folder,record)
+            receipt_folder.mkdir(parents=True,mode=0o700,exist_ok=True)
+            proof.write_text(json.dumps(record,ensure_ascii=False,sort_keys=True)+"\n",encoding="utf8")
+            os.chmod(proof,0o600)
+            totals["technical_candidates_verified"]+=1
+        except (ValueError,OSError,RuntimeError,AssertionError,KeyError,TypeError):
+            totals["failed"]+=1
+    totals.update({"schema":SCHEMA,"commercial_release_authorized":False,
+                   "professional_quality_1000_verified":False,
+                   "all_40_native_executors_proven":False})
+    print("FACTORY_REAL_NATIVE_REBUILD="+json.dumps(totals,sort_keys=True))
+    return totals
+
+def main():
+    p=argparse.ArgumentParser()
+    p.add_argument("--private-root",required=True)
+    p.add_argument("--source-root",required=True)
+    p.add_argument("--maker",required=True)
+    p.add_argument("--limit",type=int,default=2)
+    a=p.parse_args()
+    execute(a.private_root,a.source_root,a.maker,limit=a.limit)
+
+if __name__=="__main__":main()
