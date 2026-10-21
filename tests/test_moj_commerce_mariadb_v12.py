@@ -162,3 +162,84 @@ class MariaDBSettlementConcurrencyTests(MariaDBAcceptanceBase):
         with self.assertRaises(CommerceRejected):
             finalize_signed_purchase(raw, sig, SECRET, synthetic_confirmed_proof)
         self.assertEqual(Entitlement.objects.filter(purchase=self.purchase).count(), 1)
+
+
+@override_settings(MOJ_COMMERCE_CHECKOUT_ENABLED=True,
+                   MOJ_COMMERCE_REQUIRE_FILE_PRESENT=False,
+                   MOJ_COMMERCE_REQUIRE_SIGNED_WALLET=True)
+class MariaDBBuyerCheckoutConcurrencyTests(MariaDBAcceptanceBase):
+    """Atomic address allocation on real disposable MariaDB InnoDB connections."""
+    def setUp(self):
+        super().setUp()
+        from tests.test_moj_commerce_gateway_e2e import address_from_seed
+        User = get_user_model()
+        owner = User.objects.create_user(username='mariadb-seller-checkout')
+        self.buyer1 = User.objects.create_user(username='mariadb-checkout-buyer-one')
+        self.buyer2 = User.objects.create_user(username='mariadb-checkout-buyer-two')
+        self.seller = Merchant.objects.create(owner=owner, name='Test Checkout', status='approved')
+        self.product = DigitalProduct.objects.create(
+            merchant=self.seller, sku='TEST-CHECKOUT', title='CI ZIP',
+            price_usd=Decimal('4.00'), file_key='e' * 32,
+            sha256='b' * 64, active=True)
+        self.addr = MerchantAddress.objects.create(
+            merchant=self.seller, address=address_from_seed(4242),
+            verified_at=timezone.now(), verified_via='tron-sign-v2')
+
+    def _create_order(self, barrier, buyer, key):
+        from moj_commerce.checkout import issue_buyer_checkout
+        from moj_commerce.services import CommerceUnavailable
+        close_old_connections()
+        try:
+            barrier.wait(timeout=10)
+            try:
+                order, new = issue_buyer_checkout(
+                    buyer_id=buyer.pk, merchant_public_id=self.seller.public_id,
+                    product_id=self.product.pk, idempotency_key=key,
+                    rate_provider=lambda: Decimal('.32'))
+                return ('created' if new else 'replayed', order.pk)
+            except CommerceUnavailable:
+                return ('unavailable', None)
+        finally:
+            close_old_connections()
+
+    def test_only_one_buyer_can_reserve_single_payout_address(self):
+        barrier = threading.Barrier(2)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            a = pool.submit(self._create_order, barrier, self.buyer1, 'mysql-one-'+'a'*20)
+            b = pool.submit(self._create_order, barrier, self.buyer2, 'mysql-two-'+'b'*20)
+            results = [a.result(timeout=20), b.result(timeout=20)]
+        self.assertCountEqual([x[0] for x in results], ['created', 'unavailable'])
+        self.assertEqual(Purchase.objects.count(), 1)
+        self.assertEqual(Purchase.objects.get().destination_id, self.addr.pk)
+
+    def test_same_buyer_retry_uses_exactly_one_invoice(self):
+        barrier = threading.Barrier(2)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            a = pool.submit(self._create_order, barrier, self.buyer1, 'mysql-retry-'+'c'*20)
+            b = pool.submit(self._create_order, barrier, self.buyer1, 'mysql-retry-'+'c'*20)
+            results = [a.result(timeout=20), b.result(timeout=20)]
+        self.assertCountEqual([x[0] for x in results], ['created', 'replayed'])
+        self.assertEqual(results[0][1], results[1][1])
+        self.assertEqual(Purchase.objects.count(), 1)
+
+
+class MariaDBStaleHeartbeatRecoveryTests(MariaDBAcceptanceBase):
+    """Recovery never touches purchases; --apply must be an explicit opt-in."""
+    def test_dry_run_never_changes_stale_heartbeat(self):
+        run = ScannerRun.objects.create(started_at=timezone.now()-timedelta(hours=2))
+        output = StringIO()
+        call_command('moj_commerce_recover_stale', stdout=output)
+        self.assertIn('count=1', output.getvalue())
+        run.refresh_from_db()
+        self.assertEqual(run.status, ScannerRun.Status.RUNNING)
+
+    @override_settings(MOJ_COMMERCE_RECOVERY_ENABLED=True)
+    def test_apply_only_closes_stale_heartbeat_under_mariadb_lock(self):
+        old = ScannerRun.objects.create(started_at=timezone.now()-timedelta(hours=2))
+        fresh = ScannerRun.objects.create()
+        call_command('moj_commerce_recover_stale', '--apply', stdout=StringIO())
+        old.refresh_from_db()
+        fresh.refresh_from_db()
+        self.assertEqual(old.status, ScannerRun.Status.FAILED)
+        self.assertEqual(old.error_code, 'STALE_RUN_RECOVERED')
+        self.assertEqual(fresh.status, ScannerRun.Status.RUNNING)
