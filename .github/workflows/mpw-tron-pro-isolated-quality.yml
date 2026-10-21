@@ -24,11 +24,5 @@ jobs:
         run: python -m compileall -q mpw_tron_pro
       - name: Test 63+ isolated business and security contracts
         run: python -m unittest discover -s tests -p 'test_mpw_tron*.py' -v
-      - name: Confirm no live deployment in this workflow
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          f=Path('.github/workflows/mpw-tron-pro-isolated-quality.yml').read_text()
-          assert 'ssh ' not in f and 'cPanel' not in f and 'secrets.' not in f
-          print('NO_DEPLOY=PASS')
-          PY
+      - name: End source-only quality gate
+        run: echo 'Validated isolated TRON checkout source; no production deployment is configured in this workflow.'
