@@ -171,6 +171,24 @@ class GatewayToPrivateDeliveryTests(TestCase):
         self.assertEqual(self.drain()['delivered'],0)
         self.assertEqual(Entitlement.objects.count(),1)
 
+    def test_catalog_reprice_does_not_strand_confirmed_invoice(self):
+        # A merchant's later price update cannot alter the buyer's locked quote.
+        self.assertEqual(self.order.usd_amount, Decimal('4.00'))
+        self.assertEqual(self.reconcile()['settled'], 1)
+        self.product.price_usd = Decimal('17.00')
+        self.product.save(update_fields=['price_usd'])
+        self.assertEqual(self.drain()['delivered'], 1)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.usd_amount, Decimal('4.00'))
+        self.assertEqual(self.order.status, Purchase.Status.DELIVERED)
+        self.assertEqual(Entitlement.objects.filter(purchase=self.order).count(), 1)
+        self.client.force_login(self.buyer)
+        link = self.client.get(reverse('moj-commerce-download-link', args=(self.order_ref,)))
+        self.assertEqual(link.status_code, 200)
+        download = self.client.get(link.json()['download_url'])
+        self.assertEqual(download.status_code, 200)
+        self.assertEqual(b''.join(download.streaming_content), self.contents)
+
     def test_failed_delivery_keeps_queued_event_and_retries_without_duplicate_right(self):
         self.reconcile()
         # Intentionally disable the store; *payment* remains paid but no goods.
