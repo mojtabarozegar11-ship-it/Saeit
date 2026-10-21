@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Fail-closed offline product release gate. No publication or financial action."""
-import argparse, hashlib, hmac, json, pathlib, re, sys, zipfile
+import argparse, hashlib, hmac, json, pathlib, re, stat, sys, zipfile
 
 ROLES = ("scientific", "technical", "legal", "independent_human")
 HEX256 = re.compile(r"^[0-9a-f]{64}$")
@@ -91,17 +91,38 @@ def check(manifest):
     artifact_item = artifact_item if isinstance(artifact_item, dict) else {}
     artifact_name = artifact_item.get("path")
     artifact = pathlib.Path(artifact_name) if isinstance(artifact_name, str) and artifact_name else pathlib.Path("/")
-    if artifact.is_file():
-        if not zipfile.is_zipfile(artifact):
-            errors.append("artifact: not a ZIP")
-        else:
-            with zipfile.ZipFile(artifact) as z:
-                if not z.namelist() or z.testzip() is not None:
-                    errors.append("artifact: empty or CRC failure")
-                for name in z.namelist():
-                    p = pathlib.PurePosixPath(name)
-                    if p.is_absolute() or ".." in p.parts:
-                        errors.append("artifact: unsafe ZIP member")
+    if artifact.is_symlink():
+        errors.append("artifact: unsafe symlink")
+    elif artifact.is_file():
+        try:
+            if not 0 < artifact.stat().st_size <= 64 * 1024 * 1024:
+                errors.append("artifact: archive exceeds limit")
+            elif not zipfile.is_zipfile(artifact):
+                errors.append("artifact: not a ZIP")
+            else:
+                with zipfile.ZipFile(artifact) as z:
+                    members = z.infolist()
+                    names = set()
+                    total = 0
+                    if not 1 <= len(members) <= 2500:
+                        errors.append("artifact: invalid member count")
+                    for item in members:
+                        name = item.filename
+                        p = pathlib.PurePosixPath(name)
+                        total += item.file_size
+                        if (not name or name in names or name.startswith("/")
+                                or "\\\\" in name or p.is_absolute() or ".." in p.parts
+                                or item.file_size > 40 * 1024 * 1024
+                                or total > 150 * 1024 * 1024
+                                or stat.S_ISLNK(item.external_attr >> 16)):
+                            errors.append("artifact: unsafe ZIP member")
+                            break
+                        names.add(name)
+                    if not any(e.startswith("artifact:") for e in errors):
+                        if z.testzip() is not None:
+                            errors.append("artifact: CRC failure")
+        except (OSError, ValueError, RuntimeError, EOFError, zipfile.BadZipFile):
+            errors.append("artifact: unreadable ZIP")
     criteria = manifest.get("criteria", [])
     if not isinstance(criteria, list) or len(criteria) != 100 or len({c.get("id") for c in criteria if isinstance(c, dict)}) != 100:
         errors.append("criteria: require 100 distinct criteria")
