@@ -24,7 +24,11 @@ test('testnet-only provisional design and source guardrails', () => {
   assert.equal(spec.ownerApproval.nameApproved, true);
   assert.equal(spec.ownerApproval.symbolApproved, true);
   assert.equal(spec.ownerApproval.supplyApproved, true);
-  assert.equal(spec.ownerApproval.allocationApproved, false);
+  assert.equal(spec.ownerApproval.allocationApproved, true);
+  assert.equal(spec.ownerApproval.allocationApprovalDate, "2026-10-21");
+  assert.equal(spec.ownerApproval.releaseScheduleApproved, false);
+  assert.equal(spec.ownerApproval.beneficiariesApproved, false);
+  assert.equal(spec.ownerApproval.multisigApproved, false);
   assert.equal(spec.ownerApproval.mainnetReleaseApproved, false);
   assert.doesNotMatch(token, /function\s+mint\s*\(/);
   assert.match(token, /new MojGenesisDistributor\(governance\)/);

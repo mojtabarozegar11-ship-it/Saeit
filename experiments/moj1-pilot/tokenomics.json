@@ -7,7 +7,11 @@
     "symbolApproved": true,
     "supplyApproved": true,
     "date": "2026-10-21",
-    "allocationApproved": false,
+    "allocationApproved": true,
+    "allocationApprovalDate": "2026-10-21",
+    "releaseScheduleApproved": false,
+    "beneficiariesApproved": false,
+    "multisigApproved": false,
     "mainnetReleaseApproved": false
   },
   "allocation": [
@@ -19,7 +23,7 @@
     {"bucket": "contingency_and_audit_reserve", "percent": 5, "tokens": 5000000000, "proposedRelease": "locked pending treasury approval"}
   ],
   "mainnetBlockers": [
-    "Owner approval of provisional allocation, distribution and release schedules",
+    "Owner approval of specific beneficiaries, distribution arrangements and release schedules",
     "On-chain vaults enforcing allocations and vesting; multisig treasury",
     "Independent contract audit and actual behavioral tests",
     "Country-specific legal, sanctions, gaming, payment and privacy reviews",
