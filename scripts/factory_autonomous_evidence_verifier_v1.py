@@ -100,7 +100,8 @@ def verify_version(root, product, source, catalog, supplier, agent, evaluator):
                   reverse=True)
     dossier, supplier_sha = supplies[0]
     report = evaluator.evaluate(dossier, archive, catalog,
-                                supplier_script=Path(supplier.__file__))
+                                supplier_script=Path(supplier.__file__),
+                                manifest_path=manifest_path)
     require(not report["rejected_claims"] and report["machine_evidence_rechecked_count"] > 0,
             "VERIFIER_TECHNICAL_MEASUREMENT_REJECTED")
     # An AI workpaper is allowed to provide leads, not independent professional points.
