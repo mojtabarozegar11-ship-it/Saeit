@@ -14,8 +14,8 @@ jobs:
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
       github.event_name == 'workflow_run' &&
-      github.event.workflow_run.id == 39640624346 &&
-      github.event.workflow_run.head_sha == '3f05202110b0d401ddff5d82b4b2c9f3a9e9ef9f' &&
+      github.event.workflow_run.id == 39657480155 &&
+      github.event.workflow_run.head_sha == '0a3011d4f475415742e56a0d0b79dfe69aa4ff1a' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.conclusion == 'success'
@@ -29,7 +29,7 @@ jobs:
           set -euo pipefail
           python3 -B scripts/atelier_interior_register_native_draft_20261021.py selftest
           python3 -B -m py_compile scripts/atelier_interior_register_native_draft_20261021.py
-          test "${{ github.event.workflow_run.id }}" = 39640624346
+          test "${{ github.event.workflow_run.id }}" = 39657480155
           test "${{ github.event.workflow_run.conclusion }}" = success
           echo "ATELIER_VERIFIED_ISOLATED_RESTORE_EVENT=PASS"
       - name: Establish host-pinned private relay without disclosing keys
