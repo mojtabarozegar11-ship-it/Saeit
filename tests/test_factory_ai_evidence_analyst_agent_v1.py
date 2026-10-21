@@ -53,12 +53,14 @@ class AutonomousEvidenceAgentTests(unittest.TestCase):
             dossier = agent.build_dossier(root, policy, recipe, source_sha, artifact_sha, supplier)
             self.assertEqual(len(dossier["ai_workpapers"]), 100)
             self.assertTrue(dossier["owner_attributed_agent_action"])
+            self.assertEqual(dossier["receipt_integrity"],
+                             "SHA256_IMMUTABLE_HASH_NOT_DIGITAL_SIGNATURE")
             self.assertEqual(dossier["owner_delegation"]["principal"], "Mojtaba Roozegar")
             self.assertEqual(dossier["owner_delegation"]["authority_state"],
                              "OWNER_DECLARED_AGENT_AUTHORIZATION")
-            self.assertEqual(dossier["evidence_agent"]["signatory_identity"],
+            self.assertEqual(dossier["evidence_agent"]["agent_identity"],
                              "saeit-autonomous-evidence-analyst")
-            self.assertEqual(dossier["evidence_agent"]["signing_capacity"],
+            self.assertEqual(dossier["evidence_agent"]["acting_capacity"],
                              "automated_agent_acting_on_behalf_of_owner")
             self.assertFalse(dossier["owner_delegation"]["owner_private_key_or_signature_image_used"])
             self.assertFalse(dossier["owner_delegation"]["human_or_licensed_professional_certification"])
