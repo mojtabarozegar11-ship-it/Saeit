@@ -1,10 +1,12 @@
 from django.urls import path
-from .operations_views import merchant_dashboard, operator_scanner_health
+from .operations_views import merchant_dashboard, merchant_console, operator_scanner_health
 from .views import buyer_download, buyer_download_link, receive_tron_fulfillment
 from .wallet_views import create_wallet_challenge, verify_wallet_challenge
 from .checkout_views import create_buyer_checkout, buyer_checkout_status
 
 urlpatterns = [
+    path('moj-commerce/merchants/<uuid:merchant_id>/console/',
+         merchant_console, name='moj-commerce-merchant-console'),
     path('moj-commerce/merchants/<uuid:merchant_id>/dashboard/',
          merchant_dashboard, name='moj-commerce-merchant-dashboard'),
     path('moj-commerce/operator/scanner-health/',

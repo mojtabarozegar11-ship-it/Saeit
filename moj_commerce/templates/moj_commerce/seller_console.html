@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="referrer" content="no-referrer">
+<title>MOJ Commerce | Seller Console</title>
+<style>
+:root{color-scheme:dark;--ink:#eaf4f0;--muted:#abbdb5;--gold:#e8c779;--panel:#152720;--edge:#3b584b;--bg:#091610}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 70% 0%,#254537 0,transparent 42%),var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,sans-serif}main{width:min(1120px,94%);margin:3rem auto}.eyebrow{color:var(--gold);font-size:.78rem;letter-spacing:.16em;text-transform:uppercase}.lead{color:var(--muted);max-width:65ch}h1{font-size:clamp(2rem,4vw,3.3rem);margin:.3rem 0}h2{font-size:1.2rem;margin:0 0 1rem}.status{display:inline-flex;border:1px solid var(--edge);border-radius:2rem;padding:.25rem .9rem;color:var(--gold)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:1rem;margin:2rem 0}.card,.panel{background:linear-gradient(150deg,#1b3329,var(--panel));border:1px solid var(--edge);border-radius:18px;padding:1.35rem;box-shadow:0 16px 30px #0003}.card .metric{font-variant-numeric:tabular-nums;font-size:clamp(1.7rem,3vw,2.3rem);font-weight:720;margin:.3rem 0;color:var(--gold)}.label{font-size:.87rem;color:var(--muted)}.panel{margin-top:1.2rem}ul{margin:.5rem 0;padding-left:1.3rem}.alert{border-left:4px solid var(--gold);padding:.8rem 1rem;background:#3c341f;color:#ffeab9;border-radius:6px;margin:.6rem 0}table{border-collapse:collapse;width:100%;font-size:.94rem}th{text-align:left;font-size:.78rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}th,td{padding:.95rem .7rem;border-bottom:1px solid var(--edge)}.scroll{overflow-x:auto}td{overflow-wrap:anywhere}.pill{border-radius:99px;background:#254838;padding:.2rem .6rem;font-size:.8rem;white-space:nowrap}footer{color:var(--muted);font-size:.8rem;margin:2rem 0}a{color:var(--gold)}:focus-visible{outline:3px solid var(--gold);outline-offset:3px}@media(max-width:600px){main{margin:1.3rem auto}.card,.panel{padding:1rem}th,td{padding:.7rem .5rem}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="eyebrow">MOJ Commerce · Private merchant operations</div>
+<h1>Seller Console</h1>
+<p class="lead">Your own orders and digital product delivery. This screen is read-only: it does not move funds, approve transfers, or activate payments.</p>
+<span class="status">Seller status: {{ snapshot.merchant_status }}</span>
+</header>
+<section aria-label="Merchant summary" class="grid">
+<div class="card"><div class="label">Delivered orders</div><div class="metric">{{ snapshot.totals.paid_delivered }}</div></div>
+<div class="card"><div class="label">Delivered sales (USD)</div><div class="metric">${{ snapshot.totals.confirmed_sales_usd }}</div></div>
+<div class="card"><div class="label">Pending orders</div><div class="metric">{{ snapshot.totals.pending }}</div></div>
+<div class="card"><div class="label">Expired pending</div><div class="metric">{{ snapshot.totals.expired_pending }}</div></div>
+<div class="card"><div class="label">Active products</div><div class="metric">{{ snapshot.totals.products }}</div></div>
+<div class="card"><div class="label">Unused verified receive addresses</div><div class="metric">{{ snapshot.totals.available_verified_addresses }}</div></div>
+<div class="card"><div class="label">Payment discrepancies</div><div class="metric">{{ snapshot.totals.payment_discrepancies }}</div></div>
+<div class="card"><div class="label">All orders</div><div class="metric">{{ snapshot.totals.orders }}</div></div>
+</section>
+<section class="panel" aria-label="Warnings">
+<h2>Operational notices</h2>
+{% for warning in snapshot.warnings %}<div class="alert" role="status">{{ warning }}</div>{% empty %}<p>No merchant-specific notices detected in this snapshot.</p>{% endfor %}
+</section>
+<section class="panel" aria-label="Recent orders">
+<h2>Recent orders</h2>
+<div class="scroll"><table><thead><tr><th scope="col">Reference</th><th scope="col">Product</th><th scope="col">Status</th><th scope="col">USD</th><th scope="col">Created (UTC)</th></tr></thead><tbody>
+{% for order in snapshot.recent_orders %}<tr><td>{{ order.reference }}</td><td>{{ order.product_title }}</td><td><span class="pill">{{ order.status }}{% if order.expired %} · expired{% endif %}</span></td><td>{{ order.usd_amount }}</td><td>{{ order.created_at }}</td></tr>{% empty %}<tr><td colspan="5">No orders yet.</td></tr>{% endfor %}
+</tbody></table></div>
+</section>
+<footer>Only this merchant's data is shown. No customer identities, wallet addresses, transaction IDs, private assets or signing keys are displayed. Metrics are not evidence that a live payment processor is installed.</footer>
+</main>
+</body></html>

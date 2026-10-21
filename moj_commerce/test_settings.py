@@ -21,6 +21,8 @@ DATABASES = (
     else {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}}
 )
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+TEMPLATES = [{'BACKEND': 'django.template.backends.django.DjangoTemplates',
+              'APP_DIRS': True, 'OPTIONS': {}}]
 MOJ_COMMERCE_RECEIVER_ENABLED = False
 MOJ_COMMERCE_FULFILL_SECRET = ''
 MOJ_COMMERCE_FINALIZED_TRON_CHECKER = None
@@ -37,3 +39,5 @@ MOJ_COMMERCE_REQUIRE_FILE_PRESENT = True
 MOJ_COMMERCE_TRX_RATE_PROVIDER = None
 # Monitoring is read-only, no schedule, no worker and no live processing.
 MOJ_COMMERCE_MONITOR_STALE_SECONDS = 300
+# No automatic operational mutation; opt-in recovery command must pass --apply.
+MOJ_COMMERCE_RECOVERY_ENABLED = False

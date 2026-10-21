@@ -26,7 +26,7 @@ jobs:
           python -m compileall -q moj_commerce
           python -m django makemigrations moj_commerce --check --dry-run --settings=moj_commerce.test_settings
       - name: Run isolated secure merchant/wallet/chain/payment/delivery tests
-        run: python -m django test tests.test_moj_commerce tests.test_moj_commerce_wallet tests.test_moj_commerce_tron_verifier tests.test_moj_commerce_gateway_e2e tests.test_moj_commerce_checkout_v04 tests.test_moj_commerce_operations_v05 --settings=moj_commerce.test_settings --verbosity 2
+        run: python -m django test tests.test_moj_commerce tests.test_moj_commerce_wallet tests.test_moj_commerce_tron_verifier tests.test_moj_commerce_gateway_e2e tests.test_moj_commerce_checkout_v04 tests.test_moj_commerce_operations_v05 tests.test_moj_commerce_operations_v06 --settings=moj_commerce.test_settings --verbosity 2
       - name: Declare that this CI does not deploy or handle money
         run: echo 'Isolated source checks only; deployment not configured.'
 
@@ -59,7 +59,7 @@ jobs:
       - name: Install PostgreSQL and Django wallet test packages
         run: python -m pip install 'Django>=5.2,<5.3' 'psycopg[binary]>=3.2,<4' 'eth-keys>=0.6,<0.8' 'eth-hash[pycryptodome]>=0.7,<1'
       - name: Verify PostgreSQL locking, replay defense and isolated functional delivery
-        run: python -m django test tests.test_moj_commerce_postgres tests.test_moj_commerce_checkout_postgres_v04 tests.test_moj_commerce_operations_postgres_v05 --settings=moj_commerce.test_settings --verbosity 2
+        run: python -m django test tests.test_moj_commerce_postgres tests.test_moj_commerce_checkout_postgres_v04 tests.test_moj_commerce_operations_postgres_v05 tests.test_moj_commerce_recovery_postgres_v06 --settings=moj_commerce.test_settings --verbosity 2
 
   official-tronweb-v2-interop:
     runs-on: ubuntu-latest
