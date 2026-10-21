@@ -80,7 +80,8 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/stage4-evidence-ssh"
           stage="/home/githubops/factory-runtime/operations/.stage4-evidence-$GITHUB_RUN_ID"
-          timeout 100s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12 githubops@178.239.147.150 "bash -se -- '$GITHUB_RUN_ID' '$GITHUB_SHA' '$GITHUB_REPOSITORY' '$GITHUB_RUN_ATTEMPT' '$have'" <<'REMOTE'
+          script_sha="$(sha256sum scripts/factory_stage4_evidence_revision_resume_20261021.py | cut -d' ' -f1)"
+          timeout 100s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12 githubops@178.239.147.150 "bash -se -- '$GITHUB_RUN_ID' '$GITHUB_SHA' '$GITHUB_REPOSITORY' '$GITHUB_RUN_ATTEMPT' '$script_sha'" <<'REMOTE'
           set -euo pipefail
           run_id="$1"
           commit_sha="$2"
