@@ -16,13 +16,17 @@ STAGE_BASE = Path("/home/zomorod2/Saeit-staging/moj-commerce-v11-synthetic-resto
 
 
 def _connect(path: Path) -> sqlite3.Connection:
-    return sqlite3.connect(str(path), timeout=10)
+    connection = sqlite3.connect(str(path), timeout=10)
+    connection.execute("PRAGMA foreign_keys = ON")
+    return connection
 
 
 def _logical_receipt(path: Path) -> tuple[str, int, int]:
     with _connect(path) as connection:
         if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise RuntimeError("Synthetic database integrity check failed")
+        if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+            raise RuntimeError("Synthetic foreign-key integrity check failed")
         orders = connection.execute(
             "SELECT id, reference, amount_sun, status FROM orders ORDER BY id"
         ).fetchall()
@@ -57,7 +61,8 @@ def main() -> None:
     seed = sandbox / "synthetic_orders.sqlite3"
     snapshot = sandbox / "synthetic_backup.sqlite3"
     restored = sandbox / "synthetic_restored.sqlite3"
-    if any(path.exists() or path.is_symlink() for path in (seed, snapshot, restored)):
+    tampered = sandbox / "synthetic_tampered_test.sqlite3"
+    if any(path.exists() or path.is_symlink() for path in (seed, snapshot, restored, tampered)):
         raise RuntimeError("Refusing overwrite of existing database or backup")
 
     with _connect(seed) as connection:
@@ -99,7 +104,21 @@ def main() -> None:
     if seed_receipt[1:] != (3, 1):
         raise RuntimeError("Unexpected synthetic counts")
 
+    # Independently exercise fail-closed checksum mismatch detection, keeping
+    # the verified snapshot and restoration unchanged for later inspection.
+    with _connect(snapshot) as backup_connection:
+        with _connect(tampered) as tampered_connection:
+            backup_connection.backup(tampered_connection)
+    with _connect(tampered) as tampered_connection:
+        tampered_connection.execute(
+            "UPDATE orders SET status = ? WHERE id = ?", ("pending", 2)
+        )
+        tampered_connection.commit()
+    if _logical_receipt(tampered) == seed_receipt:
+        raise RuntimeError("Deliberately altered backup passed logical verification")
+
     print("V11_SYNTHETIC_BACKUP_RESTORE_PASS")
+    print("V11_TAMPERED_DATA_HASH_MISMATCH_DETECTED")
     print("V11_SYNTHETIC_ORDERS=3 ENTITLEMENTS=1")
     print("V11_LOGICAL_SHA256=" + seed_receipt[0])
     print("V11_SQLITE_ONLY_NO_PRODUCTION_DATABASE_NO_REAL_PAYMENTS")
