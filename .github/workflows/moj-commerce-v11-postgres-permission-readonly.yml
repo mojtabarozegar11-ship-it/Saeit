@@ -91,7 +91,20 @@ jobs:
               *) echo "UAPI_CATEGORY_UNCLASSIFIED";;
             esac
             case "$uapi_out" in *"\"result\""*) echo "UAPI_HAS_RESULT_JSON_TOKEN";; *) echo "UAPI_NO_RESULT_JSON_TOKEN";; esac
-            if command -v pg_isready >/dev/null 2>&1; then
+            if test -L /usr/local/cpanel/bin/uapi; then echo "UAPI_IS_SYMLINK"; else echo "UAPI_IS_NOT_SYMLINK"; fi
+            if test -x /usr/local/cpanel/3rdparty/bin/perl; then echo "CPANEL_PERL_RUNTIME_PRESENT"; else echo "CPANEL_PERL_RUNTIME_NOT_AT_STANDARD_PATH"; fi
+            uapi_help=$(/usr/local/cpanel/bin/uapi --help 2>&1)
+            help_rc=$?
+            if test "$help_rc" -eq 0; then echo "UAPI_HELP_RC_ZERO"; else echo "UAPI_HELP_RC_NONZERO"; fi
+            case "$uapi_help" in
+              *"No such file or directory"*) echo "UAPI_HELP_MISSING_FILE_OR_INTERPRETER";;
+              *"not found"*) echo "UAPI_HELP_NOT_FOUND";;
+              *"Usage:"*|*"usage:"*) echo "UAPI_HELP_USAGE_DISPLAYED";;
+              *"Cannot locate"*|*"Cannot locate"*) echo "UAPI_HELP_MISSING_PERL_MODULE";;
+              "") echo "UAPI_HELP_NO_OUTPUT";;
+              *) echo "UAPI_HELP_OTHER";;
+            esac
+                        if command -v pg_isready >/dev/null 2>&1; then
               echo "PG_ISREADY_BINARY_YES"
               if PGCONNECT_TIMEOUT=3 timeout 8s pg_isready -q -h 127.0.0.1 -p 5432 >/dev/null 2>&1; then
                 echo "PG_TCP_5432_ACCEPTING"
