@@ -1,0 +1,115 @@
+name: Atelier Interior native commerce safe runtime inventory
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/atelier-interior-runtime-inventory-20261021.yml"
+permissions: {contents: read}
+concurrency:
+  group: atelier-interior-runtime-inventory-20261021
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inventory exact native commerce and private stock without database or site writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 100s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import hashlib, inspect, json, os, sys
+          from pathlib import Path
+          APP=Path('/home/zomorod2/Saeit-staging')
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          os.environ['PYTHONDONTWRITEBYTECODE']='1'
+          os.chdir(APP)
+          sys.path.insert(0,str(APP))
+          import django
+          django.setup()
+          from core.models import Product
+          from django.urls import resolve, reverse
+          result={'sku':'atelier-interior-kit-v1','read_only':True,'app_available':True}
+          result['product_fields']=[f.name for f in Product._meta.get_fields() if getattr(f,'concrete',False)]
+          result['exact_product_count']=sum(1 for p in Product.objects.filter(title='Atelier Interior — Client-Ready Website Kit')[:5] if isinstance(p.metadata,dict) and p.metadata.get('sku')=='atelier-interior-kit-v1')
+          result['reference_books']={}
+          for k in (72,225):
+           p=Product.objects.filter(pk=k).first()
+           if p:
+            m=p.metadata if isinstance(p.metadata,dict) else {}
+            result['reference_books'][str(k)]={'exists':True,'owner_set':p.owner_id is not None,'currency_usd':p.currency=='USD','active':p.active,'metadata_keys':sorted(m.keys())[:60], 'commerce_keys':sorted(m.get('mpw_commerce',{}).keys()) if isinstance(m.get('mpw_commerce'),dict) else []}
+           else: result['reference_books'][str(k)]={'exists':False}
+          routes={}
+          for path in ('/store/','/store/product/72/','/store/product/72/checkout/','/commerce/checkout/72/','/commerce/download/72/'):
+           try:
+            r=resolve(path)
+            routes[path]={'resolves':True,'namespace':r.namespace,'url_name':r.url_name,'function_module':getattr(r.func,'__module__','')[:100]}
+           except Exception as exc:routes[path]={'resolves':False,'type':type(exc).__name__}
+          result['routes']=routes
+          mods={}
+          for name in ('mpw_commerce.fulfillment','mpw_commerce.checkout_views','mpw_commerce.entitlements','core.cryptopay_checkout'):
+           try:
+            mod=__import__(name,fromlist=['*'])
+            mods[name]={'available':True,'known_handlers':sorted(n for n in ('_private_file','can_access_purchased_digital_item','checkout_start','product_delivery_ready','download') if hasattr(mod,n))}
+            if name=='mpw_commerce.fulfillment' and hasattr(mod,'_private_file'):
+             fn=getattr(mod,'_private_file')
+             mods[name]['private_file_signature']=str(inspect.signature(fn))[:150]
+           except Exception as exc:mods[name]={'available':False,'type':type(exc).__name__}
+          result['modules']=mods
+          base=Path('/home/zomorod2/.private_mojplaywin_digital_products')
+          arc=base/'atelier-interior-kit-v1-repacked.zip'
+          result['artifact']={'exists':arc.is_file() and not arc.is_symlink(),'size_ok':arc.is_file() and 1000<arc.stat().st_size<15_000_000}
+          if result['artifact']['exists']:
+           h=hashlib.sha256()
+           with arc.open('rb') as f:
+            for b in iter(lambda:f.read(131072),b''):h.update(b)
+           result['artifact']['sha_matches']=h.hexdigest()=='98bffad4ccf36f84c7924ca77e4a8b473b42f33a8fce4d85cefe2367afc097aa'
+          print('ATELIER_NATIVE_COMPLETION_INVENTORY='+json.dumps(result,sort_keys=True))
+          PY
