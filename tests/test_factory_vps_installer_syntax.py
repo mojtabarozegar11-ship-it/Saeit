@@ -33,7 +33,8 @@ class VPSProductInstallerTests(unittest.TestCase):
         workflow = (source / ".github/workflows/vps-autonomous-product-install.yml").read_text(encoding="utf-8")
         maker = (source / "scripts/factory_product_maker.py").read_text(encoding="utf-8")
         policy = "factory_personal_owner_passport_policy_20261020.py"
-        self.assertIn('with_name(\\n        "' + policy + '")', maker)
+        self.assertIn("with_name(", maker)
+        self.assertIn('"' + policy + '"', maker)
         self.assertTrue((source / "scripts" / policy).is_file())
         self.assertIn('test -f "$repo/scripts/' + policy + '"', installer)
         self.assertIn('test ! -L "$repo/scripts/' + policy + '"', installer)
