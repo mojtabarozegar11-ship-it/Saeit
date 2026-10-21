@@ -336,10 +336,24 @@ class ProductionContinuityTests(unittest.TestCase):
 
     def test_high_level_internal_needs_feed_real_new_product_builds(self):
         novel=0
+        actual_cycles=[]
         for _ in range(6):
             result=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True,
                                    enable_design_intake=True,design_capacity=6)
             novel+=result['new_artifacts']
+            snapshot=json.loads((self.output/'production-state.json').read_text())
+            latest_failures=[]
+            for item in snapshot.get("quality_failures_this_cycle",[]):
+                ledger_file=self.output/'qa-rework'/item['recipe']/'ledger.json'
+                record=json.loads(ledger_file.read_text()) if ledger_file.is_file() else {}
+                history=record.get('history',[])
+                latest_failures.append(dict(item, actual_error_excerpt=(
+                    history[-1].get('actual_error_excerpt') if history else None)))
+            actual_cycles.append({"new":result["new_artifacts"],
+                                  "built":result["manufactured"],
+                                  "failures":latest_failures,
+                                  "designer":snapshot.get("designer_failures"),
+                                  "customer":snapshot.get("real_customer_zip_checks_passed")})
         status=json.loads((self.output/'engineering-intake/production-results.json').read_text())
         source_receipts=[]
         for path in (self.output/'engineering-intake').glob('*.json'):
@@ -360,7 +374,7 @@ class ProductionContinuityTests(unittest.TestCase):
                                      'designer_pending':designer_state.get('pending_requests'),
                                      'designer_rework':designer_state.get('rework')},sort_keys=True))
         self.assertGreaterEqual(status['functional_products'],9)
-        self.assertGreaterEqual(novel,18)
+        self.assertGreaterEqual(novel,18,json.dumps(actual_cycles,sort_keys=True))
         replay=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True,
                                enable_design_intake=True,design_capacity=6)
         self.assertEqual(replay['new_artifacts'],0)
