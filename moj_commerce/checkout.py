@@ -1,6 +1,6 @@
 """Buyer-initiated, merchant-isolated TRX invoices (source only, disabled in prod).
 
-PostgreSQL is the production requirement. Each merchant must own a pool of
+PostgreSQL or MariaDB with transactional InnoDB row locking is required.\nEach merchant must own a pool of
 individually signed, never-before-used deposit addresses. Reservations are
 atomic within the SAME database as purchases. No global gateway wallet pool,
 client-supplied price, browser wallet key, or token custody is involved.
