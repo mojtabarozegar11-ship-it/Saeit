@@ -186,6 +186,32 @@ def make_zip(path, source, recipe, files):
             os.unlink(temporary)
 
 
+def ensure_professional_quality_stop(product_dir, manifest, zip_path):
+    """Separate technical-package success from paid/public sales eligibility.
+
+    Works for cached (unchanged) archives too, and cannot self-certify a
+    product's 1000/1000 professional quality from its unit-test counters.
+    """
+    actual = sha256_file(zip_path)
+    if actual != manifest.get("artifact_sha256"):
+        raise RuntimeError("QUALITY_STOP_PACKAGE_VERSION_CHANGED")
+    document = {
+        "schema": "saeit.factory.manufacturing-commercial-release-stop.v1",
+        "recipe": manifest["recipe"],
+        "artifact_sha256": actual,
+        "technical_qa": manifest.get("qa_status"),
+        "quality_standard": "100_independent_groups_x_10",
+        "professional_grade": None,
+        "professional_approval_verified": False,
+        "requires_externally_signed_1000_quality_clearance": True,
+        "requires_exact_version_owner_approval": True,
+        "commercial_release_permitted_from_manufacturing": False,
+    }
+    atomic_text(product_dir / "professional_quality_release_stop.json",
+                json.dumps(document, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
+    return "pending_independent_1000_quality_review"
+
+
 def manufacture(recipe, recipes_root, private_root):
     if not isinstance(recipe, str) or not RECIPE_ID.fullmatch(recipe):
         raise ValueError("UNSUPPORTED_RECIPE")
@@ -210,8 +236,10 @@ def manufacture(recipe, recipes_root, private_root):
             and prior_qa.get("policy_version") == QA_POLICY_VERSION
             and type(successful) is int and successful >= 1
             and zip_path.is_file() and prior.get("artifact_sha256") == previous_artifact_sha):
+        quality_state = ensure_professional_quality_stop(root, prior, zip_path)
         passport = ensure_manufacturing_private_passport(root, prior)
         return {"recipe": recipe, "changed": False, "qa_status": "passed",
+                "professional_quality_status": quality_state,
                 "private_passport": passport["passport_file"],
                 "private_artifact": str(zip_path)}
     measurements = {}
@@ -254,6 +282,7 @@ def manufacture(recipe, recipes_root, private_root):
         "needs_content_and_market_review": True, "needs_storefront_adapter_verification": True,
     }
     metadata.update(design_metadata)
+    quality_state = ensure_professional_quality_stop(root, metadata, zip_path)
     # A private per-revision sidecar is generated only after QA and hash checks.
     passport = ensure_manufacturing_private_passport(root, metadata)
     metadata["private_passport_schema"] = "saeit.factory.private-product-passport.v4"
@@ -263,6 +292,7 @@ def manufacture(recipe, recipes_root, private_root):
     return {"recipe": recipe,
             "changed": previous_artifact_sha != metadata["artifact_sha256"],
             "qa_refreshed": True, "qa_status": "passed",
+            "professional_quality_status": quality_state,
             "private_passport": passport["passport_file"],
             "private_artifact": str(zip_path)}
 
