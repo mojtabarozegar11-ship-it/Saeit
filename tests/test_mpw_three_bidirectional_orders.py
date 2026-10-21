@@ -175,6 +175,46 @@ class ThreeRealProductRequests(unittest.TestCase):
             courier.receive_three_product_requests(json.dumps(raw).encode(),self.root,ENGINE)
         self.assertFalse(list((self.root/"production-instructions/orders").glob("WO-*.json")))
 
+    def test_same_day_rescue_adds_three_real_new_sources_without_rewriting_first_batch(self):
+        self._extend_real_stock_to_twelve()
+        original=courier.three_site_product_requests(self.site,cycle="20261021")
+        oldpath=self.site/"product-orders-outbound"/"20261021.json"
+        oldbytes=oldpath.read_bytes()
+        prior=courier.receive_three_product_requests(original,self.root,ENGINE)
+        self.assertEqual(prior["new_native_orders"],3)
+        self._private_preview_for_batch(original)
+        courier.triage_site_work_orders(self.root,ENGINE)
+        rescue=courier.three_site_product_requests(
+            self.site,cycle="20261021-r1",require_fresh=True)
+        x=json.loads(original)["requests"]
+        y=json.loads(rescue)["requests"]
+        self.assertEqual(json.loads(rescue)["cycle"],"20261021-r1")
+        self.assertFalse({(r["product_id"],r["source_sha256"]) for r in x}
+                         & {(r["product_id"],r["source_sha256"]) for r in y})
+        new=courier.receive_three_product_requests(rescue,self.root,ENGINE)
+        self.assertEqual(new["new_native_orders"],3)
+        self.assertEqual(new["status"],"three_native_product_orders_created")
+        self.assertEqual(oldpath.read_bytes(),oldbytes)
+        self.assertEqual(courier.three_site_product_requests(
+            self.site,cycle="20261021-r1",require_fresh=True),rescue)
+        replay=courier.receive_three_product_requests(rescue,self.root,ENGINE)
+        self.assertEqual(replay["status"],"already_admitted")
+        self.assertEqual(replay["new_native_orders"],0)
+        self.assertEqual(len(list((self.root/"production-instructions/orders").glob("WO-*.json"))),6)
+        self.assertFalse(new["sales_or_publication_enabled"])
+
+    def test_rescue_fails_closed_without_three_distinct_unused_sources(self):
+        old=courier.three_site_product_requests(self.site,cycle="20261021")
+        oldpath=self.site/"product-orders-outbound"/"20261021.json"
+        oldbytes=oldpath.read_bytes()
+        with self.assertRaisesRegex(RuntimeError,"THREE_ORDERS_RESCUE_NO_NEW_SOURCE"):
+            courier.three_site_product_requests(self.site,cycle="20261021-r1",
+                                                require_fresh=True)
+        self.assertEqual(oldpath.read_bytes(),oldbytes)
+        self.assertFalse((self.site/"product-orders-outbound"/"20261021-r1.json").exists())
+        with self.assertRaisesRegex(RuntimeError,"THREE_ORDERS_CYCLE_INVALID"):
+            courier.three_site_product_requests(self.site,cycle="20261021-r2")
+
     def test_source_manufacture_sha_and_site_return_tampering_is_rejected(self):
         raw=courier.three_site_product_requests(self.site,cycle="20261019")
         task=json.loads(raw)["requests"][0]

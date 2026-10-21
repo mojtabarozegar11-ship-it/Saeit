@@ -1,0 +1,46 @@
+name: MojPlayWin same-day duplicate-source rescue tests
+on:
+  push:
+    branches: [fix/mpw-one-rescue-batch-preserve-receipts-20261021]
+    paths:
+      - scripts/mpw_vps_warehouse_courier.py
+      - tests/test_mpw_three_bidirectional_orders.py
+      - .github/workflows/mpw-vps-warehouse-courier.yml
+      - .github/workflows/mpw-same-day-rescue-regression-20261021.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/mpw_vps_warehouse_courier.py
+      - tests/test_mpw_three_bidirectional_orders.py
+      - .github/workflows/mpw-vps-warehouse-courier.yml
+      - .github/workflows/mpw-same-day-rescue-regression-20261021.yml
+permissions: {contents: read}
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install pinned YAML parser
+        run: python3 -m pip install --disable-pip-version-check 'PyYAML==6.0.2'
+      - name: Real native rework queue and exact receipt regression
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_vps_warehouse_courier.py
+          python3 -B -m unittest tests.test_mpw_three_bidirectional_orders -v
+          python3 -B -m unittest tests.test_mpw_vps_warehouse_courier -v
+          python3 - <<'PY'
+          import pathlib,subprocess,yaml
+          source=pathlib.Path('.github/workflows/mpw-vps-warehouse-courier.yml').read_text()
+          workflow=yaml.safe_load(source)
+          scripts=[s['run'] for s in workflow['jobs']['courier']['steps'] if 'run' in s]
+          scripts=[s for s in scripts if 'MPW_SAME_DAY_RESCUE_NEW_REAL_NATIVE_ORDERS' in s]
+          assert len(scripts)==1
+          r=subprocess.run(['bash','-n'],input=scripts[0],text=True,capture_output=True)
+          assert r.returncode==0,r.stderr
+          assert 'site-three-orders-export-rescue' in scripts[0]
+          assert 'waiting_for_distinct_site_sources' in scripts[0]
+          print('MPW_SITE_RESCUE_SHELL_SYNTAX=PASS')
+          PY
+          echo MPW_ONLY_PRIVATE_QA_NO_COMMERCIAL_RELEASE=PASS

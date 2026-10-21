@@ -182,7 +182,67 @@ jobs:
           PY
           timeout 95s ssh -T -F "$d/config" saeit-vps \
             "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-three-orders-import" \
-            < "$RUNNER_TEMP/mpw-three-product-orders.json"
+            < "$RUNNER_TEMP/mpw-three-product-orders.json" \
+            > "$RUNNER_TEMP/mpw-original-admission.jsonl"
+          cat "$RUNNER_TEMP/mpw-original-admission.jsonl"
+          retry="$(python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          lines=(Path(os.environ['RUNNER_TEMP'])/'mpw-original-admission.jsonl').read_text().splitlines()
+          assert len(lines)==1 and lines[0].startswith('MPW_COURIER_THREE_PRODUCT_ORDERS=')
+          row=json.loads(lines[0].split('=',1)[1])
+          assert row['received_verified_site_requests']==3
+          assert row['sales_or_publication_enabled'] is False
+          assert row['new_native_orders'] in (0,3)
+          print('yes' if row['status']=='waiting_for_distinct_site_sources' else 'no')
+          PY
+          )"
+          if test "$retry" = yes; then
+            # Only one bounded rescue in the same UTC day, with an independent
+            # receipt. The old batch and all prior QA remain immutable.
+            timeout 65s ssh -T -F "$d/config" saeit-cpanel \
+              "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' site-three-orders-export-rescue" \
+              > "$RUNNER_TEMP/mpw-three-product-orders-rescue.json"
+            python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          d=Path(os.environ['RUNNER_TEMP'])
+          first=json.loads((d/'mpw-three-product-orders.json').read_text())
+          rescue=json.loads((d/'mpw-three-product-orders-rescue.json').read_text())
+          assert first['schema']==rescue['schema']=='mpw.factory.three-product-requests.v1'
+          assert first['tenant']==rescue['tenant']=='mojplaywin-main'
+          assert rescue['cycle']==first['cycle']+'-r1'
+          assert rescue['exact_product_requests']==3 and len(rescue['requests'])==3
+          assert {x['slot'] for x in rescue['requests']}=={1,2,3}
+          source=lambda batch: {(x['product_id'],x['source_sha256']) for x in batch['requests']}
+          assert len(source(rescue))==3 and not (source(first)&source(rescue))
+          assert all(x['paid_customer_purchase'] is False and x['public_distribution'] is False
+                     for x in rescue['requests'])
+          print('MPW_RESCUE_REAL_DISTINCT_VERIFIED_SOURCES=PASS')
+          PY
+            timeout 95s ssh -T -F "$d/config" saeit-vps \
+              "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-three-orders-import" \
+              < "$RUNNER_TEMP/mpw-three-product-orders-rescue.json" \
+              > "$RUNNER_TEMP/mpw-rescue-admission.jsonl"
+            cat "$RUNNER_TEMP/mpw-rescue-admission.jsonl"
+            python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          lines=(Path(os.environ['RUNNER_TEMP'])/'mpw-rescue-admission.jsonl').read_text().splitlines()
+          assert len(lines)==1 and lines[0].startswith('MPW_COURIER_THREE_PRODUCT_ORDERS=')
+          row=json.loads(lines[0].split('=',1)[1])
+          assert row['received_verified_site_requests']==3
+          assert row['sales_or_publication_enabled'] is False
+          assert row['new_native_orders'] in (0,3)
+          if row['new_native_orders']!=3:
+              assert row['status'] in ('already_admitted','waiting_for_bounded_site_capacity',
+                  'waiting_for_prior_three_to_complete','waiting_for_native_capacity',
+                  'waiting_for_distinct_site_sources')
+          print('MPW_SAME_DAY_RESCUE_NEW_REAL_NATIVE_ORDERS='+str(row['new_native_orders']))
+          PY
+          else
+            echo MPW_SAME_DAY_RESCUE_NOT_NEEDED=true
+          fi
           echo MPW_SITE_TO_FACTORY_THREE_PRODUCT_REQUESTS_DELIVERED=PASS
       - name: Consume accepted returns as executable factory Stage-1 QA review jobs
         shell: bash

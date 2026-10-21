@@ -751,11 +751,11 @@ def triage_factory_stage1(root=VPS):
 
 PRODUCT_ORDER_SCHEMA="mpw.factory.three-product-requests.v1"
 PRODUCT_ORDER_ID=re.compile(r"^MPWREQ-[a-f0-9]{20}$")
-PRODUCT_ORDER_CYCLE=re.compile(r"^20[0-9]{6}$")
+PRODUCT_ORDER_CYCLE=re.compile(r"^20[0-9]{6}(?:-r1)?$")
 SITE_PENDING_WORK_ORDER_LIMIT=9
 SITE_TRIAGE_SCHEMA="mpw.factory.native-site-order-technical-triage.v1"
 
-def three_site_product_requests(root=DEST,cycle=None):
+def three_site_product_requests(root=DEST,cycle=None,*,require_fresh=False):
     """Three ACTUAL private site-origin QA rework requests, not buyer purchases.
     Ground each request in a byte-verified site stock and signed return ticket.
     A calendar-day cycle remains idempotent on hourly scheduler replays.
@@ -763,7 +763,7 @@ def three_site_product_requests(root=DEST,cycle=None):
     root=target_root(root)
     cycle=cycle or datetime.now(timezone.utc).strftime("%Y%m%d")
     require(bool(PRODUCT_ORDER_CYCLE.fullmatch(cycle)),"THREE_ORDERS_CYCLE_INVALID")
-    try:day=datetime.strptime(cycle,"%Y%m%d").date()
+    try:day=datetime.strptime(cycle[:8],"%Y%m%d").date()
     except ValueError as exc:raise RuntimeError("THREE_ORDERS_CYCLE_INVALID") from exc
     folder=root/"returns"
     private_new(folder)
@@ -810,7 +810,9 @@ def three_site_product_requests(root=DEST,cycle=None):
     require(len(history)<=2000,"THREE_ORDERS_HISTORY_CAPACITY")
     historical_sources=set()
     for previous_path in history[-180:]:
-        if previous_path.name>=path.name or not PRODUCT_ORDER_CYCLE.fullmatch(previous_path.stem):
+        if (not PRODUCT_ORDER_CYCLE.fullmatch(previous_path.stem) or
+                (previous_path.stem[:8], previous_path.stem.endswith("-r1")) >=
+                (cycle[:8], cycle.endswith("-r1"))):
             continue
         require(previous_path.is_file() and not previous_path.is_symlink(),
                 "THREE_ORDERS_HISTORY_UNSAFE")
@@ -834,6 +836,8 @@ def three_site_product_requests(root=DEST,cycle=None):
     fresh=[row for row in candidates if (row[0],row[1]) not in historical_sources]
     # If all three fresh versions are unavailable, keep the strict native
     # overlap/capacity block; never manufacture a fake "new" source.
+    if require_fresh:
+        require(len(fresh)>=3,"THREE_ORDERS_RESCUE_NO_NEW_SOURCE")
     pool=fresh if len(fresh)>=3 else candidates
     start=(day.toordinal()*3)%len(pool)
     chosen=[pool[(start+i)%len(pool)] for i in range(3)]
@@ -1222,6 +1226,9 @@ def main():
         print("MPW_NATIVE_ORDER_EVIDENCE_TRIAGE="+json.dumps(report,sort_keys=True))
     elif mode=="site-three-orders-export":
         sys.stdout.buffer.write(three_site_product_requests())
+    elif mode=="site-three-orders-export-rescue":
+        cycle=datetime.now(timezone.utc).strftime("%Y%m%d")+"-r1"
+        sys.stdout.buffer.write(three_site_product_requests(cycle=cycle,require_fresh=True))
     elif mode=="vps-three-orders-import":
         result=receive_three_product_requests(sys.stdin.buffer.read(160001))
         print("MPW_COURIER_THREE_PRODUCT_ORDERS="+json.dumps(result,sort_keys=True))
