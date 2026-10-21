@@ -132,7 +132,45 @@ def inspect_source(root, recipe):
         for info in archive.infolist():
             if info.is_dir() or info.flag_bits & 0x1 or info.file_size > MAX_ZIP:
                 raise RuntimeError("WAREHOUSE_UNSAFE_ZIP_ENTRY")
+    require_customer_package_qa(root, recipe, manifest)
     return artifact, manifest
+
+
+
+def require_customer_package_qa(root, recipe, manifest):
+    """Never stock freshly made goods without proof from the exact buyer ZIP."""
+    sha = manifest["source_sha256"]
+    digest_expected = manifest["artifact_sha256"]
+    evidence_dir = root / "customer-extracted-acceptance" / recipe / sha
+    ticket_dir = root / "quality-excellence" / "customer-extracted-review" / recipe / sha
+    for parent in (evidence_dir, ticket_dir):
+        if parent.is_symlink() or not parent.is_dir():
+            raise RuntimeError("WAREHOUSE_CUSTOMER_PACKAGE_QA_MISSING")
+    evidence = read_json(evidence_dir / "technical-receipt.json")
+    ticket = read_json(ticket_dir / "pending.json")
+    schema = "zomorodmelal.factory.customer-extracted-acceptance.v1"
+    measurements = manifest.get("qa_measurements", {})
+    if (evidence.get("schema") != schema
+            or evidence.get("recipe") != recipe
+            or evidence.get("source_sha256") != sha
+            or evidence.get("artifact_sha256") != digest_expected
+            or evidence.get("customer_zip_extract_test") != "passed"
+            or type(evidence.get("customer_archive_tests_run")) is not int
+            or evidence["customer_archive_tests_run"] < 1
+            or evidence["customer_archive_tests_run"] != measurements.get("tests_run")
+            or evidence.get("professional_quality_1000_approved") is not False
+            or evidence.get("public_listing_enabled") is not False
+            or evidence.get("commerce_enabled") is not False
+            or ticket.get("schema") != schema
+            or ticket.get("recipe") != recipe
+            or ticket.get("source_sha256") != sha
+            or ticket.get("artifact_sha256") != digest_expected
+            or ticket.get("technical_customer_qa") != "passed"
+            or ticket.get("rubric_maximum") != 1000
+            or ticket.get("verified_total_score") is not None
+            or ticket.get("professional_quality_1000_approved") is not False
+            or ticket.get("commercial_release") is not False):
+        raise RuntimeError("WAREHOUSE_CUSTOMER_PACKAGE_QA_NOT_VERIFIED")
 
 
 def verify_stored(version):
@@ -184,7 +222,8 @@ def stock_one(root, recipe, warehouse, *, quality_snapshot=None):
         "artifact_sha256": manifest["artifact_sha256"],
         "bytes": artifact.stat().st_size,
         "manufacturing_qc": "passed",
-        "qa_evidence": "unit_tests_and_zip_integrity",
+        "qa_evidence": "manufacturer_and_extracted_customer_zip_tests",
+        "customer_archive_qa": "passed",
         "production_state": "finished_goods_in_factory",
         "commercial_release": False,
         "content_rights_market_review": "pending",
@@ -234,6 +273,7 @@ def stock_summary(warehouse):
                     "artifact_sha256": record["artifact_sha256"],
                     "bytes": record["bytes"],
                     "manufacturing_qc": record["manufacturing_qc"],
+                    "customer_archive_qa": record.get("customer_archive_qa", "legacy_unverified"),
                     "commercial_release": False,
                     "site_transfer_state": "not_transferred",
                 })
