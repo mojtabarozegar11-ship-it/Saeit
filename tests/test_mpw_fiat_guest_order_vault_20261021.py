@@ -3,7 +3,7 @@ import sqlite3
 import unittest
 
 from mpw_fiat_to_trx_20261020.guest_order_vault import (
-    initialize, create_order, bind_invoice, status, GuestOrderError
+    initialize, create_order, create_catalog_order, bind_invoice, status, GuestOrderError
 )
 
 class NoAccountFiatOrderTests(unittest.TestCase):
@@ -124,6 +124,80 @@ class NoAccountFiatOrderTests(unittest.TestCase):
                        claim=o["claim"], now=self.clock)
         self.assertFalse(state["safe_to_fulfill"])
         self.assertEqual(state["state"], "created")
+
+
+    def test_retry_private_claim_only_with_original_secret(self):
+        first=self.create()
+        resumed=create_order(self.db,product_id=72,price_usd="7.50",
+                             client_nonce=self.nonce,now=self.clock+1,
+                             previous_claim=first["claim"])
+        self.assertTrue(resumed["reused"])
+        self.assertEqual(resumed["claim"],first["claim"])
+        with self.assertRaises(GuestOrderError):
+            create_order(self.db,product_id=72,price_usd="7.50",
+                         client_nonce=self.nonce,now=self.clock+1,
+                         previous_claim="Z"*56)
+        self.assertIsNone(self.create()["claim"])
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM fiat_guest_orders").fetchone()[0],1)
+
+    def test_browser_price_cannot_override_authoritative_catalog(self):
+        def catalog(pk):
+            return {"product_id":pk,"approved":True,"currency":"USD","price_usd":"7.50"}
+        order=create_catalog_order(self.db,product_id=72,client_nonce=self.nonce,
+                                   trusted_catalog_quote=catalog,now=self.clock)
+        details=status(self.db,order_id=order["order_id"],claim=order["claim"],now=self.clock)
+        self.assertEqual(details["price_usd"],"7.50")
+        with self.assertRaises(GuestOrderError):
+            create_catalog_order(self.db,product_id=72,client_nonce="C"*48,
+                                 trusted_catalog_quote=lambda pk:{
+                                     "product_id":pk,"approved":False,"currency":"USD",
+                                     "price_usd":"0.03"},now=self.clock)
+        with self.assertRaises(GuestOrderError):
+            create_catalog_order(self.db,product_id=72,client_nonce="D"*48,
+                                 trusted_catalog_quote=lambda pk:{
+                                     "product_id":pk,"approved":True,"currency":"TRX",
+                                     "price_usd":"1.00"},now=self.clock)
+        with self.assertRaises(GuestOrderError):
+            create_catalog_order(self.db,product_id=72,client_nonce="E"*48,
+                                 trusted_catalog_quote=lambda pk:{
+                                     "product_id":225,"approved":True,"currency":"USD",
+                                     "price_usd":"7.50"},now=self.clock)
+        with self.assertRaises(GuestOrderError):
+            create_catalog_order(self.db,product_id=72,client_nonce="F"*48,
+                                 trusted_catalog_quote=None,now=self.clock)
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM fiat_guest_orders").fetchone()[0],1)
+
+    def test_guest_checkout_capacity_and_safe_expired_pruning(self):
+        self.create()
+        # Simulate a full ledger of active, non-invoiced orders without PII.
+        self.db.execute("DELETE FROM fiat_guest_orders")
+        records=[(
+            "MPWF-"+format(i,"036x"),i+1,"7.50",format(i,"064x"),
+            format(i+1700,"064x"),self.clock,self.clock+60,None,None,"created"
+        ) for i in range(1200)]
+        self.db.executemany(
+            "INSERT INTO fiat_guest_orders "
+            "(order_id,product_id,price_usd,client_nonce_digest,claim_digest,created_at,"
+            "expires_at,invoice_id,invoice_url,state) VALUES(?,?,?,?,?,?,?,?,?,?)",records)
+        self.db.commit()
+        with self.assertRaises(GuestOrderError):
+            self.create(nonce="G"*48)
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM fiat_guest_orders").fetchone()[0],1200)
+        # Stale never-invoiced orders are eligible for pruning; invoiced ones are retained.
+        self.db.execute("UPDATE fiat_guest_orders SET expires_at=? WHERE product_id=1",
+                        (self.clock-90000,))
+        self.db.execute("UPDATE fiat_guest_orders SET expires_at=?,state='awaiting_payment',"
+                        "invoice_id=?,invoice_url=? WHERE product_id=2",
+                        (self.clock-90000,"55","https://nowpayments.io/payment/55"))
+        self.db.execute("UPDATE fiat_guest_orders SET expires_at=? WHERE product_id>2",
+                        (self.clock-1,))
+        self.db.commit()
+        self.create(nonce="H"*48)
+        self.assertEqual(self.db.execute(
+            "SELECT COUNT(*) FROM fiat_guest_orders WHERE product_id=1").fetchone()[0],0)
+        self.assertEqual(self.db.execute(
+            "SELECT COUNT(*) FROM fiat_guest_orders WHERE product_id=2").fetchone()[0],1)
+
 
 if __name__ == "__main__":
     unittest.main()
