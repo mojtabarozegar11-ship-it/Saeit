@@ -436,10 +436,18 @@ class RealPrivateDocumentEditionTests(unittest.TestCase):
         files={"bundle/guide.txt":b"Original technical guide"}
         files.update({"bundle/image_%03d.png"%i:b"x" for i in range(200)})
         self.bind(files)
+        source=self.root/"quality-excellence/document-edition-sources"
+        base="edition_"+self.artifact_hash[:24]
         self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
-                         "document_asset_count_over_limit")
-        self.assertFalse((self.root/"quality-excellence/document-edition-sources"/(
-            "edition_"+self.artifact_hash[:24])).exists())
+                         "private_document_edition_built")
+        self.assertEqual(len(json.loads((source/(base+"_v01")/"metadata.json").read_text())["assets"]),200)
+        self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
+                         "private_document_edition_built")
+        self.assertEqual(len(json.loads((source/(base+"_v02")/"metadata.json").read_text())["assets"]),1)
+        self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
+                         "already_issued_private_edition")
+        self.assertFalse((source/base).exists())
+        self.assertTrue((self.stock/(self.recipe+"-internal-qa.zip")).is_file())
     def test_transient_manufacturing_failure_is_retryable(self):
         self.bind({"bundle/guide.txt":b"legitimate document"})
         source=self.root/"quality-excellence/document-edition-sources"/(
