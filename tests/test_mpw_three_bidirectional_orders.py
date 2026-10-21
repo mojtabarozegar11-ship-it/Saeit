@@ -148,6 +148,22 @@ class ThreeRealProductRequests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,"THREE_ORDERS_HISTORY_UNTRUSTED"):
             courier.three_site_product_requests(self.site,cycle="20261020")
 
+    def test_new_site_work_orders_carry_only_a_verified_warehouse_family(self):
+        batch=courier.three_site_product_requests(self.site,cycle="20261019")
+        for row in json.loads(batch)["requests"]:
+            target=self.root/"production-warehouse"/"finished"/row["product_id"]/row["source_sha256"]/"warehouse_manifest.json"
+            manifest=json.loads(target.read_text())
+            manifest["family_id"]="F28"
+            target.write_text(json.dumps(manifest))
+        admission=courier.receive_three_product_requests(batch,self.root,ENGINE)
+        self.assertEqual(admission["new_native_orders"],3)
+        for order in admission["native_product_orders"]:
+            p=self.root/"production-instructions"/"orders"/(order+".json")
+            ticket=json.loads(p.read_text())
+            self.assertEqual(ticket["family_id"],"F28")
+            self.assertFalse(ticket["publication_approved"])
+            self.assertFalse(ticket["manufacturing_qa_passed"])
+
     def test_site_order_shares_no_other_tenant_and_cannot_spoof_customer_sale(self):
         raw=json.loads(courier.three_site_product_requests(self.site,cycle="20261019"))
         raw["tenant"]="zomorodmelal-main"
