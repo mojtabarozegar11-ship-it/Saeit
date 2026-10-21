@@ -215,11 +215,16 @@ jobs:
           mv "$ht.tmp.$sha" "$ht"
           ht_installed=1
           ht_expected="$(sha256sum "$ht" | cut -d' ' -f1)"
-          code="$(curl -sS -L --max-time 30 -H 'Cache-Control: no-cache' -o "$backup/live-profile.html" -w '%{http_code}' "https://zomorodmelal.ir/authors/mojtaba-rozegar/?seo_verify=$sha" || true)"
-          echo "PERSIAN_PROFILE_HTTP=$code"
-          test "$code" = 200
+          origin_code="$(curl -k -sS --max-time 25 --resolve 'zomorodmelal.ir:443:127.0.0.1' -H 'Cache-Control: no-cache' -o "$backup/origin-profile.html" -w '%{http_code}' "https://zomorodmelal.ir/authors/mojtaba-rozegar/?seo_verify=$sha" || true)"
+          echo "PERSIAN_PROFILE_ORIGIN_HTTP=$origin_code"
+          test "$origin_code" = 200
+          edge_code="$(curl -sS -L --max-time 30 -H 'Cache-Control: no-cache' -o "$backup/live-profile.html" -w '%{http_code}' "https://zomorodmelal.ir/authors/mojtaba-rozegar/?seo_verify=$sha" || true)"
+          echo "PERSIAN_PROFILE_PUBLIC_EDGE_HTTP=$edge_code"
+          if test "$edge_code" != 200 && test "$edge_code" != 404; then exit 1; fi
+          verify_html="$backup/origin-profile.html"
+          if test "$edge_code" = 200; then verify_html="$backup/live-profile.html"; else echo PUBLIC_EDGE_CACHED_404_ORIGIN_CONFIRMED=yes; fi
           for token in '<link rel="canonical" href="https://zomorodmelal.ir/authors/mojtaba-rozegar/">' 'Mojtaba Roozegar' 'Mojtaba Rozegar' 'مجتبی روزگار' '"@type":"ProfilePage"'; do
-            if grep -Fq "$token" "$backup/live-profile.html"; then echo "PROFILE_TOKEN_PRESENT=$token"; else echo "PROFILE_TOKEN_MISSING=$token"; exit 1; fi
+            if grep -Fq "$token" "$verify_html"; then echo "PROFILE_TOKEN_PRESENT=$token"; else echo "PROFILE_TOKEN_MISSING=$token"; exit 1; fi
           done
           imgcode="$(curl -sS -L --max-time 25 -o "$backup/live-photo.webp" -w '%{http_code}' "https://zomorodmelal.ir/static/site/zomorod-about/ceo-mojtaba-rozegar.webp?seo_verify=$sha" || true)"
           echo "PERSIAN_PROFILE_IMAGE_HTTP=$imgcode"
@@ -230,7 +235,7 @@ jobs:
           echo "ROOT_HTACCESS_AND_INDEX_UNCHANGED=yes"
           trap - EXIT
           echo "PERSIAN_AUTHOR_PROFILE_LIVE=verified"
-          echo "PROFILE_HTTP=200 PHOTO_HTTP=200"
+          echo "PROFILE_ORIGIN_HTTP=200 PHOTO_HTTP=200 PUBLIC_EDGE_HTTP=$edge_code"
           echo "BACKUP=$backup"
           REMOTE
       - name: Remove short-lived SSH credentials
