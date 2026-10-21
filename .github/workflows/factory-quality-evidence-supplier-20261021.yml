@@ -122,16 +122,19 @@ jobs:
               if doc.get("artifact_sha256") != artifact: continue
               # Previous immutable Q068-only receipts must not invalidate
               # a new version of the technical evidence supplier.
-              if doc.get("automated_criteria_measured") != ["Q036","Q057","Q061","Q064","Q068","Q069"]:
+              if doc.get("automated_criteria_measured") != ["Q036","Q057","Q061","Q064","Q068","Q069","Q092"]:
                   continue
               assert len(doc["supplier_assignments"])==100
-              assert doc["automated_criteria_measured"]==["Q036","Q057","Q061","Q064","Q068","Q069"]
-              assert doc["unmet_criterion_count"]==94
+              assert doc["automated_criteria_measured"]==["Q036","Q057","Q061","Q064","Q068","Q069","Q092"]
+              assert doc["unmet_criterion_count"]==93
               assert doc["independently_unapproved_criterion_count"]==100
               assert doc["f28_runtime_technical_measurement"]["positive_baseline_cli_repeats"]==8
               assert doc["f28_runtime_technical_measurement"]["invalid_cli_inputs_rejected"]==8
               assert doc["f28_runtime_technical_measurement"]["actual_embedded_unittest_count"] >= 8
               assert doc["q068_original_warehouse_zip_measurement"]["zip_crc_verified"]
+              assert doc["q092_exact_version_binding_measurement"]["artifact_sha256"]==artifact
+              assert doc["q092_exact_version_binding_measurement"]["source_sha256"]==source
+              assert doc["q092_exact_version_binding_measurement"]["source_bytes_independently_verified"] is False
               assert doc["independent_external_assessments_completed"]==0
               assert doc["professional_quality_1000_points"] is None
               assert doc["sale_or_publication_allowed"] is False
@@ -143,7 +146,7 @@ jobs:
           print("FACTORY_QA1000_SUPPLIER_PRIVATE_READBACK=PASS")
           print("FACTORY_Q068_REAL_ZIP_EVIDENCE=PASS")
           print("FACTORY_QA1000_F28_EXTRA_SCOPED_TESTS=5")
-          print("FACTORY_QA1000_CRITERIA_WITH_SOME_TECHNICAL_PROOF=6")
+          print("FACTORY_QA1000_CRITERIA_WITH_SOME_TECHNICAL_PROOF=7")
           print("FACTORY_QA1000_FULLY_INDEPENDENTLY_APPROVED=0")
           print("FACTORY_QA1000_ASSIGNED_SUPPLIER_ROLES=10")
           print("FACTORY_QA1000_EXTERNAL_SUPPLIERS_CONNECTED=0")
