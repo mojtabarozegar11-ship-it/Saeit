@@ -82,6 +82,9 @@ for route in ("/accounts/login/","/accounts/register/"):
             "cookie_samesite":cookie["samesite"] if cookie else None,
             "cookie_path":cookie["path"] if cookie else None,
             "cache_control":got.get("Cache-Control",""),
+            "http_csp":got.get("Content-Security-Policy","")[:1400],
+            "meta_csp_present":bool(re.search(r'<meta[^>]+http-equiv=["\\x27]Content-Security-Policy',markup,re.I)),
+            "form_script_present":"mpw-csrf-fresh-submit-20261020" in markup,
             "vary_has_cookie":"Cookie" in got.get("Vary",""),
             "fresh_form_script":"mpw-csrf-fresh-submit-20261020" in markup,
         })
