@@ -38,7 +38,7 @@ class TestMpwFiveEnhancedBrowserGames(unittest.TestCase):
                 self.assertIn('type="button"', s)
                 self.assertIn('id="pauseButton"', s)
                 self.assertIn('id="soundButton"', s)
-                data = re.search(r'<script type="application/ld\\+json">(.*?)</script>', s, re.S)
+                data = re.search(r'<script type="application/ld\+json">(.*?)</script>', s, re.S)
                 self.assertIsNotNone(data)
                 payload = json.loads(data.group(1))
                 self.assertEqual(payload["url"], url + slug + "/index.html")
