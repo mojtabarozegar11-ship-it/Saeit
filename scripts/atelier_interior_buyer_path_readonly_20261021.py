@@ -97,4 +97,17 @@ print("ATELIER_COMMERCE_SUFFIX_ROOT="+json.dumps({"suffixes":sorted(str(z) for z
 KnowledgeArticle=Product._meta.get_field("knowledge_article").remote_field.model
 print("ATELIER_ARTICLE_MODEL_FIELDS="+json.dumps([f.name for f in KnowledgeArticle._meta.fields]))
 print("ATELIER_PREVIOUS_PRODUCT_INVENTORY="+json.dumps([{"id":q.pk,"type":q.product_type,"article":q.knowledge_article_id is not None,"approved":all(q.metadata.get(k) is True for k in pc_module.APPROVAL_FLAGS),"price":str(q.price)} for q in Product.objects.filter(pk__in=[72,225,879])]))
+
+fields=[]
+for f in KnowledgeArticle._meta.fields:
+    fields.append({"name":f.name,"type":f.get_internal_type(),"null":f.null,"blank":f.blank,"default":str(f.default)[:80],"unique":f.unique})
+print("ATELIER_ARTICLE_FIELD_RULES="+json.dumps(fields))
+from django.conf import settings
+print("ATELIER_LIVE_GATE_FLAGS="+json.dumps({flag:getattr(settings,flag,None) is True for flag in module.FLAGS}))
+from mpw_commerce.product_checkout_page import proven_assets
+print("ATELIER_LIVE_PROVEN_PAYMENT_ASSETS="+json.dumps({k:v is True for k,v in proven_assets().items() if k in ("ETH","TRX")}))
+for path in [app/"core"/"templates"/"brands"/"mojplaywin"/"product.html",app/"core"/"templates"/"mojplaywin"/"store.html"]:
+    if path.is_file():
+        raw=path.read_text("utf8")
+        print("ATELIER_TARGET_TPL_HINT="+json.dumps({"name":path.name,"size":len(raw),"key_positions":{term:raw.find(term) for term in ("{% elif product.pk == 72 or product.pk == 225 %}","mpw-two-books","mpw-book-pay-note","{% endblock %}")},"end_snippet":raw[-650:]}))
 print("ATELIER_READONLY_VIEW_INSPECT=PASS")
