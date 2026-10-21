@@ -5,6 +5,7 @@ on:
     paths:
       - "mpw_fiat_to_trx_20261020/**"
       - "tests/test_mpw_fiat_to_trx_provider_20261020.py"
+      - "tests/test_mpw_fiat_guest_order_vault_20261021.py"
       - ".github/workflows/mpw-fiat-trx-provider-contract-tests-20261020.yml"
 permissions: {contents: read}
 jobs:
@@ -16,6 +17,7 @@ jobs:
         with: {persist-credentials: false}
       - name: Offline hosted gateway readiness and webhook integrity tests
         run: |
-          python3 -m py_compile mpw_fiat_to_trx_20261020/provider_adapter.py
+          python3 -m py_compile mpw_fiat_to_trx_20261020/provider_adapter.py mpw_fiat_to_trx_20261020/guest_order_vault.py
           python3 -m unittest discover -s tests -p test_mpw_fiat_to_trx_provider_20261020.py -v
-          echo 'MPW_FIAT_TO_TRX_PROVIDER_OFFLINE_GATES=PASS'
+          python3 -m unittest discover -s tests -p test_mpw_fiat_guest_order_vault_20261021.py -v
+          echo 'MPW_FIAT_TO_TRX_PROVIDER_AND_GUEST_OFFLINE_GATES=PASS'
