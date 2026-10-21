@@ -99,6 +99,13 @@ jobs:
           timeout 85s ssh -T -F "$RUNNER_TEMP/mpw-delivery-evidence-ssh/config" saeit-cpanel \
             "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" \
             < scripts/mpw_registration_csrf_readonly_audit_20261021.py
+      - name: Read current signup handler and existing mobile form JavaScript without writing
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-delivery-evidence-ssh/config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" \
+            < scripts/mpw_customer_mobile_csrf_rootcause_details_readonly_20261020.py
       - name: Remove temporary relay keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-delivery-evidence-ssh"
