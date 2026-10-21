@@ -89,9 +89,13 @@ def live_trx_minimum_usd(env, *, opener=urlopen):
    if name in result and str(result[name]).lower()!=expected:
     raise ValueError("Wrong payment network/currency in minimum response")
   amount=result["fiat_equivalent"]
-  if type(amount) not in (str,int,float):raise ValueError("Invalid fiat minimum type")
+  crypto_amount=result["min_amount"]
+  if type(amount) not in (str,int,float) or type(crypto_amount) not in (str,int,float):
+   raise ValueError("Invalid fiat or TRX minimum type")
   minimum=Decimal(str(amount))
-  if not minimum.is_finite() or minimum<=0 or minimum>Decimal("1000"):
+  native_minimum=Decimal(str(crypto_amount))
+  if (not minimum.is_finite() or minimum<=0 or minimum>Decimal("1000")
+      or not native_minimum.is_finite() or native_minimum<=0):
    raise ValueError("Invalid processor minimum amount")
  except (KeyError,ValueError,TypeError,UnicodeDecodeError,InvalidOperation) as exc:
   raise MerchantNotReady("Unverifiable processor minimum fiat equivalent") from exc
@@ -135,6 +139,24 @@ def create_invoice(order_id,price_usd,description,callback,success,cancel,*,env=
   raise ProviderError("Unverifiable processor invoice response") from ex
  return {"invoice_id":str(invoice_id),"invoice_url":uri,"order_id":order_id}
 
+def _unique_json_pairs(pairs):
+ """Disallow duplicate keys to prevent interpreting the same signed payment differently."""
+ result={}
+ for key,value in pairs:
+  if key in result:raise ValueError("Ambiguous duplicate JSON key")
+  result[key]=value
+ return result
+
+def _strict_payment_json(raw):
+ if isinstance(raw,bytes):
+  if len(raw)>32768:raise ValueError("Oversized JSON")
+  raw=raw.decode("utf8")
+ if not isinstance(raw,str):raise ValueError("Invalid JSON type")
+ result=json.loads(raw,object_pairs_hook=_unique_json_pairs,
+  parse_constant=lambda v: (_ for _ in ()).throw(ValueError("Non-finite JSON value")))
+ if not isinstance(result,dict):raise ValueError("Payment JSON must be an object")
+ return result
+
 def _sorted_payload(value):
  if isinstance(value,dict):
   return {k:_sorted_payload(value[k]) for k in sorted(value)}
@@ -147,8 +169,7 @@ def valid_webhook(raw,signature,secret):
   return False
  if not isinstance(secret,str) or not secret:return False
  try:
-  message=json.loads(raw)
-  if not isinstance(message,dict):return False
+  message=_strict_payment_json(raw)
   canonical=json.dumps(_sorted_payload(message),separators=(",",":"),ensure_ascii=False).encode("utf8")
   expected=hmac.new(secret.encode(),canonical,hashlib.sha512).hexdigest()
   return hmac.compare_digest(expected,signature.lower())
@@ -187,7 +208,7 @@ def verify_processor_payment(*, payment_id, invoice_id, order_id, price_usd,
  if not valid_webhook(signed_ipn_raw,signed_ipn_signature,e["NOWPAYMENTS_IPN_SECRET"]):
   raise ProviderError("Untrusted IPN notification")
  try:
-  ipn=json.loads(signed_ipn_raw.decode("utf8"))
+  ipn=_strict_payment_json(signed_ipn_raw)
  except (ValueError,UnicodeDecodeError) as exc:
   raise ProviderError("Unreadable authenticated IPN") from exc
  request=Request("https://api.nowpayments.io/v1/payment/"+str(payment_id),
@@ -198,7 +219,7 @@ def verify_processor_payment(*, payment_id, invoice_id, order_id, price_usd,
  except Exception as exc:
   raise ProviderError("Independent processor verification unavailable") from exc
  if len(raw)>32768:raise ProviderError("Unbounded provider verification")
- try: current=json.loads(raw.decode("utf8"))
+ try: current=_strict_payment_json(raw)
  except (ValueError,UnicodeDecodeError) as exc:
   raise ProviderError("Malformed independent provider status") from exc
  def same_status(proof):
