@@ -151,8 +151,9 @@ if log.is_file() and not log.is_symlink():
         elif "reconcile_exception" in line:outcome["exception"]+=1
         elif "reconcile_timeout" in line:outcome["timeout"]+=1
         elif "reconcile_disabled" in line:outcome["disabled"]+=1
-        elif "reconcile_idle" in line:outcome["idle"]+=1
-        elif "reconcile_scanned" in line:outcome["scanned"]+=1
+        elif "reconcile_MPW_COMMERCE_RECONCILE_state=idle" in line:outcome["idle"]+=1
+        elif "reconcile_MPW_COMMERCE_RECONCILE_state=scanned" in line:outcome["scanned"]+=1
+        elif "reconcile_MPW_COMMERCE_RECONCILE_state=disabled" in line:outcome["disabled"]+=1
         if any(t in line for t in ("reconcile_failed","reconcile_exception","reconcile_timeout")):
             last.append(line[:45])
     log_age=(timezone.now()-datetime.datetime.fromtimestamp(
