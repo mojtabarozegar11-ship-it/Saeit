@@ -9,6 +9,7 @@ authorized external reviewers and the owner, never the factory.
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -30,16 +31,33 @@ def digest(path):
     return h.hexdigest()
 
 def validate_key_registry(config):
+    """Only a root-signed registry anchored OUTSIDE that registry is trusted.
+
+    The root SHA-256 is an operator-controlled environment setting on the
+    actual server, not a self-declared value in the candidate JSON.
+    No configured trust root => no commercial clearance.
+    """
     if not isinstance(config,dict) or config.get("schema")!=KEY_SCHEMA:
         raise ValueError("TRUST_REGISTRY_INVALID")
     entries=config.get("reviewers")
-    if not isinstance(entries,dict):raise ValueError("TRUST_KEYS_MISSING")
+    if not isinstance(entries,dict):
+        raise ValueError("TRUST_KEYS_MISSING")
+    root_pub=config.get("trusted_root_public_key_pem")
+    root_sig=config.get("root_signature_hex")
+    pinned=os.environ.get("FACTORY_QA_TRUST_ROOT_SHA256","")
+    if (not isinstance(root_pub,str) or not re.fullmatch(r"[a-f0-9]{64}",pinned)
+            or hashlib.sha256(root_pub.encode("utf-8")).hexdigest()!=pinned
+            or not verify_sig(root_pub,canonical({"schema":KEY_SCHEMA,"reviewers":entries}),root_sig)):
+        raise ValueError("UNVERIFIED_OR_UNPINNED_TRUST_REGISTRY")
     for name,entry in entries.items():
         if (not re.fullmatch(r"[a-zA-Z0-9_.-]{4,64}",name)
             or not isinstance(entry,dict) or entry.get("role") not in ROLES
             or not isinstance(entry.get("public_key_pem"),str)
             or "BEGIN PUBLIC KEY" not in entry["public_key_pem"]
-            or not entry.get("externally_identity_verified") is True):
+            or entry.get("externally_identity_verified") is not True
+            or not isinstance(entry.get("identity_verification_evidence_sha256"),str)
+            or not HEX.fullmatch(entry["identity_verification_evidence_sha256"])
+            or entry.get("active") is not True):
             raise ValueError("UNTRUSTED_REVIEWER_IDENTITY")
     return entries
 
