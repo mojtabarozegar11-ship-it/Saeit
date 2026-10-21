@@ -233,3 +233,35 @@ for root,dirs,files in os.walk(home,topdown=True,followlinks=False):
         entries.append({"directory":str(rel),"wsgi":"passenger_wsgi.py" in files,"manage":"manage.py" in files})
     if len(entries)>=30:break
 print("ATELIER_OTHER_APP_ENTRYPOINTS="+json.dumps(entries))
+
+
+# Follow-up: identify only the domain-specific storefront and product rewrite targets.
+docroot=home/"mojplaywin.com"
+ht=docroot/".htaccess"
+if ht.is_file():
+    htlines=ht.read_text("utf8",errors="replace").splitlines()
+    keep=[]
+    for n,line in enumerate(htlines,1):
+        lower=line.lower()
+        if any(q in lower for q in ("store", "product", "checkout","commerce","passenger","design-preview","rewritebase")):
+            if any(q in lower for q in ("token", "password", "secret", "authorization", "api_key","authuserfile")):continue
+            keep.append({"line":n,"rule":line.strip()[:260]})
+    print("ATELIER_DOMAIN_REWRITE_ROUTES="+json.dumps({"count":len(htlines),"matches":keep[:90]},sort_keys=True))
+for rel in ("passenger_wsgi.py","design-preview-20261017",
+            "design-preview-20261017/store","design-preview-20261017/store.html",
+            "design-preview-20261017/store.php",
+            "design-preview-20261017/_mpw_dynamic_main_shell_20261019.php",
+            "design-preview-20261017/pages/store.html",
+            "design-preview-20261017/pages/store.php"):
+    q=docroot/rel
+    item={"path":rel,"exists":q.exists(),"file":q.is_file(),"directory":q.is_dir(),
+          "symlink":q.is_symlink()}
+    if q.is_file() and not q.is_symlink():
+        item["bytes"]=q.stat().st_size
+        data=q.read_text("utf8",errors="replace") if q.stat().st_size<120000 else ""
+        item["atelier_marker"]="atelier-original-vector-879" in data
+        item["checkout_879_link"]="/store/product/879/checkout/" in data
+        if rel.endswith("passenger_wsgi.py"):
+            item["app_path_refs"]=[line.strip()[:150] for line in data.splitlines()
+                 if any(t in line for t in ("Saeit","sys.path","os.chdir","DJANGO_SETTINGS_MODULE"))][:15]
+    print("ATELIER_DOMAIN_ROUTE_FILE="+json.dumps(item,sort_keys=True))
