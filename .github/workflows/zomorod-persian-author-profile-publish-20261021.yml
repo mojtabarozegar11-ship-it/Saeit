@@ -186,6 +186,12 @@ jobs:
           test -s "$candidate" && test -s "$sitemap" && test -f "$web/.htaccess"
           test ! -L "$web" && test ! -L "$sitemap" && test ! -L "$web/.htaccess"
           test ! -e "$page"
+          python3 - "$web/.htaccess" <<'PY'
+          import re,sys
+          for line in open(sys.argv[1],encoding='utf-8',errors='replace'):
+              if re.search(r'(rewrite|directoryindex|passenger|fallback|authors|redirect)',line,re.I) and not re.search(r'(password|passwd|secret|token|credential)',line,re.I):
+                  print('ROUTING_RULE='+line.rstrip()[:300])
+          PY
           test -f "$image" && test ! -L "$image"
           python3 - "$sitemap" <<'PY'
           import sys,xml.etree.ElementTree as ET
@@ -242,16 +248,16 @@ jobs:
           sitemap_changed=1
           sitemap_expected="$(sha256sum "$sitemap" | cut -d' ' -f1)"
           code="$(curl -sS -L --max-time 30 -H 'Cache-Control: no-cache' -o "$backup/live-profile.html" -w '%{http_code}' "https://zomorodmelal.ir/authors/mojtaba-rozegar/?seo_verify=$sha" || true)"
-          test "$code" = 200
-          grep -Fq '<link rel="canonical" href="https://zomorodmelal.ir/authors/mojtaba-rozegar/">' "$backup/live-profile.html"
-          grep -Fq 'Mojtaba Roozegar' "$backup/live-profile.html"
-          grep -Fq 'Mojtaba Rozegar' "$backup/live-profile.html"
-          grep -Fq 'مجتبی روزگار' "$backup/live-profile.html"
-          grep -Fq '"@type":"ProfilePage"' "$backup/live-profile.html"
+          echo "PERSIAN_PROFILE_HTTP=$code"
+          for token in '<link rel="canonical" href="https://zomorodmelal.ir/authors/mojtaba-rozegar/">' 'Mojtaba Roozegar' 'Mojtaba Rozegar' 'مجتبی روزگار' '"@type":"ProfilePage"'; do
+            if grep -Fq "$token" "$backup/live-profile.html"; then echo "PROFILE_TOKEN_PRESENT=$token"; else echo "PROFILE_TOKEN_MISSING=$token"; exit 1; fi
+          done
           imgcode="$(curl -sS -L --max-time 25 -o "$backup/live-photo.webp" -w '%{http_code}' "https://zomorodmelal.ir/static/site/zomorod-about/ceo-mojtaba-rozegar.webp?seo_verify=$sha" || true)"
+          echo "PERSIAN_PROFILE_IMAGE_HTTP=$imgcode"
           test "$imgcode" = 200
           grep -Fq "$loc" "$sitemap"
           (cd "$web"; sha256sum -c --status "$backup/protected.htaccess.sha256")
+          echo "PROTECTED_HTACCESS_UNCHANGED=yes"
           trap - EXIT
           echo "PERSIAN_AUTHOR_PROFILE_LIVE=verified"
           echo "PROFILE_HTTP=200 PHOTO_HTTP=200"
