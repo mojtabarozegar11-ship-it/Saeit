@@ -7,6 +7,7 @@ on:
       - scripts/factory_verified_customer_cycle_20261021.py
       - scripts/factory_product_maker.py
       - scripts/factory_product_rework.py
+      - deploy/install_autonomous_factory_products.sh
       - product_recipes/**
       - tests/test_factory_verified_customer_cycle_20261021.py
       - .github/workflows/factory-real-customer-qa-20261021.yml
@@ -17,6 +18,7 @@ on:
       - scripts/factory_verified_customer_cycle_20261021.py
       - scripts/factory_product_maker.py
       - scripts/factory_product_rework.py
+      - deploy/install_autonomous_factory_products.sh
       - product_recipes/**
       - tests/test_factory_verified_customer_cycle_20261021.py
       - .github/workflows/factory-real-customer-qa-20261021.yml
@@ -38,6 +40,7 @@ jobs:
           set -euo pipefail
           python3 -m pip install --disable-pip-version-check openpyxl==3.1.5
           export PYTHONDONTWRITEBYTECODE=1
+          bash -n deploy/install_autonomous_factory_products.sh
           python3 -m py_compile scripts/factory_verified_customer_cycle_20261021.py scripts/factory_vps_product_cycle.py
           python3 -m unittest tests.test_factory_verified_customer_cycle_20261021 -v
           python3 -m unittest tests.test_factory_product_maker -v
