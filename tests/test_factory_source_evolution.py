@@ -99,8 +99,8 @@ class SourceEvolutionTests(unittest.TestCase):
         calculator.write_text(code[:first]+code[last:],encoding='utf8')
         tests=self.source/'test_calculator.py'
         content=tests.read_text(encoding='utf8')
-        content=re.sub(r'(?ms)^# STATS_TESTS_V3_START\\n.*?^# STATS_TESTS_V3_END\\n','',content)
-        content=re.sub(r'(?ms)^    # STATS_TESTS_V3_START\\n.*?^    # STATS_TESTS_V3_END\\n','',content)
+        content=re.sub(r'(?ms)^# STATS_TESTS_V3_START\n.*?^# STATS_TESTS_V3_END\n','',content)
+        content=re.sub(r'(?ms)^    # STATS_TESTS_V3_START\n.*?^    # STATS_TESTS_V3_END\n','',content)
         tests.write_text(content,encoding='utf8')
         receipt=self.source/'design_receipt.json'
         data=json.loads(receipt.read_text(encoding='utf8'))
