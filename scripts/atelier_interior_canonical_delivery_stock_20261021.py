@@ -46,8 +46,15 @@ def main():
     if any("public_html"==part or "mojplaywin.com"==part for part in root.parts):
         raise RuntimeError("PUBLIC_DOCROOT_REFUSED")
     if not root.is_dir() or root.parent.is_symlink():raise RuntimeError("INVALID_PAYMENT_PRIVATE_ROOT")
-    secure(root)
-    dest=root/NAME
+    if root.is_symlink():raise RuntimeError("ROOT_SYMLINK")
+    # Existing engine root may be shared/0755; create an isolated 0700 child
+    # rather than changing permissions on the shared commerce directory.
+    private_child=root/".atelier_paid_digital_20261021"
+    if private_child.is_symlink():raise RuntimeError("CHILD_SYMLINK")
+    if not private_child.exists():private_child.mkdir(mode=0o700)
+    if not private_child.is_dir():raise RuntimeError("CHILD_NOT_DIRECTORY")
+    secure(private_child)
+    dest=private_child/NAME
     if dest.is_symlink():raise RuntimeError("DESTINATION_SYMLINK")
     if dest.exists():
         secure(dest)
