@@ -68,15 +68,17 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-route-diagnostic"
-          ssh -F "$d/config" saeit-cpanel bash -s <<'REMOTE'
+          source_sha="$(sha256sum config/urls.py | awk '{print $1}')"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$source_sha" <<'REMOTE'
           set -euo pipefail
+          source_sha="$1"
           route="$HOME/Saeit/config/urls.py"
           public="$HOME/public_html"
           target="$public/authors/mojtaba-rozegar"
           echo "DEPLOYED_DJANGO_ROUTE:"
           grep -n -B 2 -A 2 'authors/mojtaba-rozegar' "$route" || true
           echo "DEPLOYED_URLCONF_SHA=$(sha256sum "$route" | awk '{print $1}')"
-          echo "SOURCE_URLCONF_SHA=$(sha256sum "$GITHUB_WORKSPACE/config/urls.py" | awk '{print $1}')"
+          echo "SOURCE_URLCONF_SHA=$source_sha"
           sed -n '1,18p' "$route"
           if test -e "$target"; then
             echo "PERSIAN_STATIC_TARGET_EXISTS=yes"
