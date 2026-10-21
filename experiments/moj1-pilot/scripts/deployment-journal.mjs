@@ -27,8 +27,14 @@ export async function openDeploymentJournal(path, context) {
   if (typeof path !== 'string' || !isAbsolute(path)) {
     throw new Error('MOJ1_DEPLOY_JOURNAL_PATH must be an absolute persistent filesystem path');
   }
+  // Only two explicitly enumerated Shasta-only deployment manifests are supported.
+  // A governance bootstrap uses a separate journal, so a token deployment cannot
+  // overwrite or disguise a previously uncertain governance transaction.
+  const manifest = context?.artifacts;
+  const keys = manifest && Object.keys(manifest).sort().join(',');
+  const validManifest = keys === 'MojAssets,MojCoin' || keys === 'MojPilotGovernance';
   if (!context || context.network !== 'Shasta' ||
-      !context.governance || !context.artifacts?.MojCoin || !context.artifacts?.MojAssets) {
+      !context.governance || !validManifest) {
     throw new Error('Invalid Shasta deployment journal identity');
   }
   await mkdir(dirname(path), {recursive: true, mode: 0o700});
@@ -78,7 +84,7 @@ export async function openDeploymentJournal(path, context) {
       async markBroadcastUncertain(name, details) {
         const othersPending = Object.values(state.steps).some(
           step => step?.status === 'BROADCAST_UNCERTAIN');
-        if (!['MojCoin', 'MojAssets'].includes(name) || state.steps[name] || othersPending) {
+        if (!Object.prototype.hasOwnProperty.call(context.artifacts, name) || state.steps[name] || othersPending) {
           throw new Error('Cannot repeat or overwrite a journaled deployment: ' + name);
         }
         if (!/^[a-f0-9]{64}$/i.test(details?.txID ?? '') ||
