@@ -40,8 +40,23 @@
         "source_verification",
         "expert_peer_review",
         "technical_accuracy",
-        "layout_and_accessibility"
+        "layout_and_accessibility",
+        "doctoral_reference_depth",
+        "claim_to_primary_source_traceability",
+        "current_literature_and_guideline_alignment",
+        "chapter_by_chapter_specialist_signoff",
+        "original_scientific_synthesis",
+        "independent_fact_and_clinical_safety_review",
+        "reference_grade_figures_tables_and_index"
       ],
+      "elite_quality_policy": {
+        "schema": "saeit.factory.reference-depth-and-game-novelty.v1",
+        "gate_module": "scripts/factory_reference_depth_game_novelty_gate.py",
+        "quality_target": "specialist_reference_edition",
+        "inspiration_only_not_copied": "Kirklin/Barratt-Boyes Cardiac Surgery",
+        "automated_sales_approval": false,
+        "fail_closed_without_independent_expert_evidence": true
+      },
       "universal_tests": [
         "completeness",
         "correctness_functionality",
@@ -1045,8 +1060,23 @@
         "playability",
         "security",
         "responsive",
-        "save_restore_if_promised"
+        "save_restore_if_promised",
+        "original_gameplay_compared_with_competitors",
+        "non_derivative_core_loop",
+        "new_release_and_market_relevance",
+        "two_demonstrable_novel_mechanics",
+        "blind_independent_player_sessions",
+        "mobile_real_device_and_accessibility",
+        "copyright_and_marketplace_distribution_review"
       ],
+      "elite_quality_policy": {
+        "schema": "saeit.factory.reference-depth-and-game-novelty.v1",
+        "gate_module": "scripts/factory_reference_depth_game_novelty_gate.py",
+        "quality_target": "original_contemporary_global_mobile_game",
+        "legacy_comparator_not_new_game": "Clash of Clans (2012 original release)",
+        "automated_sales_approval": false,
+        "fail_closed_without_verified_novelty": true
+      },
       "universal_tests": [
         "completeness",
         "correctness_functionality",
