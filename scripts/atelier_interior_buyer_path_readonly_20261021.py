@@ -290,3 +290,13 @@ for rel in ("design-preview-20261017/_mpw_dynamic_main_shell_20261019.php",
     print("ATELIER_PUBLIC_STORE_PHP_ORIGIN="+json.dumps({"path":rel,"total_lines":len(lines),
          "bytes":q.stat().st_size,"matches":matched[:75],
          "has_catalog_bridge":"store.html" in q.read_text("utf8",errors="replace")},sort_keys=True))
+
+
+# Follow-up: source-to-public-store pipeline, code excerpts only (no credentials).
+shell=docroot/"design-preview-20261017/_mpw_dynamic_main_shell_20261019.php"
+if shell.is_file():
+    lines=shell.read_text("utf8",errors="replace").splitlines()
+    for lo,hi in ((10,31),(277,326),(335,383)):
+        snippet=[{"n":n,"code":lines[n-1][:180]} for n in range(lo,min(hi,len(lines))+1)
+          if not any(x in lines[n-1].lower() for x in ("password","token","secret","private_key","authorization"))]
+        print("ATELIER_ACTIVE_PHP_SEGMENT="+json.dumps({"from":lo,"to":hi,"lines":snippet}))
