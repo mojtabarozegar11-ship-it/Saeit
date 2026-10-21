@@ -340,6 +340,9 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
     print("FACTORY_TECHNICAL_PASS_NOT_PREMIUM="+str(summary["technical_passed"]))
     print("FACTORY_REAL_REWORK_CLASSIFICATION="+json.dumps(dict(statuses),sort_keys=True))
     print("FACTORY_TOP_STOP_SHIP_DEFECTS="+json.dumps(defects.most_common(8)))
+    print("FACTORY_QUARANTINE_ROOT_CAUSES="+json.dumps(
+        Counter(code for x in records if x["quality_status"].startswith("QUARANTINE")
+                for code in x["defects"]).most_common(15)))
     print("FACTORY_QUALITY_GROUP_COUNT=100")
     print("FACTORY_QUALITY_POINTS_PER_GROUP=10")
     print("FACTORY_QUALITY_CRITERIA_COUNT=100")
