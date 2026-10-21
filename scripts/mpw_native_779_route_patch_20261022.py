@@ -15,7 +15,7 @@ APP = Path("/home/zomorod2/Saeit-staging")
 SITE = Path("/home/zomorod2/mojplaywin.com")
 TARGET = APP / "core/cryptopay_checkout.py"
 BACKUPS = Path("/home/zomorod2/.private_mojplaywin_main_agents")
-OLD = re.compile(r"\\bpk\\s+in\\s*\\(\\s*72\\s*,\\s*225\\s*,\\s*879\\s*\\)")
+OLD = re.compile(r"pk\s+in\s*\(\s*72\s*,\s*225\s*,\s*879\s*\)")
 NEW = "pk in (72, 225, 779, 879)"
 
 def digest(data):
