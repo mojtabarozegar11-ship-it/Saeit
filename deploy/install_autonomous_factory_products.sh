@@ -26,6 +26,10 @@ fi
 test -d "$ops"
 test -d "$base/private"
 test -f "$repo/scripts/factory_product_maker.py"
+# The maker imports this mandatory, private, fail-closed personal-owner policy.
+# Missing this file previously caused manufacturing/import failures after cutover.
+test -f "$repo/scripts/factory_personal_owner_passport_policy_20261020.py"
+test ! -L "$repo/scripts/factory_personal_owner_passport_policy_20261020.py"
 test -f "$repo/scripts/factory_recipe_designer.py"
 test -f "$repo/scripts/factory_specialist_pilots.py"
 test -f "$repo/scripts/factory_specialist_formats.py"
@@ -79,7 +83,7 @@ mkdir -p "$scripts" "$recipes" "$private"
 chmod 700 "$stage" "$scripts" "$recipes" "$private"
 
 
-for f in factory_product_maker.py factory_autonomous_portfolio.py \
+for f in factory_product_maker.py factory_personal_owner_passport_policy_20261020.py factory_autonomous_portfolio.py \
          factory_evidence_quality.py factory_first_product_pilot.py factory_vps_product_cycle.py \
          factory_product_rework.py factory_recipe_designer.py factory_specialist_pilots.py factory_specialist_formats.py factory_research_triage.py factory_build_50.py factory_build50_workbook.py factory_design_intake.py factory_continuous_invention.py factory_customer_packager.py; do
   install -m 600 "$repo/scripts/$f" "$scripts/$f"
@@ -109,7 +113,7 @@ incoming=""
 
 # Quality gate must exist and compile BEFORE any production cycle or cron change.
 "$python" -B -c 'import ast, pathlib, sys; [ast.parse(pathlib.Path(x).read_text(encoding="utf-8")) for x in sys.argv[1:]]' \
-  "$scripts/factory_recipe_designer.py" "$scripts/factory_evidence_quality.py" "$scripts/factory_autonomous_portfolio.py" "$scripts/factory_vps_product_cycle.py" "$scripts/factory_product_rework.py" "$scripts/factory_specialist_pilots.py" "$scripts/factory_specialist_formats.py" "$scripts/factory_research_triage.py" "$scripts/factory_continuous_invention.py" "$scripts/factory_customer_packager.py"
+  "$scripts/factory_personal_owner_passport_policy_20261020.py" "$scripts/factory_recipe_designer.py" "$scripts/factory_evidence_quality.py" "$scripts/factory_autonomous_portfolio.py" "$scripts/factory_vps_product_cycle.py" "$scripts/factory_product_rework.py" "$scripts/factory_specialist_pilots.py" "$scripts/factory_specialist_formats.py" "$scripts/factory_research_triage.py" "$scripts/factory_continuous_invention.py" "$scripts/factory_customer_packager.py"
 
 # Product QA is mandatory BEFORE changes to the local scheduler.
 # The cycle discovers the complete catalog and runs each recipe's test_*.py suite.
