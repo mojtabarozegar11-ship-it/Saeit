@@ -93,7 +93,7 @@ def active_rework(root, recipe):
     return None
 
 
-def inspect_source(root, recipe):
+def inspect_source(root, recipe, *, strict_build50_evidence=False):
     if not RECIPE.fullmatch(recipe):
         raise RuntimeError("WAREHOUSE_INVALID_PRODUCT_ID")
     folder = root / "digital-products" / recipe
@@ -132,7 +132,8 @@ def inspect_source(root, recipe):
         for info in archive.infolist():
             if info.is_dir() or info.flag_bits & 0x1 or info.file_size > MAX_ZIP:
                 raise RuntimeError("WAREHOUSE_UNSAFE_ZIP_ENTRY")
-    require_customer_package_qa(root, recipe, manifest)
+    if not strict_build50_evidence:
+        require_customer_package_qa(root, recipe, manifest)
     return artifact, manifest
 
 
@@ -196,13 +197,24 @@ def verify_stored(version):
 
 
 def stock_one(root, recipe, warehouse, *, quality_snapshot=None):
-    artifact, manifest = inspect_source(root, recipe)
+    artifact, manifest = inspect_source(root, recipe,
+                                        strict_build50_evidence=quality_snapshot is not None)
     if quality_snapshot is not None:
         receipt=Path(root)/'digital-products'/recipe/'manufacturing_manifest.json'
         if (manifest.get('source_sha256')!=quality_snapshot.get('source_sha256')
                 or manifest.get('artifact_sha256')!=quality_snapshot.get('artifact_sha256')
                 or digest(receipt)!=quality_snapshot.get('source_receipt_sha256')):
             raise RuntimeError('WAREHOUSE_BUILD50_SNAPSHOT_CHANGED')
+        # A caller-supplied dict must never waive buyer ZIP QA. Independently
+        # rederive strict 50-stage proof from the pinned local receipts.
+        protocol_path = Path(__file__).resolve().with_name('factory_build_50.py')
+        spec = importlib.util.spec_from_file_location('warehouse_bound_build50', protocol_path)
+        require_proof = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(require_proof)
+        verified = [x for x in require_proof.audit(root)['products']
+                    if x['product_id'] == recipe and x['build_50_verified']]
+        if len(verified) != 1 or verified[0] != quality_snapshot:
+            raise RuntimeError('WAREHOUSE_BUILD50_INDEPENDENT_PROOF_INVALID')
     if active_rework(root, recipe):
         return {"product_id": recipe, "action": "held_for_rework", "source_sha256": manifest["source_sha256"]}
     container = warehouse / "finished" / recipe
@@ -222,8 +234,11 @@ def stock_one(root, recipe, warehouse, *, quality_snapshot=None):
         "artifact_sha256": manifest["artifact_sha256"],
         "bytes": artifact.stat().st_size,
         "manufacturing_qc": "passed",
-        "qa_evidence": "manufacturer_and_extracted_customer_zip_tests",
-        "customer_archive_qa": "passed",
+        "qa_evidence": ("independent_verified_50_stage_build"
+                        if quality_snapshot is not None
+                        else "manufacturer_and_extracted_customer_zip_tests"),
+        "customer_archive_qa": ("not_measured_build50_expert_review_only"
+                                if quality_snapshot is not None else "passed"),
         "production_state": "finished_goods_in_factory",
         "commercial_release": False,
         "content_rights_market_review": "pending",
