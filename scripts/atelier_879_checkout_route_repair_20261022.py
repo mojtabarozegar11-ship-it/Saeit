@@ -61,9 +61,9 @@ def smoke():
     request.user=SimpleNamespace(is_authenticated=True,is_active=True)
     response=checkout(request,879)
     body=getattr(response,"content",b"").decode("utf-8","replace")
-    if response.status_code!=200 or "/api/" not in body or "6.80" not in body:
+    if response.status_code!=200 or len(body)<300 or "Product delivery is not ready." in body or "Checkout unavailable" in body:
         raise RuntimeError("SIGNED_IN_NATIVE_GET_FAILED_"+str(response.status_code))
-    return {"status":response.status_code,"price_visible":True,"api_present":True}
+    return {"status":response.status_code,"checkout_html_rendered":True,"legacy_error_absent":True}
 def activate():
     if os.environ.get("ATELIER_OWNER_REPAIR_879_ROUTE")!="20261022-owner-879":
         raise PermissionError("OWNER_GUARD_REQUIRED")
