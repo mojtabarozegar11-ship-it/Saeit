@@ -134,6 +134,24 @@ class FactoryPrivateQAFailureIsolation(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "CONSUMER_MANIFEST_"):
                     sender.verify_consumer_source(self.root.parent, recipe, version)
 
+    def test_failed_remote_call_reports_safe_stage_not_ssh_credential(self):
+        command = ["ssh", "-i", "synthetic-sensitive-private-key", "private-host"]
+        with mock.patch.object(sender.subprocess, "run",
+                               return_value=mock.Mock(returncode=255)):
+            with self.assertRaisesRegex(RuntimeError,
+                                        "PRIVATE_DELIVERY_STATUS_RC_255") as error:
+                sender.call(command, allowed=(0, 1), stage="status")
+        self.assertNotIn("synthetic-sensitive-private-key", str(error.exception))
+        self.assertNotIn("private-host", str(error.exception))
+
+    def test_unrecognized_error_stage_is_never_logged(self):
+        with mock.patch.object(sender.subprocess, "run",
+                               return_value=mock.Mock(returncode=3)):
+            with self.assertRaisesRegex(RuntimeError,
+                                        "PRIVATE_DELIVERY_UNKNOWN_RC_3") as error:
+                sender.call(["ssh", "private-host"], stage="anything_secret")
+        self.assertNotIn("anything_secret", str(error.exception))
+
     def test_install_workflow_retains_vps_sender_rollback(self):
         workflow = (SOURCE.parents[1] / ".github/workflows/vps-store-bridge-install.yml"
                     ).read_text(encoding="utf-8")
