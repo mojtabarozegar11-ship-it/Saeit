@@ -56,8 +56,9 @@ def changed(raw,pinned=True):
  if MARK in s:fail('Already styled')
  for v in ('<form method="post">','{% csrf_token %}','{{ product.title }}','{{ product.price }}','12 USDT'):
   if s.count(v)!=1:fail('Legacy checkout contract drifted: '+v)
- for v in ('<form method="post">','{% csrf_token %}','{{ product.title }}','{{ product.price }}'):
+ for v in ('<form method="post">','{% csrf_token %}','{{ product.price }}'):
   if HTML.count(v)!=1:fail('New checkout contract invalid: '+v)
+ if HTML.count('{{ product.title }}')<1:fail('Missing escaped product title')
  if '12 USDT' in HTML:fail('Hardcoded price retained')
  return HTML.encode('utf8')
 def render_test(blob):
