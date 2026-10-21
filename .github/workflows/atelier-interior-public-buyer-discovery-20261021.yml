@@ -59,5 +59,12 @@ jobs:
           i.feed(ptxt)
           print("ATELIER_BUYER_PAGE_STRUCTURE="+json.dumps({"links":[a for a in i.a if any(k in str(a).lower() for k in ["checkout","product","buy","cart","login","register","order"])][:30],"forms":i.forms[:12],"buttons":i.buttons[:15],"inputs":[v for v in i.inputs if v["type"] not in ("hidden",)][0:15],"contains_buy_word":("buy" in ptxt.lower()),"contains_purchase_word":("purchase" in ptxt.lower())},sort_keys=True))
           print("ATELIER_STORE_ANCHORS="+json.dumps({"product_path_in_html":("/store/product/879/" in stxt),"atelier_word":("atelier" in stxt.lower()),"store_html_chars":len(stxt)},sort_keys=True))
+          for label,blob,term in [("STORE_ATELIER",stxt,"atelier"),("PRODUCT_PURCHASE",ptxt,"purchase"),("PRODUCT_ATELIER",ptxt,"atelier")]:
+              m=re.search(term,blob,re.I)
+              if m:
+                  raw=blob[max(0,m.start()-800):m.end()+1500]
+                  scrubbed=re.sub(r"(?is)<script.*?</script>|<style.*?</style>","",raw)
+                  print("ATELIER_PUBLIC_CONTEXT_"+label+"="+json.dumps(scrubbed[:1800]))
+          print("ATELIER_CHECKOUT_REFS="+json.dumps(re.findall(r".{0,90}(?:checkout|purchase|payment|contact).{0,100}",ptxt,re.I)[:12]))
           assert store==200 and product==200
           PY
