@@ -1,6 +1,6 @@
 import hashlib,hmac,json,unittest
 from mpw_fiat_to_trx_20261020.provider_adapter import (
- ready,invoice_fields,create_invoice,MerchantNotReady,ProviderError,valid_webhook,may_fulfill)
+ ready,invoice_fields,create_invoice,live_trx_minimum_usd,MerchantNotReady,ProviderError,valid_webhook,may_fulfill)
 
 class FiatToTRXContractTests(unittest.TestCase):
  def test_no_kby_or_provider_key_blocks_checkout(self):
@@ -69,7 +69,8 @@ class FiatToTRXContractTests(unittest.TestCase):
    return create_invoice("MPWF-AABBCC112233","7.50","Test PDF",
     "https://mojplaywin.com/ipn/","https://mojplaywin.com/ok/",
     "https://mojplaywin.com/cancel/",env=env,
-    opener=lambda request,timeout:Response(reply))
+    opener=lambda request,timeout:Response(reply),
+    min_opener=lambda request,timeout:Response({"min_amount":"10","fiat_equivalent":"2.70","currency_from":"trx","currency_to":"trx"}))
   correct={"id":9123,"invoice_url":"https://nowpayments.io/payment/9123",
            "order_id":"MPWF-AABBCC112233","price_amount":"7.50","price_currency":"usd"}
   self.assertEqual(run(correct)["invoice_id"],"9123")
@@ -88,5 +89,69 @@ class FiatToTRXContractTests(unittest.TestCase):
    for ambiguous in ("false","true",1,0,None):
     with self.subTest(flag=name,value=ambiguous):
      self.assertFalse(may_fulfill(**{**args,name:ambiguous}))
+
+
+ def test_live_trx_minimum_is_from_official_endpoint(self):
+  env={"NOWPAYMENTS_API_KEY":"test-key"}
+  class Response:
+   def __init__(self,data):self.data=data
+   def __enter__(self):return self
+   def __exit__(self,*args):return False
+   def read(self,size):return json.dumps(self.data).encode()
+  def expected(req,timeout):
+   self.assertEqual(req.get_method(),"GET")
+   self.assertEqual(req.full_url,
+    "https://api.nowpayments.io/v1/min-amount?currency_from=trx&currency_to=trx&fiat_equivalent=usd")
+   return Response({"min_amount":"12.3","fiat_equivalent":"3.15",
+                    "currency_from":"trx","currency_to":"trx"})
+  self.assertEqual(str(live_trx_minimum_usd(env,opener=expected)),"3.15")
+
+ def test_missing_or_invalid_live_minimum_blocks_before_invoice(self):
+  env={"MPW_FIAT_ONRAMP_APPROVED":"1","MPW_FIAT_TRX_PAYOUT_VERIFIED":"1",
+       "NOWPAYMENTS_API_KEY":"test-key","NOWPAYMENTS_IPN_SECRET":"test-ipn",
+       "MPW_FIAT_PROVIDER_MIN_USD":"0.01"}
+  class Response:
+   def __init__(self,data):self.data=data
+   def __enter__(self):return self
+   def __exit__(self,*args):return False
+   def read(self,size):return json.dumps(self.data).encode()
+  def invoice_must_not_be_created(req,timeout):
+   raise AssertionError("Invoice API must not be called")
+  samples=(
+    {"min_amount":"15.0","fiat_equivalent":"8.00"},
+    {"min_amount":"7","fiat_equivalent":"NaN"},
+    {"fiat_equivalent":"-2"},
+    {"fiat_equivalent":"1.00","currency_to":"usdttrc20"},
+    {"fiat_equivalent":True},
+    [],
+  )
+  for response in samples:
+   with self.subTest(response=response),self.assertRaises(MerchantNotReady):
+    create_invoice("MPWF-AABBCC112233","7.50","Book",
+      "https://mojplaywin.com/ipn/","https://mojplaywin.com/ok/",
+      "https://mojplaywin.com/cancel/",env=env,
+      opener=invoice_must_not_be_created,
+      min_opener=lambda req,timeout:Response(response))
+  with self.assertRaises(MerchantNotReady):
+   create_invoice("MPWF-AABBCC112233","7.50","Book",
+      "https://mojplaywin.com/ipn/","https://mojplaywin.com/ok/",
+      "https://mojplaywin.com/cancel/",env=env,
+      opener=invoice_must_not_be_created,
+      min_opener=lambda req,timeout:(_ for _ in ()).throw(TimeoutError()))
+
+ def test_provider_minimum_must_not_be_guessed_from_static_merchant_floor(self):
+  env={"MPW_FIAT_ONRAMP_APPROVED":"1","MPW_FIAT_TRX_PAYOUT_VERIFIED":"1",
+       "NOWPAYMENTS_API_KEY":"test-key","NOWPAYMENTS_IPN_SECRET":"test-ipn",
+       "MPW_FIAT_PROVIDER_MIN_USD":"0.01"}
+  class Response:
+   def __enter__(self):return self
+   def __exit__(self,*args):return False
+   def read(self,size):return b'{"min_amount":"100","fiat_equivalent":"12.00"}'
+  with self.assertRaises(MerchantNotReady):
+   create_invoice("MPWF-AABBCC112233","0.03","Test PDF",
+      "https://mojplaywin.com/ipn/","https://mojplaywin.com/ok/",
+      "https://mojplaywin.com/cancel/",env=env,
+      opener=lambda req,timeout:(_ for _ in ()).throw(AssertionError("unacceptable micro invoice")),
+      min_opener=lambda req,timeout:Response())
 
 if __name__=="__main__":unittest.main()
