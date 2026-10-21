@@ -71,6 +71,15 @@ class QARebuildTests(unittest.TestCase):
             "schema_version":2,"recipe":item.name,"files":["README.md"],
             "source_sha256":hashlib.sha256(source_bytes).hexdigest(),
             "artifact_sha256":FakeMaker.sha256_file(archive)}))
+        artifact=FakeMaker.sha256_file(archive)
+        receipt=self.root/"quality-excellence"/"rework"/item.name/"current.json"
+        receipt.parent.mkdir(parents=True,exist_ok=True)
+        receipt.write_text(json.dumps({"artifact_sha256":artifact}))
+        order=self.quality/item.name/"current.json"
+        order_data=json.loads(order.read_text())
+        order_data["artifact_sha256"]=artifact
+        order_data["source_quality_receipt_sha256"]=hashlib.sha256(receipt.read_bytes()).hexdigest()
+        order.write_text(json.dumps(order_data))
         if tamper:archive.write_bytes(archive.read_bytes()+b"tamper")
         shutil.rmtree(item)
         return item.name,archive
@@ -109,6 +118,14 @@ class QARebuildTests(unittest.TestCase):
         self.assertEqual(result["technical_candidates_verified"],1)
         self.assertEqual((self.root/"quality-excellence"/"recovered-verified-sources"/name/"README.md").read_bytes(),b"v2 changed")
         self.assertEqual(archive.read_bytes(),before)
+    def test_receipt_bound_archive_recovers_source_without_manifest_fields(self):
+        name,_=self.seed_archived_only()
+        original=self.root/"digital-products"/name
+        (original/"manufacturing_manifest.json").write_text(json.dumps({"legacy":True}))
+        result=self.run_bridge()
+        self.assertEqual(result["archive_sources_recovered"],1)
+        self.assertEqual(result["missing_source"],0)
+        self.assertEqual(result["rebuild_attempted"],1)
     def test_tampered_original_zip_never_becomes_rebuild_source(self):
         self.seed_archived_only(tamper=True)
         result=self.run_bridge()

@@ -55,37 +55,35 @@ def atomic_receipt(path,doc):
         os.chmod(dest,0o600)
     return digest
 
-def recover_source_from_archive(root,recipe,maker,recovered_root):
-    """Recover an absent recipe only from its hash-verified original private ZIP."""
+def recover_source_from_archive(root,recipe,order,maker,recovered_root):
+    """Recover source only from the original artifact bound to its QA receipt."""
     product=root/"digital-products"/recipe
     manifest=product/"manufacturing_manifest.json"
     archive=product/(recipe+"-internal-qa.zip")
     if not product.exists():return False,None
     if product.is_symlink():return False,"unsafe_archive_path"
-    if not manifest.is_file() or not archive.is_file():return False,None
-    if manifest.is_symlink() or archive.is_symlink():return False,"unsafe_archive_path"
+    if not archive.is_file():return False,None
+    if archive.is_symlink() or (manifest.exists() and manifest.is_symlink()):
+        return False,"unsafe_archive_path"
     try:
-        meta=checked_json(manifest)
-        files=meta.get("files")
-        if (meta.get("recipe")!=recipe or not isinstance(files,list) or not files
-                or len(files)>256 or not isinstance(meta.get("source_sha256"),str)
-                or not HEX.fullmatch(meta["source_sha256"])
-                or not isinstance(meta.get("artifact_sha256"),str)
-                or not HEX.fullmatch(meta["artifact_sha256"])):
-            return False,"manifest_metadata_invalid"
+        expected_artifact=order.get("artifact_sha256")
+        receipt=root/"quality-excellence"/"rework"/recipe/"current.json"
+        if (not isinstance(expected_artifact,str) or not HEX.fullmatch(expected_artifact)
+                or not receipt.is_file() or receipt.is_symlink()
+                or sha(receipt.read_bytes())!=order.get("source_quality_receipt_sha256")
+                or checked_json(receipt).get("artifact_sha256")!=expected_artifact):
+            return False,"triage_receipt_mismatch"
+        try:meta=checked_json(manifest) if manifest.is_file() else {}
+        except (ValueError,OSError,UnicodeError):meta={}
+        files=meta.get("files") if meta.get("recipe")==recipe else None
+        source_expected=meta.get("source_sha256")
+        if not isinstance(source_expected,str) or not HEX.fullmatch(source_expected):source_expected=None
+        if (not isinstance(files,list) or not files or len(files)>256
+                or any(not isinstance(name,str) or "\\" in name for name in files)):
+            files=None
         raw=archive.read_bytes()
         if len(raw)>64*1024*1024:return False,"archive_too_large"
-        if sha(raw)!=meta["artifact_sha256"]:return False,"archive_hash_mismatch"
-        normalized=[]
-        for name in files:
-            if not isinstance(name,str) or "\\" in name:
-                return False,"archive_member_list_invalid"
-            rel=PurePosixPath(name)
-            if rel.is_absolute() or any(part in ("", ".", "..") for part in rel.parts):
-                return False,True
-            normalized.append(rel.as_posix())
-        if len(set(normalized))!=len(normalized):return False,"archive_member_list_invalid"
-        expected=[recipe+"/"+name for name in sorted(normalized)]
+        if sha(raw)!=expected_artifact:return False,"archive_hash_mismatch"
         if recovered_root.parent.is_symlink():return False,"unsafe_recovered_root"
         recovered_root.mkdir(parents=True,mode=0o700,exist_ok=True)
         if recovered_root.is_symlink():return False,"unsafe_recovered_root"
@@ -97,23 +95,31 @@ def recover_source_from_archive(root,recipe,maker,recovered_root):
             payload.mkdir(mode=0o700)
             with zipfile.ZipFile(archive,"r") as zf:
                 infos=zf.infolist()
-                if ([i.filename for i in infos]!=expected or zf.testzip() is not None
-                        or sum(i.file_size for i in infos)>64*1024*1024):
+                if not infos or len(infos)>256 or zf.testzip() is not None or sum(i.file_size for i in infos)>64*1024*1024:
                     return False,"archive_members_invalid"
+                names=[]
+                for info in infos:
+                    prefix=recipe+"/"
+                    if not info.filename.startswith(prefix) or info.is_dir():return False,"archive_members_invalid"
+                    name=info.filename[len(prefix):]
+                    rel=PurePosixPath(name)
+                    if not name or "\\" in name or rel.is_absolute() or any(part in ("", ".", "..") for part in rel.parts):
+                        return False,"archive_members_invalid"
+                    names.append(rel.as_posix())
+                if len(set(names))!=len(names):return False,"archive_members_invalid"
+                normalized=sorted(files) if files is not None else sorted(names)
+                if names!=normalized:return False,"archive_members_invalid"
                 for info,name in zip(infos,normalized):
-                    mode=info.external_attr>>16
-                    if stat.S_ISLNK(mode):return False,"archive_symlink_member"
+                    if stat.S_ISLNK(info.external_attr>>16):return False,"archive_symlink_member"
                     dest=payload/name
                     dest.parent.mkdir(parents=True,exist_ok=True)
-                    dest.write_bytes(zf.read(info))
-                    os.chmod(dest,0o600)
-            source=payload
-            _,checked_files=maker.inspect_recipe(source)
-            if tuple(checked_files)!=tuple(normalized) or maker.source_digest(source,checked_files)!=meta["source_sha256"]:
+                    dest.write_bytes(zf.read(info));os.chmod(dest,0o600)
+            _,checked_files=maker.inspect_recipe(payload)
+            source_hash=maker.source_digest(payload,checked_files)
+            if tuple(checked_files)!=tuple(normalized) or (source_expected and source_hash!=source_expected):
                 return False,"source_hash_mismatch"
-            os.chmod(payload,0o700)
-            os.replace(payload,target)
-            return True,False
+            os.chmod(payload,0o700);os.replace(payload,target)
+            return True,None
         finally:
             if stage.exists():shutil.rmtree(stage)
     except zipfile.BadZipFile:return False,"archive_invalid_zip"
@@ -188,7 +194,7 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
                    for index,parent in enumerate(roots)
                    if (parent/recipe).is_dir() and not (parent/recipe).is_symlink()]
         if not locations:
-            restored,rejection=recover_source_from_archive(root,recipe,maker,recovered_root)
+            restored,rejection=recover_source_from_archive(root,recipe,order,maker,recovered_root)
             if rejection:
                 totals["archive_recovery_rejected"]+=1
                 reasons=totals["archive_recovery_rejection_reasons"]
