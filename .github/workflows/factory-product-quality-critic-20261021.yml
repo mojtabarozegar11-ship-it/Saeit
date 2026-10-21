@@ -7,6 +7,13 @@ on:
       - "scripts/factory_f14_f28_product_quality_critic_20261021.py"
       - "scripts/factory_f14_keyboard_runtime_probe_20261021.js"
       - "tests/test_factory_f14_f28_product_critic_20261021.py"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/factory-product-quality-critic-20261021.yml"
+      - "scripts/factory_f14_f28_product_quality_critic_20261021.py"
+      - "scripts/factory_f14_keyboard_runtime_probe_20261021.js"
+      - "tests/test_factory_f14_f28_product_critic_20261021.py"
   workflow_dispatch:
 permissions:
   contents: read
