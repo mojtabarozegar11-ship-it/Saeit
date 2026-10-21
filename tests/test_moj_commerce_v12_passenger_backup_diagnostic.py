@@ -4,7 +4,7 @@ import tarfile
 import unittest
 from unittest.mock import patch
 
-from tools.moj_commerce_v12_passenger_backup_diagnostic import (classify_archive, passenger, classify_absolute_link_target)
+from tools.moj_commerce_v12_passenger_backup_diagnostic import (classify_archive, passenger, classify_absolute_link_target, classify_tenant_link_family)
 
 
 def synthetic_archive():
@@ -63,6 +63,10 @@ class DiagnosticTests(unittest.TestCase):
         self.assertEqual(classify_absolute_link_target('/home/otheruser/file'),
                          'other_account_home')
         self.assertEqual(classify_absolute_link_target('/etc/shadow'), 'external_other')
+        self.assertEqual(classify_tenant_link_family('/home/zomorod2/Saeit/config/wsgi.py'), 'production_source')
+        self.assertEqual(classify_tenant_link_family('/home/zomorod2/virtualenv/Saeit/3.11/bin/python'), 'private_runtime')
+        self.assertEqual(classify_tenant_link_family('/home/zomorod2/public_html/image.png'), 'public_assets')
+        self.assertEqual(classify_tenant_link_family('/home/zomorod2/other/path'), 'other_tenant')
         archive = io.BytesIO()
         with tarfile.open(fileobj=archive, mode='w') as tar:
             for name, target in [
@@ -86,6 +90,8 @@ class DiagnosticTests(unittest.TestCase):
         self.assertEqual(result['absolute_external_other'], 1)
         self.assertEqual(result['absolute_tenant_unbacked'], 0)
         self.assertEqual(result['absolute_other_account_home'], 0)
+        self.assertEqual(result['tenant_production_source'], 0)
+        self.assertEqual(result['tenant_private_runtime'], 0)
         self.assertNotIn('etc/shadow', str(result))
         self.assertNotIn('python311', str(result))
 
