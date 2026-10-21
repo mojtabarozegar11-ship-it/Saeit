@@ -41,9 +41,24 @@ class StrictRedirect(urllib.request.HTTPRedirectHandler):
         self.redirect_count = 0
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        target = urllib.parse.urlsplit(newurl)
-        if target.scheme != "https" or target.hostname not in ALLOWED_HOSTS or target.port not in (None, 443):
-            raise UnsafeRedirect("external_or_insecure_redirect")
+        try:
+            target = urllib.parse.urlsplit(newurl)
+            permitted = (
+                target.scheme == "https"
+                and target.hostname in ALLOWED_HOSTS
+                and target.port in (None, 443)
+                and target.username is None
+                and target.password is None
+                # No redirects to sensitive, unknown, encoded or dynamically
+                # routed endpoints, even when they share the allowed host.
+                and target.path in PUBLIC_PATHS
+                and not target.query
+                and not target.fragment
+            )
+        except ValueError:
+            permitted = False
+        if not permitted:
+            raise UnsafeRedirect("redirect_outside_exact_public_allowlist")
         self.redirect_count += 1
         if self.redirect_count > 2:
             raise UnsafeRedirect("more_than_two_redirects")
