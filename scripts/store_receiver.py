@@ -14,7 +14,7 @@ SLUG = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
 MAX_ARCHIVE_BYTES = 25 * 1024 * 1024
 MAX_UNPACKED_BYTES = 100 * 1024 * 1024
-MAX_FILES = 80
+MAX_FILES = 256  # bounded, manifest-bound private package transfer
 F34_EXACT_ICON_FILES = 100  # 48 SVG + 48 PNG + four documented files, private ONLY
 
 
@@ -78,9 +78,9 @@ def validate_package(zip_file, manifest_file, recipe, expected_digest):
         raise ValueError("SHA256_MISMATCH")
     with zipfile.ZipFile(str(zip_file)) as archive:
         infos = archive.infolist()
-        # The new independently verified F34 icon pack contains exactly
-        # 48 SVG + 48 PNG + four documents. General products stay capped
-        # at 80 files; there is NO blanket relaxation of zip security.
+        # F34 keeps its exact specialist 100-file contract. Other products
+        # may have up to 256 files ONLY when every archived path matches
+        # the producer's declared unique file list and SHA-bound ZIP.
         if recipe == "fieldwork_ui_48_icons":
             reviewer = manifest.get("qa_measurements")
             members = manifest.get("files")
@@ -107,6 +107,17 @@ def validate_package(zip_file, manifest_file, recipe, expected_digest):
                 raise ValueError("F34_EXACT_ICON_PACKAGE_INVALID")
         elif not infos or len(infos) > MAX_FILES:
             raise ValueError("ARCHIVE_FILE_COUNT_INVALID")
+        elif not isinstance(manifest.get("files"), list):
+            raise ValueError("ARCHIVE_MANIFEST_MEMBERS_MISSING")
+        elif (len(manifest["files"]) != len(infos)
+              or len(set(manifest["files"])) != len(infos)
+              or not all(isinstance(v,str) and v and len(v)<=240
+                         for v in manifest["files"])
+              or {recipe + "/" + v for v in manifest["files"]}
+                    != {item.filename for item in infos}):
+            raise ValueError("ARCHIVE_MANIFEST_MEMBERS_MISMATCH")
+        if len({x.filename for x in infos}) != len(infos):
+            raise ValueError("ARCHIVE_DUPLICATE_MEMBER")
         if sum(x.file_size for x in infos) > MAX_UNPACKED_BYTES:
             raise ValueError("ARCHIVE_EXPANSION_LIMIT")
         for member in infos:
