@@ -92,11 +92,11 @@ def recover_source_from_archive(root,recipe,order,maker,recovered_root):
         # complete canonical source digest matches its original SHA256.
         # Malformed *declared* indexes still fail closed.
         if files is not None and (not isinstance(files,list) or not 1<=len(files)<=256
-            or len(set(files))!=len(files)
             or any(not isinstance(name,str) or len(name)>240 or "\\" in name
                 or not name or name.startswith("/") or
                 any(part in ("","..",".") for part in name.split("/"))
-                for name in files)):
+                for name in files)
+            or len(set(files))!=len(files)):
             return False,"source_file_inventory_not_verifiable"
         raw=archive.read_bytes()
         if len(raw)>64*1024*1024:return False,"archive_too_large"
