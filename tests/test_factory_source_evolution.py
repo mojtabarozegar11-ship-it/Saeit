@@ -30,6 +30,9 @@ def make_legacy_source(source):
     start=body.index('# BATCH_API_V2_START')
     end=body.index('# BATCH_API_V2_END',start)+len('# BATCH_API_V2_END')
     body=body[:start]+body[end:]
+    start=body.index('# STATS_API_V3_START')
+    end=body.index('# STATS_API_V3_END',start)+len('# STATS_API_V3_END')
+    body=body[:start]+body[end:]
     newer="""    incoming=json.load(sys.stdin)
     print(json.dumps(calculate_batch(incoming) if isinstance(incoming,list)
                      else calculate(incoming), sort_keys=True))"""
@@ -42,11 +45,14 @@ def make_legacy_source(source):
     # Remove both imported batch capability and its two acceptance tests.
     cases=re.sub(r'(?ms)^# BATCH_TESTS_V2_START\n.*?^# BATCH_TESTS_V2_END\n','',cases)
     cases=re.sub(r'(?ms)^    # BATCH_TESTS_V2_START\n.*?^    # BATCH_TESTS_V2_END\n','',cases)
+    cases=re.sub(r'(?ms)^# STATS_TESTS_V3_START\n.*?^# STATS_TESTS_V3_END\n','',cases)
+    cases=re.sub(r'(?ms)^    # STATS_TESTS_V3_START\n.*?^    # STATS_TESTS_V3_END\n','',cases)
     assert 'calculate_batch' not in cases
+    assert 'calculate_statistics' not in cases
     tests.write_text(cases,encoding='utf8')
     receipt=source/'design_receipt.json'
     evidence=json.loads(receipt.read_text(encoding='utf8'))
-    assert evidence.pop('generator_capability_revision')=='verified-batch-v2'
+    assert evidence.pop('generator_capability_revision')=='verified-summary-v3'
     receipt.write_text(json.dumps(evidence,sort_keys=True,indent=2)+'\n',encoding='utf8')
     return body
 
@@ -69,9 +75,10 @@ class SourceEvolutionTests(unittest.TestCase):
         result=designer.evolve_recipe(self.name,self.recipes)
         self.assertTrue(result['changed'])
         self.assertEqual(result['previous_source_sha256'],before)
-        self.assertEqual(result['implemented_feature'],'bounded_atomic_customer_batch_1_to_100')
+        self.assertEqual(result['implemented_feature'],'verified_decimal_customer_batch_statistics_v3')
         self.assertNotEqual(result['previous_source_sha256'],result['revised_source_sha256'])
         self.assertIn('def calculate_batch', (self.source/'calculator.py').read_text())
+        self.assertIn('def calculate_statistics', (self.source/'calculator.py').read_text())
         retained=Path(result['previous_source_retained'])
         self.assertEqual((retained/'calculator.py').read_text(),old_code)
         self.assertGreaterEqual(result['measured_acceptance']['successful_tests'],5)
@@ -83,6 +90,32 @@ class SourceEvolutionTests(unittest.TestCase):
         again=designer.evolve_recipe(self.name,self.recipes)
         self.assertFalse(again['changed'])
         self.assertEqual(again['reason'],'already_evolved')
+
+    def test_v2_existing_product_upgrades_to_v3_without_relabeling_as_new_recipe(self):
+        calculator=self.source/'calculator.py'
+        code=calculator.read_text(encoding='utf8')
+        first=code.index('# STATS_API_V3_START')
+        last=code.index('# STATS_API_V3_END',first)+len('# STATS_API_V3_END')
+        calculator.write_text(code[:first]+code[last:],encoding='utf8')
+        tests=self.source/'test_calculator.py'
+        content=tests.read_text(encoding='utf8')
+        content=re.sub(r'(?ms)^# STATS_TESTS_V3_START\n.*?^# STATS_TESTS_V3_END\n','',content)
+        content=re.sub(r'(?ms)^    # STATS_TESTS_V3_START\n.*?^    # STATS_TESTS_V3_END\n','',content)
+        tests.write_text(content,encoding='utf8')
+        receipt=self.source/'design_receipt.json'
+        data=json.loads(receipt.read_text(encoding='utf8'))
+        data['generator_capability_revision']='verified-batch-v2'
+        receipt.write_text(json.dumps(data,sort_keys=True),encoding='utf8')
+        maker.verify_recipe(self.source,minimum_tests=5)
+        old_digest=maker.source_digest(self.source,maker.inspect_recipe(self.source)[1])
+        change=designer.evolve_recipe(self.name,self.recipes)
+        self.assertTrue(change['changed'])
+        self.assertEqual(change['previous_source_sha256'],old_digest)
+        self.assertTrue(Path(change['previous_source_retained']).is_dir())
+        self.assertEqual(json.loads((self.source/'design_receipt.json').read_text())['generator_capability_revision'],
+                         'verified-summary-v3')
+        maker.verify_recipe(self.source,minimum_tests=7)
+        self.assertFalse(designer.evolve_recipe(self.name,self.recipes)['changed'])
 
     def test_owner_modified_or_unknown_extra_files_cannot_be_silently_replaced(self):
         make_legacy_source(self.source)
