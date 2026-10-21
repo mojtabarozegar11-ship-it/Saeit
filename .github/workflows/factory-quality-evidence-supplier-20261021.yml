@@ -1,4 +1,4 @@
-name: Factory 1000 evidence supplier - real ZIP proof plus 100 routed needs
+name: Factory 1000 evidence supplier - hash-pinned ZIP and real F28 customer CLI
 on:
   pull_request:
     branches: [main]
@@ -80,7 +80,7 @@ jobs:
           have="$(timeout 30s ssh -T -F "$d/config" factory-vps "sha256sum '$stage/criteria.json' | cut -d' ' -f1")"
           test "$wanted" = "$have"
           echo FACTORY_QA1000_SUPPLIER_SOURCE_PINNING=PASS
-      - name: Supply measured Q068 and route all 100 criteria for the real F28 stock
+      - name: Measure six bounded technical criteria on the pinned real F28 ZIP
         shell: bash
         run: |
           set -euo pipefail
@@ -104,7 +104,12 @@ jobs:
               doc=json.loads(path.read_text(encoding="utf8"))
               if doc["artifact_sha256"]!=artifact:continue
               assert len(doc["supplier_assignments"])==100
-              assert doc["automated_criteria_measured"]==["Q068"]
+              assert doc["automated_criteria_measured"]==["Q036","Q057","Q061","Q064","Q068","Q069"]
+              assert doc["unmet_criterion_count"]==94
+              assert doc["independently_unapproved_criterion_count"]==100
+              assert doc["f28_runtime_technical_measurement"]["positive_baseline_cli_repeats"]==8
+              assert doc["f28_runtime_technical_measurement"]["invalid_cli_inputs_rejected"]==8
+              assert doc["f28_runtime_technical_measurement"]["actual_embedded_unittest_count"] >= 8
               assert doc["q068_original_warehouse_zip_measurement"]["zip_crc_verified"]
               assert doc["independent_external_assessments_completed"]==0
               assert doc["professional_quality_1000_points"] is None
@@ -116,6 +121,9 @@ jobs:
           assert good,"NO_VERIFIED_SUPPLIER_RECEIPT"
           print("FACTORY_QA1000_SUPPLIER_PRIVATE_READBACK=PASS")
           print("FACTORY_Q068_REAL_ZIP_EVIDENCE=PASS")
+          print("FACTORY_QA1000_F28_EXTRA_SCOPED_TESTS=5")
+          print("FACTORY_QA1000_CRITERIA_WITH_SOME_TECHNICAL_PROOF=6")
+          print("FACTORY_QA1000_FULLY_INDEPENDENTLY_APPROVED=0")
           print("FACTORY_QA1000_ASSIGNED_SUPPLIER_ROLES=10")
           print("FACTORY_QA1000_EXTERNAL_SUPPLIERS_CONNECTED=0")
           print("FACTORY_QA1000_PROFESSIONAL_CERTIFICATION=PENDING")

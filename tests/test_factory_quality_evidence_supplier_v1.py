@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import zipfile
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "scripts/factory_quality_evidence_supplier_v1.py"
@@ -104,6 +105,36 @@ class EvidenceSupplierTest(unittest.TestCase):
         path.write_bytes(b"malicious alteration")
         with self.assertRaisesRegex(RuntimeError, "SUPPLIER_IMMUTABLE_RECEIPT_CONFLICT"):
             supplier.persist(self.root, self.dossier())
+
+
+    def test_real_f28_embedded_customer_runtime_supplies_six_scoped_criteria(self):
+        recipe_dir = ROOT / "product_recipes" / self.recipe
+        with zipfile.ZipFile(str(self.product), "w", zipfile.ZIP_DEFLATED) as z:
+            for name in supplier.F28_FILES:
+                z.write(str(recipe_dir / name), self.recipe + "/" + name)
+        self.actual_sha = hashlib.sha256(self.product.read_bytes()).hexdigest()
+        manifest = json.loads(self.manifest.read_text())
+        manifest["artifact_sha256"] = self.actual_sha
+        manifest["bytes"] = self.product.stat().st_size
+        self.manifest.write_text(json.dumps(manifest))
+        with mock.patch.object(supplier, "PINNED_F28_SOURCE", self.source), \
+             mock.patch.object(supplier, "PINNED_F28_ARTIFACT", self.actual_sha):
+            record = self.dossier()
+        self.assertEqual(record["automated_criteria_measured"],
+                         ["Q036", "Q057", "Q061", "Q064", "Q068", "Q069"])
+        runtime = record["f28_runtime_technical_measurement"]
+        self.assertGreaterEqual(runtime["actual_embedded_unittest_count"], 8)
+        self.assertEqual(runtime["positive_baseline_cli_repeats"], 8)
+        self.assertEqual(runtime["invalid_cli_inputs_rejected"], 8)
+        self.assertEqual(record["unmet_criterion_count"], 94)
+        self.assertEqual(record["independently_unapproved_criterion_count"], 100)
+        self.assertEqual(record["independent_external_assessments_completed"], 0)
+        self.assertFalse(record["sale_or_publication_allowed"])
+        self.assertIsNone(record["professional_quality_1000_points"])
+
+    def test_unpinned_f28_zip_cannot_execute_customer_code(self):
+        with self.assertRaisesRegex(RuntimeError, "PINNED_PRODUCT_SHA"):
+            supplier.f28_runtime_proof(self.product)
 
 
 if __name__ == "__main__":

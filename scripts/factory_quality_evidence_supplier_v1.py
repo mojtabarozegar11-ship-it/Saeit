@@ -76,9 +76,10 @@ def catalog(path):
     return groups
 
 
-def supplier_route(criterion, policy):
+def supplier_route(criterion, policy, measured=None):
     n = int(criterion[1:])
     role, output, review = ROLES[(n - 1) // 10]
+    measured = measured if measured is not None else {"Q068"}
     return {
         "criterion_id": criterion,
         "criterion_name": policy["name"],
@@ -88,10 +89,10 @@ def supplier_route(criterion, policy):
         "person_or_company_contractually_connected": False,
         "supplier_identity_authenticated": False,
         "supplier_authorized_to_sign": False,
-        "automated_evidence_executable_now": criterion == "Q068",
+        "automated_evidence_executable_now": criterion in measured,
         "engine": ("scripts/factory_quality_evidence_supplier_v1.py"
-                   if criterion == "Q068" else None),
-        "required_evidence_state": "MEASURED_TECHNICAL_ONLY" if criterion == "Q068"
+                   if criterion in measured else None),
+        "required_evidence_state": "MEASURED_PARTIAL_TECHNICAL_EVIDENCE" if criterion in measured
                                   else "AWAITING_REAL_SUPPLIER_WORK",
         "professional_points_awarded": None,
     }
@@ -131,6 +132,105 @@ def zip_proof(file, recipe):
             "zip_crc_verified": True}
 
 
+
+# This specific archive has already passed the factory's separate technical
+# verification. Executing ZIP-contained Python on the VPS is restricted to
+# this exact hash-pinned private F28 product; never run arbitrary warehouse ZIPs.
+PINNED_F28_SOURCE = "c446aeaa32494c93a453f524390ee14061d6f36da3228b3d4b15c5b794d2bc1e"
+PINNED_F28_ARTIFACT = "7ba2168c90617b236d10ee4542ec9fd276f3f524809ddd001f18f5a5634fc553"
+F28_FILES = ("README.md", "calculator.py", "example_inputs.json", "test_calculator.py")
+RUNTIME_SCOPES = {
+    "Q036": "actual_cli_discloses_hypothetical_inputs_and_uncalibrated_market_limits_only",
+    "Q057": "malformed_inputs_get_bounded_non_traceback_errors_only_not_ux_recovery",
+    "Q061": "actual_cli_arithmetic_baseline_validated_only",
+    "Q064": "embedded_unittest_suite_on_exact_zip_executed_only",
+    "Q069": "eight_repeat_cold_start_cli_consistency_only_not_long_duration_stability",
+}
+
+
+def f28_runtime_proof(archive_path):
+    """Real cold-start CLI and embedded tests on a trusted, pinned F28 ZIP."""
+    import subprocess
+    import sys
+    import tempfile
+    import time
+    require(hash_bytes(Path(archive_path).read_bytes()) == PINNED_F28_ARTIFACT,
+            "F28_RUNTIME_REQUIRES_PINNED_PRODUCT_SHA")
+    with tempfile.TemporaryDirectory(prefix="f28-qa1000-runtime-") as tmp:
+        base = Path(tmp)
+        with zipfile.ZipFile(str(archive_path)) as bundle:
+            names = sorted(bundle.namelist())
+            require(names == sorted("greenhouse_crop_margin/" + n for n in F28_FILES),
+                    "F28_RUNTIME_ZIP_SOURCE_INCOMPLETE")
+            for name in F28_FILES:
+                item = bundle.getinfo("greenhouse_crop_margin/" + name)
+                require(item.file_size <= 400000 and not item.is_dir()
+                        and (item.external_attr >> 16) & 0o170000 != 0o120000,
+                        "F28_RUNTIME_UNSAFE_MEMBER")
+                (base / name).write_bytes(bundle.read(item))
+        calc = base / "calculator.py"
+        unit = subprocess.run(
+            [sys.executable, "-I", "-B", "-m", "unittest", "discover",
+             "-s", str(base), "-p", "test_calculator.py", "-v"],
+            cwd=str(base), capture_output=True, text=True, timeout=35)
+        match = re.search(r"Ran ([0-9]+) tests?", unit.stderr)
+        require(unit.returncode == 0 and match is not None and
+                int(match.group(1)) > 0 and "OK" in unit.stderr,
+                "F28_RUNTIME_EMBEDDED_REGRESSION_FAILED")
+        source = base / "scenario.json"
+        item = read_json(base / "example_inputs.json")
+        source.write_text(json.dumps(item), encoding="utf8")
+        checks = []
+        for _ in range(8):
+            started = time.monotonic_ns()
+            run = subprocess.run([sys.executable, "-I", "-B", str(calc), str(source)],
+                cwd=str(base), capture_output=True, text=True, timeout=12)
+            milliseconds = round((time.monotonic_ns() - started) / 1_000_000, 2)
+            require(run.returncode == 0 and len(run.stdout) < 100000,
+                    "F28_RUNTIME_CUSTOMER_CLI_FAILED")
+            output = json.loads(run.stdout)
+            values = output["results"]
+            require(values["sales_revenue"] == "27000.00"
+                    and values["total_cost"] == "20000.00"
+                    and values["net_margin"] == "7000.00",
+                    "F28_RUNTIME_INDEPENDENT_BASELINE_MISMATCH")
+            require(output.get("market_data_independently_validated") is False
+                    and len(output.get("assumptions", [])) >= 3
+                    and any("not guaranteed" in str(x).lower()
+                            for x in output["assumptions"]),
+                    "F28_RUNTIME_ASSUMPTIONS_MISLEADING")
+            checks.append({"output_sha256": hash_bytes(run.stdout.encode()),
+                           "cold_start_ms": milliseconds})
+        require(len(set(v["output_sha256"] for v in checks)) == 1,
+                "F28_RUNTIME_NONDETERMINISTIC_OUTPUT")
+        invalid = 0
+        for field, value in (("area_m2", 0), ("area_m2", "NaN"),
+                             ("price_per_kg", "Infinity"), ("price_per_kg", -1),
+                             ("rejection_rate_percent", 101),
+                             ("fixed_cost_total", "-Infinity"),
+                             ("variable_cost_per_m2", "nonsense"),
+                             ("expected_yield_kg_per_m2", True)):
+            payload = dict(item)
+            payload[field] = value
+            source.write_text(json.dumps(payload), encoding="utf8")
+            run = subprocess.run([sys.executable, "-I", "-B", str(calc), str(source)],
+                cwd=str(base), capture_output=True, text=True, timeout=12)
+            require(run.returncode == 2 and not run.stdout
+                    and run.stderr.startswith("INPUT_ERROR:")
+                    and "Traceback" not in run.stderr, "F28_RUNTIME_BAD_INPUT_NOT_HANDLED")
+            invalid += 1
+        return {
+            "actual_embedded_unittest_count": int(match.group(1)),
+            "positive_baseline_cli_repeats": len(checks),
+            "invalid_cli_inputs_rejected": invalid,
+            "repeat_stdout_sha256": checks[0]["output_sha256"],
+            "cold_start_max_ms": max(x["cold_start_ms"] for x in checks),
+            "limited_scope_only": True,
+            "real_hardware_stress_and_long_term_runtime_unmeasured": True,
+            "external_domain_review_complete": False,
+        }
+
+
 def supplier_dossier(root, policy, recipe, source_sha, artifact_sha):
     require(PRODUCT.fullmatch(recipe) and HEX.fullmatch(source_sha)
             and HEX.fullmatch(artifact_sha), "SUPPLIER_VERSION_ID_INVALID")
@@ -155,8 +255,14 @@ def supplier_dossier(root, policy, recipe, source_sha, artifact_sha):
             and hash_bytes(archive.read_bytes()) == artifact_sha,
             "SUPPLIER_WAREHOUSE_VERSION_HASH_OR_POLICY_MISMATCH")
     measured = zip_proof(archive, recipe)
+    scopes = {"Q068": "actual_package_integrity_crc_sha_only"}
+    runtime = None
+    if (recipe == "greenhouse_crop_margin" and
+        source_sha == PINNED_F28_SOURCE and artifact_sha == PINNED_F28_ARTIFACT):
+        runtime = f28_runtime_proof(archive)
+        scopes.update(RUNTIME_SCOPES)
     routes = {
-        key: supplier_route(key, value) for key, value in policy.items()
+        key: supplier_route(key, value, scopes) for key, value in policy.items()
     }
     return {
         "schema": SCHEMA,
@@ -169,11 +275,14 @@ def supplier_dossier(root, policy, recipe, source_sha, artifact_sha):
         "possible_supplier_roles": sorted(set(x["possible_supplier_role"]
                                               for x in routes.values())),
         "genuinely_connected_external_supplier_count": 0,
-        "automated_technical_suppliers_executed": 1,
-        "automated_criteria_measured": ["Q068"],
+        "automated_technical_suppliers_executed": 1 if runtime is None else 2,
+        "automated_criteria_measured": sorted(scopes),
+        "measured_criterion_scope_limits": scopes,
+        "f28_runtime_technical_measurement": runtime,
         "q068_original_warehouse_zip_measurement": measured,
         "supplier_assignments": routes,
-        "unmet_criterion_count": 99,
+        "unmet_criterion_count": 100 - len(scopes),
+        "independently_unapproved_criterion_count": 100,
         "independent_external_assessments_completed": 0,
         "professional_quality_1000_points": None,
         "professional_quality_1000_certified": False,
@@ -213,7 +322,8 @@ def persist(root, dossier):
         "receipt": str(receipt),
         "receipt_sha256": hash_bytes(raw),
         "criteria_assigned": len(dossier["supplier_assignments"]),
-        "genuine_technical_evidence_supplied": 1,
+        "genuine_technical_evidence_supplied": len(dossier["automated_criteria_measured"]),
+        "measured_criteria": dossier["automated_criteria_measured"],
         "external_independent_evidence_pending": True,
         "quality_1000_certified": False,
         "public_release_allowed": False,
