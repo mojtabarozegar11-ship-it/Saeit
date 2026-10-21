@@ -1,0 +1,48 @@
+name: Factory real customer ZIP execution and rework regression (no release)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/factory_vps_product_cycle.py
+      - scripts/factory_verified_customer_cycle_20261021.py
+      - scripts/factory_product_maker.py
+      - scripts/factory_product_rework.py
+      - product_recipes/**
+      - tests/test_factory_verified_customer_cycle_20261021.py
+      - .github/workflows/factory-real-customer-qa-20261021.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_vps_product_cycle.py
+      - scripts/factory_verified_customer_cycle_20261021.py
+      - scripts/factory_product_maker.py
+      - scripts/factory_product_rework.py
+      - product_recipes/**
+      - tests/test_factory_verified_customer_cycle_20261021.py
+      - .github/workflows/factory-real-customer-qa-20261021.yml
+permissions: {contents: read}
+jobs:
+  real-customer-technical-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run actual manufacturer, customer-archive, rework and factory integration tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -m py_compile scripts/factory_verified_customer_cycle_20261021.py scripts/factory_vps_product_cycle.py
+          python3 -m unittest tests.test_factory_verified_customer_cycle_20261021 -v
+          python3 -m unittest tests.test_factory_product_maker -v
+          python3 -m unittest tests.test_factory_product_rework -v
+          python3 -m unittest tests.test_factory_vps_product_cycle -v
+          echo FACTORY_PRODUCT_REAL_CUSTOMER_ARCHIVE_QA=TESTED
+          echo FACTORY_INDEPENDENT_PROFESSIONAL_1000_CLEARANCE=NOT_GRANTED
+          echo FACTORY_ALL_40_EXECUTORS_VERIFIED=FALSE
+          echo FACTORY_COMMERCIAL_RELEASE=BLOCKED
