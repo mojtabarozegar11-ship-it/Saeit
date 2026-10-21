@@ -40,7 +40,7 @@ test('Shasta deployer refuses malformed governance before touching the chain', (
 test('Shasta deployment source has explicit governance contract-code and ambiguity gates', () => {
   const src = readFileSync(script, 'utf8');
   assert.match(src, /https:\/\/api\.shasta\.trongrid\.io/);
-  assert.doesNotMatch(src, /https:\/\/api\.trongrid\.io(?=[/'"])/);
+  assert.equal(src.includes('https://api.trongrid.io'), false);
   assert.match(src, /governanceContract\?\.bytecode/);
   assert.match(src, /journal\.markBroadcastUncertain/);
   assert.match(src, /reconcileDeployment/);
