@@ -28,6 +28,33 @@ const governanceContract = await tronWeb.trx.getContract(governance);
 if (!governanceContract?.bytecode) {
   throw new Error('Shasta governance must be a deployed contract, not a single-key wallet');
 }
+// Bytecode existence by itself does NOT prove a contract is our 2-of-3 governor.
+// Require three explicitly pinned distinct Shasta test signer addresses and
+// cross-check the three on-chain owners before deploying any token.
+const ownerInput = (process.env.MOJ1_SHASTA_GOV_OWNERS ?? '').split(',').map(x => x.trim());
+if (ownerInput.length !== 3 || ownerInput.some(x => !tronWeb.isAddress(x))) {
+  throw new Error('MOJ1_SHASTA_GOV_OWNERS requires exactly three valid test-governance owner addresses');
+}
+const normalizedOwners = ownerInput.map(x => normalizedTronAddress(x, tronWeb));
+if (new Set(normalizedOwners).size !== 3) {
+  throw new Error('Duplicate Shasta governance owners');
+}
+let onchainGovernor;
+try {
+  onchainGovernor = await tronWeb.contract().at(governance);
+  for (let i = 0; i < 3; ++i) {
+    if (normalizedTronAddress(String(await onchainGovernor.owners(i).call()), tronWeb) !== normalizedOwners[i]) {
+      throw new Error('Shasta governance owner mismatch');
+    }
+  }
+  // Our pilot governor exposes this monotonic replay nonce. A generic deployed
+  // contract without our governance interface is not a valid signing controller.
+  if (!/^\\d+$/.test(String(await onchainGovernor.nonce().call()))) {
+    throw new Error('Shasta governance lacks expected nonce');
+  }
+} catch (error) {
+  throw new Error('Unverified Shasta 2-of-3 governance interface/owners: ' + error.message);
+}
 
 const names = ['MojCoin', 'MojAssets'];
 const artifacts = {};
