@@ -1,12 +1,8 @@
-name: MojPlayWin approved backup AND isolated restore one-pass drill
+name: MojPlayWin isolated restore of exact 2026-10-21 approved backup
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/mojplaywin-backup-and-restore-onepass-20261017.yml"
-      - "scripts/mojplaywin_recovery_stream_vps.py"
-      - "scripts/mojplaywin_restore_files_isolated_runner.py"
-      - "tests/test_mojplaywin_recovery_isolated_once.py"
+  workflow_run:
+    workflows: ["MojPlayWin owner-approved GPGv2 encrypted primary backup"]
+    types: [completed]
 permissions:
   contents: read
   actions: read
@@ -15,7 +11,14 @@ concurrency:
   cancel-in-progress: false
 jobs:
   private-verified-backup-and-real-isolated-restore:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push' && startsWith(github.event.head_commit.message, '[approved-restore-once-20261017]')
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.id == 39627855265 &&
+      github.event.workflow_run.head_sha == 'e885407ebb830f60d9be8e2c763d22c706dfea2d' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -28,28 +31,14 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_mojplaywin_recovery_isolated_once.py'
           python3 -m py_compile scripts/mojplaywin_recovery_stream_vps.py scripts/mojplaywin_restore_files_isolated_runner.py
-      - name: Wait for original owner-approved GPG backup (never duplicate active transfer)
+      - name: Require exact owner-approved backup run before isolated restore
         shell: bash
-        timeout-minutes: 48
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          outcome=pending
-          for i in $(seq 1 140); do
-            outcome=$(curl --fail --silent --show-error --max-time 15 \
-              -H "Authorization: Bearer $GH_TOKEN" \
-              -H "Accept: application/vnd.github+json" \
-              https://api.github.com/repos/mojtabarozegar11-ship-it/Saeit/actions/runs/39023816185 |
-              python3 -c 'import json,sys; r=json.load(sys.stdin); print(r.get("conclusion") if r.get("status")=="completed" else "pending")')
-            if [ "$outcome" != pending ]; then break; fi
-            sleep 20
-          done
-          if [ "$outcome" != success ]; then
-            echo "NO-GO: previous owner-approved source backup has not completed successfully"
-            exit 1
-          fi
-          echo "Original GPG backup workflow succeeded; independently checking archive manifests"
+          test '${{ github.event.workflow_run.id }}' = '39627855265'
+          test '${{ github.event.workflow_run.conclusion }}' = 'success'
+          test '${{ github.event.workflow_run.head_sha }}' = 'e885407ebb830f60d9be8e2c763d22c706dfea2d'
+          echo "OWNER_APPROVED_BACKUP_SOURCE_PROVENANCE=PASS"
       - name: Establish host-pinned private relay without disclosing keys
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}

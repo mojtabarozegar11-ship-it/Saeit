@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -20,6 +21,10 @@ from pathlib import Path
 
 STEM = "mojplaywin_20261017"
 VERSION = "gpgv2"
+# One owner-approved run; newer archives get independent timestamp/nonce stems.
+NEW_RUN_DAY = "20261021"
+STEM_RE = re.compile(r"^mojplaywin_(?:20261017|[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16})$")
+NEW_MANIFEST_RE = re.compile(r"^(mojplaywin_20261021T[0-9]{6}Z_[0-9a-f]{16})_(mysql|files)_gpgv2[.]manifest[.]json$")
 MARKER = b"\n-- MJWP-RECOVERY-20261017-COMPLETE-F91D7C40 --\n"
 MAX_PLAINTEXT_BYTES = 12 * 1024**3
 
@@ -35,14 +40,17 @@ def safe_regular(path, *, private=False):
         return False
 
 
-def load(kind, home=None):
+def load(kind, home=None, stem=None):
     if kind not in ("mysql", "files"):
         raise ValueError("invalid kind")
+    stem = STEM if stem is None else stem
+    if not STEM_RE.fullmatch(stem):
+        raise RuntimeError("unsafe backup identity")
     home = Path.home() if home is None else home
     root = home / ".private-mojplaywin-offhost-backups"
     keyroot = home / ".config" / "mojplaywin-backup-recovery"
-    ciphertext = root / (STEM + "_" + kind + "_" + VERSION + ".gpg")
-    manifest = root / (STEM + "_" + kind + "_" + VERSION + ".manifest.json")
+    ciphertext = root / (stem + "_" + kind + "_" + VERSION + ".gpg")
+    manifest = root / (stem + "_" + kind + "_" + VERSION + ".manifest.json")
     keyfile = keyroot / "recovery-key.bin"
     for parent in (root, keyroot, keyroot / "gnupg-v2"):
         if parent.is_symlink() or not parent.is_dir():
@@ -50,7 +58,8 @@ def load(kind, home=None):
     if not all(safe_regular(x, private=True) for x in (ciphertext, manifest, keyfile)):
         raise RuntimeError("complete encrypted source or private key absent")
     meta = json.loads(manifest.read_text(encoding="ascii"))
-    if (meta.get("kind") != kind or meta.get("format") != "OpenPGP-AES256-GPGv2" or
+    if (meta.get("kind") != kind or meta.get("archive_name", ciphertext.name) != ciphertext.name or
+            meta.get("format") != "OpenPGP-AES256-GPGv2" or
             meta.get("ciphertext_roundtrip_integrity_verified") is not True or
             meta.get("source_completion_footer_verified") is not True or
             meta.get("encrypted_bytes") != ciphertext.stat().st_size or
@@ -65,8 +74,27 @@ def load(kind, home=None):
     return ciphertext, meta, keyroot / "gnupg-v2", key
 
 
-def decrypt_to_stdout(kind, *, home=None, out=None):
-    path, meta, ghome, key = load(kind, home=home)
+def discover(home=None):
+    """Fail closed unless exactly one valid, owner-approved 2026-10-21 pair exists."""
+    home = Path.home() if home is None else home
+    root = home / ".private-mojplaywin-offhost-backups"
+    if root.is_symlink() or not root.is_dir():
+        raise RuntimeError("private backup directory missing")
+    found = {"mysql": [], "files": []}
+    for p in root.iterdir():
+        match = NEW_MANIFEST_RE.fullmatch(p.name)
+        if match:
+            found[match.group(2)].append(match.group(1))
+    if any(len(found[k]) != 1 for k in found):
+        raise RuntimeError("missing or ambiguous independent backup pair")
+    stems = {k: found[k][0] for k in found}
+    for kind, stem in stems.items():
+        load(kind, home=home, stem=stem)
+    return stems
+
+
+def decrypt_to_stdout(kind, *, home=None, out=None, stem=None):
+    path, meta, ghome, key = load(kind, home=home, stem=stem)
     passphrase = hashlib.sha256(key + b":MJWP:GPG-AES256:20261017:v2").hexdigest().encode()+b"\n"
     r, w = os.pipe()
     try:
@@ -111,8 +139,7 @@ def decrypt_to_stdout(kind, *, home=None, out=None):
 
 def readiness(home=None):
     try:
-        for name in ("mysql", "files"):
-            load(name,home=home)
+        discover(home)
         return {"classification":"ONE_PASS_RECOVERY_SOURCE_READINESS",
                 "both_primary_archives_complete":True,
                 "isolated_restore_performed":False,
@@ -137,7 +164,8 @@ if __name__=="__main__":
     try:
         if mode not in ("mysql","files"):
             raise RuntimeError("unsupported operation")
-        size=decrypt_to_stdout(mode)
+        stems=discover()
+        size=decrypt_to_stdout(mode,stem=stems[mode])
         print(json.dumps({"classification":"PRIVATE_STREAM_VERIFIED",
                           "source_kind":mode,"source_verified":True,
                           "plaintext_bytes":size,"release_permitted":False},
