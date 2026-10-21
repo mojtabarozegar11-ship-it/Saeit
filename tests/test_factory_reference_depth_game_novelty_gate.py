@@ -128,6 +128,23 @@ class PremiumProductQA(unittest.TestCase):
             self.assertIn("SELF_DECLARED_APPROVAL_NOT_EVIDENCE",codes(r))
             self.assertFalse(r["commercial_release_authorized"])
 
+    def test_factory_40_family_registry_binds_elite_F01_and_F14_quality(self):
+        registry=json.loads((HERE/"factory_config/forty_families.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(registry["profiles"]),40)
+        profiles={x["id"]:x for x in registry["profiles"]}
+        self.assertFalse(registry["distribution_enabled"])
+        self.assertFalse(registry["commercial_auto_approval"])
+        for family in ("F01","F14"):
+            profile=profiles[family]
+            binding=profile["elite_quality_policy"]
+            self.assertEqual(binding["gate_module"],"scripts/factory_reference_depth_game_novelty_gate.py")
+            self.assertFalse(binding["automated_sales_approval"])
+            self.assertEqual(binding["schema"],gate.SCHEMA)
+        self.assertIn("doctoral_reference_depth",profiles["F01"]["specialist_tests"])
+        self.assertIn("independent_fact_and_clinical_safety_review",profiles["F01"]["specialist_tests"])
+        self.assertIn("non_derivative_core_loop",profiles["F14"]["specialist_tests"])
+        self.assertIn("two_demonstrable_novel_mechanics",profiles["F14"]["specialist_tests"])
+
     def test_cli_does_not_return_success_for_commercial_release(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)
