@@ -175,8 +175,12 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                 (updated_product_ids if already_manufactured else new_product_ids).append(recipe)
             manifest = root / "digital-products" / recipe / "manufacturing_manifest.json"
             if manifest.is_file():
+                # Bind recovery to fresh recipe bytes and the exact customer-bound ZIP.
+                source_name, source_files = maker.inspect_recipe(source)
                 repair.record_technical_recovery(
-                    root, recipe, json.loads(manifest.read_text(encoding="utf-8")))
+                    root, recipe, json.loads(manifest.read_text(encoding="utf-8")),
+                    archive_path=previous_product / (recipe + "-internal-qa.zip"),
+                    source_digest=maker.source_digest(source, source_files))
         if enable_design_intake and engineering_state.get('enabled'):
             try:engineering_state['production_results']=intake.reconcile(root)
             except (ValueError,OSError) as error:

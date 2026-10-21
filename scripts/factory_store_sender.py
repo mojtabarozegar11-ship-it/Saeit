@@ -43,7 +43,10 @@ def verify_source(manifest_path, archive_path, recipe):
     if (archive_path.stat().st_size <= 0 or archive_path.stat().st_size > MAX_BUNDLE
             or manifest_path.stat().st_size > 100000):
         raise ValueError("PACKAGE_SIZE_UNSAFE")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeError) as exc:
+        raise ValueError("PACKAGE_MANIFEST_INVALID_JSON") from exc
     if not isinstance(manifest, dict):
         raise ValueError("PACKAGE_MANIFEST_INVALID")
     digest = manifest.get("artifact_sha256")
@@ -55,6 +58,19 @@ def verify_source(manifest_path, archive_path, recipe):
         or manifest.get("public_listing_enabled") is not False
         or manifest.get("price") is not None):
         raise ValueError("PACKAGE_NOT_PRIVATE_QA_PASSED")
+    # Validate actual ZIP bytes; a matching SHA and "passed" JSON is insufficient.
+    try:
+        with zipfile.ZipFile(archive_path) as bundle:
+            members = bundle.infolist()
+            if not 0 < len(members) <= 200 or sum(i.file_size for i in members) > 100 * 1024 * 1024:
+                raise ValueError("PACKAGE_ARCHIVE_EXPANSION_UNSAFE")
+            if any(i.filename.startswith("/") or ".." in Path(i.filename).parts or
+                   "\\" in i.filename for i in members):
+                raise ValueError("PACKAGE_ARCHIVE_MEMBER_UNSAFE")
+            if bundle.testzip() is not None:
+                raise ValueError("PACKAGE_ARCHIVE_CORRUPT")
+    except (zipfile.BadZipFile, OSError) as exc:
+        raise ValueError("PACKAGE_ARCHIVE_INVALID") from exc
     # The last technically-good ZIP may still exist after a new source
     # revision fails. Never ship that stale package while a defect is open.
     # The private receiver is not a public storefront, but stale QA must
@@ -69,8 +85,14 @@ def verify_source(manifest_path, archive_path, recipe):
             raise ValueError("PRIVATE_REWORK_LEDGER_INVALID") from exc
         if not isinstance(state, dict) or state.get("schema") != "saeit.factory.qa-rework.v1":
             raise ValueError("PRIVATE_REWORK_LEDGER_UNVERIFIED")
-        if state.get("current_status") in ("needs_rework", "expert_review"):
+        status = state.get("current_status")
+        if status != "technical_qa_pass_only_owner_and_content_review_pending":
             raise ValueError("PRIVATE_PRODUCT_BLOCKED_FOR_REWORK")
+        history = state.get("history")
+        if (not isinstance(history, list) or not history or
+                not isinstance(history[-1], dict) or
+                history[-1].get("status") != "technically_recovered"):
+            raise ValueError("PRIVATE_REWORK_RECOVERY_UNVERIFIED")
     return digest
 
 

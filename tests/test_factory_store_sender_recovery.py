@@ -45,6 +45,38 @@ class FactoryPrivateQAFailureIsolation(unittest.TestCase):
         self.root = Path(self.tmp.name) / "private" / "digital-products"
         self.root.mkdir(parents=True)
 
+    def test_private_sender_rejects_unverified_rework_state(self):
+        product(self.root, "alpha")
+        manifest = self.root / "alpha" / "manufacturing_manifest.json"
+        archive = self.root / "alpha" / "alpha-internal-qa.zip"
+        ledger = self.root.parent / "qa-rework" / "alpha" / "ledger.json"
+        ledger.parent.mkdir(parents=True)
+        ledger.write_text(json.dumps({
+            "schema": "saeit.factory.qa-rework.v1",
+            "current_status": "unknown_quality_state",
+            "history": []
+        }))
+        with self.assertRaisesRegex(ValueError, "PRIVATE_PRODUCT_BLOCKED_FOR_REWORK"):
+            sender.verify_source(manifest, archive, "alpha")
+        ledger.write_text(json.dumps({
+            "schema": "saeit.factory.qa-rework.v1",
+            "current_status": "technical_qa_pass_only_owner_and_content_review_pending",
+            "history": [{"status": "needs_rework"}]
+        }))
+        with self.assertRaisesRegex(ValueError, "PRIVATE_REWORK_RECOVERY_UNVERIFIED"):
+            sender.verify_source(manifest, archive, "alpha")
+
+    def test_private_sender_rejects_a_nonzip_even_with_matching_sha(self):
+        product(self.root, "alpha")
+        manifest = self.root / "alpha" / "manufacturing_manifest.json"
+        archive = self.root / "alpha" / "alpha-internal-qa.zip"
+        archive.write_bytes(b"not actually a zip")
+        data = json.loads(manifest.read_text())
+        data["artifact_sha256"] = hashlib.sha256(archive.read_bytes()).hexdigest()
+        manifest.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, "PACKAGE_ARCHIVE_INVALID"):
+            sender.verify_source(manifest, archive, "alpha")
+
     def test_bad_first_package_does_not_stop_three_good_packages(self):
         product(self.root, "alpha", good=False)
         for recipe in ("bravo", "charlie", "delta"):

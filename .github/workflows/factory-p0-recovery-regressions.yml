@@ -1,0 +1,147 @@
+name: Factory P0 recovery regressions (no deploy)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/factory_product_rework.py"
+      - "scripts/factory_vps_product_cycle.py"
+      - "scripts/factory_store_sender.py"
+      - "scripts/mpw_factory_stage1_technical_repair.py"
+      - "tests/test_factory_product_rework.py"
+      - "tests/test_factory_store_sender_recovery.py"
+      - "tests/test_mpw_factory_stage1_technical_repair.py"
+      - ".github/workflows/factory-p0-recovery-regressions.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_product_rework.py"
+      - "scripts/factory_vps_product_cycle.py"
+      - "scripts/factory_store_sender.py"
+      - "scripts/mpw_factory_stage1_technical_repair.py"
+      - "tests/test_factory_product_rework.py"
+      - "tests/test_factory_store_sender_recovery.py"
+      - "tests/test_mpw_factory_stage1_technical_repair.py"
+      - ".github/workflows/factory-p0-recovery-regressions.yml"
+permissions: {contents: read}
+jobs:
+  technical-integrity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile factory recovery modules
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_product_rework.py scripts/factory_vps_product_cycle.py scripts/factory_store_sender.py scripts/mpw_factory_stage1_technical_repair.py
+      - name: Enforce real package hash, fail-closed rework and bounded repair regression
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_product_rework tests.test_factory_store_sender_recovery tests.test_mpw_factory_stage1_technical_repair -v
+      - name: Prevent automatic release from QA-only repairs
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          for path in ('scripts/factory_product_rework.py','scripts/mpw_factory_stage1_technical_repair.py'):
+              source=Path(path).read_text()
+              assert 'public_sale_allowed' in source
+          print('P0_PRIVATE_ONLY_POLICY=PASS')
+          PY
+
+  deploy-private-vps:
+    # Never deploy from a PR. A reviewed main-branch merge is the release boundary.
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: technical-integrity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    concurrency:
+      group: saeit-vps-p0-rework-integrity-install
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Pinned and authenticated SSH identity
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/p0-vps"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\\r\\n","\\n").replace("\\r","").replace("\\\\n","\\n").rstrip()+"\\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo FACTORY_P0_VPS_PIN_VERIFIED
+      - name: Stage and atomically install validated private modules, with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/p0-vps"
+          opts=(-i "$d/key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          host="githubops@178.239.147.150"
+          stage="/home/githubops/factory-runtime/operations/.p0-integrity-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh -T "${opts[@]}" "$host" "umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
+          for file in factory_product_rework.py factory_vps_product_cycle.py factory_store_sender.py; do
+            scp -q "${opts[@]}" "scripts/$file" "$host:$stage/$file"
+            want="$(sha256sum "scripts/$file" | awk '{print $1}')"
+            got="$(ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$file' | cut -d' ' -f1")"
+            test "$want" = "$got"
+          done
+          ssh -T "${opts[@]}" "$host" "bash -se -- '$stage'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          stage="$1"
+          base="$HOME/factory-runtime"
+          ops="$base/operations"
+          target="$base/scripts"
+          python="$base/.venv/bin/python"
+          test -d "$target" && test ! -L "$target" && test -x "$python"
+          exec 9>"$ops/.p0-integrity-install.lock"
+          flock -w 45 9
+          backup="$ops/backups/p0-integrity-$(basename "$stage")"
+          test ! -e "$backup"
+          install -d -m 700 "$ops/backups" "$backup"
+          files=(factory_product_rework.py factory_vps_product_cycle.py factory_store_sender.py)
+          for file in "${files[@]}"; do
+            test -f "$target/$file" && test ! -L "$target/$file"
+            test -f "$stage/$file" && test ! -L "$stage/$file"
+            cp -p -- "$target/$file" "$backup/$file"
+            test "$(sha256sum "$target/$file" | cut -d' ' -f1)" = "$(sha256sum "$backup/$file" | cut -d' ' -f1)"
+          done
+          install_started=0
+          rollback() {
+            rc=$?
+            if [ "$rc" -ne 0 ] && [ "$install_started" -eq 1 ]; then
+              for file in "${files[@]}"; do
+                cp -p -- "$backup/$file" "$target/$file"
+              done
+              echo FACTORY_P0_PRIVATE_MODULE_ROLLBACK=RESTORED
+            fi
+            exit "$rc"
+          }
+          trap rollback EXIT
+          install_started=1
+          for file in "${files[@]}"; do
+            temp="$(mktemp "$target/.p0-integrity.XXXXXXXX")"
+            cp -- "$stage/$file" "$temp"
+            chmod 600 "$temp"
+            mv -f -- "$temp" "$target/$file"
+          done
+          "$python" -m py_compile "$target/factory_product_rework.py" "$target/factory_vps_product_cycle.py" "$target/factory_store_sender.py"
+          for file in "${files[@]}"; do
+            test "$(sha256sum "$stage/$file" | cut -d' ' -f1)" = "$(sha256sum "$target/$file" | cut -d' ' -f1)"
+          done
+          echo FACTORY_P0_PRIVATE_MODULES_INSTALLED_SHA_VERIFIED=3
+          echo FACTORY_PUBLIC_PRODUCTS_PUBLISHED=0
+          echo FACTORY_PAYMENT_CHANGED=false
+          rm -f -- "$stage/"factory_product_rework.py "$stage/"factory_vps_product_cycle.py "$stage/"factory_store_sender.py
+          rmdir -- "$stage"
+          REMOTE
