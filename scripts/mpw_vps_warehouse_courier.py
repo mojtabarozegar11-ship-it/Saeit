@@ -800,8 +800,43 @@ def three_site_product_requests(root=DEST,cycle=None):
             candidates.append((product.name,version,meta["artifact_sha256"]))
             require(len(candidates)<=MAX_ITEMS,"THREE_ORDERS_SITE_INDEX_FULL")
     require(len(candidates)>=3,"THREE_ORDERS_NOT_ENOUGH_VERIFIED_SITE_PRODUCTS")
-    start=(day.toordinal()*3)%len(candidates)
-    chosen=[candidates[(start+i)%len(candidates)] for i in range(3)]
+    # Use distinct site-verified product versions before replaying older work.
+    # Past batches are immutable: they are NOT removed, replaced or marked done.
+    # A valid same-day existing batch is revalidated below, never overwritten.
+    outbound=root/"product-orders-outbound"
+    private_new(outbound)
+    path=outbound/(cycle+".json")
+    history=sorted(outbound.glob("*.json"))
+    require(len(history)<=2000,"THREE_ORDERS_HISTORY_CAPACITY")
+    historical_sources=set()
+    for previous_path in history[-180:]:
+        if previous_path.name>=path.name or not PRODUCT_ORDER_CYCLE.fullmatch(previous_path.stem):
+            continue
+        require(previous_path.is_file() and not previous_path.is_symlink(),
+                "THREE_ORDERS_HISTORY_UNSAFE")
+        previous_batch=json_file(previous_path,100_000)
+        require(previous_batch.get("schema")==PRODUCT_ORDER_SCHEMA
+                and previous_batch.get("tenant")==TENANT
+                and previous_batch.get("cycle")==previous_path.stem,
+                "THREE_ORDERS_HISTORY_UNTRUSTED")
+        past=previous_batch.get("requests")
+        require(isinstance(past,list) and len(past)==3,
+                "THREE_ORDERS_HISTORY_UNTRUSTED")
+        for previous_row in past:
+            require(isinstance(previous_row,dict)
+                    and isinstance(previous_row.get("product_id"),str)
+                    and RECIPE.fullmatch(previous_row["product_id"])
+                    and isinstance(previous_row.get("source_sha256"),str)
+                    and SHA.fullmatch(previous_row["source_sha256"]),
+                    "THREE_ORDERS_HISTORY_UNTRUSTED")
+            historical_sources.add((previous_row["product_id"],
+                                    previous_row["source_sha256"]))
+    fresh=[row for row in candidates if (row[0],row[1]) not in historical_sources]
+    # If all three fresh versions are unavailable, keep the strict native
+    # overlap/capacity block; never manufacture a fake "new" source.
+    pool=fresh if len(fresh)>=3 else candidates
+    start=(day.toordinal()*3)%len(pool)
+    chosen=[pool[(start+i)%len(pool)] for i in range(3)]
     rows=[]
     for slot,(product,version,sha) in enumerate(chosen,1):
         request_id="MPWREQ-"+digest((cycle+"|"+product+"|"+version).encode())[:20]
@@ -815,9 +850,6 @@ def three_site_product_requests(root=DEST,cycle=None):
          "publications":0,"commercial_authorizations":0,
          "source":"site_verified_private_qa_returns",
          "real_customer_purchases":0}
-    outbound=root/"product-orders-outbound"
-    private_new(outbound)
-    path=outbound/(cycle+".json")
     if path.exists() or path.is_symlink():
         # A site's verified stock may grow during the same UTC day. Once a
         # three-product batch exists, NEVER replace it based on today's changing
