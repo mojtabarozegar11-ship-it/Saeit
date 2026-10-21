@@ -1,0 +1,48 @@
+name: MOJ1 Shasta public RPC read-only preflight
+on:
+  push:
+    branches: ['moj1/shasta-pilot-20261021']
+    paths:
+      - '.github/workflows/moj1-shasta-readonly-rpc.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj1-shasta-readonly-rpc-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  public-rpc-readonly:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/moj1/shasta-pilot-20261021'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify public Shasta latest and solidified heads without wallet or broadcast
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://api.shasta.trongrid.io'
+          head_json="$(curl --fail-with-body --silent --show-error --max-time 25 --retry 2 --retry-delay 2 --retry-all-errors \
+            --request POST --header 'Content-Type: application/json' --data '{}' \
+            "$base/wallet/getnowblock")"
+          solid_json="$(curl --fail-with-body --silent --show-error --max-time 25 --retry 2 --retry-delay 2 --retry-all-errors \
+            --request GET --header 'accept: application/json' \
+            "$base/walletsolidity/getnowblock")"
+          head_height="$(jq -er '.block_header.raw_data.number | select(type == "number" and . > 0)' <<< "$head_json")"
+          solid_height="$(jq -er '.block_header.raw_data.number | select(type == "number" and . > 0)' <<< "$solid_json")"
+          head_block="$(jq -er '.blockID | select(type == "string" and test("^[0-9a-fA-F]{64}$"))' <<< "$head_json")"
+          solid_block="$(jq -er '.blockID | select(type == "string" and test("^[0-9a-fA-F]{64}$"))' <<< "$solid_json")"
+          head_ts="$(jq -er '.block_header.raw_data.timestamp | select(type == "number" and . > 0)' <<< "$head_json")"
+          now_ms="$(date +%s%3N)"
+          test "$solid_height" -le "$head_height"
+          test "$head_ts" -le "$((now_ms + 120000))"
+          test "$head_ts" -ge "$((now_ms - 86400000))"
+          echo "MOJ1_RPC_BASE=$base"
+          echo "MOJ1_SHASTA_LATEST_HEIGHT=$head_height"
+          echo "MOJ1_SHASTA_SOLIDIFIED_HEIGHT=$solid_height"
+          echo "MOJ1_SHASTA_HEAD_BLOCK_ID=$head_block"
+          echo "MOJ1_SHASTA_SOLID_BLOCK_ID=$solid_block"
+          echo 'MOJ1_SHASTA_PUBLIC_RPC_READ_ONLY=PASS'
+          echo 'MOJ1_SIGNING_KEYS=NOT_USED'
+          echo 'MOJ1_BROADCAST_COUNT=0'
+          echo 'MOJ1_DEPLOYMENT_COUNT=0'
+          echo 'MOJ1_MAINNET=NOT_ACCESSED'
