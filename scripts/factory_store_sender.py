@@ -100,7 +100,25 @@ SAFE_STAGES = frozenset({
 def call(command, *, allowed=(0,), timeout=40, stage="unknown"):
     completed = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
     if completed.returncode not in allowed:
-        # Never log command arguments, SSH paths, product bytes, stderr or secrets.
+        # A receiver may emit a single documented, fixed validation code.
+        # Never print arbitrary remote stderr, paths, command arguments or keys.
+        if stage == "finalize" and completed.returncode == 1:
+            found = re.search(r"(?m)^STORE_RECEIVER_SAFE_REASON=([A-Z0-9_]{3,80})$",
+                              completed.stderr or "")
+            allowed_reasons = {
+                "INBOX_SYMLINK_REJECTED", "INBOX_DIRECTORY_INVALID",
+                "INVALID_RECIPE_OR_DIGEST", "SYMLINK_IN_UPLOAD",
+                "INCOMPLETE_UPLOAD", "INVALID_ARCHIVE_SIZE",
+                "MANIFEST_TOO_LARGE", "BAD_MANIFEST",
+                "MANIFEST_IDENTITY_MISMATCH", "UNSAFE_OR_UNREVIEWED_MANIFEST",
+                "SHA256_MISMATCH", "F34_EVIDENCE_CONTRACT_INVALID",
+                "F34_EXACT_ICON_PACKAGE_INVALID", "ARCHIVE_FILE_COUNT_INVALID",
+                "ARCHIVE_EXPANSION_LIMIT", "UNSAFE_ARCHIVE_MEMBER",
+                "CORRUPT_ARCHIVE",
+            }
+            if found and found.group(1) in allowed_reasons:
+                print("FACTORY_STORE_RECEIVER_REJECTION=" + found.group(1),
+                      file=sys.stderr)
         safe_stage = stage if stage in SAFE_STAGES else "unknown"
         raise RuntimeError("PRIVATE_DELIVERY_" + safe_stage.upper()
                            + "_RC_" + str(completed.returncode))
