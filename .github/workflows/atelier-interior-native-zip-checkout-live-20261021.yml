@@ -100,9 +100,9 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           src64="$(base64 -w0 scripts/atelier_interior_passenger_reload_20261021.py)"
-          call="import base64;exec(base64.b64decode('$src64'))"
+          call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
           timeout 65s ssh -T -F "$d/config" saeit-cpanel \
-            "ATELIER_OWNER_PASSENGER_TEMPLATE_RELOAD=owner-879-20261021 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c '$call'"
+            "ATELIER_OWNER_PASSENGER_TEMPLATE_RELOAD=owner-879-20261021 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c '$call' '$src64'"
       - name: Public buyer listing + native checkout CTA and protected-site smoke
         run: |
           set -euo pipefail
@@ -162,7 +162,7 @@ jobs:
         run: |
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           src64="$(base64 -w0 scripts/atelier_interior_passenger_reload_20261021.py)"
-          call="import base64;exec(base64.b64decode('$src64'))"
+          call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
           timeout 65s ssh -T -F "$d/config" saeit-cpanel \
-            "ATELIER_OWNER_PASSENGER_TEMPLATE_RELOAD=owner-879-20261021 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c '$call'"
+            "ATELIER_OWNER_PASSENGER_TEMPLATE_RELOAD=owner-879-20261021 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c '$call' '$src64'"
 # Scope: only Product 879, two exact templates and Passenger cached-template marker.
