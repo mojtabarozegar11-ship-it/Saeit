@@ -2,7 +2,7 @@ name: MojPlayWin synthetic cPanel to VPS stream path probe (no site writes)
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/mojplaywin-pinned-stream-synthetic-probe-20261021.yml"]
+    paths: [".github/workflows/mojplaywin-pinned-stream-synthetic-probe-20261021.yml", "scripts/mojplaywin_backup_source_firstbyte_probe.py"]
 permissions: {contents: read}
 concurrency:
   group: mojplaywin-synthetic-stream-diagnostic-20261021
@@ -75,3 +75,26 @@ jobs:
           echo "LEG_CPANEL_VIA_RUNNER_TO_VPS=PASS"
           echo "NO_PRODUCTION_DATA_READ_OR_WRITTEN=TRUE"
           echo "BACKUP_RESTORED_OR_DEPLOY_PERMITTED=FALSE"
+      - name: Probe actual backup source startup locally on cPanel without revealing bytes
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          python3 scripts/mojplaywin_backup_source_firstbyte_probe.py selftest
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          src64="$(base64 -w0 scripts/mojplaywin_backup_stream_cpanel.py)"
+          probe64="$(base64 -w0 scripts/mojplaywin_backup_source_firstbyte_probe.py)"
+          python_call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
+          failures=0
+          for kind in mysql files; do
+            if timeout 48s ssh -T -F "$d/config" saeit-cpanel "python3 -c '$python_call' '$probe64' '$src64' '$kind'"; then
+              echo "CPANEL_SOURCE_FIRST_BYTE_$kind=PASS"
+            else
+              echo "CPANEL_SOURCE_FIRST_BYTE_$kind=FAILED_OR_TIMED_OUT"
+              failures=$((failures+1))
+            fi
+          done
+          echo "SOURCE_CONTENT_TRANSFERRED_TO_RUNNER=FALSE"
+          echo "SOURCE_OR_PRODUCTION_PERSISTENT_WRITES=FALSE"
+          test "$failures" -eq 0
+
