@@ -170,3 +170,5 @@ jobs:
 # Scope: only Product 879, two exact templates and Passenger cached-template marker.
 
 # Owner-scoped final release after verified cached Django loader and rollback routines.
+
+# Owner final direct-store-checkout launch attempt, no unsupported detail-page requirement.
