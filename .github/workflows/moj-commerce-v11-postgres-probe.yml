@@ -1,9 +1,10 @@
-name: MOJ Commerce v1.1 PostgreSQL isolated staging capability probe (NO DEPLOY)
+name: MOJ Commerce v1.1 PostgreSQL preflight and synthetic restore (NO LIVE DEPLOY)
 on:
   pull_request:
     paths:
       - '.github/workflows/moj-commerce-v11-postgres-probe.yml'
       - 'moj_commerce/STAGING_V11.md'
+      - 'tools/moj_commerce_stage_backup_smoke.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Verified relay and READ-ONLY PostgreSQL capability checks
+      - name: Verified relay, PG capability probe, and isolated synthetic restore
         shell: bash
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -76,3 +77,21 @@ jobs:
           timeout 45s ssh -F "$sshdir/config" saeit-host 'set -eu; echo V11_CPANEL_PROBE_BEGIN; test "$(id -un)" = zomorod2; test -d /home/zomorod2/Saeit-staging; for bin in psql pg_config initdb pg_ctl pg_dump pg_restore createdb; do if command -v "$bin" >/dev/null 2>&1; then echo "CPANEL_BIN_$bin=present"; else echo "CPANEL_BIN_$bin=absent"; fi; done; for p in /usr/pgsql-16/bin/initdb /usr/pgsql-15/bin/initdb /usr/pgsql-14/bin/initdb /usr/local/pgsql/bin/initdb; do if test -x "$p"; then echo "CPANEL_ISOLATED_INITDB_FOUND=$p"; fi; done; df -Pk /home/zomorod2/Saeit-staging | awk '"'"'NR==2{print "CPANEL_DISK_KB_AVAILABLE="$4}'"'"'; test -d /home/zomorod2/Saeit && echo "PRODUCTION_EXISTS_READ_ONLY"; echo V11_CPANEL_PROBE_DONE'
           timeout 50s ssh -F "$sshdir/config" saeit-host 'set -eu; if test -x /usr/local/cpanel/bin/uapi; then echo CPANEL_LOCAL_UAPI_PRESENT; if timeout 15s /usr/local/cpanel/bin/uapi --output=json Postgresql get_restrictions >/dev/null 2>&1; then echo CPANEL_UAPI_POSTGRES_READONLY_CALL_OK; else echo CPANEL_UAPI_POSTGRES_READONLY_CALL_FAILED; fi; else echo CPANEL_LOCAL_UAPI_ABSENT; fi; if PGCONNECT_TIMEOUT=5 timeout 12s psql -w -X -qAt -d postgres -c "SELECT 1" >/dev/null 2>&1; then echo CPANEL_LOCAL_PG_ACCOUNT_AUTH_OK; else echo CPANEL_LOCAL_PG_ACCOUNT_AUTH_NOT_AVAILABLE; fi'
           echo 'V11_PG_CAPABILITIES_OBSERVED_NO_DATABASE_CREATED_NO_PRODUCTION_WRITE_NO_PAYMENT'
+          # Fallback is synthetic SQLite backup/restore in a NEW private stage directory.
+          # It does not create or read any existing PostgreSQL database.
+          script="$RUNNER_TEMP/moj-commerce-v11-synthetic-restore.py"
+          git show HEAD:tools/moj_commerce_stage_backup_smoke.py > "$script"
+          test -s "$script"
+          script_digest="$(sha256sum "$script" | awk '{print $1}')"
+          release="mc11-$(git rev-parse --short=12 HEAD)"
+          [[ "$release" =~ ^mc11-[0-9a-f]{12}$ ]] || exit 1
+          stage="/home/zomorod2/Saeit-staging/moj-commerce-v11-synthetic-restore"
+          destination="$stage/$release"
+          timeout 45s ssh -F "$sshdir/config" saeit-host "set -eu; test -d /home/zomorod2/Saeit-staging; test ! -L /home/zomorod2/Saeit-staging; umask 077; mkdir -p -m 700 '$stage'; test ! -e '$destination'; mkdir -m 700 '$destination'"
+          timeout 60s ssh -F "$sshdir/config" saeit-host "umask 077; cat > '$destination/restore_smoke.py'" < "$script"
+          remote_script_digest="$(timeout 40s ssh -F "$sshdir/config" saeit-host "sha256sum '$destination/restore_smoke.py'" | awk '{print $1}')"
+          test "$script_digest" = "$remote_script_digest"
+          timeout 45s ssh -F "$sshdir/config" saeit-host "set -eu; test -x /opt/alt/python311/bin/python3.11; cd '$destination'; /opt/alt/python311/bin/python3.11 restore_smoke.py --sandbox '$destination'"
+          echo "V11_SYNTHETIC_STAGE_NAME=$release"
+          echo "V11_SMOKE_SOURCE_SHA256=$script_digest"
+          echo 'V11_NO_PRODUCTION_DB_NO_REAL_FUNDS'
