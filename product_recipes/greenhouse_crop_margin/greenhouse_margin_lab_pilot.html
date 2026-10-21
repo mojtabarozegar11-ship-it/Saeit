@@ -1,0 +1,102 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Greenhouse Margin Lab | Factory F28 Private Pilot</title>
+<style>
+:root{font-family:system-ui,sans-serif;color:#19332a;background:#f2f7f4}
+*{box-sizing:border-box}body{margin:0}main{max-width:1080px;margin:auto;padding:24px 16px}
+header{background:#155b48;color:#fff;border-radius:16px;padding:24px}
+h1{margin:0;font-size:clamp(1.7rem,4vw,2.6rem)}h2{font-size:1.3rem}
+p{line-height:1.6}.notice{border-left:4px solid #b8860b;padding:14px;background:#fff7df;border-radius:8px}
+.layout{display:grid;grid-template-columns:minmax(240px,370px) 1fr;gap:16px;margin-top:16px}
+.panel{border:1px solid #d0dfd4;border-radius:15px;padding:19px;background:white}
+form{display:grid;gap:12px}label{display:grid;gap:4px;font-weight:600}
+input{border:1px solid #96b0a2;border-radius:7px;padding:10px;width:100%;font:inherit}
+button{border:0;border-radius:9px;padding:12px 15px;background:#096849;color:white;font-weight:650;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:3px solid #80c5a8}
+button.secondary{background:#dcebe1;color:#153e2b}button:disabled{opacity:.45}
+.actions{display:flex;flex-wrap:wrap;gap:10px}
+.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.metric{border:1px solid #dbebe1;padding:11px;border-radius:9px;min-width:0}
+.metric span{color:#476458;font-size:.85rem}.metric b{display:block;overflow-wrap:anywhere}
+table{border-collapse:collapse;width:100%;min-width:450px}td,th{border-bottom:1px solid #dbe8df;padding:9px;text-align:right}
+td:first-child,th:first-child{text-align:left}.scroll{overflow:auto}
+small{color:#405c50}#error{color:#a72419;font-weight:700}
+@media(max-width:740px){.layout{grid-template-columns:1fr}}@media(max-width:420px){.metrics{grid-template-columns:1fr}}
+@media print{body{background:white}.actions{display:none}}
+</style></head><body><main><header><small style="color:#d3f3e0">F28 · Offline Specialist Product · Private Technical Preview</small>
+<h1>Greenhouse Margin &amp; Break-even Lab</h1>
+<p>Analyse greenhouse profitability and nine price/yield stress tests from user-entered assumptions.</p></header>
+<p class="notice"><b>Illustrative only.</b> Replace every default with local verified values. This tool does not predict crop output or market prices. It excludes tax, depreciation, finance, omitted labor costs and seasonal risk. No commercial license or live sales is activated.</p>
+<div class="layout"><section class="panel"><h2>1. Assumptions</h2><form id="form">
+<label>Greenhouse area (m²)<input id="area" required type="number" min="0.000001" step="any" value="100"></label>
+<label>Expected production per m² (kg)<input id="yield" required type="number" min="0" step="any" value="10"></label>
+<label>Price per saleable kg<input id="price" required type="number" min="0" step="any" value="3"></label>
+<label>Variable cost per m²<input id="variable" required type="number" min="0" step="any" value="5"></label>
+<label>Total fixed cost<input id="fixed" required type="number" min="0" step="any" value="500"></label>
+<label>Reject/unsaleable share (%)<input id="reject" required type="number" min="0" max="100" step="any" value="10"></label>
+<label>Currency unit<input id="currency" required type="text" maxlength="12" value="USD"></label>
+<div class="actions"><button type="submit">Calculate</button><button type="button" id="reset" class="secondary">Reset</button></div>
+<p id="error" role="alert" aria-live="assertive"></p></form></section>
+<section class="panel"><h2>2. Scenario results</h2><div id="metrics" class="metrics" aria-live="polite"></div>
+<div class="actions" style="margin-top:16px"><button id="export" type="button" class="secondary" disabled>Export results CSV</button><button id="print" type="button" class="secondary">Print</button></div>
+<small>A zero saleable yield makes break-even price undefined, not zero.</small></section></div>
+<section class="panel" style="margin-top:16px"><h2>3. Nine scenario stress tests</h2>
+<p><small>Saleable quantity: −20%, 0%, +20%. Unit price: −10%, 0%, +10%. Total costs held constant; not a forecast.</small></p>
+<div class="scroll"><table><thead><tr><th>Yield change</th><th>Price change</th><th>Sales</th><th>Margin</th></tr></thead><tbody id="rows"></tbody></table></div>
+<p><small>No network, trackers, payments or data collection. Private factory QA candidate. Specialist review, itemized rights, owner approval, support terms and gateway verification remain pending.</small></p></section>
+<script>'use strict'; const calculate=function calculate(v){
+ const read=(k,lo,hi)=>{let x=v[k];if(x===undefined||x===null||String(x).trim()==='')throw Error(k+' is required');x=Number(x);if(!Number.isFinite(x)||x<lo||x>hi)throw Error(k+' outside valid range');return x};
+ const a=read('area',.000001,1e8),y=read('yield',0,1e5),p=read('price',0,1e12),c=read('variable',0,1e12),f=read('fixed',0,1e14),reject=read('reject',0,100);
+ const currency=String(v.currency||'USD').toUpperCase().trim();if(!/^[A-Z][A-Z0-9_]{1,11}$/.test(currency))throw Error('Invalid currency unit');
+ const gross=a*y,saleable=gross*(1-reject/100),revenue=saleable*p,total=a*c+f,margin=revenue-total;
+ if(![gross,saleable,revenue,total,margin].every(Number.isFinite))throw Error('Inputs too large');
+ return {currency,gross,saleable,revenue,total,margin,marginPerArea:margin/a,breakEven:saleable?total/saleable:null};
+};
+const keys=['area','yield','price','variable','fixed','reject','currency'],form=document.getElementById('form');
+const metricBox=document.getElementById('metrics'),rows=document.getElementById('rows'),error=document.getElementById('error');
+const button=document.getElementById('export');let last=null;
+const money=(n,u)=>n===null?'Undefined':new Intl.NumberFormat('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n)+(u?' '+u:'');
+function addMetric(label,value){const d=document.createElement('div'),s=document.createElement('span'),b=document.createElement('b');d.className='metric';s.textContent=label;b.textContent=value;d.append(s,b);metricBox.append(d)}
+function show(r){
+ metricBox.replaceChildren();rows.replaceChildren();error.textContent='';
+ for(const [k,v] of [['Gross yield',money(r.gross,'kg')],['Saleable yield',money(r.saleable,'kg')],['Revenue',money(r.revenue,r.currency)],['Total costs',money(r.total,r.currency)],['Net margin',money(r.margin,r.currency)],['Margin per m²',money(r.marginPerArea,r.currency)],['Break-even price/kg',money(r.breakEven,r.currency)]])addMetric(k,v);
+ for(const yd of [-.2,0,.2])for(const pd of [-.1,0,.1]){
+  const rev=r.saleable*(1+yd)*r.price*(1+pd);const tr=document.createElement('tr');
+  for(const val of [(yd>0?'+':'')+Math.round(yd*100)+'%',(pd>0?'+':'')+Math.round(pd*100)+'%',money(rev,r.currency),money(rev-r.total,r.currency)]){
+   const td=document.createElement('td');td.textContent=val;tr.append(td)}
+  rows.append(tr)}
+ button.disabled=false;last=r;
+}
+form.addEventListener('submit',e=>{
+ e.preventDefault();const v={};keys.forEach(k=>v[k]=document.getElementById(k).value);
+ try{show({...calculate(v),price:Number(v.price),inputs:v})}catch(err){error.textContent=String(err.message);metricBox.replaceChildren();rows.replaceChildren();button.disabled=true;last=null}
+});
+document.getElementById('reset').addEventListener('click',()=>{form.reset();form.requestSubmit()});
+document.getElementById('print').addEventListener('click',()=>window.print());
+button.addEventListener('click',()=>{if(!last)return;
+ const lines=[['metric','value','unit'],
+  ['currency',last.currency,'label'],
+  ['greenhouse_area',Number(last.inputs.area),'m2'],
+  ['expected_yield_per_m2',Number(last.inputs.yield),'kg/m2'],
+  ['unit_sale_price',Number(last.inputs.price),last.currency+'/kg'],
+  ['variable_cost_per_m2',Number(last.inputs.variable),last.currency+'/m2'],
+  ['fixed_cost',Number(last.inputs.fixed),last.currency],
+  ['rejected_yield',Number(last.inputs.reject),'percent'],
+  ['gross_yield',last.gross,'kg'],
+  ['saleable_yield',last.saleable,'kg'],
+  ['sales_revenue',last.revenue,last.currency],
+  ['total_cost',last.total,last.currency],
+  ['net_margin',last.margin,last.currency],
+  ['net_margin_per_area',last.marginPerArea,last.currency+'/m2'],
+  ['break_even_price_per_kg',last.breakEven,last.currency+'/kg']];
+ for(const yd of [-.2,0,.2])for(const pd of [-.1,0,.1]){
+  const code='yield_'+Math.round(yd*100)+'_price_'+Math.round(pd*100);
+  const revenue=last.saleable*(1+yd)*last.price*(1+pd);
+  lines.push(['stress_'+code+'_revenue',revenue,last.currency]);
+  lines.push(['stress_'+code+'_margin',revenue-last.total,last.currency]);
+ }
+ const quote=v=>'"'+String(v===null?'undefined':v).replace(/"/g,'""')+'"';
+ const csv='\uFEFF'+lines.map(line=>line.map(quote).join(',')).join('\r\n')+'\r\n';
+ const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');
+ a.href=url;a.download='greenhouse-margin-f28.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200);
+});
+form.requestSubmit();</script></main></body></html>
