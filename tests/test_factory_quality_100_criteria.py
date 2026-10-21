@@ -17,19 +17,22 @@ def attach(root,key,text):
 class OneHundredTimesTen(unittest.TestCase):
     def test_exactly_one_hundred_distinct_criteria_all_ten(self):
         self.assertEqual(len(score.CRITERIA),100)
-        self.assertEqual({c["group"] for c in score.CRITERIA.values()},set(score.LINK))
+        self.assertEqual(set(score.CRITERIA),{"Q%03d"%n for n in range(1,101)})
         self.assertEqual(len(set(x["name"] for x in score.CRITERIA.values())),100)
         self.assertEqual(list(score.CRITERIA),["Q%03d"%n for n in range(1,101)])
         self.assertEqual(sum(10 for _ in score.CRITERIA),1000)
-        self.assertEqual(len(score.LINK),10)
+        self.assertEqual(len({group for group in score.CRITERIA}),100)
+        self.assertEqual(len({x["name"] for x in score.CRITERIA.values()}),100)
 
     def test_active_policy_applies_to_all_forty_families(self):
         policy=json.loads((ROOT/"factory_config/active_quality_1000_policy.json").read_text())
         registry=json.loads((ROOT/"factory_config/forty_families.json").read_text())
         self.assertTrue(policy["active"])
         self.assertEqual(policy["scope"],"all_40_registered_families")
-        self.assertEqual(policy["count"],100)
-        self.assertEqual(policy["points_per_criterion"],10)
+        self.assertEqual(policy["group_count"],100)
+        self.assertEqual(policy["criteria_per_group"],1)
+        self.assertEqual(policy["points_per_group"],10)
+        self.assertEqual(policy["points_per_group"],10)
         self.assertEqual(policy["total_required"],1000)
         self.assertEqual(len(registry["profiles"]),40)
 
@@ -40,6 +43,9 @@ class OneHundredTimesTen(unittest.TestCase):
             self.assertIsNone(c["product_quality_points"])
             self.assertFalse(c["release_allowed"])
             self.assertEqual(c["criteria_count"],100)
+            self.assertEqual(c["group_count"],100)
+            self.assertEqual(c["criteria_per_group"],1)
+            self.assertEqual(c["points_per_group"],10)
             self.assertTrue(score.require_no_false_certification(c))
 
     def test_one_evidence_is_ten_points_and_corruption_is_detected(self):
