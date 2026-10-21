@@ -25,6 +25,7 @@ class SignedApprovalTests(unittest.TestCase):
               "family_id":"F14","technical_test_passed":True,
               "blockers":[{"code":"P0_INDEPENDENT_ATTESTATION_NOT_AUTHENTICATED"},
                           {"code":"P0_WORLD_NUMBER_ONE_CLAIM_UNVERIFIED"}]}
+        decision["gate_report_sha256"]=hashlib.sha256(mod.canonical(gate)).hexdigest()
         trust={"schema":mod.KEY_SCHEMA,"reviewers":{}}
         sigs=[]
         for role in ROLES:
