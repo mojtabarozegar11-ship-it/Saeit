@@ -1,0 +1,12 @@
+{
+  "sessions": 12,
+  "session_minutes": 15,
+  "initial_wallet": 150,
+  "earn_per_minute": 8,
+  "spend_per_minute": 6,
+  "earn_growth_per_session": 0.02,
+  "spend_growth_per_session": 0.03,
+  "wallet_cap": 2000,
+  "players": 1000,
+  "retention_per_session": 0.88
+}
