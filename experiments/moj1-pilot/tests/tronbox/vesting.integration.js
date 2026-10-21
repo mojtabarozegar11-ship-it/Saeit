@@ -224,3 +224,42 @@ contract('MOJ1 escrowed genesis allocations', (accounts) => {
     await expectRevert(nft.safeMint(accounts[1], 'ipfs://former-owner'));
   });
 });
+
+const MojPilotGovernance = artifacts.require('MojPilotGovernance');
+
+contract('MOJ1 experimental 2-of-3 governance on isolated TVM', (accounts) => {
+  async function expectReverted(promise) {
+    const txId = await promise;
+    const info = await tronWeb.trx.getTransactionInfo(txId);
+    assert.equal(info?.receipt?.result, 'REVERT', 'Transaction must revert in TVM');
+  }
+
+  it('requires two different owners before executing a token read through governance', async () => {
+    const governance = await MojPilotGovernance.new([accounts[0], accounts[1], accounts[2]]);
+    const token = await MojCoin.new(governance.address);
+    const escrowAddress = tronWeb.address.fromHex(await token.distributor());
+    const distributor = await MojGenesisDistributor.at(escrowAddress);
+    assert.equal(tronWeb.address.fromHex(await distributor.governance()), governance.address);
+    const callData = '0x18160ddd'; // TRC20 totalSupply()
+    await expectReverted(governance.execute(token.address, callData, 0, {from: accounts[0]}));
+    await expectReverted(governance.approve(token.address, callData, 0, {from: accounts[5]}));
+    await governance.approve(token.address, callData, 0, {from: accounts[0]});
+    await expectReverted(governance.approve(token.address, callData, 0, {from: accounts[0]}));
+    assert.equal((await governance.approvals(await governance.operationHash(token.address, callData, 0))).toString(), '1');
+    await expectReverted(governance.execute(token.address, callData, 0, {from: accounts[2]}));
+    await governance.approve(token.address, callData, 0, {from: accounts[1]});
+    await governance.execute(token.address, callData, 0, {from: accounts[2]});
+    assert.equal((await governance.nonce()).toString(), '1');
+    await expectReverted(governance.execute(token.address, callData, 0, {from: accounts[0]}));
+    assert.equal((await token.totalSupply()).toString(), (100_000_000_000n * 10n ** 18n).toString());
+  });
+
+  it('rejects duplicate governance owners and a zero-address owner', async () => {
+    try {
+      await MojPilotGovernance.new([accounts[0], accounts[0], accounts[1]]);
+      assert.fail('duplicate owners should fail');
+    } catch (error) {
+      assert.match(String(error.message), /Duplicate owner|revert|REVERT|failed/i);
+    }
+  });
+});
