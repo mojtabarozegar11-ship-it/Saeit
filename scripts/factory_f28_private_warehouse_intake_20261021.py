@@ -15,6 +15,7 @@ from pathlib import Path
 import shutil
 import sys
 import tempfile
+import time
 
 RECIPE = "greenhouse_crop_margin"
 SCHEMA = "zomorodmelal.factory.f28-central-private-intake.v1"
@@ -68,6 +69,24 @@ def stable_ticket(warehouse, path, payload):
         warehouse.write_json_atomic(path, payload)
 
 
+def acquire_warehouse_lock(handle, *, wait_seconds=70, interval_seconds=0.5):
+    """Wait a bounded time for the existing cooperative warehouse lock.
+
+    Never break, delete or bypass the shared warehouse lock: other writers
+    retain exclusive access while holding it.
+    """
+    deadline = time.monotonic() + wait_seconds
+    while True:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except BlockingIOError:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError("F28_INTAKE_WAREHOUSE_LOCKED_RETRY")
+            time.sleep(min(interval_seconds, remaining))
+
+
 def accept(candidate, factory_root, warehouse_module):
     candidate = Path(candidate).absolute()
     factory_root = Path(factory_root).absolute()
@@ -114,10 +133,7 @@ def accept(candidate, factory_root, warehouse_module):
     require(not lockpath.is_symlink(), "F28_INTAKE_UNSAFE_LOCK")
     with lockpath.open("a+b") as lock:
         os.chmod(str(lockpath), 0o600)
-        try:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise RuntimeError("F28_INTAKE_WAREHOUSE_LOCKED_RETRY")
+        acquire_warehouse_lock(lock)
         # A pre-existing live QA/rework hold is never bypassed.
         active = module.active_rework(factory_root, RECIPE)
         require(active is None, "F28_INTAKE_REWORK_HOLD_" + str(active))
