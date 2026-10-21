@@ -11,9 +11,13 @@ if (!/^[a-fA-F0-9]{64}$/.test(testKey ?? '')) {
 }
 
 const tronWeb = new TronWeb({fullHost: 'https://api.shasta.trongrid.io', privateKey: testKey});
-const treasury = process.env.MOJ_SHASTA_TREASURY;
-if (!tronWeb.isAddress(treasury ?? '')) {
-  throw new Error('Set MOJ_SHASTA_TREASURY to a checked test wallet address');
+const governance = process.env.MOJ_SHASTA_GOVERNANCE;
+if (!tronWeb.isAddress(governance ?? '')) {
+  throw new Error('Set MOJ_SHASTA_GOVERNANCE to an approved Shasta multisig contract address');
+}
+const governanceContract = await tronWeb.trx.getContract(governance);
+if (!governanceContract?.bytecode) {
+  throw new Error('Shasta governance must be a deployed contract, not a single-key wallet');
 }
 
 async function deploy(name) {
@@ -25,7 +29,7 @@ async function deploy(name) {
   const contract = await tronWeb.contract().new({
     abi: artifact.abi,
     bytecode: artifact.bytecode,
-    parameters: [treasury],
+    parameters: [governance],
     feeLimit: 1_000_000_000,
     callValue: 0
   });
@@ -49,4 +53,16 @@ const [name, symbol, supply] = await Promise.all([
 if (String(name) !== 'Moj 1' || String(symbol) !== 'MOJ1' || BigInt(supply.toString()) !== 100_000_000_000n * 10n ** 18n) {
   throw new Error('On-chain identity/supply verification failed');
 }
-console.log(JSON.stringify({network: 'Shasta', tokenAddress, nftAddress, name: String(name), symbol: String(symbol), supply: supply.toString()}, null, 2));
+const distributorHex = String(await token.distributor().call());
+const distributorAddress = tronWeb.address.fromHex(distributorHex);
+const [escrowed, governanceOnChain] = await Promise.all([
+  token.balanceOf(distributorAddress).call(),
+  tronWeb.contract().at(distributorAddress).then(x => x.governance().call())
+]);
+if (BigInt(escrowed.toString()) !== BigInt(supply.toString()) ||
+    tronWeb.address.fromHex(String(governanceOnChain)) !== governance) {
+  throw new Error('Genesis escrow/governance verification failed; do not proceed');
+}
+console.log(JSON.stringify({network: 'Shasta', tokenAddress, nftAddress, distributorAddress,
+  name: String(name), symbol: String(symbol), supply: supply.toString(),
+  escrowed: escrowed.toString(), distributed: false}, null, 2));

@@ -4,9 +4,11 @@ import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 
 const specs = [
-  {name: 'MojCoin', args: 1, functions: ['name', 'symbol', 'decimals', 'totalSupply', 'balanceOf', 'transfer', 'approve']},
+  {name: 'MojCoin', args: 1, functions: ['name', 'symbol', 'decimals', 'totalSupply', 'balanceOf', 'transfer', 'approve', 'distributor']},
   {name: 'MojAssets', args: 1, functions: ['safeMint', 'tokenURI', 'owner', 'transferFrom']},
-  {name: 'MojVestingVault', args: 6, functions: ['beneficiary', 'allocation', 'start', 'cliff', 'duration', 'released', 'vestedAt', 'fullyFunded', 'releasable', 'release']}
+  {name: 'MojVestingVault', args: 6, functions: ['beneficiary', 'allocation', 'start', 'cliff', 'duration', 'released', 'vestedAt', 'fullyFunded', 'releasable', 'release']},
+  {name: 'MojGenesisDistributor', args: 1, functions: ['governance', 'token', 'distributed', 'vaults', 'bucketAmount', 'distribute']},
+  {name: 'MojApprovalReserve', args: 4, functions: ['beneficiary', 'releaseController', 'allocation', 'fullyFunded', 'scheduleRelease', 'cancelRelease', 'executeRelease']}
 ];
 
 const contractReports = [];
@@ -29,6 +31,9 @@ for (const {name, args, functions} of specs) {
   }
   if (name === 'MojVestingVault' && [...abiFunctions].some(x => /^(revoke|recover|setBeneficiary|upgradeTo)$/.test(x))) {
     throw new Error('Vesting vault contains a privileged backdoor');
+  }
+  if (name === 'MojGenesisDistributor' && [...abiFunctions].some(x => /^(withdraw|recover|setGovernance|upgradeTo)$/.test(x))) {
+    throw new Error('Genesis escrow contains a privileged bypass');
   }
   contractReports.push({name, compiler: artifact.compiler.version.split('+')[0], bytecodeSha256: createHash('sha256').update(artifact.bytecode).digest('hex')});
 }

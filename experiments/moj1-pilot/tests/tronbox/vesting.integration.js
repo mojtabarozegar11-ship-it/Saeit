@@ -1,83 +1,113 @@
-/*
- * ON-CHAIN integration suite for TronBox + local TVM runtime (TRE).
- * Unlike the Node model tests, this invokes compiled contracts; NOT run without TRE.
- * Run: npm run test:onchain:local
- */
+/* Real TVM integration tests on an ephemeral, localhost-only TRON runtime. */
 const MojCoin = artifacts.require('MojCoin');
 const MojVestingVault = artifacts.require('MojVestingVault');
+const MojApprovalReserve = artifacts.require('MojApprovalReserve');
+const MojGenesisDistributor = artifacts.require('MojGenesisDistributor');
 const MojAssets = artifacts.require('MojAssets');
 
-contract('MOJ1 token and team vault', (accounts) => {
+contract('MOJ1 escrowed genesis allocations', (accounts) => {
+  const unit = 10n ** 18n;
+  const amounts = [35n, 20n, 15n, 10n, 15n, 5n].map(x => (x * 1_000_000_000n * unit).toString());
+  const day = 86400;
+  let token, distributor, vaults, start;
+
   async function expectRevert(txPromise) {
-    // TronBox returns a transaction ID even when a TVM state-changing call reverts.
-    // Query the actual TVM receipt; a returned tx ID is not execution success.
     const txId = await txPromise;
-    const info = await tronWeb.trx.getTransactionInfo(txId);
-    assert.equal(info?.receipt?.result, 'REVERT', 'transaction must revert in TVM');
+    const receipt = await tronWeb.trx.getTransactionInfo(txId);
+    assert.equal(receipt?.receipt?.result, 'REVERT', 'TVM receipt must show REVERT');
   }
 
-  it('funds the vault and exposes immutable cliff / duration math', async () => {
-    const token = await MojCoin.new(accounts[0]);
-    const allocation = '10000000000000000000000000000'; // 10 billion * 10^18
-    const start = Math.floor(Date.now() / 1000) + 3600;
-    const cliff = 365 * 86400;
-    const duration = 3 * 365 * 86400;
-    const vault = await MojVestingVault.new(
-      token.address, accounts[1], allocation, start, cliff, duration
-    );
+  function addressFromResult(raw) {
+    return tronWeb.address.fromHex(raw);
+  }
 
-    assert.equal(await vault.fullyFunded(), false);
-    assert.equal((await vault.vestedAt(start + cliff)).toString(), '0');
-    assert.equal((await vault.vestedAt(start + cliff + duration / 2)).toString(), '5000000000000000000000000000');
-    assert.equal((await vault.vestedAt(start + cliff + duration)).toString(), allocation);
-    await token.transfer(vault.address, allocation);
-    assert.equal(await vault.fullyFunded(), true);
-    assert.equal((await token.balanceOf(vault.address)).toString(), allocation);
-    // TronBox returns raw hex for contract addresses; account fixtures are Base58.
-    assert.equal(tronWeb.address.fromHex(await vault.beneficiary()), accounts[1]);
-  });
-  it('keeps the fixed 100 billion MOJ1 supply unchanged after transfers', async () => {
-    const token = await MojCoin.new(accounts[0]);
-    const fixedSupply = '100000000000000000000000000000';
-    const smallTransfer = '2500000000000000000';
-    assert.equal((await token.totalSupply()).toString(), fixedSupply);
-    await token.transfer(accounts[1], smallTransfer);
-    assert.equal((await token.balanceOf(accounts[1])).toString(), smallTransfer);
-    assert.equal((await token.totalSupply()).toString(), fixedSupply);
+  before(async () => {
+    token = await MojCoin.new(accounts[0]);
+    distributor = await MojGenesisDistributor.at(addressFromResult(await token.distributor()));
+    start = Math.floor(Date.now() / 1000) + 7200;
+    vaults = [];
+    for (let i = 0; i < 6; i++) {
+      const beneficiary = accounts[i + 1];
+      if (i === 2 || i === 5) {
+        vaults.push(await MojApprovalReserve.new(token.address, beneficiary, accounts[0], amounts[i]));
+      } else {
+        const cliff = i === 3 ? 365 * day : 0;
+        const duration = (i === 0 ? 1825 : i === 3 ? 1095 : 1460) * day;
+        vaults.push(await MojVestingVault.new(token.address, beneficiary, amounts[i], start, cliff, duration));
+      }
+    }
   });
 
-  it('mints an identified NFT with an owner and a metadata URI', async () => {
-    const collection = await MojAssets.new(accounts[0]);
-    await collection.safeMint(accounts[1], 'ipfs://moj1-local-fixture-1');
-    assert.equal(tronWeb.address.fromHex(await collection.ownerOf(1)), accounts[1]);
-    assert.equal(await collection.tokenURI(1), 'ipfs://moj1-local-fixture-1');
+  it('escrows 100 billion before distribution and blocks an unauthorized caller', async () => {
+    const supply = (100_000_000_000n * unit).toString();
+    assert.equal((await token.totalSupply()).toString(), supply);
+    assert.equal((await token.balanceOf(distributor.address)).toString(), supply);
+    assert.equal((await token.balanceOf(accounts[0])).toString(), '0');
+    assert.equal(await distributor.distributed(), false);
+    await expectRevert(distributor.distribute(vaults.map(x => x.address), start, {from: accounts[1]}));
+    assert.equal((await token.balanceOf(distributor.address)).toString(), supply);
   });
 
-
-  it('rejects release before funding and before the cliff without losing tokens', async () => {
-    const token = await MojCoin.new(accounts[0]);
-    const allocation = '100000000000000000000'; // 100 MOJ1
-    const start = Math.floor(Date.now() / 1000) + 3600;
-    const vault = await MojVestingVault.new(token.address, accounts[1], allocation, start, 86400, 86400);
-
-    await expectRevert(vault.release());
-    assert.equal((await vault.released()).toString(), '0');
-
-    await token.transfer(vault.address, allocation);
-    await expectRevert(vault.release());
-    assert.equal((await vault.released()).toString(), '0');
-    assert.equal((await token.balanceOf(vault.address)).toString(), allocation);
-    assert.equal((await token.balanceOf(accounts[1])).toString(), '0');
+  it('funds six immutable independent vaults once with exact percentages', async () => {
+    await distributor.distribute(vaults.map(x => x.address), start, {from: accounts[0]});
+    assert.equal(await distributor.distributed(), true);
+    assert.equal((await token.balanceOf(distributor.address)).toString(), '0');
+    for (let i = 0; i < 6; i++) {
+      assert.equal((await distributor.bucketAmount(i)).toString(), amounts[i]);
+      assert.equal((await token.balanceOf(vaults[i].address)).toString(), amounts[i]);
+      assert.equal(await vaults[i].fullyFunded(), true);
+      assert.equal(addressFromResult(await vaults[i].beneficiary()), accounts[i + 1]);
+      assert.equal(addressFromResult(await distributor.vaults(i)), vaults[i].address);
+    }
+    assert.equal((await token.totalSupply()).toString(), (100_000_000_000n * unit).toString());
   });
 
-  it('rejects invalid NFT metadata and a former NFT owner minting', async () => {
-    const collection = await MojAssets.new(accounts[0]);
-    await expectRevert(collection.safeMint(accounts[1], ''));
-    assert.equal((await collection.balanceOf(accounts[1])).toString(), '0');
-
-    await collection.transferOwnership(accounts[1]);
-    await expectRevert(collection.safeMint(accounts[1], 'ipfs://former-owner-test'));
-    assert.equal((await collection.balanceOf(accounts[1])).toString(), '0');
+  it('enforces the team cliff and 3-year linear schedule', async () => {
+    const team = vaults[3];
+    const cliff = 365 * day;
+    const duration = 1095 * day;
+    assert.equal((await team.vestedAt(start + cliff)).toString(), '0');
+    assert.equal((await team.vestedAt(start + cliff + duration / 2)).toString(), (5_000_000_000n * unit).toString());
+    assert.equal((await team.vestedAt(start + cliff + duration)).toString(), amounts[3]);
+    await expectRevert(team.release());
+    assert.equal((await token.balanceOf(team.address)).toString(), amounts[3]);
   });
 
+  it('blocks any second distribution, leaving every existing vault unchanged', async () => {
+    await expectRevert(distributor.distribute(vaults.map(x => x.address), start));
+    for (let i = 0; i < 6; i++) {
+      assert.equal((await token.balanceOf(vaults[i].address)).toString(), amounts[i]);
+    }
+  });
+
+  it('requires governance and a 30-day delay for protected reserve releases', async () => {
+    const reserve = vaults[2];
+    await expectRevert(reserve.scheduleRelease({from: accounts[1]}));
+    await expectRevert(reserve.executeRelease());
+    await reserve.scheduleRelease({from: accounts[0]});
+    assert.notEqual((await reserve.releaseScheduledAt()).toString(), '0');
+    await expectRevert(reserve.executeRelease());
+    await reserve.cancelRelease({from: accounts[0]});
+    assert.equal((await reserve.releaseScheduledAt()).toString(), '0');
+    assert.equal((await token.balanceOf(reserve.address)).toString(), amounts[2]);
+    assert.equal((await token.balanceOf(accounts[3])).toString(), '0');
+  });
+
+  it('rejects a duplicate bucket list without moving escrowed supply', async () => {
+    const fresh = await MojCoin.new(accounts[0]);
+    const escrow = await MojGenesisDistributor.at(addressFromResult(await fresh.distributor()));
+    const invalid = Array(6).fill(vaults[0].address);
+    await expectRevert(escrow.distribute(invalid, start));
+    assert.equal(await escrow.distributed(), false);
+    assert.equal((await fresh.balanceOf(escrow.address)).toString(), (100_000_000_000n * unit).toString());
+  });
+
+  it('mints a valid NFT and blocks invalid metadata or a former owner', async () => {
+    const nft = await MojAssets.new(accounts[0]);
+    await nft.safeMint(accounts[1], 'ipfs://moj1-pilot');
+    assert.equal(addressFromResult(await nft.ownerOf(1)), accounts[1]);
+    await expectRevert(nft.safeMint(accounts[1], ''));
+    await nft.transferOwnership(accounts[1]);
+    await expectRevert(nft.safeMint(accounts[1], 'ipfs://former-owner'));
+  });
 });
