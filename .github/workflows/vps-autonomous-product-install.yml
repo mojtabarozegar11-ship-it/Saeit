@@ -166,7 +166,11 @@ jobs:
               before.append(data.get("functional_sha256"))
           (root/"engineering-before-${{ github.sha }}.json").write_text(json.dumps(before))
           PYBEFORE
+          # The passport v3 module must be identical in GitHub's reviewed staging
+          # and the installed runtime; a missing dependency is a hard install failure.
+          "${SSH[@]}" 'test -s "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/scripts/factory_personal_owner_passport_policy_20261020.py"'
           "${SSH[@]}" 'bash "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/deploy/install_autonomous_factory_products.sh"'
+          "${SSH[@]}" 'cmp "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/scripts/factory_personal_owner_passport_policy_20261020.py" "$HOME/factory-runtime/operations/autonomous-product-runtime/scripts/factory_personal_owner_passport_policy_20261020.py" && echo FACTORY_PASSPORT_POLICY_INSTALLED_BYTE_FOR_BYTE=PASS'
           "${SSH[@]}" 'bash "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/deploy/install_production_warehouse.sh"'
           "${SSH[@]}" 'bash "$HOME/factory-runtime/operations/autonomous-product-runtime/run-local-cycle.sh" && bash "$HOME/factory-runtime/operations/production-warehouse/run-warehouse.sh"'
           "${SSH[@]}" 'python3 -c "import json,pathlib; p=pathlib.Path.home()/\"factory-runtime/private/autonomous-product-cycle/family-pilots/status.json\"; print(\"FACTORY_SPECIALIST_PILOT_PROOF=\"+json.dumps(json.loads(p.read_text()),sort_keys=True))"'
