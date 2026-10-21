@@ -116,4 +116,7 @@ production=Path("/home/zomorod2/Saeit")
 for rel in ["core/templates/brands/mojplaywin/product.html","core/templates/mojplaywin/store.html","mpw_commerce/product_checkout_page.py"]:
     paths=[app/rel,production/rel]
     print("ATELIER_DEPLOYED_TPL_PARITY="+json.dumps({"rel":rel,"staging":paths[0].is_file(),"production":paths[1].is_file(),"identical":all(t.is_file() for t in paths) and hashlib.sha256(paths[0].read_bytes()).digest()==hashlib.sha256(paths[1].read_bytes()).digest()}))
+
+from django.conf import settings
+print("ATELIER_TEMPLATE_RUNTIME="+json.dumps({"debug":settings.DEBUG,"template_backend_count":len(settings.TEMPLATES),"loaders":str(settings.TEMPLATES[0].get("OPTIONS",{}).get("loaders",None))[:280],"app_dirs":settings.TEMPLATES[0].get("APP_DIRS"),"passenger_wsgi":(app/"passenger_wsgi.py").is_file(),"app_tmp_exists":(app/"tmp").is_dir(),"passenger_restart_marker":(app/"tmp"/"restart.txt").is_file(),"app_owner":app.stat().st_uid==(app/"manage.py").stat().st_uid}))
 print("ATELIER_READONLY_VIEW_INSPECT=PASS")
