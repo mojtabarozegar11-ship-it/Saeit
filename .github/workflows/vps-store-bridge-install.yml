@@ -278,3 +278,4 @@ jobs:
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/saeit-store"
 # Reconnect 2026-10-20: re-run private 3-package VPS-to-cPanel bridge verification; never publish without QA/owner approval.
+# 2026-10-21: Recheck pinned private bridge with allowlisted receiver rejection diagnostics; policy/QA unchanged.
