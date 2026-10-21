@@ -6,6 +6,8 @@ on:
       - '.github/workflows/moj-commerce-v12-cpanel-readonly.yml'
       - 'tools/moj_commerce_v12_live_mariadb_readonly.py'
       - 'tests/test_moj_commerce_v12_readonly_probe.py'
+      - 'tools/moj_commerce_v12_passenger_backup_diagnostic.py'
+      - 'tests/test_moj_commerce_v12_passenger_backup_diagnostic.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -16,13 +18,13 @@ jobs:
   verify-no-deploy:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/moj-commerce-v12-mariadb-isolated-20261022'
     runs-on: ubuntu-latest
-    timeout-minutes: 7
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
       - name: Validate sanitized metadata-only inspector without production access
         run: |
-          python3 -m unittest -v tests.test_moj_commerce_v12_readonly_probe
+          python3 -m unittest -v tests.test_moj_commerce_v12_readonly_probe tests.test_moj_commerce_v12_passenger_backup_diagnostic
           python3 -m py_compile tools/moj_commerce_v12_live_mariadb_readonly.py
       - name: Read production MariaDB metadata and hosting quota over pinned relay
         shell: bash
@@ -74,6 +76,20 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
           mv "$d/host.candidate" "$d/host.known"
           timeout 100s ssh -T -F "$d/config" saeit-host 'python3 -' < tools/moj_commerce_v12_live_mariadb_readonly.py
+          # Approved known site metadata: inspect only fixed WSGI/.htaccess files,
+          # never print paths, environment variables, secrets, or actual app code.
+          timeout 70s ssh -T -F "$d/config" saeit-host 'python3 -' < tools/moj_commerce_v12_passenger_backup_diagnostic.py
+          echo 'MOJ_COMMERCE_V12_PASSENGER_SOURCE_INSPECTION=COMPLETED'
+          # Decrypt the EXISTING completed files archive on VPS and stream over
+          # the already-pinned encrypted SSH channel. On runner, inspect only TAR
+          # metadata: no extraction, archive storage, file-content logging or keys.
+          # The upstream GPG receiver authenticates full source bytes and footer.
+          stream64="$(base64 -w0 scripts/mojplaywin_recovery_stream_vps.py)"
+          diag64="$(base64 -w0 tools/moj_commerce_v12_passenger_backup_diagnostic.py)"
+          call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
+          timeout 700s ssh -T -F "$d/config" saeit-vps "python3 -c '$call' '$stream64' files" |
+            timeout 700s python3 -c "$call" "$diag64" archive
+          echo 'MOJ_COMMERCE_V12_EXISTING_GPG_BACKUP_METADATA=ANALYZED_READ_ONLY'
           echo 'MOJ_COMMERCE_V12_RELAY_READONLY=COMPLETED'
           echo 'MOJ_COMMERCE_V12_PRODUCTION_WRITES=ZERO'
           echo 'MOJ_COMMERCE_V12_MIGRATIONS=ZERO'
