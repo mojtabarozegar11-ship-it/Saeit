@@ -85,7 +85,8 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
     assert root.is_dir() and not root.is_symlink()
     module=load_module(Path(policy))
     score_module=load_module(Path(scorecard_file) if scorecard_file else Path(__file__).with_name("factory_quality_1000_v2.py"))
-    integrity_module=load_module(Path(__file__).with_name("factory_measured_zip_evidence_v1.py"))
+    integrity_file=Path(__file__).with_name("factory_measured_zip_evidence_v1.py")
+    integrity_module=load_module(integrity_file) if integrity_file.is_file() and not integrity_file.is_symlink() else None
     profiles=module.load_registry(Path(registry))
     assert len(profiles)==40
     out=root/"quality-excellence"/"rework"
@@ -137,7 +138,8 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
                     "path":zipfile.name,"sha256":existing_hash or ""})
                 # Independently *measure* criterion Q068 from the actual ZIP bytes;
                 # never accept an arbitrary text dossier as proof of ZIP integrity.
-                measured=integrity_module.measured_zip_evidence(folder,name,zipfile,doc)
+                measured=(integrity_module.measured_zip_evidence(folder,name,zipfile,doc)
+                          if integrity_module is not None else None)
                 dossier=candidate.get("criteria_evidence")
                 dossier=dict(dossier) if isinstance(dossier,dict) else {}
                 dossier.pop("Q068",None)
