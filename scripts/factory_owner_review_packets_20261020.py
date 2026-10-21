@@ -16,6 +16,11 @@ import tempfile
 
 ORDER = re.compile(r"^WO-[0-9]{8}\.json$")
 SCHEMA = "saeit.factory.owner-review-queue.v1"
+# Source-native products legitimately contain 97-145 files. The former
+# 80-member cap created false technical REWORK; preserve strict total size,
+# SHA, CRC, member-path and original F34 independent-review checks.
+MAX_ARCHIVE_MEMBERS = 256
+MAX_UNPACKED_BYTES = 100 * 1024 * 1024
 PASSPORT_FIELDS = (
     "work_order","title","product_type","version","origin","target_audience",
     "problem_solved","deliverables","file_formats","language","scope",
@@ -149,12 +154,17 @@ def inspect_actual_products(root, lifecycle):
                                     {recipe+"/"+x for x in documented})
                         if not is_special:
                             errors.append("F34_EXACT_EVIDENCE_INVALID")
-                    if (not members or len(members)>(100 if is_special else 80)
-                            or sum(x.file_size for x in members)>100*1024*1024):
+                    if (not members or len(members)>MAX_ARCHIVE_MEMBERS
+                            or sum(x.file_size for x in members)>MAX_UNPACKED_BYTES):
                         errors.append("ARCHIVE_LIMIT")
                     if not errors:
+                        seen_archive_names=set()
                         for member in members:
                             name=member.filename
+                            if name in seen_archive_names:
+                                errors.append("ARCHIVE_DUPLICATE_MEMBER")
+                                break
+                            seen_archive_names.add(name)
                             if (member.is_dir() or not name.startswith(recipe+"/")
                                 or any(p in ("",".","..") for p in name.split("/"))
                                 or "\\" in name

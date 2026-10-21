@@ -25,6 +25,12 @@ class Stage1Test(unittest.TestCase):
   self.assertIn('test "$free_kib" -lt 262144',script)
   self.assertNotIn('df -Pm "$root"',script)
   self.assertIn('MPW_STAGE1_INSTALL_FAILURE_STAGE=',script)
+  self.assertIn("factory_personal_owner_passport_policy_20261020.py",script)
+ def test_courier_stages_personal_rights_passport_code(self):
+  wf=(Path(__file__).resolve().parents[1]/".github/workflows/mpw-factory-execute-stage1-repairs-20261020.yml").read_text()
+  self.assertIn("scripts/factory_personal_owner_passport_policy_20261020.py scripts/mpw_factory_stage1_deep_evidence.py",wf)
+  self.assertIn("needs: preflight",wf)
+  self.assertIn("github.ref == 'refs/heads/main'",wf)
  def test_no_human_approvals_in_outcome(self):
   with tempfile.TemporaryDirectory() as t:
    root=Path(t)

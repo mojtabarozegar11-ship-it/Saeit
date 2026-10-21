@@ -16,7 +16,7 @@ exec 9>"$ops/.mpw-repair-install.lock";flock -w 35 9
 install -d -m 700 "$target" "$ops/backups"
 backup="$ops/backups/mpw-stage1-real-repair-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 install -d -m 700 "$backup"
-files="mpw_factory_stage1_technical_repair.py mpw_vps_warehouse_courier.py factory_customer_packager.py factory_native_customer_packager.py factory_product_maker.py mpw_factory_stage1_deep_evidence.py"
+files="mpw_factory_stage1_technical_repair.py mpw_vps_warehouse_courier.py factory_customer_packager.py factory_native_customer_packager.py factory_product_maker.py factory_personal_owner_passport_policy_20261020.py mpw_factory_stage1_deep_evidence.py"
 for file in $files;do
  test -s "$stage/$file" && test ! -L "$stage/$file"
  if test -f "$target/$file";then test ! -L "$target/$file";cp -p "$target/$file" "$backup/$file";fi
