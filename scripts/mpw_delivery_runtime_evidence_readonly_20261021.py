@@ -73,3 +73,25 @@ if log.is_file() and not log.is_symlink():
   'age_seconds':int(datetime.datetime.now(datetime.timezone.utc).timestamp()-stat.st_mtime),'size':stat.st_size})
 else:out('MPW_DELIVERY_WORKER_LOG',{'exists':False})
 out('MPW_DELIVERY_AUDIT_SCOPE',{'read_only':True,'orders_modified':0,'chain_transfers':0})
+
+# Confirm whether the live checkout UI automatically discovers paid status.
+import re
+template=ROOT/'mpw_commerce/templates/mpw_commerce/product_checkout.html'
+if template.is_file() and not template.is_symlink():
+ html=template.read_text("utf8","replace")
+ blocks=re.findall(r'<script\b[^>]*>(.*?)</script>',html,re.I|re.S)
+ hints=[]
+ for block in blocks:
+  for line in block.splitlines():
+   if re.search(r'fetch|setInterval|setTimeout|status|download|check|invoice|\\.click|addEventListener',line,re.I):
+    if any(x in line.lower() for x in ("secret","wallet","address","private","token","password")):
+     hints.append("[sensitive payment line suppressed]")
+    else:
+     hints.append(line.strip()[:200])
+ out('MPW_DELIVERY_BUYER_AUTO_REFRESH',{
+   'template_sha_prefix':hashlib.sha256(html.encode()).hexdigest()[:12],
+   'script_count':len(blocks),
+   'setinterval_present':any('setInterval' in b for b in blocks),
+   'settimeout_present':any('setTimeout' in b for b in blocks),
+   'fetch_present':any('fetch(' in b for b in blocks),
+   'status_related_lines':hints[:90]})
