@@ -308,3 +308,18 @@ if shell.is_file():
         print("ATELIER_ACTIVE_PHP_FINAL="+json.dumps({"from":lo,"to":hi,
             "lines":[{"n":n,"code":lines[n-1][:210]} for n in range(lo,min(hi,len(lines))+1)
               if not any(x in lines[n-1].lower() for x in ("password","token=","secret","private_key","authorization"))]}))
+
+
+# Follow-up: assert public transformed store contains the exact safe insertion marker.
+try:
+    u="https://mojplaywin.com/store/?atelier_php_marker_diag=20261022"
+    request=urllib.request.Request(u,headers={"User-Agent":"Atelier-Owner-Marker-ReadOnly/1.0"})
+    with urllib.request.urlopen(request,timeout=20) as resp:
+        body=resp.read(200000).decode("utf8","replace")
+        markers=("<!-- MPW_TWO_BOOKS_PUBLIC_CATALOG_V1_END -->",
+                 "mpw-two-books", "mpw-sale-book", "</main>","</body>",
+                 "/store/product/879/checkout/")
+        print("ATELIER_PHP_SAFE_INSERTION_PROOF="+json.dumps({"http":resp.status,
+          "markers":{m:body.count(m) for m in markers},"body_chars":len(body)},sort_keys=True))
+except Exception as ex:
+    print("ATELIER_PHP_SAFE_INSERTION_ERROR="+type(ex).__name__)
