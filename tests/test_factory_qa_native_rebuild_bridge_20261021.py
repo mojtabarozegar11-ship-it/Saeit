@@ -401,6 +401,26 @@ class RealPrivateDocumentEditionTests(unittest.TestCase):
                          "already_issued_private_edition")
         self.assertEqual(self.arch.read_bytes(),(self.stock/(self.recipe+"-internal-qa.zip")).read_bytes())
 
+    def test_hundred_document_archive_builds_multiple_accessible_navigation_groups(self):
+        rows={"chapter/chapter_%03d.md"%i:("# Section %d\\nAn original chapter."%i).encode()
+              for i in range(1,101)}
+        self.bind(rows)
+        status=m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker)
+        self.assertEqual(status,"private_document_edition_built")
+        edition="edition_"+self.artifact_hash[:24]
+        source=self.root/"quality-excellence/document-edition-sources"/edition
+        manifest=json.loads((source/"metadata.json").read_text())
+        self.assertEqual(len(manifest["assets"]),100)
+        self.assertEqual(manifest["navigation_page_group_size"],50)
+        self.assertLessEqual(manifest["offline_preview_bytes"],1_000_000)
+        html=(source/"index.html").read_text()
+        self.assertIn("<summary>Files 1-50</summary>",html)
+        self.assertIn("<summary>Files 51-100</summary>",html)
+        self.assertIn('href="assets/file_100.md"',html)
+        self.assertEqual(self.maker.verify_recipe(source),"unit_tests_passed")
+        receipt=self.root/"quality-excellence/document-edition-receipts"/(edition+".json")
+        self.assertFalse(json.loads(receipt.read_text())["commercial_release_authorized"])
+
     def test_unbound_and_tampered_archives_never_get_new_product(self):
         self.bind({"bundle/file.txt":b"legitimate doc"})
         self.order["source_quality_receipt_sha256"]="0"*64
