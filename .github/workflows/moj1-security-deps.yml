@@ -35,6 +35,23 @@ jobs:
           console.log("MOJ1_DEPENDENCY_AUDIT=" + JSON.stringify(p.metadata.vulnerabilities));
           for (const [name, info] of Object.entries(p.vulnerabilities)) {
             console.log("MOJ1_ADVISORY_PACKAGE=" + name + " severity=" + info.severity + " direct=" + info.isDirect + " fixAvailable=" + JSON.stringify(info.fixAvailable));
+            for (const advisory of info.via) {
+              if (typeof advisory === "object") console.log("MOJ1_ADVISORY_DETAIL=" + JSON.stringify({package:name,title:advisory.title,url:advisory.url,range:advisory.range}));
+            }
+          }
+          '
+      - name: Separate production dependency advisories
+        working-directory: experiments/moj1-pilot
+        shell: bash
+        run: |
+          npm audit --omit=dev --json > "$RUNNER_TEMP/moj1-prod-audit.json" || true
+          node -e '
+          const fs = require("node:fs");
+          const p = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/moj1-prod-audit.json", "utf8"));
+          if (!p.metadata?.vulnerabilities) process.exit(1);
+          console.log("MOJ1_PRODUCTION_DEPENDENCY_AUDIT=" + JSON.stringify(p.metadata.vulnerabilities));
+          for (const [name, info] of Object.entries(p.vulnerabilities || {})) {
+            console.log("MOJ1_PRODUCTION_ADVISORY_PACKAGE=" + name + " severity=" + info.severity);
           }
           '
       - name: No Mainnet credentials are used
