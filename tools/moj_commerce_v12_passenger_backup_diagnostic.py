@@ -86,10 +86,27 @@ def _parts(name):
     return parts
 
 
+def classify_absolute_link_target(target):
+    """Return an opaque safety class; do not print, follow or resolve target."""
+    if not isinstance(target, str) or not target.startswith('/'):
+        raise ValueError('not_an_absolute_target')
+    prefix = '/home/zomorod2/'
+    if target.startswith(prefix):
+        within = target[len(prefix):]
+        if _parts(within) is not None:
+            return 'within_archive_roots'
+    # Deployment interpreter / system environment is NOT part of the archive.
+    if target.startswith(('/opt/alt/', '/usr/', '/bin/', '/lib/', '/lib64/')):
+        return 'external_runtime_dependency'
+    return 'external_other'
+
+
 def classify_archive(stream):
     count = {'directories': 0, 'regular_files': 0, 'symlinks': 0,
              'hardlinks': 0, 'unsafe_member_paths': 0, 'duplicate_paths': 0,
-             'absolute_link_targets': 0, 'relative_link_escape': 0,
+             'absolute_link_targets': 0, 'absolute_within_archive_roots': 0,
+             'absolute_runtime_dependency': 0, 'absolute_external_other': 0,
+             'relative_link_escape': 0,
              'missing_hardlink_targets': 0, 'nested_link_targets': 0,
              'special_members': 0, 'file_bytes_total': 0,
              'too_many_entries': False, 'too_many_file_bytes': False}
@@ -137,6 +154,9 @@ def classify_archive(stream):
     for _, parts, target, sym in links:
         if not isinstance(target, str) or target.startswith('/'):
             count['absolute_link_targets'] += 1
+            bucket = (classify_absolute_link_target(target) if isinstance(target, str)
+                      and target.startswith('/') else 'external_other')
+            count['absolute_' + bucket] += 1
             continue
         candidate = (posixpath.normpath(posixpath.join(*parts[:-1], target))
                      if sym else posixpath.normpath(target))
