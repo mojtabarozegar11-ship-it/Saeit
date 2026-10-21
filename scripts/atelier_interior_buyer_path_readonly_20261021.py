@@ -1,0 +1,33 @@
+#!/usr/bin/env python3
+"""Read-only exact buyer-path view and storefront implementation inspection."""
+import os,sys,inspect,re,json
+from pathlib import Path
+app=Path("/home/zomorod2/Saeit-staging")
+if not (app/"manage.py").is_file():raise SystemExit("APP_MISSING")
+os.chdir(app);sys.path.insert(0,str(app))
+os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+os.environ["PYTHONDONTWRITEBYTECODE"]="1"
+import django;django.setup()
+from django.urls import resolve
+from core.models import Product
+p=Product.objects.get(pk=879)
+print("ATELIER_BUY_PATH_PRODUCT="+json.dumps({"active":p.active,"price":str(p.price),"product_type":p.product_type,"metadata_flags":{k:p.metadata.get(k) for k in ["checkout_enabled","payment_live","sales_enabled","quality_approved","catalog_state","digital_delivery"]}}))
+for route in ["/store/","/store/product/879/","/store/product/879/checkout/"]:
+    match=resolve(route)
+    view=match.func
+    module=getattr(view,"__module__","")
+    qual=getattr(view,"__qualname__","")
+    sourcefile=inspect.getsourcefile(view) or ""
+    print("ATELIER_ROUTE="+json.dumps({"route":route,"view":module+"."+qual,"file_relative":str(Path(sourcefile).relative_to(app)) if sourcefile.startswith(str(app)) else Path(sourcefile).name}))
+    try:
+        source=inspect.getsource(view).splitlines()
+    except Exception as exc:
+        print("ATELIER_SOURCE_UNAVAILABLE="+type(exc).__name__);continue
+    selected=[]
+    terms=("template","render(","checkout","purchase","cart","metadata","payment","active","store","contact","login","redirect","product")
+    for n,line in enumerate(source,1):
+        if any(t in line.lower() for t in terms):
+            if any(t in line.lower() for t in ("token","secret","password","key=")):continue
+            selected.append({"line":n,"text":line.strip()[:180]})
+    print("ATELIER_VIEW_KEYLINES="+json.dumps({"route":route,"code_lines":len(source),"matches":selected[:60]}))
+print("ATELIER_READONLY_VIEW_INSPECT=PASS")
