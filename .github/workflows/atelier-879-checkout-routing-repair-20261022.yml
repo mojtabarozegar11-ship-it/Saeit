@@ -1,4 +1,4 @@
-name: Atelier 879 repair legacy checkout mismatch and verify signed-in purchase
+name: Atelier 879 checkout legacy routing - response based acceptance and rollback
 on:
   push:
     branches: [feature/atelier-sale-readiness-20261021]
