@@ -285,7 +285,7 @@ def reauthor_document_delivery(root,recipe,order,maker):
                             return "private_edition_receipt_conflict"
                         with pending.open("x",encoding="utf8") as writer:
                             json.dump(prior,writer,sort_keys=True,indent=2)
-                            writer.write("\\n");writer.flush();os.fsync(writer.fileno())
+                            writer.write("\n");writer.flush();os.fsync(writer.fileno())
                         os.chmod(pending,0o600)
                         os.replace(pending,receipt_file)
                         return "private_document_edition_repaired"
