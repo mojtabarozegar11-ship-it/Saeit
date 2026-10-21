@@ -227,6 +227,7 @@ class QARebuildTests(unittest.TestCase):
         import zipfile
         item,original=self.seed("archived_legacy_product")
         (item/"README.md").unlink();item.rmdir()
+        (original/"manufacturing_manifest.json").write_text(json.dumps({"qa_status":"passed","recipe":"archived_legacy_product"}))
         path=original/"archived_legacy_product-internal-qa.zip"
         with zipfile.ZipFile(path,"w") as zf:
             zf.writestr("download/report.pdf",b"%PDF-1.4 fake example")
