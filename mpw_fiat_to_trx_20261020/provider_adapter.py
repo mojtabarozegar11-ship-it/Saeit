@@ -8,7 +8,7 @@ import hmac
 import json
 import os
 import re
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from urllib.parse import urlsplit
 from urllib.request import Request,urlopen
 
@@ -17,19 +17,36 @@ SUPPORTED_ACCOUNT_CODE="NOWPAYMENTS"
 class MerchantNotReady(RuntimeError):pass
 class ProviderError(RuntimeError):pass
 
+def _approved_minimum(e):
+ """Provider-confirmed, explicit minimum: prevents uneconomical micro-invoices."""
+ try:
+  floor=Decimal(str(e.get("MPW_FIAT_PROVIDER_MIN_USD")))
+ except (InvalidOperation,TypeError,ValueError):
+  return None
+ if not floor.is_finite() or floor<Decimal("0.01") or floor>Decimal("1000"):
+  return None
+ if floor!=floor.quantize(Decimal("0.01")):
+  return None
+ return floor
+
 def ready(env=None):
  e=os.environ if env is None else env
  return (e.get("MPW_FIAT_ONRAMP_APPROVED")=="1"
          and e.get("MPW_FIAT_TRX_PAYOUT_VERIFIED")=="1"
          and bool(e.get("NOWPAYMENTS_API_KEY"))
-         and bool(e.get("NOWPAYMENTS_IPN_SECRET")))
+         and bool(e.get("NOWPAYMENTS_IPN_SECRET"))
+         and _approved_minimum(e) is not None)
 
 def invoice_fields(order_id,price_usd,description,callback,success,cancel):
  if not re.fullmatch(r"MPWF-[a-zA-Z0-9_-]{12,80}",str(order_id)):
   raise ValueError("Invalid unique merchant order")
- price=Decimal(str(price_usd))
- if not price.is_finite() or price<=0 or price>Decimal("1000"):
-  raise ValueError("Invalid merchant order amount")
+ try:
+  price=Decimal(str(price_usd))
+ except (InvalidOperation,TypeError,ValueError) as ex:
+  raise ValueError("Invalid merchant order amount") from ex
+ if not price.is_finite() or price<=0 or price>Decimal("1000") or (
+    price!=price.quantize(Decimal("0.01"))):
+  raise ValueError("Invalid amount or unsupported sub-cent precision")
  for uri in (callback,success,cancel):
   u=urlsplit(uri)
   if u.scheme!="https" or u.hostname not in ("mojplaywin.com","www.mojplaywin.com") or u.username or u.password or u.port:
@@ -50,8 +67,10 @@ def _official_invoice_url(value):
 
 def create_invoice(order_id,price_usd,description,callback,success,cancel,*,env=None,opener=urlopen):
  e=os.environ if env is None else env
- if not ready(e):raise MerchantNotReady("Fiat-onramp TRX settlement is not merchant-approved")
+ if not ready(e):raise MerchantNotReady("Fiat-onramp TRX settlement or provider minimum is not merchant-approved")
  payload=invoice_fields(order_id,price_usd,description,callback,success,cancel)
+ if Decimal(payload["price_amount"])<_approved_minimum(e):
+  raise MerchantNotReady("Order is below the approved processor minimum; do not charge")
  # The processor's merchant payout configuration, NOT pay_currency in this invoice,
  # decides the TRX settlement wallet. Fiat acceptance must be activated at merchant level.
  data=json.dumps(payload,separators=(",",":")).encode("utf8")
@@ -69,7 +88,11 @@ def create_invoice(order_id,price_usd,description,callback,success,cancel,*,env=
    raise ValueError("Missing invoice ID")
   if obj.get("order_id") not in (None,order_id):
    raise ValueError("Wrong provider order ID")
- except (KeyError,ValueError,TypeError) as ex:
+  if "price_amount" in obj and Decimal(str(obj["price_amount"]))!=Decimal(payload["price_amount"]):
+   raise ValueError("Provider quoted a different price")
+  if "price_currency" in obj and str(obj["price_currency"]).lower()!="usd":
+   raise ValueError("Provider quoted a different currency")
+ except (KeyError,ValueError,TypeError,InvalidOperation) as ex:
   raise ProviderError("Unverifiable processor invoice response") from ex
  return {"invoice_id":str(invoice_id),"invoice_url":uri,"order_id":order_id}
 
@@ -95,6 +118,7 @@ def valid_webhook(raw,signature,secret):
 def may_fulfill(*,merchant_verified,invoice_id_matches,order_id_matches,amount_matches,
                 currency_matches,settlement_native_trx_confirmed,replayed,refunded_or_partial):
  # All flags must originate from independent server-side provider state/ledger checks.
- return all((merchant_verified,invoice_id_matches,order_id_matches,
-             amount_matches,currency_matches,settlement_native_trx_confirmed)) and not (
-             replayed or refunded_or_partial)
+ # Never accept truthy strings/numbers (such as "false" or 1) as verified evidence.
+ checks=(merchant_verified,invoice_id_matches,order_id_matches,
+         amount_matches,currency_matches,settlement_native_trx_confirmed)
+ return all(x is True for x in checks) and replayed is False and refunded_or_partial is False
