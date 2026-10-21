@@ -8,12 +8,9 @@ on:
       - scripts/factory_ai_evidence_analyst_agent_v1.py
       - scripts/factory_autonomous_evidence_verifier_v1.py
       - scripts/factory_quality_evidence_evaluator_v1.py
-      - scripts/factory_autonomous_evidence_verifier_v1.py
-      - scripts/factory_quality_evidence_evaluator_v1.py
       - tests/test_factory_quality_evidence_supplier_v1.py
       - tests/test_factory_quality_bulk_evidence_supplier_v1.py
       - tests/test_factory_ai_evidence_analyst_agent_v1.py
-      - tests/test_factory_autonomous_evidence_verifier_v1.py
       - tests/test_factory_autonomous_evidence_verifier_v1.py
       - .github/workflows/factory-quality-evidence-supplier-20261021.yml
   push:
@@ -22,9 +19,12 @@ on:
       - scripts/factory_quality_evidence_supplier_v1.py
       - scripts/factory_quality_bulk_evidence_supplier_v1.py
       - scripts/factory_ai_evidence_analyst_agent_v1.py
+      - scripts/factory_autonomous_evidence_verifier_v1.py
+      - scripts/factory_quality_evidence_evaluator_v1.py
       - tests/test_factory_quality_evidence_supplier_v1.py
       - tests/test_factory_quality_bulk_evidence_supplier_v1.py
       - tests/test_factory_ai_evidence_analyst_agent_v1.py
+      - tests/test_factory_autonomous_evidence_verifier_v1.py
       - .github/workflows/factory-quality-evidence-supplier-20261021.yml
   schedule:
     - cron: '17 */6 * * *'
