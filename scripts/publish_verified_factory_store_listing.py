@@ -79,6 +79,16 @@ def verify_sources(inbox, docroot):
     publisher = loaded("factory_native_store_publisher", "publish_factory_free_tool.py")
     if publisher.digest_file(package) != digest:
         raise ValueError("PUBLIC_FACTORY_SHA256_MISMATCH")
+    package_manifest=inbox/"packages"/RECIPE/(digest+".json")
+    if not package_manifest.is_file() or package_manifest.is_symlink():
+        raise ValueError("FACTORY_PRIVATE_RECIPE_MANIFEST_MISSING")
+    source_manifest=json.loads(package_manifest.read_text(encoding="utf8"))
+    if not isinstance(source_manifest,dict):
+        raise ValueError("FACTORY_PRIVATE_RECIPE_MANIFEST_INVALID")
+    if source_manifest.get("professional_quality_standard")=="100_groups_x_10":
+        quality=loaded("factory_premium_commercial_guard",
+                       "factory_commercial_quality_release_guard_v1.py")
+        quality.require_quality_clearance(inbox,RECIPE,digest,source_manifest,package)
     body = release.read_text(encoding="utf-8")
     if TITLE not in body or digest not in body or "Free Toolkit" not in body:
         raise ValueError("PUBLIC_FREE_TOOLKIT_CONTENT_NOT_VERIFIED")
