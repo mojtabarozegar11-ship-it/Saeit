@@ -300,3 +300,11 @@ if shell.is_file():
         snippet=[{"n":n,"code":lines[n-1][:180]} for n in range(lo,min(hi,len(lines))+1)
           if not any(x in lines[n-1].lower() for x in ("password","token","secret","private_key","authorization"))]
         print("ATELIER_ACTIVE_PHP_SEGMENT="+json.dumps({"from":lo,"to":hi,"lines":snippet}))
+
+
+if shell.is_file():
+    lines=shell.read_text("utf8",errors="replace").splitlines()
+    for lo,hi in ((175,213),(384,422)):
+        print("ATELIER_ACTIVE_PHP_FINAL="+json.dumps({"from":lo,"to":hi,
+            "lines":[{"n":n,"code":lines[n-1][:210]} for n in range(lo,min(hi,len(lines))+1)
+              if not any(x in lines[n-1].lower() for x in ("password","token=","secret","private_key","authorization"))]}))
