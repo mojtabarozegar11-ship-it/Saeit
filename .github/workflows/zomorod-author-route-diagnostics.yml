@@ -88,11 +88,31 @@ jobs:
           fi
           echo "AUTHOR_ENGLISH_PAGE_MARKER:"
           grep -o 'mojtaba-roozegar-official-profile-20261021' "$public/en/authors/mojtaba-rozegar/index.html" | head -1
-          for path in authors/mojtaba-rozegar/ en/authors/mojtaba-rozegar/; do
-            code="$(curl -k -sS --max-time 20 --resolve 'zomorodmelal.ir:443:127.0.0.1' -D "$HOME/.zomorod-route-$RANDOM.headers" -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/$path?route_diagnostic=$(date +%s%N)" || true)"
-            echo "ORIGIN_HTTP=$path $code"
-          done
+          if test -e "$target"; then
+            test -d "$target" && test ! -L "$target"
+            first="$(find "$target" -mindepth 1 -maxdepth 1 -print -quit)"
+            if test -n "$first"; then
+              echo "STALE_ROUTE_DIRECTORY_NOT_EMPTY=refusing_to_remove"
+              exit 1
+            fi
+            rmdir "$target"
+            echo "EMPTY_STALE_ROUTE_DIRECTORY_REMOVED=yes"
+          else
+            echo "EMPTY_STALE_ROUTE_DIRECTORY_REMOVED=already_absent"
+          fi
           REMOTE
+          headers="$RUNNER_TEMP/author-route.headers"
+          body="$RUNNER_TEMP/author-route.html"
+          code="$(curl -sS --max-time 25 -D "$headers" -o "$body" -w '%{http_code}' "https://zomorodmelal.ir/authors/mojtaba-rozegar/?route_verify=$GITHUB_SHA" || true)"
+          echo "PERSIAN_AUTHOR_PUBLIC_HTTP=$code"
+          test "$code" = 301
+          grep -iE '^location: ?/?en/authors/mojtaba-rozegar/' "$headers"
+          final="$(curl -sS -L --max-time 30 -o "$body" -w '%{http_code}' "https://zomorodmelal.ir/authors/mojtaba-rozegar/?route_verify=$GITHUB_SHA" || true)"
+          echo "PERSIAN_AUTHOR_FINAL_HTTP=$final"
+          test "$final" = 200
+          grep -Fq 'mojtaba-roozegar-official-profile-20261021' "$body"
+          grep -Fq 'Mojtaba Roozegar' "$body"
+          echo "PERSIAN_AUTHOR_REDIRECT_AND_PROFILE=verified"
       - name: Remove short-lived SSH credentials
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/zomorod-route-diagnostic"
