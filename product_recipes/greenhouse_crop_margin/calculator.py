@@ -5,7 +5,7 @@ This is a deterministic planning aid. It makes no market-price, yield, or
 agronomic claims and uses only Python's standard library.
 """
 import argparse
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_HALF_UP
 import json
 from pathlib import Path
 import sys
@@ -29,6 +29,11 @@ def number(value, field, *, minimum=None, maximum=None):
 
 def money(value):
     return str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def minimum_threshold(value, unit):
+    """Round required break-even thresholds up so the displayed value is safe."""
+    return str(value.quantize(Decimal(unit), rounding=ROUND_CEILING))
 
 
 def granular_costs(data, area):
@@ -135,7 +140,17 @@ def calculate(data):
     revenue = saleable_yield * price
     total_cost = variable_cost + fixed_cost
     margin = revenue - total_cost
-    break_even_price = None if saleable_yield == 0 else money(total_cost / saleable_yield)
+    # A nearest-cent price can be below break-even; always round upward.
+    break_even_price = (None if saleable_yield == 0 else
+                        minimum_threshold(total_cost / saleable_yield, "0.01"))
+    gross_yield_revenue_factor = area * (Decimal(1) - rejection / Decimal(100)) * price
+    if total_cost == 0:
+        break_even_gross_yield = "0.000"
+    elif gross_yield_revenue_factor == 0:
+        break_even_gross_yield = None
+    else:
+        break_even_gross_yield = minimum_threshold(
+            total_cost / gross_yield_revenue_factor, "0.001")
     result = {
         "version": "2.0" if granular else "1.0",
         "model_scope": "resource_explicit_uncalibrated" if granular else "legacy_aggregate_cost",
@@ -164,6 +179,8 @@ def calculate(data):
             "net_margin": money(margin),
             "net_margin_per_m2": money(margin / area),
             "break_even_price_per_kg": break_even_price,
+            "minimum_gross_yield_kg_per_m2_to_break_even": break_even_gross_yield,
+            "minimum_gross_yield_reachable": break_even_gross_yield is not None,
             "break_even_reachable": saleable_yield > 0,
         },
     }

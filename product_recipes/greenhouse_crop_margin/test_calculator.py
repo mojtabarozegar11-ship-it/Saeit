@@ -1,5 +1,6 @@
 """Functional tests for the greenhouse crop margin planning tool."""
 import json
+from decimal import Decimal
 import importlib.util
 from pathlib import Path
 import subprocess
@@ -34,7 +35,38 @@ class GreenhouseCropMarginTests(unittest.TestCase):
         self.assertEqual(values["sales_revenue"], "27000.00")
         self.assertEqual(values["total_cost"], "20000.00")
         self.assertEqual(values["net_margin"], "7000.00")
-        self.assertEqual(values["break_even_price_per_kg"], "1.85")
+        self.assertEqual(values["break_even_price_per_kg"], "1.86")
+
+    def test_break_even_thresholds_are_not_rounded_below_true_minimum(self):
+        result = calculate(self.data)["results"]
+        price = Decimal(result["break_even_price_per_kg"])
+        required_yield = Decimal(result["minimum_gross_yield_kg_per_m2_to_break_even"])
+        self.assertEqual(str(required_yield), "8.889")
+        self.assertTrue(result["minimum_gross_yield_reachable"])
+        saleable_kg = Decimal(result["saleable_yield_kg"])
+        total_cost = Decimal(result["total_cost"])
+        self.assertGreaterEqual(price * saleable_kg, total_cost)
+        self.assertLess((price - Decimal("0.01")) * saleable_kg, total_cost)
+        revenue_at_threshold = (
+            Decimal(self.data["area_m2"]) * required_yield
+            * (Decimal(1) - Decimal("0.1")) * Decimal("2.5")
+        )
+        self.assertGreaterEqual(revenue_at_threshold, total_cost)
+        self.assertLess(revenue_at_threshold - Decimal("0.001") * Decimal("1000") * Decimal("0.9") * Decimal("2.5"),
+                        total_cost)
+
+    def test_unreachable_threshold_and_no_cost_edge_cases(self):
+        for changes in ({"price_per_kg": 0}, {"rejection_rate_percent": 100}):
+            with self.subTest(changes=changes):
+                result = calculate(dict(self.data, **changes))["results"]
+                self.assertIsNone(result["minimum_gross_yield_kg_per_m2_to_break_even"])
+                self.assertFalse(result["minimum_gross_yield_reachable"])
+        zero_cost = calculate(dict(self.data, price_per_kg=0,
+                                   variable_cost_per_m2=0,
+                                   fixed_cost_total=0))["results"]
+        self.assertEqual(zero_cost["minimum_gross_yield_kg_per_m2_to_break_even"],
+                         "0.000")
+        self.assertTrue(zero_cost["minimum_gross_yield_reachable"])
 
     def test_zero_saleable_yield_has_no_break_even_price(self):
         result = calculate(dict(self.data, rejection_rate_percent=100))
@@ -75,7 +107,7 @@ class GreenhouseCropMarginTests(unittest.TestCase):
             "climate_control": "1000.00", "other": "7000.00",
         })
         self.assertEqual(result["results"]["net_margin"], "7000.00")
-        self.assertEqual(result["results"]["break_even_price_per_kg"], "1.85")
+        self.assertEqual(result["results"]["break_even_price_per_kg"], "1.86")
 
     def test_prevent_double_counting_and_partial_resource_claims(self):
         inputs = self.complete_resource_case()
