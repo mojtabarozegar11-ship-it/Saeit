@@ -6,6 +6,7 @@ on:
       - scripts/mpw_delivery_runtime_evidence_readonly_20261021.py
       - scripts/mpw_crypto_prepurchase_engineering_audit_20261021.py
       - scripts/mpw_registration_csrf_readonly_audit_20261021.py
+      - scripts/mpw_registration_csrf_public_probe_20261021.py
       - scripts/mpw_simulated_crypto_purchase_delivery_20261021.py
       - .github/workflows/mpw-crypto-delivery-actual-diagnosis-20261021.yml
   workflow_dispatch:
@@ -20,6 +21,12 @@ jobs:
         with: {persist-credentials: false}
       - name: Compile nonmutating automatic-delivery investigator
         run: python3 -m py_compile scripts/mpw_delivery_runtime_evidence_readonly_20261021.py
+      - name: Reproduce empty mobile registration POST with secure and missing cookies on public HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_registration_csrf_public_probe_20261021.py
+          python3 scripts/mpw_registration_csrf_public_probe_20261021.py
       - name: Establish pinned VPS relay to cPanel
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
