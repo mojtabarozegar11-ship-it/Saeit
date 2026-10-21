@@ -88,4 +88,12 @@ for dotted in ["mpw_commerce.downloads.download","mpw_commerce.api_checkout.crea
         print("ATELIER_COMMERCE_FUNCTION="+json.dumps({"name":dotted,"lines":len(lines),"match":[l.strip()[:190] for l in lines if any(w in l.lower() for w in ("pdf","zip","file","product","approval","purchase","type","content"))][:50]}))
     except Exception as e:print("ATELIER_COMMERCE_FUNCTION_MISSING="+json.dumps({"fn":dotted,"err":type(e).__name__}))
 print("ATELIER_PRODUCT_TYPE_CHOICES="+json.dumps(Product._meta.get_field("product_type").choices))
+
+from django.conf import settings
+from mpw_commerce import product_checkout_page as pc_module
+root=getattr(settings,"MPW_COMMERCE_PRIVATE_ASSET_ROOT",None)
+print("ATELIER_COMMERCE_SUFFIX_ROOT="+json.dumps({"suffixes":sorted(str(z) for z in pc_module.ACCEPTED_SUFFIXES),"root_configured":isinstance(root,str) and root.startswith("/"),"root_exists":isinstance(root,str) and Path(root).is_dir(),"zip_supported":".zip" in pc_module.ACCEPTED_SUFFIXES}))
+from core.models import KnowledgeArticle
+print("ATELIER_ARTICLE_MODEL_FIELDS="+json.dumps([f.name for f in KnowledgeArticle._meta.fields]))
+print("ATELIER_PREVIOUS_PRODUCT_INVENTORY="+json.dumps([{"id":q.pk,"type":q.product_type,"article":q.knowledge_article_id is not None,"approved":all(q.metadata.get(k) is True for k in pc_module.APPROVAL_FLAGS),"price":str(q.price)} for q in Product.objects.filter(pk__in=[72,225,879])]))
 print("ATELIER_READONLY_VIEW_INSPECT=PASS")
