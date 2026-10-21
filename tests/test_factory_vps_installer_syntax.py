@@ -26,6 +26,25 @@ class VPSProductInstallerTests(unittest.TestCase):
         self.assertIn("ORDER_REQUIRED=false", script)
         self.assertNotIn("core_order", script)
 
+    def test_manufacturer_policy_dependency_survives_vps_install_and_transport(self):
+        """Prevent deploying a maker that cannot import its private passport policy."""
+        source = Path(__file__).resolve().parents[1]
+        installer = (source / "deploy/install_autonomous_factory_products.sh").read_text(encoding="utf-8")
+        workflow = (source / ".github/workflows/vps-autonomous-product-install.yml").read_text(encoding="utf-8")
+        maker = (source / "scripts/factory_product_maker.py").read_text(encoding="utf-8")
+        policy = "factory_personal_owner_passport_policy_20261020.py"
+        self.assertIn('with_name(\\n        "' + policy + '")', maker)
+        self.assertTrue((source / "scripts" / policy).is_file())
+        self.assertIn('test -f "$repo/scripts/' + policy + '"', installer)
+        self.assertIn('test ! -L "$repo/scripts/' + policy + '"', installer)
+        self.assertIn('for f in factory_product_maker.py ' + policy, installer)
+        self.assertIn('"$scripts/' + policy + '"', installer)
+        self.assertIn('scripts/' + policy + ' scripts/factory_product_rework.py', workflow)
+        self.assertEqual(workflow.count('      - "scripts/' + policy + '"'), 2)
+        self.assertIn("python -B -m unittest discover -s tests -p 'test_factory_private_passport_20261020.py'", workflow)
+        self.assertIn("python3 -m unittest discover -s tests -p 'test_factory_private_passport_20261020.py'", workflow)
+        self.assertNotIn('PUBLISHING_ENABLED=true', installer)
+
     def test_manual_or_owner_requested_gated_deployment_is_packaged(self):
         source = Path(__file__).resolve().parents[1]
         wf = (source / ".github/workflows/vps-autonomous-product-install.yml").read_text(encoding="utf-8")
