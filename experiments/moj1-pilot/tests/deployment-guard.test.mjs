@@ -27,3 +27,13 @@ test('deployment refuses to run without a test-only signing key', () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /dedicated 64-hex-character Shasta-only test wallet key/);
 });
+
+test('deployment refuses missing durable journal before contacting Shasta', () => {
+  const result = attempt({
+    MOJ1_DEPLOY_CONFIRM: 'SHASTA_ONLY',
+    TRON_PRIVATE_KEY: '1'.repeat(64),
+    MOJ1_DEPLOY_JOURNAL_PATH: ''
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /MOJ1_DEPLOY_JOURNAL_PATH/);
+});
