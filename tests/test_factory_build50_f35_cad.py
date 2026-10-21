@@ -23,6 +23,25 @@ class F35ActualCad(unittest.TestCase):
    (folder/(tasks[0]["id"]+".stl")).write_bytes(b"fake")
    with self.assertRaisesRegex(ValueError,"STL_TRIANGLE_COUNT"):
     review.one(folder,tasks[0]["id"])
+ def test_full_real_48_mesh_50_stage_native_build_and_idempotent(self):
+  import json,zipfile
+  with tempfile.TemporaryDirectory() as temp:
+   root=Path(temp)
+   first=maker.build(root)
+   self.assertEqual(first["status"],"technical_50_stage_build_completed")
+   self.assertEqual(first["completed_stages"],50)
+   product=root/"digital-products"/maker.PRODUCT
+   manifest=json.loads((product/"manufacturing_manifest.json").read_text())
+   self.assertEqual(manifest["family_id"],"F35")
+   self.assertFalse(manifest["public_listing_enabled"])
+   self.assertFalse(manifest["independent_human_review"])
+   archive=product/(maker.PRODUCT+"-internal-qa.zip")
+   with zipfile.ZipFile(archive) as z:
+    self.assertEqual(len(z.namelist()),193)
+    self.assertIsNone(z.testzip())
+   again=maker.build(root)
+   self.assertEqual(again["status"],"unchanged_verified_technical_product")
+   self.assertEqual(maker.sha(archive),manifest["artifact_sha256"])
  def test_invalid_glb_cannot_be_sold(self):
   with tempfile.TemporaryDirectory() as temp:
    folder=Path(temp);task=maker.plan(proto)["work_packages"][1]
