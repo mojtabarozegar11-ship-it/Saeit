@@ -5,6 +5,7 @@ on:
     paths:
       - "scripts/factory_global_quality_triage_v2.py"
       - "scripts/factory_quality_1000_scorecard.py"
+      - "factory_config/forty_families.json"
       - "tests/test_factory_quality_1000_scorecard.py"
       - "tests/test_factory_global_quality_triage_v2.py"
       - ".github/workflows/factory-real-quality-rework-40.yml"
