@@ -84,7 +84,7 @@ def main():
     parser.add_argument("--supplier", required=True)
     args = parser.parse_args()
     result = run(args.factory_root, args.catalog, args.supplier)
-    if result["versions_seen"] == 0 or result["supplied"] == 0:
+    if result["versions_seen"] == 0 or result["versions_supplied"] == 0:
         raise SystemExit("BULK_NO_ELIGIBLE_VERSIONS_SUPPLIED")
 
 
