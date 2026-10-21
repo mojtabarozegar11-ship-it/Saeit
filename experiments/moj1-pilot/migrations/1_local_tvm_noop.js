@@ -1,3 +1,5 @@
-// Local TVM contract tests deploy their own isolated fixtures.
-// TronBox expects a migrations directory even when no migration is necessary.
-module.exports = function () {};
+// Local-only migration: the integration tests instantiate their own contracts.
+// TronBox requires a migration callback with at least one argument.
+module.exports = function (deployer) {
+  void deployer;
+};
