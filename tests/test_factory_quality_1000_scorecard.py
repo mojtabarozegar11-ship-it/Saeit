@@ -89,6 +89,20 @@ class QualityThousandTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             q.require_no_false_certification(card)
 
+    def test_factory_registry_sets_1000_for_all_40(self):
+        import json
+        data=json.loads((ROOT/"factory_config/forty_families.json").read_text(encoding="utf8"))
+        self.assertEqual(len(data["profiles"]),40)
+        policy=data["quality_1000_policy"]
+        self.assertEqual(policy["schema"],q.SCHEMA)
+        self.assertEqual(policy["minimum_verified_quality_score"],1000)
+        self.assertEqual(policy["maximum_quality_score"],1000)
+        self.assertEqual(policy["noncompensatory_pillars"],12)
+        self.assertTrue(policy["zero_critical_defects_required"])
+        self.assertTrue(policy["every_family_specialist_gate_required"])
+        self.assertTrue(policy["independent_human_certification_required"])
+        self.assertFalse(policy["automatic_publication_permitted"])
+
     def test_every_family_1000_not_auto_pass(self):
         for number in range(1,41):
             card=q.grade(fact([],family="F%02d"%number))
