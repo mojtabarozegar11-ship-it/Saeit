@@ -20,12 +20,15 @@ sender = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(sender)
 
 
-def product(directory, recipe, *, good=True):
+def product(directory, recipe, *, good=True, members=1):
     target = directory / recipe
     target.mkdir()
     archive = target / (recipe + "-internal-qa.zip")
     with zipfile.ZipFile(archive, "w") as zf:
-        zf.writestr("package/README.txt", "A tested private archive")
+        if members:
+            zf.writestr("package/README.txt", "A tested private archive")
+        for index in range(max(0, members - 1)):
+            zf.writestr(f"package/data-{index:03d}.txt", "fixture")
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     (target / "manufacturing_manifest.json").write_text(json.dumps({
         "recipe": recipe,
@@ -62,6 +65,27 @@ class FactoryPrivateQAFailureIsolation(unittest.TestCase):
         self.assertEqual(calls, ["bravo", "charlie", "delta"])
         self.assertEqual(sender.read_cursor(self.root.parent / "store-send-cursor.json"),
                          "delta")
+
+    def test_oversized_private_zip_is_skipped_before_ssh_delivery(self):
+        product(self.root, "alpha", members=81)
+        for recipe in ("bravo", "charlie", "delta"):
+            product(self.root, recipe)
+        calls = []
+        def fake_deliver(recipe, root, options, *, dry_run=False):
+            calls.append(recipe)
+            return {"recipe": recipe, "status": "received_private"}
+        with mock.patch.object(sender, "host_ssh_options", return_value=[]), \
+             mock.patch.object(sender, "deliver", side_effect=fake_deliver):
+            results = sender.sync(self.root, "unused", "unused", limit=3)
+        self.assertEqual(results[0]["status"], "blocked_private_qa")
+        self.assertEqual(calls, ["bravo", "charlie", "delta"])
+        self.assertEqual(sender.read_cursor(self.root.parent /
+                                            "store-send-cursor.json"), "delta")
+        with self.assertRaisesRegex(ValueError, "PACKAGE_ARCHIVE_FILE_COUNT_INVALID"):
+            sender.verify_source(
+                self.root / "alpha" / "manufacturing_manifest.json",
+                self.root / "alpha" / "alpha-internal-qa.zip", "alpha"
+            )
 
     def test_bad_only_does_not_advance_cursor_or_claim_transfer(self):
         product(self.root, "alpha", good=False)

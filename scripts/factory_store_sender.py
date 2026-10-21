@@ -71,6 +71,45 @@ def verify_source(manifest_path, archive_path, recipe):
             raise ValueError("PRIVATE_REWORK_LEDGER_UNVERIFIED")
         if state.get("current_status") in ("needs_rework", "expert_review"):
             raise ValueError("PRIVATE_PRODUCT_BLOCKED_FOR_REWORK")
+    # The cPanel receiver rejects generic ZIPs with more than 80 members.
+    # Fail before SSH and let sync() skip this product, so one invalid
+    # archive cannot starve later independently-validated packages.
+    try:
+        with zipfile.ZipFile(archive_path, "r") as bundle:
+            members = bundle.infolist()
+            if recipe == "fieldwork_ui_48_icons":
+                evidence = manifest.get("qa_measurements")
+                declared = manifest.get("files")
+                if (manifest.get("family_id") != "F34"
+                        or not isinstance(evidence, dict)
+                        or evidence.get("review_kind") !=
+                            "separate_automated_technical_verification"
+                        or evidence.get("validated_archive_members") != 100
+                        or evidence.get("archive_sha256") != digest
+                        or evidence.get("critical_defects") != []
+                        or not isinstance(evidence.get("gates"), dict)
+                        or len(evidence["gates"]) != 10
+                        or not all(flag is True for flag in evidence["gates"].values())
+                        or not isinstance(declared, list)
+                        or len(declared) != 100
+                        or not all(isinstance(name, str) for name in declared)
+                        or len(set(declared)) != 100):
+                    raise ValueError("PACKAGE_F34_EXACT_QA_REQUIRED")
+                svg = {name[:-4] for name in declared if name.endswith(".svg")}
+                png = {name[:-4] for name in declared if name.endswith(".png")}
+                docs = set(declared) - {
+                    name for name in declared if name.endswith((".svg", ".png"))
+                }
+                if (len(members) != 100 or len(svg) != 48 or svg != png
+                        or docs != {"README.md", "LICENSE.txt", "catalog.json",
+                                    "preview.html"}
+                        or {member.filename for member in members}
+                           != {recipe + "/" + name for name in declared}):
+                    raise ValueError("PACKAGE_F34_EXACT_MEMBERS_REQUIRED")
+            elif not 1 <= len(members) <= 80:
+                raise ValueError("PACKAGE_ARCHIVE_FILE_COUNT_INVALID")
+    except (OSError, zipfile.BadZipFile) as exc:
+        raise ValueError("PACKAGE_ARCHIVE_READ_INVALID") from exc
     return digest
 
 
