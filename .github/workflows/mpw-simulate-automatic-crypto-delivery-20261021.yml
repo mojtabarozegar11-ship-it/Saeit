@@ -77,10 +77,68 @@ jobs:
             > "$RUNNER_TEMP/mpw-autodelivery-browser.js"
           node --check "$RUNNER_TEMP/mpw-autodelivery-browser.js"
           node tests/mpw_autodelivery_browser_mock_20261021.cjs "$RUNNER_TEMP/mpw-autodelivery-browser.js"
+      - name: Install audited payment status auto-check with private backup
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-delivery-simulator-ssh/config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - install '$GITHUB_RUN_ID'" \
+            < scripts/mpw_autodelivery_status_poll_release_20261021.py
+      - name: Validate real Django checkout, authorization and CSP after install
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-delivery-simulator-ssh/config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify '$GITHUB_RUN_ID'" \
+            < scripts/mpw_autodelivery_status_poll_release_20261021.py
+      - name: Refresh main MojPlayWin templates only, not shared tenants
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/mpw-delivery-simulator-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          site=Path('/home/zomorod2/mojplaywin.com')
+          page=Path('/home/zomorod2/Saeit-staging/mpw_commerce/templates/mpw_commerce/product_checkout.html')
+          if site.is_symlink() or page.is_symlink() or not site.is_dir():
+              raise RuntimeError('Unsafe Mojo site path')
+          if "APP='/home/zomorod2/Saeit-staging'" not in (site/'passenger_wsgi.py').read_text('utf8'):
+              raise RuntimeError('Unexpected Passenger app')
+          if 'MPW_CRYPTO_AUTODELIVERY_POLL_V1' not in page.read_text('utf8'):
+              raise RuntimeError('Payment UI auto-check missing')
+          tmp=site/'tmp'
+          if tmp.is_symlink():raise RuntimeError('Unsafe passenger directory')
+          tmp.mkdir(exist_ok=True)
+          marker=tmp/'restart.txt'
+          if marker.is_symlink():raise RuntimeError('Unsafe restart marker')
+          marker.touch()
+          print('MPW_AUTODELIVERY_SITE_RELOAD=REQUESTED')
+          PY
       - name: Execute real Django modules with fake chain proof and in-memory ORM only
         run: |
           set -euo pipefail
           timeout 110s ssh -T -F "$RUNNER_TEMP/mpw-delivery-simulator-ssh/config" saeit-cpanel             "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" < scripts/mpw_simulated_crypto_purchase_delivery_20261021.py
+      - name: Check storefront after template activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request
+          for path in ('/','/store/','/store/product/72/','/store/product/779/'):
+            with urllib.request.urlopen('https://mojplaywin.com'+path,timeout=18) as r:
+              if r.status!=200:raise RuntimeError('Public buyer storefront unavailable')
+          print('MPW_AUTODELIVERY_PUBLIC_STORE=PASS')
+          PY
+      - name: Restore checkout after failed postpublication acceptance
+        if: failure() && steps.publish.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-delivery-simulator-ssh/config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'" \
+            < scripts/mpw_autodelivery_status_poll_release_20261021.py
+          ssh -T -F "$RUNNER_TEMP/mpw-delivery-simulator-ssh/config" saeit-cpanel \
+            'touch /home/zomorod2/mojplaywin.com/tmp/restart.txt'
       - name: Delete relay credentials
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-delivery-simulator-ssh"
