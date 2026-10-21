@@ -198,6 +198,193 @@ def classify_unrecoverable_artifact(root,recipe):
 
 
 
+def build_next_document_volume(root,recipe,expected,entries,omitted,maker,
+                               source_parent,package_parent,receipt_parent):
+    """Genuinely build ONE missing 200-asset volume per bounded QA iteration.
+
+    No false source-restoration: a new document source is authored afresh from
+    exact hash-pinned input data. Each volume passes manufacturer unit/ZIP QA.
+    The downstream courier hard-limits a package to 256 ZIP members.
+    """
+    volume_size=200
+    total=len(entries)
+    if not 200<total<=2500:
+        return "document_volume_input_invalid"
+    count=(total+volume_size-1)//volume_size
+    TEXT={".md",".txt",".csv",".json"}
+    for volume in range(1,count+1):
+        code="edition_"+expected[:24]+"_v%02d"%volume
+        subset=entries[(volume-1)*volume_size:volume*volume_size]
+        source=source_parent/code
+        proof=receipt_parent/(code+".json")
+        built=package_parent/code/"manufacturing_manifest.json"
+        if source.is_symlink() or proof.is_symlink() or built.is_symlink():
+            return "document_volume_symlink_refused"
+        if source.exists():
+            if not (source.is_dir() and proof.is_file() and built.is_file()):
+                return "document_volume_existing_partial_requires_review"
+            prior=checked_json(proof)
+            manifest=checked_json(built)
+            source_manifest=checked_json(source/"metadata.json")
+            if (source/"metadata.json").is_symlink():
+                return "document_volume_existing_receipt_unverified"
+            try:
+                _,current_files=maker.inspect_recipe(source)
+                actual_source_digest=maker.source_digest(source,current_files)
+                verified_package=package_parent/code/(code+"-internal-qa.zip")
+                actual_package_digest=(maker.sha256_file(verified_package)
+                                      if verified_package.is_file() and not verified_package.is_symlink()
+                                      else None)
+            except (OSError,ValueError,RuntimeError,UnicodeError):
+                return "document_volume_existing_receipt_unverified"
+            if not (actual_source_digest==manifest.get("source_sha256")
+                    and actual_package_digest==manifest.get("artifact_sha256")
+                    and prior.get("source_customer_archive_sha256")==expected
+                    and prior.get("new_edition_recipe")==code
+                    and prior.get("volume_number")==volume
+                    and prior.get("volume_count")==count
+                    and prior.get("technical_manufacturer_qa_passed") is True
+                    and prior.get("commercial_release_authorized") is False
+                    and manifest.get("qa_status")=="passed"
+                    and manifest.get("recipe")==code
+                    and manifest.get("source_sha256")==prior.get("new_source_sha256")
+                    and manifest.get("artifact_sha256")==prior.get("new_artifact_sha256")
+                    and source_manifest.get("original_artifact_sha256")==expected
+                    and source_manifest.get("volume_number")==volume
+                    and source_manifest.get("volume_count")==count):
+                return "document_volume_existing_receipt_unverified"
+            # A previously built volume needs no reauthoring. Continue with
+            # the next missing chunk in this same customer source archive.
+            continue
+        if proof.exists() or built.exists():
+            return "document_volume_receipt_without_source"
+        stage=Path(tempfile.mkdtemp(dir=str(source_parent),prefix=".volume-source-"))
+        try:
+            folder=stage/"assets"
+            folder.mkdir(mode=0o700)
+            links=[];previews=[];assets=[]
+            preview_bytes=0
+            for j,(label,ext,payload) in enumerate(subset,1):
+                name="file_%03d%s"%(j,ext)
+                target=folder/name
+                with target.open("xb") as out:
+                    out.write(payload);out.flush();os.fsync(out.fileno())
+                os.chmod(target,0o600)
+                clean_name="".join(ch for ch in label if ch.isprintable())[:100] or name
+                digest=sha(payload)
+                assets.append({"path":"assets/"+name,"sha256":digest,
+                               "bytes":len(payload),"display_name":clean_name})
+                links.append('<li><a href="assets/%s" download>%s</a></li>'%
+                             (name,html_escape(clean_name,quote=True)))
+                if ext in TEXT and 0<len(payload)<=200000 and preview_bytes+len(payload)<=1_000_000:
+                    preview_bytes+=len(payload)
+                    previews.append('<section><h3>%s</h3><pre>%s</pre></section>'%
+                        (html_escape(clean_name,quote=True),
+                         html_escape(payload.decode("utf8","replace"))))
+            nav=[]
+            for start in range(0,len(links),50):
+                nav.append("<details open><summary>Files %d–%d</summary><ul>%s</ul></details>"%(
+                    start+1,min(start+50,len(links)),"".join(links[start:start+50])))
+            page='''<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'">
+<title>Private document volume %d of %d</title>
+<style>body{font:16px/1.65 system-ui;background:#13212d;color:#fff;margin:0}
+main{max-width:1000px;margin:0 auto;padding:2rem}a{color:#ebc573}
+pre{white-space:pre-wrap;overflow-wrap:anywhere}section,details{padding:1rem;border:1px solid #c1a767;margin:1rem 0}
+:focus-visible{outline:3px solid #ebc573}</style></head>
+<body><a href="#content">Skip to content</a>
+<main id="content"><h1>Private document volume %d of %d</h1>
+<p>This technical delivery is a newly generated volume; independent factual and rights reviews have not been completed.</p>
+<nav aria-label="Document and asset links">%s</nav>%s</main></body></html>'''%(
+                volume,count,volume,count,"".join(nav),"".join(previews))
+            metadata={
+                "schema":"saeit.factory.private-document-volume.v1",
+                "new_recipe":code,
+                "original_recipe":recipe,
+                "original_artifact_sha256":expected,
+                "volume_number":volume,"volume_count":count,
+                "volume_asset_start":(volume-1)*volume_size+1,
+                "total_original_supported_assets":total,
+                "assets":assets,"ignored_unsupported_input_files":omitted,
+                "source_restored_from_original":False,
+                "source_executed_during_recovery":False,
+                "original_stock_mutated":False,
+                "independent_specialist_approved":False,
+                "commercial_release_authorized":False}
+            (stage/"index.html").write_text(page,encoding="utf8")
+            (stage/"metadata.json").write_text(json.dumps(metadata,sort_keys=True,
+                    indent=2,ensure_ascii=False)+"\n",encoding="utf8")
+            (stage/"README.md").write_text(
+                "# Private document volume %d of %d\n\n"% (volume,count) +
+                "Exactly 200 or fewer original document assets from SHA-pinned customer stock. "
+                "No historical source restoration claim. Separate QA and legal review required.\n",
+                encoding="utf8")
+            test='''import hashlib,json,unittest
+from pathlib import Path
+BASE=Path(__file__).resolve().parent
+class PrivateVolumeTests(unittest.TestCase):
+ def test_assets_are_exact_and_bounded(self):
+  doc=json.loads((BASE/"metadata.json").read_text(encoding="utf8"))
+  self.assertEqual(doc["schema"],"saeit.factory.private-document-volume.v1")
+  self.assertLessEqual(len(doc["assets"]),200)
+  self.assertGreaterEqual(len(doc["assets"]),1)
+  self.assertFalse(doc["commercial_release_authorized"])
+  self.assertFalse(doc["source_restored_from_original"])
+  for item in doc["assets"]:
+   self.assertEqual(hashlib.sha256((BASE/item["path"]).read_bytes()).hexdigest(),item["sha256"])
+ def test_offline_navigation_covers_every_asset(self):
+  doc=json.loads((BASE/"metadata.json").read_text(encoding="utf8"))
+  page=(BASE/"index.html").read_text(encoding="utf8")
+  self.assertIn("Content-Security-Policy",page)
+  self.assertIn('aria-label="Document and asset links"',page)
+  self.assertNotIn("<script",page.lower())
+  self.assertNotIn("http://",page.lower())
+  self.assertNotIn("https://",page.lower())
+  for item in doc["assets"]:
+   self.assertIn('href="'+item["path"]+'"',page)
+'''
+            (stage/"test_volume.py").write_text(test,encoding="utf8")
+            for f in ("index.html","metadata.json","README.md","test_volume.py"):
+                os.chmod(stage/f,0o600)
+            if source.exists() or source.is_symlink():
+                return "document_volume_source_collision"
+            os.replace(stage,source)
+        finally:
+            if stage.exists():
+                shutil.rmtree(stage)
+        product=maker.manufacture(code,source_parent,package_parent)
+        manifest=checked_json(package_parent/code/"manufacturing_manifest.json")
+        package=package_parent/code/(code+"-internal-qa.zip")
+        if not (product.get("qa_status")=="passed"
+                and manifest.get("qa_status")=="passed"
+                and manifest.get("recipe")==code
+                and isinstance(manifest.get("artifact_sha256"),str)
+                and manifest.get("artifact_sha256")!=expected
+                and package.is_file() and not package.is_symlink()
+                and maker.sha256_file(package)==manifest.get("artifact_sha256")
+                and len(assets)+4<=256):
+            return "document_volume_failed_manufacturer_qa"
+        receipt={
+            "schema":"saeit.factory.document-volume-receipt.v1",
+            "source_customer_archive_sha256":expected,
+            "original_recipe":recipe,"new_edition_recipe":code,
+            "volume_number":volume,"volume_count":count,
+            "new_source_sha256":manifest.get("source_sha256"),
+            "new_artifact_sha256":manifest.get("artifact_sha256"),
+            "assets_verified":len(assets),
+            "technical_manufacturer_qa_passed":True,
+            "original_stock_mutated":False,
+            "commercial_release_authorized":False,
+            "independent_1000_quality_approved":False}
+        with proof.open("x",encoding="utf8") as output:
+            json.dump(receipt,output,sort_keys=True,indent=2)
+            output.write("\n");output.flush();os.fsync(output.fileno())
+        os.chmod(proof,0o600)
+        return "private_document_edition_built"
+    return "already_issued_private_edition"
+
+
 def reauthor_document_delivery(root,recipe,order,maker):
     """Create a NEW, private offline document-reader source, not fake old source.
 
@@ -332,7 +519,8 @@ def reauthor_document_delivery(root,recipe,order,maker):
         # 200 assets + index, metadata, README and executable QA source.
         # Unpacked input remains limited to 48 MiB independently.
         if len(entries)>200:
-            return "document_asset_count_over_limit"
+            return build_next_document_volume(root,recipe,expected,entries,omitted,maker,
+                                              source_parent,package_parent,receipt_parent)
         source_stage=Path(tempfile.mkdtemp(prefix=".document-edition-",dir=str(source_parent)))
         try:
             # Every original path is replaced by a safe generated flat filename.
