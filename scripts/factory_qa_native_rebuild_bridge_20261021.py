@@ -87,7 +87,11 @@ def recover_source_from_archive(root,recipe,order,maker,recovered_root):
             return False,"source_manifest_technical_quality_unverified"
         if not isinstance(source_expected,str) or not HEX.fullmatch(source_expected):
             return False,"source_provenance_missing"
-        if (not isinstance(files,list) or not 1<=len(files)<=256
+        # If the original manifest omitted only the file index, it may be
+        # reconstructed from authenticated ZIP members, but ONLY when the
+        # complete canonical source digest matches its original SHA256.
+        # Malformed *declared* indexes still fail closed.
+        if files is not None and (not isinstance(files,list) or not 1<=len(files)<=256
             or len(set(files))!=len(files)
             or any(not isinstance(name,str) or len(name)>240 or "\\" in name
                 or not name or name.startswith("/") or
