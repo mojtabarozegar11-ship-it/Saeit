@@ -166,7 +166,14 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-author"
           sha="$GITHUB_SHA"
-          scp -F "$d/config" "$RUNNER_TEMP/mojtaba-author.html" "saeit-cpanel:/home/zomorod2/.backups/zomorod-persian-author/$sha/profile.html"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$sha" <<'REMOTE'
+          set -euo pipefail
+          backup="$HOME/.backups/zomorod-persian-author/$1"
+          test ! -e "$backup"
+          mkdir -p "$backup/stage"
+          chmod 700 "$backup" "$backup/stage"
+          REMOTE
+          scp -F "$d/config" "$RUNNER_TEMP/mojtaba-author.html" "saeit-cpanel:/home/zomorod2/.backups/zomorod-persian-author/$sha/stage/profile.html"
           ssh -F "$d/config" saeit-cpanel bash -s -- "$sha" <<'REMOTE'
           set -euo pipefail
           sha="$1"
@@ -175,7 +182,7 @@ jobs:
           sitemap="$web/sitemap.xml"
           image="$web/static/site/zomorod-about/ceo-mojtaba-rozegar.webp"
           backup="$HOME/.backups/zomorod-persian-author/$sha"
-          candidate="$backup/profile.html"
+          candidate="$backup/stage/profile.html"
           test -s "$candidate" && test -s "$sitemap" && test -f "$web/.htaccess"
           test ! -L "$web" && test ! -L "$sitemap" && test ! -L "$web/.htaccess"
           test ! -e "$page"
@@ -191,6 +198,7 @@ jobs:
           test ! -e "$backup/sitemap.original.xml"
           cp -p "$sitemap" "$backup/sitemap.original.xml"
           sha256sum "$sitemap" > "$backup/sitemap.before.sha256"
+          sha256sum "$web/.htaccess" > "$backup/protected.htaccess.sha256"
           expected="$(sha256sum "$candidate" | cut -d' ' -f1)"
           installed=0
           sitemap_changed=0
@@ -243,8 +251,7 @@ jobs:
           imgcode="$(curl -sS -L --max-time 25 -o "$backup/live-photo.webp" -w '%{http_code}' "https://zomorodmelal.ir/static/site/zomorod-about/ceo-mojtaba-rozegar.webp?seo_verify=$sha" || true)"
           test "$imgcode" = 200
           grep -Fq "$loc" "$sitemap"
-          (cd "$web"; sha256sum -c --status "$backup/sitemap.before.sha256")
-          test "$(sha256sum "$web/.htaccess" | cut -d' ' -f1)" = "$(awk '{print $1}' "$backup/protected.htaccess.sha256" 2>/dev/null || sha256sum "$web/.htaccess" | cut -d' ' -f1)"
+          (cd "$web"; sha256sum -c --status "$backup/protected.htaccess.sha256")
           trap - EXIT
           echo "PERSIAN_AUTHOR_PROFILE_LIVE=verified"
           echo "PROFILE_HTTP=200 PHOTO_HTTP=200"
