@@ -1,8 +1,8 @@
-name: MOJ Commerce v1.0 private staging Django smoke (NO LIVE DEPLOY)
+name: MOJ Commerce v1.2 private staging Django smoke (NO LIVE DEPLOY)
 on:
   pull_request:
     paths:
-      - '.github/workflows/moj-commerce-v12-staging-smoke.yml'
+      - '.github/workflows/moj-commerce-v12-private-stage.yml'
       - 'moj_commerce/STAGING_V12.md'
   workflow_dispatch:
 permissions:
