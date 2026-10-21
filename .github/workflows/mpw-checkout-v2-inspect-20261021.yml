@@ -88,6 +88,37 @@ jobs:
                 'csrf_literal_count':s.count('{% csrf_token %}'),
                 'sample':tags[:100]},ensure_ascii=False))
           PY
+      - name: Inspect actual low-value TRX trial route and additional payment templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/mpw-csp-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,inspect,ast,re,hashlib
+          from pathlib import Path
+          root=Path('/home/zomorod2/Saeit-staging')
+          os.chdir(root);sys.path.insert(0,str(root))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.urls import resolve
+          for url in ('/commerce/book/779/','/store/product/779/checkout/','/commerce/book/72/','/store/product/72/checkout/'):
+              try:
+                  fn=inspect.unwrap(resolve(url).func)
+                  source=inspect.getsource(fn)
+                  templates=sorted(set(re.findall(r'["\x27]([A-Za-z0-9_./-]+\.html)["\x27]',source)))
+                  print('MPWF_PAYMENT_ROUTE='+json.dumps({'path':url,'module':fn.__module__,
+                       'function':fn.__name__,'templates':templates[:15]},ensure_ascii=False))
+              except Exception as exc:
+                  print('MPWF_PAYMENT_ROUTE='+json.dumps({'path':url,'error':type(exc).__name__}))
+          tdir=root/'mpw_commerce/templates/mpw_commerce'
+          for p in sorted(tdir.glob('*.html')):
+              raw=p.read_text('utf8','replace')
+              print('MPWF_ADDITIONAL_TEMPLATE='+json.dumps({'name':p.name,'bytes':len(raw),
+                   'sha':hashlib.sha256(raw.encode()).hexdigest(),
+                   'has_invoice':bool(re.search('invoice|payment|checkout|TRX',raw,re.I)),
+                   'has_head':raw.count('</head>'),'style_count':len(re.findall(r'<style\b',raw)),
+                   'script_count':len(re.findall(r'<script\b',raw)),
+                   'forms':len(re.findall(r'<form\b',raw))}))
+          PY
       - name: Remove temporary keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-csp-ssh"
