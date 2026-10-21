@@ -1,0 +1,75 @@
+name: Correct master contract year to 1398 in private VPS record
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_master_contract_year_correction_1398.py"
+      - "tests/test_factory_master_contract_year_correction_1398.py"
+      - ".github/workflows/factory-master-contract-1398-private.yml"
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: factory-master-contract-1398-owner-correction
+  cancel-in-progress: false
+jobs:
+  correction:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test immutable owner year correction
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_master_contract_year_correction_1398.py -v
+          python3 -m py_compile scripts/factory_master_contract_year_correction_1398.py
+          echo MASTER_CONTRACT_CORRECT_ORIGIN_YEAR=1398
+      - name: Pinned VPS SSH install append-only legal correction
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/contract-year-1398"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          stage="/home/githubops/factory-runtime/operations/.correct-master-year-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; test \"\$(id -un)\" = githubops; umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
+          scp -q "${opts[@]}" scripts/factory_master_contract_year_correction_1398.py githubops@178.239.147.150:"$stage/year.py"
+          want="$(sha256sum scripts/factory_master_contract_year_correction_1398.py | awk '{print $1}')"
+          timeout 75s ssh -T "${opts[@]}" githubops@178.239.147.150 \
+            python3 -B - "$stage" "$want" <<'PY'
+          import hashlib,json,sys,subprocess
+          from pathlib import Path
+          source,want=sys.argv[1:]
+          script=Path(source)/"year.py"
+          assert script.is_file() and not script.is_symlink()
+          assert hashlib.sha256(script.read_bytes()).hexdigest()==want
+          workspace=Path.home()/"factory-runtime/private/autonomous-product-cycle/quality-reviewer-console"
+          assert workspace.is_dir() and not workspace.is_symlink()
+          command=[sys.executable,"-B",str(script),"install","--workspace",str(workspace)]
+          result=json.loads(subprocess.run(command,capture_output=True,text=True,check=True,timeout=15).stdout)
+          assert result["master_contract_year"]==1398
+          assert result["typed_revision_year"]==1405
+          assert result["preexisting_ledger_kept"] and not result["commercial_clearance"]
+          verified=json.loads(subprocess.run([sys.executable,"-B",str(script),
+                        "status","--workspace",str(workspace)],
+                        capture_output=True,text=True,check=True,timeout=15).stdout)
+          assert verified["contract_year_correction_ledger_verified"]
+          print("VPS_OWNER_MASTER_CONTRACT_ORIGINAL_YEAR=1398")
+          print("VPS_TYPING_REVISION_YEAR=1405")
+          print("VPS_LEGAL_CORRECTION_LEDGER=VERIFIED")
+          print("VPS_CORRECTED_DOCUMENT_SHA256=8c955cd28d99aa7f82db92403b9763dd9c7e33812b7e24c66a0a43c31b09b608")
+          print("VPS_ORIGINAL_SERVED_AS_PRIOR_EVIDENCE=YES")
+          print("VPS_GENUINE_SIGNATURE_VERIFIED=false")
+          PY
+          ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; rm -f -- '$stage/year.py'; rmdir -- '$stage'"
