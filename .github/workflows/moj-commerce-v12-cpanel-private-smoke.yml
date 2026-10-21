@@ -28,9 +28,14 @@ jobs:
           git ls-files -s moj_commerce mpw_tron_pro tests | awk '$1 != "100644" { bad=1 } END { exit bad }'
           git archive --format=tar HEAD moj_commerce mpw_tron_pro tests/__init__.py tests/test_moj_commerce*.py | gzip -n > "$RUNNER_TEMP/moj-commerce-v12-src.tar.gz"
           test -s "$RUNNER_TEMP/moj-commerce-v12-src.tar.gz"
-          tar -tzf "$RUNNER_TEMP/moj-commerce-v12-src.tar.gz" | grep -Fqx 'moj_commerce/test_settings.py'
-          tar -tzf "$RUNNER_TEMP/moj-commerce-v12-src.tar.gz" | grep -Fqx 'tests/test_moj_commerce_mariadb_v12.py'
-          if tar -tzvf "$RUNNER_TEMP/moj-commerce-v12-src.tar.gz" | grep -Eq '^l'; then
+          tar -tzf "$RUNNER_TEMP/moj-commerce-v12-src.tar.gz" > "$RUNNER_TEMP/moj-commerce-v12-src-files.list"
+          grep -Fqx 'moj_commerce/test_settings.py' "$RUNNER_TEMP/moj-commerce-v12-src-files.list"
+          grep -Fqx 'tests/test_moj_commerce_mariadb_v12.py' "$RUNNER_TEMP/moj-commerce-v12-src-files.list"
+          if grep -Eq '(^/|(^|/)\.\./)' "$RUNNER_TEMP/moj-commerce-v12-src-files.list"; then
+            echo 'MOJ_COMMERCE_STAGE_UNSAFE_PATH=DENIED'; exit 1
+          fi
+          tar -tvzf "$RUNNER_TEMP/moj-commerce-v12-src.tar.gz" > "$RUNNER_TEMP/moj-commerce-v12-src-verbose.list"
+          if grep -Eq '^l' "$RUNNER_TEMP/moj-commerce-v12-src-verbose.list"; then
             echo 'MOJ_COMMERCE_STAGE_SYMLINK=DENIED'; exit 1
           fi
           mkdir -p "$RUNNER_TEMP/moj-commerce-v12-deps/wheelhouse"
