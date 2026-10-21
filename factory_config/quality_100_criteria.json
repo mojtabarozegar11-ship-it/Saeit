@@ -1,0 +1,131 @@
+{
+  "schema": "saeit.factory.quality-100-criteria.v1",
+  "criteria_total": 100,
+  "points_per_criterion": 10,
+  "required_points": 1000,
+  "noncompensatory": true,
+  "critical_defects_allowed": 0,
+  "professional_grade_requires_independent_verification": true,
+  "groups": {
+    "global_competition": [
+      "relevant_market_defined",
+      "five_current_global_competitors",
+      "benchmark_provenance",
+      "live_competitor_features",
+      "independent_benchmark_reproducible",
+      "quantified_global_advantage",
+      "sampling_and_bias_validated",
+      "benchmark_uncertainty_reported",
+      "competitor_weaknesses_verified",
+      "advantage_endures"
+    ],
+    "originality_innovation": [
+      "concept_provenance",
+      "core_mechanism_original",
+      "two_working_innovations",
+      "novelty_vs_prior_art",
+      "not_cosmetic_or_rebranded",
+      "current_market_relevance",
+      "independent_creativity_review",
+      "original_content_rights",
+      "innovation_improves_usefulness",
+      "creative_reasoning_explained"
+    ],
+    "advanced_technology": [
+      "architecture_fit_for_purpose",
+      "modern_technical_foundations",
+      "reproducible_build",
+      "performance_vs_global_baseline",
+      "scalability_measured",
+      "resource_efficiency",
+      "integration_interoperability",
+      "automation_resilience",
+      "logging_observability",
+      "technical_tradeoffs_documented"
+    ],
+    "domain_scientific_depth": [
+      "domain_scope_comprehensive",
+      "primary_claims_traceable",
+      "factual_accuracy_independently_tested",
+      "current_research_considered",
+      "methods_reproducible",
+      "uncertainty_and_limits_explained",
+      "challenging_domain_edge_cases",
+      "expert_domain_accuracy_review",
+      "contradictory_evidence_addressed",
+      "original_specialist_synthesis"
+    ],
+    "customer_value": [
+      "real_problem_researched",
+      "target_users_identified",
+      "real_tasks_completed",
+      "advantage_for_user_measured",
+      "time_cost_saving_measured",
+      "user_friction_assessed",
+      "blind_independent_user_feedback",
+      "repeat_usefulness_demonstrated",
+      "inclusive_audience_needs",
+      "claims_match_delivered_value"
+    ],
+    "design_user_experience": [
+      "intuitive_controls",
+      "visual_hierarchy_quality",
+      "navigation_and_discoverability",
+      "mobile_touch_experience",
+      "accessible_alternative_controls",
+      "first_use_learning_curve",
+      "error_messages_recovery",
+      "professional_visual_assets",
+      "language_localization",
+      "cross_device_consistency"
+    ],
+    "reliability_testing": [
+      "critical_functional_tests",
+      "real_device_test_matrix",
+      "stress_and_boundary_tests",
+      "regression_suite",
+      "failure_recovery",
+      "real_backup_restore",
+      "rollback_rehearsal",
+      "hash_package_integrity",
+      "runtime_stability",
+      "independent_adversarial_testing"
+    ],
+    "safety_security_rights": [
+      "threat_model",
+      "independent_security_review",
+      "data_minimization",
+      "privacy_consent",
+      "harm_and_misuse_safety",
+      "regulatory_fit",
+      "asset_provenance",
+      "commercial_licenses",
+      "age_market_suitability",
+      "zero_unresolved_critical_vulnerabilities"
+    ],
+    "commercial_delivery": [
+      "customer_promise_accuracy",
+      "independent_price_cost_review",
+      "order_entitlement_test",
+      "payment_receipt_authenticity",
+      "customer_delivery_redownload",
+      "real_customer_support",
+      "refund_policy",
+      "maintenance_updates",
+      "measured_operational_costs",
+      "exact_version_owner_release_approval"
+    ],
+    "independent_validation": [
+      "qualified_reviewer_identity",
+      "evidence_bound_to_exact_hash",
+      "scientific_method_not_self_attested",
+      "reviewer_independence",
+      "conflicts_disclosed",
+      "third_party_repeatability",
+      "timeliness_of_evidence",
+      "out_of_sample_external_validation",
+      "defects_retested_after_rework",
+      "independent_final_signoff"
+    ]
+  }
+}
