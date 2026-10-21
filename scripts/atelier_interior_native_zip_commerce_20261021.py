@@ -90,7 +90,16 @@ def activate():
         raise PermissionError("OWNER_APPROVAL_MISSING")
     Product,Article,txn,approved,target=setup()
     with txn.atomic():
-        p=Product.objects.select_for_update().get(pk=879)
+        p=Product.objects.select_for_update().select_related("knowledge_article").get(pk=879)
+        if p.product_type=="digital":
+            if (p.title!=TITLE or str(p.price)!="6.80" or p.currency!="USD" or not p.active
+                or not p.knowledge_article_id or p.knowledge_article.slug!=ARTICLE_SLUG
+                or p.metadata.get("sku")!=SKU or p.metadata.get("sha256")!=SHA
+                or p.metadata.get("mpw_commerce",{}).get("private_file")!=REL
+                or not target.is_file() or digest(target)!=SHA or not approved(fake_buyer(),p)):
+                raise RuntimeError("EXISTING_NATIVE_COMMERCE_INCONSISTENT")
+            print("ATELIER_NATIVE_ZIP_COMMERCE_IDEMPOTENT=GATE_PASS_NO_NEW_WRITE")
+            return
         m=guard_product(p)
         if p.knowledge_article_id is not None:raise RuntimeError("PRODUCT_ALREADY_HAS_ARTICLE")
         from core.cryptopay_checkout import _file_for
