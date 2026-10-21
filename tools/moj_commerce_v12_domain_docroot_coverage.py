@@ -114,7 +114,12 @@ def inspect_live_symlinks(domain_docroots):
             'live_links_to_other_unbacked_account_path':0,
             'live_links_to_system_or_elsewhere':0,
             'inventory_complete':True,
-            'exact_archive_link_match_verified':False}
+            'exact_archive_link_match_verified':False,
+            'live_application_source_root_bytes':None,
+            'live_application_source_size_measured':False,
+            'other_account_referent_bytes':None,
+            'other_account_referents_size_measured':False}
+    other_refs=set()
     def errors(_):
         counts['inventory_complete']=False
     try:
@@ -147,10 +152,37 @@ def inspect_live_symlinks(domain_docroots):
                             counts['live_links_to_private_dot_directory']+=1
                         else:
                             counts['live_links_to_other_unbacked_account_path']+=1
+                            other_refs.add(link)
                     else:
                         counts['live_links_to_system_or_elsewhere']+=1
     except (OSError,ValueError):
         counts['inventory_complete']=False
+    def bounded_bytes(path):
+        try:
+            if path.is_symlink() or not path.exists():
+                return None
+            if path.is_file():
+                return path.stat().st_size
+            run=subprocess.run(['nice','-n','15','du','-skx','--',str(path)],
+                               capture_output=True,timeout=25,check=False)
+            if run.returncode:
+                return None
+            return int(run.stdout.split()[0])*1024
+        except (OSError,ValueError,IndexError,subprocess.TimeoutExpired):
+            return None
+    if counts['live_links_to_unbacked_application_source']:
+        size=bounded_bytes(HOME/'Saeit')
+        counts['live_application_source_root_bytes']=size
+        counts['live_application_source_size_measured']=size is not None
+    if counts['live_links_to_other_unbacked_account_path']:
+        ordered=[]
+        for path in sorted(other_refs,key=lambda x:(len(x.parts),str(x))):
+            if not any(path==item or item in path.parents for item in ordered):
+                ordered.append(path)
+        sizes=[bounded_bytes(item) for item in ordered]
+        if all(x is not None for x in sizes):
+            counts['other_account_referent_bytes']=sum(sizes)
+            counts['other_account_referents_size_measured']=True
     return counts
 
 
