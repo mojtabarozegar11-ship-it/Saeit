@@ -1,0 +1,60 @@
+name: MOJ Commerce v1.2 isolated MariaDB financial acceptance (NO DEPLOY)
+on:
+  push:
+    branches: ['feature/moj-commerce-v12-mariadb-isolated-20261022']
+    paths:
+      - 'moj_commerce/**'
+      - 'tests/test_moj_commerce_mariadb_v12.py'
+      - '.github/workflows/moj-commerce-v12-mariadb-isolated.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj-commerce-v12-mariadb-isolated-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  mariadb-finance-concurrency:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/moj-commerce-v12-mariadb-isolated-20261022'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_ROOT_PASSWORD: synthetic-test-only-2026
+          MARIADB_DATABASE: moj_commerce_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      MOJ_COMMERCE_TEST_MYSQL: '1'
+      MOJ_COMMERCE_TEST_POSTGRES: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install synthetic-only Django and MySQL/MariaDB dependencies
+        run: |
+          python -m pip install 'Django>=5.2,<5.3' 'mysqlclient>=2.2,<3' 'eth-keys>=0.6,<0.8' 'eth-hash[pycryptodome]>=0.7,<1'
+      - name: Verify pinned isolated test engine, database constraints and migration coherence
+        run: |
+          python -m compileall -q moj_commerce tests/test_moj_commerce_mariadb_v12.py
+          python -m django makemigrations moj_commerce --check --dry-run --settings=moj_commerce.test_settings
+      - name: Run true MariaDB row-lock, scanner mutex, duplicate settlement and delivery tests
+        run: |
+          python -m django test tests.test_moj_commerce_mariadb_v12 tests.test_moj_commerce tests.test_moj_commerce_gateway_e2e tests.test_moj_commerce_checkout_v04 --settings=moj_commerce.test_settings --verbosity 2
+          echo 'MOJ_COMMERCE_MARIADB_ISOLATED_FINANCIAL_ACCEPTANCE=PASS'
+      - name: Enforce no live assets or production host access
+        if: always()
+        run: |
+          echo 'MOJ_COMMERCE_PRODUCTION_DB_CONTACT=NONE'
+          echo 'MOJ_COMMERCE_REAL_TRON_RPC_CONTACT=NONE'
+          echo 'MOJ_COMMERCE_REAL_WALLET_USED=NO'
+          echo 'MOJ_COMMERCE_LIVE_SITE_MODIFIED=NO'
