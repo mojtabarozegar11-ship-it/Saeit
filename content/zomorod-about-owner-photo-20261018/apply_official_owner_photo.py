@@ -13,13 +13,14 @@ ANCHOR = '<h2>شرکت کشت و صنعت زمرد ملل؛ مرکز تحقیق�
 FRAGMENT = f'''{MARKER}
 <div class="zm-owner-real-profile" aria-label="معرفی رسمی مجتبی روزگار">
 <figure class="zm-owner-real-figure">
-<img src="{IMAGE}" alt="عکس واقعی مجتبی روزگار، محقق و پژوهشگر و مدیرعامل شرکت کشت و صنعت زمرد ملل" width="500" height="620" loading="eager" decoding="async">
+<img src="{IMAGE}" alt="Mojtaba Roozegar, also written Mojtaba Rozegar (مجتبی روزگار), researcher and CEO of Zomorod Melal" width="500" height="620" loading="eager" decoding="async">
 <figcaption>مجتبی روزگار · محقق و پژوهشگر</figcaption>
 </figure>
 <div class="zm-owner-real-bio">
 <p class="zm-owner-real-overline">RESEARCHER · SCIENTIFIC LEADERSHIP</p>
 <h3>مجتبی روزگار</h3>
 <p><strong>محقق، پژوهشگر و مدیرعامل شرکت کشت و صنعت زمرد ملل</strong></p>
+<p lang="en">Mojtaba Roozegar · also written Mojtaba Rozegar · مجتبی روزگار</p>
 <p>نقش محوری در جهت‌گیری پژوهش‌محور مجموعه، پیگیری تحقیقات علمی، ژنتیک و اصلاح نژاد و
 تلاش برای استمرار فعالیت‌های پژوهشی. بر اساس اعلام شرکت، تأمین کسری منابع مالی پژوهش
 در سال‌های گذشته از منابع شخصی او انجام شده است.</p>
