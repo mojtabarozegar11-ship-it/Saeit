@@ -1,0 +1,125 @@
+name: Factory Stage4 persisted research capacity and release-chain evidence (read-only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-stage4-capacity-readonly-20261021.yml
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: factory-stage4-research-readonly-20261021
+  cancel-in-progress: false
+jobs:
+  inspect-live-vps:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Authenticate pinned VPS SSH identity
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/stage4-readonly"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          echo STAGE4_RESEARCH_VPS_HOST_PIN_VERIFIED=PASS
+      - name: Read bounded Stage4 budget evidence and release model counters without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/stage4-readonly"
+          timeout 150s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          base="$HOME/factory-runtime"
+          test "$(id -un)" = githubops
+          test -d "$base/django-app" && test -x "$base/.venv/bin/python"
+          cd "$base/django-app"
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+          export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
+          "$base/.venv/bin/python" -B - <<'PY'
+          import datetime, hashlib, json, os, re, sys
+          from pathlib import Path
+          root=Path.home()/"factory-runtime"
+          app=root/"django-app"
+          report={"schema":"saeit.factory.stage4-research-budget-readonly.v1",
+                  "read_only":True,"policy_modified":False,
+                  "payment_modified":False,"product_release_modified":False}
+          paths={
+            "stage4":app/"core/factory_stage4.py",
+            "agent_runtime":app/"core/factory_agent_runtime.py",
+            "factory_loop":root/"operations/vps-only-loop.sh"}
+          review={}
+          for label,p in paths.items():
+              if p.is_symlink():
+                  review[label]={"state":"unsafe_symlink"}
+                  continue
+              if not p.is_file():
+                  review[label]={"state":"missing"}
+                  continue
+              size=p.stat().st_size
+              if size>2_000_000:
+                  review[label]={"state":"oversize"}
+                  continue
+              raw=p.read_bytes()
+              text=raw.decode("utf-8","replace").lower()
+              review[label]={"state":"present","sha256":hashlib.sha256(raw).hexdigest(),
+                             "size_bytes":size,"budget_references":len(re.findall(r"\bbudget\b",text)),
+                             "capacity_references":len(re.findall(r"\bcapacity\b",text)),
+                             "persisted_references":len(re.findall(r"\bpersist",text))}
+          report["source_evidence"]=review
+          log=root/"operations/vps-only-factory.log"
+          if log.is_symlink():
+              report["log_probe"]={"state":"unsafe_symlink"}
+          elif not log.is_file():
+              report["log_probe"]={"state":"missing"}
+          else:
+              stat=log.stat()
+              with log.open("rb") as f:
+                  f.seek(max(0,stat.st_size-524288))
+                  tail=f.read(524288).decode("utf-8","replace")
+              report["log_probe"]={
+                "state":"present",
+                "log_size_bytes":stat.st_size,
+                "last_modified_utc":datetime.datetime.fromtimestamp(stat.st_mtime,datetime.timezone.utc).isoformat(),
+                "budget_wait_mentions_in_last_512k":tail.count("Stage 4 research is waiting for its persisted budget window or capacity policy"),
+                "stage4_mentions_in_last_512k":len(re.findall(r"stage.?4",tail,re.I))}
+          try:
+              os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+              sys.path.insert(0,str(app))
+              import django
+              django.setup()
+              from django.apps import apps
+              from django.db.models import Count
+              models={}
+              for name in ("AgentTask","FactoryRun","FactoryEvidence","FactoryArtifact","FactoryReleaseGate","FactoryReleaseManifest"):
+                  try: cls=apps.get_model("core",name)
+                  except LookupError:
+                      models[name]={"state":"model_not_registered"}
+                      continue
+                  fields={f.name for f in cls._meta.fields}
+                  v={"state":"present","rows":cls.objects.count()}
+                  v["capacity_field_names"]=sorted(
+                      f for f in fields if any(key in f.lower() for key in ("budget","capacity","window","quota","reset")))
+                  if "status" in fields:
+                      v["status_counts"]={str(x["status"])[:45]:x["total"] for x in
+                          cls.objects.values("status").annotate(total=Count("pk")).order_by("status")[:30]}
+                  models[name]=v
+              report["database_probe"]={"state":"read_ok","models":models}
+          except Exception as err:
+              report["database_probe"]={"state":"read_blocked","error_type":type(err).__name__}
+          print("FACTORY_STAGE4_BUDGET_EVIDENCE="+json.dumps(report,sort_keys=True,ensure_ascii=True))
+          print("STAGE4_RESEARCH_READONLY_NO_CAPACITY_OVERRIDE=PASS")
+          PY
+          REMOTE
+      - name: Destroy runner SSH key material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/stage4-readonly"
