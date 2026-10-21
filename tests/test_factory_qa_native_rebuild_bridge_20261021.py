@@ -384,8 +384,12 @@ class RealPrivateDocumentEditionTests(unittest.TestCase):
         source=self.root/"quality-excellence/document-edition-sources"/(
             "edition_"+self.artifact_hash[:24])
         original=self.maker.manufacture
-        with patch.object(self.maker,"manufacture",
-                          side_effect=[RuntimeError("temporary build failure"),original]) as build:
+        calls=[0]
+        def fail_once_then_build(*args,**kwargs):
+            calls[0]+=1
+            if calls[0]==1:raise RuntimeError("temporary build failure")
+            return original(*args,**kwargs)
+        with patch.object(self.maker,"manufacture",side_effect=fail_once_then_build) as build:
             self.assertEqual(m.reauthor_document_delivery(
                 self.root,self.recipe,self.order,self.maker),
                 "document_edition_failed_needs_engineering")
