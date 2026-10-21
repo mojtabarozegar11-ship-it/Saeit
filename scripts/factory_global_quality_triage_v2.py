@@ -82,7 +82,7 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
     root=Path(private_root)
     assert root.is_dir() and not root.is_symlink()
     module=load_module(Path(policy))
-    score_module=load_module(Path(scorecard_file) if scorecard_file else Path(__file__).with_name("factory_quality_1000_scorecard.py"))
+    score_module=load_module(Path(scorecard_file) if scorecard_file else Path(__file__).with_name("factory_quality_1000_v2.py"))
     profiles=module.load_registry(Path(registry))
     assert len(profiles)==40
     out=root/"quality-excellence"/"rework"
@@ -121,7 +121,9 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
                     "path":zipfile.name,"sha256":existing_hash or ""})
                 verdict=module.inspect(candidate,folder,profiles,doc)
                 status,actual,pending=classify(verdict)
-                card=score_module.grade(verdict,exact_build_sha256=existing_hash)
+                card=score_module.grade(verdict,exact_build_sha256=existing_hash,
+                                        criteria_evidence=candidate.get("criteria_evidence"),
+                                        evidence_root=folder)
                 score_module.require_no_false_certification(card)
                 if not isinstance(manifest_sha,str) or not HEX.fullmatch(manifest_sha):
                     status="QUARANTINE_TECHNICAL_OR_INTEGRITY"
@@ -175,7 +177,7 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
         "technical_passed":sum(x.get("technical_qa_status")=="passed" for x in records),
         "quality_certified":0,"public_release_authorized":False,
         "required_quality_points":1000,
-        "quality_score_units":"noncompensatory_12_pillar_thousand",
+        "quality_score_units":"100_independent_criteria_x_10",
         "actual_quality_verified_product_count":0,
         "documentary_evidence_points_sum":sum(x.get("documentary_evidence_points",0) for x in records),
         "status_counts":dict(sorted(statuses.items())),
@@ -198,6 +200,8 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
     print("FACTORY_TECHNICAL_PASS_NOT_PREMIUM="+str(summary["technical_passed"]))
     print("FACTORY_REAL_REWORK_CLASSIFICATION="+json.dumps(dict(statuses),sort_keys=True))
     print("FACTORY_TOP_STOP_SHIP_DEFECTS="+json.dumps(defects.most_common(8)))
+    print("FACTORY_QUALITY_CRITERIA_COUNT=100")
+    print("FACTORY_QUALITY_POINTS_PER_CRITERION=10")
     print("FACTORY_QUALITY_MINIMUM_REQUIRED=1000/1000")
     print("FACTORY_QUALITY_1000_INDEPENDENTLY_VERIFIED=0")
     print("FACTORY_WORLD_EXCELLENCE_APPROVED=0")
