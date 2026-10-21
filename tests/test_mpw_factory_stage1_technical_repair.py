@@ -1,5 +1,6 @@
 """Tests for privately repairing available buyer packages without sale approval."""
 import tempfile,unittest,json
+from datetime import datetime,timezone
 from unittest import mock
 from pathlib import Path
 from scripts import mpw_factory_stage1_technical_repair as worker
@@ -34,7 +35,10 @@ class Stage1Test(unittest.TestCase):
      "consumer_package_sha256":None,
      "blocking_reason":"REPAIR_MOCK_BLOCKED"
     }
-   with mock.patch.object(worker,"stage1",return_value=entries),mock.patch.object(worker,"once",side_effect=fake_once):
+   # Freeze the rotation bucket so the intentionally bad receipt is first.
+   # A successful repair attempt must not be consumed by this unrelated blocker.
+   with mock.patch.object(worker,"stage1",return_value=entries),mock.patch.object(worker,"once",side_effect=fake_once),mock.patch.object(worker,"datetime") as clock:
+    clock.now.return_value=datetime(2026,10,20,0,0,tzinfo=timezone.utc)
     report=worker.run(root,max_new=1)
    self.assertEqual(attempted,[False,True])
    self.assertEqual(report["technical_package_attempts_consumed"],1)
