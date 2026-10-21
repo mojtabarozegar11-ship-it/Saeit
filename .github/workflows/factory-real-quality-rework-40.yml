@@ -26,6 +26,12 @@ on:
       - "tests/test_factory_quality_100_criteria.py"
       - "tests/test_factory_global_quality_triage_v2.py"
       - ".github/workflows/factory-real-quality-rework-40.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/factory_autonomous_jump_repair_v1.py"
+      - "tests/test_factory_autonomous_jump_repair_v1.py"
+      - ".github/workflows/factory-real-quality-rework-40.yml"
   workflow_dispatch:
   schedule:
     - cron: "23 * * * *"
@@ -34,6 +40,19 @@ concurrency:
   group: saeit-factory-real-quality-rework-40
   cancel-in-progress: false
 jobs:
+  verify-autonomous-repair-contract:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Prove authentic repairs and no false QA approvals
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_autonomous_jump_repair_v1.py
+          python3 -B -m unittest discover -s tests -p test_factory_autonomous_jump_repair_v1.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_qa_native_rebuild_bridge_20261021.py -v
   review-real-inventory:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
