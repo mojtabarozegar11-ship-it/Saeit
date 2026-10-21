@@ -218,6 +218,11 @@ def run(root,registry,module_dir):
       "private_commercial_sku_proposals","genuine_verified_product_families",
       "families_without_trusted_package","strict_archives_verified",
       "commercially_approved_families","live_products_published_by_this_engine")},sort_keys=True))
+    # Exact non-sensitive family IDs enable targeted native-builder remediation.
+    # Reporting a missing package never grants commercial or QA approval.
+    missing=sorted(x["family_id"] for x in records if x["technical_products_verified"]==0)
+    print("FACTORY_COMMERCE40_MISSING_TECHNICAL_FAMILIES="+json.dumps(missing))
+    print("FACTORY_COMMERCE40_STILL_REQUIRES_INDEPENDENT_QA=TRUE")
     return report
 def main():
     p=argparse.ArgumentParser()
