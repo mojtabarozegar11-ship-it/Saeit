@@ -104,9 +104,69 @@ def attest_terms(workspace):
         "sale_or_quality_clearance":False,
     }
 
+def dual_capacity_attestation():
+    """Record direct user statement, not proof of original signatures or authority."""
+    return {
+        "schema":"saeit.factory.master-contract-dual-capacity-owner-attestation.v1",
+        "contract_year_jalali":1398,
+        "source":"owner_direct_conversation_confirmation_2026-10-21",
+        "owner_attested_original_contract_signed":True,
+        "signing_capacities_owner_attested":{
+            "individual_personal_ip_owner":True,
+            "company_managing_director_and_representative":True
+        },
+        "individual_professional_name":"مجتبی روزگار",
+        "company_name":"شرکت کشت و صنعت زمرد ملل",
+        "same_human_signed_in_two_distinct_capacities_owner_attested":True,
+        "current_text_same_as_original_1398_owner_attested":True,
+        "independently_inspected_original_signature":False,
+        "company_signing_power_officially_verified_for_1398":False,
+        "actual_contract_enforceability_independently_determined":False,
+        "one_human_is_not_two_independent_qa_reviewers":True,
+        "signed_qa_1000_certification_created":False,
+        "commercial_release_authorized":False,
+        "corrected_library_document_sha256":AFTER,
+        "does_not_change_earlier_immutable_ledgers":True
+    }
+def attest_dual_capacity(workspace):
+    """Separate immutable receipt tied to the already verified 1398 ledger."""
+    base=Path(workspace)/"legal-capacity"
+    if not base.is_dir() or base.is_symlink():
+        raise ValueError("PRIVATE_LEGAL_LEDGER_NOT_PRESENT")
+    expected_year=serialized()
+    year_receipts=[p for p in base.glob("master-year-1398-*.json")
+                   if p.is_file() and not p.is_symlink() and p.read_bytes()==expected_year]
+    terms_expected=(json.dumps(terms_attestation(),sort_keys=True,
+                    ensure_ascii=False,separators=(",",":"))+"\n").encode()
+    terms_receipts=[p for p in base.glob("master-terms-1398-*.json")
+                    if p.is_file() and not p.is_symlink() and p.read_bytes()==terms_expected]
+    if len(year_receipts)!=1 or len(terms_receipts)!=1:
+        raise ValueError("SIGNED_1398_YEAR_AND_TERMS_OWNER_ATTESTATIONS_REQUIRED")
+    payload=(json.dumps(dual_capacity_attestation(),sort_keys=True,
+             ensure_ascii=False,separators=(",",":"))+"\n").encode()
+    digest=hashlib.sha256(payload).hexdigest()
+    target=base/("master-two-capacities-1398-"+digest[:24]+".json")
+    if target.is_symlink():raise ValueError("UNSAFE_DUAL_CAPACITY_LEDGER")
+    if target.exists():
+        if target.read_bytes()!=payload:raise ValueError("CONFLICTING_DUAL_CAPACITY_LEDGER")
+    else:
+        with target.open("xb") as output:
+            output.write(payload);output.flush();os.fsync(output.fileno())
+        os.chmod(target,0o600)
+    return {
+        "owner_attested_personal_signature":True,
+        "owner_attested_company_representative_signature":True,
+        "same_human_two_distinct_legal_roles":True,
+        "independent_original_signature_verification":False,
+        "official_company_authority_verified":False,
+        "qa_or_commercial_approval":False,
+        "receipt_sha256":digest,
+        "prior_immutable_ledgers_preserved":True
+    }
+
 if __name__=="__main__":
     parser=argparse.ArgumentParser()
-    parser.add_argument("command",choices=["install","status","attest-terms"])
+    parser.add_argument("command",choices=["install","status","attest-terms","attest-dual-capacity"])
     parser.add_argument("--workspace",required=True)
     args=parser.parse_args()
-    print(json.dumps(install(args.workspace) if args.command=="install" else attest_terms(args.workspace) if args.command=="attest-terms" else status(args.workspace),sort_keys=True,ensure_ascii=False))
+    print(json.dumps(install(args.workspace) if args.command=="install" else attest_terms(args.workspace) if args.command=="attest-terms" else attest_dual_capacity(args.workspace) if args.command=="attest-dual-capacity" else status(args.workspace),sort_keys=True,ensure_ascii=False))
