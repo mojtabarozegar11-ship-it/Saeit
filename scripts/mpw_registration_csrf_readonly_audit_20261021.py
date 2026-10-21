@@ -25,7 +25,7 @@ from django.test import Client
 def out(k,v): print(k+"="+json.dumps(v,sort_keys=True,ensure_ascii=False,default=str),flush=True)
 flags=("DEBUG","CSRF_COOKIE_SECURE","CSRF_COOKIE_HTTPONLY","CSRF_COOKIE_SAMESITE",
        "CSRF_COOKIE_DOMAIN","CSRF_COOKIE_PATH","CSRF_USE_SESSIONS",
-       "SESSION_COOKIE_SECURE","SESSION_COOKIE_SAMESITE",
+       "SESSION_COOKIE_SECURE","SESSION_COOKIE_SAMESITE","SECURE_REFERRER_POLICY",
        "SECURE_PROXY_SSL_HEADER","USE_X_FORWARDED_HOST","SECURE_SSL_REDIRECT")
 out("MPW_REGISTER_CSRF_SETTINGS",{k:getattr(settings,k,None) for k in flags})
 out("MPW_REGISTER_CSRF_TRUST",{
