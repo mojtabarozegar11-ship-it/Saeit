@@ -52,7 +52,7 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           ssh_vps(){ ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 githubops@178.239.147.150 "$@"; }
-          stage="/home/githubops/factory-runtime/operations/ .fivepublishers-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          stage="/home/githubops/factory-runtime/operations/.fivepublishers-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           ssh_vps "test ! -e '$stage' && mkdir -m 700 '$stage'"
           for source in scripts/factory_build50_five_publications.py scripts/factory_five_publication_review.py scripts/factory_five_publication_cycle.py deploy/install_factory_five_native_publications.sh;do
             name="$(basename "$source")"
