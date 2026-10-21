@@ -3,6 +3,7 @@
 Ephemeral test keys only. Never ship test signatures as production authority.
 """
 import hashlib,importlib.util,json,subprocess,tempfile
+from unittest.mock import patch
 from pathlib import Path
 import unittest
 ROOT=Path(__file__).resolve().parents[1]
@@ -45,10 +46,29 @@ class SignedApprovalTests(unittest.TestCase):
                                         "externally_identity_verified":True}
             sigs.append({"reviewer_id":reviewer,"role":role,
                          "signature_hex":signature.read_bytes().hex()})
+        authority_priv=root/"authorized-owner-root.pem"
+        authority_pub=root/"authorized-owner-root.pub.pem"
+        authority_sig=root/"root-registry.sig"
+        subprocess.run(["openssl","genpkey","-algorithm","ED25519","-out",str(authority_priv)],
+                       check=True,capture_output=True)
+        with authority_pub.open("wb") as f:
+            subprocess.run(["openssl","pkey","-in",str(authority_priv),"-pubout"],
+                           check=True,stdout=f,stderr=subprocess.PIPE)
+        for entry in trust["reviewers"].values():
+            entry["identity_verification_evidence_sha256"]="e"*64
+            entry["active"]=True
+        root_data=root/"registry-content.bin"
+        root_data.write_bytes(mod.canonical({"schema":mod.KEY_SCHEMA,"reviewers":trust["reviewers"]}))
+        subprocess.run(["openssl","pkeyutl","-sign","-rawin",
+                        "-inkey",str(authority_priv),"-in",str(root_data),
+                        "-out",str(authority_sig)],check=True,capture_output=True)
+        trust["trusted_root_public_key_pem"]=authority_pub.read_text()
+        trust["root_signature_hex"]=authority_sig.read_bytes().hex()
         return root,build,cat,decision,gate,trust,sigs
     def check(self,x):
         root,build,cat,decision,gate,trust,sigs=x
-        return mod.inspect_approval({"schema":mod.SCHEMA,"decision":decision,
+        with patch.dict("os.environ",{"FACTORY_QA_TRUST_ROOT_SHA256":hashlib.sha256(trust.get("trusted_root_public_key_pem","").encode()).hexdigest()}):
+            return mod.inspect_approval({"schema":mod.SCHEMA,"decision":decision,
                   "approvals":sigs},gate,build,cat,trust)
     def test_truly_signed_multirole_exact_version_allows_clearance_only(self):
         with tempfile.TemporaryDirectory() as d:
@@ -63,7 +83,7 @@ class SignedApprovalTests(unittest.TestCase):
             x=list(self.make(d));x[5]={"schema":mod.KEY_SCHEMA,"reviewers":{}}
             v=self.check(x)
             self.assertFalse(v["eligible"])
-            self.assertIn("MISSING_INDEPENDENT_SIGNED_ROLE:owner",v["blocking_reasons"])
+            self.assertIn("TRUST_REGISTRY_INVALID",v["blocking_reasons"])
     def test_wrong_build_hash_fails_even_if_four_signatures_are_valid(self):
         with tempfile.TemporaryDirectory() as d:
             x=self.make(d);x[1].write_bytes(x[1].read_bytes()+b"tampered")
@@ -104,4 +124,18 @@ class SignedApprovalTests(unittest.TestCase):
             v=self.check(x)
             self.assertFalse(v["eligible"])
             self.assertIn("INVALID_APPROVAL_SIGNATURE",v["blocking_reasons"])
+    def test_changing_registry_key_without_owner_root_resign_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            x=list(self.make(d))
+            x[5]["reviewers"]["trusted_owner"]["identity_verification_evidence_sha256"]="a"*64
+            v=self.check(x)
+            self.assertFalse(v["eligible"])
+            self.assertIn("TRUST_REGISTRY_INVALID",v["blocking_reasons"])
+    def test_no_server_pinned_trust_root_rejects_even_genuine_signatures(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,build,cat,decision,gate,trust,sigs=self.make(d)
+            with patch.dict("os.environ",{"FACTORY_QA_TRUST_ROOT_SHA256":""}):
+                v=mod.inspect_approval({"schema":mod.SCHEMA,"decision":decision,
+                    "approvals":sigs},gate,build,cat,trust)
+            self.assertIn("TRUST_REGISTRY_INVALID",v["blocking_reasons"])
 if __name__=="__main__":unittest.main()
