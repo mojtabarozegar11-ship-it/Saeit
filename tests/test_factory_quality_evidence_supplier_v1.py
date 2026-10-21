@@ -112,7 +112,7 @@ class EvidenceSupplierTest(unittest.TestCase):
             supplier.persist(self.root, self.dossier())
 
 
-    def test_real_f28_embedded_customer_runtime_supplies_six_scoped_criteria(self):
+    def test_real_f28_embedded_customer_runtime_supplies_seven_scoped_criteria(self):
         recipe_dir = ROOT / "product_recipes" / self.recipe
         with zipfile.ZipFile(str(self.product), "w", zipfile.ZIP_DEFLATED) as z:
             for name in supplier.F28_FILES:
