@@ -95,3 +95,22 @@ if template.is_file() and not template.is_symlink():
    'settimeout_present':any('setTimeout' in b for b in blocks),
    'fetch_present':any('fetch(' in b for b in blocks),
    'status_related_lines':hints[:90]})
+
+# Show only publicly deliverable HTML JavaScript and its CSP assembly shape.
+if template.is_file() and not template.is_symlink():
+ scripts=re.findall(r'<script\b[^>]*>(.*?)</script>',html,re.I|re.S)
+ if scripts:
+  code=scripts[0].strip()
+  redacted=[]
+  for line in code.splitlines():
+   if re.search(r'(?i)(secret|private.key|mnemonic|wallet.address|api.key|access.token|receive.address)',line):
+    redacted.append('[private line omitted]')
+   else:redacted.append(line[:280])
+  out('MPW_DELIVERY_BUYER_JS_SOURCE',{'lines':redacted[:260],'bytes':len(code)})
+ module=(ROOT/'mpw_commerce/product_checkout_page.py').read_text('utf8','replace')
+ parts=[]
+ for i,line in enumerate(module.splitlines()):
+  if re.search('Content-Security-Policy|script-src|sha256|nonce|render\\(|CSP|<script',line,re.I):
+   parts.append({'line':i+1,'snippet':('[redacted]' if re.search('secret|private|token|wallet|address',line,re.I) else line[:270])})
+ out('MPW_DELIVERY_CHECKOUT_CSP_SOURCE',{'signals':parts[:45],
+     'inline_scripts':len(scripts),'has_head':html.count('</head>')})
