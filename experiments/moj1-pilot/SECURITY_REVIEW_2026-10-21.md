@@ -7,6 +7,7 @@
 - [TVM integration pass](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39607596859): **5/5** actual local TRE contract tests. Includes fixed supply / transfer, funded vesting mathematics, valid NFT mint, insufficient-funding and before-cliff reversion receipt checks, blank metadata and former owner rejection.
 - [Offline checks pass](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39607596890): **9/9** model/guard tests, compiler 0.8.25, bytecode preflight.
 - [Dependency advisory scan](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39607834009): npm reports **3 high / 0 critical** vulnerable package names overall; **2 high / 0 critical** in `--omit=dev`: `axios` (transitive) and `tronweb` (direct). `tronbox` is dev tooling. Many distinct `axios` advisories are grouped under one package count; the number three does **not** mean only three security advisories.
+- [Security dependency remediation](https://github.com/mojtabarozegar11-ship-it/Saeit/commit/5ff1f9b6fb06122d6e03c046e1a39ac58b505df1): pinned transitive `axios` at `1.20.0`, regenerated `package-lock.json`, preserved `tronweb 6.5.0` and `tronbox 4.10.0`. [GitHub audit](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39609627776) reports **0 vulnerabilities (full tree) and 0 vulnerabilities (`--omit=dev`)**. [Offline run](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39609627845) passed **9/9** and compile/preflight; [isolated local TVM run](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39609627983) passed **5/5**. This closes the dependency-scanning part of F01 for the experimental branch, not overall production readiness.
 - Public [GitHub advisory example: axios redirect SSRF](https://github.com/advisories/GHSA-r4gj-5m52-g5wh); npm output lists Axios affected ranges under 1.20.0. Check a fully compatible patched dependency tree; **do not blindly downgrade** TronWeb/TronBox based on npm's automated fix suggestion.
 - VPS `githubops` read-only preflight succeeded, but Docker/Podman/Node/npm absent, so the TVM was run on an ephemeral GitHub-hosted runner rather than the production VPS. No live site/server installation.
 
@@ -14,7 +15,7 @@
 
 | ID | Severity | Finding / evidence | Required mitigation |
 |---|---|---|---|
-| F01 | HIGH - release blocker | npm reports high-severity advisories in runtime dependency chain `tronweb` → `axios`; patched deployment-compatible tree not yet tested. | Confirm exact installed chain, select patched Axios/relevant TronWeb, regenerate the lockfile and prove `npm audit --omit=dev` clean and all TVM tests pass; assess actual exploitability. |
+| F01 | ADDRESSED IN PILOT (2026-10-21) | Previously vulnerable transitive Axios dependency is overridden to `1.20.0` with refreshed lockfile; GitHub Actions full and production-only `npm audit` both report zero vulnerabilities. Offline and local TVM compatibility checks pass. | Re-audit before release and separately assess exploitability and secure deployment; this pilot fix does not close F02-F07 or authorize Mainnet. |
 | F02 | HIGH - release blocker | `MojCoin` instantly mints the entire 100bn supply to one constructor treasury. Six allocation percentages in JSON are merely proposed; no allocation distribution or enforced reserve/team schedule is deployed. | Owner approval of allocations; separate independent vaults/locks for all release-limited buckets; immutable, verified beneficiary addresses; fully funded vault receipts; owner-controlled multisignature custody. |
 | F03 | HIGH - release blocker | `MojVestingVault` allows any `cliffSeconds` (including zero), arbitrary `startTimestamp` (including historical), and arbitrary allocation/duration. A deployer could configure immediate team unlock contrary to the proposed 12-month cliff. | Deployment policy with fixed approved parameters, timestamp bounds, reproducible manifest and automated checks proving proposed policy; independent scrutiny of deployed constructor values. |
 | F04 | MEDIUM-HIGH | A single `Ownable` NFT administrator can mint all 10k items and transfer/renounce ownership. Key theft or mistaken ownership transfer changes mint controls; renouncing ownership permanently blocks future minting. | Multisig owner, two-step ownership transfer, off-chain sign-off and monitoring; document permanent renounce behavior. |
@@ -33,7 +34,7 @@
 **NO-GO for Mainnet, exchange listing, real reward payouts or sales.** Local test success is necessary but insufficient.
 
 Recommended sequence:
-1. Close F01 and run compatibility + npm audit clean.
+1. F01 dependency audit/compatibility **completed in pilot**; repeat scans on every lockfile/security-relevant change.
 2. Approve tokenomics and strengthen custody/vesting parameters F02-F04.
 3. Complete adversarial TVM tests, static analyzers and third-party audit F06.
 4. Verify reproducible Shasta receipts, deployment idempotency, fee limits F05.
