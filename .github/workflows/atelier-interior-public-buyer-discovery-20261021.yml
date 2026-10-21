@@ -1,0 +1,41 @@
+name: Atelier Interior public store discoverability and buyer CTA audit
+on:
+  push:
+    branches: [feature/atelier-sale-readiness-20261021]
+    paths:
+      - ".github/workflows/atelier-interior-public-buyer-discovery-20261021.yml"
+permissions: {contents: read}
+jobs:
+  site_discovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Inspect public store and product link without logins or writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError,URLError
+          from html.parser import HTMLParser
+          import json,re
+          def fetch(path):
+              with urlopen(Request("https://mojplaywin.com"+path,headers={"User-Agent":"AtelierPublicBuyerLinkAudit/1.0"}),timeout=25) as resp:
+                  raw=resp.read(4000000).decode("utf8","replace")
+                  return resp.status,raw
+          store,stxt=fetch("/store/")
+          product,ptxt=fetch("/store/product/879/")
+          links=re.findall(r'href\s*=\s*["\']([^"\']+)["\']',stxt,re.I)
+          p_links=re.findall(r'href\s*=\s*["\']([^"\']+)["\']',ptxt,re.I)
+          f={
+              "store_http":store,"product_http":product,
+              "store_has_product_879_link":any("/store/product/879/" in x for x in links),
+              "store_has_atelier_name":"Atelier Interior" in stxt,
+              "store_mentions_preview_only_for_atelier":"Atelier Interior" in stxt and "preview only" in stxt.lower(),
+              "product_has_checkout_cta":any("/store/product/879/checkout/" in x for x in p_links),
+              "product_has_usd_price":"6.80" in ptxt or "$6.8" in ptxt,
+              "product_has_svg_disclosure":"SVG" in ptxt or "illustrations" in ptxt.lower(),
+          }
+          print("ATELIER_PUBLIC_BUYER_DISCOVERY="+json.dumps(f,sort_keys=True))
+          assert store==200 and product==200
+          PY
