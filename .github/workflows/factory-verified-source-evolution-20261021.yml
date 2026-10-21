@@ -194,10 +194,16 @@ jobs:
                                           'source_sha256':result['revised_source_sha256'],
                                           'technical_tests':result['measured_acceptance']['successful_tests']})
                           product=maker.manufacture(p.name,generated,candidates_root)
-                          manifest=maker.sha256_file(candidates_root/p.name/(p.name+'-internal-qa.zip'))
-                          if product.get('qa_status')!='passed' or manifest!=product.get('artifact_sha256'):
+                          artifact_sha=maker.sha256_file(candidates_root/p.name/(p.name+'-internal-qa.zip'))
+                          record=json.loads((candidates_root/p.name/'manufacturing_manifest.json').read_text(encoding='utf8'))
+                          if (product.get('qa_status')!='passed'
+                                  or record.get('qa_status')!='passed'
+                                  or record.get('source_sha256')!=result['revised_source_sha256']
+                                  or record.get('artifact_sha256')!=artifact_sha
+                                  or record.get('professional_quality_approved') is not False
+                                  or record.get('public_listing_enabled') is not False):
                               raise RuntimeError('EVOLUTION_CANDIDATE_MANUFACTURING_QA_FAILED')
-                          built.append({'recipe':p.name,'artifact_sha256':manifest,
+                          built.append({'recipe':p.name,'artifact_sha256':artifact_sha,
                                         'technical_qa':'passed','commercial_approval':False})
                   except (RuntimeError,ValueError,OSError,ArithmeticError) as error:
                       issues.append({'recipe':p.name,'reason':type(error).__name__})
