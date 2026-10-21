@@ -1,0 +1,91 @@
+name: MOJ Commerce v1.2 archive unbacked 3 cPanel site roots (ENCRYPTED, NO DEPLOY)
+on:
+  push:
+    branches: ['feature/moj-commerce-v12-mariadb-isolated-20261022']
+    paths:
+      - '.github/workflows/moj-commerce-v12-extra-root-backup.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj-commerce-v12-one-private-extra-webroots-backup
+  cancel-in-progress: false
+jobs:
+  backup-three-missing-site-roots:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/moj-commerce-v12-mariadb-isolated-20261022'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Strictly synthetic tests and source validation before backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest -v tests.test_moj_commerce_v12_export_extra_domains tests.test_moj_commerce_v12_extra_webroot_archive
+          python3 -m py_compile tools/moj_commerce_v12_export_extra_domains.py tools/moj_commerce_v12_extra_webroot_archive_verify.py scripts/mojplaywin_backup_encrypt_vps_gpg.py scripts/mojplaywin_recovery_stream_vps.py
+          echo 'EXTRA_ROOT_SOURCE_TESTS=PASS'
+      - name: Create a single separately encrypted archive of unbacked cPanel docroots
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ -n "$VPS_KEY" && -n "$HOST_KEY" ]] || { echo 'RELAY_BLOCKED_MISSING_KEY'; exit 1; }
+          d="$RUNNER_TEMP/moj-commerce-v12-extra-backup"
+          mkdir -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(13)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 12
+            ConnectionAttempts 1
+          EOF
+          chmod 600 "$d/config"
+          timeout 75s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net 2>/dev/null' > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          src64="$(base64 -w0 tools/moj_commerce_v12_export_extra_domains.py)"
+          enc64="$(base64 -w0 scripts/mojplaywin_backup_encrypt_vps_gpg.py)"
+          recovery64="$(base64 -w0 scripts/mojplaywin_recovery_stream_vps.py)"
+          inspect64="$(base64 -w0 tools/moj_commerce_v12_extra_webroot_archive_verify.py)"
+          call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
+          echo 'MOJ_COMMERCE_V12_EXTRA_WEBROOT_SOURCE=READ_ONLY_TRANSFER_STARTED'
+          timeout 600s ssh -T -F "$d/config" saeit-host "python3 -c '$call' '$src64' export" |
+            timeout 600s ssh -T -F "$d/config" saeit-vps "python3 -c '$call' '$enc64' extra-webroots"
+          echo 'MOJ_COMMERCE_V12_EXTRA_WEBROOT_GPG=ENCRYPTED_COMPLETE'
+          timeout 600s ssh -T -F "$d/config" saeit-vps "python3 -c '$call' '$recovery64' extra-webroots" |
+            timeout 600s python3 -c "$call" "$inspect64" archive
+          echo 'MOJ_COMMERCE_V12_EXTRA_WEBROOT_VERIFIED_ARCHIVE=PASS'
+          echo 'MOJ_COMMERCE_V12_LIVE_SITE_FILES_MODIFIED=NO'
+          echo 'MOJ_COMMERCE_V12_LIVE_DATABASE_WRITES=NO'
+          echo 'MOJ_COMMERCE_V12_PAYMENT_ENABLED=NO'
+          echo 'MOJ_COMMERCE_V12_TENANT_RESTORE_AND_KEY_ESCROW=STILL_GATED'
