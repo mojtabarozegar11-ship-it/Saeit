@@ -8,6 +8,7 @@ import http.cookiejar,json,re,urllib.request,urllib.error,urllib.parse
 BASES=["https://mojplaywin.com","https://www.mojplaywin.com"]
 PATHS=["/accounts/register/","/accounts/login/"]
 USER_AGENT="Mozilla/5.0 (Linux; Android 10; SM-A920F) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36"
+REFERRER_META_RE=re.compile(r"""<meta\s+name=["\']referrer["\']\s+content=["\']no-referrer""",re.I)
 
 def emit(data):
  print("MPW_REGISTER_PUBLIC_HTTP="+json.dumps(data,sort_keys=True),flush=True)
@@ -35,7 +36,7 @@ def submit(base,path):
   "csp_header":(headers.get("Content-Security-Policy") or "")[:1350],
   "cache_control":headers.get("Cache-Control",""),
   "referrer_policy_header":headers.get("Referrer-Policy",""),
-  "referrer_meta_no_referrer":bool(re.search(r'<meta\\s+name=["\\x27]referrer["\\x27]\\s+content=["\\x27]no-referrer',html,re.I)),
+  "referrer_meta_no_referrer":bool(REFERRER_META_RE.search(html)),
   "vary":headers.get("Vary",""),
   "refresh_script_present":"mpw-csrf-fresh-submit-20261020" in html,
  }
