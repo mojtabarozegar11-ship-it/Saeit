@@ -102,7 +102,11 @@ jobs:
           for path in files:
               assert not path.is_symlink()
               doc=json.loads(path.read_text(encoding="utf8"))
-              if doc["artifact_sha256"]!=artifact:continue
+              if doc.get("artifact_sha256") != artifact: continue
+              # Previous immutable Q068-only receipts must not invalidate
+              # a new version of the technical evidence supplier.
+              if doc.get("automated_criteria_measured") != ["Q036","Q057","Q061","Q064","Q068","Q069"]:
+                  continue
               assert len(doc["supplier_assignments"])==100
               assert doc["automated_criteria_measured"]==["Q036","Q057","Q061","Q064","Q068","Q069"]
               assert doc["unmet_criterion_count"]==94
