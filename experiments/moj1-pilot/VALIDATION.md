@@ -10,10 +10,17 @@
 4. The offline run also exercises the fail-closed Shasta deployment journal: exclusive locking, persistent pre-broadcast ambiguity marker, refusal to redeploy after an unknown outcome, idempotent reuse of confirmed entries, mismatched governance/artifact rejection, and refusal to run without an external absolute journal path. **These journal tests mock the filesystem state and never transmit a transaction.**
 5. Earlier local source/install/syntax and asset-image checks were documented in prior revisions. Do not misinterpret these CI receipts as direct VPS tests.
 
+## F06 transaction recovery follow-up — 2026-10-21
+
+- [Offline run 39625575642](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39625575642): **PASS, 29/29**; includes additional crash-state, replay, attestation-tampering, missing receipt, failed execution and missing-bytecode scenarios. These tests use mocked node reads, not a real Shasta receipt.
+- [Disposable local TVM run 39625802241](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39625802241): **PASS, 11/11** contract integration tests; separate `check-builder-local.mjs` step **PASS** for creating and signing a TRON contract-creation transaction using the pinned TronWeb version, with **no broadcast**. The builder check uses a disposable local test key, not a Shasta or user wallet.
+- `deploy-shasta.mjs` now constructs and signs first, saves a persistent `txID`, SHA-256 of `raw_data_hex` and expected contract address, then performs **one** attempted broadcast. On restart, a read-only reconciler verifies the original transaction, solidified successful receipt, matching contract address and non-empty code before resuming. A keyless `npm run reconcile:shasta` command permits read-only examination.
+- Legacy pending journals without a txID, missing receipts, failed transactions, RPC errors, and stale locks **remain fail-closed**; there is no automatic second deployment or assertion that uncertain transactions are absent from chain. No real Shasta recovery or third-party source-code audit has occurred.
+
 ## Not performed / still required
 
 - **No Shasta or Mainnet deployment**, contract address, energy payment, wallet funding, public mint, transfer, sale, exchange listing or custody operation.
-- No actual recovery of an uncertain Shasta deployment, no journaled pre-signed txID/on-chain source attestation, no production deployment-bytecode verification, vetted multisig or validated beneficiary addresses. The unsafe clock harness must be excluded from any real deployment manifest or genesis vault.
+- No actual recovery of an uncertain **Shasta** deployment or independent on-chain source attestation. Pre-broadcast txID journaling and read-only reconciliation are now implemented and tested with mocks/local TVM, but remain unproven on public Shasta; no production deployment-bytecode verification, vetted multisig or validated beneficiary addresses. The unsafe clock harness must be excluded from any real deployment manifest or genesis vault.
 - No full-cliff time-advance test against an actual **genesis-funded** vesting vault, exhaustive adversarial token/NFT receiver or reentrancy simulation, property fuzzing, or independent third-party security audit.
 - The production VPS reportedly lacks Docker/Podman/Node; tests ran on an ephemeral GitHub-hosted TVM runner, not on that VPS.
 - Actual reserve schedules, beneficiary identities, final custody governance, required legal reviews and any irreversible transaction await **separate explicit owner approval**.
