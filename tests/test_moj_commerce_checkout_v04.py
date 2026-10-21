@@ -107,6 +107,24 @@ class BuyerCheckoutIsolationTests(TestCase):
         self.assertEqual(second.amount_sun,12_500_000)
         self.assertEqual(Purchase.objects.count(),1)
 
+    def test_emergency_checkout_stop_hides_payable_destination_on_replay_and_status(self):
+        order, created = self.purchase()
+        self.assertTrue(created)
+        self.assertTrue(checkout_payload(order)['payment_enabled'])
+        self.client.force_login(self.buyer)
+        url = reverse('moj-commerce-checkout-status', args=(order.reference,))
+        with override_settings(MOJ_COMMERCE_CHECKOUT_ENABLED=False):
+            # Existing idempotent references do not create new invoices,
+            # but must never continue advertising a payable wallet.
+            same, created_again = self.purchase()
+            self.assertFalse(created_again)
+            self.assertEqual(same.pk, order.pk)
+            status = self.client.get(url)
+            self.assertEqual(status.status_code, 200)
+            self.assertFalse(status.json()['payment_enabled'])
+            self.assertIsNone(status.json()['destination'])
+            self.assertFalse(checkout_payload(same)['payment_enabled'])
+
     def test_address_exhaustion_does_not_cross_merchants(self):
         self.purchase(key='checkout-'+'a'*20)
         self.purchase(key='checkout-'+'b'*20)
