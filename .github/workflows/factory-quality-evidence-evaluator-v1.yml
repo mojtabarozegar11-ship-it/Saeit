@@ -1,0 +1,146 @@
+name: Factory fail-closed evidence evaluator
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/factory_quality_evidence_evaluator_v1.py
+      - tests/test_factory_quality_evidence_evaluator_v1.py
+      - .github/workflows/factory-quality-evidence-evaluator-v1.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_quality_evidence_evaluator_v1.py
+      - tests/test_factory_quality_evidence_evaluator_v1.py
+      - .github/workflows/factory-quality-evidence-evaluator-v1.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factory-fail-closed-evidence-evaluator
+  cancel-in-progress: false
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test evidence provenance and non-release invariants
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_quality_evidence_evaluator_v1.py
+          python3 -B -m unittest discover -s tests -p test_factory_quality_evidence_evaluator_v1.py -v
+          echo FACTORY_EVIDENCE_EVALUATOR_CONTRACT=PASS
+
+  private-vps-e2e:
+    needs: contract
+    if: github.event_name != 'pull_request' && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Authenticate the pinned private VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-evaluator-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo FACTORY_EVALUATOR_VPS_HOST_PIN=PASS
+      - name: Transfer tested evaluator to private staging and verify hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-evaluator-ssh"
+          stage="/home/githubops/factory-runtime/operations/.evidence-evaluator-$GITHUB_RUN_ID"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12)
+          timeout 35s ssh "${opts[@]}" githubops@178.239.147.150 "set -eu; test ! -e '$stage'; install -d -m 700 '$stage'"
+          timeout 35s scp -q "${opts[@]}" scripts/factory_quality_evidence_evaluator_v1.py scripts/factory_quality_evidence_supplier_v1.py factory_config/quality_100_criteria.json "githubops@178.239.147.150:$stage/"
+          for name in factory_quality_evidence_evaluator_v1.py factory_quality_evidence_supplier_v1.py quality_100_criteria.json; do
+            case "$name" in
+              quality_100_criteria.json) local_path=factory_config/quality_100_criteria.json ;;
+              *) local_path="scripts/$name" ;;
+            esac
+            expected="$(sha256sum "$local_path" | cut -d' ' -f1)"
+            actual="$(timeout 25s ssh "${opts[@]}" githubops@178.239.147.150 "sha256sum '$stage/$name' | cut -d' ' -f1")"
+            test "$expected" = "$actual"
+          done
+          echo FACTORY_EVALUATOR_TRANSFER_HASHES_MATCH=PASS
+      - name: Re-measure and evaluate the exact pinned private F28 artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-evaluator-ssh"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12)
+          timeout 180s ssh -T "${opts[@]}" githubops@178.239.147.150 "bash -se -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          run_id="$1"
+          base="/home/githubops/factory-runtime"
+          stage="$base/operations/.evidence-evaluator-$run_id"
+          root="$base/private/autonomous-product-cycle"
+          recipe=greenhouse_crop_margin
+          source_sha=c446aeaa32494c93a453f524390ee14061d6f36da3228b3d4b15c5b794d2bc1e
+          artifact_sha=7ba2168c90617b236d10ee4542ec9fd276f3f524809ddd001f18f5a5634fc553
+          test "$(id -un)" = githubops
+          python3 -B "$stage/factory_quality_evidence_supplier_v1.py" \
+            --factory-root "$root" --catalog "$stage/quality_100_criteria.json" \
+            --recipe "$recipe" --source-sha256 "$source_sha" --artifact-sha256 "$artifact_sha"
+          dossier="$(python3 - "$root" "$recipe" "$source_sha" "$artifact_sha" <<'PY'
+          import hashlib,json,sys
+          from pathlib import Path
+          root=Path(sys.argv[1]);recipe=sys.argv[2];source=sys.argv[3];artifact=sys.argv[4]
+          folder=root/"quality-excellence"/"evidence-suppliers"/recipe/source
+          matches=[]
+          for path in folder.glob("supply-*.json"):
+              if path.is_symlink() or not path.is_file():continue
+              raw=path.read_bytes()
+              try:doc=json.loads(raw)
+              except Exception:continue
+              if (doc.get("artifact_sha256")==artifact and
+                  doc.get("automated_criteria_measured")==["Q036","Q057","Q061","Q064","Q068","Q069"] and
+                  path.name=="supply-"+hashlib.sha256(raw).hexdigest()+".json"):
+                  matches.append((path.stat().st_mtime_ns,str(path)))
+          assert matches,"VERIFIED_SUPPLIER_DOSSIER_NOT_FOUND"
+          print(sorted(matches)[-1][1])
+          PY
+          )"
+          eval_dir="$root/quality-excellence/evidence-evaluations/$recipe/$artifact_sha"
+          install -d -m 700 "$eval_dir"
+          output="$eval_dir/evaluation-$run_id.json"
+          python3 -B "$stage/factory_quality_evidence_evaluator_v1.py" \
+            --dossier "$dossier" \
+            --artifact "$root/production-warehouse/finished/$recipe/$source_sha/product.zip" \
+            --catalog "$stage/quality_100_criteria.json" \
+            --supplier-script "$stage/factory_quality_evidence_supplier_v1.py" \
+            --output "$output"
+          python3 - "$output" <<'PY'
+          import json,sys
+          from pathlib import Path
+          p=Path(sys.argv[1]);d=json.loads(p.read_text(encoding="utf8"))
+          assert d["schema"]=="saeit.factory.quality-evidence-evaluation.v1"
+          assert d["product_id"]=="greenhouse_crop_margin"
+          assert d["machine_evidence_rechecked_count"]==6
+          assert d["machine_evidence_rechecked_criteria"]==["Q036","Q057","Q061","Q064","Q068","Q069"]
+          assert d["professional_quality_points"] is None and d["release_allowed"] is False
+          assert d["publication_or_payment_enabled"] is False
+          assert p.stat().st_mode & 0o077 == 0
+          print("FACTORY_EVIDENCE_RECHECKED_CRITERIA=6")
+          print("FACTORY_EVIDENCE_HUMAN_REVIEW_REMAINING=94")
+          print("FACTORY_EVIDENCE_PROFESSIONAL_POINTS=NONE")
+          print("FACTORY_EVIDENCE_RELEASE_ALLOWED=false")
+          print("FACTORY_EVALUATION_RECEIPT="+str(p))
+          PY
+          echo FACTORY_EVALUATOR_PRIVATE_VPS_E2E=PASS
+          REMOTE
+      - name: Remove temporary runner credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/factory-evaluator-ssh"
