@@ -6,6 +6,11 @@ on:
       - 'moj_commerce/**'
       - 'tests/test_moj_commerce_mariadb_v12.py'
       - '.github/workflows/moj-commerce-v12-mariadb-isolated.yml'
+  pull_request:
+    paths:
+      - 'moj_commerce/**'
+      - 'tests/test_moj_commerce*.py'
+      - '.github/workflows/moj-commerce-v12-mariadb-isolated.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   mariadb-finance-concurrency:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/moj-commerce-v12-mariadb-isolated-20261022'
+    if: ${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/feature/moj-commerce-v12-mariadb-isolated-20261022' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'feature/moj-commerce-v12-mariadb-isolated-20261022' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'mojtabarozegar11-ship-it')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
