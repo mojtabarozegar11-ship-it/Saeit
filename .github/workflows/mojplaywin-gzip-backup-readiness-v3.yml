@@ -1,0 +1,125 @@
+name: V3 MojPlayWin private backup readiness - read only
+on:
+  push:
+    branches: [fix/mpw-gzip-before-ssh-backup-20261020]
+    paths:
+      - ".github/workflows/mojplaywin-gzip-backup-readiness-v3.yml"
+      - "scripts/mojplaywin_backup_gzip_destination_preflight_v3.py"
+      - "scripts/mojplaywin_backup_gzip_runner_v3.py"
+permissions:
+  contents: read
+concurrency:
+  group: v3-mpw-private-readonly-backup-readiness-20261020
+  cancel-in-progress: false
+jobs:
+  check-private-backup-readiness-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/fix/mpw-gzip-before-ssh-backup-20261020'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate scoped metadata-only backup diagnostics without server access
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_backup_gzip_destination_preflight_v3.py scripts/mojplaywin_backup_gzip_recovery_v3.py
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_destination_preflight_v3.py' -v
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read VPS private destination and existing archive readiness only
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          if timeout 45s ssh -T -F "$d/config" saeit-vps 'python3 - 20261020' < scripts/mojplaywin_backup_gzip_destination_preflight_v3.py; then
+            echo 'V3_OWNER_BACKUP_DESTINATION=READY_FOR_REVIEW'
+          else
+            echo 'V3_OWNER_BACKUP_DESTINATION=BLOCKED_NO_LIVE_BACKUP'
+          fi
+          if timeout 45s ssh -T -F "$d/config" saeit-vps 'python3 - check --date 20261020' < scripts/mojplaywin_backup_gzip_recovery_v3.py; then
+            echo 'V3_EXISTING_ENCRYPTED_BACKUP_PAIR_METADATA=PRESENT_NOT_RESTORED'
+          else
+            echo 'V3_EXISTING_ENCRYPTED_BACKUP_PAIR_METADATA=INCOMPLETE_OR_ABSENT'
+          fi
+          echo 'V3_REAL_BACKUP_CREATED_BY_THIS_WORKFLOW=false'
+          echo 'V3_ISOLATED_RESTORE_PERFORMED=false'
+          echo 'V3_PUBLIC_RELEASE_AUTHORIZED=false'
+      - name: Read isolated database restore runtime prerequisites on VPS only
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 40s ssh -T -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          import json, os, shutil
+          from pathlib import Path
+          root=Path.home()/".private-mojplaywin-offhost-backups"
+          free=os.statvfs(root)
+          free_bytes=free.f_bavail*free.f_frsize
+          mem_bytes=None
+          try:
+              for line in Path("/proc/meminfo").read_text().splitlines():
+                  if line.startswith("MemAvailable:"):
+                      mem_bytes=int(line.split()[1])*1024
+                      break
+          except (OSError, ValueError):
+              pass
+          bins={name: bool(shutil.which(name)) for name in
+                ("docker","podman","mariadbd","mysqld","mariadb","mysql")}
+          print(json.dumps({"classification":"V3_VPS_ISOLATED_RESTORE_RUNTIME_READONLY",
+            "runtime_available_for_review":any(bins.get(n) for n in ("docker","podman","mariadbd","mysqld")),
+            "binary_availability":bins,
+            "at_least_10_gib_free_now":free_bytes>=10*1024**3,
+            "at_least_16_gib_free_now":free_bytes>=16*1024**3,
+            "at_least_2_gib_mem_available":mem_bytes is not None and mem_bytes>=2*1024**3,
+            "isolated_restore_performed":False,
+            "public_release_authorized":False},sort_keys=True))
+          PY
+      - name: Remove temporary SSH credentials from runner
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/mojplaywin-inventory-ssh"
