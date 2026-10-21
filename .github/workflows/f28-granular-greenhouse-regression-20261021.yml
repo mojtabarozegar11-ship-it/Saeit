@@ -1,0 +1,45 @@
+name: F28 granular greenhouse resource-model technical regression (no release)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - product_recipes/greenhouse_crop_margin/calculator.py
+      - product_recipes/greenhouse_crop_margin/test_calculator.py
+      - product_recipes/greenhouse_crop_margin/README.md
+      - .github/workflows/f28-granular-greenhouse-regression-20261021.yml
+  push:
+    branches: [main]
+    paths:
+      - product_recipes/greenhouse_crop_margin/calculator.py
+      - product_recipes/greenhouse_crop_margin/test_calculator.py
+      - product_recipes/greenhouse_crop_margin/README.md
+      - .github/workflows/f28-granular-greenhouse-regression-20261021.yml
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  technical-model-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify greenhouse model syntax and deterministic user-supplied scenario tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile product_recipes/greenhouse_crop_margin/calculator.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s product_recipes/greenhouse_crop_margin -p test_calculator.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          module=Path("product_recipes/greenhouse_crop_margin/calculator.py").read_text()
+          assert '"market_data_independently_validated": False' in module
+          assert '"uncertainty_inputs_market_calibrated": False' in module
+          assert "variable_cost_per_m2 to prevent cost double counting" in module
+          print("F28_EXPLICIT_COST_DRIVER_REGRESSION=PASS")
+          print("F28_INDEPENDENT_DOMAIN_APPROVAL=NOT_GRANTED")
+          print("F28_PUBLIC_RELEASE=BLOCKED_PENDING_REVIEW")
+          PY
