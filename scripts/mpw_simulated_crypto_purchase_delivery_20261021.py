@@ -98,6 +98,8 @@ invoice=SimpleNamespace(
  sender_challenge_id='simulated-ownership-challenge',
  sender_signature_verified_at=now-timedelta(minutes=2),
  status='awaiting',save=lambda **kwargs:None)
+# In production Django creates this reverse OneToOne automatically; the in-memory fixture must model it.
+order.mpw_commerce_invoice=invoice
 # The model names and enum constants come from the LIVE imported package,
 # but all instance access and ORM writes below are redirected into memory.
 InvoiceStatus=SimpleNamespace(PAID='paid',AWAITING='awaiting')
