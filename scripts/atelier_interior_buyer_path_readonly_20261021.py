@@ -265,3 +265,28 @@ for rel in ("passenger_wsgi.py","design-preview-20261017",
             item["app_path_refs"]=[line.strip()[:150] for line in data.splitlines()
                  if any(t in line for t in ("Saeit","sys.path","os.chdir","DJANGO_SETTINGS_MODULE"))][:15]
     print("ATELIER_DOMAIN_ROUTE_FILE="+json.dumps(item,sort_keys=True))
+
+
+# Follow-up: determine actual PHP public storefront content source, preserve all originals.
+if ht.is_file():
+    htlines=ht.read_text("utf8",errors="replace").splitlines()
+    for lo,hi in ((1,12),(116,124),(146,154)):
+        print("ATELIER_DOMAIN_REWRITE_WINDOW="+json.dumps({"from":lo,"to":hi,
+          "lines":[{"n":n,"text":htlines[n-1][:190]} for n in range(lo,min(hi,len(htlines))+1)
+          if not any(q in htlines[n-1].lower() for q in ("password","secret","token","authorization"))]}))
+for rel in ("design-preview-20261017/_mpw_dynamic_main_shell_20261019.php",
+            "design-preview-20261017/_mpw_main_canonical_bridge_20261017.php",
+            "design-preview-20261017/store.html"):
+    q=docroot/rel
+    if not q.is_file() or q.is_symlink():continue
+    lines=q.read_text("utf8",errors="replace").splitlines()
+    matched=[]
+    for n,line in enumerate(lines,1):
+        lower=line.lower()
+        if any(t in lower for t in ("store.html","store/","'store'","\"store\"","_mpw_template_route",
+                                   "_mpw_canon_route","file_get_contents","include_once","readfile","preview")):
+            if any(t in lower for t in ("password","secret","private_key","token=")):continue
+            matched.append({"n":n,"text":line.strip()[:230]})
+    print("ATELIER_PUBLIC_STORE_PHP_ORIGIN="+json.dumps({"path":rel,"total_lines":len(lines),
+         "bytes":q.stat().st_size,"matches":matched[:75],
+         "has_catalog_bridge":"store.html" in q.read_text("utf8",errors="replace")},sort_keys=True))
