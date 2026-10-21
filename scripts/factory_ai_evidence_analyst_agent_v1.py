@@ -122,7 +122,11 @@ def build_dossier(root, policy, recipe, source_sha, artifact_sha, supplier):
                  "candidate_member_count": len(candidates),
                  "candidate_members": [{"path": x["path"], "sha256": x["sha256"],
                                         "bytes": x["bytes"], "file_type": x["file_type"],
-                                        "static_parse": x["static_parse"]}
+                                        "static_parse": x["static_parse"],
+                                        "test_function_count": x.get("test_function_count"),
+                                        "text_line_count": x.get("text_line_count"),
+                                        "word_count": x.get("word_count"),
+                                        "heading_count": x.get("heading_count")}
                                        for x in candidates[:8]]}
             ],
             "conclusion": ("Potential source files found by filename; their relevance and truth are unverified."
