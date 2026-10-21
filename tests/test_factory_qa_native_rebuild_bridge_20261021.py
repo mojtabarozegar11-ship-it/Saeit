@@ -312,5 +312,91 @@ class QARebuildTests(unittest.TestCase):
         self.assertEqual(r["missing_source"],1)
         self.assertEqual(r["rebuild_attempted"],0)
 
+
+class RealPrivateDocumentEditionTests(unittest.TestCase):
+    def setUp(self):
+        t=tempfile.TemporaryDirectory();self.addCleanup(t.cleanup)
+        self.root=Path(t.name)
+        self.recipe="legacy_customer_document"
+        self.stock=self.root/"digital-products"/self.recipe
+        self.stock.mkdir(parents=True)
+        self.arch=self.stock/(self.recipe+"-internal-qa.zip")
+        self.qa=self.root/"quality-excellence"/"rework"/self.recipe
+        self.qa.mkdir(parents=True)
+        self.maker=m.load_maker(FILE.parent/"factory_product_maker.py")
+
+    def bind(self,source_files):
+        with zipfile.ZipFile(self.arch,"w") as zf:
+            for name,payload in source_files.items():
+                zf.writestr(name,payload)
+        self.artifact_hash=hashlib.sha256(self.arch.read_bytes()).hexdigest()
+        (self.qa/"current.json").write_text(json.dumps({
+            "schema":"saeit.factory.quality-rework.v2",
+            "recipe":self.recipe,"artifact_sha256":self.artifact_hash}))
+        self.order={"recipe":self.recipe,
+                    "artifact_sha256":self.artifact_hash,
+                    "source_quality_receipt_sha256":hashlib.sha256(
+                        (self.qa/"current.json").read_bytes()).hexdigest(),
+                    "unresolved_technical_or_domain_defects":
+                        ["P0_GLOBAL_TOP_FIVE_CURRENT_BENCHMARKS_MISSING"]}
+
+    def test_genuine_customer_documents_become_new_accessible_private_source_and_zip(self):
+        attack=b"</pre><script>alert('bad')</script> Read this guide."
+        self.bind({
+            "bundle/":b"",
+            "bundle/book.txt":attack,
+            "bundle/appendix.pdf":b"%PDF-1.4 sample bytes",
+            "bundle/executable.js":b"alert('never run')"})
+        status=m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker)
+        self.assertEqual(status,"private_document_edition_built")
+        new_id="edition_"+self.artifact_hash[:24]
+        recipes=self.root/"quality-excellence"/"document-edition-sources"
+        product=self.root/"quality-excellence"/"document-edition-private-stock"/new_id
+        source=recipes/new_id
+        self.assertTrue(source.is_dir())
+        index=(source/"index.html").read_text()
+        self.assertIn("&lt;script&gt;",index)
+        self.assertNotIn("<script>",index)
+        self.assertIn('aria-label="Document and asset links"',index)
+        self.assertNotIn("executable.js",index)
+        self.assertGreaterEqual(len(list((source/"assets").iterdir())),2)
+        self.assertEqual(self.maker.verify_recipe(source),"unit_tests_passed")
+        actual=json.loads((product/"manufacturing_manifest.json").read_text())
+        self.assertEqual(actual["qa_status"],"passed")
+        self.assertFalse(actual["professional_quality_approved"])
+        self.assertNotEqual(actual["artifact_sha256"],self.artifact_hash)
+        self.assertTrue((product/(new_id+"-internal-qa.zip")).is_file())
+        receipt=json.loads((self.root/"quality-excellence/document-edition-receipts"/(new_id+".json")).read_text())
+        self.assertTrue(receipt["technical_manufacturer_qa_passed"])
+        self.assertFalse(receipt["commercial_release_authorized"])
+        self.assertFalse(receipt["external_independent_review_verified"])
+        self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
+                         "already_issued_private_edition")
+        self.assertEqual(self.arch.read_bytes(),(self.stock/(self.recipe+"-internal-qa.zip")).read_bytes())
+
+    def test_unbound_and_tampered_archives_never_get_new_product(self):
+        self.bind({"bundle/file.txt":b"legitimate doc"})
+        self.order["source_quality_receipt_sha256"]="0"*64
+        self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
+                         "original_qa_receipt_not_bound")
+        self.order["source_quality_receipt_sha256"]=hashlib.sha256(
+            (self.qa/"current.json").read_bytes()).hexdigest()
+        with self.arch.open("ab") as fh:fh.write(b"tamper")
+        self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
+                         "original_archive_sha_mismatch")
+        self.assertFalse((self.root/"quality-excellence/document-edition-sources").exists())
+
+    def test_archive_cannot_use_path_traversal_or_executable_source_as_document(self):
+        self.bind({"../outside.txt":b"data"})
+        self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
+                         "unsafe_document_archive_member")
+        self.assertFalse((self.root/"outside.txt").exists())
+        self.bind({"private/evil.py":b"print('run')"})
+        self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
+                         "no_supported_document_content")
+        self.assertFalse((self.root/"quality-excellence/document-edition-sources"/(
+            "edition_"+self.artifact_hash[:24])).exists())
+
+
 if __name__=="__main__":unittest.main()
 

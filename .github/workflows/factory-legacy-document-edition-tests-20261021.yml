@@ -1,0 +1,43 @@
+name: Real legacy document editions QA (private candidates only)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/factory_qa_native_rebuild_bridge_20261021.py"
+      - "tests/test_factory_qa_native_rebuild_bridge_20261021.py"
+      - ".github/workflows/factory-legacy-document-edition-tests-20261021.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_qa_native_rebuild_bridge_20261021.py"
+      - "tests/test_factory_qa_native_rebuild_bridge_20261021.py"
+      - ".github/workflows/factory-legacy-document-edition-tests-20261021.yml"
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  measured-real-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Prove accessible source generation and actual private product QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_qa_native_rebuild_bridge_20261021.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_factory_qa_native_rebuild_bridge_20261021.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('scripts/factory_qa_native_rebuild_bridge_20261021.py').read_text()
+          assert 'def reauthor_document_delivery(' in source
+          assert 'maker.manufacture(code,source_parent,package_parent)' in source
+          assert '"private_document_editions_built":0' in source
+          assert '"commercial_release_authorized":False' in source
+          print('FACTORY_REAL_DOCUMENT_EDITION_SOURCE_AND_QA=PASS')
+          print('FACTORY_PUBLIC_RELEASE_FROM_EDITION=FALSE')
+          PY

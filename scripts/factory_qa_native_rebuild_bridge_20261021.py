@@ -7,6 +7,7 @@ candidate with the existing tested manufacturer. Never edits original warehouse.
 Nonmechanical quality findings remain open for verifiable work by specialists.
 """
 import argparse
+from html import escape as html_escape
 import hashlib
 import importlib.util
 import json
@@ -196,6 +197,226 @@ def classify_unrecoverable_artifact(root,recipe):
     return facts
 
 
+
+def reauthor_document_delivery(root,recipe,order,maker):
+    """Create a NEW, private offline document-reader source, not fake old source.
+
+    Original customer ZIP bytes must match their independently stored QA return
+    receipt. We treat untrusted documents as DATA, never execute archived code.
+    A new recipe is tested by the real manufacturer and stays commercially
+    blocked pending all original 1000-point specialist/rights checks.
+    """
+    stock=root/"digital-products"/recipe
+    archive=stock/(recipe+"-internal-qa.zip")
+    qa=root/"quality-excellence"/"rework"/recipe/"current.json"
+    expected=order.get("artifact_sha256")
+    if (stock.is_symlink() or archive.is_symlink() or qa.is_symlink()
+            or not archive.is_file() or not qa.is_file()
+            or not isinstance(expected,str) or not HEX.fullmatch(expected)):
+        return "unverifiable_original_archive"
+    try:
+        if (sha(qa.read_bytes())!=order.get("source_quality_receipt_sha256")
+                or checked_json(qa).get("artifact_sha256")!=expected):
+            return "original_qa_receipt_not_bound"
+        if not 0<archive.stat().st_size<=65*1024*1024:
+            return "original_archive_size_invalid"
+        h=hashlib.sha256()
+        with archive.open("rb") as fh:
+            for chunk in iter(lambda:fh.read(65536),b""):
+                h.update(chunk)
+        if h.hexdigest()!=expected:
+            return "original_archive_sha_mismatch"
+        code="edition_"+expected[:24]
+        source_parent=root/"quality-excellence"/"document-edition-sources"
+        package_parent=root/"quality-excellence"/"document-edition-private-stock"
+        receipt_parent=root/"quality-excellence"/"document-edition-receipts"
+        if any(p.is_symlink() for p in (source_parent,package_parent,receipt_parent)):
+            return "unsafe_document_edition_root"
+        for p in (source_parent,package_parent,receipt_parent):
+            p.mkdir(mode=0o700,parents=True,exist_ok=True)
+        dest=source_parent/code
+        receipt_file=receipt_parent/(code+".json")
+        if dest.exists() or dest.is_symlink():
+            if receipt_file.is_file() and not receipt_file.is_symlink():
+                prior=checked_json(receipt_file)
+                if (prior.get("source_customer_archive_sha256")==expected
+                    and prior.get("commercial_release_authorized") is False
+                    and prior.get("technical_manufacturer_qa_passed") is True):
+                    out=package_parent/code/"manufacturing_manifest.json"
+                    if out.is_file() and not out.is_symlink():
+                        meta=checked_json(out)
+                        if (meta.get("qa_status")=="passed"
+                                and meta.get("source_sha256")==prior.get("new_source_sha256")
+                                and meta.get("artifact_sha256")==prior.get("new_artifact_sha256")):
+                            return "already_issued_private_edition"
+            return "existing_edition_requires_engineering_review"
+        ALLOWED={".md",".txt",".pdf",".docx",".epub",".csv",".json",
+                 ".xlsx",".png",".jpg",".jpeg",".webp",".mp3",".wav",".mp4"}
+        TEXT={".md",".txt",".csv",".json"}
+        entries=[];total=0;omitted=0
+        with zipfile.ZipFile(archive) as zf:
+            members=zf.infolist()
+            if not 1<=len(members)<=2500:
+                return "original_archive_member_count_invalid"
+            visited=set()
+            for item in members:
+                filename=item.filename
+                rel=PurePosixPath(filename)
+                if (filename.startswith("/") or "\\" in filename or
+                    rel.is_absolute() or ".." in rel.parts or not rel.parts or
+                    stat.S_ISLNK(item.external_attr>>16) or
+                    (item.flag_bits&1) or filename in visited or len(filename)>260):
+                    return "unsafe_document_archive_member"
+                visited.add(filename)
+                # Directory entries are common in authentic delivery ZIPs.
+                # They are never materialized and cannot affect safe new paths.
+                if item.is_dir():
+                    continue
+                suffix=rel.suffix.lower()
+                if suffix not in ALLOWED:
+                    omitted+=1
+                    continue
+                if item.file_size>16*1024*1024:
+                    return "document_asset_over_limit"
+                total+=item.file_size
+                if total>48*1024*1024:
+                    return "document_bundle_over_limit"
+                content=zf.read(item)
+                if len(content)!=item.file_size:
+                    return "document_asset_size_error"
+                entries.append((rel.name, suffix, content))
+        if not entries or not any(ext in {".txt",".md",".pdf",".docx",".epub"}
+                                  for _,ext,_ in entries):
+            return "no_supported_document_content"
+        if len(entries)>80:
+            return "document_asset_count_over_limit"
+        source_stage=Path(tempfile.mkdtemp(prefix=".document-edition-",dir=str(source_parent)))
+        try:
+            # Every original path is replaced by a safe generated flat filename.
+            assets=source_stage/"assets"
+            assets.mkdir(mode=0o700)
+            verified=[];nav=[];previews=[]
+            for index,(original,ext,payload) in enumerate(entries,1):
+                safe="file_%03d%s"%(index,ext)
+                target=assets/safe
+                with target.open("xb") as stream:
+                    stream.write(payload);stream.flush();os.fsync(stream.fileno())
+                os.chmod(target,0o600)
+                label="".join(x for x in original if x.isprintable())[:100] or safe
+                digest=sha(payload)
+                verified.append({"path":"assets/"+safe,"sha256":digest,
+                                 "bytes":len(payload),"type":ext,
+                                 "display_name":label})
+                nav.append('<li><a href="assets/%s" download>%s</a> <small>(%s)</small></li>'%
+                           (safe,html_escape(label,quote=True),html_escape(ext)))
+                if ext in TEXT and len(payload)<=200000:
+                    content=payload.decode("utf8","replace")
+                    previews.append('<section aria-label="Text preview"><h2>%s</h2><pre>%s</pre></section>'%
+                        (html_escape(label,quote=True),html_escape(content)))
+            title=recipe.replace("_"," ").title()
+            html='''<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>%s | Offline document edition</title>
+<style>body{font:16px/1.7 system-ui;margin:0;background:#101922;color:#f5f2e8}
+main{max-width:980px;margin:auto;padding:2rem}a{color:#f1ce7f}
+nav,section{border:1px solid #927b4b;border-radius:12px;margin:1rem 0;padding:1.25rem}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#1c2933;padding:1rem}
+:focus-visible{outline:3px solid #f1ce7f}small{color:#b2b6ba}
+</style></head><body><a href="#content">Skip to content</a>
+<main id="content"><h1>%s</h1><p>Offline private technical reading edition. Scientific and legal reviews remain pending.</p>
+<nav aria-label="Document and asset links"><h2>Available files</h2><ul>%s</ul></nav>
+%s
+<footer>Local files only. No claims of professional approval or commercial release.</footer>
+</main></body></html>'''%(html_escape(title),html_escape(title),
+                           "".join(nav),"".join(previews))
+            edition={
+                "schema":"saeit.factory.private-document-edition.v1",
+                "original_recipe":recipe,"original_artifact_sha256":expected,
+                "new_recipe":code,"assets":verified,
+                "ignored_potentially_executable_or_unsupported_members":omitted,
+                "source_restored_from_original":False,
+                "input_files_executed":False,
+                "new_technical_source_created":True,
+                "independent_scientific_or_rights_review_verified":False,
+                "commercial_release_authorized":False}
+            (source_stage/"index.html").write_text(html,encoding="utf8")
+            (source_stage/"metadata.json").write_text(json.dumps(edition,sort_keys=True,
+                  indent=2,ensure_ascii=False)+"\n",encoding="utf8")
+            (source_stage/"README.md").write_text(
+                "# Offline document edition\n\nA genuinely new, generated accessible "
+                "offline index of verified private customer-delivery assets; not a "
+                "restoration of a missing historical build source. Original input SHA256: "
+                +expected+"\n\nThis is a technical candidate only. Rights, real-world "
+                "accuracy, professional 1000/1000 review and owner approval remain pending.\n",
+                encoding="utf8")
+            testcase='''import hashlib,html,json,unittest
+from pathlib import Path
+BASE=Path(__file__).resolve().parent
+class EditionTests(unittest.TestCase):
+ def test_every_asset_is_present_and_byte_identical(self):
+  info=json.loads((BASE/"metadata.json").read_text(encoding="utf8"))
+  self.assertFalse(info["commercial_release_authorized"])
+  self.assertFalse(info["source_restored_from_original"])
+  self.assertGreaterEqual(len(info["assets"]),1)
+  for file in info["assets"]:
+   path=BASE/file["path"]
+   self.assertTrue(path.is_file())
+   self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),file["sha256"])
+ def test_offline_accessibility_and_escaped_document_labels(self):
+  info=json.loads((BASE/"metadata.json").read_text(encoding="utf8"))
+  page=(BASE/"index.html").read_text(encoding="utf8")
+  self.assertIn('aria-label="Document and asset links"',page)
+  self.assertIn("Content-Security-Policy",page)
+  self.assertNotIn("<script",page.lower())
+  self.assertNotIn("http://",page.lower())
+  self.assertNotIn("https://",page.lower())
+  for item in info["assets"]:
+   self.assertIn('href="'+item["path"]+'"',page)
+   self.assertIn(html.escape(item["display_name"],quote=True),page)
+'''
+            (source_stage/"test_reader.py").write_text(testcase,encoding="utf8")
+            for name in ("index.html","metadata.json","README.md","test_reader.py"):
+                os.chmod(source_stage/name,0o600)
+            if dest.exists() or dest.is_symlink():
+                return "document_edition_source_collision"
+            os.replace(source_stage,dest)
+        finally:
+            if source_stage.exists():
+                shutil.rmtree(source_stage)
+        # Run actual new-source tests, build a genuinely different private ZIP.
+        result=maker.manufacture(code,source_parent,package_parent)
+        new_meta=checked_json(package_parent/code/"manufacturing_manifest.json")
+        new_archive=package_parent/code/(code+"-internal-qa.zip")
+        if not (result.get("qa_status")=="passed"
+                and new_meta.get("qa_status")=="passed"
+                and new_meta.get("recipe")==code
+                and new_archive.is_file() and not new_archive.is_symlink()
+                and maker.sha256_file(new_archive)==new_meta.get("artifact_sha256")
+                and new_meta.get("artifact_sha256")!=expected):
+            return "new_document_edition_technical_qa_failed"
+        proof={
+            "schema":"saeit.factory.document-reauthor-receipt.v1",
+            "source_customer_archive_sha256":expected,
+            "original_recipe":recipe,
+            "new_edition_recipe":code,
+            "new_source_sha256":new_meta["source_sha256"],
+            "new_artifact_sha256":new_meta["artifact_sha256"],
+            "technical_manufacturer_qa_passed":True,
+            "assets_verified":len(entries),"technical_qa_only":True,
+            "old_archive_mutated":False,
+            "external_independent_review_verified":False,
+            "commercial_release_authorized":False}
+        with receipt_file.open("x",encoding="utf8") as writer:
+            json.dump(proof,writer,sort_keys=True,indent=2);writer.write("\n")
+            writer.flush();os.fsync(writer.fileno())
+        os.chmod(receipt_file,0o600)
+        return "private_document_edition_built"
+    except (OSError,ValueError,UnicodeError,RuntimeError,TypeError,
+            zipfile.BadZipFile,KeyError,EOFError,NotImplementedError):
+        return "document_edition_failed_needs_engineering"
+
+
 def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
     """Rebuild from either verified generated or installed native recipe roots."""
     root=Path(root);source_root=Path(source_root);maker_path=Path(maker_path)
@@ -241,6 +462,8 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
             "unchanged_or_human_only":0,"missing_source":0,"failed":0,
             "archive_sources_recovered":0,"archive_recovery_rejected":0,
             "archive_recovery_rejection_reasons":{},
+            "private_document_editions_built":0,
+            "private_document_edition_outcomes":{},
             "legacy_source_gap_causes":{},
             "verified_source_roots":len(roots),
             "source_root_hits":[0 for _ in roots],
@@ -280,6 +503,12 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
                 locations=[(index,recovered_root,recovered_root/recipe)]
             else:
                 totals["missing_source"]+=1
+                if totals["private_document_editions_built"]<6:
+                    outcome=reauthor_document_delivery(root,recipe,order,maker)
+                    results=totals["private_document_edition_outcomes"]
+                    results[outcome]=results.get(outcome,0)+1
+                    if outcome=="private_document_edition_built":
+                        totals["private_document_editions_built"]+=1
                 causes=totals["legacy_source_gap_causes"]
                 for reason in classify_unrecoverable_artifact(root,recipe):
                     causes[reason]=causes.get(reason,0)+1
