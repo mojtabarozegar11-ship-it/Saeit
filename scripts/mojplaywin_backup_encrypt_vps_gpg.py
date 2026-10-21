@@ -19,13 +19,17 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from datetime import datetime, timezone
+from secrets import token_hex
 
 MARKER = b"\n-- MJWP-RECOVERY-20261017-COMPLETE-F91D7C40 --\n"
 MAX_SOURCE_BYTES = 12 * 1024**3
 MAX_ENCRYPTED_BYTES = 12 * 1024**3
-MIN_START_FREE = 14 * 1024**3
+# Initial admission cap is below the independently measured 13.61 GiB available;
+# encrypt_stream_to_file retains its per-chunk hard stop at 3 GiB free.
+MIN_START_FREE = 10 * 1024**3
 BLOCK = 128 * 1024
-STEM = "mojplaywin_20261017"
+STEM = "mojplaywin_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "_" + token_hex(8)
 VERSION = "gpgv2"
 
 
@@ -155,7 +159,7 @@ def verify_stream(target: Path, gpg_home: Path, key: bytes):
 
 def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None = None,
           minimum_free: int = MIN_START_FREE):
-    if kind not in ("mysql", "files"):
+    if kind not in ("mysql", "files", "extra-webroots"):
         raise RuntimeError("unsupported kind")
     root = Path.home() if root is None else root
     keyroot = Path.home() if keyroot is None else keyroot
@@ -180,6 +184,7 @@ def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None =
     os.rename(partial, complete)
     summary = {
         "kind": kind, "format": "OpenPGP-AES256-GPGv2",
+        "archive_name": complete.name,
         "encrypted_bytes": complete.stat().st_size,
         "plaintext_bytes": total, "plaintext_sha256": digest,
         "source_completion_footer_verified": True,
@@ -196,6 +201,7 @@ def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None =
         f.flush()
         os.fsync(f.fileno())
     return {"kind": kind, "gpg_aes256_backup_created": True,
+            "archive_name": complete.name,
             "encrypted_bytes": summary["encrypted_bytes"],
             "plaintext_bytes": total, "decryption_verified": True,
             "source_complete": True, "full_tenant_backup": False,
