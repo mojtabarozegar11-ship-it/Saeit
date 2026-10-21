@@ -59,6 +59,55 @@ class ProductPlanner(unittest.TestCase):
         row=next(x for x in r['rows'] if len(x['source_orders'])==2)
         self.assertEqual(row['status'],'blocked_missing_engineering_or_inputs')
         self.assertEqual(len(r['rejected_inputs']),1)
+    def test_existing_mpw_order_recovers_verified_family_into_a_blocked_custom_plan(self):
+        # The order itself has no family_id, as in the real three-order courier.
+        # The exact ZIP hash, warehouse manifest and returned QA receipt must agree.
+        import zipfile
+        name="fieldwork_engineering_calculators"
+        version="a"*64
+        stock=self.root/"production-warehouse"/"finished"/name/version
+        stock.mkdir(parents=True)
+        archive=stock/"product.zip"
+        with zipfile.ZipFile(archive,"w") as z:
+            z.writestr("product/readme.txt","reproducible source-bound review")
+        archive_sha=__import__("hashlib").sha256(archive.read_bytes()).hexdigest()
+        (stock/"warehouse_manifest.json").write_text(json.dumps({
+            "family_id":"F28","product_id":name,"source_sha256":version,
+            "artifact_sha256":archive_sha,"manufacturing_qc":"passed",
+            "commercial_release":False}))
+        ret=self.root/"design-intake"/"mojplaywin-stage1-quality-returns"
+        ret.mkdir(parents=True)
+        (ret/(name+"-"+version+".json")).write_text(json.dumps({
+            "tenant":"mojplaywin-main","status":"return_for_qa_completion",
+            "product_id":name,"source_sha256":version,
+            "artifact_sha256":archive_sha,"published":False}))
+        queue=self.root/"production-instructions"/"orders"
+        queue.mkdir(parents=True)
+        identity="WO-00000001"
+        order={"id":identity,"phase":"engineering_specification",
+          "source_product_id":name,"source_sha256":version,
+          "source_artifact_sha256":archive_sha,"requesting_site":"mojplaywin.com",
+          "origin":"mojplaywin-site-qa-return","status":"issued",
+          "subject":"Improve verified greenhouse margin calculator reliability",
+          "acceptance":["Measure scientific reliability on real input cases.",
+                        "Test invalid input and original source copyright."]}
+        (queue/(identity+".json")).write_text(json.dumps(order))
+        result=planner.cycle(self.root,REGISTRY)
+        self.assertEqual(result["existing_order_plans"],1)
+        row=next(x for x in result["rows"] if identity in x["source_orders"])
+        self.assertEqual(row["family_id"],"F28")
+        self.assertEqual(row["status"],"blocked_missing_engineering_or_inputs")
+        self.assertIn("validated_custom_product_executor_missing",row["blockers"])
+        self.assertEqual(result["custom_product_executors_verified"],0)
+        # Tampering with the warehouse source revokes planning admission;
+        # no historical order is edited or falsely completed.
+        (stock/"product.zip").write_bytes(b"broken")
+        later=planner.cycle(self.root,REGISTRY)
+        self.assertEqual(later["existing_order_plans"],0)
+        self.assertTrue(any(x.get("reason")=="site_return_lacks_verified_family_or_source"
+                            for x in later["rejected_inputs"]))
+        self.assertEqual(json.loads((queue/(identity+".json")).read_text())["status"],"issued")
+
     def test_resource_hold_never_launches_and_failure_does_not_claim_success(self):
         with patch.object(planner,'resources',return_value=dict(CAP,memory_available_mb=100)),patch.object(planner,'execute') as execute:
             r=planner.cycle(self.root,REGISTRY,dispatch=True);execute.assert_not_called();self.assertIn('memory_below_safe_reserve',r['resource_holds'])
