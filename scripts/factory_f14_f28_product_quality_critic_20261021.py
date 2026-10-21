@@ -149,6 +149,13 @@ def audit_f14(root,probe_script):
             "Five-lane prototype mechanics do not independently demonstrate professional game depth.",
             "Conduct independent gameplay review with multi-session balancing and content-depth acceptance.",
             "game_design","product_recipes/rootline_bloom_defense/engine.js"))
+    quality_doc=read(root,"product_recipes/rootline_bloom_defense/COMMERCIAL_PILOT.md")
+    if ("competitor novelty matrix" not in quality_doc.lower()
+            or "novel mechanics independently validated" not in quality_doc.lower()):
+        problems.append(issue("F14_P0_GAME_ORIGINALITY_NOT_PROVEN","P0",
+            "Real gameplay may work, but its core strategy loop has no dated independent competitor/novelty comparison.",
+            "Compare multiple modern and legacy competitors (including mature 2012 base-building templates), prototype two testable unique gameplay mechanisms, and obtain independent player validation.",
+            "modern_game_innovation","product_recipes/rootline_bloom_defense/COMMERCIAL_PILOT.md"))
     if "private pilot" in html.lower() or "private technical" in html.lower():
         problems.append(issue("F14_P1_PROTOTYPE_NOT_RELEASE_CONTENT","P1",
             "Product labels itself private or prototype; product-market acceptance is absent.",
