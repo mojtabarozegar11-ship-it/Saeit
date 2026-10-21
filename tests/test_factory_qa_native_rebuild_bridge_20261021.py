@@ -299,6 +299,33 @@ class QARebuildTests(unittest.TestCase):
         facts=m.classify_unrecoverable_artifact(self.root,"legacy_symlink")
         self.assertEqual(facts,{"unsafe_stock_path":1})
 
+    def test_document_edition_returns_to_existing_rework_and_is_not_rebuilt_identically(self):
+        edition="edition_"+"a"*24
+        source=self.root/"quality-excellence"/"document-edition-sources"/edition
+        source.mkdir(parents=True)
+        (source/"README.md").write_text("# Safe generated edition")
+        manuf=self.root/"quality-excellence"/"document-edition-private-stock"/edition
+        manuf.mkdir(parents=True)
+        source_hash=FakeMaker.source_digest(source,("README.md",))
+        (manuf/"manufacturing_manifest.json").write_text(json.dumps({
+            "recipe":edition,"source_sha256":source_hash,"qa_status":"passed"}))
+        order=self.quality/edition
+        order.mkdir()
+        (order/"current.json").write_text(json.dumps({
+            "schema":"saeit.factory.production-rework-order.v1",
+            "recipe":edition,
+            "source_quality_receipt_sha256":"a"*64,
+            "unresolved_technical_or_domain_defects":[
+                "P0_PROOF_MISSING:independent_expert_review"]}))
+        with patch.object(m,"load_maker",return_value=FakeMaker):
+            actual=m.execute(self.root,self.source,FILE,limit=2)
+        self.assertEqual(actual["sources_available"],1)
+        self.assertEqual(actual["missing_source"],0)
+        self.assertEqual(actual["unchanged_or_human_only"],1)
+        self.assertEqual(actual["rebuild_attempted"],0)
+        self.assertEqual(actual["document_editions_queued_for_strict_review"],1)
+        self.assertFalse(actual["commercial_release_authorized"])
+
     def test_untrusted_source_symlink_is_not_executed(self):
         original=self.root/"foreign";original.mkdir()
         (self.source/"synth_abc123").symlink_to(original,target_is_directory=True)
