@@ -169,6 +169,13 @@ def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None =
     make_private(backups)
     make_private(secrets)
     make_private(gnupg)
+    if kind == "extra-webroots":
+        # Never generate multiple competing extra-site archives. Any ambiguous
+        # interrupted run leaves a .partial and requires explicit reconciliation.
+        existing = [p for p in backups.iterdir()
+                    if "_extra-webroots_gpgv2." in p.name]
+        if existing:
+            raise RuntimeError("additional site backup already exists or is uncertain")
     if shutil.which("gpg") is None or disk_free(backups) < minimum_free:
         raise RuntimeError("GPG unavailable or destination capacity insufficient")
     key = recovery_key(secrets / "recovery-key.bin")
