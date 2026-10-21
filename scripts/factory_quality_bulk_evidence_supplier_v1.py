@@ -70,7 +70,7 @@ def run(root, catalog_path, supplier_path):
               "versions_seen": counts["versions_seen"], "versions_supplied": counts["supplied"],
               "versions_rejected_or_unmeasurable": counts["rejected_or_unmeasurable"],
               "verified_receipts": records,
-              "note": "Q068 is measured for each supplied version; other criteria remain pending real evidence."}
+              "note": "Q068 CRC and Q092 hash binding are technically measured; all professional criteria remain pending independent review."}
     print("FACTORY_BULK_QA1000_EVIDENCE_SUPPLY=" + json.dumps(result, sort_keys=True))
     for key in sorted(k for k in counts if k.startswith("reject:")):
         print("FACTORY_BULK_REJECTION=" + key + ":" + str(counts[key]))
