@@ -120,3 +120,65 @@ for rel in ["core/templates/brands/mojplaywin/product.html","core/templates/mojp
 from django.conf import settings
 print("ATELIER_TEMPLATE_RUNTIME="+json.dumps({"debug":settings.DEBUG,"template_backend_count":len(settings.TEMPLATES),"loaders":str(settings.TEMPLATES[0].get("OPTIONS",{}).get("loaders",None))[:280],"app_dirs":settings.TEMPLATES[0].get("APP_DIRS"),"passenger_wsgi":(app/"passenger_wsgi.py").is_file(),"app_tmp_exists":(app/"tmp").is_dir(),"passenger_restart_marker":(app/"tmp"/"restart.txt").is_file(),"app_owner":app.stat().st_uid==(app/"manage.py").stat().st_uid}))
 print("ATELIER_READONLY_VIEW_INSPECT=PASS")
+
+
+# Follow-up: match on-disk Django origins, live route output, and public worker response.
+import urllib.request
+from hashlib import sha256
+from django.template.loader import get_template
+from django.test import RequestFactory
+for name in ("brands/mojplaywin/product.html", "mojplaywin/store.html"):
+    try:
+        obj = get_template(name)
+        src = obj.template.source
+        origin = obj.origin.name
+        print("ATELIER_ORIGIN_DIAG=" + json.dumps({
+            "name": name, "origin_relative": str(Path(origin).relative_to(app)) if origin.startswith(str(app)) else Path(origin).name,
+            "on_disk_sha": sha256(Path(origin).read_bytes()).hexdigest()[:16],
+            "compiled_source_sha": sha256(src.encode()).hexdigest()[:16],
+            "has_879_marker": ("atelier-original-vector-879" in src or "product.pk == 879" in src),
+            "source_matches_disk": src == Path(origin).read_text(encoding="utf8")
+        }, sort_keys=True))
+    except Exception as ex:
+        print("ATELIER_ORIGIN_DIAG_ERROR=" + type(ex).__name__)
+import core.mojplaywin_views as mpwv
+items = getattr(mpwv,"PRODUCTS",[])
+print("ATELIER_INMEMORY_CATALOG="+json.dumps({
+    "total":len(items),"atelier":[{"url":str(q.get("url",""))[:160],"action":str(q.get("action_label",""))[:80],"note":str(q.get("availability_note",""))[:160]}
+            for q in items if "atelier" in str(q.get("title","")).lower()]},sort_keys=True))
+factory = RequestFactory()
+req = factory.get("/store/", secure=True, HTTP_HOST="mojplaywin.com")
+for label,view,args in (("store",mpwv.store,()),):
+    try:
+        ans=view(req,*args)
+        txt=ans.content.decode("utf8","replace")
+        print("ATELIER_INPROCESS_VIEW="+json.dumps({"name":label,"status":ans.status_code,
+             "has_product_url":"/store/product/879/" in txt,"has_buy_url":"/store/product/879/checkout/" in txt,
+             "has_preview_warning":"preview only" in txt.lower(),
+             "has_custom_marker":"atelier-original-vector-879" in txt,
+             "html_sha":sha256(txt.encode()).hexdigest()[:16]},sort_keys=True))
+    except Exception as ex:
+        print("ATELIER_INPROCESS_VIEW_ERROR="+json.dumps({"name":label,"type":type(ex).__name__}))
+for route in ("/store/","/store/product/879/"):
+    try:
+        url="https://mojplaywin.com"+route+"?atelier_owner_diag=20261022"
+        request=urllib.request.Request(url,headers={"User-Agent":"Atelier-Owner-ReadOnly-Audit/1.0"})
+        with urllib.request.urlopen(request,timeout=20) as resp:
+            txt=resp.read(300000).decode("utf8","replace")
+            print("ATELIER_ORIGIN_PUBLIC="+json.dumps({"route":route,"status":resp.status,
+                "has_product_url":"/store/product/879/" in txt,"has_buy_url":"/store/product/879/checkout/" in txt,
+                "has_custom_marker":"atelier-original-vector-879" in txt,
+                "cache_control":resp.headers.get("Cache-Control","")[:80],
+                "html_sha":sha256(txt.encode()).hexdigest()[:16]},sort_keys=True))
+    except Exception as ex:
+        print("ATELIER_ORIGIN_PUBLIC_ERROR="+json.dumps({"route":route,"type":type(ex).__name__}))
+for root in (app/"core"/"templatetags", app/"core"):
+    hits=[]
+    try:
+        for file in root.rglob("*.py"):
+            if len(hits)>=20:break
+            if "mpw_managed_offers" in file.read_text(encoding="utf8",errors="replace"):
+                hits.append(str(file.relative_to(app)))
+        print("ATELIER_MANAGED_OFFERS_SOURCE="+json.dumps({"root":str(root.relative_to(app)),"hits":hits}))
+    except Exception as ex:
+        print("ATELIER_MANAGED_OFFERS_ERROR="+type(ex).__name__)
