@@ -95,7 +95,14 @@ receivers=S.RECEIVERS.get('TRX')
 if not receivers:raise RuntimeError('Active native TRX receiver is missing; do not simulate incompatible chain')
 network,receiver,_=receivers
 # Never print the real merchant receiving address.
-invoice=SimpleNamespace(
+class FakeInvoice(SimpleNamespace):
+ def __getattribute__(self,name):
+  if (name=='payment_receipt' and
+      object.__getattribute__(self,'__dict__').get('_simulate_missing_receipt',False)):
+   # The real Django reverse OneToOne descriptor raises DoesNotExist.
+   raise ReceiptModel.DoesNotExist('Simulated missing blockchain receipt')
+  return super().__getattribute__(name)
+invoice=FakeInvoice(
  pk=48146,order=order,order_id=order.pk,asset='TRX',network=network,
  recipient=receiver,expected_sender='T'+'N'*33,amount_atomic=9200000,
  total_usd=price,quote_usd_per_asset=Decimal('0.80'),
@@ -240,7 +247,11 @@ with contextlib.ExitStack() as st, tempfile.TemporaryDirectory(prefix='mpw-deliv
  # the same real authorization function must deny access immediately.
  saved_receipts=list(records['receipt'])
  records['receipt'].clear()
- assert E.can_access_purchased_digital_item(item.pk,order.customer_id) is False
+ invoice._simulate_missing_receipt=True
+ try:
+  assert E.can_access_purchased_digital_item(item.pk,order.customer_id) is False
+ finally:
+  invoice._simulate_missing_receipt=False
  records['receipt'][:]=saved_receipts
  saved_ledger=list(records['ledger'])
  records['ledger'].clear()
