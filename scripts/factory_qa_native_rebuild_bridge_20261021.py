@@ -447,6 +447,13 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
         if recovered_root.resolve() in (item.resolve() for item in roots):
             raise ValueError("DUPLICATE_SOURCE_ROOT")
         roots.append(recovered_root)
+    edition_source=root/"quality-excellence"/"document-edition-sources"
+    if edition_source.exists() or edition_source.is_symlink():
+        if edition_source.is_symlink() or not edition_source.is_dir():
+            raise ValueError("DOCUMENT_EDITION_SOURCE_UNSAFE")
+        if edition_source.resolve() in (p.resolve() for p in roots):
+            raise ValueError("DOCUMENT_EDITION_DUPLICATE_SOURCE_ROOT")
+        roots.append(edition_source)
     if type(limit) is not int or not 1<=limit<=3:raise ValueError("BOUNDED_CAP_REQUIRED")
     maker=load_maker(maker_path)
     workorders=root/"quality-excellence"/"production-workorders"
@@ -462,6 +469,7 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
             "unchanged_or_human_only":0,"missing_source":0,"failed":0,
             "archive_sources_recovered":0,"archive_recovery_rejected":0,
             "archive_recovery_rejection_reasons":{},
+            "document_editions_queued_for_strict_review":0,
             "private_document_editions_built":0,
             "private_document_edition_outcomes":{},
             "legacy_source_gap_causes":{},
@@ -528,8 +536,13 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
         totals["sources_available"]+=1
         totals["source_root_hits"][index]+=1
         original=root/"digital-products"/recipe/"manufacturing_manifest.json"
-        prior=checked_json(original) if original.is_file() else {}
+        is_edition=source.parent.resolve()==edition_source.resolve()
+        if is_edition:
+            original=root/"quality-excellence"/"document-edition-private-stock"/recipe/"manufacturing_manifest.json"
+        prior=checked_json(original) if original.is_file() and not original.is_symlink() else {}
         changed=prior.get("source_sha256")!=source_hash
+        if is_edition:
+            totals["document_editions_queued_for_strict_review"]+=1
         mechanical=any(isinstance(code,str) and code.startswith(MECHANICAL)
                        for code in order.get("unresolved_technical_or_domain_defects",[]))
         if not changed and not mechanical:
