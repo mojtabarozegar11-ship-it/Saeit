@@ -52,6 +52,16 @@ class AutonomousEvidenceAgentTests(unittest.TestCase):
             policy = supplier.catalog(catalog_path)
             dossier = agent.build_dossier(root, policy, recipe, source_sha, artifact_sha, supplier)
             self.assertEqual(len(dossier["ai_workpapers"]), 100)
+            self.assertTrue(dossier["owner_attributed_agent_action"])
+            self.assertEqual(dossier["owner_delegation"]["principal"], "Mojtaba Roozegar")
+            self.assertEqual(dossier["owner_delegation"]["authority_state"],
+                             "OWNER_DECLARED_AGENT_AUTHORIZATION")
+            self.assertEqual(dossier["evidence_agent"]["signatory_identity"],
+                             "saeit-autonomous-evidence-analyst")
+            self.assertEqual(dossier["evidence_agent"]["signing_capacity"],
+                             "automated_agent_acting_on_behalf_of_owner")
+            self.assertFalse(dossier["owner_delegation"]["owner_private_key_or_signature_image_used"])
+            self.assertFalse(dossier["owner_delegation"]["human_or_licensed_professional_certification"])
             self.assertTrue(dossier["ai_evidence_is_not_human_or_independent_certification"])
             self.assertIsNone(dossier["professional_quality_1000_points"])
             rights = dossier["ai_workpapers"]["Q071"]
