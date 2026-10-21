@@ -1,0 +1,146 @@
+name: MOJ1 dedicated Shasta test wallet provisioning on VPS
+on:
+  push:
+    branches: ['moj1/shasta-pilot-20261021']
+    paths:
+      - '.github/workflows/moj1-vps-shasta-wallet-provision.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj1-vps-shasta-test-wallet-provision
+  cancel-in-progress: false
+jobs:
+  provision-test-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/moj1/shasta-pilot-20261021'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Create or reuse private Shasta-only wallet on authorized VPS
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$VPS_SSH_PRIVATE_KEY" ]; then
+            echo 'MOJ1_VPS_SSH=UNAVAILABLE'
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/moj1_shasta_relay_key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null > "$RUNNER_TEMP/moj1_shasta_known_hosts"
+          expected='SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh-keygen -lf "$RUNNER_TEMP/moj1_shasta_known_hosts" -E sha256 | grep -Fq "$expected"
+          timeout 230s ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/moj1_shasta_known_hosts" -i "$RUNNER_TEMP/moj1_shasta_relay_key" githubops@178.239.147.150 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          wallet_root="$HOME/.local/share/moj1-shasta-test-20261021"
+          install -d -m 700 "$wallet_root"
+          test "$(stat -c '%a' "$wallet_root")" = 700
+          if ! PYTHONPATH="$wallet_root/vendor" python3 -c 'from Crypto.Hash import keccak' 2>/dev/null; then
+            python3 -m pip install --no-input --disable-pip-version-check --no-warn-script-location --only-binary=:all: --quiet --target "$wallet_root/vendor" 'pycryptodome==3.24.0'
+          fi
+          MOJ1_WALLET_ROOT="$wallet_root" PYTHONPATH="$wallet_root/vendor" python3 - <<'PY_WALLET'
+          import base64
+          import datetime
+          import fcntl
+          import hashlib
+          import json
+          import os
+          import secrets
+          import stat
+          from pathlib import Path
+          from Crypto.Hash import keccak
+          from cryptography.hazmat.primitives.asymmetric import ec
+          from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+          root = Path(os.environ["MOJ1_WALLET_ROOT"])
+          assert not root.is_symlink()
+          assert root.is_dir() and stat.S_IMODE(root.stat().st_mode) == 0o700
+          order = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+          alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+
+          def encode_address(key):
+              number = int.from_bytes(key, 'big')
+              if not 1 <= number < order:
+                  raise RuntimeError('Invalid secp256k1 key; refusing to use wallet')
+              pub = ec.derive_private_key(number, ec.SECP256K1()).public_key().public_bytes(
+                  Encoding.X962, PublicFormat.UncompressedPoint)
+              if len(pub) != 65 or pub[0] != 4:
+                  raise RuntimeError('Invalid elliptic curve public point')
+              digest = keccak.new(digest_bits=256, data=pub[1:]).digest()
+              tron_hex = bytes([0x41]) + digest[-20:]
+              check = hashlib.sha256(hashlib.sha256(tron_hex).digest()).digest()[:4]
+              n = int.from_bytes(tron_hex + check, 'big')
+              out = ''
+              while n:
+                  n, rem = divmod(n, 58)
+                  out = alphabet[rem] + out
+              return out, tron_hex.hex()
+
+          # Published secp256k1 private-key-1 / Ethereum-address derivation
+          # cross-check: catches SHA3-256 vs Ethereum/TRON Keccak-256 mistakes.
+          assert encode_address(bytes.fromhex('00' * 31 + '01'))[1] == (
+              '417e5f4552091a69125d5dfcb7b8c2659029395bdf')
+
+          lock_fd = os.open(str(root / 'setup.lock'),
+                            os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+          fcntl.flock(lock_fd, fcntl.LOCK_EX)
+          key_path = root / 'wallet.key'
+          metadata_path = root / 'wallet-public.json'
+          created = False
+          if key_path.exists():
+              st = key_path.lstat()
+              if not stat.S_ISREG(st.st_mode) or stat.S_IMODE(st.st_mode) != 0o600:
+                  raise RuntimeError('Existing wallet file unsafe; refusing to overwrite')
+              key_fd = os.open(str(key_path), os.O_RDONLY | os.O_NOFOLLOW)
+              try:
+                  with os.fdopen(key_fd, 'rb') as f:
+                      key = f.read()
+              finally:
+                  pass
+          else:
+              while True:
+                  key = secrets.token_bytes(32)
+                  if 1 <= int.from_bytes(key, 'big') < order:
+                      break
+              key_fd = os.open(str(key_path),
+                               os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+              with os.fdopen(key_fd, 'wb') as f:
+                  f.write(key)
+                  f.flush()
+                  os.fsync(f.fileno())
+              created = True
+
+          if len(key) != 32:
+              raise RuntimeError('Invalid key length; manual repair required, no overwrite')
+          base58, hex_addr = encode_address(key)
+          if not base58.startswith('T') or len(base58) != 34:
+              raise RuntimeError('TRON address generation invariant failed')
+          public = {'network': 'Shasta-dedicated-test-use-only',
+                    'address_base58': base58, 'address_hex': hex_addr,
+                    'wallet_scope': 'MOJ1 experimental; NEVER Mainnet'}
+          if metadata_path.exists():
+              data = json.loads(metadata_path.read_text(encoding='utf-8'))
+              for field, value in public.items():
+                  if data.get(field) != value:
+                      raise RuntimeError('Public metadata mismatch; refusing to replace wallet')
+          else:
+              meta_fd = os.open(str(metadata_path),
+                                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+              with os.fdopen(meta_fd, 'w', encoding='utf-8') as f:
+                  json.dump(public, f, sort_keys=True)
+                  f.write('\n')
+                  f.flush()
+                  os.fsync(f.fileno())
+
+          print('MOJ1_WALLET_STATE=' + ('CREATED' if created else 'REUSED'))
+          print('MOJ1_WALLET_NETWORK=SHASTA_TEST_ONLY')
+          print('MOJ1_WALLET_PUBLIC_ADDRESS=' + base58)
+          print('MOJ1_WALLET_DIR_MODE=0700')
+          print('MOJ1_WALLET_PRIVATE_FILE_MODE=0600')
+          print('MOJ1_WALLET_PRIVATE_KEY_EXPORTED=NO')
+          print('MOJ1_WALLET_MAINNET_BROADCAST=NEVER')
+          print('MOJ1_WALLET_TEST_TRX_FUNDING=NOT_YET_VERIFIED')
+          PY_WALLET
+          REMOTE
