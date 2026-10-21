@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - "scripts/factory_reference_depth_game_novelty_gate.py"
+      - "factory_config/forty_families.json"
       - "tests/test_factory_reference_depth_game_novelty_gate.py"
       - ".github/workflows/factory-premium-reference-novelty-gate.yml"
   workflow_dispatch:
