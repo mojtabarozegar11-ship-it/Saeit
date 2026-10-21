@@ -63,18 +63,20 @@ async function verifyGovernance(address) {
 }
 
 try {
-  const prior = journal.verifiedAddress(name); // Fail closed if state is BROADCAST_UNCERTAIN.
+  const pending = journal.pending(name);
+  // Read-only recovery MUST run before verifiedAddress(), which intentionally throws
+  // for an unresolved step. Never create a second transaction from a pending state.
   let verifiedAddress;
-  if (prior) {
-    verifiedAddress = await verifyGovernance(tronWeb.address.fromHex(prior));
+  if (pending) {
+    const recovery = await reconcileDeployment(journal, name, tronWeb);
+    if (recovery.status !== 'VERIFIED') {
+      throw new Error('Shasta governance broadcast is uncertain: DO NOT REDEPLOY');
+    }
+    verifiedAddress = await verifyGovernance(tronWeb.address.fromHex(recovery.address));
   } else {
-    const pending = journal.pending(name);
-    if (pending) {
-      const recovery = await reconcileDeployment(journal, name, tronWeb);
-      if (recovery.status !== 'VERIFIED') {
-        throw new Error('Shasta governance broadcast is uncertain: DO NOT REDEPLOY');
-      }
-      verifiedAddress = await verifyGovernance(tronWeb.address.fromHex(recovery.address));
+    const prior = journal.verifiedAddress(name);
+    if (prior) {
+      verifiedAddress = await verifyGovernance(tronWeb.address.fromHex(prior));
     } else {
       const balance = await tronWeb.trx.getBalance(tronWeb.defaultAddress.base58);
       if (BigInt(balance) <= 0n) {
