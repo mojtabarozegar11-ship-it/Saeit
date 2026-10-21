@@ -21,6 +21,8 @@ DATABASES = (
     else {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}}
 )
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+TEMPLATES = [{'BACKEND': 'django.template.backends.django.DjangoTemplates',
+              'APP_DIRS': True, 'OPTIONS': {}}]
 MOJ_COMMERCE_RECEIVER_ENABLED = False
 MOJ_COMMERCE_FULFILL_SECRET = ''
 MOJ_COMMERCE_FINALIZED_TRON_CHECKER = None
