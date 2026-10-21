@@ -141,6 +141,35 @@ except Exception as e:
     blocks.append("auto_reconcile_schedule_unavailable")
 emit("MPW_PREBUY_CRON",cron)
 
+# Validate both READ-ONLY mainnet discovery adapters independently of idle invoices.
+# Never emit transaction IDs, wallet addresses, decoded events or API URLs.
+import time as _time
+from mpw_commerce.auto_reconcile import discover_trx,discover_eth
+import signal as _signal
+class _TimedChainCheck(Exception):
+    pass
+def _alarm_handler(*_):
+    raise _TimedChainCheck("Read-only chain indexer timeout")
+if hasattr(_signal,"SIGALRM"):
+    _signal.signal(_signal.SIGALRM,_alarm_handler)
+chain={}
+for asset,scan in (("TRX",discover_trx),("ETH",discover_eth)):
+    started=_time.monotonic()
+    try:
+        if hasattr(_signal,"SIGALRM"):_signal.alarm(22)
+        events=scan(now_ms=int(_time.time()*1000),lookback_s=600)
+        if not isinstance(events,(list,tuple)):
+            raise TypeError("Indexer result is not bounded sequence")
+        chain[asset]={"state":"readable","events":len(events),
+                      "elapsed_seconds":round(_time.monotonic()-started,2)}
+    except Exception as exc:
+        chain[asset]={"state":"unavailable","exception_type":type(exc).__name__,
+                      "elapsed_seconds":round(_time.monotonic()-started,2)}
+        blocks.append("mainnet_readonly_indexer_unavailable:"+asset)
+    finally:
+        if hasattr(_signal,"SIGALRM"):_signal.alarm(0)
+emit("MPW_PREBUY_CHAIN_INDEXERS",chain)
+
 log=PRIVATE/"mpw_commerce_reconcile_20261019.log"
 if log.is_file() and not log.is_symlink():
     raw=log.read_bytes()[-150000:].decode("utf8","replace").splitlines()
