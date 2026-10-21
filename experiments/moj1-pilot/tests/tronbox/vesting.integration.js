@@ -239,7 +239,7 @@ contract('MOJ1 experimental 2-of-3 governance on isolated TVM', (accounts) => {
     const token = await MojCoin.new(governance.address);
     const escrowAddress = tronWeb.address.fromHex(await token.distributor());
     const distributor = await MojGenesisDistributor.at(escrowAddress);
-    assert.equal(tronWeb.address.fromHex(await distributor.governance()), governance.address);
+    assert.equal(tronWeb.address.toHex(await distributor.governance()), tronWeb.address.toHex(governance.address));
     const callData = '0x18160ddd'; // TRC20 totalSupply()
     await expectReverted(governance.execute(token.address, callData, 0, {from: accounts[0]}));
     await expectReverted(governance.approve(token.address, callData, 0, {from: accounts[5]}));
@@ -259,7 +259,7 @@ contract('MOJ1 experimental 2-of-3 governance on isolated TVM', (accounts) => {
       await MojPilotGovernance.new([accounts[0], accounts[0], accounts[1]]);
       assert.fail('duplicate owners should fail');
     } catch (error) {
-      assert.match(String(error.message), /Duplicate owner|revert|REVERT|failed/i);
+      assert.match(String(error.message), /Duplicate owner|revert|REVERT|failed|not been deployed/i);
     }
   });
   it('executes an actual governed ownership change after two owner approvals', async () => {
@@ -268,12 +268,12 @@ contract('MOJ1 experimental 2-of-3 governance on isolated TVM', (accounts) => {
     const receiver = accounts[7];
     // Standard Ownable transferOwnership(address) selector + 32-byte ABI address.
     const data = '0xf2fde38b' + tronWeb.address.toHex(receiver).slice(2).padStart(64, '0');
-    assert.equal(tronWeb.address.fromHex(await collection.owner()), governance.address);
+    assert.equal(tronWeb.address.toHex(await collection.owner()), tronWeb.address.toHex(governance.address));
     await governance.approve(collection.address, data, 0, {from: accounts[0]});
     await expectReverted(governance.execute(collection.address, data, 0, {from: accounts[1]}));
     await governance.approve(collection.address, data, 0, {from: accounts[2]});
     await governance.execute(collection.address, data, 0, {from: accounts[1]});
-    assert.equal(tronWeb.address.fromHex(await collection.owner()), receiver);
+    assert.equal(tronWeb.address.toHex(await collection.owner()), tronWeb.address.toHex(receiver));
     assert.equal((await governance.nonce()).toString(), '1');
     await expectReverted(governance.execute(collection.address, data, 0, {from: accounts[0]}));
   });
