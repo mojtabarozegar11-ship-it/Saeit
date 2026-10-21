@@ -180,9 +180,9 @@ def preview():
 def extract_js_preview():
  ensure_home()
  updated=changed(TARGET.read_bytes()).decode("utf8")
- matches=re.findall(r"<script\\b[^>]*>(.*?)</script\\s*>",updated,re.I|re.S)
+ matches=re.findall(r"<script\b[^>]*>(.*?)</script\s*>",updated,re.I|re.S)
  if len(matches)!=1:fail("Expected precisely one CSP-hashed checkout script")
- script=re.sub(r"\\{\\{\\s*product\\.pk\\s*\\}\\}","72",matches[0])
+ script=re.sub(r"\{\{\s*product\.pk\s*\}\}","72",matches[0])
  if "{{" in script or "{%" in script or "NOWPAYMENTS_API_KEY" in script:
   fail("Unsafe or unresolved JavaScript expression")
  print(script)
