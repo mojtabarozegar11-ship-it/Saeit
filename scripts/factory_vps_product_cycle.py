@@ -63,6 +63,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
 
         repair = load("saeit_factory_rework_cycle",
                       SCRIPTS / "factory_product_rework.py")
+        customer = load("saeit_factory_real_customer_acceptance",
+                        SCRIPTS / "factory_verified_customer_cycle_20261021.py")
         quality_return_state = repair.quality_returns(root)
         quality_return_orders = {x['recipe']: x for x in quality_return_state['orders']}
         quality_return_candidates = []
@@ -183,6 +185,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         new_product_ids = []
         updated_product_ids = []
         failures = []
+        customer_acceptances = []
+        customer_repairs = []
         for recipe in selected:
             source = recipe_roots[recipe] / recipe
             previous_product = root / 'digital-products' / recipe
@@ -210,6 +214,35 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                 else:
                     failures.append(recorded)
                     continue
+            # Test the actual bytes delivered to a customer, from a fresh ZIP
+            # extraction. Manufacturer test counts alone cannot pass this gate.
+            try:
+                customer_receipt = customer.inspect_product(previous_product, recipe)
+                customer.persist_pending(root, customer_receipt)
+            except (RuntimeError, ValueError, OSError, ArithmeticError) as customer_error:
+                recorded = repair.record_failure(root, recipe, customer_error, str(source))
+                reason = str(customer_error)
+                # One mechanical repair attempt, never a self-awarded score.
+                # Functional regressions stay in the durable rework queue.
+                if any(code in reason for code in (
+                        "CUSTOMER_ZIP_HASH_MISMATCH", "CUSTOMER_ZIP_CRC_FAILED",
+                        "CUSTOMER_ZIP_UNUSABLE", "CUSTOMER_ZIP_FILE_INDEX_MISMATCH")):
+                    try:
+                        result = maker.manufacture(recipe, recipe_roots[recipe],
+                                                   root / "digital-products")
+                        customer_receipt = customer.inspect_product(previous_product, recipe)
+                        customer.persist_pending(root, customer_receipt)
+                        customer_repairs.append({"recipe": recipe,
+                            "artifact_sha256": customer_receipt["artifact_sha256"],
+                            "technical_repair_verified": True})
+                    except (RuntimeError, ValueError, OSError, ArithmeticError) as retry_error:
+                        recorded["repair_error"] = str(retry_error)[:250]
+                        failures.append(recorded)
+                        continue
+                else:
+                    failures.append(recorded)
+                    continue
+            customer_acceptances.append(customer_receipt)
             produced.append(result)
             if result.get('changed'):
                 (updated_product_ids if already_manufactured else new_product_ids).append(recipe)
@@ -278,6 +311,10 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "designs_processed_per_cycle_limit": design_capacity,
             "unchanged_product_rechecks": sum(not bool(p.get("changed")) for p in produced),
             "built_product_recipes": [p["recipe"] for p in produced],
+            "real_customer_zip_checks_passed": len(customer_acceptances),
+            "real_customer_zip_technical_receipts": customer_acceptances,
+            "mechanical_customer_zip_repairs_verified": customer_repairs,
+            "professional_quality_1000_customer_checks_cannot_approve": True,
             "artifact_qa_passed": bool(produced) and not failures and not admission_failures and all(
                 p["qa_status"] == "passed" for p in produced),
             "quality_failures_this_cycle": [
