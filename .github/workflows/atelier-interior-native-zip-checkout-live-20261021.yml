@@ -95,9 +95,24 @@ jobs:
           call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
           timeout 100s ssh -T -F "$d/config" saeit-cpanel \
             "ATELIER_OWNER_EXACT_CTA=20261021-owner-879 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c '$call' '$src64' activate"
+      - name: Reload exact Passenger app's cached templates via existing verified marker
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          src64="$(base64 -w0 scripts/atelier_interior_passenger_reload_20261021.py)"
+          call="import base64;exec(base64.b64decode('$src64'))"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel \
+            "ATELIER_OWNER_PASSENGER_TEMPLATE_RELOAD=owner-879-20261021 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c '$call'"
       - name: Public buyer listing + native checkout CTA and protected-site smoke
         run: |
           set -euo pipefail
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            store_wait="$(curl -sS --max-time 9 -o /dev/null -w '%{http_code}' https://mojplaywin.com/store/ || true)"
+            product_wait="$(curl -sS --max-time 9 -o /dev/null -w '%{http_code}' https://mojplaywin.com/store/product/879/ || true)"
+            if test "$store_wait" = 200 && test "$product_wait" = 200; then break; fi
+            sleep 3
+          done
+          test "$store_wait" = 200 && test "$product_wait" = 200
           : > "$RUNNER_TEMP/atelier-879-native-after"
           for p in / /store/ /mojtaba.roozegar/ /picm/ /saman/ /farnaz/; do
             s="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$p" || true)"
@@ -141,4 +156,13 @@ jobs:
           timeout 100s ssh -T -F "$d/config" saeit-cpanel \
             "ATELIER_OWNER_NATIVE_ZIP_ROLLBACK=20261021-owner-879 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c '$call' '$src64' rollback"
 
-# Scoped owner re-run after corrected public smoke and rollback code; no other products touched.
+      - name: Refresh Passenger templates back to exact backup version after any failure
+        if: failure()
+        continue-on-error: true
+        run: |
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          src64="$(base64 -w0 scripts/atelier_interior_passenger_reload_20261021.py)"
+          call="import base64;exec(base64.b64decode('$src64'))"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel \
+            "ATELIER_OWNER_PASSENGER_TEMPLATE_RELOAD=owner-879-20261021 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c '$call'"
+# Scope: only Product 879, two exact templates and Passenger cached-template marker.
