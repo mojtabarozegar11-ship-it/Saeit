@@ -109,6 +109,9 @@ def inspect_live_symlinks(domain_docroots):
     counts={'inspected_live_entries':0,'live_absolute_links':0,
             'live_links_to_unbacked_domain_root':0,
             'live_links_to_other_account_path':0,
+            'live_links_to_unbacked_application_source':0,
+            'live_links_to_private_dot_directory':0,
+            'live_links_to_other_unbacked_account_path':0,
             'live_links_to_system_or_elsewhere':0,
             'inventory_complete':True,
             'exact_archive_link_match_verified':False}
@@ -137,6 +140,13 @@ def inspect_live_symlinks(domain_docroots):
                         counts['live_links_to_unbacked_domain_root']+=1
                     elif link==HOME or HOME in link.parents:
                         counts['live_links_to_other_account_path']+=1
+                        live_source=HOME/'Saeit'
+                        if link==live_source or live_source in link.parents:
+                            counts['live_links_to_unbacked_application_source']+=1
+                        elif any(part.startswith('.') for part in link.relative_to(HOME).parts):
+                            counts['live_links_to_private_dot_directory']+=1
+                        else:
+                            counts['live_links_to_other_unbacked_account_path']+=1
                     else:
                         counts['live_links_to_system_or_elsewhere']+=1
     except (OSError,ValueError):
