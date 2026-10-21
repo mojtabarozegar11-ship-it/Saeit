@@ -20,7 +20,7 @@ CASES = (
     "transparent_amount_network_fees",
     "guest_purchase",
     "direct_trx_checkout",
-    "fiat_to_native_trx",
+    "crypto_asset_network_coverage",
     "invoice_and_wallet_security",
     "finality_reconciliation",
     "recovery_and_operations",
@@ -32,7 +32,7 @@ VALID_SOURCES = {
     "provider_quote_integration",
     "browser_guest_e2e",
     "tron_chain_independent",
-    "approved_processor_and_settlement",
+    "independent_crypto_mainnet_routes",
     "security_review",
     "provider_and_chain_reconciliation",
     "fault_injection_live_safe",
@@ -44,7 +44,7 @@ SOURCES = dict(zip(CASES, (
     "provider_quote_integration",
     "browser_guest_e2e",
     "tron_chain_independent",
-    "approved_processor_and_settlement",
+    "independent_crypto_mainnet_routes",
     "security_review",
     "provider_and_chain_reconciliation",
     "fault_injection_live_safe",
@@ -81,6 +81,10 @@ def evaluate(manifest, secret, *, now=None):
             expected = hmac.new(secret.encode(), payload_to_sign(manifest), hashlib.sha256).hexdigest()
             if not hmac.compare_digest(supplied, expected):
                 reasons.append("untrusted_attestation_signature")
+    if manifest.get("policy_version") != "crypto-only-20261021":
+        reasons.append("wrong_or_obsolete_fiat_gateway_policy")
+    if manifest.get("payment_scope") != "cryptocurrency_only":
+        reasons.append("not_scoped_to_crypto_only")
     if manifest.get("domain") != "mojplaywin.com" or manifest.get("environment") != "production":
         reasons.append("wrong_site_or_environment")
     if manifest.get("owner_signed_off") is not True:
@@ -121,7 +125,7 @@ def evaluate(manifest, secret, *, now=None):
             reasons.append("unverified_" + case)
     accepted = not reasons and len(accepted_groups) == 10
     return accepted, {
-        "scope": "mojplaywin.com/payment_gateway_only",
+        "scope": "mojplaywin.com/cryptocurrency_payment_gateway_only",
         "status": "ACCEPTED_100_OF_100" if accepted else "BLOCKED_NOT_100",
         "verified_gates_in_manifest": len(accepted_groups),
         "total_required_gates": 10,
@@ -137,6 +141,8 @@ def main():
     args = parser.parse_args()
     if args.selftest:
         fake = {
+            "policy_version": "crypto-only-20261021",
+            "payment_scope": "cryptocurrency_only",
             "domain": "mojplaywin.com",
             "environment": "production",
             "verified_at_utc": "2026-10-21T00:00:00Z",
