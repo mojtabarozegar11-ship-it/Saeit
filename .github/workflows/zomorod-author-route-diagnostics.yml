@@ -96,6 +96,9 @@ jobs:
           fi
           echo "ROOT_AUTH_REWRITE_RULES:"
           grep -niE 'RewriteEngine|RewriteRule|RewriteCond|PassengerEnabled|PassengerAppRoot|PassengerBaseURI|PassengerPython' "$public/.htaccess" || true
+          cd "$HOME/Saeit"
+          python="$HOME/virtualenv/Saeit/3.10/bin/python"
+          "$python" manage.py shell -c 'from django.test import Client; from django.urls import resolve; p="/authors/mojtaba-rozegar/"; print("DJANGO_RESOLVER_VIEW="+resolve(p).view_name); r=Client().get(p, HTTP_HOST="zomorodmelal.ir"); print("DJANGO_CLIENT_STATUS="+str(r.status_code)); print("DJANGO_CLIENT_LOCATION="+str(r.get("Location","")))' 2>&1
           echo "AUTHOR_ENGLISH_PAGE_MARKER:"
           grep -o 'mojtaba-roozegar-official-profile-20261021' "$public/en/authors/mojtaba-rozegar/index.html" | head -1
           if test -e "$target"; then
