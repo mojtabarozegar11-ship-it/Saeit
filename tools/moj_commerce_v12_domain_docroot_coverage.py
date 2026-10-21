@@ -6,6 +6,7 @@ Accesses one local cPanel UAPI call and filesystem stat. No production writes.
 """
 from __future__ import annotations
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -62,6 +63,53 @@ def report_from_payload(payload):
     return result
 
 
+def inspect_live_symlinks(domain_docroots):
+    """Summarize LIVE metadata only; a current symlink is not a backup attestation."""
+    outside=[]
+    for root_string in domain_docroots:
+        p=Path(root_string)
+        if not p.is_absolute() or '..' in p.parts:
+            continue
+        if not any(p==r or r in p.parents for r in BACKED_ROOTS):
+            outside.append(p)
+    counts={'inspected_live_entries':0,'live_absolute_links':0,
+            'live_links_to_unbacked_domain_root':0,
+            'live_links_to_other_account_path':0,
+            'live_links_to_system_or_elsewhere':0,
+            'inventory_complete':True,
+            'exact_archive_link_match_verified':False}
+    def errors(_):
+        counts['inventory_complete']=False
+    try:
+        for root in BACKED_ROOTS:
+            if root.is_symlink() or not root.is_dir():
+                counts['inventory_complete']=False
+                continue
+            for current,dirs,files in os.walk(root,topdown=True,followlinks=False,onerror=errors):
+                for name in dirs+files:
+                    counts['inspected_live_entries']+=1
+                    if counts['inspected_live_entries']>150000:
+                        counts['inventory_complete']=False
+                        return counts
+                    p=Path(current)/name
+                    if not p.is_symlink():
+                        continue
+                    target=os.readlink(p)
+                    if not target.startswith('/'):
+                        continue
+                    counts['live_absolute_links']+=1
+                    link=Path(target)
+                    if any(link==r or r in link.parents for r in outside):
+                        counts['live_links_to_unbacked_domain_root']+=1
+                    elif link==HOME or HOME in link.parents:
+                        counts['live_links_to_other_account_path']+=1
+                    else:
+                        counts['live_links_to_system_or_elsewhere']+=1
+    except (OSError,ValueError):
+        counts['inventory_complete']=False
+    return counts
+
+
 def main():
     try:
         p=subprocess.run(
@@ -70,7 +118,11 @@ def main():
             timeout=35,check=False)
         if p.returncode or len(p.stdout)>1000000:
             raise ValueError('API unavailable')
-        report=report_from_payload(json.loads(p.stdout))
+        payload=json.loads(p.stdout)
+        report=report_from_payload(payload)
+        if report['cpanel_domaininfo_success']:
+            report['live_link_inventory']=inspect_live_symlinks(list(
+                _domain_records(payload.get('result',{}).get('data'))))
         print(json.dumps(report,sort_keys=True))
     except (ValueError,OSError,subprocess.TimeoutExpired,TypeError):
         print(json.dumps({'classification':'MOJ_COMMERCE_V12_DOMAININFO_UNVERIFIED',
