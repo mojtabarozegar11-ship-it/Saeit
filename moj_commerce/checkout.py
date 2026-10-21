@@ -84,7 +84,7 @@ def issue_buyer_checkout(*, buyer_id: int, merchant_public_id, product_id: int,
         if existing.buyer_id != buyer_id or existing.merchant_id != merchant.pk or existing.product_id != product_id:
             raise CommerceRejected('Checkout reference collision')
         return existing, False
-    if not getattr(settings, 'MOJ_COMMERCE_CHECKOUT_ENABLED', False):
+    if getattr(settings, 'MOJ_COMMERCE_CHECKOUT_ENABLED', False) is not True:
         raise CommerceUnavailable('Buyer checkout is not enabled')
     if not callable(rate_provider):
         rate_provider = getattr(settings, 'MOJ_COMMERCE_TRX_RATE_PROVIDER', None)
