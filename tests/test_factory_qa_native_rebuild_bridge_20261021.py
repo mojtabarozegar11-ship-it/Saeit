@@ -470,6 +470,75 @@ class RealPrivateDocumentEditionTests(unittest.TestCase):
                             /new_id/"metadata.json").read_text())
         self.assertEqual(len(edition["assets"]),81)
 
+    def test_large_customer_archive_reauthors_two_independent_safely_bounded_volumes(self):
+        documents={"book/chapter_%03d.md"%i:("# Chapter %03d\nStudy content."%i).encode()
+                   for i in range(1,226)}
+        self.bind(documents)
+        expected="edition_"+self.artifact_hash[:24]
+        first=m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker)
+        self.assertEqual(first,"private_document_edition_built")
+        folder=self.root/"quality-excellence/document-edition-sources"
+        stock=self.root/"quality-excellence/document-edition-private-stock"
+        self.assertTrue((folder/(expected+"_v01")).is_dir())
+        self.assertFalse((folder/(expected+"_v02")).exists())
+        meta=json.loads((folder/(expected+"_v01")/"metadata.json").read_text())
+        self.assertEqual(meta["volume_number"],1)
+        self.assertEqual(meta["volume_count"],2)
+        self.assertEqual(meta["total_original_supported_assets"],225)
+        self.assertEqual(len(meta["assets"]),200)
+        self.assertFalse(meta["commercial_release_authorized"])
+        self.assertEqual(self.maker.verify_recipe(folder/(expected+"_v01")),
+                         "unit_tests_passed")
+        product=json.loads((stock/(expected+"_v01")/"manufacturing_manifest.json").read_text())
+        self.assertEqual(product["qa_status"],"passed")
+        self.assertFalse(product["professional_quality_approved"])
+        count1=len(__import__("zipfile").ZipFile(
+            stock/(expected+"_v01")/(expected+"_v01-internal-qa.zip")).namelist())
+        self.assertLessEqual(count1,256)
+
+        second=m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker)
+        self.assertEqual(second,"private_document_edition_built")
+        other=folder/(expected+"_v02")
+        meta2=json.loads((other/"metadata.json").read_text())
+        self.assertEqual(meta2["volume_number"],2)
+        self.assertEqual(meta2["volume_count"],2)
+        self.assertEqual(len(meta2["assets"]),25)
+        self.assertEqual(self.maker.verify_recipe(other),"unit_tests_passed")
+        self.assertEqual(sum(len(json.loads((folder/name/"metadata.json").read_text())["assets"])
+                             for name in (expected+"_v01",expected+"_v02")),225)
+        manifest2=json.loads((stock/(expected+"_v02")/"manufacturing_manifest.json").read_text())
+        self.assertNotEqual(product["artifact_sha256"],manifest2["artifact_sha256"])
+        self.assertEqual(
+            m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
+            "already_issued_private_edition")
+        self.assertTrue((self.stock/(self.recipe+"-internal-qa.zip")).is_file())
+
+    def test_tampered_volume_source_does_not_rebuild_or_claim_prior_success(self):
+        self.bind({"chapters/%03d.md"%i:b"Legitimate notes." for i in range(205)})
+        self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
+                         "private_document_edition_built")
+        name="edition_"+self.artifact_hash[:24]+"_v01"
+        receipt=self.root/"quality-excellence/document-edition-receipts"/(name+".json")
+        record=json.loads(receipt.read_text())
+        record["new_source_sha256"]="0"*64
+        receipt.write_text(json.dumps(record))
+        self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
+                         "document_volume_existing_receipt_unverified")
+        self.assertFalse((self.root/"quality-excellence/document-edition-sources"/(
+            "edition_"+self.artifact_hash[:24]+"_v02")).exists())
+
+
+    def test_source_byte_tampering_blocks_skip_and_next_volume(self):
+        self.bind({"chapters/%03d.md"%i:b"Document and source test." for i in range(207)})
+        self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
+                         "private_document_edition_built")
+        head="edition_"+self.artifact_hash[:24]
+        base=self.root/"quality-excellence/document-edition-sources"
+        (base/(head+"_v01")/"index.html").write_text("tampered source now")
+        result=m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker)
+        self.assertEqual(result,"document_volume_existing_receipt_unverified")
+        self.assertFalse((base/(head+"_v02")).exists())
+
     def test_unbound_and_tampered_archives_never_get_new_product(self):
         self.bind({"bundle/file.txt":b"legitimate doc"})
         self.order["source_quality_receipt_sha256"]="0"*64
