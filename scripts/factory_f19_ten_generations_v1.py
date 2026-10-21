@@ -34,7 +34,9 @@ def _text(value,maximum=120):
 
 def _origin(url):
     u=urlsplit(_text(url,240))
-    if u.scheme!="https" or not u.hostname or u.username or u.password or u.query or u.fragment or u.path not in ("","/"):
+    try:port=u.port
+    except ValueError:raise ValueError("VALID_HTTPS_PORT_REQUIRED")
+    if u.scheme!="https" or not u.hostname or port not in (None,443) or u.username or u.password or u.query or u.fragment or u.path not in ("","/"):
         raise ValueError("HTTPS_SITE_ORIGIN_REQUIRED")
     return "https://"+u.netloc.lower().rstrip("/")
 
@@ -160,6 +162,7 @@ FEATURES=[
         self.assertIn("https://example.org/",t.sitemap_xml("https://example.org"))
         with self.assertRaises(ValueError):t.sitemap_xml("http://example.org")
         with self.assertRaises(ValueError):t.sitemap_xml("https://user:pass@example.org")
+        with self.assertRaises(ValueError):t.sitemap_xml("https://example.org:invalid")
 
 '''),
 ("minimal_https_robots",
@@ -237,6 +240,9 @@ def original(private,protocol):
         or not protocol.verify_attempt(home,state,state["source_snapshot_sha256"])):
         raise ValueError("F19_ORIGINAL_50_STAGE_PROOF_INVALID")
     original_folder=Path(state["attempt_folder"])
+    summary=read(original_folder/"50-summary.json")
+    if manifest["artifact_sha256"] not in summary.get("outputs",{}).values():
+        raise ValueError("F19_SOURCE_ARCHIVE_NOT_BOUND_TO_STAGE50_RECEIPT")
     review=read(original_folder/"independent-technical-review.json")
     if review.get("checks_passed")!=10 or review.get("human_professional_review_done") is not False:
         raise ValueError("F19_INDEPENDENT_TECHNICAL_REVIEW_REQUIRED")
