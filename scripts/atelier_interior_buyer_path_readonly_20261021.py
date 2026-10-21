@@ -182,3 +182,54 @@ for root in (app/"core"/"templatetags", app/"core"):
         print("ATELIER_MANAGED_OFFERS_SOURCE="+json.dumps({"root":str(root.relative_to(app)),"hits":hits}))
     except Exception as ex:
         print("ATELIER_MANAGED_OFFERS_ERROR="+type(ex).__name__)
+
+
+# Follow-up: identify public vhost -> actual Passenger root, with no writes or credential reads.
+import re
+home=Path("/home/zomorod2")
+paths=[home/"public_html",home/"mojplaywin.com",home/"domains"/"mojplaywin.com"/"public_html",
+       home/"Saeit",home/"Saeit-staging",home/"MojPlayWin",home/"mojplaywin"]
+for path in paths:
+    print("ATELIER_APP_ROOT_CANDIDATE="+json.dumps({"path":str(path.relative_to(home)),
+      "exists":path.exists(),"directory":path.is_dir(),
+      "symlink":path.is_symlink(),
+      "has_wsgi":(path/"passenger_wsgi.py").is_file(),
+      "has_manage":(path/"manage.py").is_file(),
+      "has_product_template":(path/"core/templates/brands/mojplaywin/product.html").is_file()},sort_keys=True))
+    ht=path/".htaccess"
+    if ht.is_file() and not ht.is_symlink():
+        print("ATELIER_PUBLIC_HTACCESS="+json.dumps({"path":str(ht.relative_to(home)),
+          "directives":[l.strip()[:180] for l in ht.read_text("utf8",errors="replace").splitlines()
+          if re.match(r"^\s*(PassengerAppRoot|PassengerPython|PassengerStartupFile|PassengerBaseURI|PassengerEnabled|PassengerAppType|PassengerFriendlyErrorPages|RewriteRule|SetHandler)\b",l,re.I)][:35]},sort_keys=True))
+# Ownership-checked process working directories only; no process args/environment displayed.
+from collections import Counter
+worker_dirs=Counter()
+proc=Path("/proc")
+if proc.is_dir():
+    for item in proc.iterdir():
+        if not item.name.isdecimal():continue
+        try:
+            st=(item/"status").read_text("utf8",errors="replace")
+            uidline=next(x for x in st.splitlines() if x.startswith("Uid:"))
+            if int(uidline.split()[1])!=os.getuid():continue
+            comm=(item/"comm").read_text().strip().lower()
+            if not any(q in comm for q in ("python","passenger","lsapi","wsgi","ruby")):continue
+            cwd=os.readlink(item/"cwd")
+            if cwd.startswith(str(home)):
+                worker_dirs[str(Path(cwd).relative_to(home))]+=1
+        except (OSError,StopIteration,ValueError):
+            continue
+print("ATELIER_LIVE_USER_WORKER_CWDS="+json.dumps(dict(worker_dirs.most_common(16))))
+# Shallow, pruned discovery of app entrypoints outside the presumed staging root.
+entries=[]
+ignored={"node_modules",".git","static","media","venv","virtualenv",".cache","assets","backups","logs","tmp","__pycache__","site-packages"}
+for root,dirs,files in os.walk(home,topdown=True,followlinks=False):
+    rel=Path(root).relative_to(home)
+    if len(rel.parts)>=4:
+        dirs[:]=[]
+        continue
+    dirs[:]=[d for d in dirs if d not in ignored and not d.startswith(".")][:85]
+    if "passenger_wsgi.py" in files or ("manage.py" in files and rel.parts and rel.parts[0] != "Saeit-staging"):
+        entries.append({"directory":str(rel),"wsgi":"passenger_wsgi.py" in files,"manage":"manage.py" in files})
+    if len(entries)>=30:break
+print("ATELIER_OTHER_APP_ENTRYPOINTS="+json.dumps(entries))
