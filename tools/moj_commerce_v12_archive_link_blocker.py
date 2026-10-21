@@ -81,7 +81,7 @@ def classify(stream):
                         count["unsafe_external_links"] += 1
                     absolute = PurePosixPath(target)
                     parts_target = absolute.parts
-                    if len(parts_target) >= 5 and parts_target[:3] == ("/", "home", "zomorod2") and parts_target[3] in ROOTS:
+                    if len(parts_target) >= 4 and parts_target[:3] == ("/", "home", "zomorod2") and parts_target[3] in ROOTS:
                         count["absolute_links_to_backed_root"] += 1
                         eligible_absolute_targets.append("/".join(parts_target[3:]))
                     elif len(parts_target) >= 3 and parts_target[:3] == ("/", "home", "zomorod2"):
