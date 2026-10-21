@@ -7,6 +7,8 @@ on:
       - "scripts/factory_quality_signed_approval_v1.py"
       - "tests/test_factory_quality_signed_approval_v1.py"
       - "scripts/factory_quality_production_workorders_v1.py"
+      - "scripts/factory_qa_native_rebuild_bridge_20261021.py"
+      - "tests/test_factory_qa_native_rebuild_bridge_20261021.py"
       - "tests/test_factory_quality_production_workorders_v1.py"
       - "scripts/factory_commercial_quality_release_guard_v1.py"
       - "tests/test_factory_commercial_quality_release_guard_v1.py"
@@ -44,6 +46,7 @@ jobs:
           python3 -B -m unittest discover -s tests -p test_factory_quality_signed_approval_v1.py -v
           python3 -B -m unittest discover -s tests -p test_factory_commercial_quality_release_guard_v1.py -v
           python3 -B -m unittest discover -s tests -p test_factory_quality_production_workorders_v1.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_qa_native_rebuild_bridge_20261021.py -v
           python3 -B -m unittest discover -s tests -p test_factory_global_premium_quality_gate.py -v
           python3 -m py_compile scripts/factory_global_quality_triage_v2.py
           echo REAL_FACTORY_QUALITY_REWORK_REGRESSION=PASS
@@ -69,6 +72,9 @@ jobs:
           scp -q "${opts[@]}" scripts/factory_global_quality_triage_v2.py githubops@178.239.147.150:"$stage/rework.py"
           scp -q "${opts[@]}" scripts/factory_quality_1000_v2.py githubops@178.239.147.150:"$stage/score1000.py"
           scp -q "${opts[@]}" scripts/factory_quality_production_workorders_v1.py githubops@178.239.147.150:"$stage/workorders.py"
+          scp -q "${opts[@]}" scripts/factory_qa_native_rebuild_bridge_20261021.py githubops@178.239.147.150:"$stage/native-rebuild.py"
+          scp -q "${opts[@]}" scripts/factory_product_maker.py githubops@178.239.147.150:"$stage/factory_product_maker.py"
+          scp -q "${opts[@]}" scripts/factory_personal_owner_passport_policy_20261020.py githubops@178.239.147.150:"$stage/factory_personal_owner_passport_policy_20261020.py"
           scp -q "${opts[@]}" factory_config/quality_100_criteria.json githubops@178.239.147.150:"$stage/quality_100_criteria.json"
           scp -q "${opts[@]}" scripts/factory_global_premium_quality_gate.py githubops@178.239.147.150:"$stage/quality.py"
           scp -q "${opts[@]}" factory_config/forty_families.json githubops@178.239.147.150:"$stage/families.json"
@@ -87,7 +93,15 @@ jobs:
             --catalog "$stage/quality_100_criteria.json" \
             --run-id "$GITHUB_RUN_ID"
           echo FACTORY_PRODUCT_PROFESSIONAL_REWORK_QUEUE=OPERATIONAL
+          # Only source-backed, genuinely executed offline technical QA rebuilds;
+          # original factory stock and public release state remain unchanged.
+          timeout 145s ssh -T "${opts[@]}" githubops@178.239.147.150 \
+            python3 -B "$stage/native-rebuild.py" \
+            --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle \
+            --source-root /home/githubops/factory-runtime/private/autonomous-product-cycle/generated-product-recipes \
+            --maker "$stage/factory_product_maker.py" --limit 2
+          echo FACTORY_NATIVE_TECHNICAL_REBUILD_CANDIDATES_INSPECTED=YES
           echo FACTORY_QUALITY_RELEASE_THRESHOLD=1000/1000
           echo FACTORY_PUBLIC_PRODUCT_UPLOAD=NONE
           echo FACTORY_PAYMENT_CHANGE=NONE
-          ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; rm -f -- '$stage/rework.py' '$stage/quality.py' '$stage/families.json' '$stage/score1000.py' '$stage/quality_100_criteria.json' '$stage/workorders.py'; rmdir -- '$stage'"
+          ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; rm -f -- '$stage/rework.py' '$stage/quality.py' '$stage/families.json' '$stage/score1000.py' '$stage/quality_100_criteria.json' '$stage/workorders.py' '$stage/native-rebuild.py' '$stage/factory_product_maker.py' '$stage/factory_personal_owner_passport_policy_20261020.py'; rmdir -- '$stage'"
