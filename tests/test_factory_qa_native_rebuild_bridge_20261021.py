@@ -236,6 +236,35 @@ class QARebuildTests(unittest.TestCase):
                           additional_source_roots=[bad,bad,bad])
         self.assertEqual(FakeMaker.calls,0)
 
+    def test_missing_source_archive_classifies_customer_material_without_promotion(self):
+        import zipfile
+        item,original=self.seed("archived_legacy_product")
+        (item/"README.md").unlink();item.rmdir()
+        (original/"manufacturing_manifest.json").write_text(json.dumps({"qa_status":"passed","recipe":"archived_legacy_product"}))
+        path=original/"archived_legacy_product-internal-qa.zip"
+        with zipfile.ZipFile(path,"w") as zf:
+            zf.writestr("download/report.pdf",b"%PDF-1.4 fake example")
+            zf.writestr("download/readme.txt",b"not executable source")
+        facts=m.classify_unrecoverable_artifact(self.root,"archived_legacy_product")
+        self.assertEqual(facts["customer_delivery_layout_not_source_recipe"],1)
+        self.assertEqual(facts["no_embedded_source_tests"],1)
+        self.assertEqual(facts["contains_document"],1)
+        self.assertEqual(facts["source_hash_absent"],1)
+        self.assertEqual(facts["source_file_manifest_absent"],1)
+        self.assertNotIn("download",repr(facts))
+        result=self.run_bridge()
+        self.assertEqual(result["missing_source"],1)
+        self.assertEqual(result["legacy_source_gap_causes"]["contains_document"],1)
+        self.assertEqual(result["technical_candidates_verified"],0)
+        self.assertFalse(result["commercial_release_authorized"])
+
+    def test_diagnostic_rejects_symlink_to_other_product_archive(self):
+        item,old=self.seed("legacy_symlink")
+        (item/"README.md").unlink();item.rmdir()
+        (old/"legacy_symlink-internal-qa.zip").symlink_to(self.root/"not-a-zip")
+        facts=m.classify_unrecoverable_artifact(self.root,"legacy_symlink")
+        self.assertEqual(facts,{"unsafe_stock_path":1})
+
     def test_untrusted_source_symlink_is_not_executed(self):
         original=self.root/"foreign";original.mkdir()
         (self.source/"synth_abc123").symlink_to(original,target_is_directory=True)

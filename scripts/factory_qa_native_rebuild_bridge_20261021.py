@@ -148,6 +148,50 @@ def recover_source_from_archive(root,recipe,order,maker,recovered_root):
     except (OSError,ValueError,RuntimeError,UnicodeError,KeyError):
         return False,"archive_recovery_error"
 
+
+def classify_unrecoverable_artifact(root,recipe):
+    """Inspect only archive metadata and count material types; reveal no filenames."""
+    stock=root/"digital-products"/recipe
+    meta=stock/"manufacturing_manifest.json"
+    archive=stock/(recipe+"-internal-qa.zip")
+    facts={}
+    if stock.is_symlink() or meta.is_symlink() or archive.is_symlink():
+        return {"unsafe_stock_path":1}
+    try:
+        if not meta.is_file():facts["no_manufacturing_manifest"]=1
+        else:
+            data=checked_json(meta)
+            if not isinstance(data.get("source_sha256"),str) or not HEX.fullmatch(data.get("source_sha256","")):
+                facts["source_hash_absent"]=1
+            if not isinstance(data.get("files"),list):facts["source_file_manifest_absent"]=1
+            if data.get("qa_status")!="passed":facts["prior_qa_not_passed"]=1
+            if not isinstance(data.get("family_id"),str):facts["family_identity_unbound"]=1
+        if not archive.is_file():facts["archive_not_present"]=1
+        elif archive.stat().st_size>65*1024*1024:facts["archive_overlarge"]=1
+        else:
+            with zipfile.ZipFile(archive) as zf:
+                infos=zf.infolist()
+                if not 1<=len(infos)<=2500:facts["archive_member_count_invalid"]=1
+                else:
+                    parts=[PurePosixPath(item.filename) for item in infos]
+                    if not all(len(p.parts)>=2 and p.parts[0]==recipe for p in parts):
+                        facts["customer_delivery_layout_not_source_recipe"]=1
+                    if not any(p.name.startswith("test_") and p.suffix==".py" for p in parts):
+                        facts["no_embedded_source_tests"]=1
+                    extensions={p.suffix.lower() for p in parts}
+                    groups={
+                        "code":{".py",".js",".ts",".jsx",".tsx",".php"},
+                        "document":{".pdf",".docx",".md",".txt",".epub"},
+                        "media":{".png",".jpg",".jpeg",".webp",".mp3",".wav",".mp4"},
+                        "web":{".html",".css",".svg"},
+                        "structured_data":{".json",".csv",".xlsx",".db",".sqlite"}}
+                    for category,values in groups.items():
+                        if extensions.intersection(values):facts["contains_"+category]=1
+    except (OSError,ValueError,RuntimeError,UnicodeError,zipfile.BadZipFile,KeyError,EOFError):
+        facts["unreadable_legacy_archive_format"]=1
+    return facts
+
+
 def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
     """Rebuild from either verified generated or installed native recipe roots."""
     root=Path(root);source_root=Path(source_root);maker_path=Path(maker_path)
@@ -193,6 +237,7 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
             "unchanged_or_human_only":0,"missing_source":0,"failed":0,
             "archive_sources_recovered":0,"archive_recovery_rejected":0,
             "archive_recovery_rejection_reasons":{},
+            "legacy_source_gap_causes":{},
             "verified_source_roots":len(roots),
             "source_root_hits":[0 for _ in roots],
             "duplicate_recipe_roots_blocked":0}
@@ -231,6 +276,9 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
                 locations=[(index,recovered_root,recovered_root/recipe)]
             else:
                 totals["missing_source"]+=1
+                causes=totals["legacy_source_gap_causes"]
+                for reason in classify_unrecoverable_artifact(root,recipe):
+                    causes[reason]=causes.get(reason,0)+1
                 continue
         # Never make an arbitrary selection if two roots own the same recipe.
         # A genuine source collision needs operator provenance resolution.
