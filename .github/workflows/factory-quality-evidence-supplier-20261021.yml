@@ -6,9 +6,15 @@ on:
       - scripts/factory_quality_evidence_supplier_v1.py
       - scripts/factory_quality_bulk_evidence_supplier_v1.py
       - scripts/factory_ai_evidence_analyst_agent_v1.py
+      - scripts/factory_autonomous_evidence_verifier_v1.py
+      - scripts/factory_quality_evidence_evaluator_v1.py
+      - scripts/factory_autonomous_evidence_verifier_v1.py
+      - scripts/factory_quality_evidence_evaluator_v1.py
       - tests/test_factory_quality_evidence_supplier_v1.py
       - tests/test_factory_quality_bulk_evidence_supplier_v1.py
       - tests/test_factory_ai_evidence_analyst_agent_v1.py
+      - tests/test_factory_autonomous_evidence_verifier_v1.py
+      - tests/test_factory_autonomous_evidence_verifier_v1.py
       - .github/workflows/factory-quality-evidence-supplier-20261021.yml
   push:
     branches: [main]
@@ -20,6 +26,8 @@ on:
       - tests/test_factory_quality_bulk_evidence_supplier_v1.py
       - tests/test_factory_ai_evidence_analyst_agent_v1.py
       - .github/workflows/factory-quality-evidence-supplier-20261021.yml
+  schedule:
+    - cron: '17 */6 * * *'
   workflow_dispatch:
 permissions: {contents: read}
 concurrency:
@@ -35,15 +43,16 @@ jobs:
       - name: Validate supplier contract and actual ZIP evidence
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/factory_quality_evidence_supplier_v1.py scripts/factory_quality_bulk_evidence_supplier_v1.py scripts/factory_ai_evidence_analyst_agent_v1.py
+          python3 -m py_compile scripts/factory_quality_evidence_supplier_v1.py scripts/factory_quality_bulk_evidence_supplier_v1.py scripts/factory_ai_evidence_analyst_agent_v1.py scripts/factory_quality_evidence_evaluator_v1.py scripts/factory_autonomous_evidence_verifier_v1.py
           python3 -B -m unittest discover -s tests -p 'test_factory_quality_*evidence_supplier_v1.py' -v
           python3 -B -m unittest discover -s tests -p test_factory_ai_evidence_analyst_agent_v1.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_autonomous_evidence_verifier_v1.py -v
           echo FACTORY_100_SUPPLIER_ROUTES_AND_REAL_ZIP_QA=PASS
   private-vps-supply:
     needs: contract-tests
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
@@ -83,6 +92,8 @@ jobs:
           timeout 35s scp -q -F "$d/config" scripts/factory_quality_evidence_supplier_v1.py "factory-vps:$stage/supplier.py"
           timeout 35s scp -q -F "$d/config" scripts/factory_quality_bulk_evidence_supplier_v1.py "factory-vps:$stage/bulk.py"
           timeout 35s scp -q -F "$d/config" scripts/factory_ai_evidence_analyst_agent_v1.py "factory-vps:$stage/agent.py"
+          timeout 35s scp -q -F "$d/config" scripts/factory_quality_evidence_evaluator_v1.py "factory-vps:$stage/evaluator.py"
+          timeout 35s scp -q -F "$d/config" scripts/factory_autonomous_evidence_verifier_v1.py "factory-vps:$stage/verifier.py"
           timeout 35s scp -q -F "$d/config" factory_config/quality_100_criteria.json "factory-vps:$stage/criteria.json"
           wanted="$(sha256sum scripts/factory_quality_evidence_supplier_v1.py | cut -d' ' -f1)"
           have="$(timeout 30s ssh -T -F "$d/config" factory-vps "sha256sum '$stage/supplier.py' | cut -d' ' -f1")"
@@ -96,6 +107,11 @@ jobs:
           wanted="$(sha256sum scripts/factory_ai_evidence_analyst_agent_v1.py | cut -d' ' -f1)"
           have="$(timeout 30s ssh -T -F "$d/config" factory-vps "sha256sum '$stage/agent.py' | cut -d' ' -f1")"
           test "$wanted" = "$have"
+          for pair in "scripts/factory_quality_evidence_evaluator_v1.py:evaluator.py" "scripts/factory_autonomous_evidence_verifier_v1.py:verifier.py"; do
+            local_file="${pair%%:*}"
+            remote_file="${pair#*:}"
+            test "$(sha256sum "$local_file" | cut -d' ' -f1)" = "$(timeout 30s ssh -T -F "$d/config" factory-vps "sha256sum '$stage/$remote_file' | cut -d' ' -f1")"
+          done
           echo FACTORY_QA1000_SUPPLIER_SOURCE_PINNING=PASS
       - name: Measure six bounded technical criteria on the pinned real F28 ZIP
         shell: bash
@@ -168,6 +184,15 @@ jobs:
           root="/home/githubops/factory-runtime/private/autonomous-product-cycle"
           timeout 8m ssh -T -F "$d/config" factory-vps \
             "python3 -B '$stage/agent.py' --factory-root '$root' --catalog '$stage/criteria.json' --supplier '$stage/supplier.py'"
+      - name: Recheck private supplier receipts and 100 AI workpapers per version
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/supply-evidence-ssh"
+          stage="/home/githubops/factory-runtime/operations/.qa1000-supply-$GITHUB_RUN_ID"
+          root="/home/githubops/factory-runtime/private/autonomous-product-cycle"
+          timeout 8m ssh -T -F "$d/config" factory-vps \
+            "python3 -B '$stage/verifier.py' --factory-root '$root' --catalog '$stage/criteria.json' --supplier '$stage/supplier.py' --agent '$stage/agent.py' --evaluator '$stage/evaluator.py'"
       - name: Clean up temporary SSH credentials
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/supply-evidence-ssh"
