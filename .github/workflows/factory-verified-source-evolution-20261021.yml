@@ -1,0 +1,201 @@
+name: Factory verified evolution from QA defects to improved source on VPS
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/factory_recipe_designer.py
+      - scripts/factory_vps_product_cycle.py
+      - tests/test_factory_recipe_designer.py
+      - tests/test_factory_source_evolution.py
+      - .github/workflows/factory-verified-source-evolution-20261021.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_recipe_designer.py
+      - scripts/factory_vps_product_cycle.py
+      - tests/test_factory_recipe_designer.py
+      - tests/test_factory_source_evolution.py
+      - .github/workflows/factory-verified-source-evolution-20261021.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factory-verified-source-evolution-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  measured-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Prepare pinned workbook dependency for full F27/F28 tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check 'openpyxl==3.1.5'
+      - name: Prove actual source evolution, retention, rollback and genuine QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_recipe_designer.py scripts/factory_vps_product_cycle.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_source_evolution -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_recipe_designer -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_vps_product_cycle -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_product_rework -v
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('scripts/factory_vps_product_cycle.py').read_text()
+          designer=Path('scripts/factory_recipe_designer.py').read_text()
+          maker=Path('scripts/factory_product_maker.py').read_text()
+          assert 'designer.evolve_recipe(candidate_recipe,generated_root)' in source
+          assert 'genuinely_evolved_source_count' in source
+          assert 'quality_1000_certified' in designer
+          assert "'commercial_release':False" in designer
+          assert '"commercial_release_permitted_from_manufacturing": False' in maker
+          assert '"publishable_product_count": 0' in source
+          print('FACTORY_SOURCE_EVOLUTION_TECHNICAL_QA=PASS')
+          print('FACTORY_PROFESSIONAL_QUALITY_1000_AUTO_APPROVAL=false')
+          print('FACTORY_PUBLICATION_ENABLED=false')
+          PY
+  private-vps-install:
+    needs: measured-qa
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify VPS pinned identity
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/evolution"
+          install -d -m 700 "$d"
+          test -n "$VPS_KEY"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo FACTORY_EVOLUTION_PINNED_VPS=PASS
+      - name: Install tested factory evolver under production lock, with verified rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/evolution"
+          opts=(-i "$d/key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          host="githubops@178.239.147.150"
+          stage="/home/githubops/factory-runtime/operations/.source-evolution-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          timeout 35s ssh -T "${opts[@]}" "$host" "umask 077; test ! -e '$stage' && mkdir -m 700 '$stage'"
+          for file in factory_recipe_designer.py factory_vps_product_cycle.py; do
+            scp -q "${opts[@]}" "scripts/$file" "$host:$stage/$file"
+            expected="$(sha256sum "scripts/$file" | cut -d' ' -f1)"
+            actual="$(timeout 35s ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$file' | cut -d' ' -f1")"
+            test "$expected" = "$actual"
+          done
+          timeout 660s ssh -T "${opts[@]}" "$host" "bash -se -- '$stage'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          stage="$1"
+          base="$HOME/factory-runtime"
+          ops="$base/operations"
+          target="$ops/autonomous-product-runtime/scripts"
+          python="$base/.venv/bin/python"
+          private="$base/private/autonomous-product-cycle"
+          test "$(id -un)" = githubops && test -d "$target" && test ! -L "$target" && test -x "$python" && test -d "$private"
+          exec 8>"$ops/autonomous-product-cycle.lock"
+          flock -w 180 8
+          exec 9>"$private/.production-cycle.lock"
+          flock -w 60 9
+          backup="$ops/backups/source-evolution-$RANDOM-$(date -u +%Y%m%dT%H%M%SZ)"
+          install -d -m 700 "$backup"
+          files=(factory_recipe_designer.py factory_vps_product_cycle.py)
+          for file in "${files[@]}"; do
+            test -f "$target/$file" && test ! -L "$target/$file"
+            cp -p -- "$target/$file" "$backup/$file"
+            test "$(sha256sum "$backup/$file" | cut -d' ' -f1)" = "$(sha256sum "$target/$file" | cut -d' ' -f1)"
+          done
+          installed=0
+          restore() {
+            rc=$?
+            if test "$rc" -ne 0 && test "$installed" -eq 1; then
+              for file in "${files[@]}"; do
+                cp -p -- "$backup/$file" "$target/$file"
+              done
+              echo FACTORY_EVOLUTION_CODE_ROLLBACK=RESTORED
+            fi
+            exit "$rc"
+          }
+          trap restore EXIT
+          installed=1
+          for file in "${files[@]}"; do
+            test -s "$stage/$file" && test ! -L "$stage/$file"
+            temp="$(mktemp "$target/.evolution.XXXXXXXX")"
+            cp -- "$stage/$file" "$temp"
+            chmod 600 "$temp"
+            mv -f -- "$temp" "$target/$file"
+            test "$(sha256sum "$target/$file" | cut -d' ' -f1)" = "$(sha256sum "$stage/$file" | cut -d' ' -f1)"
+          done
+          "$python" -B -m py_compile "$target/factory_recipe_designer.py" "$target/factory_vps_product_cycle.py"
+          echo FACTORY_EVOLUTION_SOURCE_CODE_SHA_VERIFIED=2
+          # A bounded live inspection/evolution, not a fake positive product count.
+          "$python" -B - "$target" "$private" <<'PY'
+          import importlib.util,json,sys
+          from pathlib import Path
+          scripts=Path(sys.argv[1])
+          private=Path(sys.argv[2])
+          spec=importlib.util.spec_from_file_location('verified_evolver',scripts/'factory_recipe_designer.py')
+          mod=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          generated=private/'generated-product-recipes'
+          changed=[];examined=0;issues=[]
+          if generated.is_dir() and not generated.is_symlink():
+              candidates=sorted(p for p in generated.iterdir()
+                                if p.is_dir() and not p.is_symlink()
+                                and (p.name.startswith('synth_') or p.name.startswith('sheet_')))
+              # Only older candidates need regeneration; never repeatedly
+              # spend the window on already-evolved products.
+              for p in candidates:
+                  if examined>=2:break
+                  try:
+                      receipt=mod.read(p/'design_receipt.json')
+                  except (OSError,ValueError) as err:
+                      issues.append({'recipe':p.name,'reason':type(err).__name__})
+                      continue
+                  if receipt.get('generator_capability_revision')=='verified-batch-v2':
+                      continue
+                  examined+=1
+                  try:
+                      result=mod.evolve_recipe(p.name,generated)
+                      if result.get('changed'):
+                          changed.append({'recipe':p.name,
+                                          'source_sha256':result['revised_source_sha256'],
+                                          'technical_tests':result['measured_acceptance']['successful_tests']})
+                  except (RuntimeError,ValueError,OSError,ArithmeticError) as error:
+                      issues.append({'recipe':p.name,'reason':type(error).__name__})
+          print("FACTORY_EVOLUTION_LIVE_CANDIDATES_EXAMINED="+str(examined))
+          print("FACTORY_EVOLUTION_REAL_SOURCES_IMPROVED="+str(len(changed)))
+          print("FACTORY_EVOLUTION_UNRESOLVED_PRIVATE_ISSUES="+str(len(issues)))
+          print("FACTORY_EVOLUTION_LIVE_RESULT="+json.dumps({
+              'candidate_improvements':changed,'unresolved':issues,
+              'commercially_approved':False,'publicly_published':False},sort_keys=True))
+          PY
+          trap - EXIT
+          echo FACTORY_EVOLUTION_PRIVATE_INSTALL=PASS
+          echo FACTORY_EVOLUTION_1000_SCORE_BYPASS=0
+          echo FACTORY_EVOLUTION_PUBLIC_PRODUCTS_PUBLISHED=0
+          REMOTE
+      - name: Remove ephemeral SSH private key
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/evolution"

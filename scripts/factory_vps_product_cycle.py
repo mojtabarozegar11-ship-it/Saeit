@@ -67,6 +67,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         design_state = {"enabled": False, "new_recipes": 0}
         designer_failures = []
         source_recoveries = []
+        source_evolutions = []
+        evolution_attempt_defects = []
         invention_state={"enabled":False,"new_technical_briefs_this_tick":0}
         if enable_designer:
             designer = load("saeit_factory_recipe_designer", SCRIPTS / "factory_recipe_designer.py")
@@ -121,6 +123,37 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                     generated[recipe] = maker.inspect_recipe(generated_root / recipe)
             if set(generated) & set(recipe_catalog):
                 raise RuntimeError("GENERATED_RECIPE_COLLIDES_WITH_STATIC_SOURCE")
+            # Quality-driven product evolution: compiler-owned goods really gain
+            # a bounded customer batch API, with holdout and real unit tests.
+            # Rotate the bounded queue across ticks; never leave later product
+            # revisions permanently behind a fixed first-N selection.
+            evolution_cursor_file=root/'source-evolution-cursor.json'
+            try:
+                last=json.loads(evolution_cursor_file.read_text(encoding='utf8')).get('last_recipe','')
+                if not isinstance(last,str):last=''
+            except (OSError,ValueError,AttributeError):
+                last=''
+            pending_evolution=sorted(generated)
+            pending_evolution=[r for r in pending_evolution if r>last]+[
+                r for r in pending_evolution if r<=last]
+            for candidate_recipe in pending_evolution[:2]:
+                try:
+                    outcome=designer.evolve_recipe(candidate_recipe,generated_root)
+                    if outcome.get('changed') is True:
+                        # The revised files are actual new manufacturer inputs;
+                        # commercial approval is still a separate signed gate.
+                        generated[candidate_recipe]=maker.inspect_recipe(
+                            generated_root/candidate_recipe)
+                        source_evolutions.append(outcome)
+                except (RuntimeError,ValueError,OSError,ArithmeticError) as error:
+                    # The manufacturing defect handler further below may
+                    # recompile this same source and prove it technically
+                    # recovered. Do not permanently mark that same repaired
+                    # version as failed due to a pre-repair observation.
+                    evolution_attempt_defects.append({'type':'source_evolution',
+                        'recipe':candidate_recipe,'reason':str(error)[:240]})
+                maker.atomic_text(evolution_cursor_file,
+                                  json.dumps({'last_recipe':candidate_recipe})+'\n')
             recipe_catalog.update(generated)
             recipe_roots.update({key: generated_root for key in generated})
         for item in admission_failures:
@@ -181,6 +214,11 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                     root, recipe, json.loads(manifest.read_text(encoding="utf-8")),
                     archive_path=previous_product / (recipe + "-internal-qa.zip"),
                     source_digest=maker.source_digest(source, source_files))
+        recovered_source_ids={entry['recipe'] for entry in source_recoveries}
+        designer_failures.extend(
+            issue for issue in evolution_attempt_defects
+            if issue['recipe'] not in recovered_source_ids
+        )
         if enable_design_intake and engineering_state.get('enabled'):
             try:engineering_state['production_results']=intake.reconcile(root)
             except (ValueError,OSError) as error:
@@ -208,6 +246,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "designer_failures": designer_failures,
             "research_failures": research_failures,
             "source_recoveries": source_recoveries,
+            "source_evolutions": source_evolutions,
+            "genuinely_evolved_source_count": len(source_evolutions),
+            "source_evolution_policy": "bounded_compiler_owned_verified_sources_only",
             "recipe_admission_failures": admission_failures,
             "product_candidates_processed": dossier["processed_count"],
             "research_dossiers_updated": dossier["updated_count"],

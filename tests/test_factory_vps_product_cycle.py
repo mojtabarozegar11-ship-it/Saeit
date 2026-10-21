@@ -218,6 +218,34 @@ class FactorySynthesisIntegrationTests(unittest.TestCase):
         retained=Path(state['source_recoveries'][0]['retained_broken_source'])
         self.assertFalse(list(retained.glob('test_*.py')))
 
+    def test_legacy_compiled_product_evolves_through_actual_manufacturing_cycle(self):
+        from tests.test_factory_source_evolution import make_legacy_source
+        first=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True)
+        self.assertEqual(first['new_recipe_count'],1)
+        generated=self.output/'generated-product-recipes'
+        recipe=next(p.name for p in generated.iterdir() if p.is_dir())
+        source=generated/recipe
+        make_legacy_source(source)
+        maker=cycle.load('legacy_maker_for_upgrade',ROOT/'scripts/factory_product_maker.py')
+        previous=maker.manufacture(recipe,generated,self.output/'digital-products')
+        self.assertTrue(previous['changed'])
+        old_archive=(self.output/'digital-products'/recipe/(recipe+'-internal-qa.zip')).read_bytes()
+        cycle_result=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True)
+        self.assertEqual(cycle_result['status'],'ok')
+        state=json.loads((self.output/'production-state.json').read_text())
+        improved=state['source_evolutions']
+        self.assertEqual(len(improved),1)
+        self.assertEqual(improved[0]['recipe'],recipe)
+        self.assertEqual(state['genuinely_evolved_source_count'],1)
+        self.assertEqual(state['source_evolution_policy'],'bounded_compiler_owned_verified_sources_only')
+        self.assertNotEqual((self.output/'digital-products'/recipe/(recipe+'-internal-qa.zip')).read_bytes(),old_archive)
+        self.assertTrue(Path(improved[0]['previous_source_retained']).is_dir())
+        self.assertGreaterEqual(improved[0]['measured_acceptance']['successful_tests'],5)
+        manifest=json.loads((self.output/'digital-products'/recipe/'manufacturing_manifest.json').read_text())
+        self.assertEqual(manifest['qa_status'],'passed')
+        self.assertFalse(manifest['professional_quality_approved'])
+        self.assertFalse(state['publication_locked_until_owner_approval'] is False)
+
     def test_new_recipe_is_generated_built_and_repaired_without_static_folder(self):
         static_before = sorted(x.name for x in self.recipes.iterdir())
         first = cycle.run_cycle(self.db, self.output, self.recipes, enable_designer=True)

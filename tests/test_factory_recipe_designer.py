@@ -38,7 +38,7 @@ class DesignerTests(unittest.TestCase):
         self.assertTrue(made['changed'])
         archive, manifest=warehouse.inspect_source(self.root,result['recipe'])
         self.assertTrue(archive.is_file())
-        self.assertEqual(manifest['qa_measurements']['successful_tests'],3)
+        self.assertGreaterEqual(manifest['qa_measurements']['successful_tests'],5)
         self.assertFalse(result['commercial_release'])
 
     def test_title_and_examples_do_not_inflate_product_count(self):
@@ -126,7 +126,7 @@ class ActualSourceRecoveryTests(unittest.TestCase):
         with self.assertRaises(RuntimeError): maker.verify_recipe(source)
         recovered=designer.recover_recipe(result['recipe'],self.root/'recipes')
         self.assertIn('injected defect',(Path(recovered['retained_broken_source'])/'calculator.py').read_text())
-        self.assertEqual(recovered['qa_measurements']['successful_tests'],3)
+        self.assertGreaterEqual(recovered['qa_measurements']['successful_tests'],5)
         self.assertEqual(maker.verify_recipe(source),'unit_tests_passed')
 
     def test_changed_original_spec_is_not_silently_overwritten(self):
