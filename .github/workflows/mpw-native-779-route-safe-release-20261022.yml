@@ -4,6 +4,7 @@ on:
     branches: [fix/mpw-native-gateway-20261022]
     paths:
       - .github/workflows/mpw-native-779-route-safe-release-20261022.yml
+      - scripts/mpw_native_779_route_patch_20261022.py
   workflow_dispatch:
 permissions: {contents: read}
 jobs:
