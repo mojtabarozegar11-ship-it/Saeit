@@ -56,6 +56,52 @@ def atomic_receipt(path,doc):
         os.chmod(dest,0o600)
     return digest
 
+def private_state(path, data):
+    """Atomic, private operational state; never a quality approval."""
+    if path.is_symlink() or path.parent.is_symlink():
+        raise ValueError("UNSAFE_REBUILD_STATE_PATH")
+    path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".qa-rebuild-", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf8") as stream:
+            json.dump(data, stream, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def rotated_orders(orders, cursor):
+    if cursor.is_symlink():
+        raise ValueError("UNSAFE_REBUILD_CURSOR")
+    if not cursor.exists():
+        return orders
+    saved = checked_json(cursor)
+    last = saved.get("last_attempted_recipe")
+    if saved.get("schema") != "saeit.factory.qa-rebuild-cursor.v1" or not isinstance(last, str) or not RECIPE.fullmatch(last):
+        raise ValueError("INVALID_REBUILD_CURSOR")
+    return [row for row in orders if row[0] > last] + [row for row in orders if row[0] <= last]
+
+
+def failure_state(folder, basis):
+    path = folder / ("failures-" + basis[:24] + ".json")
+    if path.is_symlink():
+        raise ValueError("UNSAFE_REBUILD_FAILURE_LEDGER")
+    if not path.exists():
+        return path, {"schema": "saeit.factory.qa-rebuild-failure.v1",
+                      "basis_sha256": basis, "attempts": 0}
+    saved = checked_json(path)
+    if (saved.get("schema") != "saeit.factory.qa-rebuild-failure.v1"
+            or saved.get("basis_sha256") != basis
+            or type(saved.get("attempts")) is not int or saved["attempts"] < 0):
+        raise ValueError("INVALID_REBUILD_FAILURE_LEDGER")
+    return path, saved
+
+
 def recover_source_from_archive(root,recipe,order,maker,recovered_root):
     """Recover source only from the original artifact bound to its QA receipt."""
     product=root/"digital-products"/recipe
@@ -527,7 +573,8 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
             "legacy_source_gap_causes":{},
             "verified_source_roots":len(roots),
             "source_root_hits":[0 for _ in roots],
-            "duplicate_recipe_roots_blocked":0}
+            "duplicate_recipe_roots_blocked":0,
+            "root_cause_review_pending":0,"failure_escalations_created":0}
     orders=[]
     for folder in sorted(workorders.iterdir()):
         if folder.is_symlink() or not folder.is_dir() or not RECIPE.fullmatch(folder.name):
@@ -542,6 +589,8 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
         if not isinstance(order.get("unresolved_technical_or_domain_defects",[]),list):
             continue
         orders.append((folder.name,order))
+    cursor=root/"quality-excellence"/"native-rebuild-cursor.json"
+    orders=rotated_orders(orders,cursor)
     for recipe,order in orders:
         totals["orders_seen"]+=1
         locations=[(index,parent,parent/recipe)
@@ -611,8 +660,14 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
             prior_proof=checked_json(proof)
             if prior_proof.get("status")=="technical_candidate_verified":
                 continue
+        failure_path,failures=failure_state(receipt_folder,basis)
+        if failures["attempts"]>=3:
+            totals["root_cause_review_pending"]+=1
+            continue
         if totals["rebuild_attempted"]>=limit:continue
         totals["rebuild_attempted"]+=1
+        private_state(cursor,{"schema":"saeit.factory.qa-rebuild-cursor.v1",
+                              "last_attempted_recipe":recipe})
         try:
             result=maker.manufacture(recipe,active_root,output)
             target=output/recipe
@@ -644,8 +699,15 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
                     f.flush();os.fsync(f.fileno())
                 os.chmod(proof,0o600)
             totals["technical_candidates_verified"]+=1
-        except (ValueError,OSError,RuntimeError,AssertionError,KeyError,TypeError):
+        except (ValueError,OSError,RuntimeError,AssertionError,KeyError,TypeError) as error:
             totals["failed"]+=1
+            failures["attempts"]+=1
+            failures["last_error_type"]=type(error).__name__
+            failures["status"]=("ROOT_CAUSE_REVIEW_REQUIRED" if failures["attempts"]>=3
+                                else "RETRY_WITH_SAME_PROVENANCE")
+            private_state(failure_path,failures)
+            if failures["attempts"]==3:
+                totals["failure_escalations_created"]+=1
     totals.update({"schema":SCHEMA,"commercial_release_authorized":False,
                    "professional_quality_1000_verified":False,
                    "all_40_native_executors_proven":False})
