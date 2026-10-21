@@ -192,6 +192,88 @@ def summarize(private_root):
     return counts
 
 
+def quality_returns(private_root):
+    """Read actual QA work-orders, bound to their exact source assessment.
+
+    A technical rebuild never closes the independent quality assessment.
+    Results preserve the work-order hash so changed assessments are new work.
+    """
+    root = Path(private_root)
+    directory = root / 'quality-excellence' / 'production-workorders'
+    result = {'orders': [], 'invalid_orders': 0}
+    if not directory.exists():
+        return result
+    if directory.is_symlink():
+        raise RuntimeError('QUALITY_RETURN_DIRECTORY_UNSAFE')
+    for folder in sorted(directory.iterdir()):
+        if not folder.is_dir() or folder.is_symlink():
+            continue
+        try:
+            recipe = _safe_recipe(folder.name)
+            path = folder / 'current.json'
+            original = root / 'quality-excellence' / 'rework' / recipe / 'current.json'
+            if (path.is_symlink() or original.parent.is_symlink() or original.is_symlink()
+                    or not path.is_file() or not original.is_file()
+                    or path.stat().st_size > 2_000_000 or original.stat().st_size > 2_000_000):
+                raise ValueError('QUALITY_RETURN_UNSAFE')
+            raw = path.read_bytes()
+            order = json.loads(raw)
+            assessment_raw = original.read_bytes()
+            assessment = json.loads(assessment_raw)
+            if (order.get('schema') != 'saeit.factory.production-rework-order.v1'
+                    or order.get('recipe') != recipe
+                    or order.get('source_quality_receipt_sha256') != hashlib.sha256(assessment_raw).hexdigest()
+                    or order.get('artifact_sha256') != assessment.get('artifact_sha256')
+                    or not re.fullmatch('[0-9a-f]{64}', str(order.get('artifact_sha256', '')))):
+                raise ValueError('QUALITY_RETURN_SOURCE_MISMATCH')
+            if order.get('status') != 'NEEDS_REWORK':
+                continue
+            result['orders'].append({'recipe': recipe,
+                'workorder_sha256': hashlib.sha256(raw).hexdigest(),
+                'assessed_artifact_sha256': order['artifact_sha256'],
+                'status': 'returned_to_production', 'independent_reinspection_required': True})
+        except (ValueError, TypeError, AttributeError, OSError):
+            result['invalid_orders'] += 1
+    return result
+
+
+def record_quality_candidate(private_root, order, manifest, *, archive_path):
+    """Link a genuine changed, QA-passed build back to a still-open QA order."""
+    root = Path(private_root)
+    recipe = _safe_recipe(order['recipe'])
+    # Re-read the source assessment: a concurrent reviewer revision invalidates
+    # this attempt, rather than accepting an obsolete return-to-production job.
+    current = next((x for x in quality_returns(root)['orders']
+                    if x['recipe'] == recipe), None)
+    if current != order:
+        raise RuntimeError('QUALITY_RETURN_CHANGED_DURING_BUILD')
+    archive = Path(archive_path)
+    if (manifest.get('qa_status') != 'passed' or manifest.get('recipe') != recipe
+            or archive.is_symlink() or not archive.is_file()
+            or not 0 < archive.stat().st_size <= 25 * 1024 * 1024):
+        raise RuntimeError('QUALITY_RETURN_REQUIRES_REAL_PASSED_BUILD')
+    actual = hashlib.sha256(archive.read_bytes()).hexdigest()
+    if actual != manifest.get('artifact_sha256'):
+        raise RuntimeError('QUALITY_RETURN_BUILD_HASH_MISMATCH')
+    with zipfile.ZipFile(archive) as package:
+        members = package.infolist()
+        if (not members or len(members) > 256
+                or sum(x.file_size for x in members) > 100 * 1024 * 1024
+                or package.testzip() is not None):
+            raise RuntimeError('QUALITY_RETURN_ARCHIVE_INVALID')
+    changed = actual != order['assessed_artifact_sha256']
+    report = dict(order, candidate_artifact_sha256=actual,
+        status='awaiting_independent_reinspection' if changed else 'source_repair_still_required',
+        technical_qa_passed=True, genuinely_changed_artifact=changed,
+        quality_defect_closed=False, commercial_release_allowed=False)
+    target = root / 'quality-return-candidates' / recipe / (order['workorder_sha256'] + '.json')
+    if target.is_file() and not target.is_symlink():
+        if json.loads(target.read_text()) == report:
+            return report
+    _atomic_json(target, report)
+    return report
+
+
 RESEARCH_FIX_PLANS = {
     "FIVE_DISTINCT_PUBLIC_SOURCES_WITH_LINKED_EVIDENCE_REQUIRED":
         "Research and verify independent public sources; record source URLs and direct evidence links.",
@@ -271,3 +353,4 @@ def summarize_research(private_root):
             key = str(obj.get("current_status", "unknown"))
             counts[key] = counts.get(key, 0) + 1
     return counts
+

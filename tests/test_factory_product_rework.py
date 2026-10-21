@@ -1,5 +1,6 @@
 """Real recipe-failure diagnosis, protected artifacts, and repair validation."""
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -174,6 +175,32 @@ class FactoryDefectLoopTests(unittest.TestCase):
         self.assertEqual(self._ledger("farm_enterprise_economics")["current_status"],
                          "needs_rework")
 
+    def test_real_cycle_links_rebuilt_quality_return_and_retains_open_assessment(self):
+        recipe = 'farm_enterprise_economics'
+        cycle.run_cycle(self.db, self.output, self.recipes)
+        archive = self.output/'digital-products'/recipe/(recipe+'-internal-qa.zip')
+        before = maker.sha256_file(archive)
+        assessment = self.output/'quality-excellence/rework'/recipe/'current.json'
+        order = self.output/'quality-excellence/production-workorders'/recipe/'current.json'
+        assessment.parent.mkdir(parents=True)
+        order.parent.mkdir(parents=True)
+        assessment.write_text(json.dumps({'artifact_sha256': before, 'defects': ['documentation incomplete']}))
+        order.write_text(json.dumps({'schema':'saeit.factory.production-rework-order.v1',
+            'recipe':recipe, 'artifact_sha256':before, 'status':'NEEDS_REWORK',
+            'source_quality_receipt_sha256':hashlib.sha256(assessment.read_bytes()).hexdigest()}))
+        readme = self.recipes/recipe/'README.md'
+        readme.write_text(readme.read_text()+'\nClarified cost assumptions for the QA repair.\n')
+        cycle.run_cycle(self.db, self.output, self.recipes)
+        state = json.loads((self.output/'production-state.json').read_text())
+        candidate = state['quality_return_build_candidates'][0]
+        self.assertEqual(candidate['status'], 'awaiting_independent_reinspection')
+        self.assertNotEqual(candidate['candidate_artifact_sha256'], before)
+        self.assertFalse(candidate['quality_defect_closed'])
+        health = json.loads((self.output/'production-health.json').read_text())
+        self.assertEqual(health['independent_quality_returns_pending'], 1)
+        self.assertTrue(health['unfinished_rework_requires_attention'])
+
 
 if __name__ == "__main__":
     unittest.main()
+

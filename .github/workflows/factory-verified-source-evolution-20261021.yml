@@ -3,6 +3,9 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - scripts/factory_product_rework.py
+      - tests/test_factory_quality_return_loop.py
+      - tests/test_factory_product_rework.py
       - scripts/factory_recipe_designer.py
       - scripts/factory_vps_product_cycle.py
       - tests/test_factory_recipe_designer.py
@@ -11,6 +14,9 @@ on:
   push:
     branches: [main]
     paths:
+      - scripts/factory_product_rework.py
+      - tests/test_factory_quality_return_loop.py
+      - tests/test_factory_product_rework.py
       - scripts/factory_recipe_designer.py
       - scripts/factory_vps_product_cycle.py
       - tests/test_factory_recipe_designer.py
@@ -47,6 +53,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_recipe_designer -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_vps_product_cycle -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_product_rework -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_quality_return_loop -v
           python3 - <<'PY'
           from pathlib import Path
           source=Path('scripts/factory_vps_product_cycle.py').read_text()
@@ -97,7 +104,7 @@ jobs:
           host="githubops@178.239.147.150"
           stage="/home/githubops/factory-runtime/operations/.source-evolution-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           timeout 35s ssh -T "${opts[@]}" "$host" "umask 077; test ! -e '$stage' && mkdir -m 700 '$stage'"
-          for file in factory_recipe_designer.py factory_vps_product_cycle.py; do
+          for file in factory_recipe_designer.py factory_vps_product_cycle.py factory_product_rework.py; do
             scp -q "${opts[@]}" "scripts/$file" "$host:$stage/$file"
             expected="$(sha256sum "scripts/$file" | cut -d' ' -f1)"
             actual="$(timeout 35s ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$file' | cut -d' ' -f1")"
@@ -119,7 +126,7 @@ jobs:
           flock -w 60 9
           backup="$ops/backups/source-evolution-$RANDOM-$(date -u +%Y%m%dT%H%M%SZ)"
           install -d -m 700 "$backup"
-          files=(factory_recipe_designer.py factory_vps_product_cycle.py)
+          files=(factory_recipe_designer.py factory_vps_product_cycle.py factory_product_rework.py)
           for file in "${files[@]}"; do
             test -f "$target/$file" && test ! -L "$target/$file"
             cp -p -- "$target/$file" "$backup/$file"
@@ -147,7 +154,7 @@ jobs:
             test "$(sha256sum "$target/$file" | cut -d' ' -f1)" = "$(sha256sum "$stage/$file" | cut -d' ' -f1)"
           done
           "$python" -B -m py_compile "$target/factory_recipe_designer.py" "$target/factory_vps_product_cycle.py"
-          echo FACTORY_EVOLUTION_SOURCE_CODE_SHA_VERIFIED=2
+          echo FACTORY_EVOLUTION_SOURCE_CODE_SHA_VERIFIED=3
           # A bounded live inspection/evolution, not a fake positive product count.
           "$python" -B - "$target" "$private" <<'PY'
           import importlib.util,json,sys
@@ -183,6 +190,13 @@ jobs:
                                           'technical_tests':result['measured_acceptance']['successful_tests']})
                   except (RuntimeError,ValueError,OSError,ArithmeticError) as error:
                       issues.append({'recipe':p.name,'reason':type(error).__name__})
+          qspec=importlib.util.spec_from_file_location('quality_return_live',scripts/'factory_product_rework.py')
+          qmod=importlib.util.module_from_spec(qspec);qspec.loader.exec_module(qmod)
+          returns=qmod.quality_returns(private)
+          print("FACTORY_REAL_QUALITY_RETURNS_OPEN="+str(len(returns['orders'])))
+          print("FACTORY_INVALID_QUALITY_RETURNS="+str(returns['invalid_orders']))
+          assert 'record_quality_candidate(' in (scripts/'factory_vps_product_cycle.py').read_text()
+          print("FACTORY_QA_RETURN_TO_SCHEDULED_BUILD_WIRED=PASS")
           print("FACTORY_EVOLUTION_LIVE_CANDIDATES_EXAMINED="+str(examined))
           print("FACTORY_EVOLUTION_REAL_SOURCES_IMPROVED="+str(len(changed)))
           print("FACTORY_EVOLUTION_UNRESOLVED_PRIVATE_ISSUES="+str(len(issues)))
@@ -199,3 +213,4 @@ jobs:
         if: always()
         shell: bash
         run: rm -rf -- "$RUNNER_TEMP/evolution"
+

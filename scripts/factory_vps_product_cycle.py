@@ -63,6 +63,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
 
         repair = load("saeit_factory_rework_cycle",
                       SCRIPTS / "factory_product_rework.py")
+        quality_return_state = repair.quality_returns(root)
+        quality_return_orders = {x['recipe']: x for x in quality_return_state['orders']}
+        quality_return_candidates = []
         engineering_state={"enabled":False,"enqueued":0}
         design_state = {"enabled": False, "new_recipes": 0}
         designer_failures = []
@@ -136,6 +139,10 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             pending_evolution=sorted(generated)
             pending_evolution=[r for r in pending_evolution if r>last]+[
                 r for r in pending_evolution if r<=last]
+            # Prefer genuine quality returns within the existing rotating limit.
+            # Every other tick retains the normal rotation to prevent starvation.
+            if last not in quality_return_orders:
+                pending_evolution.sort(key=lambda r: r not in quality_return_orders)
             for candidate_recipe in pending_evolution[:2]:
                 try:
                     outcome=designer.evolve_recipe(candidate_recipe,generated_root)
@@ -214,6 +221,15 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                     root, recipe, json.loads(manifest.read_text(encoding="utf-8")),
                     archive_path=previous_product / (recipe + "-internal-qa.zip"),
                     source_digest=maker.source_digest(source, source_files))
+                if recipe in quality_return_orders:
+                    try:
+                        quality_return_candidates.append(repair.record_quality_candidate(
+                            root, quality_return_orders[recipe],
+                            json.loads(manifest.read_text(encoding='utf-8')),
+                            archive_path=previous_product / (recipe + '-internal-qa.zip')))
+                    except (RuntimeError, ValueError, OSError) as error:
+                        designer_failures.append({'type': 'quality_return_reinspection',
+                            'recipe': recipe, 'reason': str(error)[:200]})
         recovered_source_ids={entry['recipe'] for entry in source_recoveries}
         designer_failures.extend(
             issue for issue in evolution_attempt_defects
@@ -270,6 +286,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                 for item in failures
             ],
             "private_rework_queue": rework_counts,
+            "quality_returns_to_production": quality_return_state,
+            "quality_return_build_candidates": quality_return_candidates,
+            "quality_returns_unresolved": len(quality_return_orders),
             "research_correction_queue": research_rework_counts,
             "manufacturing_failed_recipe_count": len(failures),
             "technical_zip_checks_only": True,
@@ -314,7 +333,12 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                   'last_new_artifact_at_utc':state['cycle_finished_at_utc'] if fresh else health.get('last_new_artifact_at_utc'),
                   'consecutive_zero_new_cycles':0 if fresh else counter('consecutive_zero_new_cycles')+1,
                   'zero_new_products_reason_code':reason,
-                  'unfinished_rework_requires_attention':bool(failures or admission_failures or designer_failures or research_failures),
+                  'unfinished_rework_requires_attention':bool(failures or admission_failures or designer_failures or research_failures
+                      or quality_return_orders or quality_return_state['invalid_orders']
+                      or rework_counts.get('needs_rework') or rework_counts.get('expert_review')
+                      or research_rework_counts.get('research_correction_required')),
+                  'independent_quality_returns_pending':len(quality_return_orders),
+                  'invalid_quality_return_orders':quality_return_state['invalid_orders'],
                   'commercial_quality_certified':False}
         maker.atomic_text(health_path,json.dumps(activity,sort_keys=True,indent=2)+'\n')
         maker.atomic_text(root / "production-state.json",
@@ -383,3 +407,4 @@ if __name__ == "__main__":
     except Exception as error:
         print("VPS_FACTORY_CYCLE_ERROR=" + type(error).__name__ + ":" + str(error)[:400], file=sys.stderr)
         sys.exit(1)
+
