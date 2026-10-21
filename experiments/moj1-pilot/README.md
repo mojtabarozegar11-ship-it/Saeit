@@ -48,7 +48,17 @@ npm run deploy:shasta
 unset TRON_PRIVATE_KEY
 ```
 
-The deployer now requires an operator-controlled, **persistent external journal path**; it saves a fail-closed `BROADCAST_UNCERTAIN` marker before a possible broadcast, rejects concurrent runs or a changed artifact/governance, and reuses previously verified contract addresses. **Never delete a pending journal or lock merely to retry**. If a broadcast outcome is unknown, independently reconcile the Shasta transaction with the owner before any further execution. The journal is not a substitute for an on-chain transaction receipt or production release audit.
+The deployer requires an operator-controlled, **persistent external journal path** and saves the **signed transaction ID, exact raw-payload SHA-256, and expected contract address before the first possible broadcast**; no private key, signature or signed payload is saved. A single submission is attempted. On a subsequent run it checks the existing transaction's raw payload, solidified execution receipt, precomputed address and deployed code **read-only** before marking a contract verified. It never automatically generates or broadcasts a replacement transaction. Recovered addresses are rechecked against the MOJ1 token/escrow or NFT-owner invariants. **Never delete a pending journal or lock merely to retry**. Pre-existing legacy `BROADCAST_UNCERTAIN` entries without a recorded txID are intentionally not auto-cleared. A finalized failure, missing chain evidence or RPC uncertainty also remains blocked. This is transaction recovery, **not** a full independent source-code audit.
+
+To reconcile without loading any signing key (no transaction can be sent by this command), compile the identical pinned artifacts, then run:
+
+```sh
+export MOJ1_DEPLOY_JOURNAL_PATH=/PRIVATE/PERSISTENT/PATH/moj1-shasta.json
+npm run compile
+npm run reconcile:shasta
+```
+
+Run the command only against the original external journal; copy it safely to preserve the audit trail. A surviving `.lock` after a crashed process must be investigated by the operator before any lock cleanup. A missing journal or absent txID is **never** permission to redeploy.
 
 The script points only at `api.shasta.trongrid.io`; it has no mainnet option and requires a previously deployed Shasta governance contract, which must separately be verified as an approved multisig. It does not distribute the escrow. A successful deployment must then be verified on Shasta TRONSCAN, with source verification, transfer tests, NFT metadata inspection, and a receipt. The current pilot does not contain those test receipts.
 
