@@ -30,4 +30,23 @@ for route in ["/store/","/store/product/879/","/store/product/879/checkout/"]:
             if any(t in line.lower() for t in ("token","secret","password","key=")):continue
             selected.append({"line":n,"text":line.strip()[:180]})
     print("ATELIER_VIEW_KEYLINES="+json.dumps({"route":route,"code_lines":len(source),"matches":selected[:60]}))
+
+from importlib import import_module
+for fpath in ["brands/mojplaywin/product.html","brands/mojplaywin/store.html"]:
+    candidate=app/"templates"/fpath
+    if candidate.is_file():
+        lines=candidate.read_text(encoding="utf8",errors="replace").splitlines()
+        hits=[{"n":i+1,"text":line[:260]} for i,line in enumerate(lines) if any(term in line.lower() for term in ("contact","checkout","purchase","href","product","store"))]
+        print("ATELIER_TEMPLATE="+json.dumps({"path":fpath,"lines":len(lines),"matches":hits[:60]}))
+    else:
+        print("ATELIER_TEMPLATE_MISSING="+fpath)
+for dotted in ["core.brand_views.branded_store_dispatch","mpw_commerce.product_checkout_page.product_checkout_page"]:
+    try:
+        module,fnname=dotted.rsplit(".",1)
+        fn=getattr(import_module(module),fnname)
+        code=inspect.getsource(fn).splitlines()
+        matches=[{"line":i+1,"text":line.strip()[:230]} for i,line in enumerate(code) if any(word in line.lower() for word in ("checkout","product","render(","template","available","enabled","price","redirect","login","asset","ready","order","address")) and not any(s in line.lower() for s in ("password","token","secret","private_key"))]
+        print("ATELIER_EXTRA_VIEW="+json.dumps({"name":dotted,"total_lines":len(code),"matches":matches[:90]}))
+    except Exception as ex:
+        print("ATELIER_EXTRA_VIEW_ERR="+json.dumps({"name":dotted,"type":type(ex).__name__}))
 print("ATELIER_READONLY_VIEW_INSPECT=PASS")
