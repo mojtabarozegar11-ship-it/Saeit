@@ -17,6 +17,12 @@
 - `deploy-shasta.mjs` now constructs and signs first, saves a persistent `txID`, SHA-256 of `raw_data_hex` and expected contract address, then performs **one** attempted broadcast. On restart, a read-only reconciler verifies the original transaction, solidified successful receipt, matching contract address and non-empty code before resuming. A keyless `npm run reconcile:shasta` command permits read-only examination.
 - Legacy pending journals without a txID, missing receipts, failed transactions, RPC errors, and stale locks **remain fail-closed**; there is no automatic second deployment or assertion that uncertain transactions are absent from chain. No real Shasta recovery or third-party source-code audit has occurred.
 
+## F07 live local-chain recovery rehearsal — 2026-10-21
+
+[GitHub Actions local TRE run 39627014343](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39627014343) — **PASS**. The CI job executed the existing 11 contract behavioral cases and the pinned TronWeb build/sign check; it additionally ran `rehearse-recovery-local.mjs` against a **disposable 127.0.0.1 TRE chain** with the public dummy test key. One contract-creation transaction was signed, durably journaled and broadcast; the application-level acknowledgement was deliberately discarded. After closing and reopening the journal, read-only `getTransaction`, `getTransactionInfo` and `getContract` checks recovered the deployed NFT address, verified its intended owner and refused a second broadcast. CI receipt: `MOJ1_LOCAL_REAL_TX_RECOVERY_PASS`, `broadcasts=1`, `retryBroadcasts=0`. The container was then destroyed.
+
+This validates the actual local transaction lifecycle, not Shasta RPC reliability, cross-machine journal durability, live wallet custody, automatic stale-lock recovery after a hard kill, byte-for-byte deployed runtime source verification, or Mainnet safety.
+
 ## Not performed / still required
 
 - **No Shasta or Mainnet deployment**, contract address, energy payment, wallet funding, public mint, transfer, sale, exchange listing or custody operation.
