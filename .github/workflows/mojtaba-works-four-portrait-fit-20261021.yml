@@ -1,0 +1,183 @@
+name: Fix four uncropped portraits on Mojtaba Work page
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mojtaba-works-four-portrait-fit-20261021.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-v17-inner-pages-production
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[approved-mojtaba-works-four-fit-20261021]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify code and baseline four portraits
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_works_portrait_fit_20261021.py
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          u="https://mojplaywin.com/mojtaba.roozegar/works-activities/?work_fit_baseline=20261021"
+          with urlopen(Request(u,headers={"Cache-Control":"no-cache"}),timeout=25) as r:
+              s=r.read(2000000).decode("utf-8","replace")
+              assert r.status==200
+          assert s.count('<article class="mpw-card">')==4
+          assert '.mpw-inner .mpw-card img{width:100%;height:285px;object-fit:cover;display:block;background:#182837}' in s
+          print("PUBLIC_BASELINE_FOUR_CROPPED_IMAGES=yes")
+          PY
+      - name: Prepare pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mojtaba-work-fit-ssh"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);s=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(s.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Stage audited patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.works-portrait-fit-$GITHUB_RUN_ID"
+          timeout 30s ssh -T -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 60s scp -q -F "$SSH_CONFIG" scripts/mojtaba_works_portrait_fit_20261021.py "saeit-host:$stage/patch.py"
+      - name: Render, install, verify, and roll back if necessary
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 540s ssh -T -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          id="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          py="/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python"
+          stage="/home/zomorod2/.works-portrait-fit-$id"
+          backup="/home/zomorod2/.backups/mojtaba-works-portrait-fit/$id/activities.html"
+          patch="$stage/patch.py"
+          completed=0
+          recover() {
+            rc=$?
+            trap - EXIT
+            if test "$completed" -eq 0 && test -f "$backup"; then
+              "$py" "$patch" rollback "$id" || echo "ROLLBACK_MANUAL_REVIEW_REQUIRED=yes"
+              test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+            fi
+            exit "$rc"
+          }
+          trap recover EXIT
+          test -x "$py" && test -f "$app/manage.py" && test ! -L "$app"
+          cd "$app"
+          "$py" "$patch" check "$id"
+          "$py" - "$patch" <<'PY'
+          import importlib.util,os,sys
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.template import engines,RequestContext
+          from django.test import RequestFactory
+          spec=importlib.util.spec_from_file_location("portrait_patch",sys.argv[1])
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          old,new=m.candidate()
+          req=RequestFactory().get("/mojtaba.roozegar/works-activities/",HTTP_HOST="mojplaywin.com")
+          result=engines["django"].engine.from_string(new).render(RequestContext(req,{"items":[],"stories":[],"profile":None}))
+          assert result.count('class="mpw-card"')==4
+          assert "aspect-ratio:1229/1536;object-fit:contain" in result
+          print("PROPOSED_TEMPLATE_RENDER_VERIFIED=yes")
+          PY
+          "$py" "$patch" install "$id"
+          "$py" manage.py check --deploy
+          test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+          "$py" - "$id" <<'PY'
+          import os,re,time,sys
+          from urllib.request import Request,urlopen
+          from urllib.parse import urljoin
+          base="https://mojplaywin.com/mojtaba.roozegar/works-activities/"
+          css=".mpw-inner .mpw-card img{width:100%;height:auto;aspect-ratio:1229/1536;object-fit:contain;display:block;background:#182837}"
+          for i in range(9):
+              try:
+                  with urlopen(Request(base+"?verify_portrait_fit="+sys.argv[1]+"-"+str(i),headers={"Cache-Control":"no-cache"}),timeout=25) as r:
+                      s=r.read(2000000).decode("utf-8","replace")
+                      assert r.status==200
+                  assert css in s and s.count('<article class="mpw-card">')==4
+                  assert "height:285px;object-fit:cover" not in s[s.index('id="mpw-inner-content-20261015"'):s.index('id="mpw-inner-content-20261015"')+2500]
+                  pics=re.findall(r'<article class="mpw-card"><img src="([^"]+)"',s)
+                  assert len(pics)==4
+                  for src in pics:
+                      with urlopen(Request(urljoin(base,src)),timeout=18) as img:
+                          assert img.status==200 and img.headers.get("Content-Type","").startswith("image/")
+                  print("FOUR_FULL_SIZE_PORTRAIT_IMAGES_LIVE=yes",flush=True)
+                  break
+              except Exception as e:
+                  print("PUBLIC_RETRY="+repr(e),flush=True)
+                  if i==8: raise
+                  time.sleep(4)
+          for site in ("https://mojplaywin.com/","https://zomorodmelal.ir/"):
+              with urlopen(Request(site),timeout=25) as r:
+                  assert r.status==200
+              print("UNRELATED_ROOT_HTTP_200="+site)
+          PY
+          completed=1
+          trap - EXIT
+          echo "FOUR_WORK_PORTRAITS_DEPLOYED_AND_VERIFIED=yes"
+          echo "BACKUP=$backup"
+          REMOTE
+      - name: Clean up temporary credentials and private stage
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mojtaba-work-fit-ssh"
+          if test -f "$d/config"; then
+            stage="/home/zomorod2/.works-portrait-fit-$GITHUB_RUN_ID"
+            timeout 30s ssh -T -F "$d/config" saeit-host "test ! -d '$stage' || (test ! -L '$stage' && rm -f '$stage/patch.py' && rmdir '$stage')" || true
+          fi
+          rm -f "$d/vps.key" "$d/host.key" "$d/config" "$d/vps.known" "$d/host.known"
+          rmdir "$d" 2>/dev/null || true
