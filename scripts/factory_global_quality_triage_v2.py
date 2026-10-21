@@ -23,12 +23,14 @@ HEX=re.compile(r"^[a-f0-9]{64}$")
 AUDIT_PENDING={"P0_INDEPENDENT_ATTESTATION_NOT_AUTHENTICATED",
                "P0_WORLD_NUMBER_ONE_CLAIM_UNVERIFIED"}
 QUARANTINE={"P0_ARTIFACT_UNVERIFIED","P0_BUILD_HASH_NOT_MATCHING_MANIFEST",
+            "P0_SOURCE_PROVENANCE_HASH_MISSING_OR_INVALID",
             "P0_TECHNICAL_QA_NOT_PASSED","P0_UNSAFE_COMMERCIAL_STATE"}
 QUALITY_CATEGORIES={
     "P0_GLOBAL_TOP_FIVE_CURRENT_BENCHMARKS_MISSING":"REWORK_COMPETITIVE_COMPARISON",
     "P0_MEASURED_SUPERIORITY_UNVERIFIED":"REWORK_MEASURABLE_ADVANTAGE",
     "P0_ORIGINAL_INNOVATIONS_UNPROVEN":"REWORK_NOVELTY",
     "P0_UNMAPPED_PRODUCT_FAMILY":"REWORK_FAMILY_CLASSIFICATION",
+    "P0_SOURCE_PROVENANCE_HASH_MISSING_OR_INVALID":"RECONSTRUCT_OR_AUTHENTICATE_ORIGINAL_SOURCE_PROVENANCE",
 }
 def sha(data):
     return hashlib.sha256(data).hexdigest()
@@ -90,6 +92,19 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
     out.mkdir(parents=True,exist_ok=True,mode=0o700)
     records=[]
     sources=(root/"digital-products", root/"product-lifecycle"/"digital-products")
+    # Refuse a superficially green report covering only the first N products.
+    # Never silently omit eligible manifest-bearing inventory after a budget cap.
+    eligible_total=0
+    for base in sources:
+        if base.is_dir() and not base.is_symlink():
+            eligible_total+=sum(
+                1 for folder in base.iterdir()
+                if folder.is_dir() and not folder.is_symlink() and SKU.fullmatch(folder.name)
+                and (folder/"manufacturing_manifest.json").is_file()
+                and not (folder/"manufacturing_manifest.json").is_symlink()
+            )
+    if eligible_total>limit:
+        raise ValueError("QUALITY_INVENTORY_LIMIT_EXCEEDED:"+str(eligible_total))
     encountered=set()
     for base in sources:
         if not base.is_dir() or base.is_symlink():continue
@@ -128,11 +143,21 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
                 if not isinstance(manifest_sha,str) or not HEX.fullmatch(manifest_sha):
                     status="QUARANTINE_TECHNICAL_OR_INTEGRITY"
                     actual.append("P0_INVALID_MANIFEST_SHA256")
+                source_sha=doc.get("source_sha256")
+                provenance_ok=isinstance(source_sha,str) and bool(HEX.fullmatch(source_sha))
+                if not provenance_ok:
+                    status="QUARANTINE_TECHNICAL_OR_INTEGRITY"
+                    actual.append("P0_SOURCE_PROVENANCE_HASH_MISSING_OR_INVALID")
                 record={
                     "schema":REWORK, "recipe":name,"family_id":family,
                     "artifact_sha256":manifest_sha,
                     "actual_sha256":existing_hash,
                     "technical_qa_status":doc.get("qa_status"),
+                    "source_provenance_sha256":source_sha if provenance_ok else None,
+                    "source_provenance_hash_present":provenance_ok,
+                    "verified_artifact_integrity":bool(
+                        isinstance(manifest_sha,str) and HEX.fullmatch(manifest_sha)
+                        and existing_hash==manifest_sha),
                     "quality_1000_scorecard":card,
                     "quality_group_count":100,
                     "quality_points_per_group":10,
@@ -175,8 +200,15 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
     defects=Counter(c for x in records for c in x["defects"])
     summary={
         "schema":SCHEMA,"run_reference":str(run_reference)[:80],
-        "total_products":len(records),"registered_families":len(profiles),
-        "technical_passed":sum(x.get("technical_qa_status")=="passed" for x in records),
+        "total_products":len(records),"inventory_eligible_total":eligible_total,
+        "all_eligible_inventory_scanned":len(records)==eligible_total,
+        "registered_families":len(profiles),
+        "technical_passed":sum(x.get("technical_qa_status")=="passed"
+                                and x.get("verified_artifact_integrity") is True
+                                and x.get("source_provenance_hash_present") is True
+                                for x in records),
+        "source_provenance_missing_or_invalid":sum(
+            x.get("source_provenance_hash_present") is False for x in records),
         "quality_certified":0,"public_release_authorized":False,
         "required_quality_points":1000,
         "quality_group_count":100,
