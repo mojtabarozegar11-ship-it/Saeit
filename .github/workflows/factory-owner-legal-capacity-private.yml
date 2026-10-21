@@ -1,0 +1,89 @@
+name: Factory private natural/legal capacities and owner signer enrollment
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_owner_legal_capacity_registry_v1.py"
+      - "tests/test_factory_owner_legal_capacity_registry_v1.py"
+      - ".github/workflows/factory-owner-legal-capacity-private.yml"
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: factory-owner-legal-capacity-private
+  cancel-in-progress: false
+jobs:
+  safe-identity-dossier-and-owner-invitation:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Assert previous individual, company and document identity facts stay separate
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_owner_legal_capacity_registry_v1.py -v
+          python3 -m py_compile scripts/factory_owner_legal_capacity_registry_v1.py
+          echo NATURAL_LEGAL_IDENTITY_FAKE_APPROVAL_NEGATIVE_TESTS=PASS
+      - name: Install private VPS legal dossier plus owner invitation with no signing keys
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/legal-capacity"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          stage="/home/githubops/factory-runtime/operations/.legal-capacity-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; test \"\$(id -un)\" = githubops; umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
+          scp -q "${opts[@]}" scripts/factory_owner_legal_capacity_registry_v1.py githubops@178.239.147.150:"$stage/factory_owner_legal_capacity_registry_v1.py"
+          digest="$(sha256sum scripts/factory_owner_legal_capacity_registry_v1.py | awk '{print $1}')"
+          timeout 85s ssh -T "${opts[@]}" githubops@178.239.147.150 \
+            python3 -B - "$stage" "$digest" <<'PY'
+          import fcntl,hashlib,json,os,subprocess,sys
+          from pathlib import Path
+          stage,digest=sys.argv[1:]
+          base=Path.home()/"factory-runtime/private/autonomous-product-cycle/quality-reviewer-console"
+          assert base.is_dir() and not base.is_symlink()
+          assert (base/"factory_quality_reviewer_console_v1.py").is_file()
+          staged=Path(stage)/"factory_owner_legal_capacity_registry_v1.py"
+          dest=base/"factory_owner_legal_capacity_registry_v1.py"
+          actual=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
+          assert actual(staged)==digest and not staged.is_symlink()
+          assert not dest.is_symlink()
+          with (base/".legal-capacity-install-lock").open("a+b") as lock:
+              fcntl.flock(lock.fileno(),fcntl.LOCK_EX)
+              if dest.exists():
+                  assert dest.is_file() and actual(dest)==digest,"REFUSE_SILENT_LEGAL_POLICY_REPLACEMENT"
+              else:
+                  with dest.open("xb") as output:
+                      output.write(staged.read_bytes());output.flush();os.fsync(output.fileno())
+                  os.chmod(dest,0o600)
+              cmd=[sys.executable,"-B",str(dest),"install","--workspace",str(base)]
+              info=json.loads(subprocess.run(cmd,check=True,capture_output=True,text=True,timeout=20).stdout)
+              assert info["natural_person_recorded"] and info["separate_legal_person_recorded"]
+              assert info["claimed_company_signatory_capacity_recorded"]
+              assert not info["company_authority_verified"]
+              assert not info["actual_owner_signature"]
+              assert not info["commercial_approval"]
+              verify=json.loads(subprocess.run(
+                  [sys.executable,"-B",str(dest),"status","--workspace",str(base)],
+                  check=True,capture_output=True,text=True,timeout=20).stdout)
+              assert verify["legal_capacity_recorded"] and not verify["release_allowed"]
+              print("VPS_REAL_OWNER_NATURAL_LEGAL_CAPACITY_DOSSIER=INSTALLED")
+              print("VPS_OWNER_INVITATION="+info["owner_invitation_status"])
+              print("VPS_UPLOADED_SOURCE_DOCUMENTS_HASH_LINKED="+str(info["evidence_source_files"]))
+              print("VPS_LEGAL_DOSSIER_SHA256="+info["dossier_sha256"])
+              print("VPS_LEGAL_COMPANY_OFFICIAL_AUTHORITY_VERIFIED=false")
+              print("VPS_PERSONAL_OWNER_REAL_SIGNATURE=false")
+              print("VPS_MANUFACTURING_COMMERCIAL_APPROVAL=false")
+          PY
+          ssh -T "${opts[@]}" githubops@178.239.147.150 "rm -f -- '$stage/factory_owner_legal_capacity_registry_v1.py'; rmdir -- '$stage'"
