@@ -205,7 +205,7 @@ def compile_recipe(spec, recipes):
                   'search_states_evaluated':searched,'training_examples':len(train),
                   'heldout_examples_passed':len(holdout),'general_ai_invention':False,
                   'scientific_review_completed':False,'commercial_release':False,
-                   'generator_capability_revision':'verified-batch-v2'}
+                   'generator_capability_revision':'verified-summary-v3'}
     if destination.exists():
         saved = read(destination/'design_receipt.json')
         if saved.get('functional_sha256') != functional_hash:
@@ -253,6 +253,22 @@ def calculate_batch(records):
     return {'count':len(records), 'results':[calculate(row) for row in records]}
 # BATCH_API_V2_END
 
+# STATS_API_V3_START
+def calculate_statistics(records):
+    """Strict, exact-Decimal descriptive summary of a validated customer batch."""
+    batch = calculate_batch(records)
+    results = [Decimal(item['result']) for item in batch['results']]
+    with localcontext() as context:
+        context.prec = 40
+        total = sum(results, Decimal(0))
+        mean = total / Decimal(batch['count'])
+    if not total.is_finite() or not mean.is_finite():
+        raise ValueError('STATISTICS_OUT_OF_RANGE')
+    return {'count':batch['count'], 'unit':batch['results'][0]['unit'],
+            'sum':str(total), 'minimum':str(min(results)),
+            'maximum':str(max(results)), 'mean':str(mean)}
+# STATS_API_V3_END
+
 if __name__ == '__main__':
     incoming=json.load(sys.stdin)
     print(json.dumps(calculate_batch(incoming) if isinstance(incoming,list)
@@ -265,6 +281,9 @@ from calculator import calculate
 # BATCH_TESTS_V2_START
 from calculator import calculate_batch
 # BATCH_TESTS_V2_END
+# STATS_TESTS_V3_START
+from calculator import calculate_statistics
+# STATS_TESTS_V3_END
 EXAMPLES = %r
 class GeneratedAcceptanceTests(unittest.TestCase):
     def test_reference_cases(self):
@@ -294,6 +313,21 @@ class GeneratedAcceptanceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             calculate_batch([EXAMPLES[0]['inputs'],sample])
     # BATCH_TESTS_V2_END
+    # STATS_TESTS_V3_START
+    def test_statistics_match_independent_decimal_reference(self):
+        rows=[item['inputs'] for item in EXAMPLES[:3]]
+        values=[Decimal(str(item['output'])) for item in EXAMPLES[:3]]
+        observed=calculate_statistics(rows)
+        self.assertEqual(observed['count'],3)
+        self.assertEqual(observed['unit'],calculate(rows[0])['unit'])
+        self.assertEqual(Decimal(observed['sum']),sum(values))
+        self.assertEqual(Decimal(observed['minimum']),min(values))
+        self.assertEqual(Decimal(observed['maximum']),max(values))
+        self.assertLessEqual(abs(Decimal(observed['mean'])-sum(values)/3),Decimal('1e-25'))
+    def test_statistics_fail_closed_on_bad_batch(self):
+        for bad in ([], [{}], [{}]*101, None, 'broken'):
+            with self.assertRaises(ValueError): calculate_statistics(bad)
+    # STATS_TESTS_V3_END
 ''' % examples
     readme = '# '+spec['title']+'\n\n'+spec['problem']+'\n\n'
     readme += 'Method: bounded arithmetic program synthesis; not a general AI invention.\n\n'
@@ -301,6 +335,7 @@ class GeneratedAcceptanceTests(unittest.TestCase):
     readme += 'Output unit: '+spec['output_unit']+'\n\n'+spec['limitations']+'\n\n'
     readme += 'Run: python calculator.py < example_inputs.json\n\n'
     readme += 'Bounded batch usage: provide a JSON array of 1-100 complete input objects on stdin; invalid entries reject the whole batch.\n\n'
+    readme += 'Python API: calculator.calculate_statistics(records) returns count, unit, exact-Decimal sum, minimum, maximum and mean for 1-100 validated customer rows.\n\n'
     readme += 'Technical prototype; scientific, usability and commercial review remain pending.\n'
     stage = Path(tempfile.mkdtemp(prefix='.candidate-',dir=str(recipes)))
     try:
@@ -503,8 +538,8 @@ def evolve_recipe(recipe, recipes):
     prior_code=calculator.read_text(encoding='utf8')
     if not prior_code.startswith('"""Generated deterministic arithmetic planning tool;'):
         raise ValueError('EVOLUTION_SOURCE_NOT_COMPILER_OWNED')
-    if ('# BATCH_API_V2_START' in prior_code
-            and receipt.get('generator_capability_revision')=='verified-batch-v2'):
+    if ('# STATS_API_V3_START' in prior_code
+            and receipt.get('generator_capability_revision')=='verified-summary-v3'):
         return {'schema':'saeit.factory.source-evolution.v1',
                 'recipe':recipe,'changed':False,
                 'reason':'already_evolved','commercial_release':False}
@@ -550,7 +585,7 @@ def evolve_recipe(recipe, recipes):
             'revised_source_sha256':new_digest,
             'previous_source_retained':str(saved),
             'measured_acceptance':measurements,
-            'implemented_feature':'bounded_atomic_customer_batch_1_to_100',
+            'implemented_feature':'verified_decimal_customer_batch_statistics_v3',
             'independent_specialist_approval_verified':False,
             'quality_1000_certified':False,'commercial_release':False}
 
