@@ -10,9 +10,12 @@ def valid_receipt(record, product):
     """
     if not isinstance(record, dict) or record.get("verified") is not True:
         return False
-    path = pathlib.Path(record.get("receipt_path", ""))
+    raw_path = record.get("receipt_path", "")
+    if not isinstance(raw_path, str) or not raw_path:
+        return False
+    path = pathlib.Path(raw_path)
     expected = record.get("receipt_sha256", "")
-    if not HEX256.fullmatch(expected) or not path.is_file() or path.is_symlink():
+    if not isinstance(expected, str) or not HEX256.fullmatch(expected) or not path.is_file() or path.is_symlink():
         return False
     if not hmac.compare_digest(sha(path), expected):
         return False
@@ -29,19 +32,65 @@ def sha(path):
             h.update(block)
     return h.hexdigest()
 
+def signed_release_clearance(manifest, artifact_path):
+    """Delegate commercial approval to the existing Ed25519 four-role verifier.
+
+    The candidate JSON alone never grants authority. Without an externally
+    pinned trust root and authentic signatures, this returns False.
+    """
+    config = manifest.get("signed_release", {})
+    if not isinstance(config, dict):
+        return False
+    paths = {}
+    for field in ("decision", "gate_report", "catalog", "trusted_reviewers"):
+        raw = config.get(field)
+        if not isinstance(raw, str) or not raw:
+            return False
+        path = pathlib.Path(raw)
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 2_000_000:
+            return False
+        paths[field] = path
+    verifier_path = pathlib.Path(__file__).resolve().with_name("factory_quality_signed_approval_v1.py")
+    if verifier_path.is_symlink() or not verifier_path.is_file():
+        return False
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("factory_signed_quality_verifier", str(verifier_path))
+        verifier = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(verifier)
+        data = {key: json.loads(path.read_text(encoding="utf-8")) for key, path in paths.items()}
+        verdict = verifier.inspect_approval(
+            data["decision"], data["gate_report"], str(artifact_path),
+            str(paths["catalog"]), data["trusted_reviewers"])
+        return (verdict.get("eligible") is True
+                and hmac.compare_digest(verdict.get("artifact_sha256", ""), sha(artifact_path))
+                and verdict.get("verifiable_reviewer_count", 0) >= 4)
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, RuntimeError, UnicodeError):
+        return False
+
+
 def check(manifest):
     errors = []
+    if not isinstance(manifest, dict):
+        return ["manifest: JSON object required"]
     product = manifest.get("product", {})
+    if not isinstance(product, dict):
+        product = {}
     if not product.get("family") or not product.get("version"):
         errors.append("missing family/version")
     for key in ("source", "artifact"):
         item = manifest.get(key, {})
-        path = pathlib.Path(item.get("path", ""))
+        item = item if isinstance(item, dict) else {}
+        candidate = item.get("path", "")
+        path = pathlib.Path(candidate) if isinstance(candidate, str) and candidate else pathlib.Path("/")
         if not path.is_file() or not item.get("sha256"):
             errors.append(key + ": missing file or digest")
         elif sha(path) != item["sha256"]:
             errors.append(key + ": SHA256 mismatch")
-    artifact = pathlib.Path(manifest.get("artifact", {}).get("path", ""))
+    artifact_item = manifest.get("artifact", {})
+    artifact_item = artifact_item if isinstance(artifact_item, dict) else {}
+    artifact_name = artifact_item.get("path")
+    artifact = pathlib.Path(artifact_name) if isinstance(artifact_name, str) and artifact_name else pathlib.Path("/")
     if artifact.is_file():
         if not zipfile.is_zipfile(artifact):
             errors.append("artifact: not a ZIP")
@@ -54,18 +103,24 @@ def check(manifest):
                     if p.is_absolute() or ".." in p.parts:
                         errors.append("artifact: unsafe ZIP member")
     criteria = manifest.get("criteria", [])
-    if len(criteria) != 100 or len({c.get("id") for c in criteria if isinstance(c, dict)}) != 100:
+    if not isinstance(criteria, list) or len(criteria) != 100 or len({c.get("id") for c in criteria if isinstance(c, dict)}) != 100:
         errors.append("criteria: require 100 distinct criteria")
     else:
         for c in criteria:
-            if not isinstance(c, dict) or not isinstance(c.get("score"), int) or isinstance(c.get("score"), bool) or not 0 <= c["score"] <= 10 or not c.get("evidence_sha256"):
+            if not isinstance(c, dict) or not isinstance(c.get("score"), int) or isinstance(c.get("score"), bool) or not 0 <= c["score"] <= 10 or not isinstance(c.get("evidence_sha256"), str) or not HEX256.fullmatch(c["evidence_sha256"]):
                 errors.append("criteria: missing scored evidence")
                 break
     for name in ("cli_tests", "invalid_tests", "independent_oracle", "rework_retest", "backup_restore_test", "live_delivery_test"):
-        if manifest.get(name, {}).get("passed") is not True or not manifest.get(name, {}).get("evidence_sha256"):
+        evidence = manifest.get(name, {})
+        evidence = evidence if isinstance(evidence, dict) else {}
+        digest = evidence.get("evidence_sha256")
+        if evidence.get("passed") is not True or not isinstance(digest, str) or not HEX256.fullmatch(digest):
             errors.append(name + ": missing verified evidence")
     for role in ROLES:
-        approval = manifest.get("approvals", {}).get(role, {})
+        approvals = manifest.get("approvals", {})
+        approvals = approvals if isinstance(approvals, dict) else {}
+        approval = approvals.get(role, {})
+        approval = approval if isinstance(approval, dict) else {}
         if not valid_receipt(dict(approval, role=role), product):
             errors.append(role + ": unverified approval")
     # A digest-bound receipt does not establish legal authority or authentic signature.
@@ -76,8 +131,10 @@ def check(manifest):
         errors.append("owner publication permission absent")
     if manifest.get("rights_cleared") is not True:
         errors.append("rights not cleared")
-    if len(criteria) == 100 and sum(c.get("score", 0) for c in criteria if isinstance(c, dict)) != 1000:
+    if isinstance(criteria, list) and len(criteria) == 100 and sum(c.get("score", 0) for c in criteria if isinstance(c, dict) and type(c.get("score")) is int) != 1000:
         errors.append("quality score below 1000")
+    if not signed_release_clearance(manifest, artifact):
+        errors.append("authenticated signed four-party clearance absent")
     return errors
 
 def main():
