@@ -12,6 +12,9 @@ test -x "$py" && test -s "$registry" && test -s "$manifest"
 test -f "$scheduler" && test ! -L "$scheduler" && test -s "$target/factory_build_50.py"
 test "$(crontab -l|grep -c SAEIT_FACTORY_FORTY_FAMILY_OPERATIONAL_DISPATCH_V1)" -eq 1
 exec 9>"$ops/.next4-install.lock";flock -w 30 9
+# Serialize every installer that mutates the shared 40-family periodic dispatcher.
+exec 8>"$ops/.forty-execution-shared-installer.lock"
+flock -w 240 8
 install -d -m 700 "$ops/backups"
 backup="$ops/backups/next4-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 install -d -m 700 "$backup"
