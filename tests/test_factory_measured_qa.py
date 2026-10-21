@@ -14,6 +14,7 @@ def load(name):
 
 maker = load('factory_product_maker')
 warehouse = load('factory_production_warehouse')
+customer = load('factory_verified_customer_cycle_20261021')
 
 class MeasuredQualityTests(unittest.TestCase):
     def setUp(self):
@@ -84,6 +85,8 @@ class MeasuredQualityTests(unittest.TestCase):
         (self.source/'assets'/'data.json').write_text('{}')
         root = Path(self.tmp.name)/'private'
         maker.manufacture('sample_product', self.source.parent, root/'digital-products')
+        receipt = customer.inspect_product(root/'digital-products'/'sample_product', 'sample_product')
+        customer.persist_pending(root, receipt)
         artifact, manifest = warehouse.inspect_source(root, 'sample_product')
         self.assertTrue(artifact.is_file())
         self.assertIn('assets/data.json', manifest['files'])

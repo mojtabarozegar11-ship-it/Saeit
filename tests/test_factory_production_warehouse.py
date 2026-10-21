@@ -16,6 +16,7 @@ def load(filename,name):
 
 warehouse=load("factory_production_warehouse.py","saeit_warehouse")
 maker=load("factory_product_maker.py","saeit_maker")
+customer=load("factory_verified_customer_cycle_20261021.py","zomorodmelal_customer_verified")
 
 class FactoryWarehouseTests(unittest.TestCase):
     def setUp(self):
@@ -29,9 +30,45 @@ class FactoryWarehouseTests(unittest.TestCase):
             shutil.copytree(REPO/"product_recipes"/recipe,self.recipes/recipe)
         self.finished=self.private/"production-warehouse"/"finished"
     def manufacture(self, recipe):
-        return maker.manufacture(recipe,self.recipes,self.private/"digital-products")
+        result=maker.manufacture(recipe,self.recipes,self.private/"digital-products")
+        evidence=customer.inspect_product(self.private/"digital-products"/recipe,recipe)
+        customer.persist_pending(self.private,evidence)
+        return result
     def register(self):
         return json.loads((self.private/"production-warehouse"/"stock-register.json").read_text("utf8"))
+    def test_maker_only_success_cannot_bypass_actual_customer_zip_qa(self):
+        recipe="farm_enterprise_economics"
+        maker.manufacture(recipe,self.recipes,self.private/"digital-products")
+        result=warehouse.cycle(self.private)
+        self.assertEqual(result["stocked"],0)
+        self.assertEqual(result["held"],1)
+        self.assertIn("CUSTOMER_PACKAGE_QA_MISSING",self.register()["needs_rework_or_review"][0]["reason"])
+
+    def test_forged_customer_receipt_hash_cannot_enter_warehouse(self):
+        recipe="farm_enterprise_economics"
+        self.manufacture(recipe)
+        manifest=json.loads((self.private/"digital-products"/recipe/"manufacturing_manifest.json").read_text())
+        path=self.private/"customer-extracted-acceptance"/recipe/manifest["source_sha256"]/"technical-receipt.json"
+        evidence=json.loads(path.read_text())
+        evidence["artifact_sha256"]="0"*64
+        path.write_text(json.dumps(evidence))
+        result=warehouse.cycle(self.private)
+        self.assertEqual(result["stocked"],0)
+        self.assertEqual(result["held"],1)
+        self.assertIn("CUSTOMER_PACKAGE_QA_NOT_VERIFIED",self.register()["needs_rework_or_review"][0]["reason"])
+
+    def test_forged_build50_snapshot_cannot_bypass_customer_zip_qa(self):
+        recipe="farm_enterprise_economics"
+        maker.manufacture(recipe,self.recipes,self.private/"digital-products")
+        manifest_file=self.private/"digital-products"/recipe/"manufacturing_manifest.json"
+        m=json.loads(manifest_file.read_text())
+        forged={"product_id":recipe,"build_50_verified":True,
+                "source_sha256":m["source_sha256"],"artifact_sha256":m["artifact_sha256"],
+                "source_receipt_sha256":warehouse.digest(manifest_file)}
+        with self.assertRaisesRegex(RuntimeError,"BUILD50_INDEPENDENT_PROOF_INVALID"):
+            warehouse.stock_one(self.private,recipe,self.private/"production-warehouse",
+                                quality_snapshot=forged)
+
     def test_quality_snapshot_cannot_authorize_a_later_artifact_version(self):
         recipe='farm_enterprise_economics';self.manufacture(recipe)
         receipt=self.private/'digital-products'/recipe/'manufacturing_manifest.json'
@@ -71,6 +108,7 @@ class FactoryWarehouseTests(unittest.TestCase):
             self.assertEqual((item/"product.zip").stat().st_mode & 0o777,0o400)
             self.assertFalse(json.loads((item/"warehouse_manifest.json").read_text())["commercial_release"])
             self.assertEqual(rec["site_transfer_state"],"not_transferred")
+            self.assertEqual(rec["customer_archive_qa"],"passed")
         self.assertFalse((self.root/"published").exists())
         self.assertEqual(len(list(self.private.rglob("*.zip"))),expected_count * 2)  # source and stocked archives
     def test_repeat_cycles_never_duplicate_or_overwrite(self):

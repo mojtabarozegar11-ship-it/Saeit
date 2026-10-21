@@ -9,6 +9,7 @@ on:
       - product_recipes/greenhouse_crop_margin/example_inputs.json
       - scripts/factory_f28_private_build_cycle_20261021.py
       - scripts/factory_f28_private_warehouse_intake_20261021.py
+      - scripts/factory_verified_customer_cycle_20261021.py
       - scripts/factory_production_warehouse.py
       - tests/test_factory_f28_private_warehouse_intake_20261021.py
       - tests/test_factory_f28_private_cycle_20261021.py
@@ -24,6 +25,7 @@ on:
       - product_recipes/greenhouse_crop_margin/example_inputs.json
       - scripts/factory_f28_private_build_cycle_20261021.py
       - scripts/factory_f28_private_warehouse_intake_20261021.py
+      - scripts/factory_verified_customer_cycle_20261021.py
       - scripts/factory_production_warehouse.py
       - tests/test_factory_f28_private_warehouse_intake_20261021.py
       - tests/test_factory_f28_private_cycle_20261021.py
@@ -47,7 +49,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile product_recipes/greenhouse_crop_margin/calculator.py scripts/factory_f28_private_build_cycle_20261021.py
+          python3 -m py_compile product_recipes/greenhouse_crop_margin/calculator.py scripts/factory_f28_private_build_cycle_20261021.py scripts/factory_f28_private_warehouse_intake_20261021.py scripts/factory_verified_customer_cycle_20261021.py
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s product_recipes/greenhouse_crop_margin -p test_calculator.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_f28_private_cycle_20261021 -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_f28_private_warehouse_intake_20261021 -v
@@ -181,7 +183,7 @@ jobs:
           opts=(-i "$d/key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
           host="githubops@178.239.147.150"
           stage="/home/githubops/factory-runtime/operations/f28-granular-candidates/$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          for file in factory_production_warehouse.py factory_f28_private_warehouse_intake_20261021.py; do
+          for file in factory_production_warehouse.py factory_f28_private_warehouse_intake_20261021.py factory_verified_customer_cycle_20261021.py; do
             source="scripts/$file"
             scp -q "${opts[@]}" "$source" "$host:$stage/scripts/$file"
             want="$(sha256sum "$source" | cut -d' ' -f1)"
