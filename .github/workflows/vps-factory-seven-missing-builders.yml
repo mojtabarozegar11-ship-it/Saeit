@@ -1,0 +1,83 @@
+name: Seven missing real factory family builders and technical QA gate
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_seven_missing_builders.py"
+      - "tests/test_factory_seven_missing_builders.py"
+      - "deploy/install_factory_seven_missing_builders.sh"
+      - ".github/workflows/vps-factory-seven-missing-builders.yml"
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: zomorodmelal-seven-missing-technical-builders
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate seven private builders and fail-closed 1000 gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_seven_missing_builders.sh
+          python3 -m py_compile scripts/factory_seven_missing_builders.py
+          python3 -m unittest discover -s tests -p test_factory_seven_missing_builders.py -v
+          echo ZOMORODMELAL_SEVEN_FAMILY_SOURCE_AND_TECHNICAL_TESTS_PASS
+  install:
+    needs: test
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 19
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Secure SHA-verified install and seven private VPS builds
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/seven-gap-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          options=(-i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          remote=(ssh "${options[@]}" githubops@178.239.147.150)
+          stage="/home/githubops/factory-runtime/operations/.seven-gap-real-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          "${remote[@]}" "test ! -e '$stage' && mkdir -m 700 '$stage'"
+          for source in scripts/factory_seven_missing_builders.py scripts/factory_build50_f23_assistant.py scripts/factory_f23_assistant_independent_review.py scripts/factory_f23_offline_assistant_runtime.py deploy/install_factory_seven_missing_builders.sh; do
+            name="$(basename "$source")"
+            cat "$source" | "${remote[@]}" "umask 077; cat > '$stage/$name'; chmod 600 '$stage/$name'"
+            wanted="$(sha256sum "$source" | cut -d' ' -f1)"
+            "${remote[@]}" "test \"\$(sha256sum '$stage/$name' | cut -d' ' -f1)\" = '$wanted'"
+          done
+          "${remote[@]}" "timeout 850s bash '$stage/install_factory_seven_missing_builders.sh' '$stage'"
+          "${remote[@]}" 'python3 -' <<'PY'
+          import json
+          from pathlib import Path
+          base=Path.home()/'factory-runtime'
+          root=base/'private/autonomous-product-cycle'/'engineering-gaps'/'seven-builders'
+          families={'F12','F13','F16','F17','F23','F26','F40'}
+          records={}
+          for folder in root.iterdir():
+              if not folder.is_dir() or folder.is_symlink():continue
+              for version in folder.iterdir():
+                  record=version/'technical_receipt.json'
+                  if record.is_file() and not record.is_symlink():
+                      obj=json.loads(record.read_text())
+                      if obj['family_id'] in families:
+                          assert obj['independent_quality_1000_passed'] is False
+                          assert obj['commercial_release_allowed'] is False
+                          records[obj['family_id']]=obj['status']
+          print('VPS_SEVEN_BUILDER_PRIVATE_EVIDENCE='+json.dumps(records,sort_keys=True))
+          print('VPS_QUALITY1000_NOT_FALSIFIED_AND_SALES_NOT_AUTHORIZED=PASS')
