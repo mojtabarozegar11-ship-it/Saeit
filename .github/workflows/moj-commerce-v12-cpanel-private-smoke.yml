@@ -1,0 +1,106 @@
+name: MOJ Commerce v1.2 isolated cPanel staging installation and synthetic checkout (NO DEPLOY)
+on:
+  push:
+    branches: ['feature/moj-commerce-v12-mariadb-isolated-20261022']
+    paths:
+      - '.github/workflows/moj-commerce-v12-cpanel-private-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj-commerce-v12-cpanel-private-smoke
+  cancel-in-progress: false
+jobs:
+  isolated-stage-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/moj-commerce-v12-mariadb-isolated-20261022'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Build allowlisted tests and dependencies on ephemeral runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          git ls-files -s moj_commerce mpw_tron_pro tests | awk '$1 != "100644" { bad=1 } END { exit bad }'
+          git archive --format=tar HEAD moj_commerce mpw_tron_pro tests/__init__.py tests/test_moj_commerce*.py | gzip -n > "$RUNNER_TEMP/moj-commerce-v12-src.tar.gz"
+          test -s "$RUNNER_TEMP/moj-commerce-v12-src.tar.gz"
+          tar -tzf "$RUNNER_TEMP/moj-commerce-v12-src.tar.gz" | grep -Fqx 'moj_commerce/test_settings.py'
+          tar -tzf "$RUNNER_TEMP/moj-commerce-v12-src.tar.gz" | grep -Fqx 'tests/test_moj_commerce_mariadb_v12.py'
+          if tar -tzvf "$RUNNER_TEMP/moj-commerce-v12-src.tar.gz" | grep -Eq '^l'; then
+            echo 'MOJ_COMMERCE_STAGE_SYMLINK=DENIED'; exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/moj-commerce-v12-deps/wheelhouse"
+          python -m pip download --only-binary=:all: --dest "$RUNNER_TEMP/moj-commerce-v12-deps/wheelhouse" 'Django>=5.2,<5.3' 'eth-keys>=0.6,<0.8' 'eth-hash[pycryptodome]>=0.7,<1'
+          tar -C "$RUNNER_TEMP/moj-commerce-v12-deps" -czf "$RUNNER_TEMP/moj-commerce-v12-deps.tar.gz" wheelhouse
+      - name: Host-pinned relay and private stage smoke without production DB or public routes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ -n "$VPS_KEY" && -n "$HOST_KEY" ]] || { echo 'STAGE_BLOCKED_NO_RELAY'; exit 1; }
+          d="$RUNNER_TEMP/moj-commerce-v12-private-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net 2>/dev/null' > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          sha="$(git rev-parse --short=12 HEAD)"
+          [[ "$sha" =~ ^[0-9a-f]{12}$ ]]
+          private_root="/home/zomorod2/.local/share/moj-commerce-v12-private-smoke"
+          dest="$private_root/$sha"
+          remote_python="/opt/alt/python311/bin/python3.11"
+          # This exact destination is private and outside all website docroots.
+          timeout 40s ssh -T -F "$d/config" saeit-host "set -eu; test -x '$remote_python'; test -d /home/zomorod2/Saeit; test ! -L /home/zomorod2/.local; test ! -L /home/zomorod2/.local/share; test \$(df -Pk /home/zomorod2 | awk 'NR==2{print \$4}') -gt 307200; umask 077; mkdir -p -m 700 '$private_root'; test ! -e '$dest'; mkdir -m 700 '$dest'"
+          timeout 80s ssh -T -F "$d/config" saeit-host "umask 077; cat > '$dest/source.tar.gz'" < "$RUNNER_TEMP/moj-commerce-v12-src.tar.gz"
+          timeout 80s ssh -T -F "$d/config" saeit-host "umask 077; cat > '$dest/wheels.tar.gz'" < "$RUNNER_TEMP/moj-commerce-v12-deps.tar.gz"
+          source_digest="$(sha256sum "$RUNNER_TEMP/moj-commerce-v12-src.tar.gz" | awk '{print $1}')"
+          wheels_digest="$(sha256sum "$RUNNER_TEMP/moj-commerce-v12-deps.tar.gz" | awk '{print $1}')"
+          test "$source_digest" = "$(timeout 35s ssh -T -F "$d/config" saeit-host "sha256sum '$dest/source.tar.gz'" | awk '{print $1}')"
+          test "$wheels_digest" = "$(timeout 35s ssh -T -F "$d/config" saeit-host "sha256sum '$dest/wheels.tar.gz'" | awk '{print $1}')"
+          timeout 170s ssh -T -F "$d/config" saeit-host "set -eu; cd '$dest'; tar -xzf source.tar.gz; tar -xzf wheels.tar.gz; '$remote_python' -m venv .venv; .venv/bin/python -m pip install --no-index --find-links=wheelhouse 'Django>=5.2,<5.3' 'eth-keys>=0.6,<0.8' 'eth-hash[pycryptodome]>=0.7,<1'"
+          timeout 210s ssh -T -F "$d/config" saeit-host "set -eu; cd '$dest'; env -i PATH=/usr/bin:/bin MOJ_COMMERCE_TEST_POSTGRES=0 MOJ_COMMERCE_TEST_MYSQL=0 .venv/bin/python -m django makemigrations moj_commerce --check --dry-run --settings=moj_commerce.test_settings; env -i PATH=/usr/bin:/bin MOJ_COMMERCE_TEST_POSTGRES=0 MOJ_COMMERCE_TEST_MYSQL=0 .venv/bin/python -m django test tests.test_moj_commerce tests.test_moj_commerce_wallet tests.test_moj_commerce_tron_verifier tests.test_moj_commerce_gateway_e2e tests.test_moj_commerce_checkout_v04 tests.test_moj_commerce_operations_v05 tests.test_moj_commerce_operations_v06 tests.test_moj_commerce_quorum_v07 tests.test_moj_commerce_self_repair_v08 tests.test_moj_commerce_mariadb_v12 --settings=moj_commerce.test_settings --verbosity 1; echo MOJ_COMMERCE_V12_PRIVATE_CPANEL_SMOKE=PASS"
+          echo "MOJ_COMMERCE_V12_PRIVATE_STAGE_SOURCE_SHA256=$source_digest"
+          echo "MOJ_COMMERCE_V12_PRIVATE_STAGE_DEPS_SHA256=$wheels_digest"
+          echo 'MOJ_COMMERCE_V12_PUBLIC_ROUTES_MODIFIED=NO'
+          echo 'MOJ_COMMERCE_V12_PRODUCTION_DB_WRITES=NO'
+          echo 'MOJ_COMMERCE_V12_REAL_MONEY=NONE'
+          echo 'MOJ_COMMERCE_V12_PRODUCTION_SITE=UNCHANGED'
