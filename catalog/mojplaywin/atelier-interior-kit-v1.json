@@ -33,5 +33,44 @@
     "Private delivery of exact SHA-256 verified archive",
     "Independent QA and production release gate",
     "Verified checkout, receipt, and authenticated customer download"
-  ]
+  ],
+  "pricing_recommendation": {
+    "researched_at": "2026-10-21",
+    "currency": "USD",
+    "regular_price": 29,
+    "introductory_price": 19,
+    "introductory_cap_paid_sales": 20,
+    "pricing_status": "market_research_recommendation_not_active_checkout_price",
+    "comparables": [
+      {
+        "name": "Architekta HTML",
+        "observed_price_usd": 7,
+        "url": "https://themeforest.net/item/architekta-interior-architecture-html-template/60588934",
+        "note": "lower-priced comparison"
+      },
+      {
+        "name": "Ukainpro HTML",
+        "observed_price_usd": 16,
+        "url": "https://themeforest.net/item/ukainpro-interior-design-architecture-portfolio-template-responsive-html5-design/24155024"
+      },
+      {
+        "name": "Luxine HTML",
+        "observed_price_usd": 24,
+        "url": "https://themeforest.net/item/luxine-architecture-interior-design-html-template/61263583"
+      },
+      {
+        "name": "Interno HTML",
+        "observed_price_usd": 29,
+        "url": "https://themeforest.net/item/interno-architecture-interior-html-template/49661168"
+      },
+      {
+        "name": "Interior Designs Framer",
+        "observed_price_usd": 69,
+        "url": "https://www.framer.com/marketplace/templates/interior-designs/",
+        "note": "CMS-capable, not like-for-like static HTML"
+      }
+    ],
+    "rationale": "Introductory pricing near direct HTML competitors; regular pricing reflects browser-based editing and bundled fictional gallery assets, while acknowledging this kit has fewer pages and no CMS.",
+    "trx_settlement": "invoice_quoted_at_payment_time_no_fixed_trx_amount"
+  }
 }
