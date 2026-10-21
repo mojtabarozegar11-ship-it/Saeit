@@ -119,6 +119,28 @@ jobs:
           print("STAGE4_RESEARCH_READONLY_NO_CAPACITY_OVERRIDE=PASS")
           PY
           REMOTE
+      - name: Inspect Stage4 backoff and research retry control-flow safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/stage4-readonly"
+          timeout 90s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
+          import ast, hashlib, json, re
+          from pathlib import Path
+          base=Path.home()/"factory-runtime/django-app/core"
+          picks={"factory_stage4.py":(50,117),"factory_agent_runtime.py":(235,313)}
+          for name,(start,end) in picks.items():
+              path=base/name
+              if path.is_symlink() or not path.is_file() or path.stat().st_size>150000:
+                  print("STAGE4_SOURCE_UNSAFE="+name)
+                  continue
+              raw=path.read_text(encoding="utf8")
+              ast.parse(raw)
+              print("STAGE4_SOURCE_SHA256_"+name+"="+hashlib.sha256(raw.encode()).hexdigest())
+              for idx,line in enumerate(raw.splitlines(),1):
+                  if start<=idx<=end and len(line)<350 and not re.search(r"password|secret|credential|private.key|api.key|auth.token|https?://",line,re.I):
+                      print("STAGE4_CODE_"+name+":"+str(idx)+"="+line)
+          PY
       - name: Inspect redacted budget-policy conditions without exposing source secrets
         shell: bash
         run: |
