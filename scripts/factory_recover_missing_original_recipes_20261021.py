@@ -187,8 +187,30 @@ def recover(root,*,limit=3,other_roots=()):
                 os.chmod(proof,0o600)
             stats["restored"]+=1
             results.append({"recipe":recipe,"source_sha256":source_sha})
-        except (OSError,ValueError,TypeError,json.JSONDecodeError,zipfile.BadZipFile):
+        except (OSError,ValueError,TypeError,json.JSONDecodeError,zipfile.BadZipFile) as exc:
             stats["unrecoverable_with_current_provenance"]+=1
+            # Exact aggregate remediation reasons; never log confidential
+            # paths, arbitrary exceptions, source text or customer metadata.
+            allowed={
+                "RECOVERY_DOCUMENT_UNTRUSTED","RECOVERY_DOCUMENT_INVALID",
+                "RECOVERY_UNBOUND_QUALITY_WORKORDER",
+                "RECOVERY_AMBIGUOUS_OR_MISSING_STOCK",
+                "RECOVERY_UNSAFE_STOCK_MANIFEST",
+                "RECOVERY_MANIFEST_NOT_VERIFIABLE_SOURCE",
+                "RECOVERY_ZIP_UNSAFE","RECOVERY_ARCHIVE_HASH_MISMATCH",
+                "RECOVERY_SOURCE_MEMBERS_INVALID","RECOVERY_MEMBER_TRAVERSAL",
+                "RECOVERY_MEMBER_NAME_INVALID","RECOVERY_MEMBER_CANONICAL_NAME_REQUIRED",
+                "RECOVERY_SOURCE_HASH_MISMATCH","RECOVERY_SINGLE_FILE_TOO_LARGE",
+                "RECOVERY_POST_WRITE_SOURCE_HASH_INVALID",
+                "RECOVERY_CONCURRENT_SOURCE_EXISTS","RECOVERY_DESTINATION_SYMLINK",
+                "RECOVERY_STOCK_SYMLINK","RECOVERY_UNSAFE_STOCK_ROOT",
+                "RECOVERY_LINK_OR_DIR_FORBIDDEN",
+            }
+            detail=str(exc) if type(exc) is ValueError else ""
+            reason=detail if detail in allowed else (
+                "RECOVERY_UNREADABLE_ZIP" if isinstance(exc,zipfile.BadZipFile)
+                else "RECOVERY_METADATA_OR_IO_NOT_VERIFIABLE")
+            stats["remediation_"+reason]+=1
     summary={"schema":"saeit.factory.exact-source-recovery-summary.v1",
         "totals":dict(sorted(stats.items())),"recovered_receipts":results,
         "no_source_synthesis":True,"original_stock_mutated":False,
