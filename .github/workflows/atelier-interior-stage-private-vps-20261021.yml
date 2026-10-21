@@ -49,12 +49,13 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           printf 'ATELIER_VPS_IDENTITY_PINNED=PASS\n'
-      - name: Build private original-member ZIP in VPS factory under QA hold
+      - name: Transfer verified member ZIP through SSH and reconstruct privately on VPS under QA hold
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/atelier-vps-ssh"
-          timeout 240s ssh -T -i "$d/vps.key" -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -o ForwardAgent=no -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 \
-            "python3 - stage" < scripts/atelier_interior_stage_private_vps_20261021.py
+          python3 -B scripts/atelier_interior_stage_private_vps_20261021.py relay_program \
+            | timeout 240s ssh -T -i "$d/vps.key" -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -o ForwardAgent=no -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 \
+              "python3 -"
       - name: Erase ephemeral runner SSH identity
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/atelier-vps-ssh"

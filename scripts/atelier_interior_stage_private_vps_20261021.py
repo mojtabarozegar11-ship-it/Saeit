@@ -86,7 +86,32 @@ def build(objects):
                 raise ValueError("REBUILT_ARCHIVE_MEMBER_CHANGED")
     return blob
 
-def stage():
+def verify_streamed_archive(blob):
+    if not 1_000 <= len(blob) <= 15_000_000:
+        raise ValueError("RELAY_PACKAGE_SIZE_INVALID")
+    with zipfile.ZipFile(io.BytesIO(blob)) as pack:
+        if set(pack.namelist())!=set(FILE_HASHES) or pack.testzip():
+            raise ValueError("RELAY_PACKAGE_STRUCTURE_INVALID")
+        objects={name:pack.read(name) for name in FILE_HASHES}
+    # Canonical replay proves no member substitution, no ZIP tricks.
+    if build(objects)!=blob:
+        raise ValueError("RELAY_PACKAGE_HASH_OR_ZIP_MISMATCH")
+    return blob
+
+
+def relay_program():
+    """Runner uses its HTTPS connectivity; VPS revalidates and privately stocks."""
+    payload=base64.b64encode(build(source_bytes(fetch=True))).decode("ascii")
+    original=Path(__file__).read_text(encoding="utf8")
+    marker='\nif __name__=="__main__":'
+    if original.count(marker)!=1:
+        raise RuntimeError("RELAY_PROGRAM_SOURCE_INVALID")
+    sys.stdout.write(original.split(marker,1)[0])
+    sys.stdout.write('\nif __name__=="__main__":\n    stage(base64.b64decode("'+payload+'"))\n')
+    sys.stdout.flush()
+
+
+def stage(input_zip=None):
     if pwd.getpwuid(os.getuid()).pw_name!="githubops":
         raise PermissionError("WRONG_PRIVATE_VPS_ACCOUNT")
     if DEST_DIR.is_symlink() or DEST_DIR.parent.is_symlink():
@@ -100,7 +125,7 @@ def stage():
     with lock.open("a+b") as handle:
         os.fchmod(handle.fileno(),0o600)
         fcntl.flock(handle.fileno(),fcntl.LOCK_EX)
-        blob=build(source_bytes(fetch=True))
+        blob=build(source_bytes(fetch=True)) if input_zip is None else verify_streamed_archive(input_zip)
         checksum=digest(blob)
         info={"schema":"saeit.atelier-private-stock.v1","sku":"atelier-interior-kit-v1",
               "sha256":checksum,"size":len(blob),"member_hashes":FILE_HASHES,
@@ -139,5 +164,7 @@ if __name__=="__main__":
         print("ATELIER_PRIVATE_VPS_BUILDER_SELFTEST=PASS")
     elif len(sys.argv)==2 and sys.argv[1]=="stage":
         stage()
+    elif len(sys.argv)==2 and sys.argv[1]=="relay_program":
+        relay_program()
     else:
-        raise SystemExit("selftest|stage")
+        raise SystemExit("selftest|stage|relay_program")
