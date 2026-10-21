@@ -1,0 +1,61 @@
+name: V3 disposable MariaDB backup restore proof - SYNTHETIC ONLY
+on:
+  push:
+    branches: [fix/mpw-gzip-before-ssh-backup-20261020, release/mpw-gpg-v3-owner-manual-20261020]
+    paths:
+      - ".github/workflows/mojplaywin-v3-synthetic-isolated-mariadb-restore.yml"
+      - "tests/test_mojplaywin_backup_isolated_mariadb_v3.py"
+permissions:
+  contents: read
+concurrency:
+  group: v3-mpw-synthetic-mariadb-restore-only
+  cancel-in-progress: false
+jobs:
+  isolated-test-no-customer-data:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/fix/mpw-gzip-before-ssh-backup-20261020' || github.ref == 'refs/heads/release/mpw-gpg-v3-owner-manual-20261020')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      MPW_RESTORE_FIXTURE_CONTAINER: mpw-v3-synthetic-restore-ci
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate fixture files; never establish production SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tests/test_mojplaywin_backup_isolated_mariadb_v3.py
+          command -v docker
+          command -v gpg
+          test -z "${VPS_SSH_PRIVATE_KEY:-}"
+      - name: Launch network-disabled, disposable MariaDB fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --rm --name "$MPW_RESTORE_FIXTURE_CONTAINER" \
+            --network none --memory 2g --pids-limit 512 \
+            --tmpfs /var/lib/mysql:rw,nosuid,nodev,size=1g \
+            --env MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=1 \
+            mariadb:11.4
+          for i in $(seq 1 55); do
+            if docker exec "$MPW_RESTORE_FIXTURE_CONTAINER" mariadb-admin -uroot ping -h localhost >/dev/null 2>&1; then
+              echo 'V3_SYNTHETIC_ISOLATED_DB_ENGINE_READY=true'
+              exit 0
+            fi
+            sleep 2
+          done
+          echo 'V3_SYNTHETIC_ISOLATED_DB_ENGINE_READY=false'
+          exit 1
+      - name: Authenticate synthetic GPG pair, import SQL into disposable MariaDB and verify TAR
+        shell: bash
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_isolated_mariadb_v3.py' -v
+          echo 'V3_LIVE_CUSTOMER_DATA_ACCESSED=false'
+          echo 'V3_REAL_ISOLATED_PRODUCTION_BACKUP_RESTORE_COMPLETED=false'
+          echo 'V3_PUBLIC_RELEASE_AUTHORIZED=false'
+      - name: Destroy synthetic database container even on failure
+        if: always()
+        shell: bash
+        run: docker rm -f "$MPW_RESTORE_FIXTURE_CONTAINER" >/dev/null 2>&1 || true
