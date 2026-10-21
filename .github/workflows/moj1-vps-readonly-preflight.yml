@@ -63,5 +63,18 @@ jobs:
           else
             echo 'MOJ1_VPS_PORT_9090=UNVERIFIED'
           fi
+          # A public Shasta RPC reachability probe from the *remote VPS*.
+          # It is read-only and deliberately never references wallet material.
+          if command -v curl >/dev/null 2>&1; then
+            shasta_reply="$(curl --fail --silent --show-error --max-time 20 'https://api.shasta.trongrid.io/walletsolidity/getnowblock' 2>/dev/null)" || shasta_reply=''
+            case "$shasta_reply" in
+              *'"blockID"'*) echo 'MOJ1_VPS_TO_SHASTA_SOLIDIFIED_RPC=REACHABLE' ;;
+              *) echo 'MOJ1_VPS_TO_SHASTA_SOLIDIFIED_RPC=UNAVAILABLE' ;;
+            esac
+          else
+            echo 'MOJ1_VPS_TO_SHASTA_SOLIDIFIED_RPC=UNAVAILABLE'
+          fi
+          echo 'MOJ1_VPS_TEST_WALLET=NOT_ACCESSED'
+          echo 'MOJ1_VPS_BROADCAST=NONE'
           echo 'MOJ1_VPS_PREFLIGHT_MODE=READ_ONLY'
           REMOTE
