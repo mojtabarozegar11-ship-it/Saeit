@@ -195,6 +195,9 @@ def assess(warehouse, expected_source, expected_artifact, criteria):
             env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
         require(unit.returncode == 0 and "OK" in unit.stderr,
                 "F28_EXTRACTED_PRODUCT_UNIT_TESTS_FAILED")
+        measured_units = re.search(r"Ran ([0-9]+) tests?", unit.stderr)
+        require(measured_units is not None and int(measured_units.group(1)) >= 1,
+                "F28_UNIT_TEST_COUNT_UNVERIFIED")
         calculator = directory / "calculator.py"
         rng = random.Random(SEED)
         transcript = hashlib.sha256()
@@ -225,6 +228,7 @@ def assess(warehouse, expected_source, expected_artifact, criteria):
         "actual_package_bytes": package.stat().st_size,
         "zip_member_count": len(FILES), "zip_crc_checked": True,
         "extracted_product_unit_tests": "passed",
+        "extracted_product_unit_test_count": int(measured_units.group(1)),
         "valid_real_customer_cli_scenarios_oracle_checked": VALID,
         "invalid_customer_cli_scenarios_rejected": INVALID,
         "reproducible_seed": SEED, "test_transcript_sha256": transcript.hexdigest(),
@@ -234,6 +238,8 @@ def assess(warehouse, expected_source, expected_artifact, criteria):
         "rights_and_licenses_independently_cleared": False,
         "independent_authenticated_review_completed": False,
         "quality_criteria_total": len(groups),
+        "quality_criteria_catalog_sha256": digest(Path(criteria).read_bytes()),
+        "quality_criteria_not_independently_approved": list(groups),
         "technical_evidence_for": {
             "Q068": "zip_member_integrity_sha_and_crc",
             "Q033": "calculation_arithmetic_oracle_only_not_scientific_field_accuracy",
