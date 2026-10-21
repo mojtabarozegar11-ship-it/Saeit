@@ -40,6 +40,17 @@ class LinkClassifierTests(unittest.TestCase):
         self.assertFalse(result["all_absolute_links_derived_interpreter_dependencies"])
         self.assertFalse(result["release_permitted"])
 
+
+    def test_absolute_links_inside_existing_archive_are_a_separate_class(self):
+        result=classify(fixture(["/home/zomorod2/Saeit-staging/synthetic.txt",
+                                 "/home/zomorod2/another-root/missing",
+                                 "/usr/local/bin/python3"]))
+        self.assertEqual(result["counters"]["absolute_links_to_backed_root"],1)
+        self.assertEqual(result["counters"]["absolute_link_target_present_as_archive_member"],1)
+        self.assertEqual(result["counters"]["absolute_links_other_home"],1)
+        self.assertEqual(result["counters"]["absolute_links_system_runtime"],1)
+        self.assertFalse(result["release_permitted"])
+
     def test_safe_regular_files_never_claim_complete_restore(self):
         result=classify(fixture([]))
         self.assertEqual(result["counters"]["regular"],2)
