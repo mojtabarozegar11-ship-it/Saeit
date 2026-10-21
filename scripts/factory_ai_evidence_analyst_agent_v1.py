@@ -92,9 +92,15 @@ def build_dossier(root, policy, recipe, source_sha, artifact_sha, supplier):
     version = Path(root) / "production-warehouse" / "finished" / recipe / source_sha
     manifest = supplier.read_json(version / "warehouse_manifest.json")
     archive = version / "product.zip"
-    if (manifest.get("product_id") != recipe or manifest.get("source_sha256") != source_sha
-            or manifest.get("artifact_sha256") != artifact_sha):
-        raise RuntimeError("AI_AGENT_WAREHOUSE_BINDING_INVALID")
+    if (manifest.get("schema") != "saeit.factory.production-warehouse.v1"
+            or manifest.get("product_id") != recipe or manifest.get("source_sha256") != source_sha
+            or manifest.get("artifact_sha256") != artifact_sha
+            or manifest.get("manufacturing_qc") != "passed"
+            or manifest.get("commercial_release") is not False
+            or manifest.get("site_transfer_state") != "not_transferred"
+            or not archive.is_file() or archive.is_symlink()
+            or manifest.get("bytes") != archive.stat().st_size):
+        raise RuntimeError("AI_AGENT_WAREHOUSE_BINDING_OR_POLICY_INVALID")
     if supplier.hash_bytes(archive.read_bytes()) != artifact_sha:
         raise RuntimeError("AI_AGENT_ARTIFACT_HASH_MISMATCH")
     members = inspect_members(archive, supplier, recipe)
