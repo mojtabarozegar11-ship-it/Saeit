@@ -1,0 +1,164 @@
+name: V3 isolated backup prerequisite audit (read only)
+on:
+  push:
+    branches: [automation/v3-order-cap-main-sync-20261020]
+    paths: [".github/workflows/v3-backup-preflight-20261020.yml", "scripts/v3_backup_bounded_source_probe.py"]
+permissions: {contents: read}
+concurrency:
+  group: v3-backup-preflight-20261020
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/automation/v3-order-cap-main-sync-20261020'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate local metadata-only probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_backup_vps_failure_readonly.py scripts/mojplaywin_backup_restore_readiness_readonly.py scripts/mojplaywin_recovery_stream_vps.py
+          python3 -m unittest discover -s tests -p test_mojplaywin_backup_vps_failure_readonly.py
+          python3 -m unittest discover -s tests -p test_mojplaywin_backup_restore_readiness_readonly.py
+      - name: Run isolated factory regression tests without production access
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --no-input -r requirements.txt
+          python3 -m unittest discover -s tests -p test_factory_continuous_production_orders.py -v
+          python3 -m unittest discover -s tests -p test_factory_f18_and_organizer.py -v
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read VPS backup status metadata and isolated-recovery prerequisites only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 40s ssh -T -F "$d/config" saeit-vps python3 - < scripts/mojplaywin_backup_vps_failure_readonly.py
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/mojplaywin_backup_restore_readiness_readonly.py
+          if timeout 40s ssh -T -F "$d/config" saeit-vps 'python3 - check' < scripts/mojplaywin_recovery_stream_vps.py; then
+            echo 'V3_ENCRYPTED_SOURCE_METADATA=present_not_restored'
+          else
+            echo 'V3_ENCRYPTED_SOURCE_METADATA=missing_or_unverified'
+          fi
+          echo 'V3_ISOLATED_RESTORE_PERFORMED=false'
+          echo 'V3_PUBLIC_RELEASE_AUTHORIZED=false'
+      - name: Measure source roots and database connectivity without exporting data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_consistent_db_preflight_readonly.py
+          python3 -m unittest discover -s tests -p test_mojplaywin_consistent_db_preflight_readonly.py
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 75s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/mojplaywin_consistent_db_preflight_readonly.py
+      - name: Read masked database size and hosting quota metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_mojplaywin_mysql_quota_sanitize_readonly.py
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json Mysql list_databases' | python3 scripts/mojplaywin_mysql_quota_sanitize_readonly.py mysql
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json Quota get_local_quota_info' | python3 scripts/mojplaywin_mysql_quota_sanitize_readonly.py quota
+      - name: Inspect fixed GPGv2 archive candidates without reading backup contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          import json,stat
+          from pathlib import Path
+          root=Path.home()/".private-mojplaywin-offhost-backups"
+          kinds=("mysql","files")
+          output={"classification":"READ_ONLY_GPGV2_FIXED_BACKUP_METADATA","release_permitted":False}
+          for kind in kinds:
+              for suffix,label in ((".gpg.partial","partial"),(".gpg","complete"),(".manifest.json","manifest")):
+                  path=root/("mojplaywin_20261017_"+kind+"_gpgv2"+suffix)
+                  try:
+                      s=path.lstat()
+                      regular=stat.S_ISREG(s.st_mode) and s.st_uid==__import__("os").getuid()
+                      output[kind+"_"+label+"_bytes"]=s.st_size if regular else None
+                  except OSError:
+                      output[kind+"_"+label+"_bytes"]=None
+          print(json.dumps(output,sort_keys=True))
+          PY
+      - name: Verify 8 MiB synthetic cPanel-to-VPS stream over pinned SSH, no customer data
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 -c 'import sys;sys.stdout.buffer.write(b\"R\"*8388608)'" |
+            timeout 60s ssh -T -F "$d/config" saeit-vps "python3 -c 'import sys;d=sys.stdin.buffer.read(8388609);assert len(d)==8388608 and d==b\"R\"*8388608;print(\"V3_PINNED_SSH_8M_SYNTHETIC_RELAY=PASS\")'"
+      - name: Verify synthetic GPG AES256 encrypt/decrypt on VPS only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 75s ssh -T -F "$d/config" saeit-vps 'python3 - selftest' < scripts/mojplaywin_backup_encrypt_vps_gpg.py
+          echo 'V3_GPG_SYNTHETIC_CRYPTO_PROBE_COMPLETE'
+      - name: Confirm real source-stream startup locally on cPanel without exporting private bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/v3_backup_bounded_source_probe.py
+          python3 scripts/v3_backup_bounded_source_probe.py fixture
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          source_failures=0
+          for kind in mysql files; do
+            if timeout 90s ssh -T -F "$d/config" saeit-cpanel "python3 - $kind" < scripts/v3_backup_bounded_source_probe.py; then
+              echo "V3_BOUNDED_SOURCE_$kind=PASS"
+            else
+              echo "V3_BOUNDED_SOURCE_$kind=BLOCKED"
+              source_failures=$((source_failures+1))
+            fi
+          done
+          echo "V3_BOUNDED_SOURCE_PROBE_FAILURES=$source_failures"
+          echo 'V3_NO_CUSTOMER_DATA_EXPORTED=true'
+          test "$source_failures" -eq 0
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/mojplaywin-inventory-ssh"

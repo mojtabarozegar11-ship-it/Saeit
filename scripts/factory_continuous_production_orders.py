@@ -224,6 +224,11 @@ def generate(root,max_backlog=MAX_BACKLOG):
                 continue
             selected=(task,key,research)
             break
+        # Do not issue an order beyond the fixed historical journal limit.
+        # Keep all existing records intact and report a safe capacity hold.
+        if len(old)>=MAX_ORDERS:
+            selected=None
+            blocked_by_capacity=True
         action="issued" if selected else ("capacity_hold" if blocked_by_capacity
                                           else "no_new_meaningful_input")
         order_id=None
