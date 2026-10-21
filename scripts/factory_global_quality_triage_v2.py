@@ -157,7 +157,11 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
     assert not out.is_symlink()
     out.mkdir(parents=True,exist_ok=True,mode=0o700)
     records=[]
-    sources=(root/"digital-products", root/"product-lifecycle"/"digital-products")
+    edition_stock=root/"quality-excellence"/"document-edition-private-stock"
+    if edition_stock.is_symlink():
+        raise ValueError("QA_EDITION_STOCK_SYMLINK_UNSAFE")
+    sources=(root/"digital-products", root/"product-lifecycle"/"digital-products",
+             edition_stock)
     # Refuse a superficially green report covering only the first N products.
     # Never silently omit eligible manifest-bearing inventory after a budget cap.
     eligible_total=0
@@ -226,6 +230,8 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
                     actual.append("P0_SOURCE_PROVENANCE_HASH_MISSING_OR_INVALID")
                 record={
                     "schema":REWORK, "recipe":name,"family_id":family,
+                    "inventory_origin":("private_document_edition" if base==edition_stock
+                                        else "existing_manufacturer_stock"),
                     "artifact_sha256":manifest_sha,
                     "actual_sha256":existing_hash,
                     "technical_qa_status":doc.get("qa_status"),
@@ -311,6 +317,8 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
                                 and x.get("verified_artifact_integrity") is True
                                 and x.get("source_provenance_hash_present") is True
                                 for x in records),
+        "new_document_editions_reentered_qa":sum(
+            x.get("inventory_origin")=="private_document_edition" for x in records),
         "source_provenance_missing_or_invalid":sum(
             x.get("source_provenance_hash_present") is False for x in records),
         "quality_certified":0,"public_release_authorized":False,
@@ -338,6 +346,8 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
     print("FACTORY_ALL_40_GLOBAL_QA_TRIAGE=PASS")
     print("FACTORY_REAL_PRODUCTS_IN_REWORK_QUEUE="+str(len(records)))
     print("FACTORY_TECHNICAL_PASS_NOT_PREMIUM="+str(summary["technical_passed"]))
+    print("FACTORY_PRIVATE_DOCUMENT_EDITIONS_IN_STRICT_QA="+
+          str(summary["new_document_editions_reentered_qa"]))
     print("FACTORY_REAL_REWORK_CLASSIFICATION="+json.dumps(dict(statuses),sort_keys=True))
     print("FACTORY_TOP_STOP_SHIP_DEFECTS="+json.dumps(defects.most_common(8)))
     print("FACTORY_QUARANTINE_ROOT_CAUSES="+json.dumps(
