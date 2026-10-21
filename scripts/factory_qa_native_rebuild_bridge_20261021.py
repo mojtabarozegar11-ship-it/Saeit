@@ -57,6 +57,14 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
     if not source_root.is_dir() or source_root.is_symlink():raise ValueError("PRIVATE_SOURCE_ROOT_INVALID")
     if not isinstance(additional_source_roots,(list,tuple)) or len(additional_source_roots)>2:
         raise ValueError("BOUNDED_SOURCE_ROOTS_REQUIRED")
+    # Installed factory sources are stored outside private generated recipes.
+    # Discover only the canonical sibling under the same factory-runtime root.
+    # Preserve the explicit override for isolated CI fixtures and operators.
+    canonical=root.parent.parent/"operations"/"autonomous-product-runtime"/"product_recipes"
+    if not additional_source_roots and canonical.is_dir():
+        if canonical.is_symlink():
+            raise ValueError("CANONICAL_PRODUCT_RECIPES_SYMLINK_UNSAFE")
+        additional_source_roots=[canonical]
     roots=[source_root]
     for extra in additional_source_roots:
         candidate=Path(extra)
