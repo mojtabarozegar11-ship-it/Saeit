@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - "scripts/factory_global_quality_triage_v2.py"
+      - "scripts/factory_quality_signed_approval_v1.py"
+      - "tests/test_factory_quality_signed_approval_v1.py"
+      - "scripts/factory_quality_production_workorders_v1.py"
       - "scripts/factory_quality_1000_v2.py"
       - "factory_config/quality_100_criteria.json"
       - "factory_config/active_quality_1000_policy.json"
@@ -32,6 +35,7 @@ jobs:
           set -euo pipefail
           python3 -B -m unittest discover -s tests -p test_factory_global_quality_triage_v2.py -v
           python3 -B -m unittest discover -s tests -p test_factory_quality_100_criteria.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_quality_signed_approval_v1.py -v
           python3 -B -m unittest discover -s tests -p test_factory_global_premium_quality_gate.py -v
           python3 -m py_compile scripts/factory_global_quality_triage_v2.py
           echo REAL_FACTORY_QUALITY_REWORK_REGRESSION=PASS
@@ -56,6 +60,7 @@ jobs:
           ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; test \"\$(id -un)\" = githubops; umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
           scp -q "${opts[@]}" scripts/factory_global_quality_triage_v2.py githubops@178.239.147.150:"$stage/rework.py"
           scp -q "${opts[@]}" scripts/factory_quality_1000_v2.py githubops@178.239.147.150:"$stage/score1000.py"
+          scp -q "${opts[@]}" scripts/factory_quality_production_workorders_v1.py githubops@178.239.147.150:"$stage/workorders.py"
           scp -q "${opts[@]}" factory_config/quality_100_criteria.json githubops@178.239.147.150:"$stage/quality_100_criteria.json"
           scp -q "${opts[@]}" scripts/factory_global_premium_quality_gate.py githubops@178.239.147.150:"$stage/quality.py"
           scp -q "${opts[@]}" factory_config/forty_families.json githubops@178.239.147.150:"$stage/families.json"
@@ -67,7 +72,14 @@ jobs:
             --scorecard "$stage/score1000.py" \
             --run-reference "$GITHUB_RUN_ID"
           echo FACTORY_GLOBAL_QUALITY_TRIAGE_PRIVATE_VPS=COMPLETED
+          timeout 100s ssh -T "${opts[@]}" githubops@178.239.147.150 \
+            python3 -B "$stage/workorders.py" \
+            --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle \
+            --quality-module "$stage/score1000.py" \
+            --catalog "$stage/quality_100_criteria.json" \
+            --run-id "$GITHUB_RUN_ID"
+          echo FACTORY_PRODUCT_PROFESSIONAL_REWORK_QUEUE=OPERATIONAL
           echo FACTORY_QUALITY_RELEASE_THRESHOLD=1000/1000
           echo FACTORY_PUBLIC_PRODUCT_UPLOAD=NONE
           echo FACTORY_PAYMENT_CHANGE=NONE
-          ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; rm -f -- '$stage/rework.py' '$stage/quality.py' '$stage/families.json' '$stage/score1000.py' '$stage/quality_100_criteria.json'; rmdir -- '$stage'"
+          ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; rm -f -- '$stage/rework.py' '$stage/quality.py' '$stage/families.json' '$stage/score1000.py' '$stage/quality_100_criteria.json' '$stage/workorders.py'; rmdir -- '$stage'"
