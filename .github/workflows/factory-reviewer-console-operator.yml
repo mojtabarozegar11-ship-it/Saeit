@@ -67,6 +67,9 @@ jobs:
           if [[ "$operation" = status ]]; then
             ssh -T "${opts[@]}" githubops@178.239.147.150 \
               "python3 -B '$cli' status --workspace '$base'"
+            echo "NATURAL_LEGAL_OWNER_CAPACITY_PRIVATE_STATUS:"
+            ssh -T "${opts[@]}" githubops@178.239.147.150 \
+              "python3 -B '$base/factory_owner_legal_capacity_registry_v1.py' status --workspace '$base'"
           else
             ssh -T "${opts[@]}" githubops@178.239.147.150 \
               "python3 -B '$cli' invite --workspace '$base' --reviewer-id '$REVIEWER_ID' --role '$REVIEWER_ROLE'"
