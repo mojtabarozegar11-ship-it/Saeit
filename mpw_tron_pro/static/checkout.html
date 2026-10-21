@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark"/><meta name="theme-color" content="#080d19"/>
+<title>MojPlayWin Pay — Secure TRON Checkout</title><link rel="stylesheet" href="/assets/checkout.css"/></head>
+<body>
+<div class="ambient ambient-a" aria-hidden="true"></div><div class="ambient ambient-b" aria-hidden="true"></div>
+<div class="shell">
+<header class="topbar">
+  <a class="brand" href="https://mojplaywin.com" aria-label="MojPlayWin Home">
+    <span class="brand-mark" aria-hidden="true"><span class="brand-core">M</span></span>
+    <span class="brand-copy"><strong>MOJPLAYWIN</strong><small>PAYMENTS · TRON NETWORK</small></span>
+  </a>
+  <span class="top-safe"><span class="pulse-dot"></span><span>SECURE CHECKOUT</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 6v6c0 5 3.4 8.2 8 10 4.6-1.8 8-5 8-10V6l-8-4Zm0 4 4 2v4c0 2.5-1.5 4.6-4 6-2.5-1.4-4-3.5-4-6V8l4-2Z"/></svg></span>
+</header>
+<main class="page">
+  <div class="eyebrow"><span class="line"></span> NEXT-GENERATION CRYPTO CHECKOUT <span class="line"></span></div>
+  <div class="headline"><h1>Payment, <em>without friction.</em></h1><p>One network. One secure invoice. A straightforward way to complete your order.</p></div>
+  <section class="stages" aria-label="Payment progress">
+    <div class="stage is-done"><span class="stage-index">✓</span><span>Review</span></div><span class="stage-track"></span>
+    <div class="stage is-now"><span class="stage-index">02</span><span>Pay with TRX</span></div><span class="stage-track"></span>
+    <div class="stage" id="stage-done"><span class="stage-index">03</span><span>Confirmed</span></div>
+  </section>
+  <div class="main-grid">
+    <section class="card payment" aria-labelledby="payment-title">
+      <div class="card-heading"><div class="heading-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 21 7v10l-9 5-9-5V7l9-5Zm0 3.3L6 8.6v6.8l6 3.4 6-3.4V8.6l-6-3.3Z"/></svg></div><div><div class="card-overline">PAYMENT DETAILS</div><h2 id="payment-title">Your TRON invoice</h2></div><span class="chip"><span class="chip-glow"></span>Mainnet</span></div>
+      <div class="token-band"><div class="coin-logo" aria-hidden="true"><svg viewBox="0 0 52 52"><path d="M8 10 43 16 31 41 8 10Zm0 0 17 15 18-9M25 25l6 16M8 10 31 41" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="token-title"><strong>TRON</strong><span>Native network token</span></div><div class="asset-symbol">TRX <span>↗</span></div></div>
+      <div class="amount-zone"><div class="field-label">EXACT AMOUNT TO SEND</div><div class="amount-line"><span id="trx-amount">{{TRX_AMOUNT}}</span><strong>TRX</strong></div><div class="amount-sub"><span>≈ ${{USD_AMOUNT}} USD</span><span class="locked"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3m-11 0h12v11H6V10Zm6 4v4"/></svg> Rate locked for this invoice</span></div></div>
+      <div class="deposit"><div class="qr-frame">{{QR_MARKUP}}<span>SCAN ADDRESS</span></div><div class="deposit-info"><div class="field-label">RECEIVING ADDRESS</div><code id="trx-address">{{ADDRESS}}</code><p>Send <strong>native TRX only</strong> on the TRON network. Do not send TRC-20 tokens or use another blockchain.</p><button type="button" id="copy-address" class="btn-copy" {{COPY_DISABLED}}>COPY ADDRESS <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5H5v11h3"/></svg></button></div></div>
+      <div class="amount-copy"><span>EXACT PAYMENT AMOUNT</span><strong>{{TRX_AMOUNT}} TRX</strong><button id="copy-amount" type="button" {{COPY_DISABLED}} aria-label="Copy exact TRX amount">COPY <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5H5v11h3"/></svg></button></div>
+      <div class="notice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3Zm0 7v5m0 3v.1"/></svg><p><strong>Protect your funds.</strong> Only send to the address shown. This website never asks for a wallet recovery phrase, private key, or signature.</p></div>
+      <div class="separator"></div><div class="confirm-heading"><div><div class="field-label">ALREADY PAID?</div><h3>Verify your transaction</h3></div><div class="tiny-ring" aria-hidden="true"></div></div>
+      <form id="verify-form" class="verify-form" autocomplete="off"><label for="txid">TRON transaction hash (64 characters)</label><div class="verify-row"><input type="text" id="txid" name="txid" spellcheck="false" autocapitalize="off" maxlength="64" placeholder="Paste your transaction ID" aria-describedby="verify-help" {{VERIFY_DISABLED}} required/><button type="submit" id="verify-button" {{VERIFY_DISABLED}}>VERIFY <span aria-hidden="true">→</span></button></div><small id="verify-help">Your payment is marked complete only after blockchain finality is confirmed.</small></form>
+      <div id="feedback" class="feedback" role="status" aria-live="polite">{{INIT_MESSAGE}}</div>
+    </section>
+    <aside class="sidebar" aria-label="Order summary">
+      <section class="card order"><div class="card-overline">ORDER SUMMARY</div><h2>Purchase details</h2><div class="purchase-tile"><div class="purchase-art" aria-hidden="true"><span>◈</span></div><div class="purchase-copy"><strong>{{PRODUCT_TITLE}}</strong><span>Digital product · MojPlayWin</span></div></div><div class="order-row"><span>Product price</span><strong>${{USD_AMOUNT}}</strong></div><div class="order-row"><span>Payment network</span><strong>TRON (TRX)</strong></div><div class="order-row"><span>Merchant</span><strong>MojPlayWin</strong></div><div class="total"><span>Total due</span><div><strong>${{USD_AMOUNT}}</strong><small>USD equivalent</small></div></div></section>
+      <section class="card time-card"><div class="clock-top"><div class="clock-icon">◷</div><div><div class="card-overline">PAYMENT WINDOW</div><strong id="timer">{{TIME_TEXT}}</strong></div></div><div class="progress"><span id="timer-progress"></span></div><p>Prices are locked until the invoice expires. A payment made too late needs review.</p></section>
+      <section class="trust"><div class="trust-row"><span class="trust-icon">◆</span><div><strong>On-chain confirmation</strong><small>Verified against finalized TRON blocks</small></div></div><div class="trust-row"><span class="trust-icon">◎</span><div><strong>Unique deposit address</strong><small>Each invoice uses its own receiving address</small></div></div><div class="trust-row"><span class="trust-icon">⌁</span><div><strong>Your wallet, your keys</strong><small>No private keys are requested or stored</small></div></div></section>
+      <div class="support"><span>NEED HELP WITH THIS PAYMENT?</span><a href="https://mojplaywin.com/contact/">Contact support <span>↗</span></a></div>
+    </aside>
+  </div>
+  <footer class="footer"><span>© 2026 MOJPLAYWIN · SECURE DIGITAL COMMERCE</span><span>POWERED BY TRON NETWORK · NON-CUSTODIAL</span></footer>
+</main></div>
+<script id="invoice-data" type="application/json">{{INVOICE_JSON}}</script><script src="/assets/checkout.js" defer></script></body></html>
