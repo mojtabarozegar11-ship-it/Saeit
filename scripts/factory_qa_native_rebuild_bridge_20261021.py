@@ -217,6 +217,7 @@ def reauthor_document_delivery(root,recipe,order,maker):
     dest=None
     package_dir=None
     receipt_file=None
+    created_source=False
     try:
         if (sha(qa.read_bytes())!=order.get("source_quality_receipt_sha256")
                 or checked_json(qa).get("artifact_sha256")!=expected):
@@ -241,21 +242,53 @@ def reauthor_document_delivery(root,recipe,order,maker):
         receipt_file=receipt_parent/(code+".json")
         package_dir=package_parent/code
         if dest.exists() or dest.is_symlink():
-            if receipt_file.is_file() and not receipt_file.is_symlink():
+            if (dest.is_dir() and not dest.is_symlink()
+                    and receipt_file.is_file() and not receipt_file.is_symlink()):
                 prior=checked_json(receipt_file)
                 if (prior.get("source_customer_archive_sha256")==expected
                     and prior.get("commercial_release_authorized") is False
                     and prior.get("technical_manufacturer_qa_passed") is True):
-                    out=package_dir/"manufacturing_manifest.json"
-                    package=package_dir/(code+"-internal-qa.zip")
-                    if (not package_dir.is_symlink() and out.is_file() and not out.is_symlink()
-                            and package.is_file() and not package.is_symlink()):
-                        meta=checked_json(out)
-                        if (meta.get("qa_status")=="passed"
-                                and meta.get("source_sha256")==prior.get("new_source_sha256")
-                                and meta.get("artifact_sha256")==prior.get("new_artifact_sha256")
-                                and maker.sha256_file(package)==prior.get("new_artifact_sha256")):
-                            return "already_issued_private_edition"
+                    try:
+                        _,existing_files=maker.inspect_recipe(dest)
+                        same_source=(maker.source_digest(dest,existing_files)
+                                     ==prior.get("new_source_sha256"))
+                    except (OSError,ValueError,RuntimeError,UnicodeError):
+                        same_source=False
+                    if same_source:
+                        out=package_dir/"manufacturing_manifest.json"
+                        package=package_dir/(code+"-internal-qa.zip")
+                        if (not package_dir.is_symlink() and out.is_file() and not out.is_symlink()
+                                and package.is_file() and not package.is_symlink()):
+                            meta=checked_json(out)
+                            if (meta.get("qa_status")=="passed"
+                                    and meta.get("source_sha256")==prior.get("new_source_sha256")
+                                    and meta.get("artifact_sha256")==prior.get("new_artifact_sha256")
+                                    and maker.sha256_file(package)==prior.get("new_artifact_sha256")):
+                                return "already_issued_private_edition"
+                        if package_dir.is_symlink():
+                            return "unsafe_document_edition_root"
+                        if package_dir.exists():
+                            if not package_dir.is_dir():
+                                return "existing_edition_requires_engineering_review"
+                            shutil.rmtree(package_dir)
+                        result=maker.manufacture(code,source_parent,package_parent)
+                        meta=checked_json(package_dir/"manufacturing_manifest.json")
+                        package=package_dir/(code+"-internal-qa.zip")
+                        if (result.get("qa_status")!="passed" or meta.get("qa_status")!="passed"
+                                or meta.get("source_sha256")!=prior.get("new_source_sha256")
+                                or not package.is_file() or package.is_symlink()
+                                or maker.sha256_file(package)!=meta.get("artifact_sha256")):
+                            return "private_edition_rebuild_failed"
+                        prior["new_artifact_sha256"]=meta["artifact_sha256"]
+                        pending=receipt_parent/(code+".json.pending")
+                        if pending.exists() or pending.is_symlink():
+                            return "private_edition_receipt_conflict"
+                        with pending.open("x",encoding="utf8") as writer:
+                            json.dump(prior,writer,sort_keys=True,indent=2)
+                            writer.write("\\n");writer.flush();os.fsync(writer.fileno())
+                        os.chmod(pending,0o600)
+                        os.replace(pending,receipt_file)
+                        return "private_document_edition_repaired"
             return "existing_edition_requires_engineering_review"
         ALLOWED={".md",".txt",".pdf",".docx",".epub",".csv",".json",
                  ".xlsx",".png",".jpg",".jpeg",".webp",".mp3",".wav",".mp4"}
@@ -394,6 +427,7 @@ class EditionTests(unittest.TestCase):
             if dest.exists() or dest.is_symlink():
                 return "document_edition_source_collision"
             os.replace(source_stage,dest)
+            created_source=True
         finally:
             if source_stage.exists():
                 shutil.rmtree(source_stage)
@@ -429,7 +463,7 @@ class EditionTests(unittest.TestCase):
             zipfile.BadZipFile,KeyError,EOFError,NotImplementedError):
         # Retry transient maker/receipt failures from the same authenticated
         # archive; do not strand unreceipted generated source or partial stock.
-        for candidate in (dest,package_dir):
+        for candidate in ((dest if created_source else None),package_dir):
             if candidate is not None and candidate.is_dir() and not candidate.is_symlink():
                 shutil.rmtree(candidate)
         return "document_edition_failed_needs_engineering"
