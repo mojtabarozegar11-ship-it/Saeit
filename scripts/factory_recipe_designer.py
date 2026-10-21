@@ -472,6 +472,89 @@ def recover_recipe(recipe, recipes):
             'commercial_release':False}
 
 
+
+def evolve_recipe(recipe, recipes):
+    """Make a genuine, QA-tested private revision of a compiler-owned product.
+
+    Never patch arbitrary authored products.  A verified original design request
+    is rebuilt with the improved compiler, its complete tests execute before
+    replacing any source, and the exact previous source directory is retained.
+    This is a functional engineering improvement, NOT a 1000-point approval.
+    """
+    import importlib.util
+    recipes=Path(recipes)
+    if recipes.is_symlink() or not recipes.is_dir():
+        raise ValueError('EVOLUTION_ROOT_UNSAFE')
+    if not re.fullmatch(r'(?:synth|sheet)_[a-f0-9]{24}',recipe):
+        raise ValueError('EVOLUTION_REQUIRES_COMPILER_OWNED_RECIPE')
+    source=recipes/recipe
+    if source.is_symlink() or not source.is_dir():
+        raise ValueError('EVOLUTION_SOURCE_UNSAFE')
+    request=read(source/'design_request.json')
+    receipt=read(source/'design_receipt.json')
+    if (receipt.get('schema')!='saeit.factory.synthesis-receipt.v1'
+            or receipt.get('request_sha256')!=digest(request)
+            or receipt.get('recipe')!=recipe
+            or receipt.get('family_id')!=request.get('family_id')):
+        raise ValueError('EVOLUTION_PROVENANCE_MISMATCH')
+    calculator=source/'calculator.py'
+    if calculator.is_symlink() or not calculator.is_file() or calculator.stat().st_size>MAX_BYTES:
+        raise ValueError('EVOLUTION_SOURCE_NOT_COMPILER_OWNED')
+    prior_code=calculator.read_text(encoding='utf8')
+    if not prior_code.startswith('"""Generated deterministic arithmetic planning tool;'):
+        raise ValueError('EVOLUTION_SOURCE_NOT_COMPILER_OWNED')
+    if ('# BATCH_API_V2_START' in prior_code
+            and receipt.get('generator_capability_revision')=='verified-batch-v2'):
+        return {'schema':'saeit.factory.source-evolution.v1',
+                'recipe':recipe,'changed':False,
+                'reason':'already_evolved','commercial_release':False}
+    maker_path=Path(__file__).resolve().parent/'factory_product_maker.py'
+    spec=importlib.util.spec_from_file_location('saeit_evolution_manufacturer',maker_path)
+    maker=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(maker)
+    old_name,old_files=maker.inspect_recipe(source)
+    old_digest=maker.source_digest(source,old_files)
+    maker.verify_recipe(source)
+    # A new compiler cannot erase unspecified authored extensions or symlinks.
+    with tempfile.TemporaryDirectory(prefix='.evolution-',dir=str(recipes)) as staging:
+        generated=compile_recipe(request,Path(staging))
+        if generated['recipe']!=recipe:
+            raise ValueError('EVOLUTION_FUNCTIONAL_IDENTITY_CHANGED')
+        candidate=Path(staging)/recipe
+        new_name,new_files=maker.inspect_recipe(candidate)
+        if set(old_files)!=set(new_files):
+            raise ValueError('EVOLUTION_FILESET_CHANGE_REQUIRES_REVIEW')
+        new_digest=maker.source_digest(candidate,new_files)
+        if old_digest==new_digest:
+            return {'schema':'saeit.factory.source-evolution.v1',
+                    'recipe':recipe,'changed':False,
+                    'reason':'identical_compiler_output','commercial_release':False}
+        measurements={}
+        maker.verify_recipe(candidate,evidence=measurements,minimum_tests=5)
+        # Never overwrite the prior source without recording the exact original.
+        if maker.source_digest(source,old_files)!=old_digest:
+            raise ValueError('EVOLUTION_SOURCE_CHANGED_BEFORE_CUTOVER')
+        revisions=recipes.parent/'generated-source-revisions'
+        private(revisions)
+        saved=Path(tempfile.mkdtemp(prefix=recipe+'-evolved-',dir=str(revisions)))
+        saved.rmdir()
+        source.rename(saved)
+        try:
+            candidate.rename(source)
+        except OSError:
+            saved.rename(source)
+            raise
+    return {'schema':'saeit.factory.source-evolution.v1',
+            'recipe':recipe,'changed':True,
+            'previous_source_sha256':old_digest,
+            'revised_source_sha256':new_digest,
+            'previous_source_retained':str(saved),
+            'measured_acceptance':measurements,
+            'implemented_feature':'bounded_atomic_customer_batch_1_to_100',
+            'independent_specialist_approval_verified':False,
+            'quality_1000_certified':False,'commercial_release':False}
+
+
 def create_workbook(folder,spec,tree):
     """Construct an actual protected XLSX, not a file with a changed extension.
 
