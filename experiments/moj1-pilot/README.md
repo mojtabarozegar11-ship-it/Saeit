@@ -1,4 +1,4 @@
-# Moj 1 and Moj Digital Assets — pilot 0.5
+# Moj 1 and Moj Digital Assets — pilot 0.6 (security review pending)
 
 **Current status:** draft testnet code. The owner approved the project name `Moj 1`, ticker `MOJ1`, and 100-billion-unit supply on 21 October 2026. Uniqueness, trademarks, issuer identity, allocation schedule and legal assessments remain open. No currency has been issued; no Mainnet contract or market has been launched. The artwork supplied by the owner is included as a reference image, not an on-chain identity claim.
 
@@ -8,9 +8,9 @@
 |---|---|---|
 | `contracts/MojCoin.sol` | TRC-20, 100 billion MOJ1 initial and maximum, 18 decimals, supply minted once to test treasury | No mint extension, freeze, taxes or upgrade admin |
 | `contracts/MojAssets.sol` | TRC-721, 10,000 maximum unique items, restricted mint, per-item URI | Not a live NFT store; metadata hosting and rights are not built |
-| `contracts/MojVestingVault.sol` | Non-revocable cliff and linear vesting for a **single funded allocation** | Draft team vault only; not yet deployed, funded or exercised on TVM |
+| `contracts/MojVestingVault.sol` | Non-revocable cliff and linear vesting for a **single funded allocation** | Locally deployed/funded/tested on TVM only; no Shasta/Mainnet vault or lock |
 | `tokenomics.json` | Six proposed allocation buckets and release schedules | Other buckets still lack enforceable on-chain locks |
-| `tests/` | Nine passing allocation, vesting-model, deployment-refusal and source-guard tests; TronBox integration suite prepared | Model tests are **not** smart-contract behavior tests or an audit; TVM suite **not run** |
+| `tests/` | Nine passing offline tests and five real contract integration tests on disposable local TRE TVM | No Shasta or Mainnet transactions; no independent auditor attestation |
 | `scripts/preflight-offline.mjs` | Verifies bytecode, ABI, compiler version, forbidden admin interfaces and Shasta-only guard; prints immutable bytecode SHA-256 digests | Static/offline review, not a broadcast or an independent audit |
 | `scripts/deploy-shasta.mjs` | Testnet deployment and basic on-chain token verification | No Mainnet deployment capability |
 
@@ -27,7 +27,7 @@ npm run preflight
 
 The provisional team allocation is **10 billion MOJ1** (10% of supply). `MojVestingVault` enforces a **365-day cliff followed by 1,095 days of linear vesting** if deployed with those parameters, rather than literal calendar-month calculations. Each vault requires a separately chosen immutable recipient, allocation and start time; the current script deploys the token and NFT, **not** a vault. After deploying a vault, the treasury must transfer the full allocated amount to its contract address before releases are enabled. No tokens have been locked or vested on a live chain.
 
-The behavioral suite `tests/tronbox/vesting.integration.js` requires a running local TRON Virtual Machine runtime (TRE); run `npm run test:onchain:local` only when that runtime is configured. Local Docker/TRE was unavailable during pilot validation, so the suite was not executed. Do not mistake the nine passing Node tests or the offline preflight for on-chain validation.
+The behavioral suite `tests/tronbox/vesting.integration.js` runs on disposable local TRE in GitHub Actions (five passing as of 2026-10-21): [TVM receipt](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39607596859). Nine offline tests are separate from the behavioral suite. The production VPS lacks Docker/Podman/Node, so TRE was not installed there. These tests are **not** Shasta/Mainnet deployments or an independent security audit. See [security review and release blockers](SECURITY_REVIEW_2026-10-21.md), including high-severity runtime dependency advisories.
 
 For optional on-chain testing: only after tests and security review, the owner creates a **new, dedicated Shasta-only test wallet**, funds it with free test TRX, and controls its signing key privately. Never send private keys or seed phrases to a chat, repository or contractor.
 
