@@ -65,7 +65,7 @@ def report_from_payload(payload):
 def main():
     try:
         p=subprocess.run(
-            ['/usr/local/cpanel/bin/uapi','--output=json','DomainInfo','domains_data'],
+            ['uapi','--output=json','DomainInfo','domains_data'],
             stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
             timeout=35,check=False)
         if p.returncode or len(p.stdout)>1000000:
