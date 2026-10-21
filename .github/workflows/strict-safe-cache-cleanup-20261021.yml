@@ -1,0 +1,182 @@
+name: Strict safe cache-only cleanup VPS and cPanel 2026-10-21
+on:
+  push:
+    branches: [audit/safe-storage-20261021]
+    paths:
+      - .github/workflows/strict-safe-cache-cleanup-20261021.yml
+permissions:
+  contents: read
+concurrency:
+  group: strict-safe-cache-cleanup
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Require healthy public routes before any cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in https://zomorodmelal.ir/ https://zomorodmelal.ir/agents/ https://mojplaywin.com/ https://mojplaywin.com/games/; do
+            code="$(curl -sS -L --retry 1 --max-time 18 -o /dev/null -w '%{http_code}' "$url")"
+            echo "PRE_CLEAN_HEALTH=$url:$code"
+            test "$code" = 200
+          done
+      - name: Prepare pinned SSH identities for VPS and cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/safe-clean-20261021"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host zm-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host zm-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            ProxyJump zm-vps
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 12
+          EOF
+          chmod 600 "$d/config"
+          ssh -F "$d/config" zm-vps 'timeout 12s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo PINNED_RELAY_VERIFIED=yes
+      - name: Delete only VPS pip download cache after process and path guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/safe-clean-20261021"
+          timeout 80s ssh -T -F "$d/config" zm-vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import os, subprocess, shutil
+          h=Path.home()
+          p=h/".cache"/"pip"
+          print("CLEANUP_TARGET=VPS_PIP_DOWNLOAD_CACHE")
+          def active():
+              r=subprocess.run(["ps","-u",str(os.getuid()),"-o","args="],capture_output=True,text=True,timeout=10,check=True)
+              patterns=("pip install","python -m pip","uv pip","npm install","npm ci","npm run build","pytest","collectstatic","manage.py migrate","git checkout","git pull")
+              return any(any(term in line.lower() for term in patterns) for line in r.stdout.splitlines())
+          assert h.is_dir() and not h.is_symlink()
+          if active():
+              print("VPS_PIP_CACHE_SKIP=active_install_or_build")
+          elif not p.exists():
+              print("VPS_PIP_CACHE_SKIP=already_absent")
+          else:
+              assert p.is_dir() and not p.is_symlink()
+              assert p.parent.is_dir() and not p.parent.is_symlink()
+              assert p.resolve() == h.resolve()/".cache"/"pip"
+              assert p.stat().st_dev==h.stat().st_dev
+              assert all(not x.is_symlink() for x in p.rglob("*"))
+              r=subprocess.run(["du","-sk","--",str(p)],capture_output=True,text=True,timeout=45,check=True)
+              kb=int(r.stdout.split()[0])
+              assert kb<300000
+              if active():
+                  print("VPS_PIP_CACHE_SKIP=build_started")
+              else:
+                  shutil.rmtree(p)
+                  assert not p.exists()
+                  print("VPS_PIP_CACHE_DELETED_KB="+str(kb))
+          print("VPS_SCOPE_COMPLETE=yes")
+          PY
+      - name: Delete only cPanel staging source caches after path and process guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/safe-clean-20261021"
+          timeout 140s ssh -T -F "$d/config" zm-host 'python3 -' <<'PY'
+          from pathlib import Path
+          import os,subprocess,shutil,stat
+          h=Path.home()
+          root=h/"Saeit-staging"
+          print("CLEANUP_TARGET=CPANEL_STAGING_SOURCE_CACHE_ONLY")
+          assert str(h)=="/home/zomorod2"
+          assert root.is_dir() and not root.is_symlink()
+          assert (h/"Saeit"/"manage.py").is_file()
+          def active():
+              r=subprocess.run(["ps","-u","zomorod2","-o","args="],capture_output=True,text=True,timeout=10,check=True)
+              patterns=("pip install","python -m pip","uv pip","npm install","npm ci","npm run build","pytest","collectstatic","manage.py migrate","git checkout","git pull","rsync ")
+              return any(any(term in line.lower() for term in patterns) for line in r.stdout.splitlines())
+          if active():
+              print("HOST_STAGING_CACHE_SKIP=active_install_or_build")
+          else:
+              names={"__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache"}
+              skip={".git",".venv","node_modules","media","staticfiles","backups","var",".backups"}
+              targets=[]
+              dev=root.stat().st_dev
+              for base,dirs,files in os.walk(root,followlinks=False):
+                  depth=len(Path(base).relative_to(root).parts)
+                  keep=[]
+                  for name in dirs:
+                      p=Path(base)/name
+                      if p.is_symlink():continue
+                      if name in names:
+                          assert p.is_dir() and p.stat().st_dev==dev
+                          if all(not q.is_symlink() and q.stat().st_dev==dev for q in p.rglob("*")):
+                              targets.append(p)
+                      elif name not in skip and depth<10 and p.stat().st_dev==dev:
+                          keep.append(name)
+                  dirs[:]=keep
+              assert len(targets)<=600
+              size_kb=0
+              for p in targets:
+                  r=subprocess.run(["du","-sk","--",str(p)],capture_output=True,text=True,timeout=8,check=True)
+                  size_kb+=int(r.stdout.split()[0])
+              assert size_kb<100000
+              if active():
+                  print("HOST_STAGING_CACHE_SKIP=build_started")
+              else:
+                  deleted=0
+                  for p in targets:
+                      assert p.is_dir() and not p.is_symlink() and p.stat().st_dev==dev
+                      assert root.resolve() in p.resolve().parents
+                      shutil.rmtree(p)
+                      assert not p.exists()
+                      deleted+=1
+                  print("HOST_STAGING_CACHES_REMOVED="+str(deleted))
+                  print("HOST_STAGING_CACHES_FREED_ESTIMATE_KB="+str(size_kb))
+          print("HOST_SCOPE_COMPLETE=yes")
+          PY
+      - name: Require healthy public routes after cleanup
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in https://zomorodmelal.ir/ https://zomorodmelal.ir/agents/ https://mojplaywin.com/ https://mojplaywin.com/games/; do
+            code="$(curl -sS -L --retry 1 --max-time 18 -o /dev/null -w '%{http_code}' "$url")"
+            echo "POST_CLEAN_HEALTH=$url:$code"
+            test "$code" = 200
+          done
+      - name: Remove temporary runner-only SSH identities
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/safe-clean-20261021"
+          if test -d "$d" && test ! -L "$d"; then
+            rm -f -- "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+            rmdir -- "$d" || true
+          fi
