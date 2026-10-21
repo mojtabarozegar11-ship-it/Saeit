@@ -1,0 +1,114 @@
+name: Factory ten genuinely measured generations on private VPS
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/factory_ten_generation_builder_v1.py
+      - tests/test_factory_ten_generation_builder_v1.py
+      - .github/workflows/factory-ten-real-generations-20261021.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_ten_generation_builder_v1.py
+      - tests/test_factory_ten_generation_builder_v1.py
+      - .github/workflows/factory-ten-real-generations-20261021.yml
+  schedule:
+    - cron: "37 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factory-ten-real-generations-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline-technical-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned F27 workbook test runtime
+        run: python3 -m pip install --disable-pip-version-check 'openpyxl==3.1.5'
+      - name: Verify each of 10 measured capabilities and immutable private receipts
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_factory_ten_generation_builder_v1.py' -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_factory_source_evolution.py' -v
+          echo FACTORY_TEN_GENERATIONS_OFFLINE_TECHNICAL_QA=PASS
+          echo FACTORY_TEN_GENERATIONS_PROFESSIONAL_1000_APPROVAL=false
+          echo FACTORY_TEN_GENERATIONS_PUBLICATION=false
+  private-vps-builds:
+    needs: offline-technical-qa
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare authenticated VPS bridge with pinned host key
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/ten-generations"
+          install -d -m 700 "$d"
+          test -n "$VPS_KEY"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo FACTORY_TEN_GENERATIONS_PINNED_SSH=PASS
+      - name: Build two verified source lineages through all ten private generations
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/ten-generations"
+          opts=(-i "$d/key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          host="githubops@178.239.147.150"
+          stage="/home/githubops/factory-runtime/operations/.ten-generations-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          timeout 35s ssh -T "${opts[@]}" "$host" "umask 077; test ! -e '$stage' && mkdir -m 700 '$stage'"
+          for file in factory_ten_generation_builder_v1.py factory_product_maker.py factory_personal_owner_passport_policy_20261020.py; do
+            scp -q "${opts[@]}" "scripts/$file" "$host:$stage/$file"
+            expected="$(sha256sum "scripts/$file" | cut -d' ' -f1)"
+            actual="$(timeout 35s ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$file' | cut -d' ' -f1")"
+            test "$expected" = "$actual"
+          done
+          echo FACTORY_TEN_GENERATION_DEPLOYED_FILE_HASHES_VERIFIED=3
+          timeout 1100s ssh -T "${opts[@]}" "$host" "bash -se -- '$stage'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          stage="$1"
+          base="$HOME/factory-runtime"
+          private="$base/private/autonomous-product-cycle"
+          operations="$base/operations"
+          python="$base/.venv/bin/python"
+          test "$(id -un)" = githubops
+          test -d "$stage" && test ! -L "$stage" && test -x "$python"
+          test -d "$private" && test ! -L "$private"
+          test -d "$private/generated-product-recipes" && test ! -L "$private/generated-product-recipes"
+          exec 8>"$operations/autonomous-product-cycle.lock"
+          flock -w 180 8
+          exec 9>"$private/.production-cycle.lock"
+          flock -w 60 9
+          "$python" -B "$stage/factory_ten_generation_builder_v1.py" \
+            --private-root "$private" \
+            --source-root "$private/generated-product-recipes" \
+            --maker "$stage/factory_product_maker.py" \
+            --limit 2
+          echo FACTORY_TEN_GENERATIONS_EXISTING_SITES_UNCHANGED=true
+          echo FACTORY_TEN_GENERATIONS_PUBLIC_RELEASES=0
+          REMOTE
+      - name: Remove ephemeral runner credential
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/ten-generations"
