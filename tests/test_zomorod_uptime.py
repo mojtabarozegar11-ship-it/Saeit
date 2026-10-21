@@ -37,6 +37,17 @@ class MonitorTests(unittest.TestCase):
         rows = [{"path": "/", "ok": True}, {"path": "/api/health/", "ok": False}]
         self.assertEqual(assess(rows, rows), (True, ["/api/health/"]))
 
+    def test_incomplete_samples_do_not_claim_confirmed_outage(self):
+        first = [{"path": "/", "ok": False}, {"path": "/api/health/", "ok": True}]
+        self.assertEqual(assess(first, []), (False, []))
+        self.assertEqual(assess([], first), (False, []))
+
+    def test_malformed_samples_are_ignored_without_a_crash(self):
+        first = [None, {"path": "/", "ok": False}, {"ok": False}]
+        second = [None, {"path": "/", "ok": False}, {"path": "/api/health/"}]
+        self.assertEqual(assess(first, second), (True, ["/"]))
+        self.assertEqual(assess([None, {"path": "/", "ok": False}], [None]), (False, []))
+
     def test_workflow_is_scoped_and_no_unconditional_restart(self):
         text = (Path(__file__).resolve().parents[1] /
                 ".github/workflows/zomorod-503-watchdog.yml").read_text()
