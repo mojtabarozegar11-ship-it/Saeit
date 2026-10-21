@@ -342,9 +342,16 @@ class ProductionContinuityTests(unittest.TestCase):
                                    enable_design_intake=True,design_capacity=6)
             novel+=result['new_artifacts']
             snapshot=json.loads((self.output/'production-state.json').read_text())
+            latest_failures=[]
+            for item in snapshot.get("quality_failures_this_cycle",[]):
+                ledger_file=self.output/'qa-rework'/item['recipe']/'ledger.json'
+                record=json.loads(ledger_file.read_text()) if ledger_file.is_file() else {}
+                history=record.get('history',[])
+                latest_failures.append(dict(item, actual_error_excerpt=(
+                    history[-1].get('actual_error_excerpt') if history else None)))
             actual_cycles.append({"new":result["new_artifacts"],
                                   "built":result["manufactured"],
-                                  "failures":snapshot.get("quality_failures_this_cycle"),
+                                  "failures":latest_failures,
                                   "designer":snapshot.get("designer_failures"),
                                   "customer":snapshot.get("real_customer_zip_checks_passed")})
         status=json.loads((self.output/'engineering-intake/production-results.json').read_text())
