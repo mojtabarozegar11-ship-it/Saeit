@@ -187,6 +187,23 @@ def extract_js_preview():
   fail("Unsafe or unresolved JavaScript expression")
  print(script)
 
+def extract_installed_js():
+ """Audit live installed DOM JS only, refusing unknown or altered versions."""
+ ensure_home()
+ b,m=runpaths("39538083953")
+ manifest=json.loads(m.read_text("utf8"))
+ installed=TARGET.read_bytes()
+ if (manifest.get("run")!="39538083953" or
+     sha(installed)!=manifest.get("after") or
+     sha(changed(b.read_bytes()))!=manifest.get("after")):
+  fail("Installed checkout differs from audited pinned release")
+ updated=installed.decode("utf8")
+ matches=re.findall(r"<script\b[^>]*>(.*?)</script\s*>",updated,re.I|re.S)
+ if len(matches)!=1:fail("Expected one CSP protected checkout script")
+ script=re.sub(r"\{\{\s*product\.pk\s*\}\}","72",matches[0])
+ if "{{" in script or "{%" in script:fail("Unresolved template in installed JS")
+ print(script)
+
 def install(run):
  preview()
  b,m=runpaths(run)
@@ -224,8 +241,9 @@ def selftest():
   else:fail("Source drift checks failed")
  print("MPW_AUTODELIVERY_LOCAL_SELFTEST=PASS")
 if __name__=="__main__":
- if len(sys.argv)==2 and sys.argv[1] in ("selftest","preview","extractjs"):
-  {"selftest":selftest,"preview":preview,"extractjs":extract_js_preview}[sys.argv[1]]()
+ if len(sys.argv)==2 and sys.argv[1] in ("selftest","preview","extractjs","extractinstalledjs"):
+  {"selftest":selftest,"preview":preview,"extractjs":extract_js_preview,
+   "extractinstalledjs":extract_installed_js}[sys.argv[1]]()
  elif len(sys.argv)==3 and sys.argv[1] in ("install","verify","rollback"):
   {"install":install,"verify":verify,"rollback":rollback}[sys.argv[1]](sys.argv[2])
  else:raise SystemExit("selftest|preview|install RUN|verify RUN|rollback RUN")
