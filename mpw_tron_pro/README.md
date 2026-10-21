@@ -38,3 +38,22 @@ Tests run without TRON funds, API secrets or external requests. If the browser p
 ## Source of truth
 
 TRON finalized proof: https://developers.tron.network/docs/api-signature-and-broadcast-flow and https://developers.tron.network/reference/transactions-1 . The buyer UI is an original MojPlayWin design, not a copy of another site's interface.
+
+
+## v0.2 visual redesign (2026-10-21)
+
+- Redesigned payment presentation in `static/checkout.html` and `static/checkout.css`:
+  light premium fintech palette, prominent exact TRX quote, clear TRON network and address,
+  desktop order summary, phone-first viewport, expanded status and accessible fallback transaction check.
+- Replaced copy labels using nested text targets without changing the copy operation.
+- Paid/expired status now updates visible status panel instead of only a small feedback line.
+- The design preview must never show a live address or permit funds. No production routing changed.
+- Browser checked at 390px mobile and 1440px desktop without horizontal overflow, using
+  the preview-only HTML and no wallet or RPC access.
+- Local `python -m unittest discover -s tests -p 'test_mpw_tron*.py' -q`: 41 tests passing.
+- `tests/test_mpw_tron_checkout_ui_v02.py` adds 8 contract tests for safe preview,
+  existing IDs, quoting fields, viewports, status transitions and XSS escaping.
+
+**Still blocked:** merchant-controlled receive-address pool, safe DB migration,
+production site integration with authentic cPanel source, real finality + delivery
+E2E, security review and owner-approved deployment. **Do not merge as production-ready.**
