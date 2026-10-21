@@ -1,0 +1,22 @@
+"""Isolated CI settings. Never use to configure the production website."""
+import os
+SECRET_KEY = 'isolated-test-only-not-for-live-' + ('k' * 32)
+DEBUG = True
+USE_TZ = True
+TIME_ZONE = 'UTC'
+ALLOWED_HOSTS = ['testserver', 'localhost']
+ROOT_URLCONF = 'moj_commerce.urls'
+INSTALLED_APPS = [
+    'django.contrib.auth', 'django.contrib.contenttypes', 'django.contrib.sessions',
+    'moj_commerce.apps.MojCommerceConfig',
+]
+MIDDLEWARE = [
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+]
+DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}}
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+MOJ_COMMERCE_RECEIVER_ENABLED = False
+MOJ_COMMERCE_FULFILL_SECRET = ''
+MOJ_COMMERCE_FINALIZED_TRON_CHECKER = None
+MOJ_COMMERCE_PRIVATE_ROOT = ''

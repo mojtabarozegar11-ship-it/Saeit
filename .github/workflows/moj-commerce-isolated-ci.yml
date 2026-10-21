@@ -1,0 +1,31 @@
+name: MOJ Commerce isolated Django delivery contracts (NO DEPLOY)
+on:
+  pull_request:
+    paths:
+      - 'moj_commerce/**'
+      - 'tests/test_moj_commerce.py'
+      - '.github/workflows/moj-commerce-isolated-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-moj-commerce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned major/minor Django test dependency
+        run: python -m pip install 'Django>=5.2,<5.3'
+      - name: Compile source and enforce clean migration state
+        run: |
+          python -m compileall -q moj_commerce
+          python -m django makemigrations moj_commerce --check --dry-run --settings=moj_commerce.test_settings
+      - name: Run isolated merchant/payment/delivery/download tests
+        run: python -m django test tests.test_moj_commerce --settings=moj_commerce.test_settings --verbosity 2
+      - name: Declare that this CI does not deploy or handle money
+        run: echo 'Isolated source checks only; deployment not configured.'
