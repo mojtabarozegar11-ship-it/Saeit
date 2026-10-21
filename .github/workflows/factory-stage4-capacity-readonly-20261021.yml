@@ -141,6 +141,32 @@ jobs:
                   if start<=idx<=end and len(line)<350 and not re.search(r"password|secret|credential|private.key|api.key|auth.token|https?://",line,re.I):
                       print("STAGE4_CODE_"+name+":"+str(idx)+"="+line)
           PY
+      - name: Locate original Stage4 wait reason and report per-run retry budget health
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/stage4-readonly"
+          timeout 80s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import ast,hashlib,re,json,datetime
+          root=Path.home()/"factory-runtime/django-app/core"
+          needle="Stage 4 research is waiting for its persisted budget window or capacity policy"
+          count=0
+          for p in sorted(root.glob("*.py")):
+              if p.is_symlink() or p.stat().st_size>250000:continue
+              lines=p.read_text(encoding="utf8",errors="replace").splitlines()
+              for i,line in enumerate(lines):
+                  if needle in line:
+                      count+=1
+                      print("STAGE4_WAIT_OWNER_FILE="+p.name+";line="+str(i+1))
+                      lo=max(0,i-18);hi=min(len(lines),i+20)
+                      for j in range(lo,hi):
+                          v=lines[j]
+                          if len(v)<350 and not re.search("secret|password|credential|private.key|api.key|auth.token|https?://",v,re.I):
+                              print("STAGE4_WAIT_SOURCE_"+p.name+":"+str(j+1)+"="+v)
+          print("STAGE4_EXACT_WAIT_SITE_COUNT="+str(count))
+          PY
       - name: Inspect redacted budget-policy conditions without exposing source secrets
         shell: bash
         run: |
