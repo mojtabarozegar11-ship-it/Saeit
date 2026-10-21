@@ -97,7 +97,7 @@ def classify_absolute_link_target(target):
             return 'within_archive_roots'
     # Deployment interpreter / system environment is NOT part of the archive.
     if target.startswith(('/opt/alt/', '/usr/', '/bin/', '/lib/', '/lib64/')):
-        return 'external_runtime_dependency'
+        return 'runtime_dependency'
     return 'external_other'
 
 
