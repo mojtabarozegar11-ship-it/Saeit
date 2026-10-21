@@ -104,6 +104,24 @@ class GlobalTriageTests(unittest.TestCase):
         self.assertEqual(defects,[])
         self.assertEqual(len(pending),2)
 
+    def test_change_source_metadata_triggers_real_defect_recheck_without_fake_clearance(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,folder=self.make(d,"newly_classified",family=None)
+            m.triage_inventory(root,P,R,"unmapped-before")
+            first=json.loads((root/"quality-excellence/rework/newly_classified/current.json").read_text())
+            self.assertIn("P0_UNMAPPED_PRODUCT_FAMILY",first["defects"])
+            manifest=folder/"manufacturing_manifest.json"
+            content=json.loads(manifest.read_text())
+            content["family_id"]="F14"
+            manifest.write_text(json.dumps(content))
+            m.triage_inventory(root,P,R,"mapped-after")
+            after=json.loads((root/"quality-excellence/rework/newly_classified/current.json").read_text())
+            self.assertNotIn("P0_UNMAPPED_PRODUCT_FAMILY",after["defects"])
+            self.assertIn("P0_UNMAPPED_PRODUCT_FAMILY",after["detected_defect_rechecks_after_change"])
+            self.assertTrue(after["verified_against_new_version_or_dossier"])
+            self.assertFalse(after["closed_by_independent_expert"])
+            self.assertFalse(after["commercial_release_allowed"])
+
     def test_no_opinion_of_world_number_one_can_auto_publish(self):
         result={"blockers":[{"code":"P0_WORLD_NUMBER_ONE_CLAIM_UNVERIFIED"}],
                 "public_release_allowed":False}
