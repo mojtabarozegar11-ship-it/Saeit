@@ -69,9 +69,11 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-route-diagnostic"
           source_sha="$(sha256sum config/urls.py | awk '{print $1}')"
-          ssh -F "$d/config" saeit-cpanel bash -s -- "$source_sha" <<'REMOTE'
+          sha="$GITHUB_SHA"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$source_sha" "$sha" <<'REMOTE'
           set -euo pipefail
           source_sha="$1"
+          sha="$2"
           route="$HOME/Saeit/config/urls.py"
           public="$HOME/public_html"
           target="$public/authors/mojtaba-rozegar"
@@ -133,6 +135,30 @@ jobs:
           else
             echo "EMPTY_AUTHORS_PARENT_REMOVED=already_absent"
           fi
+          root_htaccess="$public/.htaccess"
+          backup="$HOME/.backups/zomorod-author-htaccess/$sha"
+          test -f "$root_htaccess" && test ! -L "$root_htaccess"
+          test ! -e "$backup"
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          cp -p "$root_htaccess" "$backup/original"
+          sha256sum "$root_htaccess" | awk '{print $1}' > "$backup/original.sha256"
+          python3 - "$root_htaccess" "$backup" <<'PY'
+          from pathlib import Path
+          import re,sys
+          target=Path(sys.argv[1]);backup=Path(sys.argv[2]);raw=target.read_bytes()
+          rule=b'RewriteRule ^authors/mojtaba-rozegar/?$ https://zomorodmelal.ir/en/authors/mojtaba-rozegar/ [R=301,L,NE]'
+          assert rule not in raw
+          match=re.search(br'(?im)^RewriteEngine\\s+On\\b',raw)
+          assert match, "root RewriteEngine On is missing"
+          end=match.end()
+          while end<len(raw) and raw[end:end+1] in (b'\\r',b'\\n'):end+=1
+          updated=raw[:match.end()]+b'\\n'+rule+b'\\n'+raw[end:]
+          tmp=target.with_name(target.name+".author-route-next")
+          tmp.write_bytes(updated);tmp.chmod(target.stat().st_mode&0o777);tmp.replace(target)
+          (backup/"installed.sha256").write_text(__import__("hashlib").sha256(updated).hexdigest()+"\\n")
+          print("PERSIAN_AUTHOR_APACHE_REDIRECT=installed")
+          PY
           REMOTE
           for path in about/ robots.txt sitemap.xml company/; do
             public_code="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/$path?route_compare=$GITHUB_SHA" || true)"
@@ -154,6 +180,26 @@ jobs:
           final="$(curl -sS -L --max-time 30 -o "$body" -w '%{http_code}' "https://zomorodmelal.ir/authors/mojtaba-rozegar/?route_verify=$GITHUB_SHA" || true)"
           echo "PERSIAN_AUTHOR_FINAL_HTTP=$final"
           grep -Fq 'mojtaba-roozegar-official-profile-20261021' "$body" && echo "PUBLIC_PROFILE_MARKER=found" || echo "PUBLIC_PROFILE_MARKER=missing"
+          if test "$code" != 301 || ! grep -iFq 'Location: https://zomorodmelal.ir/en/authors/mojtaba-rozegar/' "$headers"; then
+            echo "APACHE_REDIRECT_PUBLIC_CHECK=failed_restoring_original"
+            ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'ROLLBACK'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-author-htaccess/$sha";target="$web/.htaccess"
+          expected="$(cat "$backup/installed.sha256")"
+          current="$(sha256sum "$target" | awk '{print $1}')"
+          if test "$current" = "$expected";then
+            cp -p "$backup/original" "$target.rollback-$sha"
+            mv -f "$target.rollback-$sha" "$target"
+            echo "APACHE_REDIRECT_ROLLBACK=restored"
+          else
+            echo "APACHE_REDIRECT_ROLLBACK=skipped_file_changed"
+            exit 1
+          fi
+          ROLLBACK
+            exit 1
+          fi
+          grep -Fq 'mojtaba-roozegar-official-profile-20261021' "$body"
+          echo "APACHE_REDIRECT_PUBLIC_CHECK=verified"
           echo "PERSIAN_AUTHOR_ROUTE_DIAGNOSTIC=complete"
       - name: Remove short-lived SSH credentials
         if: always()
