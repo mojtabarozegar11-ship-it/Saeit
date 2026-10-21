@@ -7,12 +7,16 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command, CommandError
 from django.test import TestCase
 from django.utils import timezone
+from unittest.mock import patch
+from types import SimpleNamespace
 
 from moj_commerce.models import (
     DigitalProduct, Entitlement, Merchant, MerchantAddress, PaymentDiscrepancy,
     Purchase,
 )
 from moj_commerce.self_repair import scan_repair_eligibility
+from moj_commerce.operations import scanner_health
+from moj_commerce.operational_alerts import assess_scanner_alerts
 
 
 class SelfRepairEligibilityTests(TestCase):
@@ -77,6 +81,14 @@ class SelfRepairEligibilityTests(TestCase):
         self.address.merchant = other
         self.assertEqual(scan_repair_eligibility(self.purchase, now=self.now),
                          'ownership_mismatch')
+
+    def test_health_detects_unscanned_orders_and_raises_alert(self):
+        with patch('moj_commerce.operations.connection', SimpleNamespace(vendor='postgresql')):
+            snapshot = scanner_health()
+        self.assertEqual(snapshot['missing_scan_states'], 1)
+        alert = assess_scanner_alerts(snapshot)
+        self.assertIn('missing_scan_schedule', alert['codes'])
+        self.assertEqual(alert['severity'], 'critical')
 
     def test_sqlite_never_applies_repairs(self):
         with self.assertRaises(CommandError):
