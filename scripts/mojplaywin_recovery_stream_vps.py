@@ -41,7 +41,7 @@ def safe_regular(path, *, private=False):
 
 
 def load(kind, home=None, stem=None):
-    if kind not in ("mysql", "files"):
+    if kind not in ("mysql", "files", "extra-webroots"):
         raise ValueError("invalid kind")
     stem = STEM if stem is None else stem
     if not STEM_RE.fullmatch(stem):
@@ -91,6 +91,27 @@ def discover(home=None):
     for kind, stem in stems.items():
         load(kind, home=home, stem=stem)
     return stems
+
+
+
+def discover_extra(home=None):
+    """Find exactly one validated, separately encrypted extra-root archive."""
+    home = Path.home() if home is None else home
+    root = home / ".private-mojplaywin-offhost-backups"
+    if root.is_symlink() or not root.is_dir():
+        raise RuntimeError("private GPG backup root unavailable")
+    pattern = re.compile(
+        r"^(mojplaywin_202610(?:21|22)T[0-9]{6}Z_[0-9a-f]{16})_extra-webroots_gpgv2[.]manifest[.]json$")
+    matches=[]
+    for p in root.iterdir():
+        m=pattern.fullmatch(p.name)
+        if m:
+            matches.append(m.group(1))
+    if len(matches)!=1:
+        raise RuntimeError("missing or ambiguous additional webroots backup")
+    load("extra-webroots",home=home,stem=matches[0])
+    return matches[0]
+
 
 
 def decrypt_to_stdout(kind, *, home=None, out=None, stem=None):
@@ -162,10 +183,14 @@ if __name__=="__main__":
         print(json.dumps(report,sort_keys=True))
         raise SystemExit(0 if report["both_primary_archives_complete"] else 1)
     try:
-        if mode not in ("mysql","files"):
+        if mode not in ("mysql","files","extra-webroots"):
             raise RuntimeError("unsupported operation")
-        stems=discover()
-        size=decrypt_to_stdout(mode,stem=stems[mode])
+        if mode=="extra-webroots":
+            stem=discover_extra()
+        else:
+            stems=discover()
+            stem=stems[mode]
+        size=decrypt_to_stdout(mode,stem=stem)
         print(json.dumps({"classification":"PRIVATE_STREAM_VERIFIED",
                           "source_kind":mode,"source_verified":True,
                           "plaintext_bytes":size,"release_permitted":False},
