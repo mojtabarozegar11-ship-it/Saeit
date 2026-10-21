@@ -78,7 +78,7 @@ jobs:
           timeout 100s ssh -T -F "$d/config" saeit-host 'python3 -' < tools/moj_commerce_v12_live_mariadb_readonly.py
           # Approved known site metadata: inspect only fixed WSGI/.htaccess files,
           # never print paths, environment variables, secrets, or actual app code.
-          timeout 70s ssh -T -F "$d/config" saeit-host 'python3 -' < tools/moj_commerce_v12_passenger_backup_diagnostic.py
+          timeout 70s ssh -T -F "$d/config" saeit-host 'python3 - passenger' < tools/moj_commerce_v12_passenger_backup_diagnostic.py
           echo 'MOJ_COMMERCE_V12_PASSENGER_SOURCE_INSPECTION=COMPLETED'
           # Decrypt the EXISTING completed files archive on VPS and stream over
           # the already-pinned encrypted SSH channel. On runner, inspect only TAR
