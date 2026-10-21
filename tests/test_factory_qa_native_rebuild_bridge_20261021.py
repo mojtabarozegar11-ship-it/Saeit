@@ -86,6 +86,44 @@ class QARebuildTests(unittest.TestCase):
         if tamper:archive.write_bytes(archive.read_bytes()+b"tamper")
         shutil.rmtree(item)
         return item.name,archive
+    def test_failed_first_recipes_cannot_starve_remaining_rebuild_orders(self):
+        for recipe in ("synth_first", "synth_second", "synth_third"):
+            self.seed(name=recipe)
+        class BrokenMaker(FakeMaker):
+            attempted = []
+            @classmethod
+            def manufacture(cls, recipe, source_root, output):
+                cls.attempted.append(recipe)
+                raise RuntimeError("fixture build failure")
+        with patch.object(m, "load_maker", return_value=BrokenMaker):
+            for _ in range(9):
+                result = m.execute(self.root, self.source, FILE, limit=1)
+                self.assertEqual(result["rebuild_attempted"], 1)
+                self.assertEqual(result["failed"], 1)
+            exhausted = m.execute(self.root, self.source, FILE, limit=1)
+        self.assertEqual(BrokenMaker.attempted,
+                         ["synth_first", "synth_second", "synth_third"] * 3)
+        self.assertEqual(exhausted["rebuild_attempted"], 0)
+        self.assertEqual(exhausted["root_cause_review_pending"], 3)
+        self.assertEqual(exhausted["technical_candidates_verified"], 0)
+        self.assertFalse(exhausted["commercial_release_authorized"])
+        for recipe in ("synth_first", "synth_second", "synth_third"):
+            logs = list((self.root / "quality-excellence" / "native-rebuild-receipts" /
+                         recipe).glob("failures-*.json"))
+            self.assertEqual(len(logs), 1)
+            record = json.loads(logs[0].read_text())
+            self.assertEqual(record["attempts"], 3)
+            self.assertEqual(record["status"], "ROOT_CAUSE_REVIEW_REQUIRED")
+
+    def test_symlink_rebuild_cursor_is_rejected_before_builder(self):
+        self.seed()
+        cursor = self.root / "quality-excellence" / "native-rebuild-cursor.json"
+        cursor.symlink_to(self.root / "outside.json")
+        with patch.object(m, "load_maker", return_value=FakeMaker):
+            with self.assertRaisesRegex(ValueError, "UNSAFE_REBUILD_CURSOR"):
+                m.execute(self.root, self.source, FILE, limit=1)
+        self.assertEqual(FakeMaker.calls, 0)
+
     def test_changed_native_source_makes_real_private_candidate_once(self):
         _,original=self.seed()
         previous=(original/"manufacturing_manifest.json").read_bytes()
