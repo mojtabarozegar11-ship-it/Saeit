@@ -41,6 +41,18 @@ def main():
         manifest["approvals"]["legal"] = {"verified": False, "receipt_sha256": "unverified"}
         assert any("legal" in e for e in gate.check(manifest))
         manifest["approvals"]["legal"]["verified"] = True
+        # Even a digest-correct receipt for the wrong version must be rejected.
+        receipt = root / "legal-receipt.json"
+        receipt.write_text('{"family":"F28","version":"wrong-version","role":"legal"}', encoding="utf-8")
+        manifest["approvals"]["legal"]["receipt_path"] = str(receipt)
+        manifest["approvals"]["legal"]["receipt_sha256"] = digest(receipt)
+        assert any("legal" in e for e in gate.check(manifest))
+        receipt.write_text('{"family":"F28","version":"test-only","role":"legal"}', encoding="utf-8")
+        assert any("legal" in e for e in gate.check(manifest)), "Stale receipt digest must fail"
+        manifest["approvals"]["legal"]["receipt_sha256"] = digest(receipt)
+        assert gate.valid_receipt(dict(manifest["approvals"]["legal"], role="legal"), manifest["product"])
+        assert not gate.valid_receipt(dict(manifest["approvals"]["legal"], role="scientific"), manifest["product"])
+
         manifest["owner_publication_permission"] = True
         manifest["rights_cleared"] = True
         # Evidence strings are NOT authentic signatures. Current gate is insufficient.
