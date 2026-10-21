@@ -24,6 +24,7 @@ contract('MOJ1 token and team vault', (accounts) => {
     await token.transfer(vault.address, allocation);
     assert.equal(await vault.fullyFunded(), true);
     assert.equal((await token.balanceOf(vault.address)).toString(), allocation);
-    assert.equal(await vault.beneficiary(), accounts[1]);
+    // TronBox returns raw hex for contract addresses; account fixtures are Base58.
+    assert.equal(tronWeb.address.fromHex(await vault.beneficiary()), accounts[1]);
   });
 });
