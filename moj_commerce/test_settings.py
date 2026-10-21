@@ -14,12 +14,24 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
 ]
-DATABASES = (
-    {'default': {'ENGINE': 'django.db.backends.postgresql', 'NAME': 'moj_commerce_ci',
-                 'USER': 'postgres', 'PASSWORD': 'postgres', 'HOST': '127.0.0.1', 'PORT': '5432'}}
-    if os.environ.get('MOJ_COMMERCE_TEST_POSTGRES') == '1'
-    else {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}}
-)
+# These credentials belong only to short-lived GitHub Actions containers.
+# No production DB URL is ever loaded or referenced in this test-only module.
+if os.environ.get('MOJ_COMMERCE_TEST_MYSQL') == '1':
+    DATABASES = {'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'moj_commerce_ci',
+        'USER': 'root',
+        'PASSWORD': 'synthetic-test-only-2026',
+        'HOST': '127.0.0.1',
+        'PORT': '3306',
+        'OPTIONS': {'charset': 'utf8mb4', 'init_command': "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED"},
+        'TEST': {'CHARSET': 'utf8mb4', 'COLLATION': 'utf8mb4_unicode_ci'},
+    }}
+elif os.environ.get('MOJ_COMMERCE_TEST_POSTGRES') == '1':
+    DATABASES = {'default': {'ENGINE': 'django.db.backends.postgresql', 'NAME': 'moj_commerce_ci',
+                            'USER': 'postgres', 'PASSWORD': 'postgres', 'HOST': '127.0.0.1', 'PORT': '5432'}}
+else:
+    DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}}
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 TEMPLATES = [{'BACKEND': 'django.template.backends.django.DjangoTemplates',
               'APP_DIRS': True, 'OPTIONS': {}}]
