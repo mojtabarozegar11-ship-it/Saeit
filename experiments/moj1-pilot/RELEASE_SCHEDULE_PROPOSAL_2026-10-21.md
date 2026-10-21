@@ -23,7 +23,7 @@
 | Partners / creators | 15% / 15bn | 1,460-day linear vesting from T0 to contract-controlled distribution | 3.75bn per 365 days maximum eligibility; verified deliverables and specific beneficiary approval before onward transfers |
 | Contingency / audit | 5% / 5bn | **No automatic release.** Itemized, auditable security/incident budget and at least 30-day timelock | **Proposed new vault:** at most 0.25bn in any 90-day tranche, separated by >=90 days; 20 tranches minimum; unused funds remain locked |
 
-**The liquidity and contingency tranches are suggestions, not existing behavior.** The current `MojApprovalReserve.sol` allows a full-balance transfer to a single immutable beneficiary as soon as a one-time governance authorization and 30-day delay are satisfied. It **must be redesigned, audited and tested** to enforce the proposed per-tranche limits before any production use. Current `MojGenesisDistributor.sol` fixes the four linear schedules at 1,825/1,460/(365 + 1,095)/1,460 days and checks the reserve type, not tranche caps.
+**Implementation status:** the experimental Solidity implementation now enforces the proposed per-tranche caps, 90-day cooldown, and 30-day notice; the previous version allowed a full-balance release after 30 days. The *new code is not an approved release schedule or independently audited production deployment*. The test-only clock harness can simulate time and must never be used as a real vault. The distributor validates reserve caps and timing, as well as the four existing linear schedules.
 
 ## Maxima of the four linearly vesting vaults (not circulating supply)
 
@@ -43,7 +43,7 @@ The remaining **20bn** in the liquidity and contingency reserves has no fixed au
 ## Engineering acceptance criteria before proposing owner sign-off
 
 1. Specify governance authority (multisig threshold, member identity review, signer rotation and disaster recovery). Never store keys or seed phrases in GitHub.
-2. Implement an on-chain **capped, multi-tranche reserve** with per-tranche nonce, fixed amount ceiling, >=90-day spacing, >=30-day timelock, cancel path, reentrancy resistance and event logs. A plain 30-day delayed full release is **NO-GO**.
+2. Locally verify and externally audit the experimental **capped, multi-tranche reserve** with per-tranche nonce, fixed amount ceiling, >=90-day spacing, >=30-day timelock, cancel path, reentrancy resistance and event logs. A plain 30-day delayed full release is **NO-GO**.
 3. For program distributions, specify claim proof verification, double-claim defense, claim-expiration handling, reward-policy changes, anti-abuse rate limits, full-funding conservation and independent audit.
 4. Add local TVM tests for `T0`, each cliff boundary, first wei of vesting, end of vesting, zero/future timestamps, premature release, unauthorized releases, replay, over-cap tranche, cancel, delayed execution, token failure and exact supply conservation.
 5. Do not merge release-policy changes into live deployment until owner independently approves the **specific schedule, final beneficiary addresses and security architecture**, plus external legal/security reviews. Require a further explicit signature before Shasta deployment or any Mainnet transaction.

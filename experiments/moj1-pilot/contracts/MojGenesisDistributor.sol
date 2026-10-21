@@ -6,7 +6,7 @@ import {SafeTRC20} from "@openzeppelin/tron-contracts/token/TRC20/utils/SafeTRC2
 import {MojVestingVault} from "./MojVestingVault.sol";
 import {MojApprovalReserve} from "./MojApprovalReserve.sol";
 
-/// @notice Non-upgradeable genesis escrow for six PROVISIONAL allocation buckets.
+/// @notice Non-upgradeable genesis escrow for six owner-approved allocation PERCENTAGES.
 /// @dev Created exclusively by the MOJ1 constructor: all initial supply is held here until
 ///      all six independently deployed, policy-conforming vaults can be funded atomically.
 ///      The governance address must be a separately approved multisig before real deployment.
@@ -58,7 +58,11 @@ contract MojGenesisDistributor {
                 require(reserve.allocation() == bucketAmount(i), "Wrong reserve allocation");
                 require(reserve.beneficiary() != address(0), "Missing beneficiary");
                 require(reserve.releaseController() == governance, "Wrong reserve controller");
-                require(!reserve.released() && reserve.releaseScheduledAt() == 0, "Reserve already active");
+                uint256 cap = i == 2 ? 1_000_000_000 * 10 ** 18 : 250_000_000 * 10 ** 18;
+                require(reserve.trancheCap() == cap, "Wrong tranche cap");
+                require(reserve.RELEASE_DELAY() == 30 days && reserve.RELEASE_INTERVAL() == 90 days, "Wrong tranche timing");
+                require(!reserve.released() && reserve.releaseScheduledAt() == 0 && reserve.scheduledAmount() == 0, "Reserve scheduled");
+                require(reserve.releasedAmount() == 0 && reserve.nextReleaseAt() == 0, "Reserve already used");
             } else {
                 MojVestingVault vesting = MojVestingVault(destinations[i]);
                 require(address(vesting.token()) == address(token), "Wrong vesting token");

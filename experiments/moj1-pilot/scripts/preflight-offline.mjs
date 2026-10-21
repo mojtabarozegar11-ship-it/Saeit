@@ -8,7 +8,7 @@ const specs = [
   {name: 'MojAssets', args: 1, functions: ['safeMint', 'tokenURI', 'owner', 'transferFrom']},
   {name: 'MojVestingVault', args: 6, functions: ['beneficiary', 'allocation', 'start', 'cliff', 'duration', 'released', 'vestedAt', 'fullyFunded', 'releasable', 'release']},
   {name: 'MojGenesisDistributor', args: 1, functions: ['governance', 'token', 'distributed', 'vaults', 'bucketAmount', 'distribute']},
-  {name: 'MojApprovalReserve', args: 4, functions: ['beneficiary', 'releaseController', 'allocation', 'fullyFunded', 'scheduleRelease', 'cancelRelease', 'executeRelease']}
+  {name: 'MojApprovalReserve', args: 4, functions: ['beneficiary', 'releaseController', 'allocation', 'trancheCap', 'scheduledAmount', 'releasedAmount', 'nextReleaseAt', 'trancheNonce', 'fullyFunded', 'scheduleRelease', 'cancelRelease', 'executeRelease']}
 ];
 
 const contractReports = [];
@@ -31,6 +31,9 @@ for (const {name, args, functions} of specs) {
   }
   if (name === 'MojVestingVault' && [...abiFunctions].some(x => /^(revoke|recover|setBeneficiary|upgradeTo)$/.test(x))) {
     throw new Error('Vesting vault contains a privileged backdoor');
+  }
+  if (name === 'MojApprovalReserve' && [...abiFunctions].some(x => /^(withdraw|recover|setBeneficiary|setReleaseController|upgradeTo|setTime)$/.test(x))) {
+    throw new Error('Reserve contains a privileged bypass or test-only clock');
   }
   if (name === 'MojGenesisDistributor' && [...abiFunctions].some(x => /^(withdraw|recover|setGovernance|upgradeTo)$/.test(x))) {
     throw new Error('Genesis escrow contains a privileged bypass');
