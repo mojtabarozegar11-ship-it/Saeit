@@ -62,7 +62,7 @@ mv -- "$incoming" "$target"
 restore() {
   rc=$?
   if test "$rc" -ne 0; then
-    crontab "$backup/old-crontab" || :
+    crontab - < "$backup/old-crontab" || :
     if test -d "$target" && test ! -L "$target"; then
       mv -- "$target" "$backup/failed-install"
     fi
@@ -78,7 +78,7 @@ trap restore EXIT
 grep -v "$marker" "$backup/old-crontab" > "$backup/proposed-crontab" || true
 printf '* * * * * /bin/bash %s # %s\n' "$target/run-six-ticks.sh" "$marker" >> "$backup/proposed-crontab"
 chmod 600 "$backup/proposed-crontab"
-crontab "$backup/proposed-crontab"
+crontab - < "$backup/proposed-crontab"
 test "$(crontab -l | grep -c "$marker")" -eq 1
 "$py" -B "$target/factory_10s_cycle.py" --mode tick
 "$py" -B - "$private/quality-excellence/ten-second-control/state.json" <<'PY'
