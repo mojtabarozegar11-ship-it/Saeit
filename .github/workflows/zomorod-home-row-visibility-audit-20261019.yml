@@ -1,0 +1,43 @@
+name: Read-only live Zomorod homepage row disappearance audit
+on:
+  pull_request:
+    paths:
+      - scripts/zomorod_home_row_visibility_audit_20261019.cjs
+      - .github/workflows/zomorod-home-row-visibility-audit-20261019.yml
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install isolated Chromium browser in runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/zomorod-row-audit"
+          cd "$RUNNER_TEMP/zomorod-row-audit"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+      - name: Inspect all home rows without modifying live site
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/zomorod-row-audit"
+          cp "$GITHUB_WORKSPACE/scripts/zomorod_home_row_visibility_audit_20261019.cjs" ./audit.cjs
+          node audit.cjs
+      - name: Preserve audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-home-rows-readonly-20261019
+          path: |
+            ${{ runner.temp }}/zomorod-row-audit/row-audit-20261019.json
+            ${{ runner.temp }}/zomorod-row-audit/home-contact-*.png
+          if-no-files-found: warn
+          retention-days: 7
