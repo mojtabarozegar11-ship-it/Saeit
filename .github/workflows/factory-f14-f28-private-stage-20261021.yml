@@ -100,7 +100,14 @@ jobs:
             --archive "$stage/bundle.tar.gz" \
             --expected-sha "$wanted" \
             --private-root "/home/githubops/factory-runtime/private/autonomous-product-cycle"
+          scp -q "${opts[@]}" "$RUNNER_TEMP/f14-f28-qa1000.json" githubops@178.239.147.150:"$stage/qa1000.json"
+          scp -q "${opts[@]}" ops/scripts/factory_f14_f28_qa1000_vps_verifier_20261021.py githubops@178.239.147.150:"$stage/qa-verify.py"
+          qa_sha="$(sha256sum "$RUNNER_TEMP/f14-f28-qa1000.json" | awk '{print $1}')"
+          ssh -T "${opts[@]}" githubops@178.239.147.150 \
+            python3 -B "$stage/qa-verify.py" \
+            "/home/githubops/factory-runtime/private/autonomous-product-cycle" \
+            "$stage/qa1000.json" "$qa_sha" "$wanted"
           echo FACTORY_F14_F28_PRIVATE_VPS_READBACK=PASS
           echo FACTORY_F14_F28_PUBLIC_SITE_UPLOAD=NONE
           echo FACTORY_F14_F28_NEW_PAYMENTS=NONE
-          ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; test -f '$stage/bundle.tar.gz'; rm -f -- '$stage/bundle.tar.gz' '$stage/verify.py'; rmdir -- '$stage'"
+          ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; test -f '$stage/bundle.tar.gz'; rm -f -- '$stage/bundle.tar.gz' '$stage/verify.py' '$stage/qa1000.json' '$stage/qa-verify.py'; rmdir -- '$stage'"
