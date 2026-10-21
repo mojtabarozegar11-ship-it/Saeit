@@ -204,10 +204,13 @@ jobs:
           test ! -e "$backup/sitemap.original.xml"
           cp -p "$sitemap" "$backup/sitemap.original.xml"
           sha256sum "$sitemap" > "$backup/sitemap.before.sha256"
-          sha256sum "$web/.htaccess" > "$backup/protected.htaccess.sha256"
+          cp -p "$web/.htaccess" "$backup/htaccess.original"
+          sha256sum "$web/index.html" > "$backup/protected.root-index.sha256"
           expected="$(sha256sum "$candidate" | cut -d' ' -f1)"
           installed=0
           sitemap_changed=0
+          htaccess_changed=0
+          htaccess_expected=""
           rollback() {
             rc=$?
             trap - EXIT
@@ -217,9 +220,79 @@ jobs:
               now="$(sha256sum "$sitemap" | cut -d' ' -f1)"
               if test "$now" = "$sitemap_expected"; then cp -p "$backup/sitemap.original.xml" "$sitemap.tmp.rollback.$sha" && mv -f "$sitemap.tmp.rollback.$sha" "$sitemap"; fi
             fi
+            if test "$htaccess_changed" = 1 && test -f "$backup/htaccess.original"; then
+              now="$(sha256sum "$web/.htaccess" | cut -d' ' -f1)"
+              if test "$now" = "$htaccess_expected"; then cp -p "$backup/htaccess.original" "$web/.htaccess.rollback.$sha" && mv -f "$web/.htaccess.rollback.$sha" "$web/.htaccess"; fi
+            fi
             exit "$rc"
           }
           trap rollback EXIT
+          python3 - "$web/.htaccess" "$sha" <<'PY'
+          from pathlib import Path
+          import re,sys
+          p=Path(sys.argv[1]);raw=p.read_bytes()
+          rule=b'RewriteRule ^authors/mojtaba-rozegar/?$ authors/mojtaba-rozegar/index.html [END]'
+          assert rule not in raw
+          anchor=re.search(rb'(?im)^[ \\t]*RewriteEngine[ \\t]+On[ \\t]*
+          cp -p "$candidate" "$page.tmp.$sha"
+          chmod 644 "$page.tmp.$sha"
+          mv "$page.tmp.$sha" "$page"
+          installed=1
+          python3 - "$sitemap" "$sha" <<'PY'
+          from pathlib import Path
+          import sys,re,xml.etree.ElementTree as ET
+          p=Path(sys.argv[1]);raw=p.read_bytes()
+          loc='https://zomorodmelal.ir/authors/mojtaba-rozegar/'
+          root=ET.fromstring(raw)
+          assert root.tag.endswith('urlset')
+          locs=[(e.text or '').strip() for e in root.iter() if e.tag.endswith('loc')]
+          assert loc not in locs
+          closing=re.search(rb'</(?:[A-Za-z_][A-Za-z0-9_.-]*:)?urlset\s*>',raw,re.I)
+          assert closing
+          entry=(b'<url><loc>'+loc.encode()+b'</loc><lastmod>2026-10-21</lastmod></url>')
+          updated=raw[:closing.start()]+entry+raw[closing.start():]
+          ET.fromstring(updated)
+          tmp=p.with_name(p.name+'.author-next.'+sys.argv[2])
+          tmp.write_bytes(updated)
+          tmp.chmod(p.stat().st_mode&0o777)
+          tmp.replace(p)
+          print('PERSIAN_AUTHOR_ADDED_TO_SITEMAP=yes')
+          PY
+          sitemap_changed=1
+          sitemap_expected="$(sha256sum "$sitemap" | cut -d' ' -f1)"
+          code="$(curl -sS -L --max-time 30 -H 'Cache-Control: no-cache' -o "$backup/live-profile.html" -w '%{http_code}' "https://zomorodmelal.ir/authors/mojtaba-rozegar/?seo_verify=$sha" || true)"
+          echo "PERSIAN_PROFILE_HTTP=$code"
+          for token in '<link rel="canonical" href="https://zomorodmelal.ir/authors/mojtaba-rozegar/">' 'Mojtaba Roozegar' 'Mojtaba Rozegar' 'مجتبی روزگار' '"@type":"ProfilePage"'; do
+            if grep -Fq "$token" "$backup/live-profile.html"; then echo "PROFILE_TOKEN_PRESENT=$token"; else echo "PROFILE_TOKEN_MISSING=$token"; exit 1; fi
+          done
+          imgcode="$(curl -sS -L --max-time 25 -o "$backup/live-photo.webp" -w '%{http_code}' "https://zomorodmelal.ir/static/site/zomorod-about/ceo-mojtaba-rozegar.webp?seo_verify=$sha" || true)"
+          echo "PERSIAN_PROFILE_IMAGE_HTTP=$imgcode"
+          test "$imgcode" = 200
+          grep -Fq "$loc" "$sitemap"
+          grep -Fq 'RewriteRule ^authors/mojtaba-rozegar/?$ authors/mojtaba-rozegar/index.html [END]' "$web/.htaccess"
+          (cd "$web"; sha256sum -c --status "$backup/protected.root-index.sha256")
+          echo "ONLY_PROFILE_ROUTE_RULE_ADDED=yes"
+          echo "ROOT_INDEX_UNCHANGED=yes"
+          trap - EXIT
+          echo "PERSIAN_AUTHOR_PROFILE_LIVE=verified"
+          echo "PROFILE_HTTP=200 PHOTO_HTTP=200"
+          echo "PROFILE_IN_SITEMAP=verified"
+          echo "BACKUP=$backup"
+          REMOTE
+      - name: Remove short-lived SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-author" "$RUNNER_TEMP/mojtaba-author.html"
+,raw)
+          assert anchor
+          updated=raw[:anchor.end()]+b'\\n'+rule+raw[anchor.end():]
+          tmp=p.with_name(p.name+'.author-next.'+sys.argv[2])
+          tmp.write_bytes(updated)
+          tmp.chmod(p.stat().st_mode&0o777)
+          tmp.replace(p)
+          print('PERSIAN_AUTHOR_ROUTE_RULE_STAGED=yes')
+          PY
+          htaccess_changed=1
+          htaccess_expected="$(sha256sum "$web/.htaccess" | cut -d' ' -f1)"
           mkdir -p "$(dirname "$page")"
           cp -p "$candidate" "$page.tmp.$sha"
           chmod 644 "$page.tmp.$sha"
