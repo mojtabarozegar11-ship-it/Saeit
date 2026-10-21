@@ -78,3 +78,27 @@ test('journal refuses changed artifacts, governance address, or a concurrent run
   await assert.rejects(openDeploymentJournal(path, {...identity,
     artifacts: {...identity.artifacts, MojCoin: 'new-binary'}}), /identity mismatch/);
 });
+
+test('independent Shasta governance journal refuses double broadcast and altered owners', async t => {
+  const path = await fixture(t);
+  const govIdentity = {network: 'Shasta', governance: 'SHA256_OF_THREE_TEST_OWNERS',
+    artifacts: {MojPilotGovernance: 'governance-build-hash'}};
+  const journal = await openDeploymentJournal(path, govIdentity);
+  await journal.markBroadcastUncertain('MojPilotGovernance', details);
+  await assert.rejects(journal.markBroadcastUncertain('MojPilotGovernance', details), /Cannot repeat/);
+  await assert.rejects(journal.markBroadcastUncertain('MojCoin', details), /Cannot repeat/);
+  await journal.close();
+  const resumed = await openDeploymentJournal(path, govIdentity);
+  assert.equal(resumed.pending('MojPilotGovernance').txID, details.txID);
+  await resumed.markVerified('MojPilotGovernance', details.expectedAddress, details.txID);
+  assert.equal(resumed.verifiedAddress('MojPilotGovernance'), details.expectedAddress);
+  await resumed.close();
+  await assert.rejects(openDeploymentJournal(path, {...govIdentity,
+    governance: 'DIFFERENT_TEST_OWNERS'}), /identity mismatch/);
+});
+
+test('Shasta journal rejects unsupported deployment manifest', async t => {
+  const path = await fixture(t);
+  await assert.rejects(openDeploymentJournal(path, {network: 'Shasta', governance: 'x',
+    artifacts: {MojCoin: 'a'}}), /Invalid Shasta deployment journal identity/);
+});
