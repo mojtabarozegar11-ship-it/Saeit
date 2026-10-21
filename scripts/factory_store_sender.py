@@ -361,6 +361,9 @@ if __name__ == "__main__":
         print("FACTORY_STORE_DELIVERY_FAILED=" + type(exc).__name__, file=sys.stderr)
         detail = str(exc) if isinstance(exc, RuntimeError) else ""
         # Only a fixed step name and numeric exit code may leave the server.
-        if re.fullmatch(r"PRIVATE_DELIVERY_[A-Z_]+_RC_-?[0-9]{1,3}", detail):
+        if (re.fullmatch(r"PRIVATE_DELIVERY_[A-Z_]+_RC_-?[0-9]{1,3}", detail)
+                or detail in ("STORE_RECEIPT_NOT_VERIFIED",
+                              "CONSUMER_SITE_SHA_RECEIPT_NOT_VERIFIED",
+                              "STORE_SYNC_ALREADY_RUNNING")):
             print("FACTORY_STORE_SAFE_FAILURE=" + detail, file=sys.stderr)
         sys.exit(1)
