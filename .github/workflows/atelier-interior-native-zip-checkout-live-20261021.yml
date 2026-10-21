@@ -107,10 +107,12 @@ jobs:
           store="$(curl -sS --max-time 25 -o "$RUNNER_TEMP/atelier-store-after.html" -w '%{http_code}' https://mojplaywin.com/store/)"
           product="$(curl -sS --max-time 25 -o "$RUNNER_TEMP/atelier-product-after.html" -w '%{http_code}' https://mojplaywin.com/store/product/879/)"
           test "$store" = 200 && test "$product" = 200
+          export ATELIER_AUDIT_TEMP="$RUNNER_TEMP"
           python3 - <<'PY'
           from pathlib import Path
-          s=Path("'"$RUNNER_TEMP"'/atelier-store-after.html").read_text(encoding="utf8",errors="replace")
-          p=Path("'"$RUNNER_TEMP"'/atelier-product-after.html").read_text(encoding="utf8",errors="replace")
+          import os
+          s=(Path(os.environ["ATELIER_AUDIT_TEMP"])/"atelier-store-after.html").read_text(encoding="utf8",errors="replace")
+          p=(Path(os.environ["ATELIER_AUDIT_TEMP"])/"atelier-product-after.html").read_text(encoding="utf8",errors="replace")
           assert "/store/product/879/" in s and 'atelier-original-vector-879' in s
           assert "/store/product/879/checkout/" in p and "6.80" in p
           print("ATELIER_PUBLIC_BUY_BUTTON_AND_STORE_CARD=PASS")
@@ -135,6 +137,6 @@ jobs:
         run: |
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           src64="$(base64 -w0 scripts/atelier_interior_native_zip_commerce_20261021.py)"
-          call="import base64,sys;code=sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(sys.argv[1]))"
+          call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
           timeout 100s ssh -T -F "$d/config" saeit-cpanel \
             "ATELIER_OWNER_NATIVE_ZIP_ROLLBACK=20261021-owner-879 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c '$call' '$src64' rollback"
