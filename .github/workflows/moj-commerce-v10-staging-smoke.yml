@@ -15,7 +15,7 @@ jobs:
     # Untrusted fork PRs never receive infrastructure credentials.
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'mojtabarozegar11-ship-it') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 14
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
         with:
@@ -98,8 +98,10 @@ jobs:
           staging="/home/zomorod2/Saeit-staging/moj-commerce-v10-sandbox"
           destination="$staging/$release"
           timeout 45s ssh -F "$sshdir/config" saeit-host "set -eu; test -d /home/zomorod2/Saeit-staging; umask 077; mkdir -p -m 700 '$staging'; test ! -e '$destination'; mkdir -m 700 '$destination'"
-          timeout 90s ssh -F "$sshdir/config" saeit-host "umask 077; cat > '$destination/source.tar.gz'" < "$archive"
-          timeout 90s ssh -F "$sshdir/config" saeit-host "umask 077; cat > '$destination/wheels.tar.gz'" < "$wheels"
+          timeout 240s ssh -F "$sshdir/config" saeit-host "umask 077; cat > '$destination/source.tar.gz'" < "$archive"
+          echo STAGING_SOURCE_TRANSFER_OK
+          timeout 240s ssh -F "$sshdir/config" saeit-host "umask 077; cat > '$destination/wheels.tar.gz'" < "$wheels"
+          echo STAGING_WHEELS_TRANSFER_OK
           source_digest="$(sha256sum "$archive" | awk '{print $1}')"
           wheel_digest="$(sha256sum "$wheels" | awk '{print $1}')"
           remote_source_digest="$(timeout 45s ssh -F "$sshdir/config" saeit-host "sha256sum '$destination/source.tar.gz'" | awk '{print $1}')"
