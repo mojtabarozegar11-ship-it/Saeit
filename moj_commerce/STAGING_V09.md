@@ -1,7 +1,6 @@
 # MOJ Commerce v0.9 — staging admission record (2026-10-21)
 
-**Status: read-only SSH connectivity preflight only. No staging transfer, migration,
-schedule or live payment is performed by this branch.**
+**Status: isolated source snapshot transferred and syntax-checked on staging. No site activation, migration, scheduler, public route, production write or funds.**
 
 ## Fixed boundaries
 
@@ -24,8 +23,17 @@ The dedicated `moj-commerce-v09-relay-preflight.yml` checks:
 4. Presence of staging root and passive detection of staging venv/source.
 5. Distinguishes existence of Production path from any write; no command mutates it.
 
-Its job cannot claim readiness of PostgreSQL, network RPC providers, customer funds,
-passenger routing, cron, signed wallet ownership or recoverable backups.
+After the read-only checks it also sends a versioned source-only archive to a new private subfolder of staging, compares both SHA-256 digests, extracts there, and runs Python bytecode compilation. No process is launched.
+
+Verified [GitHub Actions run 39634544768](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39634544768):
+
+- VPS authentication: PASS; cPanel authentication via pinned ProxyJump: PASS.
+- Staging Django source found; staging virtualenv **not found at staging root**.
+- Isolated copy: `/home/zomorod2/Saeit-staging/moj-commerce-v09-source/mc09-0d5e2e3a21fd`.
+- Copied archive SHA-256 (source and destination equal): `335960a14e1ada8323c65d483df94a3137d1a8306f18302debd4ef8b42eeab03`.
+- Extraction and Python syntax compilation: PASS; no Python service activated.
+
+The run **cannot** claim readiness of PostgreSQL, network RPC providers, customer funds, Passenger routing, cron, signed wallet ownership or recoverable backups.
 
 ## Required gates before a later staging deployment
 
