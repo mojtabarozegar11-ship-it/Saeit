@@ -1,6 +1,7 @@
 """Preview-only storefront contract for the interior design website kit."""
 import json
 from pathlib import Path
+from decimal import Decimal
 
 from django.test import SimpleTestCase
 
@@ -30,3 +31,12 @@ class AtelierPreviewTests(SimpleTestCase):
         self.assertIs(data["sellable_asset_in_public_repository"], False)
         self.assertEqual(len(data["private_download_sha256"]), 64)
         self.assertIn("customer_download", data["evidence"])
+        prices = data["pricing_recommendation"]
+        original = Decimal(str(prices["regular_price"]))
+        discount = Decimal(str(prices["discount_percent"]))
+        payable = Decimal(str(prices["discounted_price"]))
+        self.assertEqual(original, Decimal("17"))
+        self.assertEqual(discount, Decimal("60"))
+        self.assertEqual(payable, Decimal("6.8"))
+        self.assertEqual((original * (Decimal("100") - discount) / Decimal("100")).quantize(Decimal("0.01")), payable)
+
