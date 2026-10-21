@@ -6,32 +6,36 @@ SCHEMA="saeit.factory.quality-1000.v2"
 TARGET=1000
 def catalog():
     here=Path(__file__).resolve()
-    one=here.with_name("quality_100_criteria.json")
-    two=here.parents[1]/"factory_config"/"quality_100_criteria.json"
-    d=json.loads((one if one.is_file() else two).read_text(encoding="utf8"))
-    if d.get("schema")!="saeit.factory.quality-100-criteria.v1" or d.get("required_points")!=1000 or d.get("points_per_criterion")!=10:
-        raise RuntimeError("QUALITY_CATALOG_WRONG_SCHEMA")
-    if len(d["groups"])!=10 or any(len(x)!=10 for x in d["groups"].values()):
-        raise RuntimeError("QUALITY_CATALOG_NOT_100_ITEMS")
-    items={"Q%03d"%(i*10+j+1):{"name":name,"group":group}
-           for i,(group,values) in enumerate(d["groups"].items())
-           for j,name in enumerate(values)}
-    if len(items)!=100 or len({x["name"] for x in items.values()})!=100:
-        raise RuntimeError("QUALITY_CATALOG_DUPLICATES")
-    return items
+    local=here.with_name("quality_100_criteria.json")
+    registry=here.parents[1]/"factory_config"/"quality_100_criteria.json"
+    document=json.loads((local if local.is_file() else registry).read_text(encoding="utf8"))
+    groups=document.get("groups")
+    if (document.get("schema")!="saeit.factory.quality-100-groups.v2"
+        or document.get("group_count")!=100
+        or document.get("criteria_per_group")!=1
+        or document.get("points_per_group")!=10
+        or document.get("total_points")!=1000
+        or not isinstance(groups,dict)
+        or len(groups)!=100):
+        raise RuntimeError("QUALITY_CATALOG_REQUIRES_100_INDEPENDENT_GROUPS")
+    ids=["Q%03d"%i for i in range(1,101)]
+    if list(groups)!=ids:
+        raise RuntimeError("QUALITY_GROUPS_NOT_SEQUENTIALLY_NUMBERED")
+    names=[]
+    for key,entry in groups.items():
+        if (not isinstance(entry,dict)
+            or not isinstance(entry.get("name"),str)
+            or not re.fullmatch(r"[a-z][a-z0-9_]{5,95}",entry["name"])
+            or entry.get("maximum_points")!=10
+            or not isinstance(entry.get("quality_dimensions"),list)
+            or not entry["quality_dimensions"]
+            or any(not isinstance(d,str) or not d for d in entry["quality_dimensions"])):
+            raise RuntimeError("QUALITY_GROUP_MUST_BE_10_POINT_INDEPENDENT_CRITERION")
+        names.append(entry["name"])
+    if len(set(names))!=100:
+        raise RuntimeError("QUALITY_GROUP_CRITERIA_DUPLICATED")
+    return groups
 CRITERIA=catalog()
-LINK={
-"global_competition":["global_comparative_advantage"],
-"originality_innovation":["originality_and_non_derivativeness","verified_innovation"],
-"advanced_technology":["technology_and_technical_excellence"],
-"domain_scientific_depth":["domain_depth_and_accuracy"],
-"customer_value":["user_customer_value"],
-"design_user_experience":["real_world_performance_accessibility"],
-"reliability_testing":["independent_adversarial_testing"],
-"safety_security_rights":["security_ethics_regulatory_safety","legal_rights_and_provenance"],
-"commercial_delivery":["distribution_support_reliability"],
-"independent_validation":["independent_expert_review"]}
-assert {c["group"] for c in CRITERIA.values()}==set(LINK)
 SPECIAL={
 "Q002":"P0_GLOBAL_TOP_FIVE_CURRENT_BENCHMARKS_MISSING",
 "Q006":"P0_MEASURED_SUPERIORITY_UNVERIFIED",
@@ -63,10 +67,10 @@ def grade(result,*,exact_build_sha256=None,reviewer_verified=False,
     items={}
     for key,c in CRITERIA.items():
         has=file_matches(evidence_root,evidence.get(key))
-        conflict=(any("P0_PROOF_MISSING:"+p in codes for p in LINK[c["group"]])
+        conflict=(any("P0_PROOF_MISSING:"+p in codes for p in c["quality_dimensions"])
                   or SPECIAL.get(key) in codes)
         pts=10 if has and not conflict else 0
-        items[key]={"criterion":c["name"],"group":c["group"],"maximum_points":10,
+        items[key]={"criterion":c["name"],"group":key,"group_id":key,"maximum_points":10,
                     "documentary_points":pts,"independent_quality_points":None,
                     "evidence_status":"HASH_CHECK_ONLY" if pts else "MISSING_OR_BLOCKED"}
     earned=sum(x["documentary_points"] for x in items.values())
@@ -74,6 +78,7 @@ def grade(result,*,exact_build_sha256=None,reviewer_verified=False,
     valid_hash=bool(isinstance(exact_build_sha256,str) and re.fullmatch("[a-f0-9]{64}",exact_build_sha256))
     result_card={
       "schema":SCHEMA,"family_id":result.get("family_id"),"required_points":1000,
+      "group_count":100,"criteria_per_group":1,"points_per_group":10,
       "criteria_count":100,"points_per_criterion":10,"criteria":items,
       "documentary_evidence_points":earned,"documentary_evidence_gap":1000-earned,
       "product_quality_points":None,"professionally_validated_criteria":0,
@@ -91,6 +96,7 @@ def grade(result,*,exact_build_sha256=None,reviewer_verified=False,
 def require_no_false_certification(c):
     if (c.get("schema")!=SCHEMA or c.get("required_points")!=1000 or
         c.get("criteria_count")!=100 or c.get("points_per_criterion")!=10 or
+        c.get("group_count")!=100 or c.get("criteria_per_group")!=1 or c.get("points_per_group")!=10 or
         set(c.get("criteria",{}))!=set(CRITERIA) or
         c.get("product_quality_points") is not None or
         c.get("professional_quality_1000_passed") is not False or
@@ -101,7 +107,7 @@ def require_no_false_certification(c):
     for id,item in c["criteria"].items():
         if (item.get("maximum_points")!=10 or item.get("documentary_points") not in (0,10)
             or item.get("independent_quality_points") is not None
-            or item.get("criterion")!=CRITERIA[id]["name"]):
+            or item.get("criterion")!=CRITERIA[id]["name"] or item.get("group_id")!=id):
             raise RuntimeError("INVALID_10_POINT_CRITERION")
         pts+=item["documentary_points"]
     if pts!=c.get("documentary_evidence_points") or c.get("documentary_evidence_gap")!=1000-pts:
