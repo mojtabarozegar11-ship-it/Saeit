@@ -13,6 +13,18 @@ import zipfile
 HEX = re.compile(r"^[a-f0-9]{64}$")
 PRODUCT = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 SCHEMA = "saeit.factory.ai-evidence-workpapers.v1"
+OWNER_DELEGATION = {
+    "schema": "saeit.factory.owner-delegation.v1",
+    "principal_role": "factory_owner",
+    "authorization_basis": "owner_explicitly_authorized_in_chat",
+    "authorized_agent": "saeit-autonomous-evidence-analyst",
+    "scope": "generate, organize, attribute, hash, and preserve preliminary factory evidence workpapers",
+    "attribution": "owner-directed agent work product; technical author remains the AI agent",
+    "digital_signature_created": False,
+    "owner_signature_or_private_key_used": False,
+    "human_expert_or_licensed_counsel_replaced": False,
+    "legal_certification_created": False,
+}
 ROLE_KEYWORDS = {
     "market_benchmark_supplier": ("market", "competitor", "benchmark", "pricing", "price", "industry"),
     "innovation_provenance_supplier": ("patent", "provenance", "origin", "author", "copyright", "novelty"),
@@ -143,8 +155,13 @@ def build_dossier(root, policy, recipe, source_sha, artifact_sha, supplier):
         "artifact_sha256": artifact_sha,
         "warehouse_manifest_sha256": supplier.hash_bytes(
             (version / "warehouse_manifest.json").read_bytes()),
+        "owner_delegation": dict(OWNER_DELEGATION),
+        "owner_directed_agent_work_product": True,
+        "receipt_integrity": "SHA256_CONTENT_INTEGRITY_ONLY_NOT_DIGITAL_SIGNATURE",
         "evidence_agent": {
             "name": "saeit-autonomous-evidence-analyst",
+            "agent_identity": "saeit-autonomous-evidence-analyst",
+            "acting_capacity": "authorized_automated_agent_for_factory_owner",
             "version": 1,
             "roles_run": sorted(ROLE_KEYWORDS),
             "agent_generated_workpapers": len(routes),
@@ -223,6 +240,8 @@ def run(root, catalog_path, supplier_path):
                "agent_roles": len(ROLE_KEYWORDS), "receipts": results,
                "rejected": rejected,
                "release_decision": "HUMAN_AND_EXTERNAL_EVIDENCE_STILL_REQUIRED",
+               "owner_delegation": dict(OWNER_DELEGATION),
+               "owner_directed_agent_work_product": True,
                "professional_certification": False}
     print("FACTORY_AI_EVIDENCE_AGENT=" + json.dumps(summary, sort_keys=True))
     if not results:
