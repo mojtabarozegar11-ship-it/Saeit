@@ -1,6 +1,6 @@
 # MOJ Commerce v1.0 — private cPanel staging Django smoke (2026-10-21)
 
-Status: **unverified pending actual Actions run**. The workflow must not claim success before its live job concludes.
+Status: **verified: isolated Django tests passed on cPanel staging (synthetic in-memory database only)**. No deployment or live service.
 
 ## Authority and boundaries
 
@@ -28,4 +28,18 @@ This is a genuine Django execution on cPanel staging hardware using an isolated 
 
 ## Execution record
 
-Pending — append the actual Actions run URL and observed pass/fail markers after the run. Never mark 100/100 production readiness based only on source or synthetic tests.
+Verified [successful GitHub Actions run 39639414806](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39639414806), 21 Oct 2026:
+
+- cPanel SSH via pinned ProxyJump: PASS.
+- CloudLinux Python 3.11 interpreter found; isolated `.venv` and offline wheel installation: PASS.
+- Migration consistency: `No changes detected in app 'moj_commerce'`.
+- Django: **112 tests / 112 passed**, 107.155 seconds, no system-check issues.
+- `STAGING_ISOLATED_DJANGO_SMOKE_PASS` present.
+- Stage-only private root: `/home/zomorod2/Saeit-staging/moj-commerce-v10-sandbox/mc10-76476c84ee63`.
+- Source archive SHA-256: `48a2efe66973af1e81273f6c2d7dd1aa71e8955c48da384be8cacf1ced9f76e0`.
+- Offline wheelhouse SHA-256: `a9d74a271d368f402476a55cc6db0e78e1d1f55a708d6eecdc4016cbd84316ab`.
+- `STAGING_NO_PRODUCTION_WRITE_NO_LIVE_PAYMENT_NO_PUBLIC_ROUTE` present.
+
+Prior failed attempts were fail-closed: first identified system Python 3.9; second installed a private Python 3.11 environment but lacked source package `mpw_tron_pro`. Both packaging/runtime issues were corrected before the successful run. The earlier isolated unsuccessful sandboxes were not deleted.
+
+**No production certification:** Independent stage PostgreSQL, backups/restore, 24/7 monitoring, live chain quorum, financial reconciliation and real-money buy-to-download validation remain separate release gates.
