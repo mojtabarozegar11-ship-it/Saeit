@@ -219,4 +219,51 @@ class FiatToTRXContractTests(unittest.TestCase):
   self.assertFalse(receipt["safe_to_fulfill"])
   self.assertFalse(receipt["native_trx_merchant_settlement_verified"])
 
+
+ def test_minimum_rejects_invalid_native_trx_amount_even_with_valid_fiat(self):
+  env={"NOWPAYMENTS_API_KEY":"mock-api"}
+  class Response:
+   def __init__(self,obj):self.obj=obj
+   def __enter__(self):return self
+   def __exit__(self,*args):return False
+   def read(self,limit):return json.dumps(self.obj).encode()
+  for bad in ("0","-1","NaN","Infinity","no value",True,None):
+   with self.subTest(minimum=bad),self.assertRaises(MerchantNotReady):
+    live_trx_minimum_usd(env,opener=lambda req,timeout:Response({
+      "min_amount":bad,"fiat_equivalent":"3.00","currency_from":"trx","currency_to":"trx"}))
+
+ def test_signed_webhook_rejects_duplicate_and_nonfinite_json(self):
+  key="test-signed-secret"
+  for raw in (b'{"payment_id":1,"payment_id":2,"order_id":"MPW"}',
+              b'{"payment_id":1,"nested":{"order_id":"good","order_id":"wrong"}}',
+              b'{"payment_status":NaN}',b'{"payment_status":Infinity}',
+              b'[{"payment_status":"finished"}]'):
+   with self.subTest(json=raw.decode()):
+    sig=hmac.new(key.encode(),
+       json.dumps(json.loads(raw),sort_keys=True,separators=(",",":")).encode(),
+       hashlib.sha512).hexdigest()
+    self.assertFalse(valid_webhook(raw,sig,key))
+
+ def test_independent_payment_status_rejects_duplicate_keys(self):
+  env={"MPW_FIAT_ONRAMP_APPROVED":"1","MPW_FIAT_TRX_PAYOUT_VERIFIED":"1",
+       "NOWPAYMENTS_API_KEY":"mock-key","NOWPAYMENTS_IPN_SECRET":"test-key",
+       "MPW_FIAT_PROVIDER_MIN_USD":"1.00"}
+  valid={"payment_id":987,"invoice_id":654,"order_id":"MPWF-SECURE1234567",
+         "price_amount": "4.00","price_currency":"usd","payment_status":"finished",
+         "pay_currency":"trx","pay_amount":20,"actually_paid":20,
+         "outcome_amount":19,"outcome_currency":"trx"}
+  raw=json.dumps(valid).encode()
+  sig=hmac.new(env["NOWPAYMENTS_IPN_SECRET"].encode(),
+     json.dumps(valid,sort_keys=True,separators=(",",":")).encode(),
+     hashlib.sha512).hexdigest()
+  class Response:
+   def __enter__(self):return self
+   def __exit__(self,*args):return False
+   def read(self,limit):
+    return json.dumps(valid).rstrip('}').encode()+b',"payment_status":"finished"}'
+  with self.assertRaises(ProviderError):
+   verify_processor_payment(payment_id=987,invoice_id=654,
+       order_id="MPWF-SECURE1234567",price_usd="4.00",signed_ipn_raw=raw,
+       signed_ipn_signature=sig,env=env,opener=lambda req,timeout:Response())
+
 if __name__=="__main__":unittest.main()
