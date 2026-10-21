@@ -41,3 +41,6 @@ MOJ_COMMERCE_TRX_RATE_PROVIDER = None
 MOJ_COMMERCE_MONITOR_STALE_SECONDS = 300
 # No automatic operational mutation; opt-in recovery command must pass --apply.
 MOJ_COMMERCE_RECOVERY_ENABLED = False
+
+# Source-only: no approved independent second provider exists in test settings.
+MOJ_COMMERCE_TRON_QUORUM_SOURCES = None
