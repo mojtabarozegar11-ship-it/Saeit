@@ -1,0 +1,73 @@
+name: Commercial Product Quality Critic - fail closed on superficial pilots
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/factory-product-quality-critic-20261021.yml"
+      - "scripts/factory_f14_f28_product_quality_critic_20261021.py"
+      - "scripts/factory_f14_keyboard_runtime_probe_20261021.js"
+      - "tests/test_factory_f14_f28_product_critic_20261021.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  independent-product-quality-review:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: ops
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: pilot_f14
+          ref: fab699b275f04ce69912c56e7d0a881ef9ee2d8d
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: pilot_f28
+          ref: 458052d5663102f0cc896047e1cad171bb80ef24
+      - name: Prove detector observes real missing keyboard planting and rejects weak pilots
+        env:
+          F14_PINNED_SOURCE_DIR: ${{ github.workspace }}/pilot_f14
+          F28_PINNED_SOURCE_DIR: ${{ github.workspace }}/pilot_f28
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s ops/tests -p test_factory_f14_f28_product_critic_20261021.py -v
+          echo QUALITY_CRITIC_DETECTION_REGRESSIONS=PASS
+      - name: Produce domain-level findings and rework orders, not just green unit tests
+        run: |
+          set -euo pipefail
+          python3 -B ops/scripts/factory_f14_f28_product_quality_critic_20261021.py \
+            --f14 pilot_f14 --f28 pilot_f28 \
+            --probe ops/scripts/factory_f14_keyboard_runtime_probe_20261021.js \
+            --report "$RUNNER_TEMP/f14-f28-professional-quality-verdict.json"
+          python3 - "$RUNNER_TEMP/f14-f28-professional-quality-verdict.json" <<'PY'
+          import json,sys
+          r=json.load(open(sys.argv[1]))
+          assert r["release_authorized"] is False
+          assert r["aggregate_product_quality_verdict"]=="BLOCKED_REWORK_REQUIRED"
+          assert len(r["assessments"])==2
+          assert all(a["blocking_issue_count"]>=5 for a in r["assessments"])
+          print("WEAK_PRODUCTS_CORRECTLY_DETECTED_AND_REJECTED=PASS")
+          PY
+          mkdir -p "$RUNNER_TEMP/quality-critic"
+          cp "$RUNNER_TEMP/f14-f28-professional-quality-verdict.json" "$RUNNER_TEMP/quality-critic/verdict.json"
+      - name: Persist independent product-quality blockers for audit and rework
+        uses: actions/upload-artifact@v4
+        with:
+          name: f14-f28-professional-quality-blockers
+          path: ${{ runner.temp }}/quality-critic/verdict.json
+          retention-days: 30
+      - name: FAIL CLOSED - defective products cannot pass professional commercial-quality gate
+        run: |
+          set -euo pipefail
+          python3 -B ops/scripts/factory_f14_f28_product_quality_critic_20261021.py \
+            --f14 pilot_f14 --f28 pilot_f28 \
+            --probe ops/scripts/factory_f14_keyboard_runtime_probe_20261021.js \
+            --report "$RUNNER_TEMP/f14-f28-enforcement-verdict.json" --enforce
+          echo "ERROR: UNEXPECTED COMMERCIAL QUALITY PASS (MUST INVESTIGATE)"
+          exit 1
