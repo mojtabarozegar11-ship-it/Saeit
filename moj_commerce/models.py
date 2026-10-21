@@ -142,3 +142,27 @@ class PaymentDiscrepancy(models.Model):
     kind = models.CharField(max_length=12, choices=[('underpaid','Underpaid'),
                                                     ('overpaid','Overpaid')])
     observed_at = models.DateTimeField(auto_now_add=True)
+
+
+class ScannerRun(models.Model):
+    """Operational scanner heartbeat only: never stores txid, private keys or buyer PII."""
+    id = models.BigAutoField(primary_key=True)
+
+    class Status(models.TextChoices):
+        RUNNING = 'running', 'Running'
+        OK = 'ok', 'Completed'
+        FAILED = 'failed', 'Failed'
+
+    started_at = models.DateTimeField(default=timezone.now, db_index=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=8, choices=Status.choices, default=Status.RUNNING)
+    scanned = models.PositiveIntegerField(default=0)
+    fulfilled = models.PositiveIntegerField(default=0)
+    failures = models.PositiveIntegerField(default=0)
+    discrepancies = models.PositiveIntegerField(default=0)
+    manual_review = models.PositiveIntegerField(default=0)
+    # Closed list only, no exception strings / addresses in operational history.
+    error_code = models.CharField(max_length=24, blank=True, default='')
+
+    class Meta:
+        indexes = [models.Index(fields=['status', 'started_at'], name='moj_scan_health_idx')]

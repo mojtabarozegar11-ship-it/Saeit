@@ -118,3 +118,43 @@ settings. The scanner fetches a solidified TRX body + receipt before signing
 an event and re-verifies at the Django receiver. Legacy source still has no
 approved live cPanel checkout mapping, production wallet stock, periodic worker,
 or customer money test. These features must not be declared live.
+
+
+## v0.5 — Operational monitoring and merchant dashboards (2026-10-21)
+
+This is **source-only**. The project remains draft; NO production schedule, wallet
+fund movement or cPanel site integration has been authorized or activated.
+
+Read-only, authenticated seller dashboard:
+`GET /moj-commerce/merchants/<merchant_uuid>/dashboard/`
+returns just that seller's counts, signed address pool capacity, pending/expired
+orders, completed sales totals and review warnings. A guessed UUID is NOT an
+authorization mechanism; the view requires `Merchant.owner == request.user`.
+The API never returns buyer personal details, deposit addresses, chain txids,
+private file paths, wallet secrets or a list of other sellers.
+
+Admin scanner diagnostic endpoint:
+`GET /moj-commerce/operator/scanner-health/`
+requires **active staff AND superuser**; ordinary staff receives a 404.
+Outputs only coarse aggregate health and incident codes: disabled,
+not_configured, never_run, running, stale, degraded, healthy. A 'healthy'
+heartbeat is not proof of receipt of real customer money.
+
+ScannerRun DB model migration `0004_scanner_run` records only whitelist counters,
+start/end times and a generic error code. The PostgreSQL-only management
+command `python manage.py moj_commerce_scan_once` is NOT automatically
+scheduled by this PR. It acquires a session-level advisory lock so two cron
+processes cannot scan the same orders concurrently and releases it in `finally`.
+The existing v0.4 bounded retry/backoff (`PurchaseScanState`) continues to
+recover temporary RPC errors during future authorized scheduled runs.
+
+To see a real non-disabled healthy scanner, the operator MUST provide a real
+PostgreSQL connection, explicitly enable both checkout and scanner, configure
+independent finalized TRON verification and a 32+ character signing secret,
+and install and independently test the job scheduling. The status must not be
+interpreted as a financial balance or proof of customer delivery.
+
+Quality tests are appended to Django and PostgreSQL isolated Actions. Test
+migrations with `python -m django makemigrations moj_commerce --check --dry-run
+--settings=moj_commerce.test_settings` and run both test matrices before merging.
+See `STAGE_V05_RELEASE_GATES.md`. This version is **NOT DEPLOYED**.
