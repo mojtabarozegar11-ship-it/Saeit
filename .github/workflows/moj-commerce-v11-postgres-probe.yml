@@ -76,6 +76,26 @@ jobs:
           timeout 45s ssh -F "$sshdir/config" saeit-vps 'set -eu; echo V11_VPS_PROBE_BEGIN; for bin in docker podman psql pg_config initdb pg_ctl pg_dump pg_restore; do if command -v "$bin" >/dev/null 2>&1; then echo "VPS_BIN_$bin=present"; else echo "VPS_BIN_$bin=absent"; fi; done; if command -v docker >/dev/null 2>&1; then if timeout 5s docker info --format "{{.ServerVersion}}" >/dev/null 2>&1; then echo VPS_CONTAINER_RUNTIME_READY; else echo VPS_CONTAINER_RUNTIME_NOT_CONFIRMED; fi; fi; if command -v free >/dev/null 2>&1; then free -m | awk '"'"'/^Mem:/{print "VPS_MEMORY_MB_TOTAL="$2, "VPS_MEMORY_MB_AVAILABLE="$7}'"'"'; fi; df -Pk . | awk '"'"'NR==2{print "VPS_DISK_KB_AVAILABLE="$4}'"'"'; echo V11_VPS_PROBE_DONE'
           timeout 45s ssh -F "$sshdir/config" saeit-host 'set -eu; echo V11_CPANEL_PROBE_BEGIN; test "$(id -un)" = zomorod2; test -d /home/zomorod2/Saeit-staging; for bin in psql pg_config initdb pg_ctl pg_dump pg_restore createdb; do if command -v "$bin" >/dev/null 2>&1; then echo "CPANEL_BIN_$bin=present"; else echo "CPANEL_BIN_$bin=absent"; fi; done; for p in /usr/pgsql-16/bin/initdb /usr/pgsql-15/bin/initdb /usr/pgsql-14/bin/initdb /usr/local/pgsql/bin/initdb; do if test -x "$p"; then echo "CPANEL_ISOLATED_INITDB_FOUND=$p"; fi; done; df -Pk /home/zomorod2/Saeit-staging | awk '"'"'NR==2{print "CPANEL_DISK_KB_AVAILABLE="$4}'"'"'; test -d /home/zomorod2/Saeit && echo "PRODUCTION_EXISTS_READ_ONLY"; echo V11_CPANEL_PROBE_DONE'
           timeout 50s ssh -F "$sshdir/config" saeit-host 'set -eu; if test -x /usr/local/cpanel/bin/uapi; then echo CPANEL_LOCAL_UAPI_PRESENT; if timeout 15s /usr/local/cpanel/bin/uapi --user=zomorod2 --output=json Postgresql get_restrictions >/dev/null 2>&1; then echo CPANEL_UAPI_POSTGRES_READONLY_CALL_OK; else echo CPANEL_UAPI_POSTGRES_READONLY_CALL_FAILED; fi; else echo CPANEL_LOCAL_UAPI_ABSENT; fi; if PGCONNECT_TIMEOUT=5 timeout 12s psql -w -X -qAt -d postgres -c "SELECT 1" >/dev/null 2>&1; then echo CPANEL_LOCAL_PG_ACCOUNT_AUTH_OK; else echo CPANEL_LOCAL_PG_ACCOUNT_AUTH_NOT_AVAILABLE; fi'
+          # Distinguish normal account-local UAPI from WHM/root-only --user mode.
+          # No database names, raw CLI output, credentials, or errors are logged.
+          timeout 65s ssh -F "$sshdir/config" saeit-host 'set -u
+            test "$(id -un)" = zomorod2 || exit 1
+            if ! test -x /usr/local/cpanel/bin/uapi; then echo CPANEL_UAPI_DIAGNOSTIC_UNAVAILABLE; exit 0; fi
+            for mode in account_local explicit_user; do
+              if test "$mode" = account_local; then
+                result="$(timeout 15s /usr/local/cpanel/bin/uapi --output=json Postgresql get_restrictions 2>&1)"; result_code=$?
+              else
+                result="$(timeout 15s /usr/local/cpanel/bin/uapi --user=zomorod2 --output=json Postgresql get_restrictions 2>&1)"; result_code=$?
+              fi
+              class=other
+              case "$result" in
+                *permission*|*Permission*|*denied*|*Denied*|*not\\ permitted*) class=permission ;;
+                *disabled*|*not\\ enabled*|*not\\ available*) class=feature_disabled ;;
+                *invalid*|*Invalid*|*unknown*|*Unknown*|*not\\ found*) class=unsupported ;;
+              esac
+              printf "CPANEL_PG_UAPI_%s_EXIT_%s_CLASS_%s\\n" "$mode" "$result_code" "$class"
+            done
+          '
           # Official read-only cPanel UAPI feature check. Do not enumerate any database.
           # Parse output into fixed, non-sensitive status markers only.
           feature_json="$(timeout 50s ssh -F "$sshdir/config" saeit-host '/usr/local/cpanel/bin/uapi --user=zomorod2 --output=json Features list_features_like pattern=postgres' 2>/dev/null || true)"
