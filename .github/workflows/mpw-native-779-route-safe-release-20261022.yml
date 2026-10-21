@@ -93,7 +93,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import urllib.request,urllib.error,json
+          import urllib.request,urllib.error,urllib.parse,json
           checks={}
           for path in ['/store/','/accounts/login/','/commerce/book/779/','/store/product/779/checkout/']:
               url='https://mojplaywin.com'+path
@@ -105,7 +105,7 @@ jobs:
               except urllib.error.HTTPError as ex:
                   status=ex.code
                   final=url
-              checks[path]={'http':status,'same_host':urllib.request.urlparse(final).netloc in ('mojplaywin.com','www.mojplaywin.com')}
+              checks[path]={'http':status,'same_host':urllib.parse.urlparse(final).netloc in ('mojplaywin.com','www.mojplaywin.com')}
               if status!=200 or not checks[path]['same_host']:raise RuntimeError('Public endpoint not healthy: '+path)
           print('MPW_779_PUBLIC_GET_HEALTH='+json.dumps(checks,sort_keys=True))
           print('MPW_779_REAL_PAYMENT_ATTEMPTED=NO')
