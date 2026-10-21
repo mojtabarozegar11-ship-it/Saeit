@@ -57,10 +57,12 @@ class DiagnosticTests(unittest.TestCase):
             '/opt/alt/python311/bin/python3.11'), 'runtime_dependency')
         for path in ('/home/zomorod2/Saeit-staging/../../etc/passwd',
                      '/home/zomorod2/extra_private/file',
-                     '/etc/shadow',
                      '/home/zomorod2/Saeit-staging-evil/file'):
             with self.subTest():
-                self.assertEqual(classify_absolute_link_target(path), 'external_other')
+                self.assertEqual(classify_absolute_link_target(path), 'tenant_unbacked')
+        self.assertEqual(classify_absolute_link_target('/home/otheruser/file'),
+                         'other_account_home')
+        self.assertEqual(classify_absolute_link_target('/etc/shadow'), 'external_other')
         archive = io.BytesIO()
         with tarfile.open(fileobj=archive, mode='w') as tar:
             for name, target in [
@@ -82,6 +84,8 @@ class DiagnosticTests(unittest.TestCase):
         self.assertEqual(result['absolute_within_archive_roots'], 1)
         self.assertEqual(result['absolute_runtime_dependency'], 1)
         self.assertEqual(result['absolute_external_other'], 1)
+        self.assertEqual(result['absolute_tenant_unbacked'], 0)
+        self.assertEqual(result['absolute_other_account_home'], 0)
         self.assertNotIn('etc/shadow', str(result))
         self.assertNotIn('python311', str(result))
 
