@@ -1,0 +1,142 @@
+name: VPS and hosting retention candidates read-only 2026-10-21
+on:
+  push:
+    branches: [audit/safe-storage-20261021]
+    paths: [.github/workflows/retention-candidates-readonly-20261021.yml]
+permissions: {contents: read}
+concurrency:
+  group: retention-candidates-readonly
+  cancel-in-progress: false
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare pinned relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/retention-audit"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host zm-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host zm-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            ProxyJump zm-vps
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 12
+          EOF
+          chmod 600 "$d/config"
+          ssh -F "$d/config" zm-vps 'timeout 12s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo RETENTION_PINNED_RELAY=verified
+      - name: VPS npm cache and old file evidence without mutating live state
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/retention-audit"
+          timeout 220s ssh -T -F "$d/config" zm-vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import os,stat,subprocess,time,shutil
+          h=Path.home()
+          assert h.is_dir() and not h.is_symlink()
+          print("RETENTION_TARGET=VPS",flush=True)
+          p=h/".npm"/"_cacache"
+          if p.is_dir() and not p.is_symlink() and not p.parent.is_symlink():
+              command=["du","-sk","--",str(p)]
+              if shutil.which("ionice"):command=["ionice","-c","3"]+command
+              if shutil.which("nice"):command=["nice","-n","15"]+command
+              try:
+                  r=subprocess.run(command,capture_output=True,text=True,timeout=100,check=True)
+                  print("VPS_NPM_CACACHE_KB="+r.stdout.split()[0],flush=True)
+              except Exception as e: print("VPS_NPM_CACACHE_SIZE="+type(e).__name__,flush=True)
+              print("VPS_NPM_CACACHE_MTIME_DAYS="+str(round((time.time()-p.stat().st_mtime)/86400,1)),flush=True)
+          else: print("VPS_NPM_CACACHE=absent_or_symlink",flush=True)
+          cr=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=10)
+          print("VPS_CRON_CACHE_REFERENCE_COUNT="+str(cr.stdout.lower().count("_cacache")),flush=True)
+          ps=subprocess.run(["ps","-u",str(os.getuid()),"-o","args="],capture_output=True,text=True,timeout=10)
+          print("VPS_RUNNING_NPM_PROCESS_COUNT="+str(sum(("npm" in x.lower() or "npx" in x.lower()) for x in ps.stdout.splitlines())),flush=True)
+          root=h/"factory-runtime"/"operations"
+          if root.is_dir() and not root.is_symlink():
+              count=0;kb=0
+              for x in root.glob("*.log"):
+                  if not x.is_file() or x.is_symlink() or time.time()-x.stat().st_mtime < 30*86400:continue
+                  count+=1;kb+=(x.stat().st_size+1023)//1024
+              print("VPS_OLD_TOPLEVEL_LOG_COUNT="+str(count),flush=True)
+              print("VPS_OLD_TOPLEVEL_LOG_KB="+str(kb),flush=True)
+          print("VPS_RETENTION_READONLY_DONE=yes",flush=True)
+          PY
+      - name: Hosting archive and temporary-file candidate counts read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/retention-audit"
+          timeout 100s ssh -T -F "$d/config" zm-host 'python3 -' <<'PY'
+          from pathlib import Path
+          import os,stat,time,subprocess
+          h=Path.home()
+          assert str(h)=="/home/zomorod2"
+          print("RETENTION_TARGET=CPANEL",flush=True)
+          for label,rel in (("STAGING","Saeit-staging"),("PRODUCTION","Saeit")):
+              root=h/rel
+              assert root.is_dir() and not root.is_symlink()
+              count=0;size=0
+              for dirname,dirs,files in os.walk(root,followlinks=False):
+                  if len(Path(dirname).relative_to(root).parts)>7:dirs[:]=[];continue
+                  dirs[:]=[n for n in dirs if n not in {".git",".venv","node_modules","media","staticfiles","var","backups"} and not (Path(dirname)/n).is_symlink()]
+                  for n in files:
+                      p=Path(dirname)/n
+                      if p.is_symlink() or not p.is_file():continue
+                      if p.suffix not in {".tmp",".swp",".bak",".orig"}:continue
+                      if time.time()-p.stat().st_mtime<21*86400:continue
+                      count+=1;size+=p.stat().st_size
+              print("HOST_"+label+"_OLD_TEMP_COUNT="+str(count),flush=True)
+              print("HOST_"+label+"_OLD_TEMP_KB="+str((size+1023)//1024),flush=True)
+          for label,rel in (("PROTECTED_BACKUP",".backups"),("PROTECTED_APP_BACKUP","Saeit/backups")):
+              p=h/rel
+              if p.is_dir() and not p.is_symlink():
+                  print("HOST_"+label+"_PRESENT=yes",flush=True)
+              else:print("HOST_"+label+"_PRESENT=no",flush=True)
+          print("HOST_RETENTION_READONLY_DONE=yes",flush=True)
+          PY
+      - name: Public route smoke after readonly inventory
+        shell: bash
+        run: |
+          for url in https://zomorodmelal.ir/ https://zomorodmelal.ir/agents/ https://mojplaywin.com/ https://mojplaywin.com/games/; do
+            code="$(curl -sS -L --max-time 18 -o /dev/null -w '%{http_code}' "$url" || true)"
+            echo "RETENTION_HEALTH=$url:$code"
+          done
+      - name: Remove credentials from disposable runner
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/retention-audit"
+          if test -d "$d" && test ! -L "$d";then
+            rm -f -- "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+            rmdir -- "$d" || true
+          fi
