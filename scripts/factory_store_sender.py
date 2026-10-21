@@ -144,8 +144,15 @@ def verify_consumer_source(root, recipe, version):
             raise ValueError("CONSUMER_SOURCE_UNSAFE")
     if candidate.stat().st_size>100000 or not 0<archive.stat().st_size<=MAX_BUNDLE:
         raise ValueError("CONSUMER_SIZE_REJECTED")
-    doc=json.loads(candidate.read_text("utf8"))
-    manifest=json.loads(source.read_text("utf8"))
+    try:
+        doc = json.loads(candidate.read_text(encoding="utf-8"))
+        manifest = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError("CONSUMER_MANIFEST_INVALID_JSON") from exc
+    # Valid JSON may be a list, string, number or null, none of which has
+    # the required provenance fields. Fail closed before reading .get().
+    if not isinstance(doc, dict) or not isinstance(manifest, dict):
+        raise ValueError("CONSUMER_MANIFEST_NOT_OBJECT")
     if (manifest.get("source_sha256")!=version
             or manifest.get("recipe")!=recipe
             or manifest.get("qa_status")!="passed"
