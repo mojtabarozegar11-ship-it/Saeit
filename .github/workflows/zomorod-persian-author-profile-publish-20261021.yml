@@ -275,13 +275,12 @@ jobs:
           p=Path(sys.argv[1]);raw=p.read_bytes()
           rule=b'RewriteRule ^authors/mojtaba-rozegar/?$ https://zomorodmelal.ir/en/authors/mojtaba-rozegar/ [R=301,L,NE]'
           assert rule not in raw
-          if b'RewriteEngine On' in raw or b'RewriteEngine on' in raw:
-              needle=b'RewriteEngine On'
-              pos=raw.lower().find(b'rewriteengine on')
-              assert pos>=0
-              eol=raw.find(b'\\n',pos)
-              assert eol>=0
-              updated=raw[:eol+1]+rule+b'\\n'+raw[eol+1:]
+          import re
+          marker=re.search(br'(?im)^RewriteEngine\\s+On\\b',raw)
+          if marker:
+              end=marker.end()
+              while end<len(raw) and raw[end:end+1] in (b'\\r',b'\\n'): end+=1
+              updated=raw[:marker.end()]+b'\\n'+rule+b'\\n'+raw[end:]
           else:
               updated=b'RewriteEngine On\\n'+rule+b'\\n'+raw
           tmp=p.with_name(p.name+".redirect-next."+sys.argv[2])
