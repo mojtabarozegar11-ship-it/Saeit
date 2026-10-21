@@ -1,0 +1,16 @@
+{
+  "schema": "saeit.factory.active-quality-1000.v2",
+  "active": true,
+  "replaces": "saeit.factory.quality-1000.v1",
+  "scope": "all_40_registered_families",
+  "catalog": "factory_config/quality_100_criteria.json",
+  "scorer": "scripts/factory_quality_1000_v2.py",
+  "count": 100,
+  "points_per_criterion": 10,
+  "total_required": 1000,
+  "non_compensatory": true,
+  "allow_critical_defects": false,
+  "automatic_certification": false,
+  "requires_authenticated_external_experts": true,
+  "owner_authorization_required": true
+}
