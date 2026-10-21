@@ -20,6 +20,9 @@ test -f "$scheduler" && test ! -L "$scheduler"
 test "$(crontab -l | grep -c SAEIT_FACTORY_FORTY_FAMILY_OPERATIONAL_DISPATCH_V1)" -eq 1
 exec 9>"$ops/.commercial40-deployment.lock"
 flock -w 30 9
+# All agents that rewrite the same private dispatcher share this lock.
+exec 8>"$ops/.forty-execution-shared-installer.lock"
+flock -w 240 8
 install -d -m 700 "$ops/backups"
 backup="$ops/backups/commerce40-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 install -d -m 700 "$backup"
