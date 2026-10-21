@@ -262,4 +262,20 @@ contract('MOJ1 experimental 2-of-3 governance on isolated TVM', (accounts) => {
       assert.match(String(error.message), /Duplicate owner|revert|REVERT|failed/i);
     }
   });
+  it('executes an actual governed ownership change after two owner approvals', async () => {
+    const governance = await MojPilotGovernance.new([accounts[0], accounts[1], accounts[2]]);
+    const collection = await MojAssets.new(governance.address);
+    const receiver = accounts[7];
+    // Standard Ownable transferOwnership(address) selector + 32-byte ABI address.
+    const data = '0xf2fde38b' + tronWeb.address.toHex(receiver).slice(2).padStart(64, '0');
+    assert.equal(tronWeb.address.fromHex(await collection.owner()), governance.address);
+    await governance.approve(collection.address, data, 0, {from: accounts[0]});
+    await expectReverted(governance.execute(collection.address, data, 0, {from: accounts[1]}));
+    await governance.approve(collection.address, data, 0, {from: accounts[2]});
+    await governance.execute(collection.address, data, 0, {from: accounts[1]});
+    assert.equal(tronWeb.address.fromHex(await collection.owner()), receiver);
+    assert.equal((await governance.nonce()).toString(), '1');
+    await expectReverted(governance.execute(collection.address, data, 0, {from: accounts[0]}));
+  });
+
 });
