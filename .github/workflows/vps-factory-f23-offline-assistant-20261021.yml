@@ -1,0 +1,80 @@
+name: F23 genuine 48-card private offline assistant and 50-stage builder
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_f23_offline_assistant_runtime.py
+      - scripts/factory_build50_f23_assistant.py
+      - scripts/factory_f23_assistant_independent_review.py
+      - tests/test_factory_build50_f23_assistant.py
+      - deploy/install_factory_f23_offline_assistant.sh
+      - .github/workflows/vps-factory-f23-offline-assistant-20261021.yml
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: saeit-factory-f23-private-offline-assistant
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Real 48 diverse retrieval trials, independent negative tests and native ZIP
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_f23_offline_assistant.sh
+          python3 -m py_compile scripts/factory_f23_offline_assistant_runtime.py scripts/factory_build50_f23_assistant.py scripts/factory_f23_assistant_independent_review.py
+          python3 -B -m unittest discover -s tests -p test_factory_build50_f23_assistant.py -v
+          echo F23_REAL_ORIGINAL_RETRIEVAL_REGRESSIONS=PASS
+  install:
+    needs: test
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install real original offline F23 tool on isolated VPS with SHA checks
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/f23-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps(){ ssh -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 "$@"; }
+          stage="/home/githubops/factory-runtime/operations/.f23-real-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh_vps "umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
+          for source in scripts/factory_f23_offline_assistant_runtime.py scripts/factory_build50_f23_assistant.py scripts/factory_f23_assistant_independent_review.py deploy/install_factory_f23_offline_assistant.sh;do
+            name="$(basename "$source")"
+            cat "$source" | ssh_vps "umask 077; cat > '$stage/$name'; chmod 600 '$stage/$name'"
+            wanted="$(sha256sum "$source" | cut -d' ' -f1)"
+            ssh_vps "test \"\$(sha256sum '$stage/$name' | cut -d' ' -f1)\" = '$wanted'"
+          done
+          ssh_vps "timeout 500s bash '$stage/install_factory_f23_offline_assistant.sh' '$stage'"
+          ssh_vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import json,subprocess
+          home=Path.home()/"factory-runtime"
+          dispatch=home/"operations/forty-execution/periodic-dispatch.sh"
+          assert dispatch.read_text().count("factory_build50_f23_assistant.py")==1
+          manifest=home/"private/autonomous-product-cycle/digital-products/fieldwork_offline_evidence_assistant/manufacturing_manifest.json"
+          data=json.loads(manifest.read_text())
+          assert data["family_id"]=="F23" and data["qa_status"]=="passed"
+          assert data["public_listing_enabled"] is False
+          assert data["professional_quality_1000_passed"] is False
+          cron=subprocess.check_output(["crontab","-l"],text=True)
+          assert cron.count("SAEIT_FACTORY_FORTY_FAMILY_OPERATIONAL_DISPATCH_V1")==1
+          print("F23_OFFLINE_RETRIEVAL_ASSISTANT_PRIVATE_VPS=PASS")
+          print("F23_COMMERCIAL_CUSTOMER_DOWNLOAD_UNAUTHORIZED=TRUE")
+          PY
