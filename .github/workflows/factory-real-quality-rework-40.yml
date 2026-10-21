@@ -1,0 +1,63 @@
+name: Real factory quality triage and quarantine 40 families
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_global_quality_triage_v2.py"
+      - "tests/test_factory_global_quality_triage_v2.py"
+      - ".github/workflows/factory-real-quality-rework-40.yml"
+  workflow_dispatch:
+  schedule:
+    - cron: "23 * * * *"
+permissions: {contents: read}
+concurrency:
+  group: saeit-factory-real-quality-rework-40
+  cancel-in-progress: false
+jobs:
+  review-real-inventory:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test 40 policies and seven concrete pass/rework/quarantine behaviors
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_global_quality_triage_v2.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_global_premium_quality_gate.py -v
+          python3 -m py_compile scripts/factory_global_quality_triage_v2.py
+          echo REAL_FACTORY_QUALITY_REWORK_REGRESSION=PASS
+      - name: Pinned SSH private warehouse -> run quality triage -> immutable rework receipts
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/rework-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3)
+          stage="/home/githubops/factory-runtime/operations/.premium-rework-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; test \"\$(id -un)\" = githubops; umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
+          scp -q "${opts[@]}" scripts/factory_global_quality_triage_v2.py githubops@178.239.147.150:"$stage/rework.py"
+          scp -q "${opts[@]}" scripts/factory_global_premium_quality_gate.py githubops@178.239.147.150:"$stage/quality.py"
+          scp -q "${opts[@]}" factory_config/forty_families.json githubops@178.239.147.150:"$stage/families.json"
+          echo FACTORY_POLICY_SHA256="$(sha256sum scripts/factory_global_premium_quality_gate.py | awk '{print $1}')"
+          timeout 125s ssh -T "${opts[@]}" githubops@178.239.147.150 \
+            python3 -B "$stage/rework.py" \
+            --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle \
+            --policy "$stage/quality.py" --registry "$stage/families.json" \
+            --run-reference "$GITHUB_RUN_ID"
+          echo FACTORY_GLOBAL_QUALITY_TRIAGE_PRIVATE_VPS=COMPLETED
+          echo FACTORY_PUBLIC_PRODUCT_UPLOAD=NONE
+          echo FACTORY_PAYMENT_CHANGE=NONE
+          ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; rm -f -- '$stage/rework.py' '$stage/quality.py' '$stage/families.json'; rmdir -- '$stage'"
