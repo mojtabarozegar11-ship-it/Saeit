@@ -161,3 +161,73 @@ def may_fulfill(*,merchant_verified,invoice_id_matches,order_id_matches,amount_m
  checks=(merchant_verified,invoice_id_matches,order_id_matches,
          amount_matches,currency_matches,settlement_native_trx_confirmed)
  return all(x is True for x in checks) and replayed is False and refunded_or_partial is False
+
+
+# Read-only, dual-source proof. Even a valid API proof never authorizes fulfillment
+# without checking the merchant's confirmed, native-TRX payout independently.
+def verify_processor_payment(*, payment_id, invoice_id, order_id, price_usd,
+                             signed_ipn_raw, signed_ipn_signature, env=None,
+                             opener=urlopen):
+ e=os.environ if env is None else env
+ if not ready(e):
+  raise MerchantNotReady("Processor and TRX merchant settlement are not approved")
+ if not re.fullmatch(r"[0-9]{1,22}",str(payment_id)) or type(payment_id) is bool:
+  raise ValueError("Invalid processor payment identifier")
+ if not re.fullmatch(r"[0-9]{1,22}",str(invoice_id)) or type(invoice_id) is bool:
+  raise ValueError("Invalid processor invoice identifier")
+ if not re.fullmatch(r"MPWF-[a-zA-Z0-9_-]{12,80}",str(order_id)):
+  raise ValueError("Invalid unique merchant order")
+ try:
+  expected_price=Decimal(str(price_usd))
+ except (ValueError,TypeError,InvalidOperation) as exc:
+  raise ValueError("Invalid price") from exc
+ if (not expected_price.is_finite() or expected_price<=0
+     or expected_price!=expected_price.quantize(Decimal("0.01"))):
+  raise ValueError("Invalid exact price")
+ if not valid_webhook(signed_ipn_raw,signed_ipn_signature,e["NOWPAYMENTS_IPN_SECRET"]):
+  raise ProviderError("Untrusted IPN notification")
+ try:
+  ipn=json.loads(signed_ipn_raw.decode("utf8"))
+ except (ValueError,UnicodeDecodeError) as exc:
+  raise ProviderError("Unreadable authenticated IPN") from exc
+ request=Request("https://api.nowpayments.io/v1/payment/"+str(payment_id),
+  method="GET",headers={"Accept":"application/json","x-api-key":e["NOWPAYMENTS_API_KEY"],
+                         "User-Agent":"MojPlayWin-Reconciliation/1"})
+ try:
+  with opener(request,timeout=12) as reply:raw=reply.read(32769)
+ except Exception as exc:
+  raise ProviderError("Independent processor verification unavailable") from exc
+ if len(raw)>32768:raise ProviderError("Unbounded provider verification")
+ try: current=json.loads(raw.decode("utf8"))
+ except (ValueError,UnicodeDecodeError) as exc:
+  raise ProviderError("Malformed independent provider status") from exc
+ def same_status(proof):
+  if not isinstance(proof,dict):return False
+  if (str(proof.get("payment_id"))!=str(payment_id) or
+      str(proof.get("invoice_id"))!=str(invoice_id) or
+      proof.get("order_id")!=order_id or
+      proof.get("payment_status")!="finished" or
+      str(proof.get("price_currency","")).lower()!="usd" or
+      str(proof.get("outcome_currency","")).lower()!="trx"):
+   return False
+  try:
+   amount=Decimal(str(proof["price_amount"]))
+   received=Decimal(str(proof["outcome_amount"]))
+   paid=Decimal(str(proof["actually_paid"]))
+   pay_amount=Decimal(str(proof["pay_amount"]))
+  except (KeyError,TypeError,ValueError,InvalidOperation):
+   return False
+  return (all(v.is_finite() for v in (amount,received,paid,pay_amount))
+          and amount==expected_price and received>0 and pay_amount>0
+          and paid>=pay_amount)
+ if not same_status(ipn) or not same_status(current):
+  raise ProviderError("Signed IPN does not agree with final independent provider payment")
+ for field in ("pay_currency","pay_amount","outcome_currency","outcome_amount","actually_paid"):
+  if str(ipn.get(field)).lower()!=str(current.get(field)).lower():
+   raise ProviderError("Signed payment and provider reconciliation differ")
+ # This is intentionally NOT a paid-delivery authorization, not an on-chain or
+ # merchant payout receipt and not a fiat-onramp KYC proof.
+ return {"payment_id":str(payment_id),"invoice_id":str(invoice_id),
+         "order_id":order_id,"provider_finished_verified":True,
+         "native_trx_merchant_settlement_verified":False,
+         "safe_to_fulfill":False}
