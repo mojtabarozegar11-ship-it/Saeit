@@ -1,6 +1,6 @@
 import hashlib,hmac,json,unittest
 from mpw_fiat_to_trx_20261020.provider_adapter import (
- ready,invoice_fields,create_invoice,live_trx_minimum_usd,MerchantNotReady,ProviderError,valid_webhook,may_fulfill)
+ ready,invoice_fields,create_invoice,live_trx_minimum_usd,verify_processor_payment,MerchantNotReady,ProviderError,valid_webhook,may_fulfill)
 
 class FiatToTRXContractTests(unittest.TestCase):
  def test_no_kby_or_provider_key_blocks_checkout(self):
@@ -153,5 +153,70 @@ class FiatToTRXContractTests(unittest.TestCase):
       "https://mojplaywin.com/cancel/",env=env,
       opener=lambda req,timeout:(_ for _ in ()).throw(AssertionError("unacceptable micro invoice")),
       min_opener=lambda req,timeout:Response())
+
+
+ def test_authenticated_webhook_requires_independent_provider_match(self):
+  env={"MPW_FIAT_ONRAMP_APPROVED":"1","MPW_FIAT_TRX_PAYOUT_VERIFIED":"1",
+       "NOWPAYMENTS_API_KEY":"mock-api-key","NOWPAYMENTS_IPN_SECRET":"mock-secret",
+       "MPW_FIAT_PROVIDER_MIN_USD":"2.00"}
+  payload={"payment_id":123456,"invoice_id":901234,"order_id":"MPWF-AABBCC112233",
+           "payment_status":"finished","price_amount":7.5,"price_currency":"usd",
+           "pay_currency":"trx","pay_amount":22,"actually_paid":22,
+           "outcome_currency":"trx","outcome_amount":21.7}
+  raw=json.dumps(payload).encode()
+  sig=hmac.new(env["NOWPAYMENTS_IPN_SECRET"].encode(),
+     json.dumps(payload,sort_keys=True,separators=(",",":")).encode(),hashlib.sha512).hexdigest()
+  class Response:
+   def __init__(self,info):self.info=info
+   def __enter__(self):return self
+   def __exit__(self,*args):return False
+   def read(self,amount):return json.dumps(self.info).encode()
+  def test(reply,**overrides):
+   arguments={"payment_id":123456,"invoice_id":901234,"order_id":"MPWF-AABBCC112233",
+              "price_usd":"7.50","signed_ipn_raw":raw,"signed_ipn_signature":sig,
+              "env":env,"opener":lambda req,timeout:Response(reply)}
+   arguments.update(overrides)
+   return verify_processor_payment(**arguments)
+  result=test(payload)
+  self.assertTrue(result["provider_finished_verified"])
+  self.assertFalse(result["native_trx_merchant_settlement_verified"])
+  self.assertFalse(result["safe_to_fulfill"])
+  for different in (
+    {"payment_status":"confirming"},{"outcome_currency":"usdttrc20"},
+    {"price_amount":8.00},{"order_id":"MPWF-UNRELATED12345"},
+    {"payment_id":4321},{"invoice_id":901235},
+    {"actually_paid":15},{"outcome_amount":0},
+    {"pay_currency":"usdttrc20"},
+  ):
+   with self.subTest(change=different),self.assertRaises(ProviderError):
+    test({**payload,**different})
+  with self.assertRaises(ProviderError):
+   test(payload,signed_ipn_signature="0"*128)
+  with self.assertRaises(ProviderError):
+   test(payload,opener=lambda req,timeout:(_ for _ in ()).throw(TimeoutError()))
+  for invalid in ("1/../../2","no-id",-1,True):
+   with self.subTest(payment_id=invalid),self.assertRaises(ValueError):
+    test(payload,payment_id=invalid)
+
+ def test_final_state_never_authorizes_paid_fulfillment_alone(self):
+  env={"MPW_FIAT_ONRAMP_APPROVED":"1","MPW_FIAT_TRX_PAYOUT_VERIFIED":"1",
+       "NOWPAYMENTS_API_KEY":"mock-api-key","NOWPAYMENTS_IPN_SECRET":"mock-secret",
+       "MPW_FIAT_PROVIDER_MIN_USD":"0.10"}
+  response={"payment_id":987,"invoice_id":456,"order_id":"MPWF-MYRECEIPT12345",
+            "payment_status":"finished","price_amount":"4.00","price_currency":"usd",
+            "pay_currency":"trx","pay_amount":"20.50","actually_paid":"20.50",
+            "outcome_amount":"20.30","outcome_currency":"trx"}
+  class R:
+   def __enter__(self):return self
+   def __exit__(self,*args):return False
+   def read(self,size):return json.dumps(response).encode()
+  raw=json.dumps(response).encode()
+  signature=hmac.new(env["NOWPAYMENTS_IPN_SECRET"].encode(),
+    json.dumps(response,sort_keys=True,separators=(",",":")).encode(),hashlib.sha512).hexdigest()
+  receipt=verify_processor_payment(payment_id=987,invoice_id=456,
+    order_id="MPWF-MYRECEIPT12345",price_usd="4.00",signed_ipn_raw=raw,
+    signed_ipn_signature=signature,env=env,opener=lambda req,timeout:R())
+  self.assertFalse(receipt["safe_to_fulfill"])
+  self.assertFalse(receipt["native_trx_merchant_settlement_verified"])
 
 if __name__=="__main__":unittest.main()
