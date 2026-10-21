@@ -50,7 +50,8 @@ class ReviewPacketTests(unittest.TestCase):
     def test_real_zip_sha_and_oversized_entry_count_are_not_falsely_certified(self):
         import hashlib
         import zipfile
-        for name,n in (("good_product",1),("bad_product",81)):
+        for name,n in (("good_product",1),("large_native_97",97),
+                       ("large_native_145",145),("bad_product",257)):
             folder=self.root/"digital-products"/name
             folder.mkdir(parents=True)
             z=folder/(name+"-internal-qa.zip")
@@ -62,16 +63,39 @@ class ReviewPacketTests(unittest.TestCase):
                 "recipe":name,"qa_status":"passed","source_sha256":"a"*64,
                 "artifact_sha256":archive_sha}))
         result=m.build(self.root)
-        self.assertEqual(result["technical_readiness"]["goods_inspected"],2)
-        self.assertEqual(result["technical_readiness"]["technically_verified"],1)
+        self.assertEqual(result["technical_readiness"]["goods_inspected"],4)
+        self.assertEqual(result["technical_readiness"]["technically_verified"],3)
         self.assertEqual(result["technical_readiness"]["technical_rework_required"],1)
         dashboard=json.loads((self.root/"product-lifecycle"/"product-technical-readiness"/"dashboard.json").read_text())
         by_id={item["recipe"]:item for item in dashboard["items"]}
         self.assertTrue(by_id["good_product"]["technical_ok"])
+        self.assertTrue(by_id["large_native_97"]["technical_ok"])
+        self.assertTrue(by_id["large_native_145"]["technical_ok"])
         self.assertIn("ARCHIVE_LIMIT",by_id["bad_product"]["blockers"])
         self.assertEqual(dashboard["commercial_approval_count"],0)
         self.assertFalse((self.root/"product-lifecycle"/"passports").exists())
-        self.assertEqual(m.build(self.root)["technical_readiness"]["goods_inspected"],2)
+        self.assertEqual(m.build(self.root)["technical_readiness"]["goods_inspected"],4)
+
+    def test_duplicate_native_archive_member_is_not_technically_verified(self):
+        import hashlib
+        import zipfile
+        import warnings
+        name="duplicate_product"
+        folder=self.root/"digital-products"/name
+        folder.mkdir(parents=True)
+        archive=folder/(name+"-internal-qa.zip")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore",UserWarning)
+            with zipfile.ZipFile(archive,"w") as pack:
+                pack.writestr(name+"/file.txt","one")
+                pack.writestr(name+"/file.txt","two")
+        (folder/"manufacturing_manifest.json").write_text(json.dumps({
+            "recipe":name,"qa_status":"passed","source_sha256":"a"*64,
+            "artifact_sha256":hashlib.sha256(archive.read_bytes()).hexdigest()}))
+        m.build(self.root)
+        result=json.loads((self.root/"product-lifecycle/product-technical-readiness/dashboard.json").read_text())
+        self.assertEqual(result["counts"]["technical_rework_required"],1)
+        self.assertIn("ARCHIVE_DUPLICATE_MEMBER",result["items"][0]["blockers"])
 
     def test_exact_f34_exception_requires_proven_verified_100_files(self):
         import hashlib

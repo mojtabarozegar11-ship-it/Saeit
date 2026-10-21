@@ -8,6 +8,7 @@ on:
       - tests/test_mpw_factory_stage1_technical_repair.py
       - deploy/install_mpw_stage1_technical_repair.sh
       - scripts/factory_native_customer_packager.py
+      - scripts/factory_personal_owner_passport_policy_20261020.py
       - scripts/mpw_factory_stage1_deep_evidence.py
       - tests/test_mpw_factory_stage1_deep_evidence.py
       - tests/test_factory_native_customer_packager.py
@@ -22,6 +23,7 @@ on:
       - scripts/factory_product_maker.py
       - deploy/install_mpw_stage1_technical_repair.sh
       - scripts/factory_native_customer_packager.py
+      - scripts/factory_personal_owner_passport_policy_20261020.py
       - scripts/mpw_factory_stage1_deep_evidence.py
       - tests/test_mpw_factory_stage1_deep_evidence.py
       - tests/test_factory_native_customer_packager.py
@@ -63,6 +65,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_customer_packager -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_native_customer_packager -v
           bash -n deploy/install_mpw_stage1_technical_repair.sh
+          python3 -m py_compile scripts/factory_personal_owner_passport_policy_20261020.py
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_existing_courier_customer_packages -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_three_bidirectional_orders -v
           python3 -m py_compile scripts/mpw_vps_warehouse_courier.py
@@ -136,7 +139,7 @@ jobs:
           d="$RUNNER_TEMP/factory-store-preflight"
           stage="/home/githubops/factory-runtime/operations/.mpw-real-repair-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           timeout 30s ssh -T -F "$d/config" saeit-vps "test ! -e '$stage' && mkdir -m 700 '$stage'"
-          for source in scripts/mpw_factory_stage1_technical_repair.py scripts/mpw_vps_warehouse_courier.py scripts/factory_customer_packager.py scripts/factory_native_customer_packager.py scripts/factory_product_maker.py scripts/mpw_factory_stage1_deep_evidence.py deploy/install_mpw_stage1_technical_repair.sh;do
+          for source in scripts/mpw_factory_stage1_technical_repair.py scripts/mpw_vps_warehouse_courier.py scripts/factory_customer_packager.py scripts/factory_native_customer_packager.py scripts/factory_product_maker.py scripts/factory_personal_owner_passport_policy_20261020.py scripts/mpw_factory_stage1_deep_evidence.py deploy/install_mpw_stage1_technical_repair.sh;do
             name="$(basename "$source")"
             cat "$source" | timeout 30s ssh -T -F "$d/config" saeit-vps "umask 077; cat > '$stage/$name'; chmod 600 '$stage/$name'"
             want="$(sha256sum "$source"|cut -d' ' -f1)"
