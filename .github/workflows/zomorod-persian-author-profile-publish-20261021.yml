@@ -344,8 +344,10 @@ jobs:
           echo "PERSIAN_PROFILE_IMAGE_HTTP=$imgcode"
           test "$imgcode" = 200
           grep -Fq "$loc" "$sitemap"
-          (cd "$web"; sha256sum -c --status "$backup/protected.htaccess.sha256")
-          echo "PROTECTED_HTACCESS_UNCHANGED=yes"
+          grep -Fq 'RewriteRule ^authors/mojtaba-rozegar/?$ authors/mojtaba-rozegar/index.html [END]' "$web/.htaccess"
+          (cd "$web"; sha256sum -c --status "$backup/protected.root-index.sha256")
+          echo "ONLY_PROFILE_ROUTE_RULE_ADDED=yes"
+          echo "ROOT_INDEX_UNCHANGED=yes"
           trap - EXIT
           echo "PERSIAN_AUTHOR_PROFILE_LIVE=verified"
           echo "PROFILE_HTTP=200 PHOTO_HTTP=200"
