@@ -129,6 +129,7 @@ def scanner_health(*, now=None, stale_seconds=300, overdue_seconds=180) -> dict:
     due=(PurchaseScanState.objects.filter(purchase__status=Purchase.Status.PENDING,
                                          next_scan_ms__lte=now_ms-overdue_seconds*1000)
          .count())
+    missing_states=Purchase.objects.filter(status=Purchase.Status.PENDING, scan_state__isnull=True).count()
     failures=(PurchaseScanState.objects.filter(purchase__status=Purchase.Status.PENDING,
                                               failures__gte=3).count())
     awaiting_review=PaymentDiscrepancy.objects.count()
@@ -148,7 +149,7 @@ def scanner_health(*, now=None, stale_seconds=300, overdue_seconds=180) -> dict:
         status='stale'
     elif run.status==ScannerRun.Status.RUNNING:
         status='running'
-    elif run.status==ScannerRun.Status.FAILED or run.failures or failures or due:
+    elif run.status==ScannerRun.Status.FAILED or run.failures or failures or due or missing_states:
         status='degraded'
     else:
         status='healthy'
@@ -161,10 +162,12 @@ def scanner_health(*, now=None, stale_seconds=300, overdue_seconds=180) -> dict:
             'last_run_scanned':run.scanned if run else 0,
             'last_run_fulfilled':run.fulfilled if run else 0,
             'last_run_failures':run.failures if run else 0,
-            'overdue_scans':due,'orders_with_repeated_scan_failures':failures,
+            'overdue_scans':due,'missing_scan_states':missing_states,
+            'orders_with_repeated_scan_failures':failures,
             'payment_discrepancies':awaiting_review,
             'warnings':[code for condition,code in (
                 (status not in ('healthy','running'),'scanner_attention_required'),
-                (due>0,'backlog_overdue'),(failures>0,'repeated_scan_failures'),
+                (due>0,'backlog_overdue'),(missing_states>0,'missing_scan_state'),
+                (failures>0,'repeated_scan_failures'),
                 (awaiting_review>0,'payment_discrepancy_review_required'),
             ) if condition]}

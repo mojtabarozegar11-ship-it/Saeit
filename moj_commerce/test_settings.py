@@ -44,3 +44,6 @@ MOJ_COMMERCE_RECOVERY_ENABLED = False
 
 # Source-only: no approved independent second provider exists in test settings.
 MOJ_COMMERCE_TRON_QUORUM_SOURCES = None
+
+# No invoice self-healing without explicit production operator opt-in.
+MOJ_COMMERCE_SELF_REPAIR_ENABLED = False
