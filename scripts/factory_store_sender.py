@@ -62,8 +62,15 @@ def verify_source(manifest_path, archive_path, recipe):
     try:
         with zipfile.ZipFile(archive_path) as bundle:
             members = bundle.infolist()
-            if not 0 < len(members) <= 200 or sum(i.file_size for i in members) > 100 * 1024 * 1024:
+            if not 0 < len(members) <= 256 or sum(i.file_size for i in members) > 100 * 1024 * 1024:
                 raise ValueError("PACKAGE_ARCHIVE_EXPANSION_UNSAFE")
+            expected = manifest.get("files")
+            if (not isinstance(expected, list) or len(expected)!=len(members)
+                    or len(set(expected))!=len(members)
+                    or not all(isinstance(v,str) and 0<len(v)<=240 for v in expected)
+                    or {recipe + "/" + v for v in expected} != {v.filename for v in members}
+                    or len({v.filename for v in members}) != len(members)):
+                raise ValueError("PACKAGE_ARCHIVE_MANIFEST_MISMATCH")
             if any(i.filename.startswith("/") or ".." in Path(i.filename).parts or
                    "\\" in i.filename for i in members):
                 raise ValueError("PACKAGE_ARCHIVE_MEMBER_UNSAFE")
