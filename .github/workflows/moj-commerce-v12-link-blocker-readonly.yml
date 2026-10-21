@@ -1,0 +1,52 @@
+name: MOJ Commerce v1.2 classify 3 GPG backup external links (READ ONLY)
+on:
+  push:
+    branches: ['feature/moj-commerce-v12-mariadb-isolated-20261022']
+    paths:
+      - '.github/workflows/moj-commerce-v12-link-blocker-readonly.yml'
+      - 'tools/moj_commerce_v12_archive_link_blocker.py'
+      - 'tests/test_moj_commerce_v12_archive_link_blocker.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj-commerce-v12-link-blocker-readonly
+  cancel-in-progress: false
+jobs:
+  classify:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/moj-commerce-v12-mariadb-isolated-20261022'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run synthetic fail-closed symlink classifier tests
+        run: |
+          python3 -m unittest -v tests.test_moj_commerce_v12_archive_link_blocker
+          python3 -m py_compile tools/moj_commerce_v12_archive_link_blocker.py
+      - name: Classify archived links without showing path names or restoring backup
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" || { echo 'VPS_RELAY_UNAVAILABLE'; exit 1; }
+          d="$RUNNER_TEMP/moj-commerce-links-readonly"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          stream64="$(base64 -w0 scripts/mojplaywin_recovery_stream_vps.py)"
+          inspect64="$(base64 -w0 tools/moj_commerce_v12_archive_link_blocker.py)"
+          call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
+          timeout 400s ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -i "$d/key" githubops@178.239.147.150 "python3 -c '$call' '$stream64' files" |
+            timeout 400s python3 -c "$call" "$inspect64" archive
+          echo 'MOJ_COMMERCE_V12_EXTERNAL_LINK_METADATA_READ=PASS'
+          echo 'MOJ_COMMERCE_V12_FILES_RESTORED=NO'
+          echo 'MOJ_COMMERCE_V12_PRODUCTION_SITE_MODIFIED=NO'
+          echo 'MOJ_COMMERCE_V12_RELEASE_PERMITTED=NO'
