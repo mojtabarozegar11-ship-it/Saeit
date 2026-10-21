@@ -6,11 +6,13 @@ on:
       - ".github/workflows/atelier-interior-owner-readonly-20261021.yml"
       - "scripts/atelier_interior_release_probe_20261021.py"
       - "scripts/atelier_interior_sale_technical_readonly_20261021.py"
+      - "scripts/atelier_interior_vector_final_preflight_20261021.py"
   pull_request:
     paths:
       - ".github/workflows/atelier-interior-owner-readonly-20261021.yml"
       - "scripts/atelier_interior_release_probe_20261021.py"
       - "scripts/atelier_interior_sale_technical_readonly_20261021.py"
+      - "scripts/atelier_interior_vector_final_preflight_20261021.py"
 permissions: {contents: read}
 concurrency:
   group: atelier-interior-evidence-${{ github.ref }}
@@ -28,6 +30,7 @@ jobs:
           set -euo pipefail
           python3 -B scripts/atelier_interior_release_probe_20261021.py selftest
           python3 -m py_compile scripts/atelier_interior_sale_technical_readonly_20261021.py
+          python3 -m py_compile scripts/atelier_interior_vector_final_preflight_20261021.py
           python3 - <<'PY'
           from pathlib import Path
           src=Path('scripts/atelier_interior_release_probe_20261021.py').read_text()
@@ -141,3 +144,9 @@ jobs:
           timeout 95s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel \
             "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" \
             < scripts/atelier_interior_sale_technical_readonly_20261021.py
+      - name: Read-only candidate delivery flags and original vector quality proof
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" \
+            < scripts/atelier_interior_vector_final_preflight_20261021.py
