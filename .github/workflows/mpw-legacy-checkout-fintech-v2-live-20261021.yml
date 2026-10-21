@@ -1,0 +1,141 @@
+name: MojPlayWin legacy payment route modern visual release 2026-10-21
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-legacy-checkout-fintech-v2-live-20261021.yml
+      - scripts/mpw_legacy_checkout_fintech_v2_20261021.py
+permissions: {contents: read}
+concurrency:
+  group: mpw-legacy-checkout-fintech-v2-only
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Syntax and legacy standalone checkout replacement selftest
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_legacy_checkout_fintech_v2_20261021.py
+          python3 scripts/mpw_legacy_checkout_fintech_v2_20261021.py selftest
+      - name: Preflight protected main routes and sibling sites
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json,os
+          paths=('/','/store/','/store/product/72/','/store/product/225/',
+                 '/accounts/login/','/taniya/','/farnaz/','/saman/','/picm/')
+          state={}
+          for p in paths:
+              try:
+                  with urllib.request.urlopen('https://mojplaywin.com'+p,timeout=20) as r:state[p]=r.status
+              except urllib.error.HTTPError as e:state[p]=e.code
+          print('MPWF_LEGACY_BEFORE='+json.dumps(state))
+          if any(s!=200 for s in state.values()):raise RuntimeError('Protected site unhealthy before publish')
+          with open(os.environ['RUNNER_TEMP']+'/legacy-baseline.json','w') as f:json.dump(state,f)
+          PY
+      - name: Establish pinned VPS to cPanel connection
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-csp-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Verify old 373-byte legacy checkout pin, CSP asset and Django syntax
+        run: |
+          set -euo pipefail
+          timeout 70s ssh -T -F "$RUNNER_TEMP/mpw-csp-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - preview" < scripts/mpw_legacy_checkout_fintech_v2_20261021.py
+      - name: Back up and install updated checkout template only
+        id: install
+        run: |
+          set -euo pipefail
+          timeout 70s ssh -T -F "$RUNNER_TEMP/mpw-csp-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - publish '$GITHUB_RUN_ID'" < scripts/mpw_legacy_checkout_fintech_v2_20261021.py
+      - name: Verify content hash, three example prices and original CSRF contract
+        run: |
+          set -euo pipefail
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-csp-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify '$GITHUB_RUN_ID'" < scripts/mpw_legacy_checkout_fintech_v2_20261021.py
+      - name: Refresh MojPlayWin main app template cache only
+        run: |
+          ssh -T -F "$RUNNER_TEMP/mpw-csp-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          root=Path('/home/zomorod2/mojplaywin.com')
+          app=Path('/home/zomorod2/Saeit-staging/core/templates/brands/mojplaywin/checkout.html')
+          if root.is_symlink() or app.is_symlink() or not root.is_dir():
+              raise RuntimeError('Invalid main app identity')
+          if 'data-mpw-legacy-checkout="fintech-v2-20261021"' not in app.read_text('utf8'):
+              raise RuntimeError('Legacy buyer theme missing')
+          if "APP='/home/zomorod2/Saeit-staging'" not in (root/'passenger_wsgi.py').read_text('utf8'):
+              raise RuntimeError('Wrong Passenger app')
+          folder=root/'tmp'
+          if folder.is_symlink():raise RuntimeError('Unsafe restart target')
+          folder.mkdir(exist_ok=True)
+          (folder/'restart.txt').touch()
+          print('MPWF_LEGACY_MAIN_RELOAD=REQUESTED')
+          PY
+      - name: Check public new CSS is already live and protected routes remain healthy
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 20 \
+            'https://mojplaywin.com/mpw-editorial/revenue/assets/mpw-fintech-checkout-v2.css' \
+            -o "$RUNNER_TEMP/legacy-new-theme.css"
+          grep -Fq 'main .mpwf-intro' "$RUNNER_TEMP/legacy-new-theme.css"
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json,os
+          with open(os.environ['RUNNER_TEMP']+'/legacy-baseline.json') as f:before=json.load(f)
+          after={}
+          for p in before:
+              try:
+                  with urllib.request.urlopen('https://mojplaywin.com'+p,timeout=20) as r:after[p]=r.status
+              except urllib.error.HTTPError as e:after[p]=e.code
+          print('MPWF_LEGACY_AFTER='+json.dumps(after))
+          if before!=after:raise RuntimeError('Sibling page regression')
+          print('MPWF_LEGACY_VISUAL_RELEASE_PUBLIC_HEALTH=PASS')
+          PY
+      - name: Restore exact checkout original only if postinstall tests fail
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          set -euo pipefail
+          timeout 70s ssh -T -F "$RUNNER_TEMP/mpw-csp-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'" < scripts/mpw_legacy_checkout_fintech_v2_20261021.py
+          ssh -T -F "$RUNNER_TEMP/mpw-csp-ssh/config" saeit-cpanel "touch /home/zomorod2/mojplaywin.com/tmp/restart.txt"
+      - name: Remove temp SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-csp-ssh"
