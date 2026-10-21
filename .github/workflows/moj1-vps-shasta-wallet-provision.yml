@@ -50,19 +50,19 @@ jobs:
           test "$(stat -c '%a' "$wallet_root")" = 700
           if ! PYTHONPATH="$wallet_root/vendor" python3 -c 'from Crypto.Hash import keccak' 2>/dev/null; then
             python3 - "$wallet_root/pycryptodome-3.24.0.whl" "$wallet_root/vendor" <<'PY_VENDOR'
-            import pathlib
-            import sys
-            import zipfile
-            wheel = pathlib.Path(sys.argv[1])
-            target = pathlib.Path(sys.argv[2])
-            target.mkdir(mode=0o700, exist_ok=True)
-            with zipfile.ZipFile(wheel) as package:
-                for name in package.namelist():
-                    item = pathlib.PurePosixPath(name)
-                    if item.is_absolute() or '..' in item.parts:
-                        raise RuntimeError('Unsafe wheel archive path')
-                package.extractall(target)
-            PY_VENDOR
+          import pathlib
+          import sys
+          import zipfile
+          wheel = pathlib.Path(sys.argv[1])
+          target = pathlib.Path(sys.argv[2])
+          target.mkdir(mode=0o700, exist_ok=True)
+          with zipfile.ZipFile(wheel) as package:
+              for name in package.namelist():
+                  item = pathlib.PurePosixPath(name)
+                  if item.is_absolute() or '..' in item.parts:
+                      raise RuntimeError('Unsafe wheel archive path')
+              package.extractall(target)
+          PY_VENDOR
           fi
           MOJ1_WALLET_ROOT="$wallet_root" PYTHONPATH="$wallet_root/vendor" python3 - <<'PY_WALLET'
           import base64
