@@ -401,6 +401,32 @@ class RealPrivateDocumentEditionTests(unittest.TestCase):
                          "already_issued_private_edition")
         self.assertEqual(self.arch.read_bytes(),(self.stock/(self.recipe+"-internal-qa.zip")).read_bytes())
 
+    def test_document_edition_120_original_assets_produces_full_new_private_zip(self):
+        files={"bundle/guide.txt":b"Original legacy technical guide with a reversible offline procedure."}
+        files.update({"bundle/support_%03d.png"%i:("original image bytes %03d"%i).encode()
+                      for i in range(119)})
+        self.bind(files)
+        original=self.arch.read_bytes()
+        result=m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker)
+        self.assertEqual(result,"private_document_edition_built")
+        new_id="edition_"+self.artifact_hash[:24]
+        source=self.root/"quality-excellence"/"document-edition-sources"/new_id
+        record=json.loads((source/"metadata.json").read_text())
+        self.assertEqual(len(record["assets"]),120)
+        self.assertFalse(record["commercial_release_authorized"])
+        self.assertEqual(self.arch.read_bytes(),original)
+        output=self.root/"quality-excellence"/"document-edition-private-stock"/new_id
+        with zipfile.ZipFile(output/(new_id+"-internal-qa.zip")) as z:
+            self.assertEqual(len(z.namelist()),124)
+            self.assertIsNone(z.testzip())
+    def test_more_than_200_assets_cannot_silently_drop_original(self):
+        files={"bundle/guide.txt":b"Original technical guide"}
+        files.update({"bundle/image_%03d.png"%i:b"x" for i in range(200)})
+        self.bind(files)
+        self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
+                         "document_asset_count_over_limit")
+        self.assertFalse((self.root/"quality-excellence/document-edition-sources"/(
+            "edition_"+self.artifact_hash[:24])).exists())
     def test_unbound_and_tampered_archives_never_get_new_product(self):
         self.bind({"bundle/file.txt":b"legitimate doc"})
         self.order["source_quality_receipt_sha256"]="0"*64
