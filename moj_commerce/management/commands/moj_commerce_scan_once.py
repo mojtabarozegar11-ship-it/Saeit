@@ -8,11 +8,11 @@ from moj_commerce.scan_purchases import scan_purchases_once, ScanUnavailable
 
 
 class Command(BaseCommand):
-    help='Bounded TRX scanner. Requires PostgreSQL, explicit operator configuration and signed-in merchant addresses.'
+    help='Bounded TRX scanner. Requires PostgreSQL or MySQL/MariaDB with verified locks and explicit operator settings.'
 
     def handle(self, *args, **options):
-        if connection.vendor != 'postgresql':
-            raise CommandError('TRX financial scanning requires PostgreSQL')
+        if connection.vendor not in ('postgresql', 'mysql'):
+            raise CommandError('TRX financial scanning requires PostgreSQL or MySQL/MariaDB')
         # Do not create a misleading "running" record on an unconfigured system.
         if not getattr(settings,'MOJ_COMMERCE_SCANNER_ENABLED',False):
             raise CommandError('TRX scanner is disabled by operator policy')
