@@ -36,6 +36,7 @@ class BridgeTests(unittest.TestCase):
         self.meta = {
             "recipe": "farm_enterprise_economics",
             "artifact_sha256": self.digest,
+            "files": ["calculator.py"],
             "qa_status": "passed",
             "commercial_status": "private_internal_qa_pass_not_published",
             "public_listing_enabled": False,
@@ -285,20 +286,53 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "F34_EVIDENCE_CONTRACT_INVALID"):
             receiver.validate_package(archive, meta, recipe, digest)
 
-    def test_all_other_recipes_remain_bound_to_80_members(self):
-        recipe = "normal_workbook"
-        folder = self.root / recipe
+    def make_large_member_package(self, count=145, *, declared=None):
+        recipe="normal_workbook"
+        folder=self.root/recipe
+        folder.mkdir(exist_ok=True)
+        archive=folder/"normal_workbook-internal-qa.zip"
+        names=["entry_%03d.txt" % n for n in range(count)]
+        with zipfile.ZipFile(archive,"w",compression=zipfile.ZIP_DEFLATED) as z:
+            for name in names:z.writestr(recipe+"/"+name,b"original locally verified fixture")
+        digest=hashlib.sha256(archive.read_bytes()).hexdigest()
+        manifest=dict(self.meta,recipe=recipe,artifact_sha256=digest,
+                      files=names if declared is None else declared)
+        file=folder/"manufacturing_manifest.json"
+        file.write_text(json.dumps(manifest))
+        return recipe,archive,file,digest
+    def test_large_145_member_verified_private_package_is_accepted_but_not_public(self):
+        recipe,archive,manifest,digest=self.make_large_member_package(145)
+        self.assertEqual(len(receiver.validate_package(archive,manifest,recipe,digest)["files"]),145)
+        self.assertEqual(digest,sender.verify_source(manifest,archive,recipe))
+        self.assertFalse(receiver.validate_package(archive,manifest,recipe,digest)["public_listing_enabled"])
+    def test_manifest_member_mismatch_rejected_at_both_sides(self):
+        recipe,archive,manifest,digest=self.make_large_member_package(145,declared=["unrelated.txt"]*145)
+        with self.assertRaisesRegex(ValueError,"ARCHIVE_MANIFEST_MEMBERS_MISMATCH"):
+            receiver.validate_package(archive,manifest,recipe,digest)
+        with self.assertRaisesRegex(ValueError,"PACKAGE_ARCHIVE_MANIFEST_MISMATCH"):
+            sender.verify_source(manifest,archive,recipe)
+    def test_any_package_above_256_members_is_rejected(self):
+        recipe,archive,manifest,digest=self.make_large_member_package(257)
+        with self.assertRaisesRegex(ValueError,"ARCHIVE_FILE_COUNT_INVALID"):
+            receiver.validate_package(archive,manifest,recipe,digest)
+        with self.assertRaisesRegex(ValueError,"PACKAGE_ARCHIVE_EXPANSION_UNSAFE"):
+            sender.verify_source(manifest,archive,recipe)
+    def test_archive_duplicate_path_rejected_even_with_declared_members(self):
+        recipe="double_member"
+        folder=self.root/recipe
         folder.mkdir()
-        archive = folder / "normal_workbook-internal-qa.zip"
-        with zipfile.ZipFile(archive, "w") as z:
-            for n in range(81):
-                z.writestr(recipe + "/entry_%02d.txt" % n, b"synthetic")
-        digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-        manifest = dict(self.meta, recipe=recipe, artifact_sha256=digest)
-        path = folder / "manufacturing_manifest.json"
-        path.write_text(json.dumps(manifest))
-        with self.assertRaisesRegex(ValueError, "ARCHIVE_FILE_COUNT_INVALID"):
-            receiver.validate_package(archive, path, recipe, digest)
+        archive=folder/"double_member-internal-qa.zip"
+        with zipfile.ZipFile(archive,"w") as z:
+            z.writestr(recipe+"/same.txt",b"a")
+            z.writestr(recipe+"/same.txt",b"b")
+        digest=hashlib.sha256(archive.read_bytes()).hexdigest()
+        manifest=dict(self.meta,recipe=recipe,artifact_sha256=digest,files=["same.txt","same.txt"])
+        meta=folder/"manufacturing_manifest.json"
+        meta.write_text(json.dumps(manifest))
+        with self.assertRaises(ValueError):
+            receiver.validate_package(archive,meta,recipe,digest)
+        with self.assertRaisesRegex(ValueError,"PACKAGE_ARCHIVE_MANIFEST_MISMATCH"):
+            sender.verify_source(meta,archive,recipe)
 
 
 if __name__ == "__main__":
