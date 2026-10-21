@@ -92,5 +92,24 @@ class F28PrivateCycleTests(unittest.TestCase):
         cycle.validate_output(report, inputs)
 
 
+    def test_nonfinite_customer_output_is_a_rework_defect_not_an_uncaught_crash(self):
+        inputs = {"area_m2":1000, "expected_yield_kg_per_m2":12,
+                  "price_per_kg":2.5, "variable_cost_per_m2":15,
+                  "fixed_cost_total":5000, "rejection_rate_percent":10}
+        baseline = {"market_data_independently_validated":False,
+                    "results":{"sales_revenue":"27000.00", "total_cost":"20000.00",
+                               "net_margin":"7000.00", "break_even_price_per_kg":"1.86",
+                               "minimum_gross_yield_kg_per_m2_to_break_even":"8.889"}}
+        cycle.validate_output(baseline, inputs)
+        for field in baseline["results"]:
+            for invalid in ("NaN", "Infinity", "-Infinity", "not-a-number"):
+                with self.subTest(field=field, invalid=invalid):
+                    report = json.loads(json.dumps(baseline))
+                    report["results"][field] = invalid
+                    with self.assertRaises(cycle.TechnicalDefect) as context:
+                        cycle.validate_output(report, inputs)
+                    self.assertEqual(context.exception.code, "F28_CUSTOMER_OUTPUT_NONFINITE")
+
+
 if __name__ == "__main__":
     unittest.main()
