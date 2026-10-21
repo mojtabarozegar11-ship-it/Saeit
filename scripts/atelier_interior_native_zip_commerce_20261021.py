@@ -106,20 +106,28 @@ def activate():
         original=_file_for(p)
         if not original:raise RuntimeError("PREVIOUS_NATIVE_DELIVERY_NOT_AVAILABLE")
         ensure_zip(Path(original),target)
-        if Article.objects.filter(slug=ARTICLE_SLUG).exists():raise RuntimeError("ARTICLE_SLUG_CONFLICT")
         preserve(p)
-        article=Article(title=TITLE,slug=ARTICLE_SLUG,published=True,version=1,
-          content=(
-          "Atelier Interior Original Vector Edition v1.1 is a downloadable ZIP of an editable, "
-          "responsive interior-design studio website. Includes HTML, CSS, JavaScript, configuration, "
-          "setup guide, a non-exclusive one-site/client license and five original SVG room illustrations. "
-          "Buyer can edit branding, contact details and WhatsApp inquiry link. "
-          "The photographs on the separate demonstration website are NOT included; "
-          "no hosting, custom installation or bespoke support is included. "
-          "USD 6.80 introductory sale price. Payment and private download follow an order-specific "
-          "verified ETH/TRX invoice. Do not send cryptocurrency without a verified invoice."
-          ))
-        article.full_clean();article.save()
+        existing=list(Article.objects.select_for_update().filter(slug=ARTICLE_SLUG))
+        if existing:
+            article=existing[0]
+            if (len(existing)!=1 or article.title!=TITLE or article.published or article.source_report_id is not None
+                or Product.objects.filter(knowledge_article_id=article.pk).exists()):
+                raise RuntimeError("EXISTING_ARTICLE_NOT_SAFE_TO_REUSE")
+            article.published=True
+            article.full_clean();article.save(update_fields=["published","updated_at"])
+        else:
+            article=Article(title=TITLE,slug=ARTICLE_SLUG,published=True,version=1,
+              content=(
+              "Atelier Interior Original Vector Edition v1.1 is a downloadable ZIP of an editable, "
+              "responsive interior-design studio website. Includes HTML, CSS, JavaScript, configuration, "
+              "setup guide, a non-exclusive one-site/client license and five original SVG room illustrations. "
+              "Buyer can edit branding, contact details and WhatsApp inquiry link. "
+              "The photographs on the separate demonstration website are NOT included; "
+              "no hosting, custom installation or bespoke support is included. "
+              "USD 6.80 introductory sale price. Payment and private download follow an order-specific "
+              "verified ETH/TRX invoice. Do not send cryptocurrency without a verified invoice."
+              ))
+            article.full_clean();article.save()
         updated=copy.deepcopy(m)
         updated["original_product_category"]="website_template"
         updated["catalog_category"]="Editable Website Kit"
