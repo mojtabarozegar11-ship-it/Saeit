@@ -70,11 +70,11 @@ jobs:
               if not p.is_file() or p.is_symlink():raise RuntimeError('Missing or unsafe template')
               s=p.read_text('utf8','replace')
               tags=[]
-              for m in re.finditer(r'<(main|header|footer|section|article|aside|div|form|button|input|h1|h2|h3|label|span|p|nav|style|script|link)\\b[^>]{0,1200}>',s,re.I):
+              for m in re.finditer(r'<(main|header|footer|section|article|aside|div|form|button|input|h1|h2|h3|label|span|p|nav|style|script|link)\b[^>]{0,1200}>',s,re.I):
                   t=m.group(0)
                   attrs={}
                   for key in ('class','id','type','name'):
-                      v=re.search(key+r'=["\\x27]([^"\\x27]{1,120})',t,re.I)
+                      v=re.search(key+r'=["\x27]([^"\x27]{1,120})',t,re.I)
                       if v:attrs[key]=v.group(1)
                   if m.group(1).lower() in ('input','script') and attrs.get('name') not in ('csrfmiddlewaretoken','network','amount','txid','action'):
                       attrs.pop('name',None)
@@ -82,9 +82,9 @@ jobs:
               print('MPW_FINTECH_TEMPLATE_STRUCTURE='+json.dumps({
                 'template':rel,'sha256':hashlib.sha256(s.encode()).hexdigest(),
                 'bytes':len(s),'has_head':s.count('</head>'),'has_main':s.count('</main>'),
-                'styles':len(re.findall(r'<style\\b',s,re.I)),
-                'scripts':len(re.findall(r'<script\\b',s,re.I)),
-                'form_count':len(re.findall(r'<form\\b',s,re.I)),
+                'styles':len(re.findall(r'<style\b',s,re.I)),
+                'scripts':len(re.findall(r'<script\b',s,re.I)),
+                'form_count':len(re.findall(r'<form\b',s,re.I)),
                 'csrf_literal_count':s.count('{% csrf_token %}'),
                 'sample':tags[:100]},ensure_ascii=False))
           PY
