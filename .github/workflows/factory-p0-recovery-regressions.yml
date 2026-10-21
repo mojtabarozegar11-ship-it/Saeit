@@ -92,7 +92,7 @@ jobs:
           for file in factory_product_rework.py factory_vps_product_cycle.py factory_store_sender.py; do
             scp -q "${opts[@]}" "scripts/$file" "$host:$stage/$file"
             want="$(sha256sum "scripts/$file" | awk '{print $1}')"
-            got="$(ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$file' | awk '{print \\$1}'")"
+            got="$(ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$file' | cut -d' ' -f1")"
             test "$want" = "$got"
           done
           ssh -T "${opts[@]}" "$host" "bash -se -- '$stage'" <<'REMOTE'
