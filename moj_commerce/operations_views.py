@@ -4,6 +4,7 @@ from django.shortcuts import render
 from django.views.decorators.http import require_GET
 from .models import Merchant
 from .operations import seller_snapshot, scanner_health
+from .operational_alerts import assess_scanner_alerts
 
 
 def _json(data):
@@ -32,7 +33,9 @@ def operator_scanner_health(request):
     if (not request.user.is_authenticated or not request.user.is_active or
         not request.user.is_staff or not request.user.is_superuser):
         raise Http404
-    return _json(scanner_health())
+    snapshot = scanner_health()
+    snapshot['alerts'] = assess_scanner_alerts(snapshot)
+    return _json(snapshot)
 
 @require_GET
 def merchant_console(request, merchant_id):
