@@ -70,7 +70,9 @@ class JumpRepairTests(unittest.TestCase):
             "professional_quality_approved": False,
             "public_listing_enabled": False,
             "owner_publication_approval": False}))
-        (proof_dir / "source-test.json").write_text(json.dumps({
+        basis = hashlib.sha256((name + "b" * 64 + digest).encode()).hexdigest()
+        proof = proof_dir / ("source-" + basis[:24] + ".json")
+        proof.write_text(json.dumps({
             "schema": "saeit.factory.qa-native-rebuild-bridge.v1",
             "recipe": name, "source_order_sha256": digest,
             "source_sha256": "b" * 64, "artifact_sha256": candidate,
@@ -141,7 +143,7 @@ class JumpRepairTests(unittest.TestCase):
         doc = json.loads(doc_path.read_text())
         doc["artifact_sha256"] = candidate
         doc_path.write_text(json.dumps(doc))
-        proof = self.base / "native-rebuild-receipts" / self.recipe / "source-test.json"
+        proof = next((self.base / "native-rebuild-receipts" / self.recipe).glob("source-*.json"))
         record = json.loads(proof.read_text())
         record["artifact_sha256"] = candidate
         proof.write_text(json.dumps(record))
