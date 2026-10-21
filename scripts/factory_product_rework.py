@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import tempfile
+import zipfile
 from datetime import datetime, timezone
 
 
@@ -63,6 +64,8 @@ def _atomic_json(path, document):
 
 
 def _load(path):
+    if path.is_symlink():
+        raise RuntimeError("REWORK_LEDGER_SYMLINK_UNSAFE")
     if not path.is_file():
         return {"schema": "saeit.factory.qa-rework.v1", "history": []}
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -128,7 +131,7 @@ def record_failure(private_root, recipe, error, source_reference):
             "issue_round": number, "code": code}
 
 
-def record_technical_recovery(private_root, recipe, manifest):
+def record_technical_recovery(private_root, recipe, manifest, *, archive_path=None, source_digest=None):
     """Prove only technical recovery, never confuse it with commercial QA."""
     path = _ledger(private_root, recipe)
     if not path.is_file():
@@ -137,13 +140,35 @@ def record_technical_recovery(private_root, recipe, manifest):
     if not data["history"]:
         return {"recipe": recipe, "status": "no_prior_failure", "new_issue": False}
     current = data["history"][-1]
-    if current.get("status") == "technically_recovered":
-        return {"recipe": recipe, "status": "technically_recovered", "new_issue": False}
-    if not isinstance(manifest, dict) or manifest.get("qa_status") != "passed":
-        raise RuntimeError("TECHNICAL_RECOVERY_REQUIRES_PASS")
+    if (not isinstance(manifest, dict) or manifest.get("qa_status") != "passed"
+            or manifest.get("recipe") != recipe):
+        raise RuntimeError("TECHNICAL_RECOVERY_REQUIRES_RECIPE_PASS")
     artifact_hash = manifest.get("artifact_sha256")
     if not isinstance(artifact_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", artifact_hash):
         raise RuntimeError("TECHNICAL_RECOVERY_REQUIRES_SHA256")
+    if (not isinstance(source_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", source_digest)
+            or manifest.get("source_sha256") != source_digest):
+        raise RuntimeError("TECHNICAL_RECOVERY_SOURCE_REVISION_UNVERIFIED")
+    # A prior passed manifest or a checksum string alone cannot close a live defect.
+    if archive_path is None:
+        raise RuntimeError("TECHNICAL_RECOVERY_ARCHIVE_MISSING")
+    archive = Path(archive_path)
+    if archive.is_symlink() or not archive.is_file() or not 0 < archive.stat().st_size <= 25 * 1024 * 1024:
+        raise RuntimeError("TECHNICAL_RECOVERY_ARCHIVE_UNSAFE")
+    checksum = hashlib.sha256()
+    with archive.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            checksum.update(block)
+    if checksum.hexdigest() != artifact_hash:
+        raise RuntimeError("TECHNICAL_RECOVERY_ARCHIVE_SHA_MISMATCH")
+    try:
+        with zipfile.ZipFile(archive) as bundle:
+            if not bundle.namelist() or bundle.testzip() is not None:
+                raise RuntimeError("TECHNICAL_RECOVERY_ARCHIVE_INTEGRITY_FAILED")
+    except zipfile.BadZipFile as exc:
+        raise RuntimeError("TECHNICAL_RECOVERY_ARCHIVE_INTEGRITY_FAILED") from exc
+    if current.get("status") == "technically_recovered":
+        return {"recipe": recipe, "status": "technically_recovered", "new_issue": False}
     current["status"] = "technically_recovered"
     current["fixed_artifact_sha256"] = artifact_hash
     current["correction_evidence"] = "Recipe QA passed and package integrity verified"

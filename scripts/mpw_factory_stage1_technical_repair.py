@@ -172,7 +172,7 @@ def run(root=ROOT,max_new=43):
     descriptor=os.open(str(lock),os.O_RDWR|os.O_CREAT|getattr(os,"O_NOFOLLOW",0),0o600)
     try:
         fcntl.flock(descriptor,fcntl.LOCK_EX)
-        repaired=checked=blocked=already=missing=native_new=native_existing=0
+        repaired=checked=blocked=already=missing=native_new=native_existing=attempted=0
         rows=[]
         for p,row in entries:
             filename=p.name
@@ -183,7 +183,11 @@ def run(root=ROOT,max_new=43):
                 if isinstance(product,str) and isinstance(version,str) and courier.RECIPE.fullmatch(product) and courier.SHA.fullmatch(version):
                     expected=root/"customer-packs"/product/version/"customer-package.zip"
                     candidate=not expected.exists()
-            allowed=candidate and repaired+native_new+blocked<max_new
+            # Count genuine package attempts, not unrelated invalid/blocked returns.
+            # Otherwise an early bad receipt can exhaust the budget for healthy stock.
+            allowed=candidate and attempted<max_new
+            if allowed:
+                attempted+=1
             result=once(root,courier,packager,native,filename,row,allowed)
             if result["technical_zip_integrity_passed"]:checked+=1
             if result["new_customer_bundle_rebuilt"]:repaired+=1
@@ -210,6 +214,7 @@ def run(root=ROOT,max_new=43):
           "existing_customer_bundles_verified":already,
           "technical_package_attempts_blocked":blocked,
           "technical_package_deferred_by_budget":missing,
+          "technical_package_attempts_consumed":attempted,
           "independent_content_rights_review_still_required":len(entries),
           "source_product_rebuilds_verified":0,
           "commercially_approved_returns":0,

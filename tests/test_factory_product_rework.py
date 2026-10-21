@@ -143,6 +143,26 @@ class FactoryDefectLoopTests(unittest.TestCase):
             repair.record_failure(self.output, "../danger", "any failure", "src")
         self.assertFalse((self.output / "qa-rework").exists())
 
+    def test_recovery_requires_real_archive_and_current_recipe_version(self):
+        recipe = "farm_enterprise_economics"
+        cycle.run_cycle(self.db, self.output, self.recipes)
+        manifest_path = self.output / "digital-products" / recipe / "manufacturing_manifest.json"
+        archive = self.output / "digital-products" / recipe / (recipe + "-internal-qa.zip")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        repair.record_failure(self.output, recipe, "PRODUCT_QA_FAILED: simulated", "source")
+        with self.assertRaisesRegex(RuntimeError, "ARCHIVE_MISSING"):
+            repair.record_technical_recovery(self.output, recipe, manifest,
+                source_digest=manifest["source_sha256"])
+        with self.assertRaisesRegex(RuntimeError, "SOURCE_REVISION_UNVERIFIED"):
+            repair.record_technical_recovery(self.output, recipe, manifest,
+                archive_path=archive, source_digest="0" * 64)
+        assert self._ledger(recipe)["current_status"] == "needs_rework"
+        with self.assertRaisesRegex(RuntimeError, "ARCHIVE_SHA_MISMATCH"):
+            archive.write_bytes(b"invalid-replaced-bytes")
+            repair.record_technical_recovery(self.output, recipe, manifest,
+                archive_path=archive, source_digest=manifest["source_sha256"])
+        self.assertEqual(self._ledger(recipe)["current_status"], "needs_rework")
+
     def test_pass_not_claimed_without_real_sha(self):
         repair.record_failure(self.output, "farm_enterprise_economics",
                               "PRODUCT_QA_FAILED: sample", "sha")
