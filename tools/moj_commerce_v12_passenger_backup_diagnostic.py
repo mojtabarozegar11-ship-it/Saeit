@@ -48,7 +48,7 @@ def passenger():
             text = ht.read_text('utf8', errors='replace')
             report['passenger_htaccess_present'] = True
             report['htaccess_passenger_directives'] = bool(re.search(
-                r'(?im)^\\s*Passenger(?:Enabled|AppRoot|Python|StartupFile|BaseURI)\\b', text))
+                r'(?im)^\s*Passenger(?:Enabled|AppRoot|Python|StartupFile|BaseURI)\b', text))
     except OSError:
         pass
     candidates = [DOC / 'passenger_wsgi.py', APP / 'passenger_wsgi.py',
