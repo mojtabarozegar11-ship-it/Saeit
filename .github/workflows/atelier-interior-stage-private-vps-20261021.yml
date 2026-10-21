@@ -1,0 +1,60 @@
+name: Atelier Interior owner-approved private VPS product stock from immutable demo bytes
+on:
+  pull_request:
+    paths:
+      - "scripts/atelier_interior_stage_private_vps_20261021.py"
+      - ".github/workflows/atelier-interior-stage-private-vps-20261021.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/atelier_interior_stage_private_vps_20261021.py"
+      - ".github/workflows/atelier-interior-stage-private-vps-20261021.yml"
+permissions: {contents: read}
+concurrency:
+  group: atelier-private-original-kit-onepass
+  cancel-in-progress: false
+jobs:
+  synthetic:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Prove original homepage hash and reject modified kit member
+        run: python3 -B scripts/atelier_interior_stage_private_vps_20261021.py selftest
+  private_stock:
+    if: |
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      startsWith(github.event.head_commit.message, '[approved-atelier-private-stock-20261021]') &&
+      github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    needs: synthetic
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish exact VPS identity and pinned SSH without logging keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/atelier-vps-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          chmod 600 "$d/vps.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'ATELIER_VPS_IDENTITY_PINNED=PASS\n'
+      - name: Build private original-member ZIP in VPS factory under QA hold
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/atelier-vps-ssh"
+          timeout 240s ssh -T -i "$d/vps.key" -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -o ForwardAgent=no -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 \
+            "python3 - stage" < scripts/atelier_interior_stage_private_vps_20261021.py
+      - name: Erase ephemeral runner SSH identity
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/atelier-vps-ssh"
