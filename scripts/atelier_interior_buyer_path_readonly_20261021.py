@@ -93,7 +93,7 @@ from django.conf import settings
 from mpw_commerce import product_checkout_page as pc_module
 suffixes=approved_for_checkout.__globals__["_private_file"].__globals__.get("ACCEPTED_SUFFIXES",())
 root=getattr(settings,"MPW_COMMERCE_PRIVATE_ASSET_ROOT",None)
-print("ATELIER_COMMERCE_SUFFIX_ROOT="+json.dumps({"suffixes":sorted(str(z) for z in suffixes),"root_configured":isinstance(root,str) and root.startswith("/"),"root_exists":isinstance(root,str) and Path(root).is_dir(),"zip_supported":".zip" in pc_module.ACCEPTED_SUFFIXES}))
+print("ATELIER_COMMERCE_SUFFIX_ROOT="+json.dumps({"suffixes":sorted(str(z) for z in suffixes),"root_configured":isinstance(root,str) and root.startswith("/"),"root_exists":isinstance(root,str) and Path(root).is_dir(),"zip_supported":".zip" in suffixes}))
 KnowledgeArticle=Product._meta.get_field("knowledge_article").remote_field.model
 print("ATELIER_ARTICLE_MODEL_FIELDS="+json.dumps([f.name for f in KnowledgeArticle._meta.fields]))
 print("ATELIER_PREVIOUS_PRODUCT_INVENTORY="+json.dumps([{"id":q.pk,"type":q.product_type,"article":q.knowledge_article_id is not None,"approved":all(q.metadata.get(k) is True for k in pc_module.APPROVAL_FLAGS),"price":str(q.price)} for q in Product.objects.filter(pk__in=[72,225,879])]))
