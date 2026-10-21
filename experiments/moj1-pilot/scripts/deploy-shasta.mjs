@@ -5,6 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {isAbsolute} from 'node:path';
 import {createHash} from 'node:crypto';
 import {openDeploymentJournal} from './deployment-journal.mjs';
+import {fingerprintRawTransaction, normalizedTronAddress, reconcileDeployment} from './deployment-reconciler.mjs';
 
 if (process.env.MOJ1_DEPLOY_CONFIRM !== 'SHASTA_ONLY') {
   throw new Error('Deployment requires MOJ1_DEPLOY_CONFIRM=SHASTA_ONLY');
@@ -56,37 +57,88 @@ async function confirmCode(address, name) {
 }
 
 async function deployOnce(name) {
+  const pending = journal.pending(name);
+  if (pending) {
+    const reconciliation = await reconcileDeployment(journal, name, tronWeb);
+    if (reconciliation.status === 'VERIFIED') {
+      return tronWeb.address.fromHex(reconciliation.address);
+    }
+    throw new Error('Existing Shasta broadcast remains uncertain for ' + name +
+      ' (txID ' + (pending.txID ?? 'UNKNOWN_LEGACY') + '): DO NOT REDEPLOY');
+  }
   const prior = journal.verifiedAddress(name);
   if (prior) {
     await confirmCode(prior, name);
-    return prior; // Reuses confirmed contracts, never rebroadcasts.
+    return tronWeb.address.fromHex(normalizedTronAddress(prior, tronWeb));
   }
-  // Persist the ambiguity marker BEFORE starting a possibly irreversible broadcast.
-  await journal.markBroadcastUncertain(name);
-  const contract = await tronWeb.contract().new({
+
+  // Build, sign and obtain the deterministic txID and contract address BEFORE
+  // writing the intent. No network broadcast occurs in these two steps.
+  const constructorABI = artifacts[name].abi.find(item => item.type === 'constructor');
+  if (constructorABI?.inputs?.length !== 1 ||
+      constructorABI.inputs[0].type !== 'address') {
+    throw new Error('Unexpected constructor; refusing to create ' + name);
+  }
+  const unsigned = await tronWeb.transactionBuilder.createSmartContract({
     abi: artifacts[name].abi,
-    bytecode: artifacts[name].bytecode,
-    parameters: [governance],
+    bytecode: artifacts[name].bytecode.replace(/^0x/, ''),
+    name,
     feeLimit: 1_000_000_000,
-    callValue: 0
+    callValue: 0,
+    userFeePercentage: 100,
+    originEnergyLimit: 10_000_000,
+    funcABIV2: constructorABI,
+    parametersV2: [governance]
+  }, tronWeb.defaultAddress.base58);
+  const signed = await tronWeb.trx.sign(unsigned);
+  if (!signed?.signature?.length ||
+      !/^[a-f0-9]{64}$/i.test(signed.txID ?? '') ||
+      signed.txID.toLowerCase() !== unsigned.txID?.toLowerCase() ||
+      !unsigned.contract_address || signed.raw_data_hex !== unsigned.raw_data_hex) {
+    throw new Error('Unsigned or inconsistent Shasta contract creation; refusing broadcast');
+  }
+  if (typeof signed.raw_data?.expiration !== 'number' ||
+      signed.raw_data.expiration <= Date.now()) {
+    throw new Error('Pre-signed deployment transaction expired before journaling');
+  }
+  const expectedAddress = normalizedTronAddress(unsigned.contract_address, tronWeb);
+  // Any process or I/O failure here MUST abort before sending. The journal
+  // stores hashes and IDs only — NEVER the key, signature, or signed payload.
+  await journal.markBroadcastUncertain(name, {
+    txID: signed.txID,
+    rawDataSha256: fingerprintRawTransaction(signed.raw_data_hex),
+    expectedAddress
   });
-  const address = tronWeb.address.fromHex(contract.address);
-  let found = false;
+
+  // Exactly one attempt with exactly this signed txID. Even an RPC error or
+  // rejection remains ambiguous: we never create or transmit a replacement.
+  let response;
+  try {
+    response = await tronWeb.trx.sendRawTransaction(signed);
+  } catch (error) {
+    throw new Error('Shasta broadcast outcome unknown for ' + name +
+      ' txID ' + signed.txID + ': DO NOT REDEPLOY (' + error.message + ')');
+  }
+  if (!response?.result && response?.code !== 'DUP_TRANSACTION_ERROR') {
+    throw new Error('Shasta node did not confirm acceptance of ' + signed.txID +
+      ': DO NOT REDEPLOY; read-only reconciliation required');
+  }
+
   for (let attempt = 0; attempt < 20; attempt++) {
     try {
-      await confirmCode(address, name);
-      found = true;
-      break;
-    } catch {
-      // Shasta may not have indexed the deployment yet. Do NOT issue another deployment.
+      const result = await reconcileDeployment(journal, name, tronWeb);
+      if (result.status === 'VERIFIED') return tronWeb.address.fromHex(result.address);
+    } catch (error) {
+      // An attestation mismatch or a confirmed failure must not be retried.
+      if (/CHAIN_ATTESTATION_MISMATCH|CHAIN_EXECUTION_FAILED|CHAIN_CODE_NOT_VERIFIED/.test(error.message)) {
+        throw error;
+      }
+      // Transient RPC errors must also never cause a second broadcast.
     }
     await new Promise(resolve => setTimeout(resolve, 3000));
   }
-  if (!found) {
-    throw new Error(`Deployment uncertain for ${name}. Do not retry: reconcile journal and Shasta transaction externally.`);
-  }
-  await journal.markVerified(name, address);
-  return address;
+  throw new Error('Shasta deployment unresolved for ' + name +
+    ' txID ' + signed.txID + ': DO NOT REDEPLOY; run read-only reconciliation');
 }
 
 try {
