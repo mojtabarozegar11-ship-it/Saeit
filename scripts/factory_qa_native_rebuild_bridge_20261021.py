@@ -288,14 +288,17 @@ def reauthor_document_delivery(root,recipe,order,maker):
         if not entries or not any(ext in {".txt",".md",".pdf",".docx",".epub"}
                                   for _,ext,_ in entries):
             return "no_supported_document_content"
-        if len(entries)>80:
+        # A real book may contain hundreds of legitimate chapters, images
+        # and annexes. Bound by total bytes and 500 assets rather than
+        # permanently rejecting valid multi-file document publications.
+        if len(entries)>500:
             return "document_asset_count_over_limit"
         source_stage=Path(tempfile.mkdtemp(prefix=".document-edition-",dir=str(source_parent)))
         try:
             # Every original path is replaced by a safe generated flat filename.
             assets=source_stage/"assets"
             assets.mkdir(mode=0o700)
-            verified=[];nav=[];previews=[]
+            verified=[];nav=[];previews=[];preview_bytes=0
             for index,(original,ext,payload) in enumerate(entries,1):
                 safe="file_%03d%s"%(index,ext)
                 target=assets/safe
@@ -309,10 +312,17 @@ def reauthor_document_delivery(root,recipe,order,maker):
                                  "display_name":label})
                 nav.append('<li><a href="assets/%s" download>%s</a> <small>(%s)</small></li>'%
                            (safe,html_escape(label,quote=True),html_escape(ext)))
-                if ext in TEXT and len(payload)<=200000:
+                if ext in TEXT and len(payload)<=200000 and preview_bytes+len(payload)<=1_000_000:
                     content=payload.decode("utf8","replace")
                     previews.append('<section aria-label="Text preview"><h2>%s</h2><pre>%s</pre></section>'%
                         (html_escape(label,quote=True),html_escape(content)))
+                    preview_bytes+=len(payload)
+            # Collapsible groups keep even 500-asset catalogs keyboard- and
+            # screen-reader navigable without JavaScript or external services.
+            nav_groups=[]
+            for offset in range(0,len(nav),50):
+                nav_groups.append("<details><summary>Files %d-%d</summary><ul>%s</ul></details>"%(
+                    offset+1,min(len(nav),offset+50),"".join(nav[offset:offset+50])))
             title=recipe.replace("_"," ").title()
             html='''<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -329,7 +339,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#1c2933;padding:1rem}
 %s
 <footer>Local files only. No claims of professional approval or commercial release.</footer>
 </main></body></html>'''%(html_escape(title),html_escape(title),
-                           "".join(nav),"".join(previews))
+                           "".join(nav_groups),"".join(previews))
             edition={
                 "schema":"saeit.factory.private-document-edition.v1",
                 "original_recipe":recipe,"original_artifact_sha256":expected,
@@ -338,6 +348,8 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#1c2933;padding:1rem}
                 "source_restored_from_original":False,
                 "input_files_executed":False,
                 "new_technical_source_created":True,
+                "offline_preview_bytes":preview_bytes,
+                "navigation_page_group_size":50,
                 "independent_scientific_or_rights_review_verified":False,
                 "commercial_release_authorized":False}
             (source_stage/"index.html").write_text(html,encoding="utf8")
