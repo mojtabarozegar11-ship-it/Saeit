@@ -65,8 +65,43 @@ jobs:
               print("NPM_CACHE_SKIPPED=active_build",flush=True)
           elif not p.is_dir() or p.is_symlink() or p.parent.is_symlink() or p.resolve()!=h.resolve()/".npm"/"_cacache" or p.stat().st_dev!=h.stat().st_dev:
               print("NPM_CACHE_SKIPPED=path_guard",flush=True)
-          elif not shutil.which("npm"):
-              print("NPM_CACHE_SKIPPED=unable_to_validate_npm_config",flush=True)
+          elif not any(shutil.which(name) for name in ("npm","npx","node","yarn","pnpm")):
+              # Conservative fallback only when no Node package-manager/runtime binary exists.
+              roots=(h/"factory-runtime"/"operations",h/"factory-runtime"/"django-app")
+              skip={".git",".venv","node_modules","media","staticfiles","var","backups","private",".cache",".npm"}
+              extensions={".sh",".py",".js",".json",".yaml",".yml",".toml",".cfg",".ini"}
+              checked=0;bytes_read=0;references=0;incomplete=False
+              for root in roots:
+                  if not root.is_dir() or root.is_symlink():incomplete=True;break
+                  for base,dirs,files in os.walk(root,followlinks=False):
+                      dirs[:]=[d for d in dirs if d not in skip and not (Path(base)/d).is_symlink()]
+                      for name in files:
+                          file=Path(base)/name
+                          if file.suffix not in extensions or file.is_symlink() or not file.is_file():continue
+                          size=file.stat().st_size
+                          if size>1024*1024:continue
+                          checked+=1;bytes_read+=size
+                          if checked>12000 or bytes_read>80*1024*1024:
+                              incomplete=True;break
+                          if any(marker in file.read_bytes().lower() for marker in (b"_cacache",b"npm_config_cache",b".npm/")):
+                              references+=1
+                      if incomplete:break
+                  if incomplete:break
+              print("NPM_DEPENDENCY_SOURCE_FILES_CHECKED="+str(checked),flush=True)
+              print("NPM_EXPLICIT_CACHE_REFS="+str(references),flush=True)
+              if incomplete or references:
+                  print("NPM_CACHE_SKIPPED=source_dependency_not_ruled_out",flush=True)
+              else:
+                  assert all(not q.is_symlink() for q in p.rglob("*"))
+                  r=subprocess.run(["du","-sk","--",str(p)],capture_output=True,text=True,timeout=75,check=True)
+                  kb=int(r.stdout.split()[0])
+                  assert 1<=kb<=400000
+                  if ps_active():
+                      print("NPM_CACHE_SKIPPED=build_started",flush=True)
+                  else:
+                      shutil.rmtree(p)
+                      assert not p.exists()
+                      print("NPM_CACACHE_DELETED_KB="+str(kb),flush=True)
           else:
               def config(k):
                   r=subprocess.run(["npm","config","get",k],capture_output=True,text=True,timeout=10,check=True)
