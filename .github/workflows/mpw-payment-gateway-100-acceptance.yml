@@ -1,0 +1,47 @@
+name: MojPlayWin payment gateway ONLY 100-of-100 owner acceptance
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/mpw-payment-gateway-100-acceptance-20261021.md
+      - scripts/mpw_payment_100_acceptance.py
+      - .github/workflows/mpw-payment-gateway-100-acceptance.yml
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  contract-test:
+    name: Contract integrity test (NOT real gateway acceptance)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify script and impossible-to-waive critical 10-of-10 checks
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_payment_100_acceptance.py
+          python3 scripts/mpw_payment_100_acceptance.py --selftest
+  acceptance:
+    name: Production acceptance 100/100 (BLOCKED until privately evidenced)
+    needs: contract-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      MPW_PAYMENT_100_ATTESTATION_KEY: ${{ secrets.MPW_PAYMENT_100_ATTESTATION_KEY }}
+      PRIVATE_MANIFEST_B64: ${{ secrets.MPW_PAYMENT_100_PRIVATE_EVIDENCE_B64 }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Require private independent verification, not mock tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          if [ -z "${MPW_PAYMENT_100_ATTESTATION_KEY:-}" ] || [ -z "${PRIVATE_MANIFEST_B64:-}" ]; then
+            echo 'MPW_PRODUCTION_PAYMENT_ACCEPTANCE=BLOCKED; evidence or trusted signing key not configured.'
+            exit 2
+          fi
+          manifest="$RUNNER_TEMP/mpw-payment-acceptance-private.json"
+          trap 'rm -f "$manifest"' EXIT
+          printf '%s' "$PRIVATE_MANIFEST_B64" | base64 --decode > "$manifest"
+          python3 scripts/mpw_payment_100_acceptance.py --evidence "$manifest"
