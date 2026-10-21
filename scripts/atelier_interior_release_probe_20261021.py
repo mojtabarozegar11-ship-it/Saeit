@@ -162,14 +162,20 @@ def main():
                     and cfg.get("fulfillment") == "digital"
                 )
                 try:
-                    from mpw_commerce.fulfillment import _private_file
-                    from types import SimpleNamespace
-                    p = _private_file(SimpleNamespace(product=product))
-                    if isinstance(p, Path) and p.is_file() and not p.is_symlink():
-                        checks["exact_private_download_resolves"] = (
-                            hashlib.sha256(p.read_bytes()).hexdigest() == SHA256
-                        )
-                except (ImportError, ValueError, OSError, TypeError, AttributeError):
+                    from core.cryptopay_checkout import product_delivery_ready
+                    from django.urls import reverse
+                    expected = ROOT / ".private_mojplaywin_digital_products" / ARCHIVE_NAME
+                    configured = cfg.get("private_file") if isinstance(cfg, dict) else None
+                    metadata_file = meta.get("private_file")
+                    route = reverse("mpw_commerce:download", kwargs={"item_id": 1})
+                    checks["exact_private_download_resolves"] = bool(
+                        exact_archive and expected.is_file()
+                        and not expected.is_symlink()
+                        and (configured == str(expected) or metadata_file == str(expected))
+                        and route.startswith("/")
+                        and product_delivery_ready(product)
+                    )
+                except (ImportError, ValueError, OSError, TypeError, AttributeError, KeyError):
                     pass
                 try:
                     route = resolve("/store/product/{}/checkout/".format(product.pk))
