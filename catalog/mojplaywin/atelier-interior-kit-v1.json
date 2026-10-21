@@ -7,8 +7,8 @@
   "status": "preview_only",
   "demo_url": "https://atelier-interior-kit-demo.mojtaba-rozegar11.chatgpt.site/",
   "preview_image_url": "https://atelier-interior-kit-demo.mojtaba-rozegar11.chatgpt.site/assets/hero.jpg",
-  "private_download_archive": "atelier-interior-kit-v1.zip",
-  "private_download_sha256": "f17eb13a5e546c5ca9974885b30b6d8b5bc44ecf5474edf75b544f8f7d254d3d",
+  "private_download_archive": "atelier-interior-kit-v1-repacked.zip",
+  "private_download_sha256": "98bffad4ccf36f84c7924ca77e4a8b473b42f33a8fce4d85cefe2367afc097aa",
   "price": null,
   "checkout_enabled": false,
   "paid_delivery_enabled": false,
@@ -22,10 +22,12 @@
   ],
   "evidence": {
     "demo_http": "200_verified_2026-10-21",
-    "archive_integrity": "local_unzip_integrity_passed_2026-10-21",
+    "archive_integrity": "11_source_members_exact_verified_and_repacked_on_VPS_2026-10-21",
     "browser_qa": "manual_demo_review_2026-10-21",
     "payment_checkout": "not_tested",
-    "customer_download": "not_tested"
+    "customer_download": "not_tested",
+    "private_vps_stock": "sha256_verified_run_39635728938",
+    "private_cpanel_stock": "sha256_verified_run_39636226435_all_7_site_routes_unchanged"
   },
   "commercial_release_requirements": [
     "Owner-approved price and currency",
@@ -77,5 +79,7 @@
     "promotion_start": null,
     "promotion_end": null,
     "promotion_note": "Promotion duration and genuine prior/base price presentation must be confirmed before enabling public discounted checkout."
-  }
+  },
+  "original_local_archive_sha256": "f17eb13a5e546c5ca9974885b30b6d8b5bc44ecf5474edf75b544f8f7d254d3d",
+  "private_stock_status": "vps_and_cpanel_private_qa_hold"
 }
