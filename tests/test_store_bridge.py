@@ -63,7 +63,7 @@ class BridgeTests(unittest.TestCase):
         response = mock.Mock(returncode=1, stdout="",
                              stderr="STORE_RECEIVER_SAFE_REASON=UNSAFE_ARCHIVE_MEMBER\n"
                                     "authorization_token=do-not-print\n")
-        with mock.patch.object(sender.subprocess, "run", return_value=response), \\
+        with mock.patch.object(sender.subprocess, "run", return_value=response), \
              mock.patch("sys.stderr", new_callable=io.StringIO) as stream:
             with self.assertRaisesRegex(RuntimeError,
                                         "PRIVATE_DELIVERY_FINALIZE_RC_1"):
