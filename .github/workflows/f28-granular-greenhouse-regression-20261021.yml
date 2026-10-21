@@ -1,0 +1,122 @@
+name: F28 granular greenhouse resource-model technical regression (no release)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - product_recipes/greenhouse_crop_margin/calculator.py
+      - product_recipes/greenhouse_crop_margin/test_calculator.py
+      - product_recipes/greenhouse_crop_margin/README.md
+      - .github/workflows/f28-granular-greenhouse-regression-20261021.yml
+  push:
+    branches: [main]
+    paths:
+      - product_recipes/greenhouse_crop_margin/calculator.py
+      - product_recipes/greenhouse_crop_margin/test_calculator.py
+      - product_recipes/greenhouse_crop_margin/README.md
+      - .github/workflows/f28-granular-greenhouse-regression-20261021.yml
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  technical-model-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify greenhouse model syntax and deterministic user-supplied scenario tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile product_recipes/greenhouse_crop_margin/calculator.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s product_recipes/greenhouse_crop_margin -p test_calculator.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          module=Path("product_recipes/greenhouse_crop_margin/calculator.py").read_text()
+          assert '"market_data_independently_validated": False' in module
+          assert '"uncertainty_inputs_market_calibrated": False' in module
+          assert "variable_cost_per_m2 to prevent cost double counting" in module
+          print("F28_EXPLICIT_COST_DRIVER_REGRESSION=PASS")
+          print("F28_INDEPENDENT_DOMAIN_APPROVAL=NOT_GRANTED")
+          print("F28_PUBLIC_RELEASE=BLOCKED_PENDING_REVIEW")
+          PY
+
+  stage-private-vps:
+    needs: technical-model-only
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify pinned VPS identity
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/f28-private"
+          install -d -m 700 "$d"
+          test -n "$VPS_KEY"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          echo F28_VPS_HOST_PIN_VERIFIED=PASS
+      - name: Install immutable private-only F28 candidate and verify genuine server tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/f28-private"
+          opts=(-i "$d/key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          host="githubops@178.239.147.150"
+          stage="/home/githubops/factory-runtime/operations/f28-granular-candidates/$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh -T "${opts[@]}" "$host" "set -eu; umask 077; mkdir -p /home/githubops/factory-runtime/operations/f28-granular-candidates; test ! -e '$stage'; mkdir -m 700 '$stage'"
+          for file in calculator.py test_calculator.py README.md; do
+            source="product_recipes/greenhouse_crop_margin/$file"
+            scp -q "${opts[@]}" "$source" "$host:$stage/$file"
+            want="$(sha256sum "$source" | cut -d' ' -f1)"
+            got="$(ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$file' | cut -d' ' -f1")"
+            test "$want" = "$got"
+          done
+          timeout 120s ssh -T "${opts[@]}" "$host" "bash -se -- '$stage' '$GITHUB_SHA'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          folder="$1"
+          revision="$2"
+          python="$HOME/factory-runtime/.venv/bin/python"
+          test -d "$folder" && test ! -L "$folder" && test -x "$python"
+          PYTHONDONTWRITEBYTECODE=1 "$python" -B -m unittest discover -s "$folder" -p test_calculator.py -v
+          "$python" -B - "$folder" "$revision" <<'PY'
+          import hashlib,json,os,sys
+          from pathlib import Path
+          root=Path(sys.argv[1])
+          outputs={name:hashlib.sha256((root/name).read_bytes()).hexdigest()
+                   for name in ("calculator.py","test_calculator.py","README.md")}
+          manifest={"schema":"saeit.factory.f28-granular-private-candidate.v1",
+                    "source_commit":sys.argv[2],"sha256":outputs,
+                    "on_vps_technical_tests_passed":True,
+                    "independent_agronomic_or_market_evidence_verified":False,
+                    "commercially_approved":False,"publicly_published":False,
+                    "payment_modified":False,"customer_orders_created":0}
+          target=root/"private_candidate_receipt.json"
+          with target.open("x",encoding="utf8") as out:
+              json.dump(manifest,out,sort_keys=True,indent=2);out.write("\n")
+          os.chmod(target,0o600)
+          assert json.loads(target.read_text())==manifest
+          print("F28_VPS_PRIVATE_CANDIDATE_SHA256_VERIFIED=3")
+          print("F28_VPS_PRIVATE_CANDIDATE_TESTS=PASS")
+          print("F28_COMMERCIAL_RELEASE=BLOCKED_INDEPENDENT_REVIEW_PENDING")
+          PY
+          REMOTE
+      - name: Remove ephemeral SSH credentials
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/f28-private"
