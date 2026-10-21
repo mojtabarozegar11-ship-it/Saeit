@@ -111,17 +111,25 @@ jobs:
           install -d -m 700 "$ops/backups" "$backup"
           files=(factory_product_rework.py factory_vps_product_cycle.py factory_store_sender.py)
           for file in "${files[@]}"; do
-            test -f "$target/$file" && test ! -L "$target/$file"
             test -f "$stage/$file" && test ! -L "$stage/$file"
-            cp -p -- "$target/$file" "$backup/$file"
-            test "$(sha256sum "$target/$file" | cut -d' ' -f1)" = "$(sha256sum "$backup/$file" | cut -d' ' -f1)"
+            if test -e "$target/$file" || test -L "$target/$file"; then
+              test -f "$target/$file" && test ! -L "$target/$file"
+              cp -p -- "$target/$file" "$backup/$file"
+              test "$(sha256sum "$target/$file" | cut -d\x27 \x27 -f1)" = "$(sha256sum "$backup/$file" | cut -d\x27 \x27 -f1)"
+            else
+              : > "$backup/$file.absent"
+            fi
           done
           install_started=0
           rollback() {
             rc=$?
             if [ "$rc" -ne 0 ] && [ "$install_started" -eq 1 ]; then
               for file in "${files[@]}"; do
-                cp -p -- "$backup/$file" "$target/$file"
+                if test -f "$backup/$file.absent"; then
+                  rm -f -- "$target/$file"
+                else
+                  cp -p -- "$backup/$file" "$target/$file"
+                fi
               done
               echo FACTORY_P0_PRIVATE_MODULE_ROLLBACK=RESTORED
             fi
