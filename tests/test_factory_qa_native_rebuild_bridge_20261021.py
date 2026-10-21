@@ -470,6 +470,25 @@ class RealPrivateDocumentEditionTests(unittest.TestCase):
                             /new_id/"metadata.json").read_text())
         self.assertEqual(len(edition["assets"]),81)
 
+    def test_unreceipted_interrupted_edition_rebuilds_from_bound_archive(self):
+        self.bind({"bundle/guide.txt":b"legitimate document"})
+        code="edition_"+self.artifact_hash[:24]
+        orphan=self.root/"quality-excellence/document-edition-sources"/code
+        orphan.mkdir(parents=True)
+        (orphan/"metadata.json").write_text(json.dumps({
+            "schema":"saeit.factory.private-document-edition.v1",
+            "original_recipe":self.recipe,
+            "original_artifact_sha256":self.artifact_hash,
+            "new_recipe":code,
+            "new_technical_source_created":True}))
+        (orphan/"index.html").write_text("interrupted prior attempt")
+        result=m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker)
+        self.assertEqual(result,"private_document_edition_built")
+        receipt=self.root/"quality-excellence/document-edition-receipts"/(code+".json")
+        self.assertTrue(receipt.is_file())
+        self.assertEqual(json.loads(receipt.read_text())["source_customer_archive_sha256"],
+                         self.artifact_hash)
+
     def test_unbound_and_tampered_archives_never_get_new_product(self):
         self.bind({"bundle/file.txt":b"legitimate doc"})
         self.order["source_quality_receipt_sha256"]="0"*64
