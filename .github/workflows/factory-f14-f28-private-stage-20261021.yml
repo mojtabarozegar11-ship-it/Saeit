@@ -1,0 +1,83 @@
+name: Stage two original products to PRIVATE VPS factory only
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/factory-f14-f28-private-stage-20261021.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-real-products-f14-f28-private-handoff
+  cancel-in-progress: false
+jobs:
+  stage-private:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: ops
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: pilot_f14
+          ref: fab699b275f04ce69912c56e7d0a881ef9ee2d8d
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: pilot_f28
+          ref: 458052d5663102f0cc896047e1cad171bb80ef24
+      - name: Execute product-specific tests and inspect private-only exporter
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile ops/scripts/factory_f14_f28_private_handoff_20261021.py
+          python3 -B -m unittest discover -s pilot_f14/tests -p test_rootline_game_pilot.py -v
+          python3 -B -m unittest discover -s pilot_f28/tests -p test_greenhouse_margin_lab_pilot.py -v
+          node --check pilot_f14/product_recipes/rootline_bloom_defense/engine.js
+          node --check pilot_f14/product_recipes/rootline_bloom_defense/game.js
+          echo TWO_GENUINE_PRODUCT_SOURCE_TESTS=PASS
+      - name: Create bounded manifest and exact-hash original product files
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 -B ops/scripts/factory_f14_f28_private_handoff_20261021.py build \
+            --f14 pilot_f14 --f28 pilot_f28 \
+            --archive "$RUNNER_TEMP/f14f28-private-handoff.tar.gz"
+          test "$(stat -c%s "$RUNNER_TEMP/f14f28-private-handoff.tar.gz")" -lt 2000000
+          echo F14_F28_PACKAGE_BYTES="$(stat -c%s "$RUNNER_TEMP/f14f28-private-handoff.tar.gz")"
+      - name: Copy to nonpublic VPS and independently verify all files and receipt
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/f14-f28-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3)
+          stage="/home/githubops/factory-runtime/operations/.f14f28-handoff-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; test \"\$(id -un)\" = githubops; umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'; test -s '/home/githubops/factory-runtime/private/autonomous-product-cycle/production-warehouse/stock-register.json'"
+          scp -q "${opts[@]}" "$RUNNER_TEMP/f14f28-private-handoff.tar.gz" githubops@178.239.147.150:"$stage/bundle.tar.gz"
+          scp -q "${opts[@]}" ops/scripts/factory_f14_f28_private_handoff_20261021.py githubops@178.239.147.150:"$stage/verify.py"
+          wanted="$(sha256sum "$RUNNER_TEMP/f14f28-private-handoff.tar.gz" | awk '{print $1}')"
+          ssh -T "${opts[@]}" githubops@178.239.147.150 \
+            python3 -B "$stage/verify.py" verify \
+            --archive "$stage/bundle.tar.gz" \
+            --expected-sha "$wanted" \
+            --private-root "/home/githubops/factory-runtime/private/autonomous-product-cycle"
+          echo FACTORY_F14_F28_PRIVATE_VPS_READBACK=PASS
+          echo FACTORY_F14_F28_PUBLIC_SITE_UPLOAD=NONE
+          echo FACTORY_F14_F28_NEW_PAYMENTS=NONE
+          ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; test -f '$stage/bundle.tar.gz'; rm -f -- '$stage/bundle.tar.gz' '$stage/verify.py'; rmdir -- '$stage'"
