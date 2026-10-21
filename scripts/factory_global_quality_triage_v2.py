@@ -134,6 +134,8 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
                     "actual_sha256":existing_hash,
                     "technical_qa_status":doc.get("qa_status"),
                     "quality_1000_scorecard":card,
+                    "quality_group_count":100,
+                    "quality_points_per_group":10,
                     "required_quality_points":1000,
                     "quality_points_verified":None,
                     "documentary_evidence_points":card["documentary_evidence_points"],
@@ -177,7 +179,9 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
         "technical_passed":sum(x.get("technical_qa_status")=="passed" for x in records),
         "quality_certified":0,"public_release_authorized":False,
         "required_quality_points":1000,
-        "quality_score_units":"100_independent_criteria_x_10",
+        "quality_group_count":100,
+        "quality_points_per_group":10,
+        "quality_score_units":"100_independent_groups_x_10",
         "actual_quality_verified_product_count":0,
         "documentary_evidence_points_sum":sum(x.get("documentary_evidence_points",0) for x in records),
         "status_counts":dict(sorted(statuses.items())),
@@ -200,6 +204,8 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
     print("FACTORY_TECHNICAL_PASS_NOT_PREMIUM="+str(summary["technical_passed"]))
     print("FACTORY_REAL_REWORK_CLASSIFICATION="+json.dumps(dict(statuses),sort_keys=True))
     print("FACTORY_TOP_STOP_SHIP_DEFECTS="+json.dumps(defects.most_common(8)))
+    print("FACTORY_QUALITY_GROUP_COUNT=100")
+    print("FACTORY_QUALITY_POINTS_PER_GROUP=10")
     print("FACTORY_QUALITY_CRITERIA_COUNT=100")
     print("FACTORY_QUALITY_POINTS_PER_CRITERION=10")
     print("FACTORY_QUALITY_MINIMUM_REQUIRED=1000/1000")
