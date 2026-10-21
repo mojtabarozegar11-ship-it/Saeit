@@ -120,6 +120,31 @@ class QARebuildTests(unittest.TestCase):
         self.assertEqual(result["technical_candidates_verified"],1)
         self.assertEqual((self.root/"quality-excellence"/"recovered-verified-sources"/name/"README.md").read_bytes(),b"v2 changed")
         self.assertEqual(archive.read_bytes(),before)
+    def test_original_sha_can_verify_exact_zip_inventory_when_index_omitted(self):
+        name,original_zip=self.seed_archived_only()
+        meta=self.root/"digital-products"/name/"manufacturing_manifest.json"
+        document=json.loads(meta.read_text())
+        original_sha=document.pop("source_sha256")
+        self.assertRegex(original_sha,r"^[a-f0-9]{64}$")
+        document["source_sha256"]=original_sha
+        document.pop("files")
+        meta.write_text(json.dumps(document))
+        before=original_zip.read_bytes()
+        outcome=self.run_bridge()
+        self.assertEqual(outcome["archive_sources_recovered"],1)
+        self.assertEqual(outcome["missing_source"],0)
+        self.assertEqual(outcome["technical_candidates_verified"],1)
+        self.assertEqual(before,original_zip.read_bytes())
+        self.assertFalse(outcome["commercial_release_authorized"])
+    def test_malformed_explicit_file_index_remains_blocked(self):
+        name,_=self.seed_archived_only()
+        meta=self.root/"digital-products"/name/"manufacturing_manifest.json"
+        document=json.loads(meta.read_text())
+        document["files"]=["README.md","README.md"]
+        meta.write_text(json.dumps(document))
+        result=self.run_bridge()
+        self.assertEqual(result["archive_sources_recovered"],0)
+        self.assertEqual(result["archive_recovery_rejection_reasons"]["source_file_inventory_not_verifiable"],1)
     def test_receipt_bound_archive_without_original_source_manifest_is_rejected(self):
         name,_=self.seed_archived_only()
         original=self.root/"digital-products"/name
