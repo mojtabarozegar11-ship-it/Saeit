@@ -125,6 +125,25 @@ class BuyerCheckoutIsolationTests(TestCase):
             self.assertIsNone(status.json()['destination'])
             self.assertFalse(checkout_payload(same)['payment_enabled'])
 
+    def test_non_boolean_checkout_flag_does_not_create_or_advertise_invoice(self):
+        # Environment variable strings must not accidentally enable real-money checkout.
+        with override_settings(MOJ_COMMERCE_CHECKOUT_ENABLED='false'):
+            with self.assertRaises(CommerceUnavailable):
+                self.purchase()
+        self.assertFalse(Purchase.objects.exists())
+        order, created = self.purchase()
+        self.assertTrue(created)
+        with override_settings(MOJ_COMMERCE_CHECKOUT_ENABLED='true'):
+            self.assertFalse(checkout_payload(order)['payment_enabled'])
+            self.assertIsNone(checkout_payload(order)['destination'])
+
+    def test_non_boolean_scanner_flag_cannot_trigger_payment_processing(self):
+        self.purchase()
+        with override_settings(MOJ_COMMERCE_SCANNER_ENABLED='false'):
+            with self.assertRaises(ScanUnavailable):
+                scan_purchases_once(verifier=lambda event, purchase: {}, secret=SECRET)
+        self.assertFalse(Entitlement.objects.exists())
+
     def test_address_exhaustion_does_not_cross_merchants(self):
         self.purchase(key='checkout-'+'a'*20)
         self.purchase(key='checkout-'+'b'*20)
