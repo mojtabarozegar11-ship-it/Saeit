@@ -1,0 +1,274 @@
+/* MojPlayWin Fintech Checkout V2 — scoped by inclusion to buyer checkout + library only.
+   Visual-only upgrade: NO overrides of security, payment JS, form names or invoice amounts. */
+:root {
+  --mpwf-ink: #eaf3ff;
+  --mpwf-muted: #a9b8d0;
+  --mpwf-surface: rgba(12, 25, 47, .90);
+  --mpwf-line: rgba(161, 197, 234, .19);
+  --mpwf-aqua: #55e7d2;
+  --mpwf-blue: #7cb9ff;
+  --mpwf-gold: #efcf8e;
+}
+html { scroll-behavior: smooth; }
+body {
+  min-width: 300px;
+  color: var(--mpwf-ink);
+  background:
+    radial-gradient(circle at 16% 3%, rgba(67, 146, 234, .17), transparent 32rem),
+    radial-gradient(circle at 93% 28%, rgba(37, 210, 189, .12), transparent 29rem),
+    linear-gradient(160deg, #071121 0%, #09192f 49%, #06101e 100%);
+  -webkit-font-smoothing: antialiased;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: .13;
+  background-image: linear-gradient(rgba(209,236,255,.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(209,236,255,.07) 1px, transparent 1px);
+  background-size: 42px 42px;
+}
+main {
+  position: relative;
+  box-sizing: border-box;
+  width: min(1140px, calc(100% - 36px));
+  max-width: 1140px;
+  padding: 34px 0 74px;
+  margin: 0 auto;
+  color: var(--mpwf-ink);
+}
+main *,main *::before,main *::after { box-sizing: border-box; }
+main a { color: #8edcff; text-underline-offset: 4px; }
+main a:hover { color: #bcefff; }
+main h1 {
+  margin: 32px 0 14px;
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  line-height: 1.13;
+  letter-spacing: -.05em;
+  font-weight: 820;
+  color: #fff;
+  text-wrap: balance;
+}
+main h2 { color: #f2f7ff; font-size: clamp(1.23rem, 2.4vw, 1.65rem); letter-spacing: -.025em; }
+main p { line-height: 1.7; }
+main .muted { color: var(--mpwf-muted) !important; }
+main .price {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .7rem;
+  margin: 14px 0 30px;
+  padding: 14px 20px;
+  border-radius: 16px;
+  background: rgba(15, 39, 63, .82);
+  border: 1px solid rgba(89, 225, 206, .4);
+  box-shadow: inset 0 1px rgba(255,255,255,.06), 0 14px 45px rgba(0,0,0,.13);
+  font-size: clamp(1.15rem, 2.3vw, 1.6rem);
+  font-weight: 800;
+  color: #7af3da;
+  font-variant-numeric: tabular-nums;
+}
+#price, #regular-price { font-variant-numeric: tabular-nums; }
+#regular-price { color: #cedaec; }
+main > .panel,main > section.panel, main > div.panel {
+  min-width: 0;
+  margin: 13px 0 22px;
+}
+main .panel {
+  padding: clamp(23px, 3vw, 34px);
+  border-radius: 24px;
+  border: 1px solid var(--mpwf-line);
+  color: var(--mpwf-ink);
+  background: linear-gradient(150deg, rgba(20, 42, 72, .93), var(--mpwf-surface));
+  box-shadow: 0 22px 65px rgba(0, 0, 0, .28), inset 0 1px 0 rgba(255,255,255,.07);
+  overflow-wrap: anywhere;
+  isolation: isolate;
+}
+@supports (backdrop-filter: blur(12px)) {
+  main .panel { backdrop-filter: blur(12px); }
+}
+main form { margin: 16px 0; }
+main label { display: block; margin: 0 0 8px; font-size: .95rem; color: #d4e2f5; font-weight: 650; }
+main input,main select,main textarea {
+  width: 100%;
+  max-width: 100%;
+  min-height: 48px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(176, 201, 230, .32);
+  color: #f7fbff;
+  background: #0b1c34;
+  font: inherit;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+main input::placeholder { color: #a9b9cd; }
+main input:focus-visible,main select:focus-visible,main textarea:focus-visible {
+  outline: none;
+  border-color: var(--mpwf-aqua);
+  box-shadow: 0 0 0 4px rgba(85,231,210,.16);
+}
+main input[type=radio],main input[type=checkbox] { width: 19px; min-height: 19px; accent-color: #51e2d4; }
+main button,main a.button,main a.primary {
+  min-height: 48px;
+  border-radius: 13px;
+  font: inherit;
+  font-weight: 750;
+  letter-spacing: -.012em;
+  transition: transform .15s ease, box-shadow .2s ease, filter .2s ease;
+}
+main button { cursor: pointer; }
+main button:disabled { opacity: .5; cursor: not-allowed; filter: grayscale(.35); }
+main button:focus-visible, main a:focus-visible {
+  outline: 3px solid #92f8e2;
+  outline-offset: 3px;
+}
+main button:not(:disabled):hover, main a.button:hover, main a.primary:hover { transform: translateY(-1px); }
+main #start,main button.primary,main button[type=submit] {
+  border: 1px solid rgba(176, 255, 241, .5);
+  color: #041523;
+  background: linear-gradient(120deg, #7effdf, #72b5ff 90%);
+  padding: 13px 24px;
+  box-shadow: 0 10px 25px rgba(62,190,198,.21);
+}
+main #check {
+  color: #ebf9ff;
+  background: linear-gradient(110deg, #244878, #174f61);
+  border: 1px solid rgba(120,202,236,.48);
+  padding: 13px 22px;
+}
+main #status { color: #b6edeb; font-weight: 650; min-height: 1.4em; }
+main .alert {
+  padding: 14px 18px;
+  border-radius: 13px;
+  color: #ffe9bd;
+  border: 1px solid rgba(238,188,90,.36);
+  background: rgba(138,94,33,.16);
+  line-height: 1.7;
+}
+main #invoice { border-color: rgba(100,170,243,.34); }
+main #invoice h2::before, main #downloads h2::before {
+  display: inline-block;
+  content: "";
+  width: 10px;
+  height: 10px;
+  margin-inline-end: 10px;
+  border-radius: 50%;
+  background: #64f1cd;
+  box-shadow: 0 0 0 5px rgba(84,236,206,.11);
+}
+main #invoice a,main #downloads a {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+main #downloads { border-color: rgba(94,217,182,.34); }
+main code,main pre,main [data-transaction-id] {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  border-radius: 10px;
+  color: #bff7e7;
+  font-size: .91em;
+  font-variant-numeric: tabular-nums;
+}
+main pre { padding: 14px; background: #071a2d; overflow-x: auto; }
+main .mpwf-intro {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(24px, 4.3vw, 46px);
+  border-radius: 26px;
+  border: 1px solid rgba(139,194,239,.25);
+  background: radial-gradient(circle at 90% 25%, rgba(63,227,208,.22), transparent 30%),
+    linear-gradient(130deg, #1c3b64 0%, #0b2344 57%, #0b283e 100%);
+  box-shadow: 0 32px 70px rgba(0,0,0,.27), inset 0 1px rgba(255,255,255,.11);
+}
+main .mpwf-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 11px;
+  border-radius: 99px;
+  background: rgba(21, 47, 71, .9);
+  border: 1px solid rgba(148,211,237,.28);
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .13em;
+  color: #bdece6;
+}
+main .mpwf-eyebrow::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #74eac8; }
+main .mpwf-intro-title {
+  margin: 18px 0 10px;
+  max-width: 710px;
+  font-size: clamp(1.8rem, 4.5vw, 3rem);
+  line-height: 1.12;
+  letter-spacing: -.045em;
+  color: #fff;
+  font-weight: 790;
+}
+main .mpwf-intro-subtitle { max-width: 680px; color: #c7d9ed; line-height: 1.68; margin-bottom: 0; }
+main .mpwf-steps {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  padding: 0;
+  margin: 16px 0 10px;
+  gap: 12px;
+}
+main .mpwf-steps li {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid rgba(151,184,223,.2);
+  background: rgba(9,23,43,.67);
+  border-radius: 15px;
+  color: #d2dff1;
+}
+main .mpwf-step-num {
+  display: grid;
+  place-items: center;
+  width: 33px;
+  height: 33px;
+  flex: 0 0 33px;
+  border-radius: 11px;
+  font-size: .75rem;
+  font-weight: 850;
+  color: #05222f;
+  background: linear-gradient(135deg,#76ead5,#79b9e9);
+}
+main .mpwf-step-copy { font-size: .86rem; font-weight: 670; }
+main .mpwf-footnote {
+  border: 1px solid rgba(176, 199, 231, .15);
+  padding: 17px 20px;
+  margin: 20px 0 0;
+  border-radius: 16px;
+  color: #b4c5d6;
+  background: rgba(10,23,39,.65);
+  font-size: .87rem;
+  line-height: 1.7;
+}
+@media (min-width: 960px) {
+  body:has(.mpwf-steps) main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 22px;
+    align-items: start;
+  }
+  body:has(.mpwf-steps) main > * { grid-column: 1 / -1; }
+  body:has(.mpwf-steps) main > div.panel { grid-column: 1; }
+  body:has(.mpwf-steps) main > section#invoice { grid-column: 2; }
+}
+@media (max-width: 640px) {
+  main { width: min(100% - 24px, 1140px); padding: 18px 0 44px; }
+  main .mpwf-intro { padding: 22px 20px; border-radius: 20px; }
+  main .mpwf-steps { gap: 7px; }
+  main .mpwf-steps li { display: grid; justify-items: center; text-align: center; gap: 8px; padding: 13px 5px; }
+  main .mpwf-step-copy { font-size: .75rem; }
+  main .panel { padding: 20px 18px; border-radius: 18px; }
+  main #start, main #check { display: block; width: 100%; }
+  main h1 { font-size: clamp(1.7rem, 8vw, 2.15rem); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,*::before,*::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
