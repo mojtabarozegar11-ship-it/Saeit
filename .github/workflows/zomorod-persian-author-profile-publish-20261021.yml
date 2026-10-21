@@ -225,7 +225,8 @@ jobs:
           echo "PERSIAN_PROFILE_IMAGE_HTTP=$imgcode"
           test "$imgcode" = 200
           test "$(sha256sum "$backup/live-photo.webp" | cut -d' ' -f1)" = "482cad022c1739a464d17f0e023c69fcd6971d72bc67881f8ec24218bd2d8e41"
-          (cd "$web"; sha256sum -c --status "$backup/protected.root-htaccess.sha256" "$backup/protected.root-index.sha256")
+          (cd "$web"; sha256sum -c --status "$backup/protected.root-htaccess.sha256")
+          (cd "$web"; sha256sum -c --status "$backup/protected.root-index.sha256")
           echo "ROOT_HTACCESS_AND_INDEX_UNCHANGED=yes"
           trap - EXIT
           echo "PERSIAN_AUTHOR_PROFILE_LIVE=verified"
