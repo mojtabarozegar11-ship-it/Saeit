@@ -94,7 +94,7 @@ def rollback():
     reload()
     print("ATELIER_879_ROUTE_RESTORED=EXACT_ORIGINAL")
 def selftest():
-    sample='start\n'+OLD+'\nend\n'
+    sample='def checkout(request,pk):\n    '+OLD+'\n        pass\n'
     out=changed(sample.encode()).decode()
     assert OLD not in out and out.count(NEW)==1
     assert all(str(k) in NEW for k in (72,225,879))
