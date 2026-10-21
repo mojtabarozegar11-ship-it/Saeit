@@ -46,9 +46,9 @@ def put(folder, name, contents):
     path.write_bytes(contents if isinstance(contents, bytes) else contents.encode("utf8"))
     return name
 
-def run(command, timeout=35):
+def run(command, timeout=35, cwd=None):
     return subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                          timeout=timeout, universal_newlines=True, check=True)
+                          timeout=timeout, universal_newlines=True, check=True, cwd=cwd)
 
 # These are original small, runnable applications; not production-quality
 # mobile-store binaries or a claim to surpass existing commercial products.
@@ -259,7 +259,27 @@ def media_ffmpeg():
     candidate=location/"ffmpeg" if location.is_absolute() and location.name=="bin" else None
     if candidate and candidate.is_file() and not candidate.is_symlink():
         return str(candidate)
+    # Use the existing verified, version-pinned factory CPU toolchain when
+    # the caller has not exported the optional bin path.
+    manifest=Path.home()/"factory-runtime"/"operations"/"build-toolchain"/"toolchain-manifest.json"
+    try:
+        if manifest.is_file() and not manifest.is_symlink():
+            record=json.loads(manifest.read_text("utf8"))
+            if record.get("schema")=="saeit.factory.toolchain.v1":
+                candidate=Path(record["tools"]["ffmpeg"])
+                if candidate.is_file() and not candidate.is_symlink():
+                    return str(candidate)
+    except (ValueError,OSError,KeyError,TypeError):
+        pass
     return shutil.which("ffmpeg")
+
+def ffmpeg_flite(ffmpeg):
+    if not ffmpeg:return False
+    try:
+        result=run([ffmpeg,"-hide_banner","-filters"],timeout=15)
+        return any(" flite " in line for line in result.stdout.splitlines())
+    except (OSError,ValueError,subprocess.CalledProcessError,subprocess.TimeoutExpired):
+        return False
 
 def create(root,family):
     root=Path(root)
@@ -325,12 +345,19 @@ def create(root,family):
                         for i in range(48)]
             put(package,"transcripts.json",jsonbytes(collection))
             voice=audio_available();ffmpeg=media_ffmpeg()
-            if voice and ffmpeg:
+            flite=ffmpeg_flite(ffmpeg) if not voice else False
+            if (voice or flite) and ffmpeg:
                 cues=[]
                 for index,item in enumerate(collection):
                     wav=package/(item["id"]+".wav")
                     mp3=package/(item["id"]+".mp3")
-                    run([voice,"-v","en","-s","145","-w",str(wav),item["text"]])
+                    if voice:
+                        run([voice,"-v","en","-s","145","-w",str(wav),item["text"]])
+                    else:
+                        put(package,item["id"]+".txt",item["text"])
+                        run([ffmpeg,"-hide_banner","-loglevel","error","-y",
+                             "-f","lavfi","-i","flite=textfile="+item["id"]+".txt:voice=kal",
+                             "-ar","16000",str(wav)],timeout=25,cwd=str(package))
                     with wave.open(str(wav),"rb") as f:
                         seconds=f.getnframes()/f.getframerate()
                     run([ffmpeg,"-hide_banner","-loglevel","error","-y","-i",str(wav),
@@ -344,7 +371,7 @@ def create(root,family):
                     cues.append(seconds)
                 checks.append("48_real_speech_mp3_and_timed_vtt")
             else:
-                missing=["espeak/espeak-ng voice engine and ffmpeg native MP3 encoder"]
+                missing=["espeak/espeak-ng or FFmpeg libflite speech filter, plus MP3 encoder"]
         elif family=="F23":
             # Its audited 50-stage builder is intentionally separate; never
             # substitute a toy JSON recipe for a verified AI model.
