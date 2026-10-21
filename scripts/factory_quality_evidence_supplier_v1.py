@@ -141,6 +141,9 @@ def supplier_dossier(root, policy, recipe, source_sha, artifact_sha):
             and not warehouse.is_symlink(), "SUPPLIER_VERSION_NOT_PRESENT")
     saved = read_json(version / "warehouse_manifest.json")
     archive = version / "product.zip"
+    require(archive.is_file() and not archive.is_symlink() and
+            0 < archive.stat().st_size <= MAX_PACKAGE,
+            "SUPPLIER_PACKAGE_UNSAFE")
     require(saved.get("schema") == "saeit.factory.production-warehouse.v1"
             and saved.get("product_id") == recipe
             and saved.get("source_sha256") == source_sha
