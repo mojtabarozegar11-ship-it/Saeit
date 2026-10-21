@@ -65,7 +65,10 @@ def discover_recipes(recipes_root, errors=None):
 
 
 # Compatibility/status view. Runtime cycles always rediscover from their supplied root.
-RECIPES = discover_recipes(DEFAULT_RECIPES, errors=[])
+# Runtime import must also work when the script is SHA-pinned into a private
+# VPS staging directory without a checkout at its legacy sibling path.
+# Explicit manufacturer calls still validate their own supplied recipe roots.
+RECIPES = discover_recipes(DEFAULT_RECIPES, errors=[]) if DEFAULT_RECIPES.is_dir() and not DEFAULT_RECIPES.is_symlink() else {}
 
 
 def sha256_file(path):
