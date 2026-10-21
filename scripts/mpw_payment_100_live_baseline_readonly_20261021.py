@@ -68,23 +68,26 @@ for label,rel in (
   }
  else:
   files[label]={'file_present':False}
-env_signals={
- "nowpayments_api_key_runtime":bool(os.environ.get('NOWPAYMENTS_API_KEY')),
- "nowpayments_webhook_secret_runtime":bool(os.environ.get('NOWPAYMENTS_IPN_SECRET')),
- "fiat_onramp_approval_runtime":os.environ.get('MPW_FIAT_ONRAMP_APPROVED')=='1',
- "trx_payout_verified_runtime":os.environ.get('MPW_FIAT_TRX_PAYOUT_VERIFIED')=='1',
+# Owner currently requires cryptocurrency payments ONLY.
+# Do not misreport absent fiat processor keys as a blocking crypto-checkout defect.
+crypto_flags={
+ name:getattr(settings,name,False) is True
+ for name in (
+  "MPW_COMMERCE_RELEASE_READY",
+  "MPW_COMMERCE_CUSTOMER_HTTP_ENABLED",
+  "MPW_COMMERCE_INVOICING_ENABLED",
+  "MPW_COMMERCE_SETTLEMENT_ENABLED",
+  "MPW_COMMERCE_REAL_RPC_ENABLED",
+  "MPW_COMMERCE_AUTORECONCILE_ENABLED",
+  "MPW_COMMERCE_DOWNLOADS_ENABLED",
+ )
 }
-# Runtime flag checks are informational only: apps may use other credential loaders.
-try:
- from command_center.mpw_public import feature_enabled
- env_signals['general_checkout_feature_enabled']=feature_enabled('MPW_ENABLE_CHECKOUT') is True
-except (ImportError,AttributeError,RuntimeError):
- env_signals['general_checkout_feature_enabled']=None
 print('MPW_PAYMENT_100_LIVE_BASELINE='+json.dumps({
  "tenant":"mojplaywin.com","routes":route_report,"login":auth,
- "templates":files,"runtime_signals":env_signals,
+ "templates":files,"crypto_runtime_feature_flags":crypto_flags,
+ "checkout_scope":"cryptocurrency_only",
+ "fiat_card_onramp":"deferred_out_of_scope",
  "live_paid_end_to_end_verified_by_this_probe":False,
- "fiat_card_to_native_trx_verified_by_this_probe":False,
  "gateway_acceptance":"BLOCKED_NOT_100",
  "writes":0,"private_data_emitted":False,
 },sort_keys=True))
