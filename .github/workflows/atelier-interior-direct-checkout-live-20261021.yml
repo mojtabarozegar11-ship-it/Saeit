@@ -1,0 +1,127 @@
+name: Atelier 879 direct authenticated ZIP checkout safe live owner release
+on:
+  push:
+    branches: [feature/atelier-sale-readiness-20261021]
+    paths:
+      - ".github/workflows/atelier-interior-direct-checkout-live-20261021.yml"
+permissions: {contents: read}
+concurrency:
+  group: atelier-879-native-zip-payment-publish
+  cancel-in-progress: false
+jobs:
+  exact_public_purchase_link:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/feature/atelier-sale-readiness-20261021' &&
+      startsWith(github.event.head_commit.message, '[owner-atelier-direct-checkout-20261021]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate exact buyer access files
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/atelier_interior_native_zip_commerce_20261021.py scripts/atelier_interior_checkout_authenticated_get_readonly_20261021.py
+          python3 -B scripts/atelier_interior_native_zip_commerce_20261021.py selftest
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Protected live sites before state change
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/direct-879-before"
+          for p in / /store/ /mojtaba.roozegar/ /picm/ /saman/ /farnaz/; do
+            code="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$p" || true)"
+            test "$code" != 000
+            printf '%s=%s\n' "$p" "$code" >> "$RUNNER_TEMP/direct-879-before"
+          done
+      - name: Enable only Product 879 in genuine commerce ZIP checkout
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          src64="$(base64 -w0 scripts/atelier_interior_native_zip_commerce_20261021.py)"
+          call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
+          timeout 105s ssh -T -F "$d/config" saeit-cpanel \
+            "ATELIER_OWNER_NATIVE_ZIP_COMMERCE=20261021-owner-879 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c '$call' '$src64' activate"
+      - name: Render actual signed-in buyer checkout GET without creating an order
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          src64="$(base64 -w0 scripts/atelier_interior_checkout_authenticated_get_readonly_20261021.py)"
+          call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
+          timeout 95s ssh -T -F "$d/config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c '$call' '$src64'"
+      - name: Verify anonymous login barrier and protected sites unchanged
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/direct-879-after"
+          for p in / /store/ /mojtaba.roozegar/ /picm/ /saman/ /farnaz/; do
+            code="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$p" || true)"
+            printf '%s=%s\n' "$p" "$code" >> "$RUNNER_TEMP/direct-879-after"
+          done
+          cmp "$RUNNER_TEMP/direct-879-before" "$RUNNER_TEMP/direct-879-after"
+          p="$(curl -sS --max-time 20 -o "$RUNNER_TEMP/879-page.html" -w '%{http_code}' https://mojplaywin.com/store/product/879/)"
+          test "$p" = 200
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          content=Path(os.environ["RUNNER_TEMP"],"879-page.html").read_text(encoding="utf8",errors="replace")
+          assert "Atelier Interior" in content and "6.80" in content
+          PY
+          checkout="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' https://mojplaywin.com/store/product/879/checkout/)"
+          case "$checkout" in 302|303) ;; *) echo "BAD_AUTH_GATE_$checkout";exit 1;; esac
+          anonymous_file="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' https://mojplaywin.com/commerce/download/879/)"
+          test "$anonymous_file" != 200 && test "$anonymous_file" != 000
+          echo "ATELIER_DIRECT_ZIP_BUY_LINK_LIVE=PASS listing=$p guest_checkout=$checkout guest_download=$anonymous_file paid_purchase_untested"
+      - name: Restore Product 879 exact previous sales state if checkout audit fails
+        if: failure()
+        continue-on-error: true
+        run: |
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          src64="$(base64 -w0 scripts/atelier_interior_native_zip_commerce_20261021.py)"
+          call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
+          timeout 100s ssh -T -F "$d/config" saeit-cpanel \
+            "ATELIER_OWNER_NATIVE_ZIP_ROLLBACK=20261021-owner-879 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c '$call' '$src64' rollback"
