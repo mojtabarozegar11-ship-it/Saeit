@@ -61,8 +61,8 @@ class BridgeTests(unittest.TestCase):
 
     def test_sender_never_echoes_untrusted_remote_stderr(self):
         response = mock.Mock(returncode=1, stdout="",
-                             stderr="STORE_RECEIVER_SAFE_REASON=UNSAFE_ARCHIVE_MEMBER\\n"
-                                    "authorization_token=do-not-print\\n")
+                             stderr="STORE_RECEIVER_SAFE_REASON=UNSAFE_ARCHIVE_MEMBER\n"
+                                    "authorization_token=do-not-print\n")
         with mock.patch.object(sender.subprocess, "run", return_value=response), \\
              mock.patch("sys.stderr", new_callable=io.StringIO) as stream:
             with self.assertRaisesRegex(RuntimeError,
