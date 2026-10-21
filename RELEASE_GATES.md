@@ -16,3 +16,12 @@
 | Paid mainnet E2E | None | Explicitly approved small test, buyer receipt, download and rollback proof |
 
 **Do not set** `MOJ_COMMERCE_RECEIVER_ENABLED=True` until every relevant gate passes. Keep this as a draft PR, do not merge into `main` or activate any cPanel workflow.
+
+## Research-led next-stage release blockers (still all live gates closed)
+
+- [x] Source implementation: TRON V2 signed wallet-control challenge with strict single-use, expiry, per-owner ACL and cryptographic recovered-address comparison; production-proof enrollment and wallet UX **not** performed.
+- [x] Source implementation: pinned read-only TRON SolidityNode transaction + receipt refetch matching amount, destination, block number and block time; one third-party RPC provider only, no live-mainnet validation.
+- [ ] Integrate a second independently operated TRON finalized RPC and quorum/consistency policy; safe behavior under outage, rate limits and chain data disagreement.
+- [ ] Audit, separately approve and configure production checker, wallet ownership challenge in real seller onboarding, customer order/quote creation and webhook signed delivery; checkout/worker integration still absent from live source.
+- [ ] Production PostgreSQL migrations with backup/restore and zero-downtime cutover, rate limits, signed challenge anti-abuse, seller KYC/risk and merchant suspension, monitoring.
+- [ ] Test one real authorized small mainnet TRX purchase through to private download and receipt, using independent test buyer; currently no such evidence.

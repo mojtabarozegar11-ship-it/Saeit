@@ -8,10 +8,11 @@ import re
 import uuid
 from datetime import datetime, timezone as dt_timezone
 from decimal import Decimal
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from mpw_tron_pro.store_receiver_contract import verify_store_event
-from .models import Merchant, Purchase, Entitlement
+from .models import Merchant, Purchase, Entitlement, MerchantAddress
 
 FILE_KEY = re.compile(r'^[a-f0-9]{32}$')
 SHA256 = re.compile(r'^[a-f0-9]{64}$')
@@ -27,6 +28,9 @@ class CommerceUnavailable(Exception):
 
 
 def _validate_existing_purchase(purchase):
+    if (getattr(settings, 'MOJ_COMMERCE_REQUIRE_SIGNED_WALLET', True) and
+        purchase.destination.verified_via != MerchantAddress.ProofMethod.SIGN_V2):
+        raise CommerceRejected('Merchant must prove control of destination using TRON signMessageV2')
     if (purchase.merchant.status != Merchant.Status.APPROVED
         or purchase.product.merchant_id != purchase.merchant_id
         or purchase.destination.merchant_id != purchase.merchant_id

@@ -6,6 +6,7 @@ not an HTTP filename.  No wallets, private signing keys or payouts are stored.
 import uuid
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 from django.db.models import Q
 
 
@@ -32,8 +33,24 @@ class MerchantAddress(models.Model):
     """
     merchant = models.ForeignKey(Merchant, on_delete=models.PROTECT, related_name='addresses')
     address = models.CharField(max_length=64, unique=True)
+    class ProofMethod(models.TextChoices):
+        UNVERIFIED = 'unverified', 'Not verified'
+        SIGN_V2 = 'tron-sign-v2', 'TRON signMessageV2'
+        MANUAL = 'manual', 'Manual verification (restricted)'
+
     verified_at = models.DateTimeField(null=True, blank=True)
+    verified_via = models.CharField(max_length=20, choices=ProofMethod.choices, default=ProofMethod.UNVERIFIED)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class WalletOwnershipChallenge(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    address = models.OneToOneField(MerchantAddress, on_delete=models.CASCADE, related_name='ownership_challenge')
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    message = models.CharField(max_length=550)
+    created_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
 
 
 class DigitalProduct(models.Model):

@@ -97,3 +97,45 @@ class PostgresConcurrencyTests(TransactionTestCase):
         self.assertFalse(Entitlement.objects.filter(purchase=order2).exists())
         order2.refresh_from_db()
         self.assertEqual(order2.status,Purchase.Status.PENDING)
+
+
+@override_settings(MOJ_COMMERCE_REQUIRE_SIGNED_WALLET=True)
+class PostgresWalletProofConcurrencyTests(TransactionTestCase):
+    """Concurrent replay cannot consume a single wallet signature twice."""
+    def setUp(self):
+        from eth_keys import keys
+        from tests.test_moj_commerce_wallet import test_wallet_address, sign_v2
+        from moj_commerce.wallet_proof import issue_wallet_challenge
+        self.pk = keys.PrivateKey(bytes.fromhex('00'*31+'03'))  # test fixture only
+        owner = get_user_model().objects.create_user(username='pg-wallet-seller')
+        self.merchant=Merchant.objects.create(owner=owner,name='Postgres wallet',status='pending')
+        self.address=MerchantAddress.objects.create(merchant=self.merchant,
+            address=test_wallet_address(self.pk))
+        self.challenge=issue_wallet_challenge(self.merchant.public_id,self.address.pk,owner.pk)
+        self.signature=sign_v2(self.pk,self.challenge['message'])
+        self.owner_id=owner.pk
+
+    def _attempt(self,barrier):
+        from moj_commerce.wallet_proof import complete_wallet_challenge
+        from moj_commerce.services import CommerceRejected
+        close_old_connections()
+        barrier.wait(timeout=5)
+        try:
+            try:
+                complete_wallet_challenge(self.merchant.public_id,self.address.pk,self.owner_id,
+                    self.challenge['challenge_id'],self.signature)
+                return 'success'
+            except CommerceRejected:
+                return 'replay_rejected'
+        finally:
+            close_old_connections()
+
+    def test_exactly_one_signer_verification_in_real_postgres(self):
+        if connection.vendor!='postgresql':self.skipTest('Must use real PostgreSQL')
+        barrier=threading.Barrier(2)
+        with ThreadPoolExecutor(max_workers=2) as exe:
+            tasks=[exe.submit(self._attempt,barrier) for _ in range(2)]
+            results=[future.result(timeout=15) for future in tasks]
+        self.assertCountEqual(results,['success','replay_rejected'])
+        self.address.refresh_from_db()
+        self.assertEqual(self.address.verified_via,'tron-sign-v2')
