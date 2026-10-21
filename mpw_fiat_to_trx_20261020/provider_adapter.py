@@ -50,7 +50,8 @@ def _official_invoice_url(value):
 
 def create_invoice(order_id,price_usd,description,callback,success,cancel,*,env=None,opener=urlopen):
  e=os.environ if env is None else env
- if not ready(e):raise MerchantNotReady("Fiat-onramp TRX settlement is not merchant-approved")
+ if not ready(e) or not merchant_release_report(e)["release_permitted"]:
+  raise MerchantNotReady("Fiat-onramp checkout remains disabled until all independently verified merchant and release gates pass")
  payload=invoice_fields(order_id,price_usd,description,callback,success,cancel)
  # The processor's merchant payout configuration, NOT pay_currency in this invoice,
  # decides the TRX settlement wallet. Fiat acceptance must be activated at merchant level.
@@ -98,3 +99,54 @@ def may_fulfill(*,merchant_verified,invoice_id_matches,order_id_matches,amount_m
  return all((merchant_verified,invoice_id_matches,order_id_matches,
              amount_matches,currency_matches,settlement_native_trx_confirmed)) and not (
              replayed or refunded_or_partial)
+
+
+# Read-only gates: never infer merchant approval or settled TRX from an API key.
+RELEASE_GATES=(
+ "MPW_FIAT_ONRAMP_APPROVED",
+ "MPW_FIAT_TRX_PAYOUT_VERIFIED",
+ "MPW_FIAT_IPN_PUBLIC_VERIFIED",
+ "MPW_FIAT_PRIVATE_DELIVERY_VERIFIED",
+ "MPW_FIAT_TENANT_ISOLATION_VERIFIED",
+ "MPW_FIAT_BACKUP_RESTORE_VERIFIED",
+ "MPW_FIAT_LIVE_CANARY_VERIFIED",
+)
+
+def merchant_release_report(env=None):
+ """Return only boolean readiness; never echo wallet addresses or credentials."""
+ e=os.environ if env is None else env
+ failed=[key for key in RELEASE_GATES if e.get(key)!="1"]
+ failed.extend(key for key in ("NOWPAYMENTS_API_KEY","NOWPAYMENTS_IPN_SECRET")
+               if not e.get(key))
+ return {"release_permitted":not failed,"missing":failed}
+
+def payment_claim_matches(payload,*,order_id,invoice_id,price_usd):
+ """Match a provider payment to the original USD invoice without equating it to a payout.
+
+ IMPORTANT: True is not sufficient to fulfil an order. The independent
+ native-TRX merchant wallet receipt must also be confirmed server-side.
+ """
+ if type(payload) is not dict:return False
+ try:
+  value=Decimal(str(payload.get("price_amount")))
+  outcome=Decimal(str(payload.get("outcome_amount")))
+ except (ValueError,TypeError,ArithmeticError):return False
+ return (payload.get("payment_status")=="finished"
+         and str(payload.get("order_id"))==str(order_id)
+         and str(payload.get("invoice_id"))==str(invoice_id)
+         and payload.get("price_currency")=="usd"
+         and value.is_finite() and value==Decimal(str(price_usd))
+         and payload.get("outcome_currency")=="trx"
+         and outcome.is_finite() and outcome>0
+         and str(payload.get("payment_id","")).isdigit())
+
+def payout_is_independently_verified(*,payment_matches,merchant_receipt_verified,
+                                     chain_is_tron_mainnet,wallet_matches,tx_unique,
+                                     order_is_unfulfilled):
+ """Explicit independent native-TRX payout receipt is mandatory for fulfilment.
+
+ All proof arguments must be computed by trusted server-side verifier; never
+ accept browser or webhook booleans as authoritative evidence.
+ """
+ return all((payment_matches,merchant_receipt_verified,chain_is_tron_mainnet,
+             wallet_matches,tx_unique,order_is_unfulfilled))
