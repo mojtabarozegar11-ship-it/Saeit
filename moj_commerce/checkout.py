@@ -33,7 +33,8 @@ def reference_for(buyer_id, merchant_id, product_id, key: str) -> str:
 
 
 def checkout_payload(purchase: Purchase) -> dict:
-    active = (purchase.status == Purchase.Status.PENDING and
+    active = (getattr(settings, 'MOJ_COMMERCE_CHECKOUT_ENABLED', False) is True and
+              purchase.status == Purchase.Status.PENDING and
               purchase.expires_at > timezone.now() and
               purchase.merchant.status == Merchant.Status.APPROVED)
     return {
