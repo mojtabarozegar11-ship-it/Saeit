@@ -227,7 +227,20 @@ def build_next_document_volume(root,recipe,expected,entries,omitted,maker,
             prior=checked_json(proof)
             manifest=checked_json(built)
             source_manifest=checked_json(source/"metadata.json")
-            if not (prior.get("source_customer_archive_sha256")==expected
+            if (source/"metadata.json").is_symlink():
+                return "document_volume_existing_receipt_unverified"
+            try:
+                _,current_files=maker.inspect_recipe(source)
+                actual_source_digest=maker.source_digest(source,current_files)
+                verified_package=package_parent/code/(code+"-internal-qa.zip")
+                actual_package_digest=(maker.sha256_file(verified_package)
+                                      if verified_package.is_file() and not verified_package.is_symlink()
+                                      else None)
+            except (OSError,ValueError,RuntimeError,UnicodeError):
+                return "document_volume_existing_receipt_unverified"
+            if not (actual_source_digest==manifest.get("source_sha256")
+                    and actual_package_digest==manifest.get("artifact_sha256")
+                    and prior.get("source_customer_archive_sha256")==expected
                     and prior.get("new_edition_recipe")==code
                     and prior.get("volume_number")==volume
                     and prior.get("volume_count")==count
