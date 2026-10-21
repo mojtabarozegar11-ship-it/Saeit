@@ -343,6 +343,7 @@ class RealPrivateDocumentEditionTests(unittest.TestCase):
     def test_genuine_customer_documents_become_new_accessible_private_source_and_zip(self):
         attack=b"</pre><script>alert('bad')</script> Read this guide."
         self.bind({
+            "bundle/":b"",
             "bundle/book.txt":attack,
             "bundle/appendix.pdf":b"%PDF-1.4 sample bytes",
             "bundle/executable.js":b"alert('never run')"})
