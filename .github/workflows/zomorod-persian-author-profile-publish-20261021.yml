@@ -273,10 +273,19 @@ jobs:
           from pathlib import Path
           import sys
           p=Path(sys.argv[1]);raw=p.read_bytes()
-          rule=b'RedirectMatch 301 ^/authors/mojtaba-rozegar/?$ https://zomorodmelal.ir/en/authors/mojtaba-rozegar/'
+          rule=b'RewriteRule ^authors/mojtaba-rozegar/?$ https://zomorodmelal.ir/en/authors/mojtaba-rozegar/ [R=301,L,NE]'
           assert rule not in raw
+          if b'RewriteEngine On' in raw or b'RewriteEngine on' in raw:
+              needle=b'RewriteEngine On'
+              pos=raw.lower().find(b'rewriteengine on')
+              assert pos>=0
+              eol=raw.find(b'\\n',pos)
+              assert eol>=0
+              updated=raw[:eol+1]+rule+b'\\n'+raw[eol+1:]
+          else:
+              updated=b'RewriteEngine On\\n'+rule+b'\\n'+raw
           tmp=p.with_name(p.name+".redirect-next."+sys.argv[2])
-          tmp.write_bytes(rule+bytes([10])+raw);tmp.chmod(p.stat().st_mode&0o777);tmp.replace(p)
+          tmp.write_bytes(updated);tmp.chmod(p.stat().st_mode&0o777);tmp.replace(p)
           print("PERSIAN_AUTHOR_301_STAGED=yes")
           PY
           htaccess_installed=1
