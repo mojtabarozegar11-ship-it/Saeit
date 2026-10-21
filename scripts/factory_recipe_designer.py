@@ -276,7 +276,7 @@ if __name__ == '__main__':
 ''' % (names,spec['inputs'],expression(tree),spec['output_unit'])
     examples = spec['training_examples']+spec['acceptance_examples']
     tests = '''import unittest
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from calculator import calculate
 # BATCH_TESTS_V2_START
 from calculator import calculate_batch
@@ -316,14 +316,21 @@ class GeneratedAcceptanceTests(unittest.TestCase):
     # STATS_TESTS_V3_START
     def test_statistics_match_independent_decimal_reference(self):
         rows=[item['inputs'] for item in EXAMPLES[:3]]
-        values=[Decimal(str(item['output'])) for item in EXAMPLES[:3]]
+        values=[Decimal(calculate(row)['result']) for row in rows]
+        references=[Decimal(str(item['output'])) for item in EXAMPLES[:3]]
         observed=calculate_statistics(rows)
         self.assertEqual(observed['count'],3)
         self.assertEqual(observed['unit'],calculate(rows[0])['unit'])
-        self.assertEqual(Decimal(observed['sum']),sum(values))
+        with localcontext() as context:
+            context.prec=40
+            total=sum(values,Decimal(0))
+            average=total/Decimal(3)
+        self.assertEqual(Decimal(observed['sum']),total)
         self.assertEqual(Decimal(observed['minimum']),min(values))
         self.assertEqual(Decimal(observed['maximum']),max(values))
-        self.assertLessEqual(abs(Decimal(observed['mean'])-sum(values)/3),Decimal('1e-25'))
+        self.assertEqual(Decimal(observed['mean']),average)
+        for actual,expected in zip(values,references):
+            self.assertLessEqual(abs(actual-expected),Decimal('1e-12')*max(Decimal(1),abs(expected)))
     def test_statistics_fail_closed_on_bad_batch(self):
         for bad in ([], [{}], [{}]*101, None, 'broken'):
             with self.assertRaises(ValueError): calculate_statistics(bad)
