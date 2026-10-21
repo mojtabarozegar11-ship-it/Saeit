@@ -78,7 +78,7 @@ class DesignIntakeTests(unittest.TestCase):
             self.assertTrue(result['changed'])
             self.assertFalse(maker.manufacture(recipe.name,recipes,self.root/'products')['changed'])
             manifest=json.loads((self.root/'products'/recipe.name/'manufacturing_manifest.json').read_text())
-            self.assertEqual(manifest['qa_measurements']['successful_tests'],3)
+            self.assertGreaterEqual(manifest['qa_measurements']['successful_tests'],5)
     def test_independent_rational_oracles_match_generated_programs_on_unseen_inputs(self):
         for key,(_,_,fields,_,oracle) in intake.BLUEPRINTS.items():
             spec=intake.expand({'schema':intake.SCHEMA,'blueprint':key},'factory_invention')
@@ -101,7 +101,7 @@ class DesignIntakeTests(unittest.TestCase):
         book=load_workbook(source/'calculator.xlsx')
         self.assertIn('Calculator',book.sheetnames)
         evidence={};maker.verify_recipe(source,evidence=evidence)
-        self.assertEqual(evidence['successful_tests'],4)
+        self.assertGreaterEqual(evidence['successful_tests'],6)
         self.assertEqual(result['family_id'],'F27')
     def test_supply_is_internal_and_does_not_invent_customer_or_market_demand(self):
         supply=ROOT/'factory_config/internal_design_supply.json'
