@@ -16,7 +16,7 @@ function runController(controllerSource){
     if(elements.has(id))return elements.get(id);
     const handlers={};
     const element={
-      id,hidden:false,disabled:false,textContent:'',firstChild:{textContent:''},
+      id,width:900,height:540,hidden:false,disabled:false,textContent:'',firstChild:{textContent:''},
       dataset:{},classList:{toggle(){}},
       addEventListener(event,fn){handlers[event]=fn;},
       dispatch(event,params){if(handlers[event])handlers[event](params||{});},
