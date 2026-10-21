@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from scripts import factory_f28_private_build_cycle_20261021 as build
 from scripts import factory_f28_private_warehouse_intake_20261021 as intake
@@ -26,6 +27,31 @@ class PrivateCentralIntakeTest(unittest.TestCase):
 
     def run_intake(self):
         return intake.accept(self.candidate, self.factory, WAREHOUSE)
+
+    def test_contended_warehouse_lock_waits_and_eventually_acquires(self):
+        with tempfile.TemporaryFile() as handle:
+            with mock.patch.object(intake.fcntl, "flock",
+                    side_effect=[BlockingIOError(), None]) as lock, \
+                 mock.patch.object(intake.time, "monotonic",
+                    side_effect=[10.0, 10.2]), \
+                 mock.patch.object(intake.time, "sleep") as pause:
+                intake.acquire_warehouse_lock(handle, wait_seconds=2)
+            self.assertEqual(lock.call_count, 2)
+            pause.assert_called_once_with(0.5)
+            self.assertTrue(all(c.args[1] == (intake.fcntl.LOCK_EX | intake.fcntl.LOCK_NB)
+                                for c in lock.call_args_list))
+
+    def test_contended_warehouse_lock_times_out_without_force_unlock(self):
+        with tempfile.TemporaryFile() as handle:
+            with mock.patch.object(intake.fcntl, "flock",
+                    side_effect=BlockingIOError()) as lock, \
+                 mock.patch.object(intake.time, "monotonic",
+                    side_effect=[0.0, 2.0]), \
+                 mock.patch.object(intake.time, "sleep") as pause:
+                with self.assertRaisesRegex(RuntimeError, "WAREHOUSE_LOCKED_RETRY"):
+                    intake.acquire_warehouse_lock(handle, wait_seconds=1)
+            lock.assert_called_once()
+            pause.assert_not_called()
 
     def test_real_build_stocked_immutable_and_1000_held(self):
         receipt = self.run_intake()
