@@ -80,6 +80,70 @@ def plan(code):
     if code in QUARANTINE:return "RESTORE_CORRECT_ARTIFACT_AND_RETEST"
     return "INVESTIGATE_WITH_ACCOUNTABLE_SPECIALIST"
 
+def independent_zip_q068_fallback(folder,recipe,archive,manifest):
+    """Bounded real ZIP measurement when newer reusable probe is not deployed.
+
+    Never score a ZIP by merely trusting metadata. Does not assert originality,
+    scientific validity, or human review.
+    """
+    import zipfile
+    from pathlib import PurePosixPath
+    target=Path(archive)
+    desired=manifest.get("artifact_sha256")
+    if (not isinstance(desired,str) or not HEX.fullmatch(desired)
+        or not target.is_file() or target.is_symlink()
+        or not 0<target.stat().st_size<=65*1024*1024):
+        return None
+    if sha(target.read_bytes())!=desired:return None
+    try:
+        count=0;total=0;member_checks=[]
+        with zipfile.ZipFile(target) as bundle:
+            files=bundle.infolist()
+            if not 1<=len(files)<=2500:return None
+            seen=set()
+            for item in files:
+                rel=item.filename
+                parts=PurePosixPath(rel)
+                if (rel in seen or rel.startswith("/") or "\\" in rel or
+                    ".." in parts.parts or not rel.startswith(recipe+"/") or
+                    item.is_dir() or ((item.external_attr>>16)&0o170000)==0o120000 or
+                    item.file_size>40*1024*1024):
+                    return None
+                seen.add(rel)
+                total+=item.file_size
+                if total>150*1024*1024:return None
+                data=bundle.read(item)
+                if len(data)!=item.file_size:return None
+                member_checks.append([rel,sha(data),len(data)])
+                count+=1
+    except (zipfile.BadZipFile,ValueError,OSError,EOFError,RuntimeError,NotImplementedError):
+        return None
+    report={"schema":"saeit.factory.measured-zip-integrity-q068.v1",
+            "criterion":"Q068",
+            "scope":"cryptographic_identity_zip_safety_crc_member_integrity_only",
+            "recipe":recipe,"artifact_sha256":desired,
+            "archive_bytes":target.stat().st_size,
+            "actual_members_tested":count,
+            "actual_uncompressed_bytes_tested":total,
+            "members_sha256":member_checks,
+            "all_crc_and_path_safety_tests_passed":True,
+            "excludes":"scientific_veracity_game_originality_human_review_global_quality",
+            "professional_quality_1000_approved":False}
+    blob=(json.dumps(report,ensure_ascii=False,sort_keys=True,separators=(",",":"))+"\n").encode()
+    out=Path(folder)/".quality-measurements"
+    if out.is_symlink():raise ValueError("QUALITY_MEASUREMENTS_UNSAFE")
+    out.mkdir(mode=0o700,exist_ok=True)
+    evidence=out/("q068-"+desired+".json")
+    if evidence.is_symlink():raise ValueError("QUALITY_MEASUREMENTS_UNSAFE")
+    if evidence.exists():
+        if evidence.read_bytes()!=blob:raise ValueError("QUALITY_MEASUREMENT_CHANGED")
+    else:
+        with evidence.open("xb") as receipt:
+            receipt.write(blob);receipt.flush();os.fsync(receipt.fileno())
+        evidence.chmod(0o600)
+    return {"path":evidence.relative_to(folder).as_posix(),"sha256":sha(blob)}
+
+
 def triage_inventory(private_root,policy,registry,run_reference="manual",limit=250,scorecard_file=None):
     root=Path(private_root)
     assert root.is_dir() and not root.is_symlink()
@@ -139,7 +203,8 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
                 # Independently *measure* criterion Q068 from the actual ZIP bytes;
                 # never accept an arbitrary text dossier as proof of ZIP integrity.
                 measured=(integrity_module.measured_zip_evidence(folder,name,zipfile,doc)
-                          if integrity_module is not None else None)
+                          if integrity_module is not None else
+                          independent_zip_q068_fallback(folder,name,zipfile,doc))
                 dossier=candidate.get("criteria_evidence")
                 dossier=dict(dossier) if isinstance(dossier,dict) else {}
                 dossier.pop("Q068",None)
