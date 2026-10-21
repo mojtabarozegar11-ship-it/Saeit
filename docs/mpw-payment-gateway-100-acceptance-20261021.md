@@ -1,6 +1,6 @@
 # MojPlayWin payment gateway — 100/100 acceptance contract
 
-**Owner decision, 2026-10-21:** Only the MojPlayWin **payment gateway** (not other pages, content, factory, or business operations) can be accepted if independently verified as **100/100**. 99/100, passing CI alone, a styled page, a demo invoice, or a plausible chain transaction are NOT acceptance.
+**Owner decision, updated 2026-10-21:** Only the MojPlayWin **cryptocurrency payment gateway** (not other pages, content, factory, or business operations) can be accepted if independently verified as **100/100**. Customer bank cards, fiat-onramp and fiat-to-TRX conversion are **out of scope for now**. Native TRX on TRON and any other crypto rail actually offered by the live site (currently native ETH where enabled) must pass real tests. 99/100, passing CI alone, a styled page, a demo invoice, or a plausible chain transaction are NOT acceptance.
 
 ## Scope and gates (10 × 10 = 100)
 
@@ -10,14 +10,18 @@ Every gate is mandatory. No averaging, compensating points, or rounding. A parti
 | --- | ---: | --- |
 | mobile_desktop_visuals | 10 | Real Chrome/Firefox/Safari (including Android/iOS), responsive branded checkout with no overflow/visual defects; human visual sign-off |
 | accessibility_localization | 10 | WCAG 2.2 AA tests, keyboard/screen reader testing, readable status messages, currency/language display |
-| transparent_amount_network_fees | 10 | Server-issued exact quote, explicit native TRX versus USDT-TRC20, correct network, minimum charge and expiry, final fees shown before payment |
-| guest_purchase | 10 | Full genuine guest buyer flow without MojPlayWin account or subscription, preserving lawful processor identity checks |
+| transparent_amount_network_fees | 10 | Exact server-issued crypto quote (native TRX, native ETH if offered; USDT-TRC20 only when explicitly supported), receiver, network, minimum charge and expiry, with disclosed fees before payment |
+| guest_purchase | 10 | Complete guest cryptocurrency purchase without forcing a MojPlayWin account or subscription, with strict order ownership and recipient proof |
 | direct_trx_checkout | 10 | TRON-mainnet native TRX correctly routed to merchant-controlled wallet, unique invoice binding and independent finality validation |
-| fiat_to_native_trx | 10 | Provider-approved fiat/card method in verified supported jurisdiction and genuine native TRX merchant settlement, no invented provider/currency support |
+| crypto_asset_network_coverage | 10 | All advertised crypto payment options (native TRX on TRON, native ETH if publicly offered) independently verified on their exact mainnets, recipient addresses and asset denominations; no phantom rails |
 | invoice_and_wallet_security | 10 | Server-only secrets, CSRF, authz, no redirect/receipt spoofing, accurate recipient/amount, non-replayable order identifiers |
-| finality_reconciliation | 10 | Exact sender/receiver/asset/amount checked on chain/provider; finality, duplicate tx/webhook, short payment, wrong network, partial/refund, race handling |
+| finality_reconciliation | 10 | Exact sender/receiver/asset/amount checked by independent mainnet RPC/indexers; chain finality, duplicate tx, insufficient amount, wrong network/asset, expiry, replay and race handling |
 | recovery_and_operations | 10 | Expiry, provider outages/timeouts, idempotent retries, safe refund/support path, recovery when customer closes/reloads, alerting and documented rollback |
 | real_paid_delivery | 10 | Independent end-to-end **real** production purchase evidence: invoice → transfer → confirmed merchant receipt/settlement → customer-specific private download and recoverable receipt |
+
+## Deferred, NOT part of current 100-point acceptance
+
+Fiat/card, fiat-onramp merchant registration, conversion to TRX, KYB and fiat-provider API credentials are postponed until an explicit later owner instruction. Their absence must **not** block acceptance of a demonstrably safe cryptocurrency-only checkout. Do not enable these routes, describe them as active, or substitute a fiat checkout for a native-crypto invoice.
 
 ## Acceptance rules
 
@@ -31,4 +35,4 @@ Every gate is mandatory. No averaging, compensating points, or rounding. A parti
 
 ## Current status, 2026-10-21
 
-Two main checkout templates have had visual upgrades with successful GitHub Actions deployment checks. A complete real paid fiat/native TRX transaction followed by verified private product delivery has **not** been demonstrated. Fiat processor merchant approval and payout have not been verified. Therefore **100/100 is NOT established**. No current numeric gateway score is certified.
+Two main checkout templates have had visual upgrades with successful GitHub Actions deployment checks. The current objective is **crypto-only**, not fiat/card onboarding. A complete real native TRX (and any other publicly advertised crypto rail) transaction followed by verified private product delivery has **not** been demonstrated. Therefore **100/100 is NOT established**. No current numeric gateway score is certified.
