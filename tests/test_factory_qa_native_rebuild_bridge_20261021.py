@@ -61,12 +61,12 @@ class QARebuildTests(unittest.TestCase):
     def run_bridge(self):
         with patch.object(m,"load_maker",return_value=FakeMaker):
             return m.execute(self.root,self.source,FILE,limit=2)
-    def seed_archived_only(self,name="synth_abc123",*,tamper=False):
+    def seed_archived_only(self,name="synth_abc123",*,tamper=False,flat=False):
         item,original=self.seed(name=name,defects=["P0_BUILD_ARCHIVE_INVALID"])
         source_bytes=(item/"README.md").read_bytes()
         archive=original/(item.name+"-internal-qa.zip")
         with zipfile.ZipFile(archive,"w",zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr(item.name+"/README.md",source_bytes)
+            zf.writestr(("README.md" if flat else item.name+"/README.md"),source_bytes)
         (original/"manufacturing_manifest.json").write_text(json.dumps({
             "schema_version":2,"recipe":item.name,"files":["README.md"],
             "source_sha256":hashlib.sha256(source_bytes).hexdigest(),
@@ -126,6 +126,11 @@ class QARebuildTests(unittest.TestCase):
         self.assertEqual(result["archive_sources_recovered"],1)
         self.assertEqual(result["missing_source"],0)
         self.assertEqual(result["rebuild_attempted"],1)
+    def test_receipt_bound_flat_archive_recovers_only_testable_source(self):
+        self.seed_archived_only(flat=True)
+        result=self.run_bridge()
+        self.assertEqual(result["archive_sources_recovered"],1)
+        self.assertEqual(result["technical_candidates_verified"],1)
     def test_tampered_original_zip_never_becomes_rebuild_source(self):
         self.seed_archived_only(tamper=True)
         result=self.run_bridge()

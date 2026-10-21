@@ -97,19 +97,28 @@ def recover_source_from_archive(root,recipe,order,maker,recovered_root):
                 infos=zf.infolist()
                 if not infos or len(infos)>256 or zf.testzip() is not None or sum(i.file_size for i in infos)>64*1024*1024:
                     return False,"archive_members_invalid"
-                names=[]
+                archive_names=[]
                 for info in infos:
-                    prefix=recipe+"/"
-                    if not info.filename.startswith(prefix) or info.is_dir():return False,"archive_members_invalid"
-                    name=info.filename[len(prefix):]
+                    if info.is_dir():return False,"archive_members_invalid"
+                    name=info.filename
                     rel=PurePosixPath(name)
                     if not name or "\\" in name or rel.is_absolute() or any(part in ("", ".", "..") for part in rel.parts):
                         return False,"archive_members_invalid"
-                    names.append(rel.as_posix())
-                if len(set(names))!=len(names):return False,"archive_members_invalid"
+                    archive_names.append(rel.as_posix())
+                if len(set(archive_names))!=len(archive_names):return False,"archive_members_invalid"
+                if all(name.startswith(recipe+"/") for name in archive_names):
+                    names=[name[len(recipe)+1:] for name in archive_names]
+                elif all("/" not in name for name in archive_names):
+                    names=list(archive_names)
+                else:
+                    top={name.split("/",1)[0] for name in archive_names}
+                    if len(top)!=1 or any("/" not in name for name in archive_names):
+                        return False,"archive_members_invalid"
+                    wrapper=next(iter(top))
+                    names=[name[len(wrapper)+1:] for name in archive_names]
                 normalized=sorted(files) if files is not None else sorted(names)
-                if names!=normalized:return False,"archive_members_invalid"
-                for info,name in zip(infos,normalized):
+                if sorted(names)!=normalized:return False,"archive_members_invalid"
+                for info,name in zip(infos,names):
                     if stat.S_ISLNK(info.external_attr>>16):return False,"archive_symlink_member"
                     dest=payload/name
                     dest.parent.mkdir(parents=True,exist_ok=True)
