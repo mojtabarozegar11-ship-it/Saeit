@@ -145,6 +145,15 @@ class QARebuildTests(unittest.TestCase):
         result=self.run_bridge()
         self.assertEqual(result["archive_sources_recovered"],0)
         self.assertEqual(result["archive_recovery_rejection_reasons"]["source_file_inventory_not_verifiable"],1)
+    def test_nonstr_file_index_returns_recoverable_error_not_crash(self):
+        name,_=self.seed_archived_only()
+        meta=self.root/"digital-products"/name/"manufacturing_manifest.json"
+        document=json.loads(meta.read_text())
+        document["files"]=["README.md",{"not":"a string"}]
+        meta.write_text(json.dumps(document))
+        result=self.run_bridge()
+        self.assertEqual(result["archive_sources_recovered"],0)
+        self.assertEqual(result["archive_recovery_rejection_reasons"]["source_file_inventory_not_verifiable"],1)
     def test_receipt_bound_archive_without_original_source_manifest_is_rejected(self):
         name,_=self.seed_archived_only()
         original=self.root/"digital-products"/name
