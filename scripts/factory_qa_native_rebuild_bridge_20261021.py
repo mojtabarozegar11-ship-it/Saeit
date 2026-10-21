@@ -12,7 +12,12 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+from pathlib import PurePosixPath
 import re
+import shutil
+import stat
+import tempfile
+import zipfile
 
 RECIPE=re.compile(r"^[a-z][a-z0-9_]{1,65}$")
 HEX=re.compile(r"^[0-9a-f]{64}$")
@@ -50,6 +55,69 @@ def atomic_receipt(path,doc):
         os.chmod(dest,0o600)
     return digest
 
+def recover_source_from_archive(root,recipe,maker,recovered_root):
+    """Recover an absent recipe only from its hash-verified original private ZIP."""
+    product=root/"digital-products"/recipe
+    manifest=product/"manufacturing_manifest.json"
+    archive=product/(recipe+"-internal-qa.zip")
+    if (product.is_symlink() or not manifest.is_file() or manifest.is_symlink()
+            or not archive.is_file() or archive.is_symlink()):
+        return False,False
+    try:
+        meta=checked_json(manifest)
+        files=meta.get("files")
+        if (meta.get("recipe")!=recipe or not isinstance(files,list) or not files
+                or len(files)>256 or not isinstance(meta.get("source_sha256"),str)
+                or not HEX.fullmatch(meta["source_sha256"])
+                or not isinstance(meta.get("artifact_sha256"),str)
+                or not HEX.fullmatch(meta["artifact_sha256"])):
+            return False,True
+        raw=archive.read_bytes()
+        if len(raw)>64*1024*1024 or sha(raw)!=meta["artifact_sha256"]:
+            return False,True
+        normalized=[]
+        for name in files:
+            if not isinstance(name,str) or "\\" in name:
+                return False,True
+            rel=PurePosixPath(name)
+            if rel.is_absolute() or any(part in ("", ".", "..") for part in rel.parts):
+                return False,True
+            normalized.append(rel.as_posix())
+        if len(set(normalized))!=len(normalized):return False,True
+        expected=[recipe+"/"+name for name in sorted(normalized)]
+        if recovered_root.parent.is_symlink():return False,True
+        recovered_root.mkdir(parents=True,mode=0o700,exist_ok=True)
+        if recovered_root.is_symlink():return False,True
+        target=recovered_root/recipe
+        if target.exists() or target.is_symlink():return False,True
+        stage=Path(tempfile.mkdtemp(prefix="."+recipe+"-",dir=str(recovered_root)))
+        try:
+            payload=stage/recipe
+            payload.mkdir(mode=0o700)
+            with zipfile.ZipFile(archive,"r") as zf:
+                infos=zf.infolist()
+                if ([i.filename for i in infos]!=expected or zf.testzip() is not None
+                        or sum(i.file_size for i in infos)>64*1024*1024):
+                    return False,True
+                for info,name in zip(infos,normalized):
+                    mode=info.external_attr>>16
+                    if stat.S_ISLNK(mode):return False,True
+                    dest=payload/name
+                    dest.parent.mkdir(parents=True,exist_ok=True)
+                    dest.write_bytes(zf.read(info))
+                    os.chmod(dest,0o600)
+            source=payload
+            _,checked_files=maker.inspect_recipe(source)
+            if tuple(checked_files)!=tuple(normalized) or maker.source_digest(source,checked_files)!=meta["source_sha256"]:
+                return False,True
+            os.chmod(payload,0o700)
+            os.replace(payload,target)
+            return True,False
+        finally:
+            if stage.exists():shutil.rmtree(stage)
+    except (OSError,ValueError,RuntimeError,UnicodeError,zipfile.BadZipFile,KeyError):
+        return False,True
+
 def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
     """Rebuild from either verified generated or installed native recipe roots."""
     root=Path(root);source_root=Path(source_root);maker_path=Path(maker_path)
@@ -73,6 +141,13 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
         if candidate.resolve() in (item.resolve() for item in roots):
             raise ValueError("DUPLICATE_SOURCE_ROOT")
         roots.append(candidate)
+    recovered_root=root/"quality-excellence"/"recovered-verified-sources"
+    if recovered_root.exists() or recovered_root.is_symlink():
+        if recovered_root.is_symlink() or not recovered_root.is_dir():
+            raise ValueError("RECOVERED_SOURCE_ROOT_UNSAFE")
+        if recovered_root.resolve() in (item.resolve() for item in roots):
+            raise ValueError("DUPLICATE_SOURCE_ROOT")
+        roots.append(recovered_root)
     if type(limit) is not int or not 1<=limit<=3:raise ValueError("BOUNDED_CAP_REQUIRED")
     maker=load_maker(maker_path)
     workorders=root/"quality-excellence"/"production-workorders"
@@ -86,6 +161,7 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
     totals={"orders_seen":0,"sources_available":0,"source_changed":0,
             "rebuild_attempted":0,"technical_candidates_verified":0,
             "unchanged_or_human_only":0,"missing_source":0,"failed":0,
+            "archive_sources_recovered":0,"archive_recovery_rejected":0,
             "verified_source_roots":len(roots),
             "source_root_hits":[0 for _ in roots],
             "duplicate_recipe_roots_blocked":0}
@@ -109,8 +185,19 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
                    for index,parent in enumerate(roots)
                    if (parent/recipe).is_dir() and not (parent/recipe).is_symlink()]
         if not locations:
-            totals["missing_source"]+=1
-            continue
+            restored,rejected=recover_source_from_archive(root,recipe,maker,recovered_root)
+            if rejected:totals["archive_recovery_rejected"]+=1
+            if restored:
+                totals["archive_sources_recovered"]+=1
+                if recovered_root.resolve() not in (item.resolve() for item in roots):
+                    roots.append(recovered_root);totals["source_root_hits"].append(0)
+                    totals["verified_source_roots"]=len(roots)
+                index=next(i for i,item in enumerate(roots)
+                           if item.resolve()==recovered_root.resolve())
+                locations=[(index,recovered_root,recovered_root/recipe)]
+            else:
+                totals["missing_source"]+=1
+                continue
         # Never make an arbitrary selection if two roots own the same recipe.
         # A genuine source collision needs operator provenance resolution.
         if len(locations)>1:
@@ -197,3 +284,4 @@ def main():
             additional_source_roots=a.additional_source_root)
 
 if __name__=="__main__":main()
+

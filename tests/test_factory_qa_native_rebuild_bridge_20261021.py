@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import zipfile
+import shutil
 from unittest.mock import patch
 
 FILE=Path(__file__).resolve().parents[1]/"scripts/factory_qa_native_rebuild_bridge_20261021.py"
@@ -59,6 +61,19 @@ class QARebuildTests(unittest.TestCase):
     def run_bridge(self):
         with patch.object(m,"load_maker",return_value=FakeMaker):
             return m.execute(self.root,self.source,FILE,limit=2)
+    def seed_archived_only(self,name="synth_abc123",*,tamper=False):
+        item,original=self.seed(name=name,defects=["P0_BUILD_ARCHIVE_INVALID"])
+        source_bytes=(item/"README.md").read_bytes()
+        archive=original/(item.name+"-internal-qa.zip")
+        with zipfile.ZipFile(archive,"w",zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(item.name+"/README.md",source_bytes)
+        (original/"manufacturing_manifest.json").write_text(json.dumps({
+            "schema_version":2,"recipe":item.name,"files":["README.md"],
+            "source_sha256":hashlib.sha256(source_bytes).hexdigest(),
+            "artifact_sha256":FakeMaker.sha256_file(archive)}))
+        if tamper:archive.write_bytes(archive.read_bytes()+b"tamper")
+        shutil.rmtree(item)
+        return item.name,archive
     def test_changed_native_source_makes_real_private_candidate_once(self):
         _,original=self.seed()
         previous=(original/"manufacturing_manifest.json").read_bytes()
@@ -84,6 +99,29 @@ class QARebuildTests(unittest.TestCase):
             "source_sha256":FakeMaker.source_digest(path,("README.md",))}))
         r=self.run_bridge()
         self.assertEqual(r["technical_candidates_verified"],1)
+    def test_verified_original_zip_recovers_missing_recipe_for_rework(self):
+        name,archive=self.seed_archived_only()
+        before=archive.read_bytes()
+        result=self.run_bridge()
+        self.assertEqual(result["archive_sources_recovered"],1)
+        self.assertEqual(result["missing_source"],0)
+        self.assertEqual(result["rebuild_attempted"],1)
+        self.assertEqual(result["technical_candidates_verified"],1)
+        self.assertEqual((self.root/"quality-excellence"/"recovered-verified-sources"/name/"README.md").read_bytes(),b"v2 changed")
+        self.assertEqual(archive.read_bytes(),before)
+    def test_tampered_original_zip_never_becomes_rebuild_source(self):
+        self.seed_archived_only(tamper=True)
+        result=self.run_bridge()
+        self.assertEqual(result["archive_sources_recovered"],0)
+        self.assertEqual(result["archive_recovery_rejected"],1)
+        self.assertEqual(result["missing_source"],1)
+        self.assertEqual(result["rebuild_attempted"],0)
+    def test_recovery_root_is_reused_across_recipes_without_ambiguity(self):
+        self.seed_archived_only("synth_first")
+        self.seed_archived_only("synth_other")
+        result=self.run_bridge()
+        self.assertEqual(result["technical_candidates_verified"],2)
+        self.assertEqual(result["duplicate_recipe_roots_blocked"],0)
     def test_does_not_mutate_original_stock_on_failed_rebuild(self):
         _,original=self.seed()
         saved=(original/"manufacturing_manifest.json").read_bytes()
@@ -177,3 +215,4 @@ class QARebuildTests(unittest.TestCase):
         self.assertEqual(r["rebuild_attempted"],0)
 
 if __name__=="__main__":unittest.main()
+
