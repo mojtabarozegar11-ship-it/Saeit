@@ -1,8 +1,27 @@
 #!/usr/bin/env python3
 """Fail-closed offline product release gate. No publication or financial action."""
-import argparse, hashlib, json, pathlib, sys, zipfile
+import argparse, hashlib, hmac, json, pathlib, re, sys, zipfile
 
 ROLES = ("scientific", "technical", "legal", "independent_human")
+HEX256 = re.compile(r"^[0-9a-f]{64}$")
+def valid_receipt(record, product):
+    """Verify an exact version-bound SHA-256 digest of an external receipt file.
+    Digest alone is not proof of an authentic human signature or independent review.
+    """
+    if not isinstance(record, dict) or record.get("verified") is not True:
+        return False
+    path = pathlib.Path(record.get("receipt_path", ""))
+    expected = record.get("receipt_sha256", "")
+    if not HEX256.fullmatch(expected) or not path.is_file() or path.is_symlink():
+        return False
+    if not hmac.compare_digest(sha(path), expected):
+        return False
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeError):
+        return False
+    return payload.get("family") == product.get("family") and payload.get("version") == product.get("version") and payload.get("role") == record.get("role")
+
 def sha(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -47,8 +66,12 @@ def check(manifest):
             errors.append(name + ": missing verified evidence")
     for role in ROLES:
         approval = manifest.get("approvals", {}).get(role, {})
-        if approval.get("verified") is not True or not approval.get("receipt_sha256"):
+        if not valid_receipt(dict(approval, role=role), product):
             errors.append(role + ": unverified approval")
+    # A digest-bound receipt does not establish legal authority or authentic signature.
+    # Require an explicit separately attested independent identity check.
+    if manifest.get("independent_identity_verification") is not True:
+        errors.append("independent identity verification absent")
     if manifest.get("owner_publication_permission") is not True:
         errors.append("owner publication permission absent")
     if manifest.get("rights_cleared") is not True:
