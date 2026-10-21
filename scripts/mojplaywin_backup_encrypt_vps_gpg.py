@@ -25,7 +25,9 @@ from secrets import token_hex
 MARKER = b"\n-- MJWP-RECOVERY-20261017-COMPLETE-F91D7C40 --\n"
 MAX_SOURCE_BYTES = 12 * 1024**3
 MAX_ENCRYPTED_BYTES = 12 * 1024**3
-MIN_START_FREE = 14 * 1024**3
+# Initial admission cap is below the independently measured 13.61 GiB available;
+# encrypt_stream_to_file retains its per-chunk hard stop at 3 GiB free.
+MIN_START_FREE = 10 * 1024**3
 BLOCK = 128 * 1024
 STEM = "mojplaywin_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "_" + token_hex(8)
 VERSION = "gpgv2"
