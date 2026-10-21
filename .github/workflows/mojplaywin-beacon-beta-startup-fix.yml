@@ -1,0 +1,145 @@
+name: Repair isolated MojPlayWin Beacon Labyrinth beta startup
+on:
+  pull_request:
+    paths:
+      - "site_patches/mojplaywin/20261021/beacon-labyrinth/index.html"
+      - "scripts/patch_mpw_beacon_beta.py"
+      - "tests/test_mpw_beacon_startup_patch.py"
+      - ".github/workflows/mojplaywin-beacon-beta-startup-fix.yml"
+  push:
+    branches: [main]
+    paths:
+      - "site_patches/mojplaywin/20261021/beacon-labyrinth/index.html"
+      - "scripts/patch_mpw_beacon_beta.py"
+      - "tests/test_mpw_beacon_startup_patch.py"
+      - ".github/workflows/mojplaywin-beacon-beta-startup-fix.yml"
+permissions: {contents: read}
+concurrency:
+  group: isolated-mpw-beacon-startup-20261021
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Run isolated startup and publish safety regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/patch_mpw_beacon_beta.py
+          python3 -m unittest discover -s tests -p 'test_mpw_beacon_startup_patch.py' -v
+  publish-beacon-only:
+    if: github.event_name == 'push'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure pinned GitHub Actions to VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "${VPS_KEY:-}" && -n "${HOST_KEY:-}" ]] || { echo 'SSH credentials missing'; exit 1; }
+          VPS_KEY="${VPS_KEY//\\n/$'\n'}"
+          HOST_KEY="${HOST_KEY//\\n/$'\n'}"
+          WORK="$RUNNER_TEMP/mpw-beacon-ssh"
+          install -d -m 700 "$WORK"
+          printf '%s\n' "$VPS_KEY" > "$WORK/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$WORK/host.key"
+          chmod 600 "$WORK/"*.key
+          ssh-keygen -y -P "" -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$WORK/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null > "$WORK/vps.known"
+          test -s "$WORK/vps.known"
+          VPS_FP="$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$VPS_FP" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]] || { echo 'VPS host pin mismatch'; exit 1; }
+          cat > "$WORK/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          HOST_SCAN="$(timeout 30s ssh -F "$WORK/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          [[ -n "$HOST_SCAN" ]] || { echo 'cPanel host key unavailable'; exit 1; }
+          printf '%s\n' "$HOST_SCAN" > "$WORK/host.known"
+          HOST_FP="$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$HOST_FP" == "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]] || { echo 'cPanel host pin mismatch'; exit 1; }
+          cat >> "$WORK/config" <<EOF
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+      - name: Recheck protected main routes before changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in / /games/ /store/ /game-releases/20261021/index.html /game-releases/20261021/beacon-labyrinth/index.html; do
+            [[ "$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path")" == "200" ]]
+          done
+      - name: Transfer only one patched HTML and bounded patch controller
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -cf "$RUNNER_TEMP/mpw-beacon-patch.tar" scripts/patch_mpw_beacon_beta.py site_patches/mojplaywin/20261021/beacon-labyrinth/index.html
+          STAGE="/home/zomorod2/.mpw-beacon-patch-$GITHUB_RUN_ID"
+          ssh -F "$RUNNER_TEMP/mpw-beacon-ssh/config" saeit-host "test ! -e '$STAGE' && test ! -L '$STAGE' && install -d -m 700 '$STAGE'"
+          scp -F "$RUNNER_TEMP/mpw-beacon-ssh/config" "$RUNNER_TEMP/mpw-beacon-patch.tar" "saeit-host:$STAGE/package.tar"
+          ssh -F "$RUNNER_TEMP/mpw-beacon-ssh/config" saeit-host "tar -xf '$STAGE/package.tar' -C '$STAGE'"
+      - name: Apply hash-pinned single-file fix, keeping verified backup
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/mpw-beacon-ssh/config" saeit-host "python3 '/home/zomorod2/.mpw-beacon-patch-$GITHUB_RUN_ID/scripts/patch_mpw_beacon_beta.py' install '$GITHUB_RUN_ID' '$GITHUB_SHA'"
+      - name: Check patched game, sibling games and main-site routes publicly
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for i in 1 2 3 4 5 6 7; do
+            if curl -fsSL --max-time 20 -H "Cache-Control: no-cache" "https://mojplaywin.com/game-releases/20261021/beacon-labyrinth/index.html?beacon_fix=$GITHUB_RUN_ID-$i" -o "$RUNNER_TEMP/beacon-live.html" && grep -Fq 'beacon-initial-frame-fix-20261021' "$RUNNER_TEMP/beacon-live.html"; then ok=1; break; fi
+            sleep 3
+          done
+          [[ "$ok" == "1" ]] || { echo 'BEACON_LIVE_MARKER_MISSING'; exit 1; }
+          for slug in pulse-forge cipher-garden skyline-keeper nebula-salvage; do
+            [[ "$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com/game-releases/20261021/$slug/index.html")" == "200" ]]
+          done
+          for path in / /games/ /store/ /game-releases/20261021/index.html; do
+            [[ "$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path")" == "200" ]]
+          done
+          echo 'BEACON_RUNTIME_PATCH_HTTP_VERIFIED_AND_SIBLINGS_UNCHANGED'
+      - name: Restore exactly the original HTML if smoke fails
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          ssh -F "$RUNNER_TEMP/mpw-beacon-ssh/config" saeit-host "python3 '/home/zomorod2/.mpw-beacon-patch-$GITHUB_RUN_ID/scripts/patch_mpw_beacon_beta.py' rollback '$GITHUB_RUN_ID' '$GITHUB_SHA'"
+      - name: Clean owned staging only; retain verifiable backup
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/mpw-beacon-ssh/config" ]]; then
+            ssh -F "$RUNNER_TEMP/mpw-beacon-ssh/config" saeit-host "rm -rf -- '/home/zomorod2/.mpw-beacon-patch-$GITHUB_RUN_ID'" || true
+          fi
+          rm -rf -- "$RUNNER_TEMP/mpw-beacon-ssh" "$RUNNER_TEMP/mpw-beacon-patch.tar"
