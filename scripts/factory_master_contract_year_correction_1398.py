@@ -59,9 +59,54 @@ def status(workspace):
             "owner_asserted_signed_original_unverified":len(valid)==1,
             "contract_year_correction_ledger_verified":len(valid)==1,
             "commercial_release_enabled":False}
+def terms_attestation():
+    """User confirmation, NOT inspection/authentication of signed original."""
+    return {
+        "schema":"saeit.factory.master-contract-terms-owner-attestation.v1",
+        "original_contract_execution_year_owner_attested_jalali":1398,
+        "current_wording_same_as_signed_1398_original_owner_attested":True,
+        "later_contract_clauses_added_owner_attested":False,
+        "typed_copy_preparation_year_jalali":1405,
+        "owner_confirmation_date":"2026-10-21",
+        "corrected_library_document_sha256":AFTER,
+        "independent_comparison_with_original_signed_copy_completed":False,
+        "original_physical_signatures_independently_authenticated":False,
+        "signing_legal_capacity_currently_independently_verified":False,
+        "creates_new_contract_or_signatures":False,
+        "commercial_release_approved":False,
+    }
+def attest_terms(workspace):
+    base=Path(workspace)/"legal-capacity"
+    if base.is_symlink() or not base.is_dir():
+        raise ValueError("PRIVATE_LEGAL_LEDGER_NOT_PRESENT")
+    expected=serialized()
+    old=[p for p in base.glob("master-year-1398-*.json")
+         if p.is_file() and not p.is_symlink() and p.read_bytes()==expected]
+    if len(old)!=1:
+        raise ValueError("CORRECTED_1398_CONTRACT_YEAR_RECORD_REQUIRED")
+    blob=(json.dumps(terms_attestation(),sort_keys=True,ensure_ascii=False,separators=(",",":"))+"\n").encode()
+    sha=hashlib.sha256(blob).hexdigest()
+    dest=base/("master-terms-1398-"+sha[:24]+".json")
+    if dest.is_symlink():raise ValueError("UNSAFE_OWNER_ATTESTATION")
+    if dest.exists():
+        if dest.read_bytes()!=blob:raise ValueError("IMMUTABLE_ATTESTATION_CONFLICT")
+    else:
+        with dest.open("xb") as output:
+            output.write(blob);output.flush();os.fsync(output.fileno())
+        os.chmod(dest,0o600)
+    return {
+        "master_contract_year":1398,
+        "current_terms_same_as_original_1398_owner_attested":True,
+        "new_clauses_after_1398_owner_attested":False,
+        "attestation_sha256":sha,
+        "independent_signed_original_comparison":False,
+        "independent_signature_verification":False,
+        "sale_or_quality_clearance":False,
+    }
+
 if __name__=="__main__":
     parser=argparse.ArgumentParser()
-    parser.add_argument("command",choices=["install","status"])
+    parser.add_argument("command",choices=["install","status","attest-terms"])
     parser.add_argument("--workspace",required=True)
     args=parser.parse_args()
-    print(json.dumps(install(args.workspace) if args.command=="install" else status(args.workspace),sort_keys=True,ensure_ascii=False))
+    print(json.dumps(install(args.workspace) if args.command=="install" else attest_terms(args.workspace) if args.command=="attest-terms" else status(args.workspace),sort_keys=True,ensure_ascii=False))
