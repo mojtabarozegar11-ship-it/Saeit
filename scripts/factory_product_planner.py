@@ -226,6 +226,51 @@ def seeds(profiles):
           requirements=['Produce the declared editable and usable deliverables.','Pass independent '+', '.join(p['specialist_tests'])+' tests.'],audience='internal engineering',language='en'))
     return rows
 
+def verified_mpw_return_family(root, order, profiles):
+    """Classify existing site return orders from actual immutable VPS stock.
+
+    Classification allows a product-specific work plan, NOT manufacture,
+    completion, grade approval or commercial distribution. No old WO is edited.
+    """
+    if order.get("requesting_site")!="mojplaywin.com" or order.get("origin")!="mojplaywin-site-qa-return":
+        return None
+    recipe=order.get("source_product_id")
+    version=order.get("source_sha256")
+    artifact_sha=order.get("source_artifact_sha256")
+    if (not isinstance(recipe,str) or not re.fullmatch(r"[a-z][a-z0-9_]{1,63}",recipe)
+        or not isinstance(version,str) or not re.fullmatch(r"[a-f0-9]{64}",version)
+        or not isinstance(artifact_sha,str) or not re.fullmatch(r"[a-f0-9]{64}",artifact_sha)):
+        return None
+    stock=root/"production-warehouse"/"finished"/recipe/version
+    if stock.is_symlink() or not stock.is_dir() or stock.parent.is_symlink():
+        return None
+    meta=read(stock/"warehouse_manifest.json")
+    family=meta.get("family_id")
+    if (family not in profiles or meta.get("product_id")!=recipe
+        or meta.get("source_sha256")!=version or meta.get("artifact_sha256")!=artifact_sha
+        or meta.get("manufacturing_qc")!="passed" or meta.get("commercial_release") is not False):
+        return None
+    if order.get("family_id") not in (None,family):
+        return None
+    archive=stock/"product.zip"
+    if archive.is_symlink() or not archive.is_file() or not 0<archive.stat().st_size<=25*1024*1024:
+        return None
+    actual=hashlib.sha256()
+    with archive.open("rb") as stream:
+        for block in iter(lambda:stream.read(1024*1024),b""):
+            actual.update(block)
+    if actual.hexdigest()!=artifact_sha:
+        return None
+    feedback=root/"design-intake"/"mojplaywin-stage1-quality-returns"/(recipe+"-"+version+".json")
+    ticket=read(feedback)
+    if (ticket.get("tenant")!="mojplaywin-main"
+        or ticket.get("status")!="return_for_qa_completion"
+        or ticket.get("product_id")!=recipe or ticket.get("source_sha256")!=version
+        or ticket.get("artifact_sha256")!=artifact_sha or ticket.get("published") is not False):
+        return None
+    return family
+
+
 def cycle(root,registry,dispatch=False,max_execute=1):
     root=Path(root)
     if not root.is_dir() or root.is_symlink():raise ValueError('PLANNER_ROOT_REQUIRED')
@@ -251,11 +296,18 @@ def cycle(root,registry,dispatch=False,max_execute=1):
             for path in existing:
                 try:
                     item=read(path);legacy_scanned+=1
-                    if item.get('phase')!='engineering_specification' or item.get('family_id') not in profiles:continue
+                    if item.get('phase')!='engineering_specification':continue
+                    family=item.get('family_id')
+                    if item.get('requesting_site')=='mojplaywin.com':
+                        family=verified_mpw_return_family(root,item,profiles)
+                        if family is None:
+                            rejected.append({'file':path.name,'reason':'site_return_lacks_verified_family_or_source'})
+                            continue
+                    if family not in profiles:continue
                     if item.get('status') in ('completed_verified','in_finished_goods_warehouse_not_distributed'):continue
                     if item.get('id')!=path.stem:raise ValueError('PLANNER_ORDER_ID_MISMATCH')
                     objective=item.get('subject');requirements=item.get('acceptance')
-                    candidate={'schema':SCHEMA,'kind':'custom','family_id':item['family_id'],
+                    candidate={'schema':SCHEMA,'kind':'custom','family_id':family,
                       'objective':objective,'requirements':requirements,'audience':str(item.get('requesting_site','internal factory')),
                       'language':'fa' if item.get('requesting_site')=='zomorodmelal.ir' else 'en'}
                     candidate=request(candidate,profiles);key=digest(candidate);raw.append(candidate)
@@ -272,7 +324,7 @@ def cycle(root,registry,dispatch=False,max_execute=1):
                 req=request(item,profiles);unique[digest(req)]=req
             except (ValueError,TypeError):rejected.append({'reason':'request_schema_or_scope_invalid'})
         rows=[];now=time.time();capacity=resources(root);holds=admissible(capacity)
-        selected=sorted(unique.items(),key=lambda item:(item[0] in legacy_aliases,item[0]))[:500]
+        selected=sorted(unique.items(),key=lambda item:(item[0] not in legacy_aliases,item[0]))[:500]
         for key,req in selected:
             plan=prepare(root,req,profiles[req['family_id']],routes);plan['source_orders']=legacy_aliases.get(key,[]);save(plans/(key+'.json'),plan)
             path=states/(key+'.json');prior=read(path) if path.exists() else {}

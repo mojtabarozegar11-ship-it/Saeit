@@ -800,8 +800,43 @@ def three_site_product_requests(root=DEST,cycle=None):
             candidates.append((product.name,version,meta["artifact_sha256"]))
             require(len(candidates)<=MAX_ITEMS,"THREE_ORDERS_SITE_INDEX_FULL")
     require(len(candidates)>=3,"THREE_ORDERS_NOT_ENOUGH_VERIFIED_SITE_PRODUCTS")
-    start=(day.toordinal()*3)%len(candidates)
-    chosen=[candidates[(start+i)%len(candidates)] for i in range(3)]
+    # Use distinct site-verified product versions before replaying older work.
+    # Past batches are immutable: they are NOT removed, replaced or marked done.
+    # A valid same-day existing batch is revalidated below, never overwritten.
+    outbound=root/"product-orders-outbound"
+    private_new(outbound)
+    path=outbound/(cycle+".json")
+    history=sorted(outbound.glob("*.json"))
+    require(len(history)<=2000,"THREE_ORDERS_HISTORY_CAPACITY")
+    historical_sources=set()
+    for previous_path in history[-180:]:
+        if previous_path.name>=path.name or not PRODUCT_ORDER_CYCLE.fullmatch(previous_path.stem):
+            continue
+        require(previous_path.is_file() and not previous_path.is_symlink(),
+                "THREE_ORDERS_HISTORY_UNSAFE")
+        previous_batch=json_file(previous_path,100_000)
+        require(previous_batch.get("schema")==PRODUCT_ORDER_SCHEMA
+                and previous_batch.get("tenant")==TENANT
+                and previous_batch.get("cycle")==previous_path.stem,
+                "THREE_ORDERS_HISTORY_UNTRUSTED")
+        past=previous_batch.get("requests")
+        require(isinstance(past,list) and len(past)==3,
+                "THREE_ORDERS_HISTORY_UNTRUSTED")
+        for previous_row in past:
+            require(isinstance(previous_row,dict)
+                    and isinstance(previous_row.get("product_id"),str)
+                    and RECIPE.fullmatch(previous_row["product_id"])
+                    and isinstance(previous_row.get("source_sha256"),str)
+                    and SHA.fullmatch(previous_row["source_sha256"]),
+                    "THREE_ORDERS_HISTORY_UNTRUSTED")
+            historical_sources.add((previous_row["product_id"],
+                                    previous_row["source_sha256"]))
+    fresh=[row for row in candidates if (row[0],row[1]) not in historical_sources]
+    # If all three fresh versions are unavailable, keep the strict native
+    # overlap/capacity block; never manufacture a fake "new" source.
+    pool=fresh if len(fresh)>=3 else candidates
+    start=(day.toordinal()*3)%len(pool)
+    chosen=[pool[(start+i)%len(pool)] for i in range(3)]
     rows=[]
     for slot,(product,version,sha) in enumerate(chosen,1):
         request_id="MPWREQ-"+digest((cycle+"|"+product+"|"+version).encode())[:20]
@@ -815,9 +850,6 @@ def three_site_product_requests(root=DEST,cycle=None):
          "publications":0,"commercial_authorizations":0,
          "source":"site_verified_private_qa_returns",
          "real_customer_purchases":0}
-    outbound=root/"product-orders-outbound"
-    private_new(outbound)
-    path=outbound/(cycle+".json")
     if path.exists() or path.is_symlink():
         # A site's verified stock may grow during the same UTC day. Once a
         # three-product batch exists, NEVER replace it based on today's changing
@@ -1066,7 +1098,12 @@ def receive_three_product_requests(raw,root=VPS,engine_path=None,max_active=300)
                 and original.get("status")=="return_for_qa_completion"
                 and original.get("issues")==list(ISSUES),
                 "THREE_ORDERS_UNVERIFIED_SITE_FEEDBACK")
-        validated.append(row)
+        # Bind a native WO to the family actually declared by the verified VPS
+        # manufacturing manifest, never to a guessed website category.
+        family=manifest.get("family_id")
+        family=(family if isinstance(family,str) and
+                re.fullmatch(r"F(?:0[1-9]|[1-3][0-9]|40)",family) else None)
+        validated.append(dict(row,verified_factory_family=family))
     engine=_native_order_engine(engine_path)
     area=root/"production-instructions"
     orderdir=area/"orders"
@@ -1133,6 +1170,8 @@ def receive_three_product_requests(raw,root=VPS,engine_path=None,max_active=300)
                                         "Independent quality and rights review before sale",
                                         "Never release publicly without owner authorization"],
                           "technical_product_release":False}
+                    if row["verified_factory_family"] is not None:
+                        task["family_id"]=row["verified_factory_family"]
                     record=dict(task,schema=engine.SCHEMA,id=oid,
                         fingerprint=engine.fingerprint(task),
                         created_utc=engine.stamp(),status="issued",

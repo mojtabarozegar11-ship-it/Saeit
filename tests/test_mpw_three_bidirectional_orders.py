@@ -119,6 +119,51 @@ class ThreeRealProductRequests(unittest.TestCase):
         self.assertEqual(done["new_native_orders"],3)
         self.assertEqual(len(list((self.root/"production-instructions/orders").glob("WO-*.json"))),6)
 
+    def test_verified_daily_source_rotation_avoids_old_unresolved_product_versions(self):
+        self._extend_real_stock_to_twelve()
+        first=courier.three_site_product_requests(self.site,cycle="20261019")
+        second=courier.three_site_product_requests(self.site,cycle="20261020")
+        third=courier.three_site_product_requests(self.site,cycle="20261021")
+        def versions(batch):
+            return {(x["product_id"],x["source_sha256"]) for x in json.loads(batch)["requests"]}
+        self.assertEqual(len(versions(first)),3)
+        self.assertEqual(len(versions(second)),3)
+        self.assertEqual(len(versions(third)),3)
+        self.assertFalse(versions(first)&versions(second))
+        self.assertFalse(versions(first)&versions(third))
+        self.assertFalse(versions(second)&versions(third))
+        self.assertEqual(courier.three_site_product_requests(self.site,cycle="20261019"),first)
+        self.assertEqual(courier.three_site_product_requests(self.site,cycle="20261020"),second)
+        self.assertEqual(courier.three_site_product_requests(self.site,cycle="20261021"),third)
+        self.assertFalse(any(row.get("paid_customer_purchase") for batch in (first,second,third)
+                             for row in json.loads(batch)["requests"]))
+
+    def test_tampered_earlier_batch_cannot_redirect_next_day_rotation(self):
+        self._extend_real_stock_to_twelve()
+        courier.three_site_product_requests(self.site,cycle="20261019")
+        previous=self.site/"product-orders-outbound"/"20261019.json"
+        record=json.loads(previous.read_text())
+        record["tenant"]="forged"
+        previous.write_text(json.dumps(record))
+        with self.assertRaisesRegex(RuntimeError,"THREE_ORDERS_HISTORY_UNTRUSTED"):
+            courier.three_site_product_requests(self.site,cycle="20261020")
+
+    def test_new_site_work_orders_carry_only_a_verified_warehouse_family(self):
+        batch=courier.three_site_product_requests(self.site,cycle="20261019")
+        for row in json.loads(batch)["requests"]:
+            target=self.root/"production-warehouse"/"finished"/row["product_id"]/row["source_sha256"]/"warehouse_manifest.json"
+            manifest=json.loads(target.read_text())
+            manifest["family_id"]="F28"
+            target.write_text(json.dumps(manifest))
+        admission=courier.receive_three_product_requests(batch,self.root,ENGINE)
+        self.assertEqual(admission["new_native_orders"],3)
+        for order in admission["native_product_orders"]:
+            p=self.root/"production-instructions"/"orders"/(order+".json")
+            ticket=json.loads(p.read_text())
+            self.assertEqual(ticket["family_id"],"F28")
+            self.assertFalse(ticket["publication_approved"])
+            self.assertFalse(ticket["manufacturing_qa_passed"])
+
     def test_site_order_shares_no_other_tenant_and_cannot_spoof_customer_sale(self):
         raw=json.loads(courier.three_site_product_requests(self.site,cycle="20261019"))
         raw["tenant"]="zomorodmelal-main"
