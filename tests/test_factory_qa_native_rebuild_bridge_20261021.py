@@ -69,8 +69,10 @@ class QARebuildTests(unittest.TestCase):
             zf.writestr(("README.md" if flat else item.name+"/README.md"),source_bytes)
         (original/"manufacturing_manifest.json").write_text(json.dumps({
             "schema_version":2,"recipe":item.name,"files":["README.md"],
-            "source_sha256":hashlib.sha256(source_bytes).hexdigest(),
-            "artifact_sha256":FakeMaker.sha256_file(archive)}))
+            "source_sha256":FakeMaker.source_digest(item,("README.md",)),
+            "artifact_sha256":FakeMaker.sha256_file(archive),
+            "qa_status":"passed","commercial_status":"private_internal_qa_pass_not_published",
+            "public_listing_enabled":False,"owner_publication_approval":False}))
         artifact=FakeMaker.sha256_file(archive)
         receipt=self.root/"quality-excellence"/"rework"/item.name/"current.json"
         receipt.parent.mkdir(parents=True,exist_ok=True)
@@ -118,14 +120,25 @@ class QARebuildTests(unittest.TestCase):
         self.assertEqual(result["technical_candidates_verified"],1)
         self.assertEqual((self.root/"quality-excellence"/"recovered-verified-sources"/name/"README.md").read_bytes(),b"v2 changed")
         self.assertEqual(archive.read_bytes(),before)
-    def test_receipt_bound_archive_recovers_source_without_manifest_fields(self):
+    def test_receipt_bound_archive_without_original_source_manifest_is_rejected(self):
         name,_=self.seed_archived_only()
         original=self.root/"digital-products"/name
         (original/"manufacturing_manifest.json").write_text(json.dumps({"legacy":True}))
         result=self.run_bridge()
-        self.assertEqual(result["archive_sources_recovered"],1)
-        self.assertEqual(result["missing_source"],0)
-        self.assertEqual(result["rebuild_attempted"],1)
+        self.assertEqual(result["archive_sources_recovered"],0)
+        self.assertEqual(result["missing_source"],1)
+        self.assertEqual(result["rebuild_attempted"],0)
+        self.assertEqual(result["archive_recovery_rejection_reasons"]["source_manifest_technical_quality_unverified"],1)
+    def test_receipt_bound_archive_with_wrong_original_source_sha_is_rejected(self):
+        name,_=self.seed_archived_only()
+        original=self.root/"digital-products"/name
+        meta=json.loads((original/"manufacturing_manifest.json").read_text())
+        meta["source_sha256"]="0"*64
+        (original/"manufacturing_manifest.json").write_text(json.dumps(meta))
+        result=self.run_bridge()
+        self.assertEqual(result["archive_sources_recovered"],0)
+        self.assertEqual(result["missing_source"],1)
+        self.assertEqual(result["archive_recovery_rejection_reasons"]["source_hash_mismatch"],1)
     def test_receipt_bound_flat_archive_recovers_only_testable_source(self):
         self.seed_archived_only(flat=True)
         result=self.run_bridge()
