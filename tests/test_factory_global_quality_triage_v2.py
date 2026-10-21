@@ -17,7 +17,7 @@ class GlobalTriageTests(unittest.TestCase):
         zipfile=folder/(name+"-internal-qa.zip")
         zipfile.write_bytes(b"tactical-game-tests-pass-but-no-expert-reviews"*10)
         good=hashlib.sha256(zipfile.read_bytes()).hexdigest()
-        record={"recipe":name,"qa_status":"passed","artifact_sha256":
+        record={"recipe":name,"qa_status":"passed","source_sha256":"f"*64,"artifact_sha256":
                 ("0"*64 if broken else good),
                 "commercial_status":"private_internal_qa_pass_not_published"}
         if family:record["family_id"]=family
@@ -44,6 +44,35 @@ class GlobalTriageTests(unittest.TestCase):
             q=json.loads((root/"quality-excellence/rework/altered_game/current.json").read_text())
             self.assertEqual(q["quality_status"],"QUARANTINE_TECHNICAL_OR_INTEGRITY")
             self.assertIn("P0_BUILD_HASH_NOT_MATCHING_MANIFEST",q["defects"])
+
+    def test_missing_source_digest_is_quarantined_not_counted_as_technical_pass(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,folder=self.make(d,"legacy_source")
+            mpath=folder/"manufacturing_manifest.json"
+            doc=json.loads(mpath.read_text())
+            doc.pop("source_sha256")
+            mpath.write_text(json.dumps(doc))
+            report=m.triage_inventory(root,P,R,"missing-provenance")
+            self.assertEqual(report["total_products"],1)
+            self.assertEqual(report["source_provenance_missing_or_invalid"],1)
+            self.assertEqual(report["technical_passed"],0)
+            self.assertTrue(report["all_eligible_inventory_scanned"])
+            ticket=json.loads((root/"quality-excellence/rework/legacy_source/current.json").read_text())
+            self.assertEqual(ticket["quality_status"],"QUARANTINE_TECHNICAL_OR_INTEGRITY")
+            self.assertFalse(ticket["source_provenance_hash_present"])
+            self.assertIn("P0_SOURCE_PROVENANCE_HASH_MISSING_OR_INVALID",ticket["defects"])
+            self.assertIn("RECONSTRUCT_OR_AUTHENTICATE_ORIGINAL_SOURCE_PROVENANCE",
+                          ticket["rework_actions"])
+            self.assertFalse(ticket["commercial_release_allowed"])
+
+    def test_inventory_over_budget_must_fail_before_writing_partial_report(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,_=self.make(d,"first_recipe")
+            root,_=self.make(d,"second_recipe")
+            with self.assertRaisesRegex(ValueError,"QUALITY_INVENTORY_LIMIT_EXCEEDED:2"):
+                m.triage_inventory(root,P,R,"incomplete-scan",limit=1)
+            self.assertFalse((root/"quality-excellence/rework/first_recipe/current.json").exists())
+            self.assertFalse((root/"quality-excellence/audit-receipts").exists())
 
     def test_missing_family_gets_specific_fix_not_generic_vague_quality(self):
         with tempfile.TemporaryDirectory() as d:
