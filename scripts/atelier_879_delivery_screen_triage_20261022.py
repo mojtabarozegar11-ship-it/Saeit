@@ -58,3 +58,30 @@ for route in paths:
     except Exception as ex:
         print("ATELIER_PUBLIC_GET_ERROR="+json.dumps({"route":route,"error":type(ex).__name__}))
 print("ATELIER_READ_ONLY_SCREENSHOT_TRIAGE=COMPLETE")
+# Focused source view: legacy vs native checkout, read-only.
+import importlib
+for dotted in ("core.cryptopay_checkout.checkout","mpw_commerce.product_checkout_page.product_checkout_page","mpw_commerce.product_checkout_page.approved_for_checkout","mpw_commerce.product_checkout_page._private_file"):
+    try:
+        module,name=dotted.rsplit(".",1)
+        fn=getattr(importlib.import_module(module),name)
+        src=inspect.getsource(fn).splitlines()
+        selected=[]
+        for idx,line in enumerate(src,1):
+            clean=line.strip()
+            if any(w in clean.lower() for w in ("password","secret","token","private_key","api_key")):
+                continue
+            if idx<=150 and any(w in clean.lower() for w in ("def ","product","asset","ready","file","if ","return ","render(","redirect","invoice","order","payment","checkout","download","metadata","path(","getattr","exists","is_file","user","request")):
+                selected.append({"line":idx,"source":clean[:240]})
+        origin=inspect.getsourcefile(fn)
+        print("ATELIER_TWO_CHECKOUT_SOURCES="+json.dumps({"handler":dotted,"relative_source":str(Path(origin).relative_to(APP)) if origin and origin.startswith(str(APP)) else "external","relevant_lines":selected},sort_keys=True))
+    except Exception as ex:
+        print("ATELIER_TWO_CHECKOUT_SOURCE_ERROR="+json.dumps({"handler":dotted,"type":type(ex).__name__}))
+for key in ("private_file","mpw_commerce","fulfillment_status","digital_asset_format"):
+    val=md.get(key)
+    if key=="private_file":
+        path=Path(str(val)) if isinstance(val,str) else None
+        print("ATELIER_DIGITAL_FILE_SAFETY="+json.dumps({"metadata_value_is_str":isinstance(val,str),"absolute":bool(path and path.is_absolute()),"exists":bool(path and path.is_file()),"suffix":path.suffix if path else None,"size":path.stat().st_size if path and path.is_file() else None}))
+    elif key=="mpw_commerce":
+        print("ATELIER_COMMERCE_CONFIG_KEYS="+json.dumps({"is_dict":isinstance(val,dict),"keys":sorted(val.keys()) if isinstance(val,dict) else []}))
+    else:
+        print("ATELIER_DELIVERY_META="+json.dumps({"key":key,"value":str(val)[:120]}))
