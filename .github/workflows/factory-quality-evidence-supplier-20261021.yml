@@ -4,12 +4,14 @@ on:
     branches: [main]
     paths:
       - scripts/factory_quality_evidence_supplier_v1.py
+      - scripts/factory_quality_bulk_evidence_supplier_v1.py
       - tests/test_factory_quality_evidence_supplier_v1.py
       - .github/workflows/factory-quality-evidence-supplier-20261021.yml
   push:
     branches: [main]
     paths:
       - scripts/factory_quality_evidence_supplier_v1.py
+      - scripts/factory_quality_bulk_evidence_supplier_v1.py
       - tests/test_factory_quality_evidence_supplier_v1.py
       - .github/workflows/factory-quality-evidence-supplier-20261021.yml
   workflow_dispatch:
@@ -27,7 +29,7 @@ jobs:
       - name: Validate supplier contract and actual ZIP evidence
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/factory_quality_evidence_supplier_v1.py
+          python3 -m py_compile scripts/factory_quality_evidence_supplier_v1.py scripts/factory_quality_bulk_evidence_supplier_v1.py
           python3 -B -m unittest discover -s tests -p test_factory_quality_evidence_supplier_v1.py -v
           echo FACTORY_100_SUPPLIER_ROUTES_AND_REAL_ZIP_QA=PASS
   private-vps-supply:
@@ -72,12 +74,16 @@ jobs:
           stage="/home/githubops/factory-runtime/operations/.qa1000-supply-$GITHUB_RUN_ID"
           timeout 35s ssh -T -F "$d/config" factory-vps "set -eu; test \$(id -un) = githubops; umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
           timeout 35s scp -q -F "$d/config" scripts/factory_quality_evidence_supplier_v1.py "factory-vps:$stage/supplier.py"
+          timeout 35s scp -q -F "$d/config" scripts/factory_quality_bulk_evidence_supplier_v1.py "factory-vps:$stage/bulk.py"
           timeout 35s scp -q -F "$d/config" factory_config/quality_100_criteria.json "factory-vps:$stage/criteria.json"
           wanted="$(sha256sum scripts/factory_quality_evidence_supplier_v1.py | cut -d' ' -f1)"
           have="$(timeout 30s ssh -T -F "$d/config" factory-vps "sha256sum '$stage/supplier.py' | cut -d' ' -f1")"
           test "$wanted" = "$have"
           wanted="$(sha256sum factory_config/quality_100_criteria.json | cut -d' ' -f1)"
           have="$(timeout 30s ssh -T -F "$d/config" factory-vps "sha256sum '$stage/criteria.json' | cut -d' ' -f1")"
+          test "$wanted" = "$have"
+          wanted="$(sha256sum scripts/factory_quality_bulk_evidence_supplier_v1.py | cut -d' ' -f1)"
+          have="$(timeout 30s ssh -T -F "$d/config" factory-vps "sha256sum '$stage/bulk.py' | cut -d' ' -f1")"
           test "$wanted" = "$have"
           echo FACTORY_QA1000_SUPPLIER_SOURCE_PINNING=PASS
       - name: Measure six bounded technical criteria on the pinned real F28 ZIP
@@ -133,6 +139,15 @@ jobs:
           print("FACTORY_QA1000_PROFESSIONAL_CERTIFICATION=PENDING")
           print("FACTORY_QA1000_SUPPLIER_RECEIPT_SHA256="+good[-1])
           PY
+      - name: Supply evidence across every finished warehouse version
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/supply-evidence-ssh"
+          stage="/home/githubops/factory-runtime/operations/.qa1000-supply-$GITHUB_RUN_ID"
+          root="/home/githubops/factory-runtime/private/autonomous-product-cycle"
+          timeout 8m ssh -T -F "$d/config" factory-vps \
+            "python3 -B '$stage/bulk.py' --factory-root '$root' --catalog '$stage/criteria.json' --supplier '$stage/supplier.py'"
       - name: Clean up temporary SSH credentials
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/supply-evidence-ssh"
