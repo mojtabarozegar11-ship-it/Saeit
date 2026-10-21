@@ -177,6 +177,16 @@ def preview():
  print("MPW_AUTODELIVERY_PREFLIGHT="+json.dumps({
   "before_sha":sha(before),"after_sha":sha(after),"one_template_only":True,
   "mainnet_verifier_code_unchanged":True,"financial_writes":0,"new_api_type":"GET status"}))
+def extract_js_preview():
+ ensure_home()
+ updated=changed(TARGET.read_bytes()).decode("utf8")
+ matches=re.findall(r"<script\\b[^>]*>(.*?)</script\\s*>",updated,re.I|re.S)
+ if len(matches)!=1:fail("Expected precisely one CSP-hashed checkout script")
+ script=re.sub(r"\\{\\{\\s*product\\.pk\\s*\\}\\}","72",matches[0])
+ if "{{" in script or "{%" in script or "NOWPAYMENTS_API_KEY" in script:
+  fail("Unsafe or unresolved JavaScript expression")
+ print(script)
+
 def install(run):
  preview()
  b,m=runpaths(run)
@@ -214,8 +224,8 @@ def selftest():
   else:fail("Source drift checks failed")
  print("MPW_AUTODELIVERY_LOCAL_SELFTEST=PASS")
 if __name__=="__main__":
- if len(sys.argv)==2 and sys.argv[1] in ("selftest","preview"):
-  {"selftest":selftest,"preview":preview}[sys.argv[1]]()
+ if len(sys.argv)==2 and sys.argv[1] in ("selftest","preview","extractjs"):
+  {"selftest":selftest,"preview":preview,"extractjs":extract_js_preview}[sys.argv[1]]()
  elif len(sys.argv)==3 and sys.argv[1] in ("install","verify","rollback"):
   {"install":install,"verify":verify,"rollback":rollback}[sys.argv[1]](sys.argv[2])
  else:raise SystemExit("selftest|preview|install RUN|verify RUN|rollback RUN")
