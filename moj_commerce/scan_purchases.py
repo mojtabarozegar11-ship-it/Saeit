@@ -1,6 +1,6 @@
 """Bounded automatic scanning of Django-native seller-isolated TRX invoices.
 
-One PostgreSQL purchase is the source of truth. No separate global SQLite
+One single transactional Django purchase database is the source of truth.\nPostgreSQL or verified MariaDB/InnoDB is supported; no separate global SQLite
 wallet pool or cross-database checkout commit. Discovery is untrusted; only a
 solidified native TRX body AND receipt make an eligible delivery event.
 Do not schedule this source on any live VPS until merchant onboarding, backup,
