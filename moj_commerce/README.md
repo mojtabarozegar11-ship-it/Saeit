@@ -158,3 +158,25 @@ Quality tests are appended to Django and PostgreSQL isolated Actions. Test
 migrations with `python -m django makemigrations moj_commerce --check --dry-run
 --settings=moj_commerce.test_settings` and run both test matrices before merging.
 See `STAGE_V05_RELEASE_GATES.md`. This version is **NOT DEPLOYED**.
+
+## v0.6 — Server-rendered console and safe operations recovery (SOURCE ONLY)
+
+The seller can inspect a responsive read-only HTML view at
+`GET /moj-commerce/merchants/<merchant-uuid>/console/`, subject to the same
+active-owner authorization as the JSON dashboard. Django escapes customer-entered
+product titles; private information is omitted; no external script is loaded.
+The operator health endpoint now includes fixed-code alert data.
+
+`python manage.py moj_commerce_healthcheck --strict` outputs redacted machine-readable
+status and exits nonzero for warning/critical conditions. **It does not send
+alerts or self-schedule.** To make 24/7 notifications real, an owner-approved
+scheduler, independent email/incident provider and deduplicated delivery/ack flow
+must be deployed and monitored.
+
+`python manage.py moj_commerce_recover_stale` is read-only by default. Explicit
+`--apply` plus `MOJ_COMMERCE_RECOVERY_ENABLED=True`, PostgreSQL and an exclusive
+scanner advisory mutex allow old abandoned `ScannerRun` heartbeat records to
+be closed. This NEVER changes purchase, payment, download, refund, token, wallet
+or entitlement state. See `STAGE_V06_RELEASE_GATES.md` and isolated tests.
+
+No cPanel route inclusion, scanner cron or live deployment has occurred.
