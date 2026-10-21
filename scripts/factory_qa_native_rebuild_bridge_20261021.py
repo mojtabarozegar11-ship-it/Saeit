@@ -75,12 +75,25 @@ def recover_source_from_archive(root,recipe,order,maker,recovered_root):
             return False,"triage_receipt_mismatch"
         try:meta=checked_json(manifest) if manifest.is_file() else {}
         except (ValueError,OSError,UnicodeError):meta={}
+        # A bound ZIP is not proof of original *source* unless the exact
+        # manufacturing manifest authenticates its complete source file list
+        # and the canonical pre-build source hash.
         files=meta.get("files") if meta.get("recipe")==recipe else None
         source_expected=meta.get("source_sha256")
-        if not isinstance(source_expected,str) or not HEX.fullmatch(source_expected):source_expected=None
-        if (not isinstance(files,list) or not files or len(files)>256
-                or any(not isinstance(name,str) or "\\" in name for name in files)):
-            files=None
+        if (meta.get("qa_status")!="passed"
+            or meta.get("commercial_status")!="private_internal_qa_pass_not_published"
+            or meta.get("public_listing_enabled") is not False
+            or meta.get("owner_publication_approval") is not False):
+            return False,"source_manifest_technical_quality_unverified"
+        if not isinstance(source_expected,str) or not HEX.fullmatch(source_expected):
+            return False,"source_provenance_missing"
+        if (not isinstance(files,list) or not 1<=len(files)<=256
+            or len(set(files))!=len(files)
+            or any(not isinstance(name,str) or len(name)>240 or "\\" in name
+                or not name or name.startswith("/") or
+                any(part in ("","..",".") for part in name.split("/"))
+                for name in files)):
+            return False,"source_file_inventory_not_verifiable"
         raw=archive.read_bytes()
         if len(raw)>64*1024*1024:return False,"archive_too_large"
         if sha(raw)!=expected_artifact:return False,"archive_hash_mismatch"
@@ -125,7 +138,7 @@ def recover_source_from_archive(root,recipe,order,maker,recovered_root):
                     dest.write_bytes(zf.read(info));os.chmod(dest,0o600)
             _,checked_files=maker.inspect_recipe(payload)
             source_hash=maker.source_digest(payload,checked_files)
-            if tuple(checked_files)!=tuple(normalized) or (source_expected and source_hash!=source_expected):
+            if tuple(checked_files)!=tuple(normalized) or source_hash!=source_expected:
                 return False,"source_hash_mismatch"
             os.chmod(payload,0o700);os.replace(payload,target)
             return True,None
