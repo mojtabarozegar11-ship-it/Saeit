@@ -1,0 +1,74 @@
+name: MOJ Commerce v1.2 restore encrypted extra webroots offsite in disposable runner (NO DEPLOY)
+on:
+  push:
+    branches: ['feature/moj-commerce-v12-mariadb-isolated-20261022']
+    paths:
+      - '.github/workflows/moj-commerce-v12-extra-webroot-restore.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj-commerce-v12-extra-webroot-restore
+  cancel-in-progress: false
+jobs:
+  read-and-restore:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/moj-commerce-v12-mariadb-isolated-20261022'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Synthetic isolation tests and syntax preflight
+        run: |
+          python3 -m unittest -v tests.test_moj_commerce_v12_restore_extra_webroots tests.test_moj_commerce_v12_extra_webroot_archive
+          python3 -m py_compile tools/moj_commerce_v12_restore_extra_webroots_isolated.py scripts/mojplaywin_recovery_stream_vps.py
+      - name: Authenticate GPGv2 and restore three webroot trees to disposable private runner
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" || { echo 'MOJ_COMMERCE_V12_VPS_KEY_ABSENT'; exit 1; }
+          d="$RUNNER_TEMP/moj-commerce-v12-extra-restore-ssh"
+          install -d -m 700 "$d"
+          restore_dir=""
+          cleanup() {
+            rm -rf -- "$d"
+            if [[ -n "$restore_dir" && "$restore_dir" == "$RUNNER_TEMP"/moj-commerce-extra-root-restore-* ]]; then
+              rm -rf -- "$restore_dir"
+            fi
+          }
+          trap cleanup EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          free="$(df -PB1 "$RUNNER_TEMP" | awk 'NR==2 {print $4}')"
+          test "$free" -gt 2000000000
+          restore_dir="$(mktemp -d "$RUNNER_TEMP/moj-commerce-extra-root-restore-XXXXXXXX")"
+          chmod 700 "$restore_dir"
+          recover64="$(base64 -w0 scripts/mojplaywin_recovery_stream_vps.py)"
+          verify64="$(base64 -w0 tools/moj_commerce_v12_restore_extra_webroots_isolated.py)"
+          call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
+          timeout 420s ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -i "$d/key" githubops@178.239.147.150 "python3 -c '$call' '$recover64' extra-webroots" |
+            timeout 420s python3 -c "$call" "$verify64" "$restore_dir" |
+            tee "$d/summary.json"
+          python3 - "$d/summary.json" <<'PY_VALIDATE'
+          import json,sys
+          with open(sys.argv[1]) as f:
+              r=json.load(f)
+          assert r['root_count_restored']==3
+          assert r['regular_files_restored']==1343
+          assert r['directories_restored']==933
+          assert r['regular_bytes_restored']==61275687
+          assert r['links_restored']==0
+          assert r['extra_root_restore_complete'] is True
+          assert r['production_modified'] is False
+          assert r['entire_cpanel_tenant_restore_proven'] is False
+          assert r['release_permitted'] is False
+          print('MOJ_COMMERCE_V12_EXTRA_ROOTS_PRIVATE_RESTORE=VERIFIED')
+          PY_VALIDATE
+          echo 'MOJ_COMMERCE_V12_LIVE_SITES_MODIFIED=NO'
+          echo 'MOJ_COMMERCE_V12_PUBLIC_PAYMENT_RELEASE=STILL_NO_GO'
