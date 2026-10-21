@@ -53,6 +53,17 @@ class AutonomousEvidenceAgentTests(unittest.TestCase):
             dossier = agent.build_dossier(root, policy, recipe, source_sha, artifact_sha, supplier)
             self.assertEqual(len(dossier["ai_workpapers"]), 100)
             self.assertTrue(dossier["ai_evidence_is_not_human_or_independent_certification"])
+            self.assertTrue(dossier["owner_directed_agent_work_product"])
+            self.assertEqual(dossier["owner_delegation"]["authorization_basis"],
+                             "owner_explicitly_authorized_in_chat")
+            self.assertEqual(dossier["owner_delegation"]["attribution"],
+                             "owner-directed agent work product; technical author remains the AI agent")
+            self.assertFalse(dossier["owner_delegation"]["digital_signature_created"])
+            self.assertFalse(dossier["owner_delegation"]["owner_signature_or_private_key_used"])
+            self.assertFalse(dossier["owner_delegation"]["human_expert_or_licensed_counsel_replaced"])
+            self.assertFalse(dossier["owner_delegation"]["legal_certification_created"])
+            self.assertEqual(dossier["receipt_integrity"],
+                             "SHA256_CONTENT_INTEGRITY_ONLY_NOT_DIGITAL_SIGNATURE")
             self.assertIsNone(dossier["professional_quality_1000_points"])
             rights = dossier["ai_workpapers"]["Q071"]
             self.assertEqual(rights["workpaper_state"], "AI_PRELIMINARY_ONLY")
