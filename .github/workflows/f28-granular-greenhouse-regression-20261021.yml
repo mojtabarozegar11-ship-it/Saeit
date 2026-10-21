@@ -6,6 +6,11 @@ on:
       - product_recipes/greenhouse_crop_margin/calculator.py
       - product_recipes/greenhouse_crop_margin/test_calculator.py
       - product_recipes/greenhouse_crop_margin/README.md
+      - product_recipes/greenhouse_crop_margin/example_inputs.json
+      - scripts/factory_f28_private_build_cycle_20261021.py
+      - tests/test_factory_f28_private_cycle_20261021.py
+      - scripts/factory_product_maker.py
+      - scripts/factory_personal_owner_passport_policy_20261020.py
       - .github/workflows/f28-granular-greenhouse-regression-20261021.yml
   push:
     branches: [main]
@@ -13,6 +18,11 @@ on:
       - product_recipes/greenhouse_crop_margin/calculator.py
       - product_recipes/greenhouse_crop_margin/test_calculator.py
       - product_recipes/greenhouse_crop_margin/README.md
+      - product_recipes/greenhouse_crop_margin/example_inputs.json
+      - scripts/factory_f28_private_build_cycle_20261021.py
+      - tests/test_factory_f28_private_cycle_20261021.py
+      - scripts/factory_product_maker.py
+      - scripts/factory_personal_owner_passport_policy_20261020.py
       - .github/workflows/f28-granular-greenhouse-regression-20261021.yml
   workflow_dispatch:
 permissions: {contents: read}
@@ -31,8 +41,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile product_recipes/greenhouse_crop_margin/calculator.py
+          python3 -m py_compile product_recipes/greenhouse_crop_margin/calculator.py scripts/factory_f28_private_build_cycle_20261021.py
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s product_recipes/greenhouse_crop_margin -p test_calculator.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_f28_private_cycle_20261021 -v
           python3 - <<'PY'
           from pathlib import Path
           module=Path("product_recipes/greenhouse_crop_margin/calculator.py").read_text()
@@ -86,6 +97,22 @@ jobs:
             got="$(ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$file' | cut -d' ' -f1")"
             test "$want" = "$got"
           done
+          # Stage a genuine recipe and pinned manufacturer in isolated private stock.
+          ssh -T "${opts[@]}" "$host" "mkdir -m 700 -p '$stage/recipes/greenhouse_crop_margin' '$stage/scripts'"
+          for file in calculator.py test_calculator.py README.md example_inputs.json; do
+            source="product_recipes/greenhouse_crop_margin/$file"
+            scp -q "${opts[@]}" "$source" "$host:$stage/recipes/greenhouse_crop_margin/$file"
+            want="$(sha256sum "$source" | cut -d' ' -f1)"
+            got="$(ssh -T "${opts[@]}" "$host" "sha256sum '$stage/recipes/greenhouse_crop_margin/$file' | cut -d' ' -f1")"
+            test "$want" = "$got"
+          done
+          for file in factory_product_maker.py factory_personal_owner_passport_policy_20261020.py factory_f28_private_build_cycle_20261021.py; do
+            source="scripts/$file"
+            scp -q "${opts[@]}" "$source" "$host:$stage/scripts/$file"
+            want="$(sha256sum "$source" | cut -d' ' -f1)"
+            got="$(ssh -T "${opts[@]}" "$host" "sha256sum '$stage/scripts/$file' | cut -d' ' -f1")"
+            test "$want" = "$got"
+          done
           timeout 120s ssh -T "${opts[@]}" "$host" "bash -se -- '$stage' '$GITHUB_SHA'" <<'REMOTE'
           set -euo pipefail
           umask 077
@@ -115,6 +142,28 @@ jobs:
           print("F28_VPS_PRIVATE_CANDIDATE_TESTS=PASS")
           print("F28_COMMERCIAL_RELEASE=BLOCKED_INDEPENDENT_REVIEW_PENDING")
           PY
+          # Produce a genuine ZIP and test the customer-facing copy independently.
+          "$python" -B "$folder/scripts/factory_f28_private_build_cycle_20261021.py" \
+            --source "$folder/recipes/greenhouse_crop_margin" \
+            --maker "$folder/scripts/factory_product_maker.py" \
+            --out "$folder/product-cycle" --revision "$revision"
+          "$python" -B - "$folder" <<'PYCHECK'
+          import hashlib,json,sys
+          from pathlib import Path
+          root=Path(sys.argv[1]); private=root/"product-cycle"
+          doc=json.loads((private/"private-cycle-receipt.json").read_text())
+          zipfile=private/"private-stock/greenhouse_crop_margin/greenhouse_crop_margin-internal-qa.zip"
+          assert doc["status"]=="private_technical_candidate_verified"
+          assert doc["independent_black_box_checks"]["customer_scenarios_verified"]==2
+          assert doc["technical_tests"]>=10
+          assert hashlib.sha256(zipfile.read_bytes()).hexdigest()==doc["artifact_sha256"]
+          assert doc["commercial_release_authorized"] is False
+          assert doc["independent_professional_quality_1000_passed"] is False
+          assert not (private/"private-rework-order.json").exists()
+          print("F28_VPS_REAL_CUSTOMER_ZIP_VERIFIED=PASS")
+          print("F28_VPS_INDEPENDENT_TECHNICAL_BLACKBOX_SCENARIOS=2")
+          print("F28_VPS_1000_QUALITY_CLEARANCE=NOT_GRANTED")
+          PYCHECK
           REMOTE
       - name: Remove ephemeral SSH credentials
         if: always()
