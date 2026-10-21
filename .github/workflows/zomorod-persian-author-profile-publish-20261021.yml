@@ -229,11 +229,26 @@ jobs:
           trap rollback EXIT
           python3 - "$web/.htaccess" "$sha" <<'PY'
           from pathlib import Path
-          import re,sys
-          p=Path(sys.argv[1]);raw=p.read_bytes()
+          import sys
+          p=Path(sys.argv[1])
+          raw=p.read_bytes()
           rule=b'RewriteRule ^authors/mojtaba-rozegar/?$ authors/mojtaba-rozegar/index.html [END]'
           assert rule not in raw
-          anchor=re.search(rb'(?im)^[ \\t]*RewriteEngine[ \\t]+On[ \\t]*
+          lines=raw.splitlines(keepends=True)
+          index=next((i for i,line in enumerate(lines) if line.strip().lower()==b'rewriteengine on'),None)
+          assert index is not None
+          before=b''.join(lines[:index+1])
+          after=b''.join(lines[index+1:])
+          updated=before+bytes([10])+rule+bytes([10])+after
+          tmp=p.with_name(p.name+'.author-next.'+sys.argv[2])
+          tmp.write_bytes(updated)
+          tmp.chmod(p.stat().st_mode&0o777)
+          tmp.replace(p)
+          print('PERSIAN_AUTHOR_ROUTE_RULE_STAGED=yes')
+          PY
+          htaccess_changed=1
+          htaccess_expected="$(sha256sum "$web/.htaccess" | cut -d' ' -f1)"
+          mkdir -p "$(dirname "$page")"
           cp -p "$candidate" "$page.tmp.$sha"
           chmod 644 "$page.tmp.$sha"
           mv "$page.tmp.$sha" "$page"
