@@ -295,7 +295,10 @@ def reauthor_document_delivery(root,recipe,order,maker):
         if not entries or not any(ext in {".txt",".md",".pdf",".docx",".epub"}
                                   for _,ext,_ in entries):
             return "no_supported_document_content"
-        if len(entries)>80:
+        # The ZIP member and total-byte caps above are the resource bound.
+        # Keep every supported asset within that verified bound; an arbitrary
+        # lower cap silently strands otherwise valid customer bundles.
+        if len(entries)>2500:
             return "document_asset_count_over_limit"
         source_stage=Path(tempfile.mkdtemp(prefix=".document-edition-",dir=str(source_parent)))
         try:
