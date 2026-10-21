@@ -1,0 +1,41 @@
+name: MOJ1 isolated offline pilot checks
+on:
+  push:
+    branches: ['moj1/shasta-pilot-20261021']
+    paths:
+      - '.github/workflows/moj1-isolated-offline.yml'
+      - 'experiments/moj1-pilot/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj1-isolated-offline-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  test-and-compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install test-only dependencies
+        working-directory: experiments/moj1-pilot
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run offline unit and rejection tests
+        working-directory: experiments/moj1-pilot
+        run: npm test
+      - name: Compile Solidity contracts
+        working-directory: experiments/moj1-pilot
+        run: npm run compile
+      - name: Verify ABI, bytecode, and Shasta-only guard
+        working-directory: experiments/moj1-pilot
+        run: npm run preflight
+      - name: Explicit no-chain safety receipt
+        run: |
+          echo 'MOJ1_CI_MODE=OFFLINE_ONLY'
+          echo 'MOJ1_MAINNET_DEPLOYMENT=DISABLED'
+          echo 'MOJ1_WALLET_SECRETS=NOT_USED'

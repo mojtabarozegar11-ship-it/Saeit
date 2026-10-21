@@ -1,0 +1,29 @@
+{
+  "status": "PROVISIONAL_TESTNET_ONLY",
+  "name": "Moj 1", "symbol": "MOJ1", "network": "TRON", "tokenStandard": "TRC-20",
+  "decimals": 18, "fixedSupply": true, "totalWholeTokens": 100000000000,
+  "ownerApproval": {
+    "nameApproved": true,
+    "symbolApproved": true,
+    "supplyApproved": true,
+    "date": "2026-10-21",
+    "allocationApproved": false,
+    "mainnetReleaseApproved": false
+  },
+  "allocation": [
+    {"bucket": "player_rewards_and_ecosystem", "percent": 35, "tokens": 35000000000, "proposedRelease": "60 months, funded reward rules"},
+    {"bucket": "product_and_security_development", "percent": 20, "tokens": 20000000000, "proposedRelease": "48 months"},
+    {"bucket": "future_liquidity_reserve", "percent": 15, "tokens": 15000000000, "proposedRelease": "locked pending market and legal approvals"},
+    {"bucket": "team_and_contributors", "percent": 10, "tokens": 10000000000, "proposedRelease": "12-month cliff, then 36-month linear vesting"},
+    {"bucket": "partners_and_creators", "percent": 15, "tokens": 15000000000, "proposedRelease": "48 months"},
+    {"bucket": "contingency_and_audit_reserve", "percent": 5, "tokens": 5000000000, "proposedRelease": "locked pending treasury approval"}
+  ],
+  "mainnetBlockers": [
+    "Owner approval of provisional allocation, distribution and release schedules",
+    "On-chain vaults enforcing allocations and vesting; multisig treasury",
+    "Independent contract audit and actual behavioral tests",
+    "Country-specific legal, sanctions, gaming, payment and privacy reviews",
+    "Appropriate disclosure, white paper and approvals where required",
+    "Separate owner signature before any Mainnet deployment"
+  ]
+}

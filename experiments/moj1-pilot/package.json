@@ -1,0 +1,7 @@
+{
+  "name": "mojcoin-shasta-pilot", "version": "0.1.0", "private": true,
+  "scripts": {"test": "node --test tests/*.test.mjs", "compile": "tronbox compile", "preflight": "node scripts/preflight-offline.mjs", "test:onchain:local": "tronbox test --network development tests/tronbox/vesting.integration.js", "deploy:shasta": "node scripts/deploy-shasta.mjs"},
+  "dependencies": {"@openzeppelin/tron-contracts": "5.6.0", "tronweb": "6.5.0"},
+  "devDependencies": {"tronbox": "4.10.0"},
+  "overrides": {"diff": "8.0.3", "serialize-javascript": "7.0.5", "ws": "8.21.0", "tronbox": {"tronweb": "6.5.0"}}
+}
