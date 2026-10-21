@@ -83,15 +83,15 @@ jobs:
             echo 'CPANEL_POSTGRES_FEATURE_QUERY_NO_JSON'
           else
             printf '%s' "$feature_json" | python3 -c 'import json,sys
-try:
-    result=json.load(sys.stdin).get("result",{})
-    status=result.get("status")
-    data=result.get("data")
-    print("CPANEL_POSTGRES_FEATURE_API_STATUS="+str(status))
-    print("CPANEL_POSTGRES_FEATURE_MATCH_PRESENT="+str(int("postgres" in json.dumps(data).lower())))
-    print("CPANEL_POSTGRES_FEATURE_API_ERROR_PRESENT="+str(int(bool(result.get("errors")))))
-except (ValueError,TypeError,AttributeError):
-    print("CPANEL_POSTGRES_FEATURE_QUERY_INVALID_JSON")'
+          try:
+              result=json.load(sys.stdin).get("result",{})
+              status=result.get("status")
+              data=result.get("data")
+              print("CPANEL_POSTGRES_FEATURE_API_STATUS="+str(status))
+              print("CPANEL_POSTGRES_FEATURE_MATCH_PRESENT="+str(int("postgres" in json.dumps(data).lower())))
+              print("CPANEL_POSTGRES_FEATURE_API_ERROR_PRESENT="+str(int(bool(result.get("errors")))))
+          except (ValueError,TypeError,AttributeError):
+              print("CPANEL_POSTGRES_FEATURE_QUERY_INVALID_JSON")'
           fi
           echo 'V11_PG_CAPABILITIES_OBSERVED_NO_DATABASE_CREATED_NO_PRODUCTION_WRITE_NO_PAYMENT'
           # Fallback is synthetic SQLite backup/restore in a NEW private stage directory.
