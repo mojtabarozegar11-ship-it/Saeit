@@ -59,32 +59,51 @@ export async function openDeploymentJournal(path, context) {
         !state.steps || typeof state.steps !== 'object') {
       throw new Error('Journal identity mismatch: refusing to use another governance or compiled artifact');
     }
-    if (Object.values(state.steps).some(step => step?.status === 'BROADCAST_UNCERTAIN')) {
-      throw new Error('Unresolved Shasta broadcast in journal: DO NOT REDEPLOY; reconcile transaction externally');
-    }
+    // Allow a read-only reconciler to inspect uncertain entries. This does NOT
+    // authorize any new broadcast: markBroadcastUncertain rejects all pending steps.
 
     return {
       snapshot: () => structuredClone(state),
+      pending(name) {
+        const record = state.steps[name];
+        if (record?.status === 'BROADCAST_UNCERTAIN') return structuredClone(record);
+        return null;
+      },
       verifiedAddress(name) {
         const record = state.steps[name];
         if (record?.status === 'VERIFIED' && typeof record.address === 'string') return record.address;
-        if (record) throw new Error('Unexpected deployment journal state for ' + name);
+        if (record) throw new Error('Unresolved deployment journal state for ' + name + ': DO NOT REDEPLOY');
         return null;
       },
-      async markBroadcastUncertain(name) {
-        if (!['MojCoin', 'MojAssets'].includes(name) || state.steps[name]) {
+      async markBroadcastUncertain(name, details) {
+        const othersPending = Object.values(state.steps).some(
+          step => step?.status === 'BROADCAST_UNCERTAIN');
+        if (!['MojCoin', 'MojAssets'].includes(name) || state.steps[name] || othersPending) {
           throw new Error('Cannot repeat or overwrite a journaled deployment: ' + name);
         }
-        state.steps[name] = {status: 'BROADCAST_UNCERTAIN', startedAt: new Date().toISOString()};
-        await save(); // Must finish durably BEFORE calling contract().new
-      },
-      async markVerified(name, address) {
-        if (state.steps[name]?.status !== 'BROADCAST_UNCERTAIN' ||
-            typeof address !== 'string' || !address) {
-          throw new Error('Cannot confirm a step without recorded broadcast intent: ' + name);
+        if (!/^[a-f0-9]{64}$/i.test(details?.txID ?? '') ||
+            !/^[a-f0-9]{64}$/i.test(details?.rawDataSha256 ?? '') ||
+            !/^41[a-f0-9]{40}$/i.test(details?.expectedAddress ?? '')) {
+          throw new Error('Refusing to journal a broadcast without a complete signed txID and chain attestation');
         }
-        state.steps[name] = {...state.steps[name], status: 'VERIFIED',
-          address, verifiedAt: new Date().toISOString()};
+        state.steps[name] = {
+          status: 'BROADCAST_UNCERTAIN',
+          txID: details.txID.toLowerCase(),
+          rawDataSha256: details.rawDataSha256.toLowerCase(),
+          expectedAddress: details.expectedAddress.toLowerCase(),
+          startedAt: new Date().toISOString()
+        };
+        await save(); // Durable BEFORE the only permitted sendRawTransaction.
+      },
+      async markVerified(name, address, txID) {
+        const record = state.steps[name];
+        if (record?.status !== 'BROADCAST_UNCERTAIN' ||
+            !record.txID || record.txID !== txID?.toLowerCase() ||
+            record.expectedAddress !== address?.toLowerCase()) {
+          throw new Error('Cannot confirm without a matching journaled transaction receipt: ' + name);
+        }
+        state.steps[name] = {...record, status: 'VERIFIED',
+          address: address.toLowerCase(), verifiedAt: new Date().toISOString()};
         await save();
       },
       async close() {
