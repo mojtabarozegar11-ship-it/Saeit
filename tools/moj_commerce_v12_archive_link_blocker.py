@@ -40,8 +40,12 @@ def classify(stream):
     count = {"regular": 0, "directories": 0, "symlinks": 0,
              "absolute_links": 0, "derived_python_venv_links": 0,
              "unsafe_external_links": 0, "relative_links": 0,
+             "absolute_links_to_backed_root": 0, "absolute_links_other_home": 0,
+             "absolute_links_system_runtime": 0, "absolute_links_elsewhere": 0,
+             "absolute_link_target_present_as_archive_member": 0,
              "hardlinks": 0, "special": 0, "total_file_bytes": 0}
     roots, seen = set(), set()
+    eligible_absolute_targets = []
     with tarfile.open(fileobj=stream, mode="r|") as archive:
         for member in archive:
             if len(seen) >= MAX_MEMBERS:
@@ -75,6 +79,17 @@ def classify(stream):
                         count["derived_python_venv_links"] += 1
                     else:
                         count["unsafe_external_links"] += 1
+                    absolute = PurePosixPath(target)
+                    parts_target = absolute.parts
+                    if len(parts_target) >= 5 and parts_target[:3] == ("/", "home", "zomorod2") and parts_target[3] in ROOTS:
+                        count["absolute_links_to_backed_root"] += 1
+                        eligible_absolute_targets.append("/".join(parts_target[3:]))
+                    elif len(parts_target) >= 3 and parts_target[:3] == ("/", "home", "zomorod2"):
+                        count["absolute_links_other_home"] += 1
+                    elif len(parts_target) > 2 and parts_target[1] in ("opt", "usr"):
+                        count["absolute_links_system_runtime"] += 1
+                    else:
+                        count["absolute_links_elsewhere"] += 1
                 else:
                     dest = posixpath.normpath(posixpath.join(*parts[:-1], target))
                     if PurePosixPath(dest).parts[0] not in ROOTS or ".." in PurePosixPath(dest).parts:
@@ -84,6 +99,8 @@ def classify(stream):
                 count["hardlinks"] += 1
             else:
                 count["special"] += 1
+    count["absolute_link_target_present_as_archive_member"] = sum(
+        1 for member in eligible_absolute_targets if member in seen)
     # Drain footer to let upstream GPG verifier independently authenticate EOF.
     while stream.read(131072):
         pass
