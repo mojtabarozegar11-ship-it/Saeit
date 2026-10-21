@@ -176,19 +176,18 @@ def run(root=ROOT,max_new=43):
         rows=[]
         for p,row in entries:
             filename=p.name
-            # Only consume budget on an absent companion; every source is audited.
-            candidate=False
-            if max_new>0:
-                product=row.get("product_id");version=row.get("source_sha256")
-                if isinstance(product,str) and isinstance(version,str) and courier.RECIPE.fullmatch(product) and courier.SHA.fullmatch(version):
-                    expected=root/"customer-packs"/product/version/"customer-package.zip"
-                    candidate=not expected.exists()
-            # Count genuine package attempts, not unrelated invalid/blocked returns.
-            # Otherwise an early bad receipt can exhaust the budget for healthy stock.
-            allowed=candidate and attempted<max_new
-            if allowed:
+            # Inspect and authenticate the complete immutable source first.
+            # Do not spend the limited packaging budget on forged returns,
+            # corrupt stock, or existing native previews. The old path-only
+            # check could repeatedly spend all three slots on those cases.
+            preliminary=once(root,courier,packager,native,filename,row,False)
+            eligible=(preliminary["technical_zip_integrity_passed"] is True and
+                      preliminary["consumer_bundle_status"]=="absent")
+            if eligible and attempted<max_new:
                 attempted+=1
-            result=once(root,courier,packager,native,filename,row,allowed)
+                result=once(root,courier,packager,native,filename,row,True)
+            else:
+                result=preliminary
             if result["technical_zip_integrity_passed"]:checked+=1
             if result["new_customer_bundle_rebuilt"]:repaired+=1
             if result["new_native_private_preview_created"]:native_new+=1

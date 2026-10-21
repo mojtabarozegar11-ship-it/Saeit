@@ -25,24 +25,52 @@ class Stage1Test(unittest.TestCase):
    entries=[(Path("bad.json"),row_bad),(Path("valid.json"),row_ok)]
    attempted=[]
    def fake_once(root,courier,packager,native,filename,row,do_pack):
-    attempted.append(do_pack)
+    attempted.append((row["product_id"],do_pack))
+    is_valid=row["product_id"]=="valid_product"
     return {
      "product_id":row["product_id"],"source_sha256":row["source_sha256"],
-     "technical_zip_integrity_passed":False,
-     "new_customer_bundle_rebuilt":False,
+     "technical_zip_integrity_passed":is_valid,
+     "new_customer_bundle_rebuilt":is_valid and do_pack,
      "new_native_private_preview_created":False,
-     "consumer_bundle_status":"held_for_rework",
+     "consumer_bundle_status":("new_independently_verified" if do_pack else "absent")
+                              if is_valid else "held_for_rework",
      "consumer_package_sha256":None,
-     "blocking_reason":"REPAIR_MOCK_BLOCKED"
+     "blocking_reason":None if is_valid else "REPAIR_MOCK_BLOCKED"
     }
    # Freeze the rotation bucket so the intentionally bad receipt is first.
    # A successful repair attempt must not be consumed by this unrelated blocker.
    with mock.patch.object(worker,"stage1",return_value=entries),mock.patch.object(worker,"once",side_effect=fake_once),mock.patch.object(worker,"datetime") as clock:
     clock.now.return_value=datetime(2026,10,20,0,0,tzinfo=timezone.utc)
     report=worker.run(root,max_new=1)
-   self.assertEqual(attempted,[False,True])
+   self.assertEqual(attempted,[("bad",False),("valid_product",False),("valid_product",True)])
    self.assertEqual(report["technical_package_attempts_consumed"],1)
    self.assertEqual(report["commercially_approved_returns"],0)
+
+ def test_preexisting_native_preview_does_not_consume_budget(self):
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t)
+   rows=[(Path("preview.json"),{"product_id":"preview","source_sha256":"a"*64}),
+         (Path("new.json"),{"product_id":"new_product","source_sha256":"b"*64})]
+   observed=[]
+   def fake_once(root,courier,packager,native,filename,row,do_pack):
+    name=row["product_id"]
+    observed.append((name,do_pack))
+    status=("preexisting_native_private_preview_verified" if name=="preview"
+            else "new_independently_verified" if do_pack else "absent")
+    return {"product_id":name,"source_sha256":row["source_sha256"],
+      "technical_zip_integrity_passed":True,
+      "new_customer_bundle_rebuilt":bool(do_pack),
+      "new_native_private_preview_created":False,
+      "consumer_bundle_status":status,"consumer_package_sha256":None,
+      "blocking_reason":None}
+   with mock.patch.object(worker,"stage1",return_value=rows),mock.patch.object(worker,"once",side_effect=fake_once),mock.patch.object(worker,"datetime") as clock:
+    clock.now.return_value=datetime(2026,10,20,0,0,tzinfo=timezone.utc)
+    report=worker.run(root,max_new=1)
+   self.assertEqual(observed,[("preview",False),("new_product",False),("new_product",True)])
+   self.assertEqual(report["technical_package_attempts_consumed"],1)
+   self.assertEqual(report["existing_native_private_previews_revalidated"],1)
+   self.assertEqual(report["new_customer_bundles_technically_repaired"],1)
+   self.assertFalse(report["site_sales_enabled"])
 
  def test_bad_budget(self):
   with tempfile.TemporaryDirectory() as t:
