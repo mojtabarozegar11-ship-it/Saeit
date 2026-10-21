@@ -86,7 +86,7 @@ def seller_snapshot(merchant: Merchant, *, limit=15, now=None) -> dict:
         'totals':{'products':DigitalProduct.objects.filter(merchant=merchant,active=True).count(),
                   'orders':orders.count(),'paid_delivered':paid.count(),
                   'pending':pending.count(),'expired_pending':late.count(),
-                  'confirmed_sales_usd':str(totals['usd'] or Decimal('0.00')),
+                  'confirmed_sales_usd':str(Decimal(totals['usd'] or 0).quantize(Decimal('0.01'))),
                   'payment_discrepancies':review.count(),
                   'available_verified_addresses':available},
         'warnings':flags,'recent_orders':items,
