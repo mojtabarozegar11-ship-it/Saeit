@@ -48,6 +48,34 @@ class CorrectContractYear(unittest.TestCase):
             w=Path(d);(w/"legal-capacity").mkdir()
             with self.assertRaisesRegex(ValueError,"CORRECTED_1398_CONTRACT_YEAR_RECORD_REQUIRED"):
                 m.attest_terms(w)
+    def test_both_signing_capacities_owner_attested_without_invented_signatures(self):
+        facts=m.dual_capacity_attestation()
+        self.assertEqual(facts["contract_year_jalali"],1398)
+        self.assertTrue(facts["signing_capacities_owner_attested"]["individual_personal_ip_owner"])
+        self.assertTrue(facts["signing_capacities_owner_attested"]["company_managing_director_and_representative"])
+        self.assertTrue(facts["same_human_signed_in_two_distinct_capacities_owner_attested"])
+        self.assertFalse(facts["independently_inspected_original_signature"])
+        self.assertFalse(facts["company_signing_power_officially_verified_for_1398"])
+        self.assertFalse(facts["signed_qa_1000_certification_created"])
+        self.assertFalse(facts["commercial_release_authorized"])
+    def test_dual_capacity_receipt_requires_existing_immutable_owner_attestations(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);ledger=root/"legal-capacity";ledger.mkdir()
+            with self.assertRaisesRegex(ValueError,"SIGNED_1398_YEAR_AND_TERMS_OWNER_ATTESTATIONS_REQUIRED"):
+                m.attest_dual_capacity(root)
+            (ledger/"capacity-original.json").write_text(json.dumps({"sha256":m.BEFORE}))
+            m.install(root)
+            m.attest_terms(root)
+            old=set(ledger.iterdir())
+            first=m.attest_dual_capacity(root)
+            self.assertTrue(first["owner_attested_personal_signature"])
+            self.assertTrue(first["owner_attested_company_representative_signature"])
+            self.assertFalse(first["independent_original_signature_verification"])
+            self.assertFalse(first["official_company_authority_verified"])
+            self.assertFalse(first["qa_or_commercial_approval"])
+            self.assertTrue(old.issubset(set(ledger.iterdir())))
+            self.assertEqual(first,m.attest_dual_capacity(root))
+            self.assertEqual(len(list(ledger.glob("master-two-capacities-1398-*.json"))),1)
     def test_missing_original_evidence_never_forces_date_overwrite(self):
         with tempfile.TemporaryDirectory() as d:
             w=Path(d);cap=w/"legal-capacity";cap.mkdir()
