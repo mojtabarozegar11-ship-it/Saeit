@@ -105,7 +105,8 @@ def run_f28_runtime(package_path, supplier_script):
     return module.f28_runtime_proof(package_path)
 
 
-def evaluate(dossier, package_path, catalog, supplier_script=None, runtime_runner=None):
+def evaluate(dossier, package_path, catalog, supplier_script=None, runtime_runner=None,
+             manifest_path=None):
     dossier = dict(dossier)
     require(dossier.get("schema") == SUPPLIER_SCHEMA, "EVALUATOR_DOSSIER_SCHEMA_INVALID")
     recipe = dossier.get("product_id")
@@ -138,6 +139,12 @@ def evaluate(dossier, package_path, catalog, supplier_script=None, runtime_runne
     accepted = {}
     rejected_claims = []
     recorded_zip = dossier.get("q068_original_warehouse_zip_measurement")
+    supported_machine_claims = set(F28_CRITERIA) | {"Q068", "Q092"}
+    for unsupported in sorted(set(claimed) - supported_machine_claims):
+        rejected_claims.append({
+            "criterion_id": unsupported,
+            "reason": "UNSUPPORTED_AUTOMATED_MEASUREMENT",
+        })
     if "Q068" in claimed:
         if recorded_zip == zip_report:
             accepted["Q068"] = {"scope": "actual_package_member_sha_crc_integrity",
@@ -145,6 +152,42 @@ def evaluate(dossier, package_path, catalog, supplier_script=None, runtime_runne
         else:
             rejected_claims.append({"criterion_id": "Q068",
                                    "reason": "RECORDED_ZIP_MEASUREMENT_MISMATCH"})
+
+    if "Q092" in claimed:
+        try:
+            require(manifest_path is not None, "EVALUATOR_Q092_MANIFEST_REQUIRED")
+            manifest_file = Path(manifest_path)
+            manifest = read_json(manifest_file)
+            manifest_sha = digest(manifest_file.read_bytes())
+            require(manifest.get("schema") == "saeit.factory.production-warehouse.v1"
+                    and manifest.get("product_id") == recipe
+                    and manifest.get("source_sha256") == source
+                    and manifest.get("artifact_sha256") == actual_sha
+                    and manifest.get("bytes") == package.stat().st_size
+                    and manifest.get("manufacturing_qc") == "passed"
+                    and manifest.get("commercial_release") is False
+                    and manifest.get("site_transfer_state") == "not_transferred"
+                    and dossier.get("warehouse_manifest_sha256") == manifest_sha,
+                    "EVALUATOR_Q092_MANIFEST_BINDING_FAILED")
+            measurement = {
+                "product_id": recipe,
+                "source_sha256": source,
+                "artifact_sha256": actual_sha,
+                "warehouse_manifest_sha256": manifest_sha,
+                "package_bytes": package.stat().st_size,
+                "source_bytes_independently_verified": False,
+                "external_review_completed": False,
+            }
+            require(dossier.get("q092_exact_version_binding_measurement") == measurement,
+                    "EVALUATOR_Q092_RECORDED_MEASUREMENT_MISMATCH")
+            accepted["Q092"] = {
+                "scope": "actual_manifest_and_artifact_hash_binding_only",
+                "measurement": measurement,
+            }
+        except (OSError, ValueError, TypeError, KeyError):
+            rejected_claims.append({
+                "criterion_id": "Q092", "reason": "VERSION_BINDING_RECHECK_FAILED",
+            })
 
     runtime = None
     runtime_claims = sorted(set(claimed).intersection(F28_CRITERIA))
@@ -206,9 +249,10 @@ def main(argv=None):
     for name in ("dossier", "artifact", "catalog", "output"):
         parser.add_argument("--" + name, required=True)
     parser.add_argument("--supplier-script")
+    parser.add_argument("--manifest")
     args = parser.parse_args(argv)
     result = evaluate(read_json(args.dossier), args.artifact, load_catalog(args.catalog),
-                      args.supplier_script)
+                      args.supplier_script, manifest_path=args.manifest)
     target = Path(args.output)
     require(not target.exists() and not target.is_symlink(), "EVALUATOR_OUTPUT_EXISTS")
     target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)

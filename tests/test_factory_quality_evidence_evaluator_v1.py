@@ -69,6 +69,59 @@ class EvidenceEvaluatorTests(unittest.TestCase):
         self.assertEqual(report["rejected_claims"][0]["reason"],
                          "RECORDED_ZIP_MEASUREMENT_MISMATCH")
 
+    def test_q092_binding_needs_original_manifest_and_exact_zip(self):
+        manifest = self.root / "warehouse_manifest.json"
+        original = {
+            "schema": "saeit.factory.production-warehouse.v1",
+            "product_id": "sample_product",
+            "source_sha256": self.source_sha,
+            "artifact_sha256": self.artifact_sha,
+            "bytes": self.package.stat().st_size,
+            "manufacturing_qc": "passed",
+            "commercial_release": False,
+            "site_transfer_state": "not_transferred",
+        }
+        manifest.write_text(json.dumps(original), encoding="utf8")
+        manifest_sha = sha(manifest.read_bytes())
+        self.dossier["automated_criteria_measured"] = ["Q068", "Q092"]
+        self.dossier["warehouse_manifest_sha256"] = manifest_sha
+        self.dossier["q092_exact_version_binding_measurement"] = {
+            "product_id": "sample_product",
+            "source_sha256": self.source_sha,
+            "artifact_sha256": self.artifact_sha,
+            "warehouse_manifest_sha256": manifest_sha,
+            "package_bytes": self.package.stat().st_size,
+            "source_bytes_independently_verified": False,
+            "external_review_completed": False,
+        }
+        without_manifest = e.evaluate(self.dossier, self.package, self.catalog)
+        self.assertEqual(without_manifest["machine_evidence_rechecked_criteria"], ["Q068"])
+        self.assertEqual(without_manifest["rejected_claims"][0]["reason"],
+                         "VERSION_BINDING_RECHECK_FAILED")
+        valid = e.evaluate(self.dossier, self.package, self.catalog,
+                           manifest_path=manifest)
+        self.assertEqual(valid["machine_evidence_rechecked_criteria"], ["Q068", "Q092"])
+        self.assertFalse(valid["release_allowed"])
+        changed = dict(original, source_sha256="f" * 64)
+        manifest.write_text(json.dumps(changed), encoding="utf8")
+        rejected = e.evaluate(self.dossier, self.package, self.catalog,
+                              manifest_path=manifest)
+        self.assertEqual(rejected["machine_evidence_rechecked_criteria"], ["Q068"])
+        self.assertEqual(rejected["rejected_claims"][0]["criterion_id"], "Q092")
+        manifest.write_text(json.dumps(original), encoding="utf8")
+        self.dossier["q092_exact_version_binding_measurement"]["source_bytes_independently_verified"] = True
+        forged = e.evaluate(self.dossier, self.package, self.catalog,
+                            manifest_path=manifest)
+        self.assertEqual(forged["machine_evidence_rechecked_criteria"], ["Q068"])
+
+    def test_unknown_machine_criterion_is_explicitly_rejected(self):
+        self.dossier["automated_criteria_measured"] = ["Q068", "Q001"]
+        report = e.evaluate(self.dossier, self.package, self.catalog)
+        self.assertEqual(report["machine_evidence_rechecked_criteria"], ["Q068"])
+        self.assertIn({"criterion_id": "Q001",
+                       "reason": "UNSUPPORTED_AUTOMATED_MEASUREMENT"},
+                      report["rejected_claims"])
+
     def test_runtime_claim_from_non_pinned_build_is_never_accepted(self):
         self.dossier["automated_criteria_measured"] = ["Q068", "Q036"]
         report = e.evaluate(self.dossier, self.package, self.catalog)

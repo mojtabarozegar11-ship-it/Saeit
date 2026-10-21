@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Actual evidence supplier for 100x10 quality obligations.
 
-The automated supplier currently performs one real, scope-limited measurement:
-Q068, integrity and CRC verification of a finished, hash-locked warehouse ZIP.
+The automated supplier measures Q068 ZIP integrity and Q092 exact-version
+manifest/artifact hash binding. These are partial technical checks only.
 It assigns concrete *supplier roles* for all 100 criteria, but does not invent
 connected third parties, empirical user tests, expert opinions or 1000 points.
 No store, payments, approvals, or warehouse versions are modified.
@@ -255,7 +255,20 @@ def supplier_dossier(root, policy, recipe, source_sha, artifact_sha):
             and hash_bytes(archive.read_bytes()) == artifact_sha,
             "SUPPLIER_WAREHOUSE_VERSION_HASH_OR_POLICY_MISMATCH")
     measured = zip_proof(archive, recipe)
-    scopes = {"Q068": "actual_package_integrity_crc_sha_only"}
+    manifest_sha = hash_bytes((version / "warehouse_manifest.json").read_bytes())
+    version_binding = {
+        "product_id": recipe,
+        "source_sha256": source_sha,
+        "artifact_sha256": artifact_sha,
+        "warehouse_manifest_sha256": manifest_sha,
+        "package_bytes": archive.stat().st_size,
+        "source_bytes_independently_verified": False,
+        "external_review_completed": False,
+    }
+    scopes = {
+        "Q068": "actual_package_integrity_crc_sha_only",
+        "Q092": "exact_manifest_artifact_version_hash_binding_only_no_source_or_external_review",
+    }
     runtime = None
     if (recipe == "greenhouse_crop_margin" and
         source_sha == PINNED_F28_SOURCE and artifact_sha == PINNED_F28_ARTIFACT):
@@ -269,8 +282,8 @@ def supplier_dossier(root, policy, recipe, source_sha, artifact_sha):
         "product_id": recipe,
         "source_sha256": source_sha,
         "artifact_sha256": artifact_sha,
-        "warehouse_manifest_sha256": hash_bytes(
-            (version / "warehouse_manifest.json").read_bytes()),
+        "warehouse_manifest_sha256": manifest_sha,
+        "q092_exact_version_binding_measurement": version_binding,
         "criteria_total": len(routes),
         "possible_supplier_roles": sorted(set(x["possible_supplier_role"]
                                               for x in routes.values())),

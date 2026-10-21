@@ -4,12 +4,14 @@ on:
     branches: [main]
     paths:
       - scripts/factory_quality_evidence_evaluator_v1.py
+      - scripts/factory_quality_evidence_supplier_v1.py
       - tests/test_factory_quality_evidence_evaluator_v1.py
       - .github/workflows/factory-quality-evidence-evaluator-v1.yml
   push:
     branches: [main]
     paths:
       - scripts/factory_quality_evidence_evaluator_v1.py
+      - scripts/factory_quality_evidence_supplier_v1.py
       - tests/test_factory_quality_evidence_evaluator_v1.py
       - .github/workflows/factory-quality-evidence-evaluator-v1.yml
   workflow_dispatch:
@@ -106,7 +108,7 @@ jobs:
               try:doc=json.loads(raw)
               except Exception:continue
               if (doc.get("artifact_sha256")==artifact and
-                  doc.get("automated_criteria_measured")==["Q036","Q057","Q061","Q064","Q068","Q069"] and
+                  doc.get("automated_criteria_measured")==["Q036","Q057","Q061","Q064","Q068","Q069","Q092"] and
                   path.name=="supply-"+hashlib.sha256(raw).hexdigest()+".json"):
                   matches.append((path.stat().st_mtime_ns,str(path)))
           assert matches,"VERIFIED_SUPPLIER_DOSSIER_NOT_FOUND"
@@ -119,6 +121,7 @@ jobs:
           python3 -B "$stage/factory_quality_evidence_evaluator_v1.py" \
             --dossier "$dossier" \
             --artifact "$root/production-warehouse/finished/$recipe/$source_sha/product.zip" \
+            --manifest "$root/production-warehouse/finished/$recipe/$source_sha/warehouse_manifest.json" \
             --catalog "$stage/quality_100_criteria.json" \
             --supplier-script "$stage/factory_quality_evidence_supplier_v1.py" \
             --output "$output"
@@ -128,13 +131,14 @@ jobs:
           p=Path(sys.argv[1]);d=json.loads(p.read_text(encoding="utf8"))
           assert d["schema"]=="saeit.factory.quality-evidence-evaluation.v1"
           assert d["product_id"]=="greenhouse_crop_margin"
-          assert d["machine_evidence_rechecked_count"]==6
-          assert d["machine_evidence_rechecked_criteria"]==["Q036","Q057","Q061","Q064","Q068","Q069"]
+          assert d["machine_evidence_rechecked_count"]==7
+          assert d["machine_evidence_rechecked_criteria"]==["Q036","Q057","Q061","Q064","Q068","Q069","Q092"]
           assert d["professional_quality_points"] is None and d["release_allowed"] is False
           assert d["publication_or_payment_enabled"] is False
           assert p.stat().st_mode & 0o077 == 0
-          print("FACTORY_EVIDENCE_RECHECKED_CRITERIA=6")
-          print("FACTORY_EVIDENCE_HUMAN_REVIEW_REMAINING=94")
+          print("FACTORY_EVIDENCE_RECHECKED_CRITERIA=7")
+          print("FACTORY_EVIDENCE_NOT_MACHINE_RECHECKED=93")
+          print("FACTORY_EVIDENCE_INDEPENDENT_REVIEW_PENDING=100")
           print("FACTORY_EVIDENCE_PROFESSIONAL_POINTS=NONE")
           print("FACTORY_EVIDENCE_RELEASE_ALLOWED=false")
           print("FACTORY_EVALUATION_RECEIPT="+str(p))

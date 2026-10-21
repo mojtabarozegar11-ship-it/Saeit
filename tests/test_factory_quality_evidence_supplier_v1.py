@@ -51,13 +51,18 @@ class EvidenceSupplierTest(unittest.TestCase):
         self.assertEqual(len(dossier["possible_supplier_roles"]), 10)
         self.assertEqual(len(dossier["supplier_assignments"]), 100)
         self.assertEqual(sum(1 for x in dossier["supplier_assignments"].values()
-                             if x["automated_evidence_executable_now"]), 1)
+                             if x["automated_evidence_executable_now"]), 2)
         self.assertTrue(dossier["supplier_assignments"]["Q068"]["automated_evidence_executable_now"])
         self.assertFalse(dossier["supplier_assignments"]["Q033"]["automated_evidence_executable_now"])
         self.assertFalse(dossier["supplier_assignments"]["Q100"]["supplier_identity_authenticated"])
         self.assertEqual(dossier["q068_original_warehouse_zip_measurement"]["member_count"], 2)
         self.assertTrue(dossier["q068_original_warehouse_zip_measurement"]["zip_crc_verified"])
-        self.assertEqual(dossier["unmet_criterion_count"], 99)
+        binding = dossier["q092_exact_version_binding_measurement"]
+        self.assertEqual(binding["artifact_sha256"], self.actual_sha)
+        self.assertEqual(binding["warehouse_manifest_sha256"],
+                         hashlib.sha256(self.manifest.read_bytes()).hexdigest())
+        self.assertFalse(binding["source_bytes_independently_verified"])
+        self.assertEqual(dossier["unmet_criterion_count"], 98)
         self.assertIsNone(dossier["professional_quality_1000_points"])
         self.assertFalse(dossier["sale_or_publication_allowed"])
 
@@ -107,7 +112,7 @@ class EvidenceSupplierTest(unittest.TestCase):
             supplier.persist(self.root, self.dossier())
 
 
-    def test_real_f28_embedded_customer_runtime_supplies_six_scoped_criteria(self):
+    def test_real_f28_embedded_customer_runtime_supplies_seven_scoped_criteria(self):
         recipe_dir = ROOT / "product_recipes" / self.recipe
         with zipfile.ZipFile(str(self.product), "w", zipfile.ZIP_DEFLATED) as z:
             for name in supplier.F28_FILES:
@@ -121,12 +126,12 @@ class EvidenceSupplierTest(unittest.TestCase):
              mock.patch.object(supplier, "PINNED_F28_ARTIFACT", self.actual_sha):
             record = self.dossier()
         self.assertEqual(record["automated_criteria_measured"],
-                         ["Q036", "Q057", "Q061", "Q064", "Q068", "Q069"])
+                         ["Q036", "Q057", "Q061", "Q064", "Q068", "Q069", "Q092"])
         runtime = record["f28_runtime_technical_measurement"]
         self.assertGreaterEqual(runtime["actual_embedded_unittest_count"], 8)
         self.assertEqual(runtime["positive_baseline_cli_repeats"], 8)
         self.assertEqual(runtime["invalid_cli_inputs_rejected"], 8)
-        self.assertEqual(record["unmet_criterion_count"], 94)
+        self.assertEqual(record["unmet_criterion_count"], 93)
         self.assertEqual(record["independently_unapproved_criterion_count"], 100)
         self.assertEqual(record["independent_external_assessments_completed"], 0)
         self.assertFalse(record["sale_or_publication_allowed"])
