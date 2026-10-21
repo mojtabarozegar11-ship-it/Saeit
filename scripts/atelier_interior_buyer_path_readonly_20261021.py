@@ -323,3 +323,18 @@ try:
           "markers":{m:body.count(m) for m in markers},"body_chars":len(body)},sort_keys=True))
 except Exception as ex:
     print("ATELIER_PHP_SAFE_INSERTION_ERROR="+type(ex).__name__)
+
+
+# Follow-up: verify the ACTUAL vhost Passenger marker, not staging app's marker.
+for root in (home/"mojplaywin.com",home/"Saeit-staging"):
+    q=root/"tmp"/"restart.txt"
+    print("ATELIER_REAL_PASSENGER_MARKER="+json.dumps({
+        "root":str(root.relative_to(home)),
+        "wsgi_present":(root/"passenger_wsgi.py").is_file(),
+        "tmp_dir_exists":(root/"tmp").is_dir(),
+        "tmp_dir_symlink":(root/"tmp").is_symlink(),
+        "marker_exists":q.is_file(),
+        "marker_symlink":q.is_symlink(),
+        "marker_owner_matches":q.is_file() and q.stat().st_uid==os.getuid(),
+        "marker_mtime_ns":q.stat().st_mtime_ns if q.is_file() else None
+    },sort_keys=True))
