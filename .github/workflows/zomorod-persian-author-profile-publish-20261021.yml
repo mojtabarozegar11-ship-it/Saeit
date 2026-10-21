@@ -178,64 +178,122 @@ jobs:
           set -euo pipefail
           sha="$1"
           web="$HOME/public_html"
-          dir="$web/authors/mojtaba-rozegar"
-          page="$dir/index.html"
-          ht="$dir/.htaccess"
+          profile="$web/en/authors/mojtaba-rozegar/index.html"
+          root_htaccess="$web/.htaccess"
           backup="$HOME/.backups/zomorod-persian-author/$sha"
-          candidate="$backup/stage/profile.html"
-          test -s "$candidate" && test -f "$web/.htaccess" && test -s "$web/index.html"
-          test ! -L "$web" && test ! -L "$web/.htaccess" && test ! -L "$web/index.html"
-          test ! -L "$web/authors" && test ! -L "$dir"
-          test ! -e "$page" && test ! -e "$ht"
-          test -f "$web/static/site/zomorod-about/ceo-mojtaba-rozegar.webp"
-          sha256sum "$web/.htaccess" > "$backup/protected.root-htaccess.sha256"
+          source="$backup/stage/profile.html"
+          test -s "$source" && test -s "$profile" && test -s "$root_htaccess" && test -s "$web/index.html"
+          test ! -L "$web" && test ! -L "$profile" && test ! -L "$root_htaccess" && test ! -L "$web/index.html"
+          test ! -e "$backup/profile.original.html" && test ! -e "$backup/htaccess.original"
+          cp -p "$profile" "$backup/profile.original.html"
+          cp -p "$root_htaccess" "$backup/htaccess.original"
           sha256sum "$web/index.html" > "$backup/protected.root-index.sha256"
-          expected="$(sha256sum "$candidate" | cut -d' ' -f1)"
-          ht_expected=""
-          page_installed=0
-          ht_installed=0
+          expected_profile=""
+          expected_htaccess=""
+          profile_installed=0
+          htaccess_installed=0
           rollback() {
             rc=$?
             trap - EXIT
             set +e
-            if test "$page_installed" = 1 && test -f "$page" && test "$(sha256sum "$page" | cut -d' ' -f1)" = "$expected"; then rm -f "$page"; fi
-            if test "$ht_installed" = 1 && test -f "$ht" && test "$(sha256sum "$ht" | cut -d' ' -f1)" = "$ht_expected"; then rm -f "$ht"; fi
+            if test "$profile_installed" = 1 && test -f "$profile" && test "$(sha256sum "$profile" | cut -d' ' -f1)" = "$expected_profile"; then
+              cp -p "$backup/profile.original.html" "$profile.rollback.$sha" && mv -f "$profile.rollback.$sha" "$profile"
+            fi
+            if test "$htaccess_installed" = 1 && test -f "$root_htaccess" && test "$(sha256sum "$root_htaccess" | cut -d' ' -f1)" = "$expected_htaccess"; then
+              cp -p "$backup/htaccess.original" "$root_htaccess.rollback.$sha" && mv -f "$root_htaccess.rollback.$sha" "$root_htaccess"
+            fi
             exit "$rc"
           }
           trap rollback EXIT
-          mkdir -p "$dir"
-          cp -p "$candidate" "$page.tmp.$sha"
-          chmod 644 "$page.tmp.$sha"
-          mv "$page.tmp.$sha" "$page"
-          page_installed=1
-          cat > "$ht.tmp.$sha" <<'HT'
-          PassengerEnabled off
-          HT
-          chmod 644 "$ht.tmp.$sha"
-          mv "$ht.tmp.$sha" "$ht"
-          ht_installed=1
-          ht_expected="$(sha256sum "$ht" | cut -d' ' -f1)"
-          origin_code="$(curl -k -sS --max-time 25 --resolve 'zomorodmelal.ir:443:127.0.0.1' -H 'Cache-Control: no-cache' -o "$backup/origin-profile.html" -w '%{http_code}' "https://zomorodmelal.ir/authors/mojtaba-rozegar/?seo_verify=$sha" || true)"
-          echo "PERSIAN_PROFILE_ORIGIN_HTTP=$origin_code"
-          test "$origin_code" = 200
-          edge_code="$(curl -sS -L --max-time 30 -H 'Cache-Control: no-cache' -o "$backup/live-profile.html" -w '%{http_code}' "https://zomorodmelal.ir/authors/mojtaba-rozegar/?seo_verify=$sha" || true)"
-          echo "PERSIAN_PROFILE_PUBLIC_EDGE_HTTP=$edge_code"
-          if test "$edge_code" != 200 && test "$edge_code" != 404; then exit 1; fi
-          verify_html="$backup/origin-profile.html"
-          if test "$edge_code" = 200; then verify_html="$backup/live-profile.html"; else echo PUBLIC_EDGE_CACHED_404_ORIGIN_CONFIRMED=yes; fi
-          for token in '<link rel="canonical" href="https://zomorodmelal.ir/authors/mojtaba-rozegar/">' 'Mojtaba Roozegar' 'Mojtaba Rozegar' 'مجتبی روزگار' '"@type":"ProfilePage"'; do
-            if grep -Fq "$token" "$verify_html"; then echo "PROFILE_TOKEN_PRESENT=$token"; else echo "PROFILE_TOKEN_MISSING=$token"; exit 1; fi
+          python3 - "$source" "$profile" "$sha" <<'PY'
+          from pathlib import Path
+          import json,re,sys
+          src=Path(sys.argv[1]).read_text(encoding='utf-8')
+          target=Path(sys.argv[2])
+          original=target.read_text(encoding='utf-8')
+          marker='id="mojtaba-roozegar-official-profile-20261021"'
+          assert marker not in original
+          assert original.count('</main>')==1 and original.count('</head>')==1
+          assert 'Mojtaba Rozegar' in original and 'rel="canonical"' in original
+          section=re.search(r'(<section class="profile"[\s\S]*?</section>)',src)
+          style=re.search(r'(<style>[\s\S]*?</style>)',src)
+          data=re.search(r'<script type="application/ld\+json">\s*(.*?)\s*</script>',src,re.S)
+          assert section and style and data
+          fragment=style.group(1)+'\n'+section.group(1)
+          fragment=fragment.replace('<section class="profile"', '<section '+marker+' class="profile"',1)
+          ld=json.loads(data.group(1))
+          english='https://zomorodmelal.ir/en/authors/mojtaba-rozegar/'
+          ld['url']=english
+          ld['name']='Mojtaba Roozegar (Mojtaba Rozegar) | Zomorod Melal'
+          ld['inLanguage']='en'
+          ld['mainEntity']['@id']=english+'#person'
+          ld['mainEntity']['url']=english
+          schema='<script type="application/ld+json">'+json.dumps(ld,ensure_ascii=False,separators=(',',':'))+'</script>'
+          head_tags=[
+            '<meta property="og:image" content="https://zomorodmelal.ir/static/site/zomorod-about/ceo-mojtaba-rozegar.webp">',
+            '<meta property="og:image:alt" content="Mojtaba Roozegar, Mojtaba Rozegar (مجتبی روزگار), official profile photograph">',
+            '<meta property="og:title" content="Mojtaba Roozegar (Mojtaba Rozegar) | Zomorod Melal">',
+            '<meta name="twitter:card" content="summary_large_image">',
+            '<meta name="twitter:image" content="https://zomorodmelal.ir/static/site/zomorod-about/ceo-mojtaba-rozegar.webp">',
+            schema,
+          ]
+          def set_meta(html,key,new_tag):
+              pat=re.compile(r'<meta\b(?=[^>]*\b'+key+r'=["\'])[^>]*>',re.I)
+              matches=list(pat.finditer(html))
+              if len(matches)>1: raise ValueError('duplicate '+key+' metadata')
+              if matches:
+                  m=matches[0];return html[:m.start()]+new_tag+html[m.end():]
+              return html.replace('</head>',new_tag+'\n</head>',1)
+          for k,tag in (('property="og:image"',head_tags[0]),('property="og:image:alt"',head_tags[1]),('property="og:title"',head_tags[2]),('name="twitter:card"',head_tags[3]),('name="twitter:image"',head_tags[4])):
+              html=original if k=='property="og:image"' else html
+              html=set_meta(html,k,tag)
+          assert 'application/ld+json' not in html
+          html=html.replace('</head>',schema+'\n</head>',1)
+          html=html.replace('</main>',fragment+'\n</main>',1)
+          tmp=target.with_name(target.name+'.seo-next.'+sys.argv[3])
+          tmp.write_text(html,encoding='utf-8')
+          tmp.chmod(target.stat().st_mode&0o777)
+          tmp.replace(target)
+          print('ENGLISH_AUTHOR_PHOTO_AND_BIO_STAGED=yes')
+          PY
+          profile_installed=1
+          expected_profile="$(sha256sum "$profile" | cut -d' ' -f1)"
+          python3 - "$root_htaccess" "$sha" <<'PY'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1]);raw=p.read_bytes()
+          rule=b'RedirectMatch 301 ^/authors/mojtaba-rozegar/?$ https://zomorodmelal.ir/en/authors/mojtaba-rozegar/'
+          assert rule not in raw
+          updated=rule+bytes([10])+raw
+          tmp=p.with_name(p.name+'.redirect-next.'+sys.argv[2])
+          tmp.write_bytes(updated);tmp.chmod(p.stat().st_mode&0o777);tmp.replace(p)
+          print('PERSIAN_AUTHOR_301_STAGED=yes')
+          PY
+          htaccess_installed=1
+          expected_htaccess="$(sha256sum "$root_htaccess" | cut -d' ' -f1)"
+          origin_code="$(curl -k -sS --max-time 25 --resolve 'zomorodmelal.ir:443:127.0.0.1' -D "$backup/origin-headers.txt" -o "$backup/origin-redirect.body" -w '%{http_code}' "https://zomorodmelal.ir/authors/mojtaba-rozegar/?seo_verify=$sha" || true)"
+          echo "PERSIAN_AUTHOR_ORIGIN_HTTP=$origin_code"
+          test "$origin_code" = 301
+          grep -iFq 'Location: https://zomorodmelal.ir/en/authors/mojtaba-rozegar/' "$backup/origin-headers.txt"
+          dest_code="$(curl -k -sS --max-time 25 --resolve 'zomorodmelal.ir:443:127.0.0.1' -o "$backup/origin-profile.html" -w '%{http_code}' "https://zomorodmelal.ir/en/authors/mojtaba-rozegar/?seo_verify=$sha" || true)"
+          echo "ENGLISH_AUTHOR_ORIGIN_HTTP=$dest_code"
+          test "$dest_code" = 200
+          for token in 'mojtaba-roozegar-official-profile-20261021' 'Mojtaba Roozegar' 'Mojtaba Rozegar' 'مجتبی روزگار' '"@type":"ProfilePage"'; do
+            grep -Fq "$token" "$backup/origin-profile.html"
           done
           imgcode="$(curl -sS -L --max-time 25 -o "$backup/live-photo.webp" -w '%{http_code}' "https://zomorodmelal.ir/static/site/zomorod-about/ceo-mojtaba-rozegar.webp?seo_verify=$sha" || true)"
           echo "PERSIAN_PROFILE_IMAGE_HTTP=$imgcode"
           test "$imgcode" = 200
           test "$(sha256sum "$backup/live-photo.webp" | cut -d' ' -f1)" = "482cad022c1739a464d17f0e023c69fcd6971d72bc67881f8ec24218bd2d8e41"
-          (cd "$web"; sha256sum -c --status "$backup/protected.root-htaccess.sha256")
           (cd "$web"; sha256sum -c --status "$backup/protected.root-index.sha256")
-          echo "ROOT_HTACCESS_AND_INDEX_UNCHANGED=yes"
+          echo "ROOT_INDEX_UNCHANGED=yes"
+          edge_code="$(curl -sS --max-time 25 -o "$backup/public-redirect.body" -w '%{http_code}' "https://zomorodmelal.ir/authors/mojtaba-rozegar/?seo_verify=$sha" || true)"
+          echo "PERSIAN_AUTHOR_PUBLIC_EDGE_HTTP=$edge_code"
+          if test "$edge_code" != 301 && test "$edge_code" != 404; then exit 1; fi
           trap - EXIT
-          echo "PERSIAN_AUTHOR_PROFILE_LIVE=verified"
-          echo "PROFILE_ORIGIN_HTTP=200 PHOTO_HTTP=200 PUBLIC_EDGE_HTTP=$edge_code"
+          echo "PERSIAN_AUTHOR_REDIRECT_AND_ENGLISH_PROFILE_ORIGIN=verified"
+          echo "ENGLISH_PROFILE_PHOTO_AND_SCHEMA=verified"
+          echo "PUBLIC_EDGE_HTTP=$edge_code"
           echo "BACKUP=$backup"
           REMOTE
       - name: Remove short-lived SSH credentials
