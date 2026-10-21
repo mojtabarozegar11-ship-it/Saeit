@@ -83,7 +83,7 @@ jobs:
             test "$expected" = "$actual"
           done
           echo FACTORY_10S_STAGE_SHA256=PASS
-          timeout 105s ssh -T "${opts[@]}" "$host" "/bin/bash '$stage/deploy/install_factory_10s_cycle.sh' '$stage'"
+          timeout 105s ssh -T "${opts[@]}" "$host" "/bin/bash -x '$stage/deploy/install_factory_10s_cycle.sh' '$stage'"
       - name: Observe independent cron pulses after installation
         shell: bash
         run: |
