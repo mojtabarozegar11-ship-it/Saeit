@@ -1,0 +1,126 @@
+name: Factory 1000 evidence supplier - real ZIP proof plus 100 routed needs
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/factory_quality_evidence_supplier_v1.py
+      - tests/test_factory_quality_evidence_supplier_v1.py
+      - .github/workflows/factory-quality-evidence-supplier-20261021.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_quality_evidence_supplier_v1.py
+      - tests/test_factory_quality_evidence_supplier_v1.py
+      - .github/workflows/factory-quality-evidence-supplier-20261021.yml
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: factory-quality-1000-evidence-supplier
+  cancel-in-progress: false
+jobs:
+  contract-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate supplier contract and actual ZIP evidence
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_quality_evidence_supplier_v1.py
+          python3 -B -m unittest discover -s tests -p test_factory_quality_evidence_supplier_v1.py -v
+          echo FACTORY_100_SUPPLIER_ROUTES_AND_REAL_ZIP_QA=PASS
+  private-vps-supply:
+    needs: contract-tests
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Pin SSH host and transfer scripts to private VPS staging
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/supply-evidence-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host factory-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          stage="/home/githubops/factory-runtime/operations/.qa1000-supply-$GITHUB_RUN_ID"
+          timeout 35s ssh -T -F "$d/config" factory-vps "set -eu; test \$(id -un) = githubops; umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
+          timeout 35s scp -q -F "$d/config" scripts/factory_quality_evidence_supplier_v1.py "factory-vps:$stage/supplier.py"
+          timeout 35s scp -q -F "$d/config" factory_config/quality_100_criteria.json "factory-vps:$stage/criteria.json"
+          wanted="$(sha256sum scripts/factory_quality_evidence_supplier_v1.py | cut -d' ' -f1)"
+          have="$(timeout 30s ssh -T -F "$d/config" factory-vps "sha256sum '$stage/supplier.py' | cut -d' ' -f1")"
+          test "$wanted" = "$have"
+          wanted="$(sha256sum factory_config/quality_100_criteria.json | cut -d' ' -f1)"
+          have="$(timeout 30s ssh -T -F "$d/config" factory-vps "sha256sum '$stage/criteria.json' | cut -d' ' -f1")"
+          test "$wanted" = "$have"
+          echo FACTORY_QA1000_SUPPLIER_SOURCE_PINNING=PASS
+      - name: Supply measured Q068 and route all 100 criteria for the real F28 stock
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/supply-evidence-ssh"
+          stage="/home/githubops/factory-runtime/operations/.qa1000-supply-$GITHUB_RUN_ID"
+          root="/home/githubops/factory-runtime/private/autonomous-product-cycle"
+          source_sha="c446aeaa32494c93a453f524390ee14061d6f36da3228b3d4b15c5b794d2bc1e"
+          artifact_sha="7ba2168c90617b236d10ee4542ec9fd276f3f524809ddd001f18f5a5634fc553"
+          timeout 130s ssh -T -F "$d/config" factory-vps \
+            "python3 -B '$stage/supplier.py' --factory-root '$root' --catalog '$stage/criteria.json' --recipe greenhouse_crop_margin --source-sha256 '$source_sha' --artifact-sha256 '$artifact_sha'"
+          timeout 35s ssh -T -F "$d/config" factory-vps python3 - "$root" "$source_sha" "$artifact_sha" <<'PY'
+          import json,hashlib,sys
+          from pathlib import Path
+          root=Path(sys.argv[1]);source=sys.argv[2];artifact=sys.argv[3]
+          folder=root/"quality-excellence/evidence-suppliers/greenhouse_crop_margin"/source
+          files=sorted(folder.glob("supply-*.json"))
+          assert files and not folder.is_symlink()
+          good=[]
+          for path in files:
+              assert not path.is_symlink()
+              doc=json.loads(path.read_text(encoding="utf8"))
+              if doc["artifact_sha256"]!=artifact:continue
+              assert len(doc["supplier_assignments"])==100
+              assert doc["automated_criteria_measured"]==["Q068"]
+              assert doc["q068_original_warehouse_zip_measurement"]["zip_crc_verified"]
+              assert doc["independent_external_assessments_completed"]==0
+              assert doc["professional_quality_1000_points"] is None
+              assert doc["sale_or_publication_allowed"] is False
+              assert doc["genuinely_connected_external_supplier_count"]==0
+              digest=hashlib.sha256(path.read_bytes()).hexdigest()
+              assert path.name=="supply-"+digest+".json"
+              good.append(digest)
+          assert good,"NO_VERIFIED_SUPPLIER_RECEIPT"
+          print("FACTORY_QA1000_SUPPLIER_PRIVATE_READBACK=PASS")
+          print("FACTORY_Q068_REAL_ZIP_EVIDENCE=PASS")
+          print("FACTORY_QA1000_ASSIGNED_SUPPLIER_ROLES=10")
+          print("FACTORY_QA1000_EXTERNAL_SUPPLIERS_CONNECTED=0")
+          print("FACTORY_QA1000_PROFESSIONAL_CERTIFICATION=PENDING")
+          print("FACTORY_QA1000_SUPPLIER_RECEIPT_SHA256="+good[-1])
+          PY
+      - name: Clean up temporary SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/supply-evidence-ssh"
