@@ -149,10 +149,10 @@ jobs:
           target=Path(sys.argv[1]);backup=Path(sys.argv[2]);raw=target.read_bytes()
           rule=b'RewriteRule ^authors/mojtaba-rozegar/?$ https://zomorodmelal.ir/en/authors/mojtaba-rozegar/ [R=301,L,NE]'
           assert rule not in raw
-          match=re.search(br'(?im)^RewriteEngine\\s+On\\b',raw)
+          match=re.search(br'(?im)^RewriteEngine\s+On\b',raw)
           assert match, "root RewriteEngine On is missing"
           end=match.end()
-          while end<len(raw) and raw[end:end+1] in (b'\\r',b'\\n'):end+=1
+          while end<len(raw) and raw[end:end+1] in (b'\r',b'\n'):end+=1
           updated=raw[:match.end()]+b'\\n'+rule+b'\\n'+raw[end:]
           tmp=target.with_name(target.name+".author-route-next")
           tmp.write_bytes(updated);tmp.chmod(target.stat().st_mode&0o777);tmp.replace(target)
