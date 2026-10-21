@@ -56,7 +56,7 @@ class AutonomousEvidenceAgentTests(unittest.TestCase):
             self.assertIsNone(dossier["professional_quality_1000_points"])
             rights = dossier["ai_workpapers"]["Q071"]
             self.assertEqual(rights["workpaper_state"], "AI_PRELIMINARY_ONLY")
-            self.assertIn("LICENSE.txt", [x["path"] for x in rights["observations"][0]["candidate_members"]])
+            self.assertTrue(any(x["path"].endswith("/LICENSE.txt") for x in rights["observations"][0]["candidate_members"]))
             engineering = dossier["ai_workpapers"]["Q021"]
             test_member = next(x for x in engineering["observations"][0]["candidate_members"]
                                if x["path"].endswith("test_sample.py"))
