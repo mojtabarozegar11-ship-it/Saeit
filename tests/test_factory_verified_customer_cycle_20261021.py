@@ -53,7 +53,7 @@ class ExtractedCustomerQATests(unittest.TestCase):
             members = [(info.filename, old.read(info)) for info in old.infolist()]
         with zipfile.ZipFile(file, "w") as archive:
             for name, contents in members:
-                archive.writestr(name, mutation(name, contents), compression=zipfile.ZIP_DEFLATED)
+                archive.writestr(name, mutation(name, contents), compress_type=zipfile.ZIP_DEFLATED)
         manifest_file = self.product() / "manufacturing_manifest.json"
         manifest = json.loads(manifest_file.read_text())
         manifest["artifact_sha256"] = hashlib.sha256(file.read_bytes()).hexdigest()
