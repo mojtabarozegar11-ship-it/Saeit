@@ -1,0 +1,118 @@
+name: Guarded VPS npm registry download cache cleanup 2026-10-21
+on:
+  push:
+    branches: [audit/safe-storage-20261021]
+    paths: [.github/workflows/guarded-vps-npm-cache-cleanup-20261021.yml]
+permissions: {contents: read}
+concurrency:
+  group: guarded-vps-npm-cache-cleanup
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Require four live routes to respond normally before cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in https://zomorodmelal.ir/ https://zomorodmelal.ir/agents/ https://mojplaywin.com/ https://mojplaywin.com/games/;do
+            code="$(curl -sS -L --retry 1 --max-time 20 -o /dev/null -w '%{http_code}' "$url")"
+            echo "NPM_BEFORE_HEALTH=$url:$code"
+            test "$code" = 200
+          done
+      - name: Prepare verified VPS SSH identity
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/npm-cache-clean-20261021"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo NPM_RELAY_PINNED=yes
+      - name: Gate and delete exact npm content-addressed download cache only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/npm-cache-clean-20261021"
+          timeout 240s ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=12 githubops@178.239.147.150 'python3 -' <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          from urllib.parse import urlsplit
+          import os,subprocess,shutil,time
+          h=Path.home()
+          p=h/".npm"/"_cacache"
+          def ps_active():
+              r=subprocess.run(["ps","-u",str(os.getuid()),"-o","args="],capture_output=True,text=True,timeout=10,check=True)
+              needles=("npm ","npx ","yarn ","pnpm ","node_modules/.bin","pip install","git checkout","git pull","npm ci")
+              return any(any(n in line.lower() for n in needles) for line in r.stdout.splitlines())
+          def disk_free():
+              r=subprocess.run(["df","-Pk",str(h)],capture_output=True,text=True,timeout=10,check=True)
+              return r.stdout.splitlines()[-1].split()[3]
+          print("NPM_CLEAN_TARGET=VPS_NPM_CACACHE_ONLY",flush=True)
+          print("NPM_FREE_BEFORE_KB="+disk_free(),flush=True)
+          assert h.is_dir() and not h.is_symlink()
+          if not p.exists():
+              print("NPM_CACHE_SKIPPED=already_absent",flush=True)
+          elif ps_active():
+              print("NPM_CACHE_SKIPPED=active_build",flush=True)
+          elif not p.is_dir() or p.is_symlink() or p.parent.is_symlink() or p.resolve()!=h.resolve()/".npm"/"_cacache" or p.stat().st_dev!=h.stat().st_dev:
+              print("NPM_CACHE_SKIPPED=path_guard",flush=True)
+          elif not shutil.which("npm"):
+              print("NPM_CACHE_SKIPPED=unable_to_validate_npm_config",flush=True)
+          else:
+              def config(k):
+                  r=subprocess.run(["npm","config","get",k],capture_output=True,text=True,timeout=10,check=True)
+                  return r.stdout.strip()
+              try:
+                  offline=config("offline")
+                  prefer_offline=config("prefer-offline")
+                  registry=config("registry")
+                  parts=urlsplit(registry)
+                  assert offline=="false" and prefer_offline=="false"
+                  assert parts.scheme=="https" and parts.hostname=="registry.npmjs.org" and not parts.username and not parts.password
+                  with urlopen(Request("https://registry.npmjs.org/-/ping",method="HEAD"),timeout=12) as resp:
+                      assert resp.status==200
+                  print("NPM_REGISTRY_ONLINE_VERIFIED=yes",flush=True)
+              except Exception as e:
+                  print("NPM_CACHE_SKIPPED=registry_or_offline_config_not_verified:"+type(e).__name__,flush=True)
+              else:
+                  assert all(not q.is_symlink() for q in p.rglob("*"))
+                  r=subprocess.run(["du","-sk","--",str(p)],capture_output=True,text=True,timeout=75,check=True)
+                  kb=int(r.stdout.split()[0])
+                  assert 1<=kb<=400000
+                  if ps_active():
+                      print("NPM_CACHE_SKIPPED=build_started",flush=True)
+                  else:
+                      shutil.rmtree(p)
+                      assert not p.exists()
+                      print("NPM_CACACHE_DELETED_KB="+str(kb),flush=True)
+          print("NPM_FREE_AFTER_KB="+disk_free(),flush=True)
+          print("NPM_CLEAN_SCOPE_COMPLETE=yes",flush=True)
+          PY
+      - name: Verify four live public routes after cleanup
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in https://zomorodmelal.ir/ https://zomorodmelal.ir/agents/ https://mojplaywin.com/ https://mojplaywin.com/games/;do
+            code="$(curl -sS -L --retry 1 --max-time 20 -o /dev/null -w '%{http_code}' "$url")"
+            echo "NPM_AFTER_HEALTH=$url:$code"
+            test "$code" = 200
+          done
+      - name: Remove temporary runner SSH credentials
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/npm-cache-clean-20261021"
+          if test -d "$d" && test ! -L "$d";then
+            rm -f -- "$d/key" "$d/known"
+            rmdir -- "$d" || true
+          fi
