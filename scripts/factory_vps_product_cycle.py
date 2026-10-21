@@ -148,7 +148,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                     designer_failures.append({'type':'source_evolution',
                         'recipe':candidate_recipe,'reason':str(error)[:240]})
                 maker.atomic_text(evolution_cursor_file,
-                                  json.dumps({'last_recipe':candidate_recipe})+'\\n')
+                                  json.dumps({'last_recipe':candidate_recipe})+'\n')
             recipe_catalog.update(generated)
             recipe_roots.update({key: generated_root for key in generated})
         for item in admission_failures:
