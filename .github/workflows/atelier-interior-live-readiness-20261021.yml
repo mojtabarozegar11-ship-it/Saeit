@@ -28,8 +28,8 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           src=Path('scripts/atelier_interior_release_probe_20261021.py').read_text()
-          assert 'f17eb13a5e546c5ca9974885b30b6d8b5bc44ecf5474edf75b544f8f7d254d3d' in src
-          assert 'atelier-interior-kit-v1.zip' in src
+          assert '98bffad4ccf36f84c7924ca77e4a8b473b42f33a8fce4d85cefe2367afc097aa' in src
+          assert 'atelier-interior-kit-v1-repacked.zip' in src
           assert 'Product.objects.filter(title=TITLE)' in src
           assert 'customer_payment_and_download_tested": False' in src
           print('ATELIER_EXACT_PRODUCT_AND_NO_FALSE_CHECKOUT_CLAIM=PASS')
