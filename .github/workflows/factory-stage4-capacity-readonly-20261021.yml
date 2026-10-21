@@ -119,6 +119,69 @@ jobs:
           print("STAGE4_RESEARCH_READONLY_NO_CAPACITY_OVERRIDE=PASS")
           PY
           REMOTE
+      - name: Inspect redacted budget-policy conditions without exposing source secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/stage4-readonly"
+          timeout 100s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          base="$HOME/factory-runtime"
+          test -d "$base/django-app" && test -x "$base/.venv/bin/python"
+          cd "$base/django-app"
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+          export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
+          "$base/.venv/bin/python" -B - <<'PY'
+          import ast, copy, json, os, re, sys
+          from pathlib import Path
+          root=Path.home()/"factory-runtime"/"django-app"
+          pattern=re.compile(r"capacity|budget|window|persist|quota|research",re.I)
+          class Redact(ast.NodeTransformer):
+              def visit_Constant(self,node):
+                  if isinstance(node.value,str):
+                      return ast.copy_location(ast.Constant(value="REDACTED_LITERAL"),node)
+                  return node
+          sections={}
+          for name in ("factory_stage4.py","factory_agent_runtime.py"):
+              p=root/"core"/name
+              if not p.is_file() or p.is_symlink() or p.stat().st_size>150000:
+                  sections[name]={"state":"missing_or_untrusted"}
+                  continue
+              tree=ast.parse(p.read_text(encoding="utf8"))
+              selected=[]
+              for node in ast.walk(tree):
+                  if not isinstance(node,(ast.If,ast.Assign,ast.AnnAssign,ast.While)):
+                      continue
+                  ast_copy=Redact().visit(copy.deepcopy(node.test if isinstance(node,(ast.If,ast.While)) else node))
+                  text=ast.unparse(ast_copy)
+                  if pattern.search(text):
+                      selected.append({"line":getattr(node,"lineno",0),
+                                       "kind":type(node).__name__,
+                                       "redacted_logic":text[:280]})
+                  if len(selected)>=40:break
+              sections[name]={"state":"parsed","redacted_policy_nodes":selected}
+          try:
+              os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+              sys.path.insert(0,str(root))
+              import django
+              django.setup()
+              from django.apps import apps
+              models=[]
+              for cls in apps.get_app_config("core").get_models():
+                  label=cls.__name__
+                  if not pattern.search(label):continue
+                  fields=[f.name for f in cls._meta.fields
+                          if pattern.search(f.name) and not re.search(r"token|password|secret|key",f.name,re.I)]
+                  if fields:models.append({"model":label,"policy_field_names":fields[:20]})
+              policy_models=models[:25]
+          except Exception as exc:
+              policy_models=[{"state":"inspection_blocked","error_type":type(exc).__name__}]
+          print("FACTORY_STAGE4_REDACTED_POLICY_LOGIC="+json.dumps({
+              "schema":"saeit.factory.stage4-policy-ast-readonly.v1","read_only":True,
+              "redacted_string_constants":True,"sources":sections,
+              "policy_models":policy_models},sort_keys=True))
+          PY
+          REMOTE
       - name: Destroy runner SSH key material
         if: always()
         shell: bash
