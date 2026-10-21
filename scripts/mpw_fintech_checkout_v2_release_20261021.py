@@ -60,7 +60,7 @@ def valid_css(blob):
  for anchor in ("main .panel","main #invoice","main #downloads","main .mpwf-intro",
                 "main #start","@media (max-width: 640px)"):
   if anchor not in txt:fail("Theme CSS missing "+anchor)
- if any(x in txt.lower() for x in ("javascript:", "@import", "behavior:")):
+ if "javascript:" in txt.lower() or "@import" in txt.lower() or re.search(r"(^|[;{}])\s*behavior\s*:",txt,re.I):
   fail("Unexpected active CSS payload")
 def transform(blob,strict=True):
  if strict and digest(blob)!=PIN:fail("Checkout source SHA drift; refuse styling")
