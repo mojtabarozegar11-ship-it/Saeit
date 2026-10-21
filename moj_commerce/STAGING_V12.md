@@ -30,3 +30,15 @@ domain rewrites, or Passenger restart is authorized by these test receipts.
 6. Validate rollback without changing the public site, then perform a limited real-money end-to-end checkout only after owner authorization and suitable precautions.
 
 There are no secrets in this document, and no release performed.
+
+## 22 October — isolated recovery of every regular file, unsafe links quarantined
+
+- [Pass: release preflight + authenticated archive and isolated file extraction, run 39686843435](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39686843435): nine synthetic safety/unit tests passed. An existing GPGv2 `files` archive was authenticated and streamed twice via pinned GitHub→VPS SSH into an ephemeral runner; no archive, secrets or production data published as artifacts.
+- Metadata classified 23,567 regular files, 2,076 directories, zero duplicate/escaping file paths, and **exactly three symlinks with absolute targets**.
+- Fresh isolated file restoration wrote **all 23,567 regular files**, with **847,868,787 bytes** restored and 2,076 directories. It did **not** materialize or follow the three absolute links. The temporary runner directory was scheduled for cleanup by EXIT trap.
+- Because those three links remain unresolved, the runner itself records `absolute_links_quarantined=3`, `restore_complete=false`, `release_permitted=false`. Do not call this a complete functional/tenant restore.
+- A separate [read-only authenticated archive classification run 39686215199](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39686215199) had independently identified the same three absolute links, explaining the earlier fail-closed file-restoration rejection.
+- Source-only Passenger inventory found .htaccess directives and WSGI entrypoints, but **could not prove which running Passenger process/DB binding is active**; no MOJ Commerce public route mount observed in inspected source. Do not infer release authorization from config-file presence.
+- Off-host recovery key custody and independent child-site backup coverage remain unverified. No production modifications, payment broadcasts or database writes.
+
+Next: classify the three symlink targets privately (no target strings in logs), reconstruct runtime dependencies within a separate recovery sandbox, verify site-level recovery and independent key custody, and then prove effective Passenger→MariaDB runtime mapping before considering a real TRX purchase.
