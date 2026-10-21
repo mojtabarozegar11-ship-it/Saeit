@@ -49,8 +49,8 @@ def load_supplier(path):
     return module
 
 
-def inspect_members(archive, supplier):
-    proof = supplier.zip_proof(archive, Path(archive).parent.parent.parent.name)
+def inspect_members(archive, supplier, recipe):
+    proof = supplier.zip_proof(archive, recipe)
     rows = []
     with zipfile.ZipFile(str(archive)) as bundle:
         for member in proof["members"]:
@@ -97,7 +97,7 @@ def build_dossier(root, policy, recipe, source_sha, artifact_sha, supplier):
         raise RuntimeError("AI_AGENT_WAREHOUSE_BINDING_INVALID")
     if supplier.hash_bytes(archive.read_bytes()) != artifact_sha:
         raise RuntimeError("AI_AGENT_ARTIFACT_HASH_MISMATCH")
-    members = inspect_members(archive, supplier)
+    members = inspect_members(archive, supplier, recipe)
     routes = {}
     for criterion, detail in policy.items():
         route = supplier.supplier_route(criterion, detail, measured={"Q068"})
@@ -187,8 +187,9 @@ def persist(root, dossier, supplier):
 def run(root, catalog_path, supplier_path):
     supplier = load_supplier(supplier_path)
     policy = supplier.catalog(catalog_path)
-    base = Path(root) / "production-warehouse" / "finished"
-    if base.is_symlink() or not base.is_dir():
+    warehouse = Path(root) / "production-warehouse"
+    base = warehouse / "finished"
+    if warehouse.is_symlink() or base.is_symlink() or not base.is_dir():
         raise RuntimeError("AI_AGENT_WAREHOUSE_UNAVAILABLE")
     results, rejected = [], []
     for product in sorted(base.iterdir()):
