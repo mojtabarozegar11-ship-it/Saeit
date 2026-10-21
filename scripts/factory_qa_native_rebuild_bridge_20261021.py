@@ -76,6 +76,10 @@ def execute(root,source_root,maker_path,*,limit=2):
         order=checked_json(current)
         if order.get("schema")!="saeit.factory.production-rework-order.v1" or order.get("recipe")!=folder.name:
             continue
+        if not isinstance(order.get("source_quality_receipt_sha256"),str) or not HEX.fullmatch(order["source_quality_receipt_sha256"]):
+            continue
+        if not isinstance(order.get("unresolved_technical_or_domain_defects",[]),list):
+            continue
         orders.append((folder.name,order))
     for recipe,order in orders:
         totals["orders_seen"]+=1
@@ -131,8 +135,15 @@ def execute(root,source_root,maker_path,*,limit=2):
                     "original_stock_mutated":False}
             atomic_receipt(receipt_folder,record)
             receipt_folder.mkdir(parents=True,mode=0o700,exist_ok=True)
-            proof.write_text(json.dumps(record,ensure_ascii=False,sort_keys=True)+"\n",encoding="utf8")
-            os.chmod(proof,0o600)
+            if proof.is_symlink():raise ValueError("UNSAFE_SUCCESS_MARKER")
+            if proof.is_file():
+                if checked_json(proof)!=record:raise ValueError("CONFLICTING_SUCCESS_MARKER")
+            else:
+                with proof.open("x",encoding="utf8") as f:
+                    json.dump(record,f,ensure_ascii=False,sort_keys=True)
+                    f.write("\n")
+                    f.flush();os.fsync(f.fileno())
+                os.chmod(proof,0o600)
             totals["technical_candidates_verified"]+=1
         except (ValueError,OSError,RuntimeError,AssertionError,KeyError,TypeError):
             totals["failed"]+=1
