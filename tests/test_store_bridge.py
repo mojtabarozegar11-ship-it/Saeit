@@ -1,5 +1,6 @@
 """Private VPS->cPanel handoff: integrity, idempotency, zero publication."""
 import hashlib
+import io
 import importlib.util
 import json
 from pathlib import Path
@@ -49,6 +50,28 @@ class BridgeTests(unittest.TestCase):
         d.mkdir(parents=True)
         (d / (self.digest + ".zip.partial")).write_bytes(self.archive.read_bytes())
         (d / (self.digest + ".json.partial")).write_bytes(self.manifest.read_bytes())
+
+    def test_receiver_validation_reason_is_strictly_allowlisted(self):
+        self.assertEqual(receiver.safe_finalize_reason(
+            ValueError("UNSAFE_ARCHIVE_MEMBER")), "UNSAFE_ARCHIVE_MEMBER")
+        self.assertIsNone(receiver.safe_finalize_reason(ValueError("my secret token")))
+        self.assertIsNone(receiver.safe_finalize_reason(
+            ValueError("SENSITIVE_API_KEY")))
+        self.assertIsNone(receiver.safe_finalize_reason(OSError("UNSAFE_ARCHIVE_MEMBER")))
+
+    def test_sender_never_echoes_untrusted_remote_stderr(self):
+        response = mock.Mock(returncode=1, stdout="",
+                             stderr="STORE_RECEIVER_SAFE_REASON=UNSAFE_ARCHIVE_MEMBER\n"
+                                    "authorization_token=do-not-print\n")
+        with mock.patch.object(sender.subprocess, "run", return_value=response), \
+             mock.patch("sys.stderr", new_callable=io.StringIO) as stream:
+            with self.assertRaisesRegex(RuntimeError,
+                                        "PRIVATE_DELIVERY_FINALIZE_RC_1"):
+                sender.call(["ssh", "sensitive-key-material"], stage="finalize")
+        safe = stream.getvalue()
+        self.assertIn("FACTORY_STORE_RECEIVER_REJECTION=UNSAFE_ARCHIVE_MEMBER", safe)
+        self.assertNotIn("do-not-print", safe)
+        self.assertNotIn("sensitive-key-material", safe)
 
     def test_receipt_is_private_and_noncommercial(self):
         self.stage()

@@ -320,9 +320,30 @@ def main(argv=None):
     return 0
 
 
+# Fixed, nonsecret policy codes only: no exception message, path, account or
+# manifest text may be printed to GitHub Actions diagnostics.
+SAFE_FINALIZE_REASONS = frozenset({
+    "INBOX_SYMLINK_REJECTED", "INBOX_DIRECTORY_INVALID",
+    "INVALID_RECIPE_OR_DIGEST", "SYMLINK_IN_UPLOAD", "INCOMPLETE_UPLOAD",
+    "INVALID_ARCHIVE_SIZE", "MANIFEST_TOO_LARGE", "BAD_MANIFEST",
+    "MANIFEST_IDENTITY_MISMATCH", "UNSAFE_OR_UNREVIEWED_MANIFEST",
+    "SHA256_MISMATCH", "F34_EVIDENCE_CONTRACT_INVALID",
+    "F34_EXACT_ICON_PACKAGE_INVALID", "ARCHIVE_FILE_COUNT_INVALID",
+    "ARCHIVE_EXPANSION_LIMIT", "UNSAFE_ARCHIVE_MEMBER", "CORRUPT_ARCHIVE",
+})
+
+
+def safe_finalize_reason(error):
+    reason = str(error)
+    return reason if type(error) is ValueError and reason in SAFE_FINALIZE_REASONS else None
+
+
 if __name__ == "__main__":
     try:
         sys.exit(main())
     except (OSError, ValueError, json.JSONDecodeError, zipfile.BadZipFile) as err:
         print("STORE_RECEIVER_ERROR=" + type(err).__name__, file=sys.stderr)
+        code = safe_finalize_reason(err)
+        if code:
+            print("STORE_RECEIVER_SAFE_REASON=" + code, file=sys.stderr)
         sys.exit(1)
