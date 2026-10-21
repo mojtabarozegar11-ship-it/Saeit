@@ -2,6 +2,7 @@
 import hashlib
 import importlib.util
 import json
+import re
 from pathlib import Path
 import tempfile
 import unittest
@@ -341,7 +342,7 @@ class RealPrivateDocumentEditionTests(unittest.TestCase):
                         ["P0_GLOBAL_TOP_FIVE_CURRENT_BENCHMARKS_MISSING"]}
 
     def test_genuine_customer_documents_become_new_accessible_private_source_and_zip(self):
-        attack=b"</pre><script>alert('bad')</script> Read this guide."
+        attack=b"</pre><script>alert('bad')</script> Read this guide. Visit https://example.org safely."
         self.bind({
             "bundle/":b"",
             "bundle/book.txt":attack,
@@ -372,7 +373,27 @@ class RealPrivateDocumentEditionTests(unittest.TestCase):
         self.assertFalse(receipt["external_independent_review_verified"])
         self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
                          "already_issued_private_edition")
+        product_archive=product/(new_id+"-internal-qa.zip")
+        product_archive.write_bytes(b"tampered private product")
+        self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
+                         "existing_edition_requires_engineering_review")
         self.assertEqual(self.arch.read_bytes(),(self.stock/(self.recipe+"-internal-qa.zip")).read_bytes())
+
+    def test_transient_manufacturing_failure_is_retryable(self):
+        self.bind({"bundle/guide.txt":b"legitimate document"})
+        source=self.root/"quality-excellence/document-edition-sources"/(
+            "edition_"+self.artifact_hash[:24])
+        original=self.maker.manufacture
+        with patch.object(self.maker,"manufacture",
+                          side_effect=[RuntimeError("temporary build failure"),original]) as build:
+            self.assertEqual(m.reauthor_document_delivery(
+                self.root,self.recipe,self.order,self.maker),
+                "document_edition_failed_needs_engineering")
+            self.assertFalse(source.exists())
+            self.assertEqual(m.reauthor_document_delivery(
+                self.root,self.recipe,self.order,self.maker),
+                "private_document_edition_built")
+            self.assertEqual(build.call_count,2)
 
     def test_unbound_and_tampered_archives_never_get_new_product(self):
         self.bind({"bundle/file.txt":b"legitimate doc"})
