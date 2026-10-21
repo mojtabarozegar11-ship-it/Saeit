@@ -9,6 +9,8 @@ Python 3.8+, stdlib only.
 import hashlib
 import json
 import os
+import resource
+import signal
 from pathlib import Path
 import re
 import subprocess
@@ -129,19 +131,36 @@ def inspect_product(folder, recipe, *, timeout=90):
             raise RuntimeError("PRODUCT_PACKAGE_QA_FAILED:CUSTOMER_ZIP_UNUSABLE") from error
         extracted = root / recipe
         evidence = root / "test-result.json"
-        result = subprocess.run(
-            [sys.executable, "-B", "-c", RUNNER, str(evidence)],
-            cwd=str(extracted), capture_output=True, text=True,
-            timeout=timeout, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+        def child_limits():
+            resource.setrlimit(resource.RLIMIT_CPU, (30, 35))
+            resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
+            resource.setrlimit(resource.RLIMIT_FSIZE, (32 * 1024 * 1024, 32 * 1024 * 1024))
+            resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+        # Keep credentials and ambient PYTHONPATH out of the extracted product.
+        safe_env = {"PATH": os.defpath, "LANG": "C.UTF-8",
+                    "HOME": str(root), "PYTHONNOUSERSITE": "1",
+                    "PYTHONDONTWRITEBYTECODE": "1"}
+        with subprocess.Popen(
+                [sys.executable, "-B", "-c", RUNNER, str(evidence)],
+                cwd=str(extracted), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, env=safe_env, start_new_session=True,
+                preexec_fn=child_limits) as process:
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired as error:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.communicate()
+                raise RuntimeError("PRODUCT_PACKAGE_QA_FAILED:CUSTOMER_TEST_TIMEOUT") from error
+            result_code = process.returncode
         require(evidence.is_file() and not evidence.is_symlink(), "CUSTOMER_TEST_REPORT_MISSING")
         try:
             counts = json.loads(evidence.read_text(encoding="utf8"))
         except (ValueError, OSError) as error:
             raise RuntimeError("PRODUCT_PACKAGE_QA_FAILED:CUSTOMER_TEST_REPORT_INVALID") from error
-        require(result.returncode == 0 and counts.get("tests_run") == measurements["tests_run"]
+        require(result_code == 0 and counts.get("tests_run") == measurements["tests_run"]
                 and all(counts.get(key) == 0 for key in
                         ("errors", "failures", "skipped", "expected_failures", "unexpected_successes")),
-                "CUSTOMER_EXTRACTED_TESTS_FAILED:" + (result.stderr or "")[-300:])
+                "CUSTOMER_EXTRACTED_TESTS_FAILED:" + (stderr or "")[-300:])
     return {"schema": SCHEMA, "recipe": recipe,
             "source_sha256": manifest["source_sha256"],
             "artifact_sha256": sha, "customer_zip_extract_test": "passed",
