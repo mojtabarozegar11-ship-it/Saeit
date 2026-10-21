@@ -33,3 +33,18 @@
 4. Keep live release/payment functions disabled until separate explicit acceptance and evidence.
 
 Do not claim 100/100 commercial or production readiness from synthetic verification.
+
+
+## Additional stage resilience acceptance (2026-10-21)
+
+- Latest passing stage execution: https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39643861357
+- Latest passing isolated delivery/locking test suite: https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39643861355
+- Fresh isolated destination: `/home/zomorod2/Saeit-staging/moj-commerce-v11-synthetic-restore/mc11-c5fe1bf6e1da`
+- Verified script content SHA-256: `01187d7143d4e3f9778540ba48f791bb3174779e8e60a8828acb41552fa69cb9`
+- The seed, untouched backup and restored synthetic SQLite database passed integrity and foreign-key verification. The logical receipt remained `583eca7ac509b203cc6978f05cb78f269c88a72eddf1582bccf6aacda49c77dc`.
+- An intentionally modified **separate synthetic copy** produced a checksum mismatch: `V11_TAMPERED_DATA_HASH_MISMATCH_DETECTED`.
+- A repeated execution pointing at the existing destination was explicitly rejected without overwrite: `V11_REPEAT_RUN_OVERWRITE_DENIED`; the workflow verified the refusal text, not merely a nonzero SSH status.
+- PostgreSQL cPanel authorization remains unavailable (same `CPANEL_UAPI_POSTGRES_READONLY_CALL_FAILED` and `CPANEL_LOCAL_PG_ACCOUNT_AUTH_NOT_AVAILABLE` markers). No PostgreSQL restore or staging role provisioning performed.
+- No live site, payment, production database, or wallet transaction was changed.
+
+**Scope limit:** These are synthetic SQLite fail-closed tests, not a production recovery drill, real customer data attestation or 100/100 readiness.
