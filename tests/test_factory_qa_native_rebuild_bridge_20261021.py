@@ -404,7 +404,14 @@ class RealPrivateDocumentEditionTests(unittest.TestCase):
         product_archive=product/(new_id+"-internal-qa.zip")
         product_archive.write_bytes(b"tampered private product")
         self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
-                         "existing_edition_requires_engineering_review")
+                         "private_document_edition_repaired")
+        repaired_meta=json.loads((product/"manufacturing_manifest.json").read_text())
+        repaired_receipt=json.loads((self.root/"quality-excellence/document-edition-receipts"
+                                     /(new_id+".json")).read_text())
+        self.assertEqual(self.maker.sha256_file(product_archive),
+                         repaired_receipt["new_artifact_sha256"])
+        self.assertEqual(repaired_meta["artifact_sha256"],
+                         repaired_receipt["new_artifact_sha256"])
         self.assertEqual(self.arch.read_bytes(),(self.stock/(self.recipe+"-internal-qa.zip")).read_bytes())
 
     def test_document_edition_120_original_assets_produces_full_new_private_zip(self):
