@@ -24,9 +24,13 @@ NEW_OPEN='''async function refreshAndDeliver() {
   if (!currentOrder || polling || delivered)return;
   polling=true;
   check.disabled=true;'''
+OLD_HIDE='''      invoiceBox.hidden=true;
+      const holder=document.getElementById("links");'''
+NEW_HIDE='''      const holder=document.getElementById("links");'''
 OLD_PAID='''      downloadBox.hidden=false;
       say("Payment confirmed and access granted.");'''
 NEW_PAID='''      if (holder.children.length) {
+        invoiceBox.hidden=true;
         delivered=true;
         stopPolling();
         downloadBox.hidden=false;
@@ -105,6 +109,7 @@ def changed(old):
     schedulePolling(6000);
     say("Your signed invoice is ready. Review the network and exact amount before sending. Payment status updates automatically.");'''),
   (OLD_OPEN,NEW_OPEN),
+  (OLD_HIDE,NEW_HIDE),
   (OLD_PAID,NEW_PAID),
   (OLD_PENDING,NEW_PENDING),
   (OLD_CLOSE,NEW_CLOSE),
