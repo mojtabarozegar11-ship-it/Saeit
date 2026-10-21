@@ -8,6 +8,9 @@ on:
       - 'tests/test_moj_commerce_v12_readonly_probe.py'
       - 'tools/moj_commerce_v12_passenger_backup_diagnostic.py'
       - 'tests/test_moj_commerce_v12_passenger_backup_diagnostic.py'
+      - 'scripts/mojplaywin_restore_files_isolated_runner.py'
+      - 'tests/test_mojplaywin_recovery_isolated_once.py'
+      - 'scripts/mojplaywin_recovery_stream_vps.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -18,13 +21,13 @@ jobs:
   verify-no-deploy:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/moj-commerce-v12-mariadb-isolated-20261022'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
       - name: Validate sanitized metadata-only inspector without production access
         run: |
-          python3 -m unittest -v tests.test_moj_commerce_v12_readonly_probe tests.test_moj_commerce_v12_passenger_backup_diagnostic
+          python3 -m unittest -v tests.test_moj_commerce_v12_readonly_probe tests.test_moj_commerce_v12_passenger_backup_diagnostic tests.test_mojplaywin_recovery_isolated_once
           python3 -m py_compile tools/moj_commerce_v12_live_mariadb_readonly.py
       - name: Read production MariaDB metadata and hosting quota over pinned relay
         shell: bash
@@ -39,7 +42,14 @@ jobs:
           fi
           d="$RUNNER_TEMP/moj-commerce-v12-ssh"
           install -d -m 700 "$d"
-          trap 'rm -rf "$d"' EXIT
+          restore_dir=""
+          cleanup() {
+            rm -rf -- "$d"
+            if [[ -n "$restore_dir" && "$restore_dir" == "$RUNNER_TEMP"/moj-commerce-v12-restore-* ]]; then
+              rm -rf -- "$restore_dir"
+            fi
+          }
+          trap cleanup EXIT
           printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
           printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
           chmod 600 "$d/vps.key" "$d/host.key"
@@ -89,6 +99,29 @@ jobs:
           call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
           timeout 700s ssh -T -F "$d/config" saeit-vps "python3 -c '$call' '$stream64' files" |
             timeout 700s python3 -c "$call" "$diag64" archive
+          # Second read of the pre-existing authenticated archive into a NEW
+          # disposable private sandbox. Materialize regular files only. External
+          # absolute symlinks remain quarantined; a full restore stays NO-GO.
+          free_bytes="$(df -PB1 "$RUNNER_TEMP" | awk 'NR==2{print $4}')"
+          test "$free_bytes" -gt 3000000000 || { echo 'ISOLATED_RESTORE_DISK_BELOW_SAFE_LIMIT'; exit 1; }
+          restore_dir="$(mktemp -d "$RUNNER_TEMP/moj-commerce-v12-restore-XXXXXXXX")"
+          chmod 700 "$restore_dir"
+          restore64="$(base64 -w0 scripts/mojplaywin_restore_files_isolated_runner.py)"
+          timeout 700s ssh -T -F "$d/config" saeit-vps "python3 -c '$call' '$stream64' files" |
+            timeout 700s python3 -c "$call" "$restore64" "$restore_dir" --quarantine-absolute-links |
+            tee "$RUNNER_TEMP/moj-commerce-v12-restore-summary.json"
+          python3 - "$RUNNER_TEMP/moj-commerce-v12-restore-summary.json" <<'PY_VERIFY'
+          import json,sys
+          report=json.load(open(sys.argv[1]))
+          assert report["root_count_restored"]==2
+          assert report["regular_files_restored"]==23567
+          assert report["regular_files_recovered"] is True
+          assert report["absolute_links_quarantined"]==3
+          assert report["restore_complete"] is False
+          assert report["production_modified"] is False
+          assert report["release_permitted"] is False
+          print("MOJ_COMMERCE_V12_QUARANTINED_FILE_RESTORE=PASS_NOT_FULL")
+          PY_VERIFY
           echo 'MOJ_COMMERCE_V12_EXISTING_GPG_BACKUP_METADATA=ANALYZED_READ_ONLY'
           echo 'MOJ_COMMERCE_V12_RELAY_READONLY=COMPLETED'
           echo 'MOJ_COMMERCE_V12_PRODUCTION_WRITES=ZERO'
