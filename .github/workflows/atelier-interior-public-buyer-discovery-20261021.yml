@@ -37,5 +37,27 @@ jobs:
               "product_has_svg_disclosure":"SVG" in ptxt or "illustrations" in ptxt.lower(),
           }
           print("ATELIER_PUBLIC_BUYER_DISCOVERY="+json.dumps(f,sort_keys=True))
+          from html.parser import HTMLParser
+          class Inspector(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.a=[]
+                  self.forms=[]
+                  self.buttons=[]
+                  self.inputs=[]
+              def handle_starttag(self,tag,attrs):
+                  d=dict(attrs)
+                  if tag=="a":
+                      self.a.append({"href":d.get("href",""),"title":d.get("title","")})
+                  if tag=="form":
+                      self.forms.append({"action":d.get("action",""),"method":d.get("method","")})
+                  if tag=="button":
+                      self.buttons.append({"type":d.get("type",""),"class":d.get("class","")})
+                  if tag=="input":
+                      self.inputs.append({"type":d.get("type",""),"name":d.get("name","")})
+          i=Inspector()
+          i.feed(ptxt)
+          print("ATELIER_BUYER_PAGE_STRUCTURE="+json.dumps({"links":[a for a in i.a if any(k in str(a).lower() for k in ["checkout","product","buy","cart","login","register","order"])][:30],"forms":i.forms[:12],"buttons":i.buttons[:15],"inputs":[v for v in i.inputs if v["type"] not in ("hidden",)][0:15],"contains_buy_word":("buy" in ptxt.lower()),"contains_purchase_word":("purchase" in ptxt.lower())},sort_keys=True))
+          print("ATELIER_STORE_ANCHORS="+json.dumps({"product_path_in_html":("/store/product/879/" in stxt),"atelier_word":("atelier" in stxt.lower()),"store_html_chars":len(stxt)},sort_keys=True))
           assert store==200 and product==200
           PY
