@@ -26,6 +26,28 @@ class CorrectContractYear(unittest.TestCase):
             again=m.install(w)
             self.assertEqual(again,item)
             self.assertEqual(before,sorted(cap.iterdir()))
+    def test_owner_attests_all_current_clauses_were_signed_1398_with_no_additions(self):
+        with tempfile.TemporaryDirectory() as d:
+            w=Path(d);cap=w/"legal-capacity";cap.mkdir()
+            (cap/"capacity-original.json").write_text(json.dumps({"original_master_sha":m.BEFORE}))
+            m.install(w)
+            first=m.attest_terms(w)
+            self.assertTrue(first["current_terms_same_as_original_1398_owner_attested"])
+            self.assertFalse(first["new_clauses_after_1398_owner_attested"])
+            self.assertFalse(first["independent_signed_original_comparison"])
+            self.assertFalse(first["independent_signature_verification"])
+            self.assertFalse(first["sale_or_quality_clearance"])
+            names=sorted(cap.iterdir())
+            self.assertEqual(first,m.attest_terms(w))
+            self.assertEqual(names,sorted(cap.iterdir()))
+            doc=json.loads(next(cap.glob("master-terms-1398-*.json")).read_text())
+            self.assertEqual(doc["typed_copy_preparation_year_jalali"],1405)
+            self.assertFalse(doc["creates_new_contract_or_signatures"])
+    def test_must_have_prior_year_record_before_attestation(self):
+        with tempfile.TemporaryDirectory() as d:
+            w=Path(d);(w/"legal-capacity").mkdir()
+            with self.assertRaisesRegex(ValueError,"CORRECTED_1398_CONTRACT_YEAR_RECORD_REQUIRED"):
+                m.attest_terms(w)
     def test_missing_original_evidence_never_forces_date_overwrite(self):
         with tempfile.TemporaryDirectory() as d:
             w=Path(d);cap=w/"legal-capacity";cap.mkdir()
