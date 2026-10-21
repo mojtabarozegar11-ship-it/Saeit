@@ -41,6 +41,23 @@ SPECIAL={
 "Q006":"P0_MEASURED_SUPERIORITY_UNVERIFIED",
 "Q013":"P0_ORIGINAL_INNOVATIONS_UNPROVEN",
 "Q014":"P0_ORIGINAL_INNOVATIONS_UNPROVEN"}
+# Cross-family defects only veto the exact criterion they invalidate.
+# Broad specialist-area omissions MUST NOT erase independently measured
+# package integrity, usability, or other separate criterion evidence.
+DOMAIN_VETO={
+ "global_comparative_advantage": "Q006",
+ "originality_and_non_derivativeness": "Q012",
+ "verified_innovation": "Q013",
+ "technology_and_technical_excellence": "Q023",
+ "domain_depth_and_accuracy": "Q033",
+ "user_customer_value": "Q043",
+ "independent_expert_review": "Q091",
+ "real_world_performance_accessibility": "Q055",
+ "security_ethics_regulatory_safety": "Q072",
+ "legal_rights_and_provenance": "Q077",
+ "distribution_support_reliability": "Q095",
+ "independent_adversarial_testing": "Q070",
+}
 PENDING={"P0_INDEPENDENT_ATTESTATION_NOT_AUTHENTICATED",
          "P0_WORLD_NUMBER_ONE_CLAIM_UNVERIFIED"}
 def file_matches(base,value):
@@ -67,8 +84,10 @@ def grade(result,*,exact_build_sha256=None,reviewer_verified=False,
     items={}
     for key,c in CRITERIA.items():
         has=file_matches(evidence_root,evidence.get(key))
-        conflict=(any("P0_PROOF_MISSING:"+p in codes for p in c["quality_dimensions"])
-                  or SPECIAL.get(key) in codes)
+        conflict=(any("P0_PROOF_MISSING:"+p in codes for p in DOMAIN_VETO
+                      if DOMAIN_VETO[p]==key)
+                  or SPECIAL.get(key) in codes
+                  or "P0_CRITERION_FAILED:"+key in codes)
         pts=10 if has and not conflict else 0
         items[key]={"criterion":c["name"],"group":key,"group_id":key,"maximum_points":10,
                     "documentary_points":pts,"independent_quality_points":None,
