@@ -1,3 +1,17 @@
+# MojPlayWin — crypto-only payment scope update, 2026-10-21
+
+**Owner's latest instruction supersedes the 2026-10-20 fiat/card requirement below.** For now, MojPlayWin accepts **cryptocurrency payment only**, centered on native TRX on TRON mainnet and any other actually enabled/proven crypto rail (such as native ETH). Fiat/card acceptance, Banxa onboarding, merchant KYB for on-ramp, bank payments and fiat-to-TRX conversion are expressly **deferred**, not prerequisites for crypto-only acceptance.
+
+The requirement to distinguish cryptocurrency transfer from USD *price display* still applies. USD-denominated product listings do not imply that credit-card payments are supported. All publicly offered crypto rails must have real mainnet payment evidence before the payment gateway can receive **100/100** approval. Current 10×10 quality gates live in [mpw-payment-gateway-100-acceptance-20261021.md](mpw-payment-gateway-100-acceptance-20261021.md).
+
+The staged `mpw_guest_trx_20261020/` path is **disabled**, not a proven live guest-payment mechanism. It may be evaluated for native-TRX payments only after wallet-ownership, unique invoice amount, quote expiry, secure buyer claim, independent TRON Solidity finality, replay protection, and paid digital file release receive end-to-end tests. **Do not enable it blindly or declare a paid order without mainnet proof.**
+
+The staged `mpw_fiat_to_trx_20261020/` provider/guest prototype is retained as reference only; its presence is neither an active fiat payment route nor a blocker for crypto-only acceptance. Never swap a currently functioning native crypto path for an unapproved fiat provider.
+
+---
+
+## Historical contract (2026-10-20), superseded and not active
+
 # MojPlayWin — required checkout contract (2026-10-20)
 
 ## Merchant requirement (supersedes the staged wallet-to-wallet guest checkout)
