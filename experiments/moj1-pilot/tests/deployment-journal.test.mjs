@@ -8,6 +8,8 @@ import {openDeploymentJournal} from '../scripts/deployment-journal.mjs';
 const identity = {network: 'Shasta', governance: 'TEST_MULTISIG', artifacts: {
   MojCoin: 'sha256-token-artifact', MojAssets: 'sha256-nft-artifact'
 }};
+const details = {txID: 'a'.repeat(64), rawDataSha256: 'b'.repeat(64),
+  expectedAddress: '41' + 'c'.repeat(40)};
 
 async function fixture(t) {
   const dir = await mkdtemp(join(tmpdir(), 'moj1-shasta-journal-'));
@@ -21,35 +23,52 @@ test('journal requires a persistent absolute path and Shasta identity', async ()
     {...identity, network: 'Mainnet'}), /Invalid Shasta/);
 });
 
-test('completed confirmed steps are idempotently reused without new deployment', async t => {
+test('confirmed steps can be reused without new deployment', async t => {
   const path = await fixture(t);
   const first = await openDeploymentJournal(path, identity);
-  await first.markBroadcastUncertain('MojCoin');
-  let snapshot = JSON.parse(await readFile(path, 'utf8'));
-  assert.equal(snapshot.steps.MojCoin.status, 'BROADCAST_UNCERTAIN');
-  await first.markVerified('MojCoin', 'TEST_ADDRESS');
+  await first.markBroadcastUncertain('MojCoin', details);
+  assert.equal(JSON.parse(await readFile(path, 'utf8')).steps.MojCoin.txID, details.txID);
+  await first.markVerified('MojCoin', details.expectedAddress, details.txID);
   await first.close();
 
   const resumed = await openDeploymentJournal(path, identity);
-  assert.equal(resumed.verifiedAddress('MojCoin'), 'TEST_ADDRESS');
+  assert.equal(resumed.verifiedAddress('MojCoin'), details.expectedAddress);
   assert.equal(resumed.verifiedAddress('MojAssets'), null);
-  await assert.rejects(resumed.markBroadcastUncertain('MojCoin'), /Cannot repeat/);
-  await resumed.markBroadcastUncertain('MojAssets');
-  await resumed.markVerified('MojAssets', 'TEST_NFT');
-  snapshot = resumed.snapshot();
-  assert.equal(snapshot.steps.MojAssets.address, 'TEST_NFT');
+  await assert.rejects(resumed.markBroadcastUncertain('MojCoin', details), /Cannot repeat/);
+  await resumed.markBroadcastUncertain('MojAssets', {...details, txID: 'd'.repeat(64)});
+  await resumed.markVerified('MojAssets', details.expectedAddress, 'd'.repeat(64));
+  assert.equal(resumed.snapshot().steps.MojAssets.status, 'VERIFIED');
   await resumed.close();
 });
 
-test('possible broadcast is permanently blocked from automatic retry until reconciled', async t => {
+test('pending broadcast survives restart and blocks every fresh deployment', async t => {
   const path = await fixture(t);
   const first = await openDeploymentJournal(path, identity);
-  await first.markBroadcastUncertain('MojCoin');
+  await first.markBroadcastUncertain('MojCoin', details);
   await first.close();
-  await assert.rejects(openDeploymentJournal(path, identity), /DO NOT REDEPLOY/);
+  const resumed = await openDeploymentJournal(path, identity);
+  assert.deepEqual(resumed.pending('MojCoin').txID, details.txID);
+  assert.throws(() => resumed.verifiedAddress('MojCoin'), /DO NOT REDEPLOY/);
+  await assert.rejects(resumed.markBroadcastUncertain('MojAssets', details), /Cannot repeat/);
+  await resumed.close();
 });
 
-test('journal refuses another compiled binary, governance address, or concurrent runner', async t => {
+test('journal refuses wrong txID, wrong address, malformed attestation and secret material', async t => {
+  const path = await fixture(t);
+  const journal = await openDeploymentJournal(path, identity);
+  await assert.rejects(journal.markBroadcastUncertain('MojCoin',
+    {...details, txID: 'bad'}), /complete signed txID/);
+  await journal.markBroadcastUncertain('MojCoin', details);
+  await assert.rejects(journal.markVerified('MojCoin', details.expectedAddress, 'f'.repeat(64)),
+    /matching journaled/);
+  await assert.rejects(journal.markVerified('MojCoin', '41'+'e'.repeat(40), details.txID),
+    /matching journaled/);
+  const raw = await readFile(path, 'utf8');
+  assert.doesNotMatch(raw, /privateKey|signature|signedTransaction|TRON_PRIVATE_KEY/);
+  await journal.close();
+});
+
+test('journal refuses changed artifacts, governance address, or a concurrent runner', async t => {
   const path = await fixture(t);
   const first = await openDeploymentJournal(path, identity);
   await assert.rejects(openDeploymentJournal(path, identity), /journal lock exists/);
