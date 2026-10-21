@@ -172,6 +172,21 @@ def main():
             broken["hmac_sha256"] = hmac.new(key.encode(), payload_to_sign(broken), hashlib.sha256).hexdigest()
             ok, _ = evaluate(broken, key, now=now)
             assert not ok, field
+        # A legacy fiat-oriented 100/100 declaration cannot pass the new scope.
+        legacy = json.loads(json.dumps(fake))
+        legacy["policy_version"] = "fiat-to-native-trx-20261020"
+        legacy["checks"]["fiat_to_native_trx"] = legacy["checks"].pop("crypto_asset_network_coverage")
+        legacy["hmac_sha256"] = hmac.new(
+            key.encode(), payload_to_sign(legacy), hashlib.sha256
+        ).hexdigest()
+        assert not evaluate(legacy, key, now=now)[0], "Old fiat 100/100 certificate must fail"
+        wrong_scope = json.loads(json.dumps(fake))
+        wrong_scope["payment_scope"] = "fiat_onramp"
+        wrong_scope["hmac_sha256"] = hmac.new(
+            key.encode(), payload_to_sign(wrong_scope), hashlib.sha256
+        ).hexdigest()
+        assert not evaluate(wrong_scope, key, now=now)[0], "Fiat scope cannot certify crypto"
+
         assert not evaluate(fake, "incorrect-key-xxxxxxxxxxxxxxxxxxxxxxxxx", now=now)[0]
         assert not evaluate(fake, "", now=now)[0]
         assert not evaluate(fake, key, now=dt.datetime(2026, 11, 2, tzinfo=dt.timezone.utc))[0]
