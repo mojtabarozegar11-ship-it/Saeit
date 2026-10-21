@@ -92,6 +92,15 @@ jobs:
           remote_script_digest="$(timeout 40s ssh -F "$sshdir/config" saeit-host "sha256sum '$destination/restore_smoke.py'" | awk '{print $1}')"
           test "$script_digest" = "$remote_script_digest"
           timeout 45s ssh -F "$sshdir/config" saeit-host "set -eu; test -x /opt/alt/python311/bin/python3.11; cd '$destination'; /opt/alt/python311/bin/python3.11 restore_smoke.py --sandbox '$destination'"
+          # A second invocation on exactly the same destination must fail closed.
+          # Check the specific refusal, so transport failures cannot pass the test.
+          replay_log="$RUNNER_TEMP/moj-commerce-v11-replay-denial.log"
+          if timeout 45s ssh -F "$sshdir/config" saeit-host "set -eu; cd '$destination'; /opt/alt/python311/bin/python3.11 restore_smoke.py --sandbox '$destination'" > "$replay_log" 2>&1; then
+            echo 'V11_REPEAT_RUN_UNEXPECTED_SUCCESS'
+            exit 1
+          fi
+          grep -q 'Refusing overwrite of existing database or backup' "$replay_log"
+          echo 'V11_REPEAT_RUN_OVERWRITE_DENIED'
           echo "V11_SYNTHETIC_STAGE_NAME=$release"
           echo "V11_SMOKE_SOURCE_SHA256=$script_digest"
           echo 'V11_NO_PRODUCTION_DB_NO_REAL_FUNDS'
