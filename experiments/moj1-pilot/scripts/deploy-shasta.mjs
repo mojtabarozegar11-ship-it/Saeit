@@ -49,7 +49,7 @@ try {
   }
   // Our pilot governor exposes this monotonic replay nonce. A generic deployed
   // contract without our governance interface is not a valid signing controller.
-  if (!/^\\d+$/.test(String(await onchainGovernor.nonce().call()))) {
+  if (!/^[0-9]+$/.test(String(await onchainGovernor.nonce().call()))) {
     throw new Error('Shasta governance lacks expected nonce');
   }
 } catch (error) {
