@@ -16,7 +16,7 @@ from mpw_tron_pro.rpc import finalized_records
 from .services import CommerceRejected, CommerceUnavailable
 
 
-def independently_verify_finalized_trx(event, purchase, *, fetch=finalized_records):
+def independently_verify_finalized_trx(event, purchase, *, fetch=finalized_records, api_key=None):
     """Return a strictly typed proof read from TRON SolidityNode, not event data.
 
     Network/provider absence => unavailable (retry event); incorrect finalized
@@ -39,8 +39,9 @@ def independently_verify_finalized_trx(event, purchase, *, fetch=finalized_recor
             expires_ms=expires_ms,
         )
         expected.validate()  # validates genuine TRON Base58Check address
-        key = getattr(settings, 'MOJ_COMMERCE_TRONGRID_API_KEY', '')
-        if not isinstance(key, str):
+        key = (getattr(settings, 'MOJ_COMMERCE_TRONGRID_API_KEY', '')
+               if api_key is None else api_key)
+        if (not isinstance(key, str) or len(key) > 512 or '\\n' in key or '\\r' in key):
             raise CommerceUnavailable('Invalid read-only TRON API configuration')
         # fetch() must be a trusted backend adapter. Never take RPC URLs from an event.
         try:
