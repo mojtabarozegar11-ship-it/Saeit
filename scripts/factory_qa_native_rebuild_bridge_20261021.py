@@ -50,10 +50,21 @@ def atomic_receipt(path,doc):
         os.chmod(dest,0o600)
     return digest
 
-def execute(root,source_root,maker_path,*,limit=2):
+def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
+    """Rebuild from either verified generated or installed native recipe roots."""
     root=Path(root);source_root=Path(source_root);maker_path=Path(maker_path)
     if not root.is_dir() or root.is_symlink():raise ValueError("PRIVATE_FACTORY_ROOT_INVALID")
     if not source_root.is_dir() or source_root.is_symlink():raise ValueError("PRIVATE_SOURCE_ROOT_INVALID")
+    if not isinstance(additional_source_roots,(list,tuple)) or len(additional_source_roots)>2:
+        raise ValueError("BOUNDED_SOURCE_ROOTS_REQUIRED")
+    roots=[source_root]
+    for extra in additional_source_roots:
+        candidate=Path(extra)
+        if candidate.is_symlink() or not candidate.is_dir():
+            raise ValueError("ADDITIONAL_RECIPE_ROOT_UNSAFE_OR_MISSING")
+        if candidate.resolve() in (item.resolve() for item in roots):
+            raise ValueError("DUPLICATE_SOURCE_ROOT")
+        roots.append(candidate)
     if type(limit) is not int or not 1<=limit<=3:raise ValueError("BOUNDED_CAP_REQUIRED")
     maker=load_maker(maker_path)
     workorders=root/"quality-excellence"/"production-workorders"
@@ -66,7 +77,10 @@ def execute(root,source_root,maker_path,*,limit=2):
     if receipts.is_symlink():raise ValueError("UNSAFE_REPAIR_RECEIPT_ROOT")
     totals={"orders_seen":0,"sources_available":0,"source_changed":0,
             "rebuild_attempted":0,"technical_candidates_verified":0,
-            "unchanged_or_human_only":0,"missing_source":0,"failed":0}
+            "unchanged_or_human_only":0,"missing_source":0,"failed":0,
+            "verified_source_roots":len(roots),
+            "source_root_hits":[0 for _ in roots],
+            "duplicate_recipe_roots_blocked":0}
     orders=[]
     for folder in sorted(workorders.iterdir()):
         if folder.is_symlink() or not folder.is_dir() or not RECIPE.fullmatch(folder.name):
@@ -83,10 +97,18 @@ def execute(root,source_root,maker_path,*,limit=2):
         orders.append((folder.name,order))
     for recipe,order in orders:
         totals["orders_seen"]+=1
-        source=source_root/recipe
-        if source.is_symlink() or not source.is_dir():
+        locations=[(index,parent,parent/recipe)
+                   for index,parent in enumerate(roots)
+                   if (parent/recipe).is_dir() and not (parent/recipe).is_symlink()]
+        if not locations:
             totals["missing_source"]+=1
             continue
+        # Never make an arbitrary selection if two roots own the same recipe.
+        # A genuine source collision needs operator provenance resolution.
+        if len(locations)>1:
+            totals["duplicate_recipe_roots_blocked"]+=1
+            continue
+        index,active_root,source=locations[0]
         try:
             _,files=maker.inspect_recipe(source)
             source_hash=maker.source_digest(source,files)
@@ -94,6 +116,7 @@ def execute(root,source_root,maker_path,*,limit=2):
             totals["missing_source"]+=1
             continue
         totals["sources_available"]+=1
+        totals["source_root_hits"][index]+=1
         original=root/"digital-products"/recipe/"manufacturing_manifest.json"
         prior=checked_json(original) if original.is_file() else {}
         changed=prior.get("source_sha256")!=source_hash
@@ -116,7 +139,7 @@ def execute(root,source_root,maker_path,*,limit=2):
         if totals["rebuild_attempted"]>=limit:continue
         totals["rebuild_attempted"]+=1
         try:
-            result=maker.manufacture(recipe,source_root,output)
+            result=maker.manufacture(recipe,active_root,output)
             target=output/recipe
             meta=checked_json(target/"manufacturing_manifest.json")
             package=target/(recipe+"-internal-qa.zip")
@@ -126,6 +149,7 @@ def execute(root,source_root,maker_path,*,limit=2):
                 or result.get("qa_status")!="passed"):
                 raise ValueError("REBUILD_TECHNICAL_QA_NOT_VERIFIED")
             record={"schema":SCHEMA,"recipe":recipe,"source_sha256":source_hash,
+                    "source_root_slot":index,
                     "source_order_sha256":order["source_quality_receipt_sha256"],
                     "artifact_sha256":meta["artifact_sha256"],
                     "source_changed":changed,
@@ -157,9 +181,11 @@ def main():
     p=argparse.ArgumentParser()
     p.add_argument("--private-root",required=True)
     p.add_argument("--source-root",required=True)
+    p.add_argument("--additional-source-root",action="append",default=[])
     p.add_argument("--maker",required=True)
     p.add_argument("--limit",type=int,default=2)
     a=p.parse_args()
-    execute(a.private_root,a.source_root,a.maker,limit=a.limit)
+    execute(a.private_root,a.source_root,a.maker,limit=a.limit,
+            additional_source_roots=a.additional_source_root)
 
 if __name__=="__main__":main()
