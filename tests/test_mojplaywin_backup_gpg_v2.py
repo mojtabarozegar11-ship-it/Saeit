@@ -12,6 +12,10 @@ class GpgStreamingBackupTests(unittest.TestCase):
         from scripts.mojplaywin_backup_encrypt_vps_gpg import selftest
         self.assertTrue(selftest())
 
+    def test_unique_timestamped_archive_name(self):
+        from scripts.mojplaywin_backup_encrypt_vps_gpg import STEM
+        self.assertRegex(STEM, r"^mojplaywin_\d{8}T\d{6}Z_[0-9a-f]{16}$")
+
     def test_round_trip_and_existing_backup_no_overwrite(self):
         from scripts.mojplaywin_backup_encrypt_vps_gpg import (
             store, MARKER, STEM, VERSION
