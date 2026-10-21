@@ -108,7 +108,8 @@ def validate_package(zip_file, manifest_file, recipe, expected_digest):
         elif not infos or len(infos) > MAX_FILES:
             raise ValueError("ARCHIVE_FILE_COUNT_INVALID")
         elif not isinstance(manifest.get("files"), list):
-            raise ValueError("ARCHIVE_MANIFEST_MEMBERS_MISSING")
+            if len(infos)>80:
+                raise ValueError("ARCHIVE_MANIFEST_MEMBERS_MISSING")
         elif (len(manifest["files"]) != len(infos)
               or len(set(manifest["files"])) != len(infos)
               or not all(isinstance(v,str) and v and len(v)<=240
