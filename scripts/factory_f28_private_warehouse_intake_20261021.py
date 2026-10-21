@@ -54,6 +54,14 @@ def load_warehouse(path):
     return module
 
 
+def load_customer(path):
+    require(path.is_file() and not path.is_symlink(), "F28_INTAKE_CUSTOMER_QA_MODULE_MISSING")
+    spec = importlib.util.spec_from_file_location("f28_customer_zip_acceptance", str(path))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def make_private(path):
     require(not path.is_symlink(), "F28_INTAKE_SYMLINK_PATH")
     path.mkdir(parents=True, mode=0o700, exist_ok=True)
@@ -127,6 +135,8 @@ def accept(candidate, factory_root, warehouse_module):
             "F28_INTAKE_SOURCE_OR_ARTIFACT_MISMATCH")
     require(sum(WEIGHTS.values()) == 1000, "F28_INTAKE_INVALID_QUALITY_RUBRIC")
     module = load_warehouse(Path(warehouse_module))
+    customer = load_customer(Path(__file__).resolve().with_name(
+        "factory_verified_customer_cycle_20261021.py"))
     warehouse = factory_root / "production-warehouse"
     make_private(warehouse)
     lockpath = warehouse / ".warehouse.lock"
@@ -146,6 +156,23 @@ def accept(candidate, factory_root, warehouse_module):
             require(sha(intake_source / artifact.name) == sha(artifact)
                     and sha(intake_source / manifest_file.name) == sha(manifest_file),
                     "F28_INTAKE_STAGING_COPY_MISMATCH")
+            # The old standalone F28 CLI black-box tests remain necessary.
+            # Additionally retest the exact archive handed to the stockkeeper.
+            buyer_qa = customer.inspect_product(intake_source, RECIPE)
+            customer.persist_pending(isolated, buyer_qa)
+            version_hash = buyer_qa["source_sha256"]
+            for origin, destination in (
+                (isolated / "customer-extracted-acceptance" / RECIPE
+                    / version_hash / "technical-receipt.json",
+                 factory_root / "customer-extracted-acceptance" / RECIPE
+                    / version_hash / "technical-receipt.json"),
+                (isolated / "quality-excellence" / "customer-extracted-review"
+                    / RECIPE / version_hash / "pending.json",
+                 factory_root / "quality-excellence" / "customer-extracted-review"
+                    / RECIPE / version_hash / "pending.json"),
+            ):
+                make_private(destination.parent)
+                stable_ticket(module, destination, json_file(origin))
             result = module.stock_one(isolated, RECIPE, warehouse)
         require(result["action"] in ("stocked", "already_stocked"),
                 "F28_INTAKE_PRODUCT_NOT_STOCKED")
