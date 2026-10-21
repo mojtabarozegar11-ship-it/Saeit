@@ -17,9 +17,10 @@ from django.utils import timezone
 from .models import Merchant, MerchantAddress, DigitalProduct, Purchase, PurchaseScanState, PaymentDiscrepancy, ScannerRun
 
 
-# Dedicated constant for a single MOJ-Commerce financial scanner per PostgreSQL DB.
-# Use a session-level lock, not a transaction-level lock that expires too early.
+# Session-scoped mutex: PostgreSQL uses numeric advisory locks, MariaDB/MySQL
+# uses a named GET_LOCK. Never fall back to a SQLite/process-local lock.
 SCAN_ADVISORY_LOCK_ID = 5631769340152039
+SCAN_MYSQL_LOCK_NAME = 'moj-commerce-trx-scanner-v1'
 
 
 class ConcurrentScanner(Exception):
@@ -28,25 +29,43 @@ class ConcurrentScanner(Exception):
 
 @contextmanager
 def exclusive_scanner():
-    """Serialize scanner runs across cron processes on one PostgreSQL DB.
+    """Hold a single-scanner mutex on the SAME DB session for the entire scan.
 
-    Caller MUST keep the connection open for the whole scan, and this lock
-    MUST be held before network reads or order writes. No SQLite fallback.
+    PostgreSQL advisory locks and MariaDB/MySQL named GET_LOCK share the required
+    cross-process semantics, unlike SQLite. Any loss/unexpected release is fatal.
+    Both modes are evaluated on independent disposable CI databases before use.
     """
-    if connection.vendor != 'postgresql':
-        raise RuntimeError('Scanner requires PostgreSQL row locks')
+    vendor = connection.vendor
+    if vendor not in ('postgresql', 'mysql'):
+        raise RuntimeError('Financial scanner requires a row-locking PostgreSQL or MySQL/MariaDB backend')
+    # No checkout, payment, or wallet changes take place here; this only holds
+    # the exclusively owned scanner session lock.
+    if connection.in_atomic_block:
+        raise RuntimeError('Scanner session lock must be acquired outside transactions')
+    connection.ensure_connection()
+    session = connection.connection
     with connection.cursor() as cursor:
-        cursor.execute('SELECT pg_try_advisory_lock(%s)', [SCAN_ADVISORY_LOCK_ID])
-        obtained = cursor.fetchone()[0]
-    if obtained is not True:
+        if vendor == 'postgresql':
+            cursor.execute('SELECT pg_try_advisory_lock(%s)', [SCAN_ADVISORY_LOCK_ID])
+            obtained = cursor.fetchone()[0] is True
+        else:
+            cursor.execute('SELECT GET_LOCK(%s, 0)', [SCAN_MYSQL_LOCK_NAME])
+            obtained = cursor.fetchone()[0] == 1
+    if not obtained:
         raise ConcurrentScanner('Another scanner is processing this database')
     try:
         yield
     finally:
-        # Same Django DB session; use transaction-neutral unlock in finally.
+        if connection.connection is not session:
+            raise RuntimeError('Financial scanner DB connection changed while lock was held')
         with connection.cursor() as cursor:
-            cursor.execute('SELECT pg_advisory_unlock(%s)', [SCAN_ADVISORY_LOCK_ID])
-            if cursor.fetchone()[0] is not True:
+            if vendor == 'postgresql':
+                cursor.execute('SELECT pg_advisory_unlock(%s)', [SCAN_ADVISORY_LOCK_ID])
+                released = cursor.fetchone()[0] is True
+            else:
+                cursor.execute('SELECT RELEASE_LOCK(%s)', [SCAN_MYSQL_LOCK_NAME])
+                released = cursor.fetchone()[0] == 1
+            if not released:
                 raise RuntimeError('Scanner lock unexpectedly lost')
 
 
@@ -133,7 +152,7 @@ def scanner_health(*, now=None, stale_seconds=300, overdue_seconds=180) -> dict:
     failures=(PurchaseScanState.objects.filter(purchase__status=Purchase.Status.PENDING,
                                               failures__gte=3).count())
     awaiting_review=PaymentDiscrepancy.objects.count()
-    ready=(connection.vendor=='postgresql' and
+    ready=(connection.vendor in ('postgresql', 'mysql') and
            bool(getattr(settings,'MOJ_COMMERCE_SCANNER_ENABLED',False)) and
            bool(getattr(settings,'MOJ_COMMERCE_CHECKOUT_ENABLED',False)) and
            callable(getattr(settings,'MOJ_COMMERCE_FINALIZED_TRON_CHECKER',None)) and
@@ -156,6 +175,7 @@ def scanner_health(*, now=None, stale_seconds=300, overdue_seconds=180) -> dict:
     # A passing heartbeat only confirms checks were attempted, not real funds.
     return {'status':status,'scanner_enabled':bool(getattr(settings,'MOJ_COMMERCE_SCANNER_ENABLED',False)),
             'database_postgresql':connection.vendor=='postgresql',
+            'database_mysql_mariadb':connection.vendor=='mysql',
             'last_run_started_at':run.started_at.isoformat() if run else None,
             'last_run_finished_at':run.finished_at.isoformat() if run and run.finished_at else None,
             'last_run_status':run.status if run else None,
