@@ -83,3 +83,7 @@ Source-only extensions, **still NOT live**:
 **Operator security caution:** With only one API provider (TronGrid), the second read verifies data independent of the web-hook claim but not independently against a separate TRON node operator. For significant value, validate a second pinned SolidityNode provider, comparison policy and failure modes. Do not replace the verifier with test fixtures. A self-custody signed challenge proves private-key access at signing time but not legal ownership, merchant identity, multisig authorities, or future address availability.
 
 Research: [Official TronWeb signMessageV2 + verifyMessageV2](https://tronweb.network/docu/docs/Sign%20and%20Verify%20Message/); [TronWeb sign-in with a wallet](https://tronweb.network/docu/docs/dapp/sign-in-with-tron); [TRON confirmation semantics](https://developers.tron.network/docs/confirmation-semantics); [Django DB transactions](https://docs.djangoproject.com/en/5.2/topics/db/transactions/).
+
+### Independent cryptographic compatibility gate
+
+An additional isolated CI job signs a **test-only** UTF-8 challenge with the official, pinned `tronweb@6.5.1` JavaScript SDK, then verifies the resulting real TronWeb V2 signature using the Python server's own Keccak/secp256k1 implementation (`tools/moj_tronweb_sign_fixture.cjs`, `tools/moj_tronweb_verify_fixture.py`). This test makes **no RPC calls and sends no funds**. It is stronger than using two Python functions based on the same assumptions. If it fails, wallet ownership must remain unapproved until the discrepancy is resolved.

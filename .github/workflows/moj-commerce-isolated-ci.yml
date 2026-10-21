@@ -60,3 +60,25 @@ jobs:
         run: python -m pip install 'Django>=5.2,<5.3' 'psycopg[binary]>=3.2,<4' 'eth-keys>=0.6,<0.8' 'eth-hash[pycryptodome]>=0.7,<1'
       - name: Verify PostgreSQL locking, replay defense and isolated functional delivery
         run: python -m django test tests.test_moj_commerce_postgres --settings=moj_commerce.test_settings --verbosity 2
+
+  official-tronweb-v2-interop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install official TronWeb 6.5.1 and server verifier dependencies
+        run: |
+          npm install --no-save --ignore-scripts --no-audit --no-fund tronweb@6.5.1
+          python -m pip install 'Django>=5.2,<5.3' 'eth-keys>=0.6,<0.8' 'eth-hash[pycryptodome]>=0.7,<1'
+      - name: Verify independent JS signed message with Python Keccak-secp256k1
+        run: node tools/moj_tronweb_sign_fixture.cjs | python tools/moj_tronweb_verify_fixture.py
+      - name: Attest zero live fund operations
+        run: echo 'No RPC, wallet transfer, or live deployment. Official SDK crypto test only.'
