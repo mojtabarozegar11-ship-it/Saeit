@@ -10,6 +10,7 @@ on:
       - "tests/test_factory_product_rework.py"
       - "tests/test_factory_store_sender_recovery.py"
       - "tests/test_mpw_factory_stage1_technical_repair.py"
+      - "tests/test_factory_p0_install_target.py"
       - ".github/workflows/factory-p0-recovery-regressions.yml"
   push:
     branches: [main]
@@ -21,6 +22,7 @@ on:
       - "tests/test_factory_product_rework.py"
       - "tests/test_factory_store_sender_recovery.py"
       - "tests/test_mpw_factory_stage1_technical_repair.py"
+      - "tests/test_factory_p0_install_target.py"
       - ".github/workflows/factory-p0-recovery-regressions.yml"
 permissions: {contents: read}
 jobs:
@@ -39,6 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_product_rework tests.test_factory_store_sender_recovery tests.test_mpw_factory_stage1_technical_repair -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_p0_install_target -v
       - name: Prevent automatic release from QA-only repairs
         run: |
           set -euo pipefail
@@ -101,11 +104,24 @@ jobs:
           stage="$1"
           base="$HOME/factory-runtime"
           ops="$base/operations"
-          target="$base/scripts"
+          # The manufacturer installs into operations/autonomous-product-runtime/scripts.
+          # $base/scripts is NOT the live product runtime and may be a transient path.
+          runtime="$ops/autonomous-product-runtime"
+          target="$runtime/scripts"
           python="$base/.venv/bin/python"
-          test -d "$target" && test ! -L "$target" && test -x "$python"
+          if ! test -d "$runtime" || test -L "$runtime" ||
+             ! test -d "$target" || test -L "$target" || ! test -x "$python"; then
+            echo FACTORY_P0_CANONICAL_RUNTIME_MISSING_OR_UNSAFE >&2
+            exit 1
+          fi
+          # Match deploy/install_autonomous_factory_products.sh and the local
+          # product-cycle scheduler so files cannot be replaced mid-cycle.
+          exec 8>"$ops/autonomous-product-cycle.lock"
+          flock -w 180 8 || { echo FACTORY_P0_RUNTIME_LOCK_BUSY >&2; exit 1; }
           exec 9>"$ops/.p0-integrity-install.lock"
-          flock -w 45 9
+          flock -w 45 9 || { echo FACTORY_P0_INSTALL_LOCK_BUSY >&2; exit 1; }
+          test -d "$target" && test ! -L "$target"
+          echo FACTORY_P0_CANONICAL_RUNTIME_VERIFIED
           backup="$ops/backups/p0-integrity-$(basename "$stage")"
           test ! -e "$backup"
           install -d -m 700 "$ops/backups" "$backup"
