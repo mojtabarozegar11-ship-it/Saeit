@@ -28,6 +28,7 @@ jobs:
       - name: Verify real product QA, warehouse versioning and no publication
         run: |
           set -euo pipefail
+          python3 -m pip install --disable-pip-version-check openpyxl==3.1.5
           bash -n deploy/install_production_warehouse.sh
           python3 -m py_compile scripts/factory_production_warehouse.py
           python3 -m unittest discover -s tests -p 'test_factory_production_warehouse.py' -v
@@ -54,6 +55,7 @@ jobs:
       - name: Test local product and warehouse logic
         run: |
           set -euo pipefail
+          python3 -m pip install --disable-pip-version-check openpyxl==3.1.5
           bash -n deploy/install_production_warehouse.sh
           python3 -m unittest discover -s tests -p 'test_factory_production_warehouse.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
