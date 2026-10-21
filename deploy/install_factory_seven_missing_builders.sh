@@ -73,6 +73,11 @@ print("SEVEN_GAP_ACTUAL_PRIVATE_PRODUCTION="+json.dumps(
     {x["family_id"]:x["status"] for x in data},sort_keys=True))
 print("SEVEN_GAP_QUALITY_1000_INDEPENDENTLY_CERTIFIED=0")
 PY
+# Recompute the existing 40-family technical ledger from source-bound,
+# independently rechecked receipts; prototypes lacking native proof remain red.
+registry="$ops/forty-family-master/forty_families.json"
+test -s "$registry" && test -s "$target/factory_commerce40_admission.py"
+"$py" -B "$target/factory_commerce40_admission.py" --factory-private "$root" --registry "$registry" --module-dir "$target"
 "$py" -B - "$scheduler" "$scheduler.new" <<'PY'
 from pathlib import Path
 import sys
