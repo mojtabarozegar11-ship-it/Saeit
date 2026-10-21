@@ -52,6 +52,38 @@ jobs:
                   if r.status!=200:raise RuntimeError('Live demo/store not available')
                   print('ATELIER_PUBLIC_READONLY_HTTP='+str(r.status))
           PY
+      - name: Check if existing public demo can supply identical source bytes for private stocking
+        run: |
+          python3 - <<'PY'
+          from hashlib import sha256
+          from urllib.request import urlopen,Request
+          from urllib.error import HTTPError,URLError
+          import json
+          base='https://atelier-interior-kit-demo.mojtaba-rozegar11.chatgpt.site/'
+          expected={
+           'index.html':'2950456f4ba3071d00b861767ceda50252aff9579252875addb0acd5969b9cd2',
+           'styles.css':'bc8f9ab0be977088c92f1633ba970df33d4bb5933e7d076b27df34f122732f93',
+           'app.js':'0045283de195bc3f5410fba58ec2e97de69a1c147d96b748bc3ff134559b4a58',
+           'config.js':'577effc087437708550b585a77270b61ab1959c77a17f0858d85ca41b0853129',
+           'README.md':'5c403edd6fd7a320cc66dc9c5bc7e6bde32872e707d2a02c248c376fcd746e88',
+           'robots.txt':'16ceb5ee3e0dc13aa9adf31a3ebbe45a1d965b8c2b9f72eaf84e5911e140ed95',
+           'assets/hero.jpg':'3360ede9e80d057131f8d9ddef260a5a4af8eecd3b0f28ee7d9ae2a1ed1cbdbc',
+           'assets/tile-0.jpg':'91ec8bcdd2fd8e2b43cb55702fa3a38ef4b5ef85c31c2df08123cdc898f49c7b',
+           'assets/tile-1.jpg':'6db5973a18c38b7c1726e9cf4093468b8ccfa8b317a780ab79089bc3505c62fb',
+           'assets/tile-2.jpg':'8b6c33eb06026ddc83331b908c663d53ac34f27fee75edfdbd3ffa49f3c78506',
+           'assets/tile-3.jpg':'e4917ecb05a728fd404ac498955d7044d3b0ad7302bfcbeac634e065b8060b90'
+          }
+          result={}
+          for path,wanted in expected.items():
+              try:
+                  with urlopen(Request(base+path,headers={'User-Agent':'AtelierSourceIntegrityProbe/1.0'}),timeout=18) as r:
+                      raw=r.read(12500000)
+                      result[path]=(r.status==200 and sha256(raw).hexdigest()==wanted)
+              except (HTTPError,URLError,TimeoutError,OSError):
+                  result[path]=False
+          print('ATELIER_ORIGINAL_PUBLIC_MEMBER_PARITY='+json.dumps(result,sort_keys=True))
+          print('ATELIER_ORIGINAL_PUBLIC_MEMBER_MATCH_COUNT='+str(sum(result.values()))+'/'+str(len(result)))
+          PY
       - name: Establish host-pinned private relay without disclosing keys
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
