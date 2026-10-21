@@ -2,6 +2,7 @@
 import hashlib
 import importlib.util
 import json
+import re
 from pathlib import Path
 import tempfile
 import unittest
@@ -368,7 +369,7 @@ class RealPrivateDocumentEditionTests(unittest.TestCase):
                         ["P0_GLOBAL_TOP_FIVE_CURRENT_BENCHMARKS_MISSING"]}
 
     def test_genuine_customer_documents_become_new_accessible_private_source_and_zip(self):
-        attack=b"</pre><script>alert('bad')</script> Read this guide."
+        attack=b"</pre><script>alert('bad')</script> Read this guide. Visit https://example.org safely."
         self.bind({
             "bundle/":b"",
             "bundle/book.txt":attack,
@@ -386,6 +387,7 @@ class RealPrivateDocumentEditionTests(unittest.TestCase):
         self.assertNotIn("<script>",index)
         self.assertIn('aria-label="Document and asset links"',index)
         self.assertNotIn("executable.js",index)
+        self.assertFalse(re.search(r'''(?:src|href)\s*=\s*["']https?://''',index,re.I))
         self.assertGreaterEqual(len(list((source/"assets").iterdir())),2)
         self.assertEqual(self.maker.verify_recipe(source),"unit_tests_passed")
         actual=json.loads((product/"manufacturing_manifest.json").read_text())
@@ -399,6 +401,10 @@ class RealPrivateDocumentEditionTests(unittest.TestCase):
         self.assertFalse(receipt["external_independent_review_verified"])
         self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
                          "already_issued_private_edition")
+        product_archive=product/(new_id+"-internal-qa.zip")
+        product_archive.write_bytes(b"tampered private product")
+        self.assertEqual(m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker),
+                         "existing_edition_requires_engineering_review")
         self.assertEqual(self.arch.read_bytes(),(self.stock/(self.recipe+"-internal-qa.zip")).read_bytes())
 
     def test_document_edition_120_original_assets_produces_full_new_private_zip(self):
@@ -427,6 +433,36 @@ class RealPrivateDocumentEditionTests(unittest.TestCase):
                          "document_asset_count_over_limit")
         self.assertFalse((self.root/"quality-excellence/document-edition-sources"/(
             "edition_"+self.artifact_hash[:24])).exists())
+    def test_transient_manufacturing_failure_is_retryable(self):
+        self.bind({"bundle/guide.txt":b"legitimate document"})
+        source=self.root/"quality-excellence/document-edition-sources"/(
+            "edition_"+self.artifact_hash[:24])
+        original=self.maker.manufacture
+        calls=[0]
+        def fail_once_then_build(*args,**kwargs):
+            calls[0]+=1
+            if calls[0]==1:raise RuntimeError("temporary build failure")
+            return original(*args,**kwargs)
+        with patch.object(self.maker,"manufacture",side_effect=fail_once_then_build) as build:
+            self.assertEqual(m.reauthor_document_delivery(
+                self.root,self.recipe,self.order,self.maker),
+                "document_edition_failed_needs_engineering")
+            self.assertFalse(source.exists())
+            self.assertEqual(m.reauthor_document_delivery(
+                self.root,self.recipe,self.order,self.maker),
+                "private_document_edition_built")
+            self.assertEqual(build.call_count,2)
+
+    def test_all_assets_below_hard_zip_bound_survive_edition_build(self):
+        self.bind({"bundle/file_%03d.txt"%i:("Document %d\n"%i).encode()
+                   for i in range(81)})
+        status=m.reauthor_document_delivery(self.root,self.recipe,self.order,self.maker)
+        self.assertEqual(status,"private_document_edition_built")
+        new_id="edition_"+self.artifact_hash[:24]
+        edition=json.loads((self.root/"quality-excellence/document-edition-sources"
+                            /new_id/"metadata.json").read_text())
+        self.assertEqual(len(edition["assets"]),81)
+
     def test_unbound_and_tampered_archives_never_get_new_product(self):
         self.bind({"bundle/file.txt":b"legitimate doc"})
         self.order["source_quality_receipt_sha256"]="0"*64
