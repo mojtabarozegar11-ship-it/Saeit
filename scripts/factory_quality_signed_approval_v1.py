@@ -81,6 +81,8 @@ def inspect_approval(receipt, report, artifact_path, catalog_path, trust_config)
     data=receipt.get("decision")
     if not isinstance(data,dict):
         defect("SIGNED_DECISION_MISSING");data={}
+    if data.get("gate_report_sha256")!=hashlib.sha256(canonical(report)).hexdigest():
+        defect("QUALITY_REPORT_NOT_BOUND_TO_SIGNATURES")
     if data.get("artifact_sha256")!=build_hash or not HEX.fullmatch(str(data.get("artifact_sha256",""))):
         defect("DECISION_WRONG_BUILD_VERSION")
     if data.get("quality_catalog_sha256")!=catalog_hash:
