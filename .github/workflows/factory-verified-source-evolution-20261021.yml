@@ -165,7 +165,12 @@ jobs:
           mod=importlib.util.module_from_spec(spec)
           spec.loader.exec_module(mod)
           generated=private/'generated-product-recipes'
-          changed=[];examined=0;issues=[]
+          changed=[];built=[];examined=0;issues=[]
+          maker_path=scripts/'factory_product_maker.py'
+          mspec=importlib.util.spec_from_file_location('verified_evolution_product_maker',maker_path)
+          maker=importlib.util.module_from_spec(mspec);mspec.loader.exec_module(maker)
+          candidates_root=private/'quality-excellence'/'evolved-source-technical-products'
+          if candidates_root.is_symlink():raise RuntimeError('EVOLUTION_CANDIDATE_ROOT_UNSAFE')
           if generated.is_dir() and not generated.is_symlink():
               candidates=sorted(p for p in generated.iterdir()
                                 if p.is_dir() and not p.is_symlink()
@@ -188,6 +193,12 @@ jobs:
                           changed.append({'recipe':p.name,
                                           'source_sha256':result['revised_source_sha256'],
                                           'technical_tests':result['measured_acceptance']['successful_tests']})
+                          product=maker.manufacture(p.name,generated,candidates_root)
+                          manifest=maker.sha256_file(candidates_root/p.name/(p.name+'-internal-qa.zip'))
+                          if product.get('qa_status')!='passed' or manifest!=product.get('artifact_sha256'):
+                              raise RuntimeError('EVOLUTION_CANDIDATE_MANUFACTURING_QA_FAILED')
+                          built.append({'recipe':p.name,'artifact_sha256':manifest,
+                                        'technical_qa':'passed','commercial_approval':False})
                   except (RuntimeError,ValueError,OSError,ArithmeticError) as error:
                       issues.append({'recipe':p.name,'reason':type(error).__name__})
           qspec=importlib.util.spec_from_file_location('quality_return_live',scripts/'factory_product_rework.py')
@@ -199,9 +210,11 @@ jobs:
           print("FACTORY_QA_RETURN_TO_SCHEDULED_BUILD_WIRED=PASS")
           print("FACTORY_EVOLUTION_LIVE_CANDIDATES_EXAMINED="+str(examined))
           print("FACTORY_EVOLUTION_REAL_SOURCES_IMPROVED="+str(len(changed)))
+          print("FACTORY_EVOLUTION_NEW_TESTED_PRIVATE_PRODUCTS="+str(len(built)))
           print("FACTORY_EVOLUTION_UNRESOLVED_PRIVATE_ISSUES="+str(len(issues)))
           print("FACTORY_EVOLUTION_LIVE_RESULT="+json.dumps({
-              'candidate_improvements':changed,'unresolved':issues,
+              'candidate_improvements':changed,'tested_private_products':built,
+              'unresolved':issues,
               'commercially_approved':False,'publicly_published':False},sort_keys=True))
           PY
           trap - EXIT
