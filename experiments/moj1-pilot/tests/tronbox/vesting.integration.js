@@ -169,6 +169,52 @@ contract('MOJ1 escrowed genesis allocations', (accounts) => {
     assert.equal((await token.totalSupply()).toString(), (100_000_000_000n * unit).toString());
   });
 
+  it('rejects unfunded matured vesting; then releases the entire team-style allocation once to beneficiary', async () => {
+    // Standalone copies of the real (unmodified) production vault, funded with LOCAL TVM tokens
+    // previously released to a disposable beneficiary. No clock override or Mainnet interaction.
+    const amount = 500n * unit;
+    const now = Math.floor(Date.now() / 1000);
+    const historicalStart = now - (365 + 1095 + 2) * day;
+    const vault = await MojVestingVault.new(
+      token.address, accounts[7], amount.toString(), historicalStart, 365 * day, 1095 * day
+    );
+    assert.equal((await vault.vestedAt(now)).toString(), amount.toString());
+    assert.equal(await vault.fullyFunded(), false);
+    await expectRevert(vault.release({from: accounts[9]}));
+    assert.equal((await vault.released()).toString(), '0');
+
+    const beneficiaryBefore = BigInt((await token.balanceOf(accounts[7])).toString());
+    await token.transfer(vault.address, amount.toString(), {from: accounts[3]});
+    assert.equal(await vault.fullyFunded(), true);
+    await vault.release({from: accounts[9]}); // an arbitrary caller cannot redirect the payout
+    assert.equal((await vault.released()).toString(), amount.toString());
+    assert.equal((await token.balanceOf(vault.address)).toString(), '0');
+    assert.equal(BigInt((await token.balanceOf(accounts[7])).toString()) - beneficiaryBefore, amount);
+    await expectRevert(vault.release({from: accounts[0]})); // fully claimed cannot replay
+    assert.equal((await vault.released()).toString(), amount.toString());
+  });
+
+  it('pays only the vested partial amount and leaves the unvested portion escrowed', async () => {
+    const amount = 1200n * unit;
+    const now = Math.floor(Date.now() / 1000);
+    const duration = 365 * day;
+    const historicalStart = now - Math.floor(duration / 2);
+    const vault = await MojVestingVault.new(
+      token.address, accounts[8], amount.toString(), historicalStart, 0, duration
+    );
+    await token.transfer(vault.address, amount.toString(), {from: accounts[3]});
+    const beneficiaryBefore = BigInt((await token.balanceOf(accounts[8])).toString());
+    await vault.release({from: accounts[6]});
+    const claimed = BigInt((await vault.released()).toString());
+    const vaultBalance = BigInt((await token.balanceOf(vault.address)).toString());
+    const beneficiaryAfter = BigInt((await token.balanceOf(accounts[8])).toString());
+    assert.ok(claimed > 0n && claimed < amount, 'partially vested allocation required');
+    assert.equal(beneficiaryAfter - beneficiaryBefore, claimed);
+    assert.equal(vaultBalance + claimed, amount, 'no allocation leak or over-release');
+    assert.equal(await vault.fullyFunded(), true);
+    assert.equal((await token.totalSupply()).toString(), (100_000_000_000n * unit).toString());
+  });
+
   it('mints a valid NFT and blocks invalid metadata or a former owner', async () => {
     const nft = await MojAssets.new(accounts[0]);
     await nft.safeMint(accounts[1], 'ipfs://moj1-pilot');

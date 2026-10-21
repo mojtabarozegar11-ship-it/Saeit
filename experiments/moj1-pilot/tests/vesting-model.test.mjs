@@ -67,3 +67,8 @@ test('vault source has permissionless beneficiary-only release and a funding gat
   assert.match(vault, /released \+= amount;/);
   assert.doesNotMatch(vault, /function (revoke|recover|upgrade|setBeneficiary|mint)\s*\(/);
 });
+
+test('production linear vesting reads block.timestamp and exposes no clock mutation', () => {
+  assert.match(vault, /vestedAt\(block\.timestamp\)/);
+  assert.doesNotMatch(vault, /function\s+(setTime|warp|mockClock|setTimestamp)\s*\(/);
+});
