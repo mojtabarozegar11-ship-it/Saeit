@@ -28,6 +28,9 @@ on:
       - tests/test_mpw_factory_stage1_deep_evidence.py
       - tests/test_factory_native_customer_packager.py
   workflow_dispatch:
+  schedule:
+    # Periodic real repair on main: PR jobs intentionally remain test-only.
+    - cron: "7 */6 * * *"
 permissions:
   contents: read
 concurrency:
