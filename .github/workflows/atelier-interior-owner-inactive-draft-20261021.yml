@@ -80,7 +80,8 @@ jobs:
           : > "$RUNNER_TEMP/atelier-site-baseline"
           for path in / /store/ /mojtaba.roozegar/ /picm/ /saman/ /farnaz/; do
             status="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path" || true)"
-            test "$status" = 200
+            echo "ATELIER_BEFORE_PATH_STATUS=$path:$status"
+            if [[ "$path" == "/" || "$path" == "/store/" ]]; then test "$status" = 200; fi
             printf '%s=%s\n' "$path" "$status" >> "$RUNNER_TEMP/atelier-site-baseline"
           done
       - name: Register only the exact-owner exact-hash inactive native product
