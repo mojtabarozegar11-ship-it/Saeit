@@ -5,7 +5,7 @@ Only source-controlled inputs are executed. Technical status is never a signed
 agronomic review, quality 1000 clearance, listing, or permission to sell.
 """
 import argparse
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import hashlib
 import importlib.util
 import json
@@ -47,6 +47,21 @@ def write_private(path, data):
     os.replace(temporary, path)
 
 
+def finite_report_decimal(value, field):
+    """Reject non-finite or malformed customer output before arithmetic."""
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise TechnicalDefect(
+            "F28_CUSTOMER_OUTPUT_NONFINITE", field + ": invalid numeric output"
+        ) from exc
+    if not parsed.is_finite():
+        raise TechnicalDefect(
+            "F28_CUSTOMER_OUTPUT_NONFINITE", field + ": finite numeric output required"
+        )
+    return parsed
+
+
 def validate_output(output, inputs):
     """Compute an oracle without importing the product's calculation function."""
     values = output["results"]
@@ -68,14 +83,14 @@ def validate_output(output, inputs):
         )
     cost = area * unit_cost + Decimal(str(inputs["fixed_cost_total"]))
     cent = Decimal("0.01")
-    if abs(Decimal(values["sales_revenue"]) - revenue) > cent / 2:
+    if abs(finite_report_decimal(values["sales_revenue"], "sales_revenue") - revenue) > cent / 2:
         raise TechnicalDefect("F28_REVENUE_ORACLE_MISMATCH", "Independent revenue calculation differs")
-    if abs(Decimal(values["total_cost"]) - cost) > cent / 2:
+    if abs(finite_report_decimal(values["total_cost"], "total_cost") - cost) > cent / 2:
         raise TechnicalDefect("F28_COST_ORACLE_MISMATCH", "Independent cost calculation differs")
-    if abs(Decimal(values["net_margin"]) - (revenue - cost)) > cent / 2:
+    if abs(finite_report_decimal(values["net_margin"], "net_margin") - (revenue - cost)) > cent / 2:
         raise TechnicalDefect("F28_MARGIN_ORACLE_MISMATCH", "Independent margin calculation differs")
     if saleable > 0:
-        threshold = Decimal(values["break_even_price_per_kg"])
+        threshold = finite_report_decimal(values["break_even_price_per_kg"], "break_even_price_per_kg")
         if threshold * saleable < cost:
             raise TechnicalDefect("F28_BREAK_EVEN_UNDERCUT", "Reported price still produces a loss")
         if threshold >= cent and (threshold - cent) * saleable >= cost:
@@ -86,7 +101,7 @@ def validate_output(output, inputs):
     required = values["minimum_gross_yield_kg_per_m2_to_break_even"]
     factor = area * (1 - rate / 100) * price
     if cost == 0:
-        if required is None or Decimal(required) != 0:
+        if required is None or finite_report_decimal(required, "minimum_gross_yield_kg_per_m2_to_break_even") != 0:
             raise TechnicalDefect("F28_ZERO_COST_THRESHOLD", "Zero cost requires zero harvest threshold")
     elif factor == 0:
         if required is not None:
@@ -94,7 +109,7 @@ def validate_output(output, inputs):
     else:
         if required is None:
             raise TechnicalDefect("F28_MISSING_YIELD", "Missing harvest threshold")
-        minimum = Decimal(required)
+        minimum = finite_report_decimal(required, "minimum_gross_yield_kg_per_m2_to_break_even")
         if minimum * factor < cost:
             raise TechnicalDefect("F28_YIELD_UNDERCUT", "Reported harvest does not cover costs")
         if minimum >= Decimal("0.001") and (minimum - Decimal("0.001")) * factor >= cost:
