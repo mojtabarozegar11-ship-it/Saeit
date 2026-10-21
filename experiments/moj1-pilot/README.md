@@ -42,10 +42,13 @@ For optional on-chain testing: only after tests and security review, the owner c
 ```sh
 export MOJ1_DEPLOY_CONFIRM=SHASTA_ONLY
 export MOJ_SHASTA_GOVERNANCE=YOUR_VERIFIED_SHASTA_MULTISIG_CONTRACT_ADDRESS
+export MOJ1_DEPLOY_JOURNAL_PATH=/PRIVATE/PERSISTENT/PATH/moj1-shasta.json
 export TRON_PRIVATE_KEY=YOUR_TEST_ONLY_PRIVATE_KEY
 npm run deploy:shasta
 unset TRON_PRIVATE_KEY
 ```
+
+The deployer now requires an operator-controlled, **persistent external journal path**; it saves a fail-closed `BROADCAST_UNCERTAIN` marker before a possible broadcast, rejects concurrent runs or a changed artifact/governance, and reuses previously verified contract addresses. **Never delete a pending journal or lock merely to retry**. If a broadcast outcome is unknown, independently reconcile the Shasta transaction with the owner before any further execution. The journal is not a substitute for an on-chain transaction receipt or production release audit.
 
 The script points only at `api.shasta.trongrid.io`; it has no mainnet option and requires a previously deployed Shasta governance contract, which must separately be verified as an approved multisig. It does not distribute the escrow. A successful deployment must then be verified on Shasta TRONSCAN, with source verification, transfer tests, NFT metadata inspection, and a receipt. The current pilot does not contain those test receipts.
 
