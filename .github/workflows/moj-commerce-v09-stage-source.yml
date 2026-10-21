@@ -27,7 +27,9 @@ jobs:
           git archive --format=tar HEAD moj_commerce | gzip -n > "$RUNNER_TEMP/moj-commerce-v09-source.tar.gz"
           test -s "$RUNNER_TEMP/moj-commerce-v09-source.tar.gz"
           tar -tzf "$RUNNER_TEMP/moj-commerce-v09-source.tar.gz" > "$RUNNER_TEMP/moj-commerce-v09-archive.list"
-          grep -Eq '^moj_commerce/apps.py
+          grep -Fqx 'moj_commerce/apps.py' "$RUNNER_TEMP/moj-commerce-v09-archive.list"
+          if grep -Fq '../' "$RUNNER_TEMP/moj-commerce-v09-archive.list"; then exit 1; fi
+          if grep -Eq '^/' "$RUNNER_TEMP/moj-commerce-v09-archive.list"; then exit 1; fi
       - name: Transfer ONLY to new private versioned staging folder and verify hash
         shell: bash
         env:
@@ -160,7 +162,7 @@ jobs:
           local_digest="$(sha256sum "$archive" | awk '{print $1}')"
           remote_digest="$(timeout 45s ssh -F "$sshdir/config" saeit-host "sha256sum '$destination/source.tar.gz'" | awk '{print $1}')"
           test "$local_digest" = "$remote_digest"
-          timeout 75s ssh -F "$sshdir/config" saeit-host "set -eu; cd '$destination'; tar -tzf source.tar.gz | grep -Eq '^moj_commerce/'; tar --no-same-owner -xzf source.tar.gz; test -f moj_commerce/apps.py; test -f moj_commerce/self_repair.py; python3 -m compileall -q moj_commerce"
+          timeout 75s ssh -F "$sshdir/config" saeit-host "set -eu; cd '$destination'; tar -tzf source.tar.gz > archive.list; grep -Fqx 'moj_commerce/apps.py' archive.list; tar --no-same-owner -xzf source.tar.gz; test -f moj_commerce/apps.py; test -f moj_commerce/self_repair.py; python3 -m compileall -q moj_commerce"
           echo "STAGED_SOURCE_ONLY_NAME=$release"
           echo "STAGED_SHA256=$local_digest"
           echo 'STAGING_CODE_SYNTAX_OK_NO_SERVICE_ENABLED_NO_PRODUCTION_WRITE_NO_PAYMENT'
