@@ -5,6 +5,7 @@
  */
 const MojCoin = artifacts.require('MojCoin');
 const MojVestingVault = artifacts.require('MojVestingVault');
+const MojAssets = artifacts.require('MojAssets');
 
 contract('MOJ1 token and team vault', (accounts) => {
   it('funds the vault and exposes immutable cliff / duration math', async () => {
@@ -27,4 +28,21 @@ contract('MOJ1 token and team vault', (accounts) => {
     // TronBox returns raw hex for contract addresses; account fixtures are Base58.
     assert.equal(tronWeb.address.fromHex(await vault.beneficiary()), accounts[1]);
   });
+  it('keeps the fixed 100 billion MOJ1 supply unchanged after transfers', async () => {
+    const token = await MojCoin.new(accounts[0]);
+    const fixedSupply = '100000000000000000000000000000';
+    const smallTransfer = '2500000000000000000';
+    assert.equal((await token.totalSupply()).toString(), fixedSupply);
+    await token.transfer(accounts[1], smallTransfer);
+    assert.equal((await token.balanceOf(accounts[1])).toString(), smallTransfer);
+    assert.equal((await token.totalSupply()).toString(), fixedSupply);
+  });
+
+  it('mints an identified NFT with an owner and a metadata URI', async () => {
+    const collection = await MojAssets.new(accounts[0]);
+    await collection.safeMint(accounts[1], 'ipfs://moj1-local-fixture-1');
+    assert.equal(tronWeb.address.fromHex(await collection.ownerOf(1)), accounts[1]);
+    assert.equal(await collection.tokenURI(1), 'ipfs://moj1-local-fixture-1');
+  });
+
 });
