@@ -113,6 +113,19 @@ jobs:
           else
             echo "EMPTY_STALE_ROUTE_DIRECTORY_REMOVED=already_absent"
           fi
+          parent="$public/authors"
+          if test -d "$parent"; then
+            test ! -L "$parent"
+            first="$(find "$parent" -mindepth 1 -maxdepth 1 -print -quit)"
+            if test -n "$first"; then
+              echo "AUTHORS_PARENT_NOT_EMPTY=refusing_to_remove"
+              exit 1
+            fi
+            rmdir "$parent"
+            echo "EMPTY_AUTHORS_PARENT_REMOVED=yes"
+          else
+            echo "EMPTY_AUTHORS_PARENT_REMOVED=already_absent"
+          fi
           REMOTE
           for path in about/ robots.txt sitemap.xml company/; do
             public_code="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/$path?route_compare=$GITHUB_SHA" || true)"
