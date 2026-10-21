@@ -55,10 +55,20 @@ def probe(path, kind, critical):
 
 
 def assess(probes, confirmation):
-    first = {row["path"]: row for row in probes}
-    second = {row["path"]: row for row in confirmation}
+    """Only two explicit critical failures justify a confirmed outage.
+
+    Incomplete or malformed samples must not crash the watchdog or trigger
+    an automatic Passenger recovery on missing evidence.
+    """
+    def indexed(rows):
+        return {row["path"]: row for row in rows
+                if isinstance(row, dict) and isinstance(row.get("path"), str)}
+
+    first = indexed(probes)
+    second = indexed(confirmation)
     failed = [key for key in ("/", "/api/health/")
-              if not first[key]["ok"] and not second[key]["ok"]]
+              if first.get(key, {}).get("ok") is False
+              and second.get(key, {}).get("ok") is False]
     return bool(failed), failed
 
 

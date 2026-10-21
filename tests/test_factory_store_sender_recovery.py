@@ -111,6 +111,29 @@ class FactoryPrivateQAFailureIsolation(unittest.TestCase):
         self.assertIn("FACTORY_STORE_RECEIPT_VERIFIED_COUNT=2", buf.getvalue())
         self.assertIn("FACTORY_STORE_ALREADY_RECEIVED_COUNT=1", buf.getvalue())
 
+    def test_consumer_provenance_rejects_invalid_or_nonobject_json(self):
+        recipe, version = "alpha", "0" * 64
+        product(self.root, recipe)
+        directory = self.root.parent / "customer-packs" / recipe / version
+        directory.mkdir(parents=True)
+        (directory / "customer-package.zip").write_bytes(b"test private archive")
+        candidate = directory / "candidate_manifest.json"
+        source = self.root / recipe / "manufacturing_manifest.json"
+        valid_source = source.read_text(encoding="utf-8")
+        for raw in ("[]", "null", '"unexpected"', "123", "{"):
+            with self.subTest(candidate=raw):
+                source.write_text(valid_source, encoding="utf-8")
+                candidate.write_text(raw, encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "CONSUMER_MANIFEST_"):
+                    sender.verify_consumer_source(self.root.parent, recipe, version)
+        candidate.write_text('{"schema":"saeit.factory.consumer-package.v1"}',
+                             encoding="utf-8")
+        for raw in ("[]", "null", "{"):
+            with self.subTest(source=raw):
+                source.write_text(raw, encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "CONSUMER_MANIFEST_"):
+                    sender.verify_consumer_source(self.root.parent, recipe, version)
+
     def test_install_workflow_retains_vps_sender_rollback(self):
         workflow = (SOURCE.parents[1] / ".github/workflows/vps-store-bridge-install.yml"
                     ).read_text(encoding="utf-8")

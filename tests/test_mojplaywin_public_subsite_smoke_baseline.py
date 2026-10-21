@@ -35,14 +35,43 @@ class PublicSmokeBaselineTests(unittest.TestCase):
         self.assertNotIn("public-only", str(result))
 
     def test_redirect_refuses_external_or_insecure(self):
-        for url in ("http://mojplaywin.com/picm/", "https://example.com/",
-                    "https://evil.mojplaywin.com/"):
+        for url in (
+            "http://mojplaywin.com/picm/",
+            "https://example.com/",
+            "https://evil.mojplaywin.com/",
+            "https://mojplaywin.com/admin/",
+            "https://mojplaywin.com/store/checkout/",
+            "https://mojplaywin.com/saman/?token=private",
+            "https://mojplaywin.com/%61dmin/",
+            "https://mojplaywin.com:8443/about/",
+            "https://mojplaywin.com@external.example/about/",
+            "/about/",
+        ):
             with self.subTest(url=url):
                 with self.assertRaises(UnsafeRedirect):
                     StrictRedirect().redirect_request(
                         urllib.request.Request("https://mojplaywin.com/"),
                         None, 302, "redirect", {}, url
                     )
+
+    def test_redirect_allows_explicit_public_page_only(self):
+        handler = StrictRedirect()
+        target = handler.redirect_request(
+            urllib.request.Request("https://mojplaywin.com/"),
+            None, 302, "redirect", {}, "https://www.mojplaywin.com/about/"
+        )
+        self.assertEqual(target.full_url, "https://www.mojplaywin.com/about/")
+        self.assertEqual(handler.redirect_count, 1)
+
+    def test_more_than_two_redirects_are_rejected(self):
+        handler = StrictRedirect()
+        request = urllib.request.Request("https://mojplaywin.com/")
+        for _ in range(2):
+            handler.redirect_request(request, None, 302, "redirect", {},
+                                     "https://mojplaywin.com/store/")
+        with self.assertRaisesRegex(UnsafeRedirect, "more_than_two_redirects"):
+            handler.redirect_request(request, None, 302, "redirect", {},
+                                     "https://mojplaywin.com/about/")
 
     def test_nonallowlisted_routes_rejected_without_network(self):
         for path in ("/admin/", "/picm/admin/", "/private/", "/health/",
