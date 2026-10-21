@@ -171,6 +171,24 @@ class GatewayToPrivateDeliveryTests(TestCase):
         self.assertEqual(self.drain()['delivered'],0)
         self.assertEqual(Entitlement.objects.count(),1)
 
+    def test_catalog_reprice_does_not_strand_confirmed_invoice(self):
+        # A merchant's later price update cannot alter the buyer's locked quote.
+        self.assertEqual(self.order.usd_amount, Decimal('4.00'))
+        self.assertEqual(self.reconcile()['settled'], 1)
+        self.product.price_usd = Decimal('17.00')
+        self.product.save(update_fields=['price_usd'])
+        self.assertEqual(self.drain()['delivered'], 1)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.usd_amount, Decimal('4.00'))
+        self.assertEqual(self.order.status, Purchase.Status.DELIVERED)
+        self.assertEqual(Entitlement.objects.filter(purchase=self.order).count(), 1)
+        self.client.force_login(self.buyer)
+        link = self.client.get(reverse('moj-commerce-download-link', args=(self.order_ref,)))
+        self.assertEqual(link.status_code, 200)
+        download = self.client.get(link.json()['download_url'])
+        self.assertEqual(download.status_code, 200)
+        self.assertEqual(b''.join(download.streaming_content), self.contents)
+
     def test_failed_delivery_keeps_queued_event_and_retries_without_duplicate_right(self):
         self.reconcile()
         # Intentionally disable the store; *payment* remains paid but no goods.
@@ -182,6 +200,15 @@ class GatewayToPrivateDeliveryTests(TestCase):
         result2 = self.drain(now_ms=1761060100000)
         self.assertEqual(result2['delivered'],1)
         self.assertEqual(Entitlement.objects.filter(purchase=self.order).count(),1)
+
+    def test_non_boolean_receiver_flag_fails_closed_before_processing(self):
+        # Misparsed environment strings must never open the authenticated receiver.
+        with override_settings(MOJ_COMMERCE_RECEIVER_ENABLED='false'):
+            reply = self.client.post(reverse('moj-commerce-tron-fulfill'),
+                data='{}', content_type='application/json')
+        self.assertEqual(reply.status_code, 503)
+        self.assertEqual(reply.json()['error'], 'receiver_not_enabled')
+        self.assertFalse(Entitlement.objects.exists())
 
     def test_unfinalized_receipt_does_not_release_file(self):
         self.raw, self.receipt = self.transaction_records()

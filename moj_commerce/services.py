@@ -28,6 +28,8 @@ class CommerceUnavailable(Exception):
 
 
 def _validate_existing_purchase(purchase):
+    # The buyer's USD price was locked in Purchase at invoice issue time.
+    # Later catalog repricing must not block delivery of an already-paid quote.
     if (getattr(settings, 'MOJ_COMMERCE_REQUIRE_SIGNED_WALLET', True) and
         purchase.destination.verified_via != MerchantAddress.ProofMethod.SIGN_V2):
         raise CommerceRejected('Merchant must prove control of destination using TRON signMessageV2')
@@ -35,7 +37,7 @@ def _validate_existing_purchase(purchase):
         or purchase.product.merchant_id != purchase.merchant_id
         or purchase.destination.merchant_id != purchase.merchant_id
         or purchase.destination.verified_at is None
-        or purchase.usd_amount != purchase.product.price_usd
+        or purchase.usd_amount <= 0
         or purchase.network != 'tron-mainnet'
         or not FILE_KEY.fullmatch(purchase.product.file_key)
         or not SHA256.fullmatch(purchase.product.sha256)

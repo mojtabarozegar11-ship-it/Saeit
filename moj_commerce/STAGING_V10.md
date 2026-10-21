@@ -43,3 +43,10 @@ Verified [successful GitHub Actions run 39639414806](https://github.com/mojtabar
 Prior failed attempts were fail-closed: first identified system Python 3.9; second installed a private Python 3.11 environment but lacked source package `mpw_tron_pro`. Both packaging/runtime issues were corrected before the successful run. The earlier isolated unsuccessful sandboxes were not deleted.
 
 **No production certification:** Independent stage PostgreSQL, backups/restore, 24/7 monitoring, live chain quorum, financial reconciliation and real-money buy-to-download validation remain separate release gates.
+
+## 21 October follow-up: locked quote and emergency-stop staging rerun
+
+- Requested source under test: [PR #817](https://github.com/mojtabarozegar11-ship-it/Saeit/pull/817), including immutable invoice price delivery and removal of payable wallet details after the operator switches checkout off.
+- This documentation update intentionally triggers the existing same-repository, owner-gated `moj-commerce-v10-staging-smoke.yml` pull-request workflow; it does not modify the SSH workflow or elevate permissions.
+- Acceptance remains the same: **new SHA-scoped private cPanel staging sandbox**, offline Django regressions, no live routing, no production writes and no real funds.
+- Passing GitHub CI alone must not be counted as passing this cPanel staging rerun. The new job's execution record and hashes must be checked separately.
