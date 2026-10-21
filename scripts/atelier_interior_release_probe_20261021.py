@@ -71,7 +71,7 @@ def safe_zip(raw):
             cfg = z.read("config.js")
             return (b'whatsapp' in (html + js).lower()
                     and b'ATELIER_CONFIG' in cfg
-                    and b'gallery' in (html + js).lower())
+                    and (b'gallery' in (html + js).lower() or b'project-grid' in html.lower()))
     except (zipfile.BadZipFile, OSError, ValueError, RuntimeError, KeyError):
         return False
 
@@ -174,7 +174,7 @@ def main():
                 try:
                     route = resolve("/store/product/{}/checkout/".format(product.pk))
                     checks["isolated_checkout_route"] = route is not None
-                except (ValueError, ImportError, Exception):
+                except Exception:
                     pass
         except Exception as exc:
             details["runtime_probe_error_type"] = type(exc).__name__
@@ -192,12 +192,12 @@ if __name__ == "__main__":
         good = io.BytesIO()
         with zipfile.ZipFile(good, "w") as z:
             for name in sorted(REQUIRED | {"assets/hero.jpg"}):
-                z.writestr(name, b"whatsapp gallery ATELIER_CONFIG")
+                z.writestr(name, b"whatsapp project-grid ATELIER_CONFIG")
         assert safe_zip(good.getvalue())
         bad = io.BytesIO()
         with zipfile.ZipFile(bad, "w") as z:
             for name in sorted(REQUIRED | {"assets/hero.jpg", "../escape.html"}):
-                z.writestr(name, b"whatsapp gallery ATELIER_CONFIG")
+                z.writestr(name, b"whatsapp project-grid ATELIER_CONFIG")
         assert not safe_zip(bad.getvalue())
         print("ATELIER_INTERIOR_READONLY_SELFTEST=PASS")
     else:
