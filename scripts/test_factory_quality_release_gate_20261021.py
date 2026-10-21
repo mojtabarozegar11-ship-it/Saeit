@@ -5,6 +5,7 @@ import importlib.util
 import pathlib
 import tempfile
 import zipfile
+import stat
 
 gate_path = pathlib.Path(__file__).with_name("factory_quality_release_gate_20261021.py")
 spec = importlib.util.spec_from_file_location("factory_quality_gate", gate_path)
@@ -55,6 +56,28 @@ def main():
 
         manifest["owner_publication_permission"] = True
         manifest["rights_cleared"] = True
+        # Even complete self-declared 1000/1000 evidence cannot bypass signatures.
+        assert any("authenticated signed four-party clearance absent" in e
+                   for e in gate.check(manifest))
+        # Path traversal and ZIP symlink must be rejected with matching archive hash.
+        with zipfile.ZipFile(artifact, "w") as z:
+            z.writestr("../escape.txt", "malicious")
+        manifest["artifact"]["sha256"] = digest(artifact)
+        assert any("unsafe ZIP member" in e for e in gate.check(manifest))
+        with zipfile.ZipFile(artifact, "w") as z:
+            symlink = zipfile.ZipInfo("source-link")
+            symlink.create_system = 3
+            symlink.external_attr = (stat.S_IFLNK | 0o777) << 16
+            z.writestr(symlink, "target")
+        manifest["artifact"]["sha256"] = digest(artifact)
+        assert any("unsafe ZIP member" in e for e in gate.check(manifest))
+        with zipfile.ZipFile(artifact, "w") as z:
+            z.writestr("folder\\\\payload.py", "malicious")
+        manifest["artifact"]["sha256"] = digest(artifact)
+        assert any("unsafe ZIP member" in e for e in gate.check(manifest))
+        # Changed source bytes invalidate the exact immutable product identity.
+        source.write_text("print('changed')\\n", encoding="utf-8")
+        assert any("source: SHA256 mismatch" in e for e in gate.check(manifest))
         # Evidence strings are NOT authentic signatures. Current gate is insufficient.
         # Until cryptographic receipt verification is integrated, deployment must remain blocked.
         print("NEGATIVE_REGRESSION_PASS; CRYPTOGRAPHIC_RECEIPT_VERIFICATION_NOT_IMPLEMENTED")
