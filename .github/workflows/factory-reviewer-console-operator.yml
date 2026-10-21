@@ -1,0 +1,75 @@
+name: Reviewer console operator - private status and expert invitation
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Read status or create private reviewer invitation
+        required: true
+        type: choice
+        options: [status, invite]
+        default: status
+      reviewer_id:
+        description: Verified human's planned ID (needed only for invite)
+        required: false
+        type: string
+      reviewer_role:
+        description: Expert role to invite (not proof of identity)
+        required: true
+        type: choice
+        options: [domain_specialist, independent_quality_auditor, rights_reviewer, owner]
+        default: domain_specialist
+  push:
+    branches: [main]
+    paths: [".github/workflows/factory-reviewer-console-operator.yml"]
+permissions: {contents: read}
+concurrency:
+  group: factory-reviewer-console-private-operator
+  cancel-in-progress: false
+jobs:
+  private-reviewer-status-or-invite:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Protected reviewer status and invitation
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          REQUESTED_OPERATION: ${{ inputs.operation }}
+          REVIEWER_ID: ${{ inputs.reviewer_id }}
+          REVIEWER_ROLE: ${{ inputs.reviewer_role }}
+        run: |
+          set -euo pipefail
+          umask 077
+          operation="$REQUESTED_OPERATION"
+          if test -z "$operation"; then operation=status; fi
+          test "$operation" = status || test "$operation" = invite
+          if test -z "$REVIEWER_ROLE"; then REVIEWER_ROLE=domain_specialist; fi
+          case "$REVIEWER_ROLE" in
+            domain_specialist|independent_quality_auditor|rights_reviewer|owner) ;;
+            *) echo UNSUPPORTED_REVIEWER_ROLE; exit 2 ;;
+          esac
+          if [[ "$operation" = invite ]]; then
+            [[ "$REVIEWER_ID" =~ ^[A-Za-z0-9_.-]{4,64}$ ]] || { echo INVALID_REVIEWER_IDENTIFIER; exit 2; }
+          fi
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/private-reviewer-ops"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          base=/home/githubops/factory-runtime/private/autonomous-product-cycle/quality-reviewer-console
+          cli="$base/factory_quality_reviewer_console_v1.py"
+          if [[ "$operation" = status ]]; then
+            ssh -T "${opts[@]}" githubops@178.239.147.150 \
+              "python3 -B '$cli' status --workspace '$base'"
+          else
+            ssh -T "${opts[@]}" githubops@178.239.147.150 \
+              "python3 -B '$cli' invite --workspace '$base' --reviewer-id '$REVIEWER_ID' --role '$REVIEWER_ROLE'"
+            echo EXPERT_INVITATION_PENDING_EXTERNAL_IDENTITY_VERIFICATION=YES
+            echo EXPERT_SIGNATURE_ISSUED=NO
+          fi
