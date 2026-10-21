@@ -16,6 +16,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
+      - name: Download pinned Keccak wheel on ephemeral runner (no wallet secrets)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/moj1_keccak_wheel"
+          python3 -m pip download --no-deps --only-binary=:all: -d "$RUNNER_TEMP/moj1_keccak_wheel" 'pycryptodome==3.24.0'
+          test "$(find "$RUNNER_TEMP/moj1_keccak_wheel" -maxdepth 1 -name '*.whl' -type f | wc -l)" -eq 1
       - name: Create or reuse private Shasta-only wallet on authorized VPS
         env:
           VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -31,6 +38,10 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null > "$RUNNER_TEMP/moj1_shasta_known_hosts"
           expected='SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           ssh-keygen -lf "$RUNNER_TEMP/moj1_shasta_known_hosts" -E sha256 | grep -Fq "$expected"
+          timeout 30s ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/moj1_shasta_known_hosts" -i "$RUNNER_TEMP/moj1_shasta_relay_key" githubops@178.239.147.150 'umask 077; install -d -m 700 "$HOME/.local/share/moj1-shasta-test-20261021"'
+          wheel=( "$RUNNER_TEMP/moj1_keccak_wheel"/*.whl )
+          test "${#wheel[@]}" -eq 1
+          timeout 70s scp -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/moj1_shasta_known_hosts" -i "$RUNNER_TEMP/moj1_shasta_relay_key" "${wheel[0]}" githubops@178.239.147.150:.local/share/moj1-shasta-test-20261021/pycryptodome-3.24.0.whl
           timeout 230s ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/moj1_shasta_known_hosts" -i "$RUNNER_TEMP/moj1_shasta_relay_key" githubops@178.239.147.150 'bash -s' <<'REMOTE'
           set -euo pipefail
           umask 077
@@ -38,7 +49,20 @@ jobs:
           install -d -m 700 "$wallet_root"
           test "$(stat -c '%a' "$wallet_root")" = 700
           if ! PYTHONPATH="$wallet_root/vendor" python3 -c 'from Crypto.Hash import keccak' 2>/dev/null; then
-            python3 -m pip install --no-input --disable-pip-version-check --no-warn-script-location --only-binary=:all: --quiet --target "$wallet_root/vendor" 'pycryptodome==3.24.0'
+            python3 - "$wallet_root/pycryptodome-3.24.0.whl" "$wallet_root/vendor" <<'PY_VENDOR'
+            import pathlib
+            import sys
+            import zipfile
+            wheel = pathlib.Path(sys.argv[1])
+            target = pathlib.Path(sys.argv[2])
+            target.mkdir(mode=0o700, exist_ok=True)
+            with zipfile.ZipFile(wheel) as package:
+                for name in package.namelist():
+                    item = pathlib.PurePosixPath(name)
+                    if item.is_absolute() or '..' in item.parts:
+                        raise RuntimeError('Unsafe wheel archive path')
+                package.extractall(target)
+            PY_VENDOR
           fi
           MOJ1_WALLET_ROOT="$wallet_root" PYTHONPATH="$wallet_root/vendor" python3 - <<'PY_WALLET'
           import base64
