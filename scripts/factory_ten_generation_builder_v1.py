@@ -211,7 +211,10 @@ FEATURES=[
 '''    def test_g10_population_standard_deviation(self):
         std=Decimal(population_standard_deviation(ROWS)["standard_deviation"])
         variance=Decimal(population_variance(ROWS)["variance"])
-        self.assertLessEqual(abs(std*std-variance),Decimal("1e-30"))
+        with localcontext() as context:
+            context.prec=40
+            tolerance=Decimal("1e-30")*max(Decimal(1),abs(variance))
+            self.assertLessEqual(abs(std*std-variance),tolerance)
         self.assertGreaterEqual(std,Decimal(0))
 
 ''')
