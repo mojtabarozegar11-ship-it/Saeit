@@ -1,0 +1,67 @@
+name: MOJ1 VPS read-only TVM capacity preflight
+on:
+  push:
+    branches: ['moj1/shasta-pilot-20261021']
+    paths:
+      - '.github/workflows/moj1-vps-readonly-preflight.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  vps-capacity:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/moj1/shasta-pilot-20261021'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Read-only VPS Docker and spare-capacity checks
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$VPS_SSH_PRIVATE_KEY" ]; then
+            echo 'MOJ1_VPS_SSH=UNAVAILABLE'
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/moj1_vps_key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null > "$RUNNER_TEMP/moj1_known_hosts"
+          expected='SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh-keygen -lf "$RUNNER_TEMP/moj1_known_hosts" -E sha256 | grep -Fq "$expected"
+          timeout 65s ssh \
+            -o BatchMode=yes -o ConnectTimeout=10 \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/moj1_known_hosts" \
+            -i "$RUNNER_TEMP/moj1_vps_key" \
+            githubops@178.239.147.150 'bash -s' <<'REMOTE'
+          set -u
+          printf 'MOJ1_VPS_USER='; id -un
+          printf 'MOJ1_VPS_OS='; uname -s
+          printf 'MOJ1_VPS_CORES='; getconf _NPROCESSORS_ONLN 2>/dev/null || true
+          if command -v free >/dev/null; then free -m | awk '/^Mem:/{print "MOJ1_VPS_RAM_AVAILABLE_MB="$7}'; fi
+          if command -v df >/dev/null; then df -Pm . | awk 'NR==2{print "MOJ1_VPS_CWD_DISK_AVAILABLE_MB="$4}'; fi
+          for cmd in docker podman node npm timeout curl; do
+            if command -v "$cmd" >/dev/null 2>&1; then
+              printf 'MOJ1_VPS_COMMAND_%s=AVAILABLE\n' "$cmd"
+            else
+              printf 'MOJ1_VPS_COMMAND_%s=ABSENT\n' "$cmd"
+            fi
+          done
+          if command -v docker >/dev/null 2>&1; then
+            if docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then
+              echo 'MOJ1_VPS_DOCKER_DAEMON_ACCESS=PASS'
+            else
+              echo 'MOJ1_VPS_DOCKER_DAEMON_ACCESS=DENIED_OR_UNAVAILABLE'
+            fi
+          fi
+          if command -v ss >/dev/null 2>&1; then
+            if ss -ltn | awk 'NR>1{print $4}' | grep -Eq ':9090$'; then
+              echo 'MOJ1_VPS_PORT_9090=BUSY'
+            else
+              echo 'MOJ1_VPS_PORT_9090=FREE'
+            fi
+          else
+            echo 'MOJ1_VPS_PORT_9090=UNVERIFIED'
+          fi
+          echo 'MOJ1_VPS_PREFLIGHT_MODE=READ_ONLY'
+          REMOTE

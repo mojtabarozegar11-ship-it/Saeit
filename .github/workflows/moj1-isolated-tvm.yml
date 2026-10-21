@@ -1,0 +1,61 @@
+name: MOJ1 isolated TVM behavioral checks
+on:
+  push:
+    branches: ['moj1/shasta-pilot-20261021']
+    paths:
+      - '.github/workflows/moj1-isolated-tvm.yml'
+      - 'experiments/moj1-pilot/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj1-tvm-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  tron-tvm:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/moj1/shasta-pilot-20261021'
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned pilot tooling
+        working-directory: experiments/moj1-pilot
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Start disposable, localhost-only TRON VM
+        run: |
+          docker pull tronbox/tre:2.0.0
+          docker run -d --rm --name moj1-tre-${{ github.run_id }} \
+            -p 127.0.0.1:9090:9090 \
+            -e useDefaultPrivateKey=true \
+            tronbox/tre:2.0.0
+          ready=0
+          for i in $(seq 1 90); do
+            if curl -fsS -m 3 http://127.0.0.1:9090/admin/accounts | grep -q 'Available Accounts'; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo 'MOJ1_LOCAL_TVM_READY=FAIL'
+            docker logs --tail 60 moj1-tre-${{ github.run_id }} || true
+            exit 1
+          fi
+          echo 'MOJ1_LOCAL_TVM_READY=PASS'
+      - name: Execute TRC20 and vesting contracts inside isolated TVM
+        working-directory: experiments/moj1-pilot
+        env:
+          LOCAL_PRIVATE_KEY: '0000000000000000000000000000000000000000000000000000000000000001'
+        run: |
+          npm run test:onchain:local
+          echo 'MOJ1_LOCAL_TVM_BEHAVIOR=PASS'
+          echo 'MOJ1_MAINNET_DEPLOYMENT=DISABLED'
+          echo 'MOJ1_REAL_WALLET_USED=NO'
+      - name: Destroy disposable TVM container
+        if: always()
+        run: docker rm -f moj1-tre-${{ github.run_id }} >/dev/null 2>&1 || true
