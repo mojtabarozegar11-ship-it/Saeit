@@ -49,4 +49,26 @@ for dotted in ["core.brand_views.branded_store_dispatch","mpw_commerce.product_c
         print("ATELIER_EXTRA_VIEW="+json.dumps({"name":dotted,"total_lines":len(code),"matches":matches[:90]}))
     except Exception as ex:
         print("ATELIER_EXTRA_VIEW_ERR="+json.dumps({"name":dotted,"type":type(ex).__name__}))
+
+from config import urls as urlconf
+for fn in ["branded_store_dispatch"]:
+    try:
+        obj=getattr(urlconf,fn)
+        code=inspect.getsource(obj).splitlines()
+        hits=[{"line":i+1,"text":l.strip()[:220]} for i,l in enumerate(code) if any(t in l.lower() for t in ("render","store","product","template","brand","checkout"))]
+        print("ATELIER_STORE_DISPATCH="+json.dumps({"sourcefile":str(Path(inspect.getsourcefile(obj) or "").name),"total_lines":len(code),"matches":hits[:80]}))
+    except Exception as e:print("ATELIER_STORE_DISPATCH_ERROR="+type(e).__name__)
+from mpw_commerce.product_checkout_page import approved_for_checkout
+src=inspect.getsource(approved_for_checkout).splitlines()
+print("ATELIER_CHECKOUT_ELIGIBILITY_SOURCE="+json.dumps([l.strip()[:220] for l in src][:90]))
+for root in [app/"templates",app/"core"/"templates",app/"mpw_commerce"/"templates"]:
+    if root.exists():
+        for pattern in ["product.html","product_checkout.html","store.html"]:
+            for file in root.rglob(pattern):
+                try:
+                    rel=str(file.relative_to(app))
+                    lines=file.read_text(encoding="utf8",errors="replace").splitlines()
+                    hits=[{"n":i+1,"text":line.strip()[:250]} for i,line in enumerate(lines) if any(t in line.lower() for t in ("checkout","purchase","contact","product","href","form","price","sale"))]
+                    print("ATELIER_DISCOVERED_TEMPLATE="+json.dumps({"file":rel,"lines":len(lines),"matches":hits[:75]}))
+                except Exception as e:print("ATELIER_TEMPLATE_ERR="+type(e).__name__)
 print("ATELIER_READONLY_VIEW_INSPECT=PASS")
