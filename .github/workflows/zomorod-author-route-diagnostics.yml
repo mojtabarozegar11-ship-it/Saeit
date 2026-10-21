@@ -86,6 +86,16 @@ jobs:
           else
             echo "PERSIAN_STATIC_TARGET_EXISTS=no"
           fi
+          echo "AUTHORS_PARENT:"
+          ls -la "$public/authors" 2>/dev/null || true
+          if test -f "$public/authors/.htaccess"; then
+            grep -niE 'authors|Rewrite|Passenger|DirectoryIndex' "$public/authors/.htaccess" || true
+          fi
+          if test -f "$target/.htaccess"; then
+            grep -niE 'authors|Rewrite|Passenger|DirectoryIndex' "$target/.htaccess" || true
+          fi
+          echo "ROOT_AUTH_REWRITE_RULES:"
+          grep -niE 'RewriteEngine|RewriteRule|RewriteCond|PassengerEnabled|PassengerAppRoot|PassengerBaseURI|PassengerPython' "$public/.htaccess" || true
           echo "AUTHOR_ENGLISH_PAGE_MARKER:"
           grep -o 'mojtaba-roozegar-official-profile-20261021' "$public/en/authors/mojtaba-rozegar/index.html" | head -1
           if test -e "$target"; then
@@ -100,6 +110,10 @@ jobs:
           else
             echo "EMPTY_STALE_ROUTE_DIRECTORY_REMOVED=already_absent"
           fi
+          for path in about/ robots.txt sitemap.xml company/; do
+            public_code="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/$path?route_compare=$GITHUB_SHA" || true)"
+            echo "PUBLIC_COMPARE_HTTP=$path $public_code"
+          done
           REMOTE
           headers="$RUNNER_TEMP/author-route.headers"
           body="$RUNNER_TEMP/author-route.html"
