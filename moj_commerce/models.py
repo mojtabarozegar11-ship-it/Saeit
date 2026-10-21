@@ -10,6 +10,7 @@ from django.db.models import Q
 
 
 class Merchant(models.Model):
+    id = models.BigAutoField(primary_key=True)
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pending vetting'
         APPROVED = 'approved', 'Approved'
@@ -24,6 +25,7 @@ class Merchant(models.Model):
 
 
 class MerchantAddress(models.Model):
+    id = models.BigAutoField(primary_key=True)
     """Address ownership must be proved OFFLINE/independently before verified_at is set.
 
     One address cannot be given to two merchants nor reused across pilot orders.
@@ -35,6 +37,7 @@ class MerchantAddress(models.Model):
 
 
 class DigitalProduct(models.Model):
+    id = models.BigAutoField(primary_key=True)
     merchant = models.ForeignKey(Merchant, on_delete=models.PROTECT, related_name='digital_products')
     sku = models.CharField(max_length=48)
     title = models.CharField(max_length=180)
@@ -52,6 +55,7 @@ class DigitalProduct(models.Model):
 
 
 class Purchase(models.Model):
+    id = models.BigAutoField(primary_key=True)
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pending verified payment'
         DELIVERED = 'delivered', 'Verified and delivered'
@@ -84,6 +88,7 @@ class Purchase(models.Model):
 
 
 class Entitlement(models.Model):
+    id = models.BigAutoField(primary_key=True)
     purchase = models.OneToOneField(Purchase, on_delete=models.PROTECT, related_name='entitlement')
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     max_downloads = models.PositiveSmallIntegerField(default=5)
