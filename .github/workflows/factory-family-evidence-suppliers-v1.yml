@@ -1,0 +1,48 @@
+name: Per-family evidence supplier registry
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/factory_family_evidence_suppliers_v1.py
+      - tests/test_factory_family_evidence_suppliers_v1.py
+      - factory_config/forty_families.json
+      - .github/workflows/factory-family-evidence-suppliers-v1.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_family_evidence_suppliers_v1.py
+      - tests/test_factory_family_evidence_suppliers_v1.py
+      - factory_config/forty_families.json
+      - .github/workflows/factory-family-evidence-suppliers-v1.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Enforce one isolated evidence supplier per production family
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_family_evidence_suppliers_v1.py
+          python3 -B -m unittest discover -s tests -p test_factory_family_evidence_suppliers_v1.py -v
+          python3 -B scripts/factory_family_evidence_suppliers_v1.py \
+            --families factory_config/forty_families.json \
+            --output "$RUNNER_TEMP/family-supplier-registry.json"
+          python3 - "$RUNNER_TEMP/family-supplier-registry.json" <<'PY'
+          import json,sys
+          from pathlib import Path
+          data=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          assert data["registered_family_count"] == 40
+          assert data["supplier_count"] == 40
+          assert data["connected_supplier_count"] == 0
+          assert len({x["supplier_id"] for x in data["suppliers"]}) == 40
+          assert all(x["evidence_request_capacity"] == "UNBOUNDED_APPEND_ONLY"
+                     for x in data["suppliers"])
+          assert data["evidence_fabricated"] is False
+          assert data["production_release_authorized"] is False
+          print("FACTORY_FAMILY_SUPPLIER_REGISTRY_CONTRACT=PASS")
+          PY
