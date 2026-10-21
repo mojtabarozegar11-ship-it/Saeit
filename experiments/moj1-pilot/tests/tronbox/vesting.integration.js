@@ -278,4 +278,42 @@ contract('MOJ1 experimental 2-of-3 governance on isolated TVM', (accounts) => {
     await expectReverted(governance.execute(collection.address, data, 0, {from: accounts[0]}));
   });
 
+  it('governance 2-of-3 actually releases the full escrow to six checked vaults', async () => {
+    const gov = await MojPilotGovernance.new([accounts[0], accounts[1], accounts[2]]);
+    const coin = await MojCoin.new(gov.address);
+    const escrow = await MojGenesisDistributor.at(tronWeb.address.fromHex(await coin.distributor()));
+    const u = 10n ** 18n;
+    const billion = 1_000_000_000n;
+    const quantities = [35n, 20n, 15n, 10n, 15n, 5n].map(x => (x * billion * u).toString());
+    const startTime = Math.floor(Date.now() / 1000) + 10000;
+    const vaults = [];
+    for (let i = 0; i < 6; ++i) {
+      const beneficiary = accounts[i + 3];
+      if (i === 2 || i === 5) {
+        vaults.push(await MojApprovalReserveClockHarness.new(coin.address, beneficiary, gov.address, quantities[i]));
+      } else {
+        const cliff = i === 3 ? 365 * 86400 : 0;
+        const duration = (i === 0 ? 1825 : i === 3 ? 1095 : 1460) * 86400;
+        vaults.push(await MojVestingVault.new(coin.address, beneficiary, quantities[i], startTime, cliff, duration));
+      }
+    }
+    // Solidity signature: distribute(address[6],uint256). Static ABI tuple: six 20-byte
+    // addresses padded to 32 bytes, followed by the unsigned timestamp.
+    const selector = tronWeb.sha3('distribute(address[6],uint256)').slice(0, 10);
+    const words = vaults.map(v => tronWeb.address.toHex(v.address).slice(2).padStart(64, '0'));
+    words.push(BigInt(startTime).toString(16).padStart(64, '0'));
+    const data = selector + words.join('');
+    await expectReverted(gov.execute(escrow.address, data, 0, {from: accounts[0]}));
+    await gov.approve(escrow.address, data, 0, {from: accounts[0]});
+    await gov.approve(escrow.address, data, 0, {from: accounts[1]});
+    await gov.execute(escrow.address, data, 0, {from: accounts[2]});
+    assert.equal(await escrow.distributed(), true);
+    assert.equal((await coin.balanceOf(escrow.address)).toString(), '0');
+    for (let i = 0; i < 6; ++i) {
+      assert.equal((await coin.balanceOf(vaults[i].address)).toString(), quantities[i]);
+    }
+    await expectReverted(gov.execute(escrow.address, data, 0, {from: accounts[1]}));
+    assert.equal((await coin.totalSupply()).toString(), (100n * billion * u).toString());
+  });
+
 });
