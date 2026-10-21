@@ -81,22 +81,22 @@ jobs:
             if [ -d "$d" ] && [ -r "$d" ]; then test_roots="$test_roots $d"; fi
           done
           if [ -n "$test_roots" ]; then
-            candidate_files="$(find $test_roots -xdev -maxdepth 5 -type f \\
-              \\( -iname '*shasta*' -o -iname '*moj1*' -o -iname '*tron*wallet*' \\) \\
+            candidate_files="$(find $test_roots -xdev -maxdepth 5 -type f \
+              \( -iname '*shasta*' -o -iname '*moj1*' -o -iname '*tron*wallet*' \) \
               -print 2>/dev/null | wc -l || true)"
-            candidate_dirs="$(find $test_roots -xdev -maxdepth 5 -type d \\
-              \\( -iname '*shasta*' -o -iname '*moj1*' \\) \\
+            candidate_dirs="$(find $test_roots -xdev -maxdepth 5 -type d \
+              \( -iname '*shasta*' -o -iname '*moj1*' \) \
               -print 2>/dev/null | wc -l || true)"
-            printf 'MOJ1_VPS_NAME_ONLY_CANDIDATE_FILES=%s\\n' "$candidate_files"
-            printf 'MOJ1_VPS_NAME_ONLY_CANDIDATE_DIRS=%s\\n' "$candidate_dirs"
+            printf 'MOJ1_VPS_NAME_ONLY_CANDIDATE_FILES=%s\n' "$candidate_files"
+            printf 'MOJ1_VPS_NAME_ONLY_CANDIDATE_DIRS=%s\n' "$candidate_dirs"
           else
             echo 'MOJ1_VPS_NAME_ONLY_INVENTORY=NO_ACCESSIBLE_ROOTS'
           fi
           for c in python3 openssl; do
             if command -v "$c" >/dev/null 2>&1; then
-              printf 'MOJ1_VPS_TOOL_%s=AVAILABLE\\n' "$c"
+              printf 'MOJ1_VPS_TOOL_%s=AVAILABLE\n' "$c"
             else
-              printf 'MOJ1_VPS_TOOL_%s=ABSENT\\n' "$c"
+              printf 'MOJ1_VPS_TOOL_%s=ABSENT\n' "$c"
             fi
           done
           echo 'MOJ1_VPS_TEST_WALLET=NOT_ACCESSED'
