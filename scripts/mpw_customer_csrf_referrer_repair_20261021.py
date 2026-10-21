@@ -44,6 +44,25 @@ def modified(blob,kind):
  new=text.replace(OLD,NEW,1)
  if new.replace(NEW,OLD,1)!=text:fail("Diff exceeds Referrer-Policy")
  return new.encode("utf8")
+def classify_template(blob):
+ text=blob.decode("utf8")
+ if text.count(NEW)==1 and OLD not in text:return "already_fixed"
+ if text.count(OLD)==1 and NEW not in text:return "needs_patch"
+ return "unverifiable"
+
+def inspect():
+ guard()
+ states={kind:classify_template(path.read_bytes()) for kind,path in FILES.items()}
+ unique=set(states.values())
+ if len(unique)!=1 or "unverifiable" in unique:
+  fail("CUSTOMER_TEMPLATE_STATE_MIXED_OR_UNVERIFIED")
+ state=unique.pop()
+ contract(state=="already_fixed")
+ print("MPW_CSRF_TEMPLATE_STATE="+state)
+ print("MPW_CSRF_INSPECTION="+json.dumps({
+  "login":states["login"],"register":states["register"],
+  "csrf_enforced":True,"no_templates_modified":True}))
+
 def dirs(run):
  if not re.fullmatch(r"[0-9]{8,20}",run):fail("Invalid operation ID")
  return {
@@ -174,7 +193,8 @@ def selftest():
  print("MPW_CSRF_REFERER_SELFTEST=PASS")
 if __name__=="__main__":
  if len(sys.argv)==2 and sys.argv[1]=="selftest":selftest()
+ elif len(sys.argv)==2 and sys.argv[1]=="inspect":inspect()
  elif len(sys.argv)==2 and sys.argv[1]=="preview":preview()
  elif len(sys.argv)==3 and sys.argv[1] in ("install","verify","rollback"):
   {"install":install,"verify":verify,"rollback":rollback}[sys.argv[1]](sys.argv[2])
- else:raise SystemExit("selftest|preview|install RUN|verify RUN|rollback RUN");
+ else:raise SystemExit("selftest|inspect|preview|install RUN|verify RUN|rollback RUN");
