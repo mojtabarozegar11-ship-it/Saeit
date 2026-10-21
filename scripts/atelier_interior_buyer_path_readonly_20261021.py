@@ -71,4 +71,21 @@ for root in [app/"templates",app/"core"/"templates",app/"mpw_commerce"/"template
                     hits=[{"n":i+1,"text":line.strip()[:250]} for i,line in enumerate(lines) if any(t in line.lower() for t in ("checkout","purchase","contact","product","href","form","price","sale"))]
                     print("ATELIER_DISCOVERED_TEMPLATE="+json.dumps({"file":rel,"lines":len(lines),"matches":hits[:75]}))
                 except Exception as e:print("ATELIER_TEMPLATE_ERR="+type(e).__name__)
+
+module=import_module("mpw_commerce.product_checkout_page")
+print("ATELIER_GATE_FLAG_STATES="+json.dumps({"FLAGS":list(getattr(module,"FLAGS",())),"approvals":list(getattr(module,"APPROVAL_FLAGS",())),"gate_result_with_anonymous":bool(approved_for_checkout(type("FakeRequest",(),{"is_secure":lambda self:True,"get_host":lambda self:"mojplaywin.com","user":type("Guest",(),{"is_authenticated":False,"is_active":True})()})(),p))}))
+print("ATELIER_EXISTING_KNOWLEDGE_ASSOC="+json.dumps({"article_attached":p.knowledge_article_id is not None,"article_published":bool(getattr(p.knowledge_article,"published",False)) if p.knowledge_article_id else False,"owner_id_present":p.owner_id is not None}))
+for fn_name in ["_private_file","approved_for_checkout"]:
+    fn=getattr(module,fn_name,None)
+    if fn:
+        lines=inspect.getsource(fn).splitlines()
+        print("ATELIER_COMMERCE_INVARIANT="+json.dumps({"fn":fn_name,"lines":[l.strip()[:220] for l in lines[:115]]}))
+import core.cryptopay_checkout as cryptopay_checkout
+for dotted in ["mpw_commerce.downloads.download","mpw_commerce.api_checkout.create_order"]:
+    try:
+        mm,n=dotted.rsplit(".",1); f=getattr(import_module(mm),n)
+        lines=inspect.getsource(f).splitlines()
+        print("ATELIER_COMMERCE_FUNCTION="+json.dumps({"name":dotted,"lines":len(lines),"match":[l.strip()[:190] for l in lines if any(w in l.lower() for w in ("pdf","zip","file","product","approval","purchase","type","content"))][:50]}))
+    except Exception as e:print("ATELIER_COMMERCE_FUNCTION_MISSING="+json.dumps({"fn":dotted,"err":type(e).__name__}))
+print("ATELIER_PRODUCT_TYPE_CHOICES="+json.dumps(Product._meta.get_field("product_type").choices))
 print("ATELIER_READONLY_VIEW_INSPECT=PASS")
