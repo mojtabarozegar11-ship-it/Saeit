@@ -1098,7 +1098,12 @@ def receive_three_product_requests(raw,root=VPS,engine_path=None,max_active=300)
                 and original.get("status")=="return_for_qa_completion"
                 and original.get("issues")==list(ISSUES),
                 "THREE_ORDERS_UNVERIFIED_SITE_FEEDBACK")
-        validated.append(row)
+        # Bind a native WO to the family actually declared by the verified VPS
+        # manufacturing manifest, never to a guessed website category.
+        family=manifest.get("family_id")
+        family=(family if isinstance(family,str) and
+                re.fullmatch(r"F(?:0[1-9]|[1-3][0-9]|40)",family) else None)
+        validated.append(dict(row,verified_factory_family=family))
     engine=_native_order_engine(engine_path)
     area=root/"production-instructions"
     orderdir=area/"orders"
@@ -1165,6 +1170,8 @@ def receive_three_product_requests(raw,root=VPS,engine_path=None,max_active=300)
                                         "Independent quality and rights review before sale",
                                         "Never release publicly without owner authorization"],
                           "technical_product_release":False}
+                    if row["verified_factory_family"] is not None:
+                        task["family_id"]=row["verified_factory_family"]
                     record=dict(task,schema=engine.SCHEMA,id=oid,
                         fingerprint=engine.fingerprint(task),
                         created_utc=engine.stamp(),status="issued",
