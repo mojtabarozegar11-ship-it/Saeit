@@ -60,8 +60,10 @@ jobs:
             ssh_vps "test \"\$(sha256sum '$stage/$name' | cut -d' ' -f1)\" = '$sha'"
           done
           ssh_vps "timeout 180s bash '$stage/install_factory_tool_router.sh' '$stage'"
+          ssh_vps 'timeout 120s /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/forty-execution/factory_tool_router.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --ops /home/githubops/factory-runtime/operations --registry /home/githubops/factory-runtime/operations/forty-family-master/forty_families.json --selftest-all'
           ssh_vps 'python3 -' <<'PY'
           import hashlib,json,subprocess
+          from datetime import datetime, timezone
           from pathlib import Path
           home=Path.home()/'factory-runtime'
           ops=home/'operations';root=home/'private/autonomous-product-cycle'
@@ -69,6 +71,14 @@ jobs:
           router=ops/'forty-execution/factory_tool_router.py'
           d=json.loads((root/'tool-router/dashboard.json').read_text())
           assert d['registered_tool_bindings']==3000 and d['families_connected']==40
+          age=(datetime.now(timezone.utc)-datetime.fromisoformat(d['observed_utc'])).total_seconds()
+          assert 0 <= age <= 300, 'STALE_ROUTER_EVIDENCE'
+          catalog=json.loads((root/'production-toolkit-3000/catalog.json').read_text())
+          distinct=len({item['operation'] for item in catalog['tools']})
+          assert distinct==75 and d['unique_underlying_implementations']==distinct
+          print('VPS_UNIQUE_UNDERLYING_OPERATIONS='+str(distinct))
+          print('VPS_BINDINGS_ARE_NOT_DISTINCT_TOOLS=3000')
+          print('VPS_ROUTER_EVIDENCE_AGE_SECONDS='+str(round(age)))
           assert d['support_invocations_this_tick']==400 and len(d['family_readbacks'])==40
           assert d['payments_touched'] is False and d['sites_touched'] is False
           assert d['agent_workers_confirmed_online']==0
