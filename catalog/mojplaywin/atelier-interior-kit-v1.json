@@ -37,10 +37,10 @@
   "pricing_recommendation": {
     "researched_at": "2026-10-21",
     "currency": "USD",
-    "regular_price": 29,
-    "introductory_price": 19,
-    "introductory_cap_paid_sales": 20,
-    "pricing_status": "market_research_recommendation_not_active_checkout_price",
+    "regular_price": 17,
+    "introductory_price": 6.8,
+    "introductory_cap_paid_sales": null,
+    "pricing_status": "owner_selected_price_proposal_not_active_checkout_price",
     "comparables": [
       {
         "name": "Architekta HTML",
@@ -70,7 +70,12 @@
         "note": "CMS-capable, not like-for-like static HTML"
       }
     ],
-    "rationale": "Introductory pricing near direct HTML competitors; regular pricing reflects browser-based editing and bundled fictional gallery assets, while acknowledging this kit has fewer pages and no CMS.",
-    "trx_settlement": "invoice_quoted_at_payment_time_no_fixed_trx_amount"
+    "rationale": "Owner selected a $17 standard price with a 60% promotional discount ($6.80 payable). Benchmarked against current interior-design templates; discounted price is promotional and may have payment-fee constraints.",
+    "trx_settlement": "invoice_quoted_at_payment_time_no_fixed_trx_amount",
+    "discount_percent": 60,
+    "discounted_price": 6.8,
+    "promotion_start": null,
+    "promotion_end": null,
+    "promotion_note": "Promotion duration and genuine prior/base price presentation must be confirmed before enabling public discounted checkout."
   }
 }
