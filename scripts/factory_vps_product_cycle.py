@@ -68,6 +68,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         designer_failures = []
         source_recoveries = []
         source_evolutions = []
+        evolution_attempt_defects = []
         invention_state={"enabled":False,"new_technical_briefs_this_tick":0}
         if enable_designer:
             designer = load("saeit_factory_recipe_designer", SCRIPTS / "factory_recipe_designer.py")
@@ -145,7 +146,11 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                             generated_root/candidate_recipe)
                         source_evolutions.append(outcome)
                 except (RuntimeError,ValueError,OSError,ArithmeticError) as error:
-                    designer_failures.append({'type':'source_evolution',
+                    # The manufacturing defect handler further below may
+                    # recompile this same source and prove it technically
+                    # recovered. Do not permanently mark that same repaired
+                    # version as failed due to a pre-repair observation.
+                    evolution_attempt_defects.append({'type':'source_evolution',
                         'recipe':candidate_recipe,'reason':str(error)[:240]})
                 maker.atomic_text(evolution_cursor_file,
                                   json.dumps({'last_recipe':candidate_recipe})+'\n')
@@ -209,6 +214,11 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                     root, recipe, json.loads(manifest.read_text(encoding="utf-8")),
                     archive_path=previous_product / (recipe + "-internal-qa.zip"),
                     source_digest=maker.source_digest(source, source_files))
+        recovered_source_ids={entry['recipe'] for entry in source_recoveries}
+        designer_failures.extend(
+            issue for issue in evolution_attempt_defects
+            if issue['recipe'] not in recovered_source_ids
+        )
         if enable_design_intake and engineering_state.get('enabled'):
             try:engineering_state['production_results']=intake.reconcile(root)
             except (ValueError,OSError) as error:
