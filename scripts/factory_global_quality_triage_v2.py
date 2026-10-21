@@ -78,10 +78,11 @@ def plan(code):
     if code in QUARANTINE:return "RESTORE_CORRECT_ARTIFACT_AND_RETEST"
     return "INVESTIGATE_WITH_ACCOUNTABLE_SPECIALIST"
 
-def triage_inventory(private_root,policy,registry,run_reference="manual",limit=250):
+def triage_inventory(private_root,policy,registry,run_reference="manual",limit=250,scorecard_file=None):
     root=Path(private_root)
     assert root.is_dir() and not root.is_symlink()
     module=load_module(Path(policy))
+    score_module=load_module(Path(scorecard_file) if scorecard_file else Path(__file__).with_name("factory_quality_1000_scorecard.py"))
     profiles=module.load_registry(Path(registry))
     assert len(profiles)==40
     out=root/"quality-excellence"/"rework"
@@ -120,6 +121,8 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
                     "path":zipfile.name,"sha256":existing_hash or ""})
                 verdict=module.inspect(candidate,folder,profiles,doc)
                 status,actual,pending=classify(verdict)
+                card=score_module.grade(verdict,exact_build_sha256=existing_hash)
+                score_module.require_no_false_certification(card)
                 if not isinstance(manifest_sha,str) or not HEX.fullmatch(manifest_sha):
                     status="QUARANTINE_TECHNICAL_OR_INTEGRITY"
                     actual.append("P0_INVALID_MANIFEST_SHA256")
@@ -128,6 +131,10 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
                     "artifact_sha256":manifest_sha,
                     "actual_sha256":existing_hash,
                     "technical_qa_status":doc.get("qa_status"),
+                    "quality_1000_scorecard":card,
+                    "required_quality_points":1000,
+                    "quality_points_verified":None,
+                    "documentary_evidence_points":card["documentary_evidence_points"],
                     "quality_status":status,
                     "premium_quality_approved":False,
                     "commercial_release_allowed":False,
@@ -142,6 +149,8 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
                 record={"schema":REWORK,"recipe":name,"quality_status":"QUARANTINE_AUDIT_ERROR",
                         "defects":["P0_AUDIT_ERROR_"+type(error).__name__],
                         "rework_actions":["INVESTIGATE_WITH_ACCOUNTABLE_SPECIALIST"],
+                        "required_quality_points":1000,"quality_points_verified":None,
+                        "documentary_evidence_points":0,
                         "premium_quality_approved":False,"commercial_release_allowed":False}
             folder_out=out/name
             assert not folder_out.is_symlink()
@@ -165,8 +174,16 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
         "total_products":len(records),"registered_families":len(profiles),
         "technical_passed":sum(x.get("technical_qa_status")=="passed" for x in records),
         "quality_certified":0,"public_release_authorized":False,
+        "required_quality_points":1000,
+        "quality_score_units":"noncompensatory_12_pillar_thousand",
+        "actual_quality_verified_product_count":0,
+        "documentary_evidence_points_sum":sum(x.get("documentary_evidence_points",0) for x in records),
         "status_counts":dict(sorted(statuses.items())),
         "top_stop_ship_defects":defects.most_common(20),
+        "product_quality_scores": [{"recipe":x["recipe"],"required":1000,
+             "documentary_evidence_points":x.get("documentary_evidence_points",0),
+             "verified_quality_points":None,
+             "eligible_for_sales":False} for x in records],
         "product_receipts":[{"recipe":x["recipe"],
                              "quality_status":x["quality_status"],
                              "defect_count":len(x["defects"])} for x in records]
@@ -181,6 +198,8 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
     print("FACTORY_TECHNICAL_PASS_NOT_PREMIUM="+str(summary["technical_passed"]))
     print("FACTORY_REAL_REWORK_CLASSIFICATION="+json.dumps(dict(statuses),sort_keys=True))
     print("FACTORY_TOP_STOP_SHIP_DEFECTS="+json.dumps(defects.most_common(8)))
+    print("FACTORY_QUALITY_MINIMUM_REQUIRED=1000/1000")
+    print("FACTORY_QUALITY_1000_INDEPENDENTLY_VERIFIED=0")
     print("FACTORY_WORLD_EXCELLENCE_APPROVED=0")
     print("FACTORY_REWORK_RECEIPT_SHA256="+signature)
     return summary
@@ -190,6 +209,7 @@ def main():
     for name in ("private-root","policy","registry"):
         p.add_argument("--"+name,required=True)
     p.add_argument("--run-reference",default="manual")
+    p.add_argument("--scorecard",default=None)
     args=p.parse_args()
-    triage_inventory(args.private_root,args.policy,args.registry,args.run_reference)
+    triage_inventory(args.private_root,args.policy,args.registry,args.run_reference,scorecard_file=args.scorecard)
 if __name__=="__main__":main()
