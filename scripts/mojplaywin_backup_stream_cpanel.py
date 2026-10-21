@@ -71,6 +71,7 @@ def copy_exact_process_stdout(command, *, env=None):
     proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                             env=env, bufsize=0)
     total = 0
+    progress_mib = 0
     try:
         assert proc.stdout is not None
         while True:
@@ -80,11 +81,18 @@ def copy_exact_process_stdout(command, *, env=None):
             total += len(b)
             if total > MAX_STREAM:
                 raise RuntimeError("source stream exceeds safety cap")
+            if total == len(b):
+                print("BACKUP_SOURCE_STREAM_STARTED", file=sys.stderr, flush=True)
+            current_mib = (total // (64 * 1024 * 1024)) * 64
+            if current_mib > progress_mib:
+                progress_mib = current_mib
+                print(f"BACKUP_SOURCE_PROGRESS_MIB={progress_mib}", file=sys.stderr, flush=True)
             sys.stdout.buffer.write(b)
         if proc.wait(timeout=30):
             raise RuntimeError("source archive or transactional DB dump failed")
         sys.stdout.buffer.write(MARKER)
         sys.stdout.buffer.flush()
+        print("BACKUP_SOURCE_STREAM_COMPLETED", file=sys.stderr, flush=True)
     finally:
         if proc.poll() is None:
             proc.kill()
