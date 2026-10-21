@@ -1,0 +1,123 @@
+name: MOJ Commerce v1.1 PostgreSQL preflight and synthetic restore (NO LIVE DEPLOY)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/moj-commerce-v11-postgres-probe.yml'
+      - 'moj_commerce/STAGING_V11.md'
+      - 'tools/moj_commerce_stage_backup_smoke.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj-commerce-v11-postgres-readiness
+  cancel-in-progress: false
+jobs:
+  verify-relay:
+    # Untrusted fork PRs never receive infrastructure credentials.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'mojtabarozegar11-ship-it') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verified relay, PG capability probe, and isolated synthetic restore
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ -n "$VPS_KEY" && -n "$HOST_KEY" ]] || { echo 'PREFLIGHT_BLOCKED_MISSING_KEY'; exit 1; }
+          sshdir="$RUNNER_TEMP/moj-commerce-v11-ssh"
+          mkdir -p "$sshdir"
+          trap 'rm -f "$sshdir/vps.key" "$sshdir/host.key" "$sshdir/config" "$sshdir/vps.known" "$sshdir/host.known" "$sshdir/host.candidate"; rmdir "$sshdir" 2>/dev/null || true' EXIT
+          printf '%s\n' "$VPS_KEY" > "$sshdir/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$sshdir/host.key"
+          python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); t=p.read_text().replace(chr(13)+chr(10),chr(10)).strip(); p.write_text(t.replace(chr(92)+"n",chr(10))+chr(10))' "$sshdir/vps.key"
+          python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); t=p.read_text().replace(chr(13)+chr(10),chr(10)).strip(); p.write_text(t.replace(chr(92)+"n",chr(10))+chr(10))' "$sshdir/host.key"
+          chmod 600 "$sshdir"/*
+          ssh-keygen -y -P '' -f "$sshdir/vps.key" > /dev/null
+          ssh-keygen -y -P '' -f "$sshdir/host.key" > /dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$sshdir/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$sshdir/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          {
+            echo "Host saeit-vps"
+            echo "  HostName 178.239.147.150"
+            echo "  User githubops"
+            echo "  Port 22"
+            echo "  IdentityFile $sshdir/vps.key"
+            echo "  UserKnownHostsFile $sshdir/vps.known"
+            echo "  StrictHostKeyChecking yes"
+            echo "Host saeit-host"
+            echo "  HostName zohal.pws-dns.net"
+            echo "  User zomorod2"
+            echo "  Port 1396"
+            echo "  IdentityFile $sshdir/host.key"
+            echo "  UserKnownHostsFile $sshdir/host.known"
+            echo "  ProxyJump saeit-vps"
+            echo "  StrictHostKeyChecking yes"
+            echo "Host *"
+            echo "  BatchMode yes"
+            echo "  IdentitiesOnly yes"
+            echo "  ForwardAgent no"
+            echo "  RequestTTY no"
+            echo "  ConnectTimeout 10"
+            echo "  ConnectionAttempts 1"
+          } > "$sshdir/config"
+          chmod 600 "$sshdir/config"
+          timeout 30s ssh -F "$sshdir/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net 2>/dev/null' > "$sshdir/host.candidate"
+          test "$(ssh-keygen -lf "$sshdir/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$sshdir/host.candidate" "$sshdir/host.known"
+          timeout 35s ssh -F "$sshdir/config" saeit-vps 'test "$(id -un)" = githubops && echo VPS_RELAY_AUTH_OK; test -d "$HOME/factory-runtime" && echo VPS_FACTORY_RUNTIME_PRESENT || echo VPS_FACTORY_RUNTIME_UNKNOWN'
+          timeout 45s ssh -F "$sshdir/config" saeit-host 'set -eu; test "$(id -un)" = zomorod2; echo CPANEL_PROXYJUMP_AUTH_OK; test -d /home/zomorod2/Saeit-staging; echo STAGING_ROOT_PRESENT; if test -f /home/zomorod2/Saeit-staging/manage.py; then echo STAGING_DJANGO_SOURCE_PRESENT; else echo STAGING_DJANGO_SOURCE_NOT_AT_ROOT; fi; if test -x /home/zomorod2/Saeit-staging/.venv/bin/python; then echo STAGING_VENV_PRESENT; else echo STAGING_VENV_NOT_AT_ROOT; fi; test -d /home/zomorod2/Saeit && echo PRODUCTION_PATH_PRESENT_READ_ONLY || echo PRODUCTION_PATH_UNKNOWN'
+          # READ-ONLY inspection. No PostgreSQL connections, DB enumeration, DB creation, or site changes.
+          timeout 45s ssh -F "$sshdir/config" saeit-vps 'set -eu; echo V11_VPS_PROBE_BEGIN; for bin in docker podman psql pg_config initdb pg_ctl pg_dump pg_restore; do if command -v "$bin" >/dev/null 2>&1; then echo "VPS_BIN_$bin=present"; else echo "VPS_BIN_$bin=absent"; fi; done; if command -v docker >/dev/null 2>&1; then if timeout 5s docker info --format "{{.ServerVersion}}" >/dev/null 2>&1; then echo VPS_CONTAINER_RUNTIME_READY; else echo VPS_CONTAINER_RUNTIME_NOT_CONFIRMED; fi; fi; if command -v free >/dev/null 2>&1; then free -m | awk '"'"'/^Mem:/{print "VPS_MEMORY_MB_TOTAL="$2, "VPS_MEMORY_MB_AVAILABLE="$7}'"'"'; fi; df -Pk . | awk '"'"'NR==2{print "VPS_DISK_KB_AVAILABLE="$4}'"'"'; echo V11_VPS_PROBE_DONE'
+          timeout 45s ssh -F "$sshdir/config" saeit-host 'set -eu; echo V11_CPANEL_PROBE_BEGIN; test "$(id -un)" = zomorod2; test -d /home/zomorod2/Saeit-staging; for bin in psql pg_config initdb pg_ctl pg_dump pg_restore createdb; do if command -v "$bin" >/dev/null 2>&1; then echo "CPANEL_BIN_$bin=present"; else echo "CPANEL_BIN_$bin=absent"; fi; done; for p in /usr/pgsql-16/bin/initdb /usr/pgsql-15/bin/initdb /usr/pgsql-14/bin/initdb /usr/local/pgsql/bin/initdb; do if test -x "$p"; then echo "CPANEL_ISOLATED_INITDB_FOUND=$p"; fi; done; df -Pk /home/zomorod2/Saeit-staging | awk '"'"'NR==2{print "CPANEL_DISK_KB_AVAILABLE="$4}'"'"'; test -d /home/zomorod2/Saeit && echo "PRODUCTION_EXISTS_READ_ONLY"; echo V11_CPANEL_PROBE_DONE'
+          timeout 50s ssh -F "$sshdir/config" saeit-host 'set -eu; if test -x /usr/local/cpanel/bin/uapi; then echo CPANEL_LOCAL_UAPI_PRESENT; if timeout 15s /usr/local/cpanel/bin/uapi --output=json Postgresql get_restrictions >/dev/null 2>&1; then echo CPANEL_UAPI_POSTGRES_READONLY_CALL_OK; else echo CPANEL_UAPI_POSTGRES_READONLY_CALL_FAILED; fi; else echo CPANEL_LOCAL_UAPI_ABSENT; fi; if PGCONNECT_TIMEOUT=5 timeout 12s psql -w -X -qAt -d postgres -c "SELECT 1" >/dev/null 2>&1; then echo CPANEL_LOCAL_PG_ACCOUNT_AUTH_OK; else echo CPANEL_LOCAL_PG_ACCOUNT_AUTH_NOT_AVAILABLE; fi'
+          # Official read-only cPanel UAPI feature check. Do not enumerate any database.
+          # Parse output into fixed, non-sensitive status markers only.
+          feature_json="$(timeout 50s ssh -F "$sshdir/config" saeit-host '/usr/local/cpanel/bin/uapi --output=json Features list_features_like pattern=postgres' 2>/dev/null || true)"
+          if [[ -z "$feature_json" ]]; then
+            echo 'CPANEL_POSTGRES_FEATURE_QUERY_NO_JSON'
+          else
+            printf '%s' "$feature_json" | python3 -c 'import json,sys
+          try:
+              result=json.load(sys.stdin).get("result",{})
+              status=result.get("status")
+              data=result.get("data")
+              print("CPANEL_POSTGRES_FEATURE_API_STATUS="+str(status))
+              print("CPANEL_POSTGRES_FEATURE_MATCH_PRESENT="+str(int("postgres" in json.dumps(data).lower())))
+              print("CPANEL_POSTGRES_FEATURE_API_ERROR_PRESENT="+str(int(bool(result.get("errors")))))
+          except (ValueError,TypeError,AttributeError):
+              print("CPANEL_POSTGRES_FEATURE_QUERY_INVALID_JSON")'
+          fi
+          echo 'V11_PG_CAPABILITIES_OBSERVED_NO_DATABASE_CREATED_NO_PRODUCTION_WRITE_NO_PAYMENT'
+          # Fallback is synthetic SQLite backup/restore in a NEW private stage directory.
+          # It does not create or read any existing PostgreSQL database.
+          script="$RUNNER_TEMP/moj-commerce-v11-synthetic-restore.py"
+          git show HEAD:tools/moj_commerce_stage_backup_smoke.py > "$script"
+          test -s "$script"
+          script_digest="$(sha256sum "$script" | awk '{print $1}')"
+          release="mc11-$(git rev-parse --short=12 HEAD)"
+          [[ "$release" =~ ^mc11-[0-9a-f]{12}$ ]] || exit 1
+          stage="/home/zomorod2/Saeit-staging/moj-commerce-v11-synthetic-restore"
+          destination="$stage/$release"
+          timeout 45s ssh -F "$sshdir/config" saeit-host "set -eu; test -d /home/zomorod2/Saeit-staging; test ! -L /home/zomorod2/Saeit-staging; umask 077; mkdir -p -m 700 '$stage'; test ! -e '$destination'; mkdir -m 700 '$destination'"
+          timeout 60s ssh -F "$sshdir/config" saeit-host "umask 077; cat > '$destination/restore_smoke.py'" < "$script"
+          remote_script_digest="$(timeout 40s ssh -F "$sshdir/config" saeit-host "sha256sum '$destination/restore_smoke.py'" | awk '{print $1}')"
+          test "$script_digest" = "$remote_script_digest"
+          timeout 45s ssh -F "$sshdir/config" saeit-host "set -eu; test -x /opt/alt/python311/bin/python3.11; cd '$destination'; /opt/alt/python311/bin/python3.11 restore_smoke.py --sandbox '$destination'"
+          # A second invocation on exactly the same destination must fail closed.
+          # Check the specific refusal, so transport failures cannot pass the test.
+          replay_log="$RUNNER_TEMP/moj-commerce-v11-replay-denial.log"
+          if timeout 45s ssh -F "$sshdir/config" saeit-host "set -eu; cd '$destination'; /opt/alt/python311/bin/python3.11 restore_smoke.py --sandbox '$destination'" > "$replay_log" 2>&1; then
+            echo 'V11_REPEAT_RUN_UNEXPECTED_SUCCESS'
+            exit 1
+          fi
+          grep -q 'Refusing overwrite of existing database or backup' "$replay_log"
+          echo 'V11_REPEAT_RUN_OVERWRITE_DENIED'
+          echo "V11_SYNTHETIC_STAGE_NAME=$release"
+          echo "V11_SMOKE_SOURCE_SHA256=$script_digest"
+          echo 'V11_NO_PRODUCTION_DB_NO_REAL_FUNDS'

@@ -1,0 +1,137 @@
+name: MOJ Commerce v1.1 PostgreSQL permission diagnostics (READ ONLY)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/moj-commerce-v11-postgres-permission-readonly.yml'
+      - 'moj_commerce/STAGING_V11.md'
+      - 'tools/moj_commerce_stage_backup_smoke.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj-commerce-v11-postgres-permission-readonly
+  cancel-in-progress: false
+jobs:
+  permission-diagnostic:
+    # Untrusted fork PRs never receive infrastructure credentials.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'mojtabarozegar11-ship-it') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verified relay and read-only PostgreSQL permission diagnostics
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ -n "$VPS_KEY" && -n "$HOST_KEY" ]] || { echo 'PREFLIGHT_BLOCKED_MISSING_KEY'; exit 1; }
+          sshdir="$RUNNER_TEMP/moj-commerce-v11-ssh"
+          mkdir -p "$sshdir"
+          trap 'rm -f "$sshdir/vps.key" "$sshdir/host.key" "$sshdir/config" "$sshdir/vps.known" "$sshdir/host.known" "$sshdir/host.candidate"; rmdir "$sshdir" 2>/dev/null || true' EXIT
+          printf '%s\n' "$VPS_KEY" > "$sshdir/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$sshdir/host.key"
+          python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); t=p.read_text().replace(chr(13)+chr(10),chr(10)).strip(); p.write_text(t.replace(chr(92)+"n",chr(10))+chr(10))' "$sshdir/vps.key"
+          python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); t=p.read_text().replace(chr(13)+chr(10),chr(10)).strip(); p.write_text(t.replace(chr(92)+"n",chr(10))+chr(10))' "$sshdir/host.key"
+          chmod 600 "$sshdir"/*
+          ssh-keygen -y -P '' -f "$sshdir/vps.key" > /dev/null
+          ssh-keygen -y -P '' -f "$sshdir/host.key" > /dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$sshdir/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$sshdir/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          {
+            echo "Host saeit-vps"
+            echo "  HostName 178.239.147.150"
+            echo "  User githubops"
+            echo "  Port 22"
+            echo "  IdentityFile $sshdir/vps.key"
+            echo "  UserKnownHostsFile $sshdir/vps.known"
+            echo "  StrictHostKeyChecking yes"
+            echo "Host saeit-host"
+            echo "  HostName zohal.pws-dns.net"
+            echo "  User zomorod2"
+            echo "  Port 1396"
+            echo "  IdentityFile $sshdir/host.key"
+            echo "  UserKnownHostsFile $sshdir/host.known"
+            echo "  ProxyJump saeit-vps"
+            echo "  StrictHostKeyChecking yes"
+            echo "Host *"
+            echo "  BatchMode yes"
+            echo "  IdentitiesOnly yes"
+            echo "  ForwardAgent no"
+            echo "  RequestTTY no"
+            echo "  ConnectTimeout 10"
+            echo "  ConnectionAttempts 1"
+          } > "$sshdir/config"
+          chmod 600 "$sshdir/config"
+          timeout 30s ssh -F "$sshdir/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net 2>/dev/null' > "$sshdir/host.candidate"
+          test "$(ssh-keygen -lf "$sshdir/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$sshdir/host.candidate" "$sshdir/host.known"
+          timeout 35s ssh -F "$sshdir/config" saeit-vps 'test "$(id -un)" = githubops && echo VPS_RELAY_AUTH_OK; test -d "$HOME/factory-runtime" && echo VPS_FACTORY_RUNTIME_PRESENT || echo VPS_FACTORY_RUNTIME_UNKNOWN'
+          timeout 45s ssh -F "$sshdir/config" saeit-host 'set -eu; test "$(id -un)" = zomorod2; echo CPANEL_PROXYJUMP_AUTH_OK; test -d /home/zomorod2/Saeit-staging; echo STAGING_ROOT_PRESENT; if test -f /home/zomorod2/Saeit-staging/manage.py; then echo STAGING_DJANGO_SOURCE_PRESENT; else echo STAGING_DJANGO_SOURCE_NOT_AT_ROOT; fi; if test -x /home/zomorod2/Saeit-staging/.venv/bin/python; then echo STAGING_VENV_PRESENT; else echo STAGING_VENV_NOT_AT_ROOT; fi; test -d /home/zomorod2/Saeit && echo PRODUCTION_PATH_PRESENT_READ_ONLY || echo PRODUCTION_PATH_UNKNOWN'
+          # No database enumeration, connection with credentials, file inspection, or remote file writes.
+          timeout 55s ssh -F "$sshdir/config" saeit-host '
+            set +e
+            echo "V11_PERMISSION_DIAG_BEGIN"
+            if test -x /usr/local/cpanel/bin/uapi; then echo "UAPI_EXECUTABLE_YES"; else echo "UAPI_EXECUTABLE_NO"; fi
+            uapi_out=$(/usr/local/cpanel/bin/uapi --output=json Features list_features_like pattern=postgres 2>&1)
+            rc=$?
+            if test "$rc" -eq 0; then echo "UAPI_RC_ZERO"; else echo "UAPI_RC_NONZERO"; fi
+            case "$uapi_out" in
+              *"Permission denied"*|*"permission denied"*) echo "UAPI_CATEGORY_PERMISSION_DENIED";;
+              *"not found"*|*"No such file"*) echo "UAPI_CATEGORY_NOT_FOUND";;
+              *"Died at"*|*"Cannot locate"*) echo "UAPI_CATEGORY_PERL_RUNTIME";;
+              *"not enabled"*|*"Feature is disabled"*) echo "UAPI_CATEGORY_DISABLED";;
+              *"Access denied"*|*"not authorized"*) echo "UAPI_CATEGORY_ACCESS_DENIED";;
+              *"Cannot connect"*|*"Connection refused"*) echo "UAPI_CATEGORY_BACKEND_UNAVAILABLE";;
+              "") echo "UAPI_CATEGORY_NO_OUTPUT";;
+              *) echo "UAPI_CATEGORY_UNCLASSIFIED";;
+            esac
+            case "$uapi_out" in *"\"result\""*) echo "UAPI_HAS_RESULT_JSON_TOKEN";; *) echo "UAPI_NO_RESULT_JSON_TOKEN";; esac
+            if test -L /usr/local/cpanel/bin/uapi; then echo "UAPI_IS_SYMLINK"; else echo "UAPI_IS_NOT_SYMLINK"; fi
+            if test -x /usr/local/cpanel/3rdparty/bin/perl; then echo "CPANEL_PERL_RUNTIME_PRESENT"; else echo "CPANEL_PERL_RUNTIME_NOT_AT_STANDARD_PATH"; fi
+            uapi_help=$(/usr/local/cpanel/bin/uapi --help 2>&1)
+            help_rc=$?
+            if test "$help_rc" -eq 0; then echo "UAPI_HELP_RC_ZERO"; else echo "UAPI_HELP_RC_NONZERO"; fi
+            case "$uapi_help" in
+              *"No such file or directory"*) echo "UAPI_HELP_MISSING_FILE_OR_INTERPRETER";;
+              *"not found"*) echo "UAPI_HELP_NOT_FOUND";;
+              *"Usage:"*|*"usage:"*) echo "UAPI_HELP_USAGE_DISPLAYED";;
+              *"Cannot locate"*|*"Cannot locate"*) echo "UAPI_HELP_MISSING_PERL_MODULE";;
+              "") echo "UAPI_HELP_NO_OUTPUT";;
+              *) echo "UAPI_HELP_OTHER";;
+            esac
+                        control_out=$(/usr/local/cpanel/bin/uapi --output=json Variables get_session_information name=host 2>&1)
+            control_rc=$?
+            if test "$control_rc" -eq 0; then echo "UAPI_CONTROL_RC_ZERO"; else echo "UAPI_CONTROL_RC_NONZERO"; fi
+            case "$control_out" in
+              *"\\\"result\\\""*) echo "UAPI_CONTROL_JSON_RESULT_TOKEN";;
+              *"No such file"*|*"not found"*) echo "UAPI_CONTROL_CATEGORY_NOT_FOUND";;
+              *"Permission denied"*|*"Access denied"*) echo "UAPI_CONTROL_CATEGORY_ACCESS";;
+              "") echo "UAPI_CONTROL_NO_OUTPUT";;
+              *) echo "UAPI_CONTROL_OTHER";;
+            esac
+            features_as_user=$(/usr/local/cpanel/bin/uapi --user=zomorod2 --output=json Features list_features_like pattern=postgres 2>&1)
+            features_as_user_rc=$?
+            if test "$features_as_user_rc" -eq 0; then echo "UAPI_EXPLICIT_USER_FEATURE_RC_ZERO"; else echo "UAPI_EXPLICIT_USER_FEATURE_RC_NONZERO"; fi
+            case "$features_as_user" in
+              *"\\\"result\\\""*) echo "UAPI_EXPLICIT_USER_FEATURE_JSON_RESULT_TOKEN";;
+              *"not found"*|*"No such file"*) echo "UAPI_EXPLICIT_USER_FEATURE_NOT_FOUND";;
+              *"Permission denied"*|*"Access denied"*) echo "UAPI_EXPLICIT_USER_FEATURE_ACCESS";;
+              "") echo "UAPI_EXPLICIT_USER_FEATURE_NO_OUTPUT";;
+              *) echo "UAPI_EXPLICIT_USER_FEATURE_OTHER";;
+            esac
+                        if command -v pg_isready >/dev/null 2>&1; then
+              echo "PG_ISREADY_BINARY_YES"
+              if PGCONNECT_TIMEOUT=3 timeout 8s pg_isready -q -h 127.0.0.1 -p 5432 >/dev/null 2>&1; then
+                echo "PG_TCP_5432_ACCEPTING"
+              else
+                echo "PG_TCP_5432_NOT_ACCEPTING"
+              fi
+            else echo "PG_ISREADY_BINARY_NO"; fi
+            echo "V11_PERMISSION_DIAG_READONLY_DONE"
+          '
+          echo 'V11_NO_PRODUCTION_WRITE_NO_DATABASE_ENUMERATION_NO_CREDENTIAL_OUTPUT'
