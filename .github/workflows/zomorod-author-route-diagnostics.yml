@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v4
       - name: Configure pinned VPS relay and cPanel identity
         shell: bash
         env:
@@ -74,6 +75,9 @@ jobs:
           target="$public/authors/mojtaba-rozegar"
           echo "DEPLOYED_DJANGO_ROUTE:"
           grep -n -B 2 -A 2 'authors/mojtaba-rozegar' "$route" || true
+          echo "DEPLOYED_URLCONF_SHA=$(sha256sum "$route" | awk '{print $1}')"
+          echo "SOURCE_URLCONF_SHA=$(sha256sum "$GITHUB_WORKSPACE/config/urls.py" | awk '{print $1}')"
+          sed -n '1,18p' "$route"
           if test -e "$target"; then
             echo "PERSIAN_STATIC_TARGET_EXISTS=yes"
             find "$target" -maxdepth 2 -mindepth 1 -printf '%y %p\n' | head -40
