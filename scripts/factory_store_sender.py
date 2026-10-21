@@ -90,10 +90,20 @@ def host_ssh_options(key, known):
             "-o", "ConnectTimeout=12"]
 
 
-def call(command, *, allowed=(0,), timeout=40):
+SAFE_STAGES = frozenset({
+    "status", "prepare", "upload_archive", "upload_manifest", "finalize", "receipt",
+    "consumer_status", "consumer_prepare", "consumer_upload_archive",
+    "consumer_upload_manifest", "consumer_finalize",
+})
+
+
+def call(command, *, allowed=(0,), timeout=40, stage="unknown"):
     completed = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
     if completed.returncode not in allowed:
-        raise RuntimeError("PRODUCT_DELIVERY_COMMAND_FAILED:" + str(completed.returncode))
+        # Never log command arguments, SSH paths, product bytes, stderr or secrets.
+        safe_stage = stage if stage in SAFE_STAGES else "unknown"
+        raise RuntimeError("PRIVATE_DELIVERY_" + safe_stage.upper()
+                           + "_RC_" + str(completed.returncode))
     return completed
 
 
@@ -108,19 +118,19 @@ def deliver(recipe, source, ssh_options, *, dry_run=False):
     if dry_run:
         return {"recipe": recipe, "digest": digest, "status": "dry_run_private_only"}
     check = call(ssh_base + [" ".join(receiver_args + [
-        "status", recipe, digest, "--root", INBOX])], allowed=(0, 1))
+        "status", recipe, digest, "--root", INBOX])], allowed=(0, 1), stage="status")
     if check.returncode == 0:
         return {"recipe": recipe, "digest": digest, "status": "already_received"}
     call(ssh_base + [" ".join(receiver_args + [
-        "prepare", recipe, digest, "--root", INBOX])])
+        "prepare", recipe, digest, "--root", INBOX])], stage="prepare")
     for local, suffix in ((archive, ".zip.partial"), (manifest, ".json.partial")):
         scp = ["scp", "-P", str(PORT)] + ssh_options + [
             str(local), remote + ":" + target + suffix]
-        call(scp, timeout=65)
+        call(scp, timeout=65, stage="upload_archive" if local == archive else "upload_manifest")
     call(ssh_base + [" ".join(receiver_args + [
-        "finalize", recipe, digest, "--root", INBOX])])
+        "finalize", recipe, digest, "--root", INBOX])], stage="finalize")
     receipt = call(ssh_base + [" ".join(receiver_args + [
-        "status", recipe, digest, "--root", INBOX])])
+        "status", recipe, digest, "--root", INBOX])], stage="receipt")
     if "STORE_PRIVATE_RECEIPT_VERIFIED" not in receipt.stdout:
         raise RuntimeError("STORE_RECEIPT_NOT_VERIFIED")
     return {"recipe": recipe, "digest": digest, "status": "received_private"}
@@ -199,20 +209,21 @@ def deliver_consumer(recipe, root, version, ssh_options, *, dry_run=False):
     base=["ssh","-p",str(PORT)]+ssh_options+[remote]
     def received():
         status=call(base+[" ".join(["python3",RECEIVER,
-            "consumer-status",recipe,version,"--root",INBOX])],allowed=(0,1))
+            "consumer-status",recipe,version,"--root",INBOX])],allowed=(0,1),stage="consumer_status")
         return status.returncode==0 and "STORE_CONSUMER_PRIVATE_RECEIPT_VERIFIED" in status.stdout
     if received():
         return {"recipe":recipe,"version":version,"status":"already_received_customer",
                 "package_sha256":meta["package_sha256"]}
     call(base+[" ".join(["python3",RECEIVER,
-        "consumer-prepare",recipe,version,"--root",INBOX])])
+        "consumer-prepare",recipe,version,"--root",INBOX])],stage="consumer_prepare")
     target=INBOX+"/incoming/consumer/"+recipe+"/"+version+"/"
     for local,part in ((archive,"customer-package.zip.partial"),
                        (candidate,"candidate_manifest.json.partial")):
         call(["scp","-P",str(PORT)]+ssh_options+[str(local),remote+":"+target+part],
-             timeout=65)
+             timeout=65,stage="consumer_upload_archive" if local == archive
+             else "consumer_upload_manifest")
     call(base+[" ".join(["python3",RECEIVER,
-        "consumer-finalize",recipe,version,"--root",INBOX])])
+        "consumer-finalize",recipe,version,"--root",INBOX])],stage="consumer_finalize")
     if not received():raise RuntimeError("CONSUMER_SITE_SHA_RECEIPT_NOT_VERIFIED")
     return {"recipe":recipe,"version":version,"status":"received_private_customer",
             "package_sha256":meta["package_sha256"]}
@@ -348,4 +359,8 @@ if __name__ == "__main__":
         sys.exit(main())
     except (ValueError, OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
         print("FACTORY_STORE_DELIVERY_FAILED=" + type(exc).__name__, file=sys.stderr)
+        detail = str(exc) if isinstance(exc, RuntimeError) else ""
+        # Only a fixed step name and numeric exit code may leave the server.
+        if re.fullmatch(r"PRIVATE_DELIVERY_[A-Z_]+_RC_-?[0-9]{1,3}", detail):
+            print("FACTORY_STORE_SAFE_FAILURE=" + detail, file=sys.stderr)
         sys.exit(1)
