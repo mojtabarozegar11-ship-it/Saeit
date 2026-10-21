@@ -137,7 +137,8 @@ jobs:
           assert d["publication_or_payment_enabled"] is False
           assert p.stat().st_mode & 0o077 == 0
           print("FACTORY_EVIDENCE_RECHECKED_CRITERIA=7")
-          print("FACTORY_EVIDENCE_HUMAN_REVIEW_REMAINING=93")
+          print("FACTORY_EVIDENCE_NOT_MACHINE_RECHECKED=93")
+          print("FACTORY_EVIDENCE_INDEPENDENT_REVIEW_PENDING=100")
           print("FACTORY_EVIDENCE_PROFESSIONAL_POINTS=NONE")
           print("FACTORY_EVIDENCE_RELEASE_ALLOWED=false")
           print("FACTORY_EVALUATION_RECEIPT="+str(p))
