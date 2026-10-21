@@ -51,7 +51,7 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           ssh_vps(){ ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 githubops@178.239.147.150 "$@"; }
-          stage="/home/githubops/factory-runtime/operations/ .all40intake-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          stage="/home/githubops/factory-runtime/operations/.all40intake-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           ssh_vps "test ! -e '$stage' && mkdir -m 700 '$stage'"
           for source in scripts/factory_all40_private_activation.py deploy/install_factory_all40_private_activation.sh;do
             name="$(basename "$source")"
@@ -73,6 +73,8 @@ jobs:
           cron=subprocess.check_output(['crontab','-l'],text=True)
           assert cron.count('SAEIT_FACTORY_FORTY_FAMILY_OPERATIONAL_DISPATCH_V1')==1
           print('VPS_ALL40_REAL_PRIVATE_QUEUE_READBACK=PASS')
+          print('VPS_ALL40_FAMILIES_NEEDING_NATIVE_MAKER='+str(d['families_needing_a_native_maker']))
+          print('VPS_ALL40_FULL_MANUFACTURING_NOT_INFERRED_FROM_INTAKE=TRUE')
           print('VPS_ALL40_TECHNICAL_FAMILIES='+str(d['technical_product_families']))
           print('VPS_ALL40_PUBLIC_PAYMENTS=NOT_ENABLED')
           PY
