@@ -1,0 +1,84 @@
+name: Factory Specialist Books and Original Games - premium anti-obsolescence gate
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_reference_depth_game_novelty_gate.py"
+      - "tests/test_factory_reference_depth_game_novelty_gate.py"
+      - ".github/workflows/factory-premium-reference-novelty-gate.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-critical-quality-discrimination:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Execute old-game and underdeveloped-book negative controls
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_reference_depth_game_novelty_gate.py -v
+          echo ELITE_QUALITY_NEGATIVE_CONTROLS=PASS
+      - name: Run F01, F14, F28 product domain discriminator (not superficial technical pass)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/premium-reports"
+          python3 - "$RUNNER_TEMP/premium-reports" <<'PY'
+          import json,sys
+          from pathlib import Path
+          from datetime import date
+          out=Path(sys.argv[1])
+          docs={
+           "legacy-game-new-claim":{
+              "family":"F14","id":"adversarial-legacy-2012",
+              "distribution_claim":"new_original_commercial_product",
+              "game":{"original_release_year":2012,
+                      "core_loop_tags":["base_build","resource_collect","troop_train",
+                                        "raid_attack","clan_war","upgrade_wait"]}},
+           "current-prototype-no-proven-novelty":{
+              "family":"F14","id":"F14-ROOTLINE-draft721-722-pilot",
+              "game":{"original_release_year":date.today().year,
+                      "core_loop_tags":["lane_defense","wave_survival","tower_placement"]}},
+           "small-unsupported-medical-reference":{
+              "family":"F01","id":"adversarial-short-clinical-book",
+              "book":{"type":"clinical","parts":["Overview"],
+                      "chapters":[{"subject":"Introduction","citations":[]}],
+                      "literature_reviewed_through_year":2019}},
+           "scientifically-unverified-calculator":{
+              "family":"F28","id":"F28-GREENHOUSE-PILOT",
+              "simulator":{}}
+          }
+          for key,data in docs.items():
+              (out/(key+".json")).write_text(json.dumps(data,indent=2)+"\n")
+          PY
+          python3 - "$RUNNER_TEMP/premium-reports" <<'PY'
+          import importlib.util,json,sys
+          from pathlib import Path
+          here=Path(sys.argv[1])
+          spec=importlib.util.spec_from_file_location("gate","scripts/factory_reference_depth_game_novelty_gate.py")
+          gate=importlib.util.module_from_spec(spec);spec.loader.exec_module(gate)
+          for candidate in sorted(here.glob("*.json")):
+              if candidate.name.endswith("-verdict.json"):
+                  continue
+              result=gate.examine(json.loads(candidate.read_text()),here)
+              assert result["verdict"]=="BLOCKED_REWORK_REQUIRED"
+              assert result["commercial_release_authorized"] is False
+              assert len(result["blockers"])>=4
+              dest=here/(candidate.stem+"-verdict.json")
+              dest.write_text(json.dumps(result,indent=2,sort_keys=True)+"\n")
+              print("EXPECTED_PRODUCT_REJECTION="+candidate.stem)
+              print("PRODUCT_BLOCKER_COUNT="+str(result["critical_blocker_count"]))
+              for finding in result["blockers"]:
+                  print("DOMAIN_DEFECT="+finding["code"])
+          print("PREMIUM_GATE_REFUSES_LEGACY_AND_SHALLOW_PRODUCT=PASS")
+          PY
+      - name: Retain auditable reject-and-rework evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: premium-quality-old-game-and-specialist-book-rejections
+          path: ${{ runner.temp }}/premium-reports/*-verdict.json
+          retention-days: 30
