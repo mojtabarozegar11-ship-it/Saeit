@@ -57,7 +57,7 @@ contract('MOJ1 escrowed genesis allocations', (accounts) => {
       assert.equal((await token.balanceOf(vaults[i].address)).toString(), amounts[i]);
       assert.equal(await vaults[i].fullyFunded(), true);
       assert.equal(addressFromResult(await vaults[i].beneficiary()), accounts[i + 1]);
-      assert.equal(addressFromResult(await distributor.vaults(i)), vaults[i].address);
+      assert.equal(addressFromResult(await distributor.vaults(i)), addressFromResult(vaults[i].address));
     }
     assert.equal((await token.totalSupply()).toString(), (100_000_000_000n * unit).toString());
   });
