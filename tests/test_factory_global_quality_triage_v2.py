@@ -65,6 +65,42 @@ class GlobalTriageTests(unittest.TestCase):
                           ticket["rework_actions"])
             self.assertFalse(ticket["commercial_release_allowed"])
 
+    def test_genuinely_reauthored_private_edition_enters_strict_100_criteria_review(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,_=self.make(d,"original_source_less")
+            edition="edition_"+"a"*24
+            folder=root/"quality-excellence"/"document-edition-private-stock"/edition
+            folder.mkdir(parents=True)
+            archive=folder/(edition+"-internal-qa.zip")
+            archive.write_bytes(b"standalone accessible private document source package")
+            manifest={"recipe":edition,"qa_status":"passed",
+                      "source_sha256":"b"*64,
+                      "artifact_sha256":hashlib.sha256(archive.read_bytes()).hexdigest(),
+                      "commercial_status":"private_internal_qa_pass_not_published"}
+            (folder/"manufacturing_manifest.json").write_text(json.dumps(manifest))
+            result=m.triage_inventory(root,P,R,"document-edition-cycle")
+            self.assertEqual(result["total_products"],2)
+            self.assertEqual(result["new_document_editions_reentered_qa"],1)
+            self.assertFalse(result["public_release_authorized"])
+            self.assertEqual(result["actual_quality_verified_product_count"],0)
+            row=json.loads((root/"quality-excellence/rework"/edition/"current.json").read_text())
+            self.assertEqual(row["inventory_origin"],"private_document_edition")
+            self.assertEqual(row["quality_group_count"],100)
+            self.assertEqual(row["required_quality_points"],1000)
+            self.assertIn("P0_UNMAPPED_PRODUCT_FAMILY",row["defects"])
+            self.assertFalse(row["commercial_release_allowed"])
+            self.assertFalse(row["premium_quality_approved"])
+
+    def test_symlinked_private_edition_stock_aborts_quality_audit(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,_=self.make(d,"old_source")
+            destination=root/"quality-excellence"
+            destination.mkdir(parents=True)
+            (destination/"document-edition-private-stock").symlink_to(
+                root/"digital-products",target_is_directory=True)
+            with self.assertRaisesRegex(ValueError,"QA_EDITION_STOCK_SYMLINK_UNSAFE"):
+                m.triage_inventory(root,P,R,"unsafe-edition-stock")
+
     def test_inventory_over_budget_must_fail_before_writing_partial_report(self):
         with tempfile.TemporaryDirectory() as d:
             root,_=self.make(d,"first_recipe")
