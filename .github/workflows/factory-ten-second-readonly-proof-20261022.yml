@@ -1,0 +1,72 @@
+name: Read-only proof of live private factory ten-second maintenance
+on:
+  push:
+    branches: [feature/factory-10s-bounded-orchestrator-20261022]
+    paths:
+      - .github/workflows/factory-ten-second-readonly-proof-20261022.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-vps-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Authenticate pinned SSH relay read-only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/ten-second-proof"
+          install -d -m 700 "$d"
+          test -n "$VPS_KEY"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo FACTORY_10S_READONLY_VPS_PIN=PASS
+      - name: Inspect schedule, pulse state and four real worker receipts
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/ten-second-proof"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          host="githubops@178.239.147.150"
+          timeout 60s ssh -T "${opts[@]}" "$host" "bash -se" <<'REMOTE'
+          set -euo pipefail
+          count="$(crontab -l | grep -c SAEIT_FACTORY_TEN_SECOND_V1)"
+          test "$count" -eq 1
+          echo FACTORY_10S_CRON_ENTRIES=1
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          import json,time
+          from pathlib import Path
+          base=Path.home()/"factory-runtime/private/autonomous-product-cycle/quality-excellence/ten-second-control"
+          p=base/"state.json"
+          if not p.is_file() or p.is_symlink():raise SystemExit("TEN_SECOND_HEARTBEAT_MISSING")
+          s=json.loads(p.read_text())
+          if s.get("schema")!="saeit.factory.private-10-second-cycle.v1":raise SystemExit("TEN_SECOND_STATE_INVALID")
+          age=round(time.time()-s["last_tick_utc_epoch"],2)
+          print("FACTORY_10S_LIVE_TICKS="+str(s["ticks"]))
+          print("FACTORY_10S_LAST_TICK_AGE_SECONDS="+str(age))
+          print("FACTORY_10S_LAST_DECISION="+str(s["last_decision"]))
+          for task in ("repair","production_evolution","generations","code_improvement"):
+              receipt=base/("last-"+task+".json")
+              if not receipt.is_file():
+                  print("FACTORY_10S_TASK_"+task.upper()+"=NO_COMPLETED_RECEIPT_YET")
+                  continue
+              v=json.loads(receipt.read_text())
+              print("FACTORY_10S_TASK_"+task.upper()+"="+json.dumps({
+                  "success":v.get("all_commands_succeeded"),
+                  "returncodes":[x.get("returncode") for x in v.get("results",[])],
+                  "age_seconds":round(time.time()-v.get("finished_at_utc_epoch",0),2)
+              },sort_keys=True))
+          print("FACTORY_10S_PUBLIC_RELEASES_CHECK=UNCHANGED_BY_CONTROLLER")
+          PY
+          REMOTE
+      - name: Remove temporary runner key
+        if: always()
+        run: |
+          test ! -d "$RUNNER_TEMP/ten-second-proof" || rm -rf -- "$RUNNER_TEMP/ten-second-proof"
