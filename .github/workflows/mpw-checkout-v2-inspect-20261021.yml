@@ -120,6 +120,24 @@ jobs:
                    'script_count':len(re.findall(r'<script\b',raw)),
                    'forms':len(re.findall(r'<form\b',raw))}))
           PY
+      - name: Read only the 373-byte legacy checkout template and base extension block names
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/mpw-csp-ssh/config" saeit-cpanel python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          root=Path('/home/zomorod2/Saeit-staging')
+          checkout=root/'core/templates/brands/mojplaywin/checkout.html'
+          base=root/'core/templates/brands/mojplaywin/base.html'
+          text=checkout.read_text('utf8','replace')
+          if len(text)>1200 or any(x in text.lower() for x in ('private_key','secret_key','password=')):
+              raise RuntimeError('Unexpected checkout content, refuse to print')
+          print('MPWF_LEGACY_CHECKOUT_SOURCE='+json.dumps(text))
+          text=base.read_text('utf8','replace')
+          blocks=re.findall(r'\{%\s*block\s+([a-zA-Z_][a-zA-Z_0-9]*)\s*%\}',text)
+          print('MPWF_LEGACY_BASE_BLOCKS='+json.dumps(blocks))
+          PY
       - name: Remove temporary keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-csp-ssh"
