@@ -166,6 +166,22 @@ jobs:
           print('MOJ1_WALLET_PRIVATE_FILE_MODE=0600')
           print('MOJ1_WALLET_PRIVATE_KEY_EXPORTED=NO')
           print('MOJ1_WALLET_MAINNET_BROADCAST=NEVER')
-          print('MOJ1_WALLET_TEST_TRX_FUNDING=NOT_YET_VERIFIED')
+          # Public Shasta account lookup only; never signs or broadcasts.
+          try:
+              import urllib.request
+              body = json.dumps({'address': hex_addr}).encode('utf-8')
+              req = urllib.request.Request(
+                  'https://api.shasta.trongrid.io/wallet/getaccount',
+                  data=body, headers={'Content-Type': 'application/json'}, method='POST')
+              with urllib.request.urlopen(req, timeout=20) as answer:
+                  chain_data = json.load(answer)
+              if isinstance(chain_data, dict) and not chain_data.get('Error'):
+                  sun = int(chain_data.get('balance', 0))
+                  print('MOJ1_WALLET_SHASTA_BALANCE_SUN=' + str(sun))
+                  print('MOJ1_WALLET_SHASTA_FUNDING=' + ('FUNDED' if sun > 0 else 'UNFUNDED'))
+              else:
+                  print('MOJ1_WALLET_SHASTA_FUNDING=RPC_UNVERIFIED')
+          except Exception:
+              print('MOJ1_WALLET_SHASTA_FUNDING=RPC_UNVERIFIED')
           PY_WALLET
           REMOTE
