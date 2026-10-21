@@ -51,7 +51,7 @@ def space(path):
     return statv.f_bavail*statv.f_frsize
 
 
-def recover(stream, directory):
+def recover(stream, directory, *, quarantine_absolute_links=False):
     base=Path(directory).resolve()
     if not base.is_dir() or base.is_symlink():
         raise ValueError("missing private restore directory")
@@ -62,7 +62,8 @@ def recover(stream, directory):
             "regular_files_restored":0,"directories_restored":0,
             "symlinks_restored":0,"hardlinks_restored":0,
             "regular_bytes_restored":0,"root_count_restored":0,
-            "restore_complete":False,"production_modified":False}
+            "restore_complete":False,"regular_files_recovered":False,
+            "absolute_links_quarantined":0,"production_modified":False}
     present=set()
     links=[]
     seen=set()
@@ -111,7 +112,15 @@ def recover(stream, directory):
                 raise ValueError("special file member not permitted in sandbox")
     # Never permit links to become parents before all ordinary files exist.
     for parts,target,is_symlink in links:
-        if not isinstance(target,str) or target.startswith("/"):
+        if not isinstance(target,str):
+            raise ValueError("invalid archive link target")
+        if target.startswith("/"):
+            # An absolute link can escape the isolated sandbox and must never
+            # become an actual filesystem symlink. Opt-in quarantine restores
+            # the regular file payload but does NOT certify full recovery.
+            if quarantine_absolute_links:
+                result["absolute_links_quarantined"]+=1
+                continue
             raise ValueError("absolute archive link cannot be restored into sandbox")
         candidate=posixpath.normpath(
             posixpath.join(*(parts[:-1] if is_symlink else ()),target)
@@ -139,15 +148,19 @@ def recover(stream, directory):
     while stream.read(131072):
         pass
     result["root_count_restored"]=len(present)
-    result["restore_complete"]=True
+    result["regular_files_recovered"]=True
+    result["restore_complete"]=result["absolute_links_quarantined"]==0
+    result["release_permitted"]=False
     return result
 
 
 if __name__=="__main__":
     try:
-        if len(sys.argv)!=2:
-            raise ValueError("expected one isolated temporary directory")
-        print(json.dumps(recover(sys.stdin.buffer,sys.argv[1]),sort_keys=True))
+        if len(sys.argv) not in (2,3) or (len(sys.argv)==3 and sys.argv[2]!="--quarantine-absolute-links"):
+            raise ValueError("expected isolated temporary directory and optional quarantine flag")
+        report=recover(sys.stdin.buffer,sys.argv[1],
+                       quarantine_absolute_links=len(sys.argv)==3)
+        print(json.dumps(report,sort_keys=True))
     except Exception:
         print("SANDBOX_FILE_RECOVERY_FAILED_NO_RELEASE",file=sys.stderr)
         raise SystemExit(1)
