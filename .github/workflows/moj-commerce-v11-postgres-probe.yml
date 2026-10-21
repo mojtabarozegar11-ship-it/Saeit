@@ -89,11 +89,11 @@ jobs:
               fi
               class=other
               case "$result" in
-                *permission*|*Permission*|*denied*|*Denied*|*not\\ permitted*) class=permission ;;
-                *disabled*|*not\\ enabled*|*not\\ available*) class=feature_disabled ;;
-                *invalid*|*Invalid*|*unknown*|*Unknown*|*not\\ found*) class=unsupported ;;
+                *permission*|*Permission*|*denied*|*Denied*|*not\ permitted*) class=permission ;;
+                *disabled*|*not\ enabled*|*not\ available*) class=feature_disabled ;;
+                *invalid*|*Invalid*|*unknown*|*Unknown*|*not\ found*) class=unsupported ;;
               esac
-              printf "CPANEL_PG_UAPI_%s_EXIT_%s_CLASS_%s\\n" "$mode" "$result_code" "$class"
+              printf "CPANEL_PG_UAPI_%s_EXIT_%s_CLASS_%s\n" "$mode" "$result_code" "$class"
             done
           '
           # Official read-only cPanel UAPI feature check. Do not enumerate any database.
