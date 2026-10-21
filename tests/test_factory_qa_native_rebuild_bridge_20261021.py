@@ -115,6 +115,26 @@ class QARebuildTests(unittest.TestCase):
         self.assertEqual(len(proofs),1)
         self.assertEqual(json.loads(proofs[0].read_text())["source_root_slot"],1)
 
+    def test_real_factory_layout_autodiscovers_installed_native_sources(self):
+        # Mirror the VPS roots used by the cron manufacturer and QA bridge.
+        factory_base=self.root/"factory-runtime"
+        self.root=factory_base/"private"/"autonomous-product-cycle"
+        self.source=self.root/"generated-product-recipes"
+        self.source.mkdir(parents=True)
+        self.quality=self.root/"quality-excellence/production-workorders"
+        self.quality.mkdir(parents=True)
+        item,original=self.seed(name="farm_enterprise_economics")
+        native=factory_base/"operations/autonomous-product-runtime/product_recipes"
+        native.mkdir(parents=True)
+        target=native/item.name
+        item.rename(target)
+        with patch.object(m,"load_maker",return_value=FakeMaker):
+            result=m.execute(self.root,self.source,FILE,limit=2)
+        self.assertEqual(result["verified_source_roots"],2)
+        self.assertEqual(result["source_root_hits"],[0,1])
+        self.assertEqual(result["technical_candidates_verified"],1)
+        self.assertEqual(result["missing_source"],0)
+
     def test_duplicate_recipe_sources_refuse_ambiguous_rebuilding(self):
         source,original=self.seed(name="synth_abc123")
         other=self.root/"canonical-factory-runtime"/"product_recipes"
