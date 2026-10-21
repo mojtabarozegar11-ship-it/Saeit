@@ -90,6 +90,79 @@ class QARebuildTests(unittest.TestCase):
         with patch.object(m,"load_maker",side_effect=ValueError("not installed")):
             with self.assertRaises(ValueError):m.execute(self.root,self.source,FILE)
         self.assertEqual(saved,(original/"manufacturing_manifest.json").read_bytes())
+    def test_static_installed_recipe_is_rebuilt_from_second_verified_root(self):
+        static=self.root/"canonical-factory-runtime"/"product_recipes"
+        static.mkdir(parents=True)
+        source,original=self.seed(name="farm_enterprise_economics")
+        (static/source.name).mkdir()
+        (static/source.name/"README.md").write_bytes(source.joinpath("README.md").read_bytes())
+        source.joinpath("README.md").unlink()
+        source.rmdir()
+        before=(original/"manufacturing_manifest.json").read_bytes()
+        with patch.object(m,"load_maker",return_value=FakeMaker):
+            first=m.execute(self.root,self.source,FILE,limit=2,
+                            additional_source_roots=[static])
+            again=m.execute(self.root,self.source,FILE,limit=2,
+                            additional_source_roots=[static])
+        self.assertEqual(first["sources_available"],1)
+        self.assertEqual(first["missing_source"],0)
+        self.assertEqual(first["source_root_hits"],[0,1])
+        self.assertEqual(first["technical_candidates_verified"],1)
+        self.assertEqual(FakeMaker.calls,1)
+        self.assertEqual(again["rebuild_attempted"],0)
+        self.assertEqual(before,(original/"manufacturing_manifest.json").read_bytes())
+        proofs=list((self.root/"quality-excellence"/"native-rebuild-receipts"/source.name).glob("source-*.json"))
+        self.assertEqual(len(proofs),1)
+        self.assertEqual(json.loads(proofs[0].read_text())["source_root_slot"],1)
+
+    def test_real_factory_layout_autodiscovers_installed_native_sources(self):
+        # Mirror the VPS roots used by the cron manufacturer and QA bridge.
+        factory_base=self.root/"factory-runtime"
+        self.root=factory_base/"private"/"autonomous-product-cycle"
+        self.source=self.root/"generated-product-recipes"
+        self.source.mkdir(parents=True)
+        self.quality=self.root/"quality-excellence/production-workorders"
+        self.quality.mkdir(parents=True)
+        item,original=self.seed(name="farm_enterprise_economics")
+        native=factory_base/"operations/autonomous-product-runtime/product_recipes"
+        native.mkdir(parents=True)
+        target=native/item.name
+        item.rename(target)
+        with patch.object(m,"load_maker",return_value=FakeMaker):
+            result=m.execute(self.root,self.source,FILE,limit=2)
+        self.assertEqual(result["verified_source_roots"],2)
+        self.assertEqual(result["source_root_hits"],[0,1])
+        self.assertEqual(result["technical_candidates_verified"],1)
+        self.assertEqual(result["missing_source"],0)
+
+    def test_duplicate_recipe_sources_refuse_ambiguous_rebuilding(self):
+        source,original=self.seed(name="synth_abc123")
+        other=self.root/"canonical-factory-runtime"/"product_recipes"
+        other.mkdir(parents=True)
+        (other/source.name).mkdir()
+        (other/source.name/"README.md").write_bytes(b"unrelated")
+        with patch.object(m,"load_maker",return_value=FakeMaker):
+            result=m.execute(self.root,self.source,FILE,
+                             additional_source_roots=[other])
+        self.assertEqual(result["duplicate_recipe_roots_blocked"],1)
+        self.assertEqual(result["technical_candidates_verified"],0)
+        self.assertEqual(FakeMaker.calls,0)
+
+    def test_unsafe_or_duplicate_extra_roots_fail_before_rework(self):
+        self.seed()
+        bad=self.root/"foreign";bad.mkdir()
+        alias=self.root/"unsafe-link"
+        alias.symlink_to(bad,target_is_directory=True)
+        with patch.object(m,"load_maker",return_value=FakeMaker):
+            with self.assertRaisesRegex(ValueError,"UNSAFE_OR_MISSING"):
+                m.execute(self.root,self.source,FILE,additional_source_roots=[alias])
+            with self.assertRaisesRegex(ValueError,"DUPLICATE_SOURCE_ROOT"):
+                m.execute(self.root,self.source,FILE,additional_source_roots=[self.source])
+            with self.assertRaisesRegex(ValueError,"BOUNDED_SOURCE_ROOTS"):
+                m.execute(self.root,self.source,FILE,
+                          additional_source_roots=[bad,bad,bad])
+        self.assertEqual(FakeMaker.calls,0)
+
     def test_untrusted_source_symlink_is_not_executed(self):
         original=self.root/"foreign";original.mkdir()
         (self.source/"synth_abc123").symlink_to(original,target_is_directory=True)
