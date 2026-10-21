@@ -48,3 +48,15 @@ Do not claim 100/100 commercial or production readiness from synthetic verificat
 - No live site, payment, production database, or wallet transaction was changed.
 
 **Scope limit:** These are synthetic SQLite fail-closed tests, not a production recovery drill, real customer data attestation or 100/100 readiness.
+
+
+## Follow-up authorized access diagnostic (2026-10-21)
+
+- New **read-only** cPanel feature eligibility probe: `Features list_features_like pattern=postgres` via the existing pinned GitHub Actions → VPS → cPanel SSH relay.
+- Passing workflow as an infrastructure/recovery job (not successful PostgreSQL provisioning): https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39645678769
+- Observed markers: `CPANEL_UAPI_POSTGRES_READONLY_CALL_FAILED`, `CPANEL_LOCAL_PG_ACCOUNT_AUTH_NOT_AVAILABLE`, and `CPANEL_POSTGRES_FEATURE_QUERY_NO_JSON`.
+- Interpret conservatively: SSH access succeeds; read-only cPanel PostgreSQL UAPI call does **not** return usable status through the currently configured SSH account. This does **not** distinguish a disabled WHM PostgreSQL feature from a UAPI invocation/hosting restriction, and it does not prove PostgreSQL is absent.
+- Prior history also recorded a PostgreSQL connection rejected by `pg_hba.conf` on this hosting account (2026-09-25); that is not evidence of a working staging PostgreSQL credential.
+- No existing databases were enumerated, no connection parameters or secrets were extracted, and no PostgreSQL database or role was created.
+- The synthetic-only SQLite backup/restore and repeat-overwrite denial passed again; do not conflate this with PostgreSQL acceptance.
+- Authorized next check: in the account's cPanel UI, determine whether **Databases → PostgreSQL Databases / PostgreSQL Database Wizard** is available. If not present, the hosting administrator must assess WHM PostgreSQL installation and feature entitlement. If available, provision a dedicated stage-only database and role through that interface; do not reuse production credentials.
