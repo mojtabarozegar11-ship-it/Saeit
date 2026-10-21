@@ -2,7 +2,7 @@ name: MojPlayWin synthetic cPanel to VPS stream path probe (no site writes)
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/mojplaywin-pinned-stream-synthetic-probe-20261021.yml", "scripts/mojplaywin_backup_source_firstbyte_probe.py"]
+    paths: [".github/workflows/mojplaywin-pinned-stream-synthetic-probe-20261021.yml", "scripts/mojplaywin_backup_source_firstbyte_probe.py", "scripts/mojplaywin_gpg_stream_synthetic_stdin_probe.py"]
 permissions: {contents: read}
 concurrency:
   group: mojplaywin-synthetic-stream-diagnostic-20261021
@@ -97,4 +97,20 @@ jobs:
           echo "SOURCE_CONTENT_TRANSFERRED_TO_RUNNER=FALSE"
           echo "SOURCE_OR_PRODUCTION_PERSISTENT_WRITES=FALSE"
           test "$failures" -eq 0
+      - name: Encrypt and round-trip 8MiB synthetic cPanel stream in VPS temporary directory only
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_gpg_stream_synthetic_stdin_probe.py
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          encrypt64="$(base64 -w0 scripts/mojplaywin_backup_encrypt_vps_gpg.py)"
+          probe64="$(base64 -w0 scripts/mojplaywin_gpg_stream_synthetic_stdin_probe.py)"
+          python_call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
+          source_py='import os,sys;o=sys.stdout.buffer;[o.write(os.urandom(131072)) for _ in range(64)];o.write(bytes([10])+b"-- MJWP-RECOVERY-20261017-COMPLETE-F91D7C40 --"+bytes([10]));o.flush()'
+          timeout 125s ssh -T -F "$d/config" saeit-cpanel "python3 -c '$source_py'" |
+            timeout 125s ssh -T -F "$d/config" saeit-vps "python3 -c '$python_call' '$probe64' '$encrypt64'"
+          echo "GPG_PROBE_DID_NOT_USE_PRODUCTION_FILES_OR_KEYS=TRUE"
+          echo "PRODUCTION_BACKUP_OR_DEPLOY_ATTEMPTED=FALSE"
+
 
