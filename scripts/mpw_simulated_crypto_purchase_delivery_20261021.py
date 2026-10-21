@@ -79,6 +79,7 @@ order=FakeOrder()
 class Item:
  def __init__(self):
   self.pk=104923
+  self.id=self.pk
   self.order=order
   self.product=fake_product
 item=Item()
