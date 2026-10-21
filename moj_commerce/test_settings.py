@@ -39,3 +39,5 @@ MOJ_COMMERCE_REQUIRE_FILE_PRESENT = True
 MOJ_COMMERCE_TRX_RATE_PROVIDER = None
 # Monitoring is read-only, no schedule, no worker and no live processing.
 MOJ_COMMERCE_MONITOR_STALE_SECONDS = 300
+# No automatic operational mutation; opt-in recovery command must pass --apply.
+MOJ_COMMERCE_RECOVERY_ENABLED = False
