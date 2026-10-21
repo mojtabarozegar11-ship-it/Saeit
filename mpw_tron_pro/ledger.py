@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from .core import CheckoutError, ExpectedTransfer, QUOTE_TTL_MS, sun_quote, tron_address_hex, verify_finalized_trx
+from .core import CheckoutError, ExpectedTransfer, QUOTE_TTL_MS, sun_quote, tron_address_hex, verify_finalized_trx, inspect_finalized_trx
 
 ORDER_ID = re.compile(r'^[A-Za-z0-9_-]{10,80}$')
 
@@ -39,6 +39,30 @@ CREATE TABLE IF NOT EXISTS invoices (
     paid_ms INTEGER
 );
 CREATE INDEX IF NOT EXISTS ix_invoice_status ON invoices(status, expires_ms);
+CREATE TABLE IF NOT EXISTS payment_observations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_id INTEGER NOT NULL REFERENCES invoices(id),
+    txid TEXT NOT NULL UNIQUE,
+    amount_sun INTEGER NOT NULL CHECK(amount_sun > 0),
+    kind TEXT NOT NULL CHECK(kind IN ('underpaid','overpaid')),
+    block_number INTEGER NOT NULL,
+    block_ms INTEGER NOT NULL,
+    recorded_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_observation_invoice ON payment_observations(invoice_id, id);
+CREATE TABLE IF NOT EXISTS invoice_verify_attempts (
+    invoice_id INTEGER NOT NULL REFERENCES invoices(id),
+    requested_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_verify_attempts ON invoice_verify_attempts(invoice_id, requested_ms);
+CREATE TABLE IF NOT EXISTS scan_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recorded_ms INTEGER NOT NULL,
+    success INTEGER NOT NULL CHECK(success IN (0,1)),
+    scanned INTEGER NOT NULL CHECK(scanned >= 0),
+    settled INTEGER NOT NULL CHECK(settled >= 0),
+    failures INTEGER NOT NULL CHECK(failures >= 0)
+);
 '''
 
 
@@ -129,6 +153,105 @@ class InvoiceLedger:
             row = db.execute('SELECT * FROM invoices WHERE bearer_hash=?',
                              (token_digest(bearer),)).fetchone()
             return dict(row) if row else None
+
+    def by_order(self, order_id: str) -> dict | None:
+        if not isinstance(order_id, str) or not ORDER_ID.fullmatch(order_id):
+            return None
+        with self._connect() as db:
+            row = db.execute('SELECT * FROM invoices WHERE merchant_order_id=?', (order_id,)).fetchone()
+            return dict(row) if row else None
+
+    def record_scan_run(self, counts: dict, *, now_ms: int | None = None) -> None:
+        """Persist scanner liveness, not a fabricated payment success signal."""
+        now = int(time.time() * 1000) if now_ms is None else now_ms
+        scanned = counts['scanned']; settled = counts['settled']
+        failures = counts['failed_scans'] + counts['requires_review']
+        if any(type(n) is not int or n < 0 for n in (now,scanned,settled,failures)):
+            raise CheckoutError('Invalid scan counters')
+        success = int(failures == 0)
+        with self._connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            db.execute('INSERT INTO scan_runs(recorded_ms,success,scanned,settled,failures) VALUES (?,?,?,?,?)',
+                       (now,success,scanned,settled,failures))
+            # Bound unneeded diagnostic history; retain latest 500 runs.
+            db.execute('DELETE FROM scan_runs WHERE id NOT IN (SELECT id FROM scan_runs ORDER BY id DESC LIMIT 500)')
+            db.commit()
+
+    def monitoring(self, *, now_ms: int | None = None) -> str:
+        now = int(time.time() * 1000) if now_ms is None else now_ms
+        with self._connect() as db:
+            last = db.execute('SELECT recorded_ms,success FROM scan_runs ORDER BY id DESC LIMIT 1').fetchone()
+        if last is None:
+            return 'not_configured'
+        if now - last['recorded_ms'] > 180000 or now < last['recorded_ms'] - 15000:
+            return 'stale'
+        if last['success'] != 1:
+            return 'degraded'
+        return 'running'
+
+    def public_state(self, invoice: dict, *, now_ms: int | None = None) -> dict:
+        """Buyer-visible settlement state from final proof, never browser claims."""
+        now = int(time.time() * 1000) if now_ms is None else now_ms
+        if invoice['status'] == 'paid':
+            status = 'paid'
+        else:
+            with self._connect() as db:
+                review = db.execute('''SELECT kind, amount_sun FROM payment_observations
+                   WHERE invoice_id=? ORDER BY id DESC LIMIT 1''', (invoice['id'],)).fetchone()
+            status = review['kind'] if review else ('expired' if now > invoice['expires_ms'] else 'pending')
+        return {'status': status, 'expires_ms': invoice['expires_ms'],
+                'server_now_ms': now, 'order_id': invoice['merchant_order_id'],
+                'network': 'tron-mainnet', 'currency': 'TRX',
+                'payment_confirmed': status == 'paid',
+                'fulfillment': 'not_integrated', 'monitoring': self.monitoring(now_ms=now)}
+
+    def allow_verification(self, invoice_id: int, *, now_ms: int | None = None) -> bool:
+        """Bound invoice-triggered RPC calls: 4/minute, 24/hour."""
+        now = int(time.time() * 1000) if now_ms is None else now_ms
+        with self._connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            db.execute('DELETE FROM invoice_verify_attempts WHERE requested_ms <= ?', (now - 3600000,))
+            minute = db.execute('SELECT COUNT(*) FROM invoice_verify_attempts WHERE invoice_id=? AND requested_ms>?',
+                                (invoice_id, now - 60000)).fetchone()[0]
+            hour = db.execute('SELECT COUNT(*) FROM invoice_verify_attempts WHERE invoice_id=? AND requested_ms>?',
+                              (invoice_id, now - 3600000)).fetchone()[0]
+            if minute >= 4 or hour >= 24:
+                db.rollback()
+                return False
+            db.execute('INSERT INTO invoice_verify_attempts(invoice_id,requested_ms) VALUES (?,?)', (invoice_id, now))
+            db.commit()
+            return True
+
+    def record_mismatched_payment(self, invoice_id: int, txid: str, tx: dict, receipt: dict) -> dict:
+        """Record an authenticated transfer as manual review, never mark paid."""
+        if type(invoice_id) is not int or invoice_id <= 0:
+            raise CheckoutError('Invalid invoice')
+        with self._connect() as db:
+            inv = db.execute('SELECT * FROM invoices WHERE id=?', (invoice_id,)).fetchone()
+        if inv is None:
+            raise CheckoutError('Invoice missing')
+        expected = ExpectedTransfer(txid, inv['address'], inv['amount_sun'], inv['issued_ms'], inv['expires_ms'])
+        proof = inspect_finalized_trx(tx, receipt, expected)
+        if proof.amount_sun == expected.amount_sun:
+            raise CheckoutError('Exact payment should use settlement flow')
+        kind = 'underpaid' if proof.amount_sun < expected.amount_sun else 'overpaid'
+        with self._connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            # Verified observation is independent of credit: no automatic top-up aggregation.
+            current = db.execute('SELECT status,address,amount_sun FROM invoices WHERE id=?', (invoice_id,)).fetchone()
+            if current is None or current['status'] != 'pending' or current['address'] != proof.recipient or current['amount_sun'] != expected.amount_sun:
+                db.rollback()
+                raise CheckoutError('Invoice changed while recording mismatch')
+            present = db.execute('SELECT invoice_id FROM payment_observations WHERE txid=?', (txid,)).fetchone()
+            if present is not None:
+                db.rollback()
+                if present['invoice_id'] != invoice_id:
+                    raise CheckoutError('Payment already assigned elsewhere')
+                return {'status': kind, 'amount_sun': proof.amount_sun, 'new': False}
+            db.execute('''INSERT INTO payment_observations(invoice_id,txid,amount_sun,kind,block_number,block_ms,recorded_ms)
+                VALUES(?,?,?,?,?,?,?)''', (invoice_id,txid,proof.amount_sun,kind,proof.block_number,proof.block_ms,int(time.time()*1000)))
+            db.commit()
+        return {'status': kind, 'amount_sun': proof.amount_sun, 'new': True}
 
     def apply_proof(self, bearer: str, txid: str, tx: dict, receipt: dict) -> dict:
         invoice = self.by_token(bearer)

@@ -14,11 +14,11 @@ import secrets
 import time
 from decimal import Decimal
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlencode
 from wsgiref.simple_server import make_server
 
-from .core import CheckoutError, TXID_PATTERN
-from .ledger import InvoiceLedger
+from .core import CheckoutError, TXID_PATTERN, tron_address_hex
+from .ledger import InvoiceLedger, ORDER_ID
 from .pricing import usd_per_trx
 from .rpc import finalized_records
 
@@ -76,6 +76,16 @@ def qr_markup(address: str | None) -> str:
         return '<div class="qr-placeholder">COPY ADDRESS</div>'
 
 
+def trust_wallet_payment_link(address: str, amount_sun: int) -> str:
+    """Official Trust Wallet payment deeplink. Never embed private keys or payment claims."""
+    tron_address_hex(address)
+    if type(amount_sun) is not int or not 0 < amount_sun <= 10**13:
+        raise CheckoutError('Invalid TRX amount')
+    amount = format(Decimal(amount_sun) / Decimal(1_000_000), '.6f')
+    return 'https://link.trustwallet.com/send?' + urlencode({
+        'asset': 'c195', 'address': address, 'amount': amount})
+
+
 def render_checkout(invoice: dict | None, *, token='', preview=False):
     if preview:
         data = {'product_title': 'Premium Digital Collection', 'usd': '4.00',
@@ -87,9 +97,13 @@ def render_checkout(invoice: dict | None, *, token='', preview=False):
         data = invoice
     amount = f"{Decimal(data['amount_sun']) / Decimal(1_000_000):.6f}" if not preview else '—'
     expires = data['expires_ms']
+    wallet_ready = (not preview and bool(data['address']) and data['status'] == 'pending'
+                    and int(time.time()*1000) <= expires)
+    wallet_link = trust_wallet_payment_link(data['address'], data['amount_sun']) if wallet_ready else '#'
     cfg = {'preview': preview, 'token': token if not preview else '',
            'address': data['address'], 'amount': amount, 'expires': expires,
-           'status': data['status']}
+           'status': data['status'], 'amountSun': data['amount_sun'],
+           'serverNow': int(time.time()*1000), 'monitoring': data.get('monitoring','not_configured')}
     config = json.dumps(cfg, separators=(',', ':'), ensure_ascii=False).replace('<', '\\u003c')
     values = {
         'TRX_AMOUNT': escape(amount), 'USD_AMOUNT': escape(data['usd']),
@@ -97,10 +111,16 @@ def render_checkout(invoice: dict | None, *, token='', preview=False):
         'PRODUCT_TITLE': escape(data['product_title']),
         'QR_MARKUP': qr_markup(data['address']),
         'INVOICE_JSON': config, 'TIME_TEXT': 'PREVIEW' if preview else '10:00',
-        'COPY_DISABLED': 'disabled' if preview else '',
+        'COPY_DISABLED': 'disabled' if not wallet_ready else '',
         'VERIFY_DISABLED': 'disabled' if preview or data['status'] == 'paid' else '',
+        'TRUST_URL': escape(wallet_link),
+        'TRUST_DISABLED': 'aria-disabled="true" tabindex="-1"' if not wallet_ready else '',
+        'WALLET_DISABLED': 'disabled' if not wallet_ready else '',
         'INIT_MESSAGE': 'PREVIEW ONLY — DO NOT SEND FUNDS. No live invoice exists.' if preview else (
-            'Payment confirmed on the TRON blockchain.' if data['status'] == 'paid' else
+            'Payment confirmed on the TRON blockchain. Fulfillment is handled by merchant store.' if data['status'] == 'paid' else
+            'Amount mismatch found in a finalized transfer. Contact support; do not pay again.'
+            if data['status'] in ('underpaid','overpaid') else
+            'Invoice expired. Do not begin a new transfer.' if data['status']=='expired' else
             'Waiting for the network to confirm a payment to this invoice address.'),
     }
     content = (ASSETS / 'checkout.html').read_text('utf8')
@@ -124,9 +144,9 @@ class TronGatewayApp:
             raise CheckoutError('A strong merchant-only secret is required')
         self.ledger.initialize()
 
-    def response(self, start, code, body, mime='application/json; charset=utf-8'):
+    def response(self, start, code, body, mime='application/json; charset=utf-8', extra_headers=()):
         raw = body if isinstance(body, bytes) else body.encode('utf8')
-        start(code, HEADERS + [('Content-Type', mime), ('Content-Length', str(len(raw)))])
+        start(code, HEADERS + list(extra_headers) + [('Content-Type', mime), ('Content-Length', str(len(raw)))])
         return [raw]
 
     def json_response(self, start, code, payload):
@@ -142,6 +162,20 @@ class TronGatewayApp:
             # Reverse-proxy MUST set wsgi.url_scheme from trusted TLS state, never client-supplied XFP.
             if environ.get('wsgi.url_scheme') != 'https':
                 return self.json_response(start, '403 Forbidden', {'error': 'HTTPS required'})
+            # Store-side, merchant-only read endpoint for durable fulfillment integration.
+            merchant_match = re.fullmatch(r'/api/merchant/orders/([A-Za-z0-9_-]{10,80})', path)
+            if method == 'GET' and merchant_match:
+                header = environ.get('HTTP_AUTHORIZATION', '')
+                if not secrets.compare_digest(header.encode('utf8'), ('Bearer ' + self.merchant_key).encode('utf8')):
+                    return self.json_response(start, '401 Unauthorized', {'error': 'Merchant authentication required'})
+                order = self.ledger.by_order(merchant_match.group(1))
+                if order is None:
+                    return self.json_response(start, '404 Not Found', {'error': 'Order not found'})
+                public = self.ledger.public_state(order)
+                return self.json_response(start, '200 OK', {**public, 'txid': order['txid'] if public['payment_confirmed'] else None,
+                    'block_number': order['block_number'] if public['payment_confirmed'] else None,
+                    'paid_ms': order['paid_ms'] if public['payment_confirmed'] else None,
+                    'amount_sun': order['amount_sun'], 'usd': order['usd']})
             if method == 'POST' and path == '/api/merchant/invoices':
                 header = environ.get('HTTP_AUTHORIZATION', '')
                 if not secrets.compare_digest(header.encode('utf8'), ('Bearer ' + self.merchant_key).encode('utf8')):
@@ -159,16 +193,19 @@ class TronGatewayApp:
                 invoice = self.ledger.by_token(match.group(1))
                 if not invoice:
                     return self.json_response(start, '404 Not Found', {'error': 'Invoice not found'})
-                return self.response(start, '200 OK', render_checkout(invoice, token=match.group(1)), 'text/html; charset=utf-8')
+                buyer_state = self.ledger.public_state(invoice)
+                return self.response(start, '200 OK', render_checkout({**invoice, 'status':buyer_state['status'],
+                    'monitoring':buyer_state['monitoring']},
+                    token=match.group(1)), 'text/html; charset=utf-8')
             match = re.fullmatch(r'/api/status/([A-Za-z0-9_-]{40,100})', path)
             if method == 'GET' and match:
                 invoice = self.ledger.by_token(match.group(1))
                 if not invoice:
                     return self.json_response(start, '404 Not Found', {'error': 'Invoice not found'})
-                public_status = 'paid' if invoice['status'] == 'paid' else (
-                    'expired' if int(time.time() * 1000) > invoice['expires_ms'] else 'pending')
-                return self.json_response(start, '200 OK', {'status': public_status,
-                    'expires_ms': invoice['expires_ms'], 'order_id': invoice['merchant_order_id']})
+                state = self.ledger.public_state(invoice)
+                if state['payment_confirmed']:
+                    state['txid'] = invoice['txid']
+                return self.json_response(start, '200 OK', state)
             match = re.fullmatch(r'/api/verify/([A-Za-z0-9_-]{40,100})', path)
             if method == 'POST' and match:
                 origin = environ.get('HTTP_ORIGIN')
@@ -181,10 +218,30 @@ class TronGatewayApp:
                 txid = data.get('txid')
                 if not isinstance(txid, str) or not TXID_PATTERN.fullmatch(txid):
                     raise CheckoutError('Provide a valid 64-character transaction hash')
+                if invoice['status'] == 'paid':
+                    if secrets.compare_digest(invoice['txid'] or '', txid):
+                        return self.json_response(start, '200 OK', {'status':'paid','txid':txid,
+                            'message':'Payment was already finalized. Store handles fulfillment.'})
+                    return self.json_response(start, '409 Conflict', {'status':'paid',
+                        'message':'This invoice was already paid with a different transaction.'})
+                if not self.ledger.allow_verification(invoice['id']):
+                    return self.response(start, '429 Too Many Requests', json.dumps({
+                        'status':'pending', 'message':'Too many verification requests. Automatic scanning continues.'}),
+                        extra_headers=[('Retry-After', '30')])
                 tx, receipt = finalized_records(txid, api_key=self.api_key)
-                saved = self.ledger.apply_proof(match.group(1), txid, tx, receipt)
+                try:
+                    saved = self.ledger.apply_proof(match.group(1), txid, tx, receipt)
+                except CheckoutError:
+                    # Only a finalized, correct-recipient transfer can enter manual review;
+                    # all other failures retain pending status and are never credited.
+                    try:
+                        review = self.ledger.record_mismatched_payment(invoice['id'], txid, tx, receipt)
+                    except CheckoutError:
+                        raise
+                    return self.json_response(start, '202 Accepted', {'status': review['status'],
+                        'message': 'Transfer received, but amount differs. Do not pay again; contact merchant support.'})
                 return self.json_response(start, '200 OK', {'status': saved['status'],
-                    'message': 'On-chain payment finality established. Purchase delivery is managed by the store.'})
+                    'txid': txid, 'message': 'On-chain payment finality established. Purchase delivery is managed by the store.'})
             return self.json_response(start, '404 Not Found', {'error': 'Not found'})
         except CheckoutError as exc:
             # Never auto-fulfill or report success if a proof, quote, or address is ambiguous.

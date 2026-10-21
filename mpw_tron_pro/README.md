@@ -57,3 +57,34 @@ TRON finalized proof: https://developers.tron.network/docs/api-signature-and-bro
 **Still blocked:** merchant-controlled receive-address pool, safe DB migration,
 production site integration with authentic cPanel source, real finality + delivery
 E2E, security review and owner-approved deployment. **Do not merge as production-ready.**
+
+## v0.3 — wallet-first checkout and safer settlement (2026-10-21)
+
+**Staged development milestone, not a live payment system.** This version adds substantive payment capabilities, not a paint-only redesign:
+
+1. **Trust Wallet payment handoff.** The official documented deep link `https://link.trustwallet.com/send?asset=c195&address=<verified TRON address>&amount=<exact TRX>` is produced on the trusted server from the **integer Sun** invoice quote. The native TRX asset is `c195`. The wallet still asks the payer to review and approve; this is **not** a payment-success signal. The link is absent if invoice is expired, paid, or preview-only. No private key or seed is needed.
+2. **TronLink direct wallet path.** Optional browser integration using the modern injected `window.tron` provider. Explicit authorization (`eth_requestAccounts`), strict mainnet chain ID (`eth_chainId = 0x2b6653dc`), inspection of the unsigned `TransferContract` destination/sender/Sun amount before signing, signature in the wallet, and broadcast once with manual customer confirmation. Broadcast success is **not** chain finality. Users without an injected supported wallet fall back to Trust Wallet or QR. No third-party JavaScript is loaded on the checkout page.
+3. **Automatic incoming transfer discovery:** `reconcile_pending()` now records *finalized* underpayments/overpayments for manual review rather than ignoring them. It never aggregates partials or silently credits a mismatched amount. `worker.py --once` provides a bounded, operator-controlled scan with an exclusive file lock and audit counters. The scan process is **not installed or scheduled** on the production server.
+4. **Detect real worker health:** the ledger stores per-run health counters and reports `not_configured`, `running`, `degraded`, or `stale`. Buyer pages no longer pretend background monitoring is live when no worker has run.
+5. **Verified merchant reconciliation endpoint:** merchant-authenticated `GET /api/merchant/orders/<order_id>` returns an immutable verified payment state, transaction hash and block details (only if paid), and a `fulfillment: not_integrated` marker. **No digital product gets unlocked in this isolated prototype.**
+6. **Bounded manual verification:** at most four verifier calls per invoice per minute and 24 per hour, with `429 Retry-After` instead of unlimited costly TRON RPC calls. Idempotent paid rechecks need no RPC; different transaction IDs on an already-paid invoice are rejected. New transfers are disabled when a quote is expired, already paid, or under/overpaid, while an earlier pending transfer remains reviewable.
+7. **Status transparency:** buyer sees quote → on-chain submission → finalized stages, under/overpayment review, browser recovery on returning to private checkout URL, receipt link only after verified finality, and a running/degraded scanner message. Status refresh is automatic in the browser, but detecting incoming transactions **depends on a separately scheduled worker**.
+
+### Operator-only API contract (illustrative; NOT provisioned on VPS)
+
+- `POST /api/merchant/invoices` with `Authorization: Bearer <backend-only key>`; trusted storefront must source its USD product price from its own database and retain the returned checkout URL; **do not** expose this key to browser scripts.
+- `GET /api/merchant/orders/<order_id>` with the same key; the store may display a paid receipt **only** after backend verification. Independently authorize product ownership, never trust a browser status flag.
+- `GET /api/status/<opaque capability>` for buyer status (private high-entropy checkout link; redact token from logs, analytics and referrers).
+- `POST /api/verify/<opaque capability>` for user-supplied transaction hash, same-origin and bounded; no user confirmation alone can produce a paid record.
+- Offline merchant-owned receiving addresses must be supplied as **public strings only**. **The current merchant wallet alone does not create an inventory of unique deposit addresses.** Never generate/record addresses for which the owner has no key custody. There is **no automatic sweep/withdrawal feature**.
+- Worker example, *only on an owner-audited private Linux directory with 0700 permissions, and only after live app integration and approvals*: `MPW_TRON_DB=/secure/gateway.sqlite3 MPW_TRON_LOCK=/secure/scan.lock MPW_TRON_API_KEY=<from-private-env> python -m mpw_tron_pro.worker --once`. Do not put keys in shell history or public repositories. This command executes one bounded scan; **it does not install a cron job**.
+
+### Testing evidence
+
+- `python -m unittest discover -s tests -p 'test_mpw_tron*.py' -q` — **63 local unit/mock tests pass** (TRON transfers simulated; zero funds spent).
+- `python tools/browser_qa.py` — Chromium UI check at 390px and 1440px, wallet authorization/send via a **mock injected provider**, and rejection of wrong chain before any signature or broadcast. No real wallet connection or chain interaction occurs.
+- **Not yet proved**: installed Trust Wallet's precise deep-link UX on target devices, genuine TronLink integration across versions, real TRX mainnet deposit settlement, refund/chargeback controls, actual VPS/Passenger ingress, shopper-session/order/fulfillment integration, accessibility audit, external security review, rate quote SLA, RPC health/failover, production PostgreSQL migrations, and monitoring under load.
+
+**Do not merge, enable, present as a real payment processor, or publish public wallet addresses until these gates are satisfied.** Never use a prior GitHub/cPanel status log as proof of an actual completed payment.
+
+References: [Trust Wallet deep linking](https://developer.trustwallet.com/developer/develop-for-trust/deeplinking); [TRON DApp integration](https://developers.tron.network/docs/tronlink-integration); [TRON confirmation semantics](https://developers.tron.network/docs/confirmation-semantics); [TRON network chain ID](https://developers.tron.network/reference/eth_chainid).

@@ -80,7 +80,7 @@ def reconcile_pending(ledger, *, max_invoices=20, api_key='', discover=incoming_
                       fetch=finalized_records):
     """Scan bounded pending invoices. Returns COUNTS, never buyer IDs or wallet data."""
     pending = ledger.pending(limit=max_invoices)
-    counts = {'scanned': 0, 'settled': 0, 'requires_review': 0, 'failed_scans': 0}
+    counts = {'scanned': 0, 'settled': 0, 'underpaid': 0, 'overpaid': 0, 'requires_review': 0, 'failed_scans': 0}
     # A pilot runner only; production must use a durable cursor and alerting.
     for invoice in pending:
         counts['scanned'] += 1
@@ -98,7 +98,13 @@ def reconcile_pending(ledger, *, max_invoices=20, api_key='', discover=incoming_
                 counts['settled'] += 1
                 break
             except CheckoutError:
-                counts['requires_review'] += 1
+                try:
+                    discrepancy = ledger.record_mismatched_payment(invoice['id'], txid, tx, receipt)
+                    if discrepancy['new']:
+                        counts[discrepancy['status']] += 1
+                    # Existing invoice is NOT settled; buyer gets manual-review status.
+                except CheckoutError:
+                    counts['requires_review'] += 1
             except (OSError, TimeoutError):
                 counts['failed_scans'] += 1
     return counts

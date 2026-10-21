@@ -308,5 +308,6 @@ class TestAutoDiscovery(unittest.TestCase):
             outcome=reconcile_pending(ledger,discover=lambda *args,**kwargs:[TX],
                     fetch=lambda *args,**kwargs:records(amount=SUN-1))
             self.assertEqual(outcome['settled'],0)
-            self.assertEqual(outcome['requires_review'],1)
+            self.assertEqual(outcome['underpaid'],1)
             self.assertEqual(ledger.by_token(inv.token)['status'],'pending')
+            self.assertEqual(ledger.public_state(ledger.by_token(inv.token))['status'],'underpaid')

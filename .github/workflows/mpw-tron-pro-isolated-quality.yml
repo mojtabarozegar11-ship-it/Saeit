@@ -1,0 +1,34 @@
+name: TRON Pay isolated quality (NO DEPLOY)
+on:
+  pull_request:
+    paths:
+      - 'mpw_tron_pro/**'
+      - 'tests/test_mpw_tron*.py'
+      - '.github/workflows/mpw-tron-pro-isolated-quality.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-tests:
+    name: Secure TRON invoice and UI contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate Python source
+        run: python -m compileall -q mpw_tron_pro
+      - name: Test 63+ isolated business and security contracts
+        run: python -m unittest discover -s tests -p 'test_mpw_tron*.py' -v
+      - name: Confirm no live deployment in this workflow
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          f=Path('.github/workflows/mpw-tron-pro-isolated-quality.yml').read_text()
+          assert 'ssh ' not in f and 'cPanel' not in f and 'secrets.' not in f
+          print('NO_DEPLOY=PASS')
+          PY

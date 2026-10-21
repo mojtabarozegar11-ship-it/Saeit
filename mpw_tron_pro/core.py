@@ -86,7 +86,7 @@ class FinalizedProof:
     recipient: str
 
 
-def verify_finalized_trx(tx: dict, receipt: dict, expected: ExpectedTransfer) -> FinalizedProof:
+def inspect_finalized_trx(tx: dict, receipt: dict, expected: ExpectedTransfer) -> FinalizedProof:
     """Requires solidity-node BODY + RECEIPT. Never trusts a customer screenshot.
 
     A plain TRX TransferContract with exact destination/amount qualifies only
@@ -109,7 +109,7 @@ def verify_finalized_trx(tx: dict, receipt: dict, expected: ExpectedTransfer) ->
     block, block_ms = receipt.get('blockNumber'), receipt.get('blockTimeStamp')
     if type(block) is not int or block <= 0 or type(block_ms) is not int:
         raise CheckoutError('Missing solidified block evidence')
-    if not expected.issued_ms - 120_000 <= block_ms <= expected.expires_ms + SOLIDITY_GRACE_MS:
+    if not expected.issued_ms - 15_000 <= block_ms <= expected.expires_ms + SOLIDITY_GRACE_MS:
         raise CheckoutError('Payment outside invoice time window')
     raw = tx.get('raw_data')
     if not isinstance(raw, dict):
@@ -137,6 +137,14 @@ def verify_finalized_trx(tx: dict, receipt: dict, expected: ExpectedTransfer) ->
         not re.fullmatch(r'41[a-fA-F0-9]{40}', value['owner_address'])):
         raise CheckoutError('Invalid sender address')
     amount = value.get('amount')
-    if type(amount) is not int or amount != expected.amount_sun:
-        raise CheckoutError('Not an exact invoice amount')
+    if type(amount) is not int or not 0 < amount <= 10**13:
+        raise CheckoutError('Invalid native TRX transfer amount')
     return FinalizedProof(expected.txid, block, block_ms, amount, expected.address)
+
+
+def verify_finalized_trx(tx: dict, receipt: dict, expected: ExpectedTransfer) -> FinalizedProof:
+    """Accept only exact finalized native TRX, never an under/overpayment."""
+    proof = inspect_finalized_trx(tx, receipt, expected)
+    if proof.amount_sun != expected.amount_sun:
+        raise CheckoutError('Not an exact invoice amount')
+    return proof
