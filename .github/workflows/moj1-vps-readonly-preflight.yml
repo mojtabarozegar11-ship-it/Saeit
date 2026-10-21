@@ -99,6 +99,10 @@ jobs:
               printf 'MOJ1_VPS_TOOL_%s=ABSENT\n' "$c"
             fi
           done
+          if [ -w "$HOME" ]; then echo 'MOJ1_TEST_WALLET_PRIVATE_STORAGE=WRITABLE_HOME'; else echo 'MOJ1_TEST_WALLET_PRIVATE_STORAGE=UNAVAILABLE'; fi
+          if command -v python3 >/dev/null 2>&1; then
+            python3 -c 'import importlib.util; print("MOJ1_VPS_PY_CRYPTOGRAPHY=" + ("AVAILABLE" if importlib.util.find_spec("cryptography") else "ABSENT")); print("MOJ1_VPS_PY_PYCRYPTODOME=" + ("AVAILABLE" if importlib.util.find_spec("Crypto") else "ABSENT")); print("MOJ1_VPS_PY_TRONPY=" + ("AVAILABLE" if importlib.util.find_spec("tronpy") else "ABSENT"))'
+          fi
           echo 'MOJ1_VPS_TEST_WALLET=NOT_ACCESSED'
           echo 'MOJ1_VPS_BROADCAST=NONE'
           echo 'MOJ1_VPS_PREFLIGHT_MODE=READ_ONLY'
