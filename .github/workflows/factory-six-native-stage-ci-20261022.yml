@@ -22,6 +22,7 @@ jobs:
         with: {python-version: "3.11"}
       - name: Generate and recheck all original source candidates
         run: |
+          mkdir -p "$RUNNER_TEMP/private-six"
           python3 -B scripts/factory_six_specialist_executors.py --factory-private "$RUNNER_TEMP/private-six" --all
           python3 -B scripts/factory_six_native_candidates.py --factory-private "$RUNNER_TEMP/private-six" --family F26 --output "$RUNNER_TEMP/real-f26"
       - name: Install pinned CPU ONNX checker and runtime
@@ -50,6 +51,7 @@ jobs:
         with: {python-version: "3.11"}
       - name: Create verified F14 private game
         run: |
+          mkdir -p "$RUNNER_TEMP/private-six"
           python3 -B scripts/factory_six_specialist_executors.py --factory-private "$RUNNER_TEMP/private-six" --all
           python3 -B scripts/factory_six_native_candidates.py --factory-private "$RUNNER_TEMP/private-six" --family F14 --output "$RUNNER_TEMP/real-f14"
       - name: Install pinned real Chromium automation
@@ -73,6 +75,7 @@ jobs:
         with: {python-version: "3.11"}
       - name: Build original verified sources
         run: |
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP/private-six" | Out-Null
           python scripts/factory_six_specialist_executors.py --factory-private "$env:RUNNER_TEMP/private-six" --all
           python scripts/factory_six_native_candidates.py --factory-private "$env:RUNNER_TEMP/private-six" --family F13 --output "$env:RUNNER_TEMP/real-f13"
           python scripts/factory_six_native_candidates.py --factory-private "$env:RUNNER_TEMP/private-six" --family F17 --output "$env:RUNNER_TEMP/real-f17"
@@ -109,6 +112,7 @@ jobs:
       - name: Verify original F12/F16 source and prepare offline Android projects
         run: |
           set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/private-six"
           python3 -B scripts/factory_six_specialist_executors.py --factory-private "$RUNNER_TEMP/private-six" --all
           python3 -B scripts/factory_six_native_candidates.py --factory-private "$RUNNER_TEMP/private-six" --family F12 --output "$RUNNER_TEMP/real-f12"
           python3 -B scripts/factory_six_native_candidates.py --factory-private "$RUNNER_TEMP/private-six" --family F16 --output "$RUNNER_TEMP/real-f16"
