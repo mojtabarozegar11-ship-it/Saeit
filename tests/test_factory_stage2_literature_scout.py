@@ -512,6 +512,35 @@ class SourceScoutTests(unittest.TestCase):
         self.assertIsNotNone(SCOUT.evidence_from_papers(
             self.order(1),1,selected,STAGE2))
 
+
+    def test_cached_retry_does_not_discard_new_independent_publishers(self):
+        title="Houseplant Rescue Guide"
+        order=self.order(1)
+        old=[study(title,n) for n in range(1,21)]
+        fresh=[study(title,n) for n in range(21,24)]
+        for article in old+fresh:
+            article["publication_year"]=2025
+        for article in old:
+            article["primary_location"]["landing_page_url"]=(
+                "https://dominant.publisher.org/article")
+            article["primary_location"]["source"]["host_organization_name"]=(
+                "Dominant Publisher")
+        responses=[old,fresh]
+        def fetch(_):
+            return responses.pop(0)
+        first=SCOUT.sources_for_topic(
+            self.root,STAGE2,order,fetch,lambda _:[])
+        self.assertEqual(first,"needs_more_research")
+        second=SCOUT.sources_for_topic(
+            self.root,STAGE2,order,fetch,lambda _:[])
+        self.assertEqual(second,"traceable_abstracts")
+        evidence=STAGE2.read(
+            self.area/"stage-02/source-evidence/AGRI-001--r001.json")
+        self.assertGreaterEqual(len({
+            SCOUT.registrable_host(s["url"].split("/")[2])
+            for s in evidence["sources"]}),4)
+        self.assertFalse(evidence["public_distribution_allowed"])
+
     def test_evidence_gap_reports_actual_unmet_gate(self):
         title="Houseplant Rescue Guide"
         order=self.order(1)
