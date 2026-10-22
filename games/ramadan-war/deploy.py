@@ -53,7 +53,10 @@ def prepare(stage):
     home=ROOT/'index.html'; assert home.is_file() and not home.is_symlink()
     game_source=stage/'incoming/index.html'; assert game_source.is_file() and game_source.stat().st_size>5000
     route_source=stage/'incoming/.htaccess';assert route_source.is_file() and route_source.read_text('utf-8')=='PassengerEnabled off\nDirectoryIndex index.html\n'
-    source=game_source.read_bytes();route=route_source.read_bytes(); assert b'RamadanWarDebug' in source and b'ZM-RAMADAN-WAR-WEB-CARD-20261022' in source
+    source=game_source.read_bytes();route=route_source.read_bytes()
+    js=(stage/'incoming/game.js').read_bytes();css=(stage/'incoming/game.css').read_bytes()
+    assert b'RamadanWarDebug' in js and b'ZM-RAMADAN-WAR-WEB-CARD-20261022' in source
+    assert b'./game.js' in source and b'./game.css' in source
     assert not GAME.exists() and not GAME.is_symlink(),'game route already exists; refusing to replace it'
     old=home.read_bytes();new=manifest(old)
     protected={}
@@ -62,7 +65,7 @@ def prepare(stage):
         if p.is_file() and not p.is_symlink(): protected[rel]=digest(p.read_bytes())
     assert len(protected)>=2,'insufficient protected-page baseline'
     (stage/'old-home.html').write_bytes(old);(stage/'new-home.html').write_bytes(new)
-    store(stage,{'phase':'prepared','oldHome':digest(old),'newHome':digest(new),'game':digest(source),'route':digest(route),'protected':protected})
+    store(stage,{'phase':'prepared','oldHome':digest(old),'newHome':digest(new),'game':digest(source),'route':digest(route),'js':digest(js),'css':digest(css),'protected':protected})
     print('RAMADAN_WEB_PREPARE=PASS current-card-2 preserved-card-1-and-rest')
 def publish(stage,run):
     m=metadata(stage);assert m['phase']=='prepared'
@@ -72,16 +75,19 @@ def publish(stage,run):
     try:
         GAME.mkdir(mode=0o755)
         atomic(GAME/'.htaccess',(stage/'incoming/.htaccess').read_bytes(),run)
+        atomic(GAME/'game.css',(stage/'incoming/game.css').read_bytes(),run)
+        atomic(GAME/'game.js',(stage/'incoming/game.js').read_bytes(),run)
         atomic(GAME/'index.html',source,run)
         assert digest((GAME/'index.html').read_bytes())==m['game']
         assert digest((GAME/'.htaccess').read_bytes())==m['route']
+        assert digest((GAME/'game.js').read_bytes())==m['js'] and digest((GAME/'game.css').read_bytes())==m['css']
         atomic(home,(stage/'new-home.html').read_bytes(),run)
         assert digest(home.read_bytes())==m['newHome']
         m['phase']='published';store(stage,m)
         print('RAMADAN_WEB_AND_SECOND_CARD_PUBLISHED=PASS')
     except BaseException:
         if GAME.is_dir() and not GAME.is_symlink():
-            for name,key in [('index.html','game'),('.htaccess','route')]:
+            for name,key in [('index.html','game'),('.htaccess','route'),('game.js','js'),('game.css','css')]:
                 p=GAME/name
                 if p.is_file() and not p.is_symlink() and digest(p.read_bytes())==m[key]:p.unlink()
             if not any(GAME.iterdir()):GAME.rmdir()
@@ -91,6 +97,7 @@ def verify(stage):
     assert digest((ROOT/'index.html').read_bytes())==m['newHome']
     assert digest((GAME/'index.html').read_bytes())==m['game']
     assert digest((GAME/'.htaccess').read_bytes())==m['route']
+    assert digest((GAME/'game.js').read_bytes())==m['js'] and digest((GAME/'game.css').read_bytes())==m['css']
     for rel,h in m['protected'].items():assert digest((ROOT/rel).read_bytes())==h,'protected file changed: '+rel
     data=json.loads(re.search(r'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',(ROOT/'index.html').read_text('utf-8'),re.S).group(1))
     row=next(r for r in data['rows'] if r.get('id')==ROW)
@@ -105,7 +112,7 @@ def rollback(stage):
     else: print('HOMEPAGE_ROLLBACK_SKIPPED_UNEXPECTED_CONTENT')
     if GAME.is_dir() and not GAME.is_symlink():
         removed=False
-        for name,key in [('index.html','game'),('.htaccess','route')]:
+        for name,key in [('index.html','game'),('.htaccess','route'),('game.js','js'),('game.css','css')]:
             p=GAME/name
             if p.is_file() and not p.is_symlink() and digest(p.read_bytes())==m.get(key):p.unlink();removed=True
         if not any(GAME.iterdir()):GAME.rmdir()
