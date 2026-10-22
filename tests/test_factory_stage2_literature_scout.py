@@ -335,6 +335,10 @@ class SourceScoutTests(unittest.TestCase):
         keys=SCOUT.keys("Houseplant Rescue Guide")
         hit=SCOUT.usable_paper(p,keys,STAGE2)
         self.assertIsNotNone(hit, msg={"keys":keys,
+                "title":p["display_name"],
+                "title_hits":len(set(keys) & {SCOUT.normalize(w) for w in SCOUT.WORD_RE.findall(p["display_name"])}),
+                "body_hits":len(set(keys) & {SCOUT.normalize(w) for w in SCOUT.WORD_RE.findall(SCOUT.abstract_from_index(p["abstract_inverted_index"]))}),
+                "source_url":p["primary_location"]["landing_page_url"],
                 "abstract_len":len(SCOUT.abstract_from_index(p["abstract_inverted_index"])),
                 "citation":SCOUT.citation_sentence(
                     SCOUT.abstract_from_index(p["abstract_inverted_index"]),keys)})
