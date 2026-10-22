@@ -98,32 +98,50 @@ def parse_arff(source):
         raise RuntimeError("F26_RICE_NOT_REAL_DATASET")
     return rows,labels
 
-def split_unique(rows,labels):
-    from sklearn.model_selection import train_test_split
+def unique_labeled_examples(rows, labels):
+    """Security-critical deduplication is pure Python and always CI-testable."""
+    if len(rows)!=len(labels):
+        raise RuntimeError("F26_RICE_FEATURE_LABEL_LENGTH_MISMATCH")
     seen={}
-    contradictory=0
-    for x,y in zip(rows,labels):
-        if x in seen and seen[x]!=y:
-            contradictory+=1
-        else:
-            seen[x]=y
-    if contradictory:
-        raise RuntimeError("F26_RICE_CONTRADICTORY_DUPLICATE_FEATURES")
+    for features, label in zip(rows,labels):
+        if features in seen and seen[features]!=label:
+            raise RuntimeError("F26_RICE_CONTRADICTORY_DUPLICATE_FEATURES")
+        seen[features]=label
     examples=list(seen.items())
     if len(examples)<200:
         raise RuntimeError("F26_RICE_TOO_FEW_DISTINCT_ROWS")
+    return examples,len(rows)-len(examples)
+
+def validate_disjoint_split(examples, groups):
+    """Reject duplicate, missing, overlapping or single-class partitions."""
+    if len(groups)!=3:
+        raise RuntimeError("F26_RICE_WRONG_SPLIT_COUNT")
+    indexes=[list(part) for part in groups]
+    label=[value for _,value in examples]
+    if any(not part or {label[i] for i in part}!={0,1}
+           for part in indexes):
+        raise RuntimeError("F26_RICE_UNBALANCED_SPLIT")
+    sets=[set(part) for part in indexes]
+    if (any(len(s)!=len(part) for s,part in zip(sets,indexes))
+            or any(a.intersection(b) for a,b in
+                   ((sets[0],sets[1]),(sets[0],sets[2]),(sets[1],sets[2])))
+            or set.union(*sets)!=set(range(len(examples)))):
+        raise RuntimeError("F26_RICE_SPLIT_DATA_LEAKAGE")
+    return True
+
+def split_unique(rows,labels):
+    # The actual trained model retains the exact existing sklearn splits,
+    # seeds, and original real-data holdout indices / ONNX hashes.
+    from sklearn.model_selection import train_test_split
+    examples,removed=unique_labeled_examples(rows,labels)
     indices=list(range(len(examples)))
     y=[value for _,value in examples]
     trainval,test=train_test_split(indices,test_size=0.2,random_state=1457,stratify=y)
     train,valid=train_test_split(trainval,test_size=0.25,random_state=1458,
                                 stratify=[y[i] for i in trainval])
     groups=(train,valid,test)
-    for one in groups:
-        if not one or {y[i] for i in one}!={0,1}:
-            raise RuntimeError("F26_RICE_UNBALANCED_SPLIT")
-    if any(set(a).intersection(b) for a,b in ((train,valid),(train,test),(valid,test))):
-        raise RuntimeError("F26_RICE_SPLIT_DATA_LEAKAGE")
-    return examples,groups,len(rows)-len(examples)
+    validate_disjoint_split(examples,groups)
+    return examples,groups,removed
 
 def train(archive,out,source_sha):
     import numpy as np
