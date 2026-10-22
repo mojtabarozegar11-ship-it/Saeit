@@ -16,6 +16,9 @@ import shutil
 from pathlib import Path
 
 CONTACT_SHA_PREFIX = "62631e0ccd54"
+HTACCESS_SHA_PREFIX = "e96e5f0166f0"
+HTACCESS_ANCHOR = "RewriteRule ^$ index.html [END]"
+TRUST_ROUTE_RULE = "RewriteRule ^(legal|privacy|terms|financial-transparency)/?$ $1/index.html [END]"
 LINK_ANCHOR = '<a href="/api/health/">وضعیت سامانه ←</a></div>'
 PAGE_LINKS = (
     '<a href="/legal/">هویت حقوقی ←</a>'
@@ -129,6 +132,12 @@ def new_contact(raw: str) -> str:
     return result
 
 
+def new_htaccess(raw: str) -> str:
+    assert raw.count(HTACCESS_ANCHOR) == 1, "Unexpected server rewrite configuration."
+    assert TRUST_ROUTE_RULE not in raw
+    return raw.replace(HTACCESS_ANCHOR, HTACCESS_ANCHOR + "\n" + TRUST_ROUTE_RULE, 1)
+
+
 def safe_path(root: Path, rel: str, require_absent=False) -> Path:
     p = root / rel
     assert root.is_dir() and not root.is_symlink()
@@ -142,6 +151,9 @@ def safe_path(root: Path, rel: str, require_absent=False) -> Path:
 def stage(site: Path, backup: Path):
     contact=safe_path(site,"contact/index.html")
     original=contact.read_bytes()
+    htfile=safe_path(site,".htaccess")
+    ht_original=htfile.read_bytes()
+    assert digest(ht_original).startswith(HTACCESS_SHA_PREFIX), "Server rewrite configuration changed; abort."
     assert digest(original).startswith(CONTACT_SHA_PREFIX), "Live contact fingerprint changed; abort."
     text=original.decode("utf-8")
     assert '<!-- zm-unified-v7-20261018 -->' in text
@@ -153,10 +165,13 @@ def stage(site: Path, backup: Path):
         safe_path(site,key,require_absent=True)
     rendered={key:render(text,key).encode('utf-8') for key in PAGES}
     rendered["contact"]=new_contact(text).encode('utf-8')
+    rendered["htaccess"]=new_htaccess(ht_original.decode("utf-8")).encode("utf-8")
     backup.mkdir(mode=0o700,parents=True)
     (backup/"original-contact.html").write_bytes(original)
+    (backup/"original-htaccess").write_bytes(ht_original)
     (backup/"manifest.json").write_text(json.dumps({
         "original_sha256":digest(original),
+        "original_htaccess_sha256":digest(ht_original),
         "new_sha256":{key:digest(raw) for key,raw in rendered.items()},
         "created_pages":list(PAGES),
     },sort_keys=True,indent=2),encoding='utf-8')
@@ -181,24 +196,31 @@ def apply(site: Path, backup: Path):
     rendered=stage(site,backup)
     created=[]
     changed_contact=False
+    changed_htaccess=False
     try:
         for key in PAGES:
             dest=site/key
             dest.mkdir(mode=0o755)
             created.append(dest)
             atomic_publish(dest/"index.html",rendered[key],backup)
+        atomic_publish(site/".htaccess",rendered["htaccess"],backup)
+        changed_htaccess=True
         atomic_publish(site/"contact/index.html",rendered["contact"],backup)
         changed_contact=True
         verify(site,backup)
         print("TRUST_PUBLICATION=verified")
         print("CHANGED_EXISTING_FILE=contact/index.html")
         print("HOMEPAGE_TOUCHED=no")
+        print("TECHNICAL_ROUTE_ALIASES=4_explicit_only")
         print("FINANCIAL_PRIVATE_FILES_TOUCHED=no")
         print("BACKUP_STORED=private")
     except Exception:
         if changed_contact:
             original=(backup/"original-contact.html").read_bytes()
             atomic_publish(site/"contact/index.html",original,backup)
+        if changed_htaccess:
+            original_ht=(backup/"original-htaccess").read_bytes()
+            atomic_publish(site/".htaccess",original_ht,backup)
         for directory in reversed(created):
             f=directory/"index.html"
             if f.exists() and f.is_file() and not f.is_symlink():
@@ -210,11 +232,12 @@ def apply(site: Path, backup: Path):
 def verify(site: Path, backup: Path):
     manifest=json.loads((backup/"manifest.json").read_text(encoding="utf-8"))
     for key,expected in manifest["new_sha256"].items():
-        rel="contact/index.html" if key=="contact" else key+"/index.html"
+        rel="contact/index.html" if key=="contact" else ".htaccess" if key=="htaccess" else key+"/index.html"
         raw=safe_path(site,rel).read_bytes()
         assert digest(raw)==expected,rel
-        assert b'class="zm-v7-footer"' in raw
-        assert b'class="zm-v7-header"' in raw
+        if key!="htaccess":
+            assert b'class="zm-v7-footer"' in raw
+            assert b'class="zm-v7-header"' in raw
         print("TRUST_FILE_VALID",rel,len(raw))
 
 
@@ -224,10 +247,15 @@ def rollback(site: Path, backup: Path):
     original=(backup/"original-contact.html").read_bytes()
     assert digest(original)==manifest["original_sha256"]
     assert digest(contact.read_bytes())==manifest["new_sha256"]["contact"],"Contact modified since deployment; manual review."
+    htfile=safe_path(site,".htaccess")
+    ht_original=(backup/"original-htaccess").read_bytes()
+    assert digest(ht_original)==manifest["original_htaccess_sha256"]
+    assert digest(htfile.read_bytes())==manifest["new_sha256"]["htaccess"],"Server rewrites modified since deployment; manual review."
     for key in PAGES:
         p=safe_path(site,key+"/index.html")
         assert digest(p.read_bytes())==manifest["new_sha256"][key],f"Page modified since deployment: {key}"
     atomic_publish(contact,original,backup)
+    atomic_publish(htfile,ht_original,backup)
     for key in PAGES:
         p=site/key/"index.html"
         p.unlink()
@@ -245,6 +273,7 @@ def selftest():
              '<footer class="zm-v7-footer"></footer></body></html>')
     assert len(PAGES)==4
     assert new_contact(fixture).count('href="/legal/"')==1
+    assert new_htaccess("RewriteEngine On\nRewriteRule ^$ index.html [END]\n").count(TRUST_ROUTE_RULE)==1
     for key in PAGES:
         out=render(fixture,key)
         assert f'href="https://zomorodmelal.ir/{key}/"' in out
