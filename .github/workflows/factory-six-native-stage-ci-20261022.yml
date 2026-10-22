@@ -1,11 +1,12 @@
 name: Real native candidates for six blocked factory lines
 on:
   push:
-    branches: [feature/six-native-candidate-builds-20261022, feature/factory-six-independent-rework-20261022, feature/six-device-and-independent-qa-evidence-20261022, main]
+    branches: [feature/six-native-candidate-builds-20261022, feature/factory-six-independent-rework-20261022, feature/six-device-and-independent-qa-evidence-20261022, feature/six-windows-acceptance-safe-main-20261022, main]
     paths:
       - scripts/factory_six_native_candidates.py
       - scripts/factory_f14_browser_real_smoke.py
       - scripts/factory_android_emulator_runtime_check.py
+      - scripts/factory_windows_native_playthrough.py
       - tests/test_factory_android_emulator_evidence.py
       - scripts/factory_six_native_candidate_bundle.py
       - scripts/factory_specialist_formats.py
@@ -140,11 +141,15 @@ jobs:
             Write-Host ("WINDOWS_REAL_PE_SHA256=" + (Get-FileHash $f -Algorithm SHA256).Hash)
           }
           Write-Host "F13_F17_NATIVE_WINDOWS_EXE_EXECUTION=PASS"
+      - name: Play all 48 desktop game levels and test 15 real inventory scenarios
+        run: |
+          python scripts/factory_windows_native_playthrough.py --f13 "$env:RUNNER_TEMP/native-f13/GemRoutePilot.exe" --f17 "$env:RUNNER_TEMP/native-f17/FieldLedgerPilot.exe" --levels "$env:RUNNER_TEMP/real-f13/source/levels.json" --out "$env:RUNNER_TEMP/windows-native-proof.json"
+          if ($LASTEXITCODE -ne 0) { throw "FACTORY_DESKTOP_RUNTIME_ACCEPTANCE_FAILED" }
       - name: Package and validate two private native Windows candidates
         run: |
-          python scripts/factory_six_native_candidate_bundle.py --family F13 --out "$env:RUNNER_TEMP/bundle-F13" --checks "Real Windows PE and 48-level executable self-test" --file "$env:RUNNER_TEMP/native-f13/GemRoutePilot.exe" --file "$env:RUNNER_TEMP/real-f13/preparation-receipt.json"
+          python scripts/factory_six_native_candidate_bundle.py --family F13 --out "$env:RUNNER_TEMP/bundle-F13" --checks "Real Windows PE and 48-level executable self-test" --file "$env:RUNNER_TEMP/native-f13/GemRoutePilot.exe" --file "$env:RUNNER_TEMP/real-f13/preparation-receipt.json" --file "$env:RUNNER_TEMP/windows-native-proof.json"
           if ($LASTEXITCODE -ne 0) { throw "F13_BUNDLE_FAILED" }
-          python scripts/factory_six_native_candidate_bundle.py --family F17 --out "$env:RUNNER_TEMP/bundle-F17" --checks "Real Windows PE executable CSV and invalid-input self-tests" --file "$env:RUNNER_TEMP/native-f17/FieldLedgerPilot.exe" --file "$env:RUNNER_TEMP/real-f17/preparation-receipt.json"
+          python scripts/factory_six_native_candidate_bundle.py --family F17 --out "$env:RUNNER_TEMP/bundle-F17" --checks "Real Windows PE executable CSV and invalid-input self-tests" --file "$env:RUNNER_TEMP/native-f17/FieldLedgerPilot.exe" --file "$env:RUNNER_TEMP/real-f17/preparation-receipt.json" --file "$env:RUNNER_TEMP/windows-native-proof.json"
           if ($LASTEXITCODE -ne 0) { throw "F17_BUNDLE_FAILED" }
           python scripts/factory_six_native_candidate_bundle.py --family F13 --out "$env:RUNNER_TEMP/bundle-F13" --verify
           if ($LASTEXITCODE -ne 0) { throw "F13_BUNDLE_VERIFICATION_FAILED" }

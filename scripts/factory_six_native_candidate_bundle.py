@@ -81,6 +81,24 @@ def actual_format_integrity(family, members):
         offset = int.from_bytes(data[0x3c:0x40],"little")
         if offset < 64 or offset+4 > len(data) or data[offset:offset+4] != b"PE\x00\x00":
             raise RuntimeError("NATIVE_BUNDLE_FAKE_WINDOWS_PE_HEADER")
+        if "windows-native-proof.json" in members:
+            proof=json.loads(members["windows-native-proof.json"].decode("utf8"))
+            row=proof.get("families",{}).get(family,{})
+            if (proof.get("schema")!="saeit.factory.windows-native-interactive-acceptance.v1"
+                    or proof.get("real_windows_runner_execute") is not True
+                    or proof.get("physical_customer_hardware_reviewed") is not False
+                    or proof.get("independent_security_expert_approved") is not False
+                    or proof.get("quality_1000_certified") is not False
+                    or proof.get("public_release") is not False
+                    or row.get("sha256")!=hashlib.sha256(data).hexdigest()
+                    or (family=="F13" and
+                        (row.get("playthroughs_from_actual_exe")!=48
+                         or row.get("level_paths_verified")!=48))
+                    or (family=="F17" and
+                        (row.get("real_packaged_csv_invoices_tested")!=6
+                         or row.get("invalid_inventory_rows_rejected")!=9
+                         or row.get("exact_decimal_math_verified") is not True))):
+                raise RuntimeError("NATIVE_BUNDLE_WINDOWS_RUNTIME_ACCEPTANCE_UNVERIFIED")
     elif family == "F14":
         data = json.loads(members["browser-proof.json"].decode("utf8"))
         if (data.get("actual_chromium_executed") is not True
