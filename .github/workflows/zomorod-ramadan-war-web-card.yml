@@ -37,7 +37,8 @@ jobs:
           Check().feed(html)
           assert html.count('ZM-RAMADAN-WAR-WEB-CARD-20261022') == 1
           assert '<script src="./game.js" defer></script>' in html and '<link rel="stylesheet" href="./game.css">' in html
-          assert 'RamadanWarDebug' in Path('games/ramadan-war/game.js').read_text(encoding='utf-8')
+          gamejs=Path('games/ramadan-war/game.js').read_text(encoding='utf-8')
+          assert 'RamadanWarDebug' in gamejs and not any(line.startswith('+') for line in gamejs.splitlines())
           PY
           node --check games/ramadan-war/game.js
       - name: Test the complete campaign in desktop and mobile browser before deployment
