@@ -108,7 +108,7 @@ jobs:
           print("FACTORY_STAGE2_REVIEWER_SIGNATURES_CREATED=0")
           print("FACTORY_WEBSITES_UNCHANGED=true")
           PY
-# Aggregate only non-sensitive source-candidate diagnostics on VPS.
+          # Aggregate only non-sensitive source-candidate diagnostics on VPS.
           # These numbers distinguish provider access from evidence matching.
           ssh_vps 'python3 -' <<'PY'
           import collections,json
