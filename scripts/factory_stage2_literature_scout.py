@@ -179,6 +179,18 @@ def usable_paper(work,topic_keys,worker):
     url=venue.get("landing_page_url")
     host=reliable_url(url,worker)
     if not host:
+        # OpenAlex frequently records a doi.org resolver as its primary
+        # landing URL. Prefer a real publisher/institutional OA landing URL
+        # if one is included; never count the DOI resolver itself as an
+        # independent publisher domain.
+        alternate=work.get("best_oa_location")
+        if isinstance(alternate,dict):
+            candidate=alternate.get("landing_page_url")
+            alternative_host=reliable_url(candidate,worker)
+            if alternative_host:
+                url=candidate
+                host=alternative_host
+    if not host:
         return None
     abstract=abstract_from_index(work.get("abstract_inverted_index"))
     if len(abstract)<210:
@@ -376,7 +388,7 @@ def fetch_openalex(title):
     data=request_json(SAFE_KEYS["openalex"],{
         "search":subject,
         "per_page":40,
-        "select":"id,display_name,doi,publication_year,type,is_retracted,abstract_inverted_index,primary_location,cited_by_count"
+        "select":"id,display_name,doi,publication_year,type,is_retracted,abstract_inverted_index,primary_location,best_oa_location,cited_by_count"
     },timeout=12)
     value=data.get("results")
     if not isinstance(value,list):
