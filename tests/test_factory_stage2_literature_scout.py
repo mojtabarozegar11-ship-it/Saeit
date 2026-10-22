@@ -382,5 +382,13 @@ class SourceScoutTests(unittest.TestCase):
         self.assertEqual(len(seen),1)
         self.assertTrue((self.area/"stage-02/source-evidence/AGRI-001--r001.json").is_file())
 
+
+    def test_scout_cycle_promotes_new_evidence_without_manual_redeploy(self):
+        installer=(BASE/"deploy/install_factory_stage2_literature_scout.sh").read_text()
+        self.assertIn("&& /usr/bin/timeout 120s",installer)
+        self.assertIn("stage2-research.py --factory-private",installer)
+        self.assertIn("awk -v marker=",installer)
+        self.assertIn("FACTORY_STAGE2_SCOUT_CRON=UPDATED",installer)
+
 if __name__=="__main__":
     unittest.main()
