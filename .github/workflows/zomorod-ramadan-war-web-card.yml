@@ -84,13 +84,22 @@ jobs:
         run: |
           python3 - <<'PY'
           from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
           import json,re
+          import time
           root='https://zomorodmelal.ir'
-          with urlopen(Request(root+'/ramadan-war/?release='+__import__('time').time_ns().__str__(),headers={'Cache-Control':'no-cache,no-store'}),timeout=40) as r:
-           assert r.status==200;game=r.read(1000000)
-          assert b'ZM-RAMADAN-WAR-WEB-CARD-20261022' in game
+          game=None
+          for attempt in range(1,11):
+           try:
+            with urlopen(Request(root+'/ramadan-war/?release='+str(time.time_ns()),headers={'Cache-Control':'no-cache,no-store','Pragma':'no-cache'}),timeout=35) as r:
+             if r.status==200:game=r.read(1000000)
+           except HTTPError as e:
+            if e.code!=404:raise
+           if game and b'ZM-RAMADAN-WAR-WEB-CARD-20261022' in game:break
+           game=None;time.sleep(1)
+          assert game,'new public route is still unavailable after ten fresh requests'
           assert b'canvas' in game and b'RamadanWarDebug' in game
-          with urlopen(Request(root+'/?ramadan_card='+__import__('time').time_ns().__str__(),headers={'Cache-Control':'no-cache,no-store'}),timeout=40) as r:
+          with urlopen(Request(root+'/?ramadan_card='+str(time.time_ns()),headers={'Cache-Control':'no-cache,no-store'}),timeout=40) as r:
            data=r.read(2600000)
           d=json.loads(re.search(rb'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',data,re.S).group(1))
           row=next(x for x in d['rows'] if x.get('id')=='ZM-R25')
