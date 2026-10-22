@@ -53,7 +53,7 @@ class PaymentWebhookEvent(models.Model):
             name="test_unique_walletless_payment_event")]
 
 
-class LedgerEntry(models.Model):
+class ExistingLedgerEntry(models.Model):
     order=models.ForeignKey(fixture.Order,on_delete=models.PROTECT)
     payment_intent=models.ForeignKey(PaymentIntent,on_delete=models.PROTECT,null=True)
     entry_type=models.CharField(max_length=30)
@@ -66,7 +66,7 @@ class LedgerEntry(models.Model):
 
 fixture.fake_core.PaymentIntent=PaymentIntent
 fixture.fake_core.PaymentWebhookEvent=PaymentWebhookEvent
-fixture.fake_core.LedgerEntry=LedgerEntry
+fixture.fake_core.LedgerEntry=ExistingLedgerEntry
 
 
 class ExistingNoDDLWalletlessTests(unittest.TestCase):
@@ -76,18 +76,18 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
         with connection.schema_editor() as editor:
             editor.create_model(PaymentIntent)
             editor.create_model(PaymentWebhookEvent)
-            editor.create_model(LedgerEntry)
+            editor.create_model(ExistingLedgerEntry)
 
     @classmethod
     def tearDownClass(cls):
         with connection.schema_editor() as editor:
-            editor.delete_model(LedgerEntry)
+            editor.delete_model(ExistingLedgerEntry)
             editor.delete_model(PaymentWebhookEvent)
             editor.delete_model(PaymentIntent)
         fixture.RealDjangoWalletlessTests.tearDownClass()
 
     def setUp(self):
-        for m in (LedgerEntry,PaymentWebhookEvent,PaymentIntent):
+        for m in (ExistingLedgerEntry,PaymentWebhookEvent,PaymentIntent):
             m.objects.all().delete()
         fixture.RealDjangoWalletlessTests.setUp(self)
         self.order_id=fixture.Order.objects.get().id
@@ -116,7 +116,7 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
         self.assertEqual(self.reserve(),(pk,invoice,False))
         self.assertEqual(invoice.network,"tron-mainnet")
         self.assertEqual(PaymentWebhookEvent.objects.count(),0)
-        self.assertEqual(LedgerEntry.objects.count(),0)
+        self.assertEqual(ExistingLedgerEntry.objects.count(),0)
 
     def test_durable_key_prevents_double_amount_for_two_orders(self):
         pk,a,_=self.reserve()
@@ -136,7 +136,7 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
         self.assertEqual(PaymentIntent.objects.get(pk=pk).status,"paid")
         self.assertEqual(fixture.Order.objects.get(pk=self.order_id).status,"paid")
         event=PaymentWebhookEvent.objects.get(provider=PROVIDER,event_id=fixture.TX_HASH)
-        record=LedgerEntry.objects.get(order_id=self.order_id)
+        record=ExistingLedgerEntry.objects.get(order_id=self.order_id)
         self.assertEqual(record.payment_intent_id,pk)
         self.assertEqual(record.metadata["walletless_receipt_event_id"],event.pk)
         self.assertEqual(record.metadata["evidence_digest"],event.payload_hash)
@@ -148,7 +148,7 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
         with self.assertRaises(PaymentHold):existing_test_buyer_status(pk,43)
         with self.assertRaises(PaymentHold):
             settle_existing_test_intent(pk,fixture.TX_HASH,self.pair())
-        self.assertEqual(LedgerEntry.objects.count(),1)
+        self.assertEqual(ExistingLedgerEntry.objects.count(),1)
 
     def test_no_paid_download_if_receipt_or_ledger_is_missing(self):
         pk,_,_=self.reserve()
@@ -170,7 +170,7 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
         with self.assertRaises(PaymentHold):
             settle_existing_test_intent(second,fixture.TX_HASH,pair)
         self.assertEqual(PaymentWebhookEvent.objects.count(),1)
-        self.assertEqual(LedgerEntry.objects.count(),1)
+        self.assertEqual(ExistingLedgerEntry.objects.count(),1)
         self.assertEqual(fixture.Order.objects.get(pk=other.pk).status,"pending")
 
     def test_unfinalized_trx_never_delivers_file(self):
@@ -178,7 +178,7 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
         with self.assertRaises(PaymentHold):
             settle_existing_test_intent(pk,fixture.TX_HASH,self.pair(solid=False))
         self.assertEqual(PaymentWebhookEvent.objects.count(),0)
-        self.assertEqual(LedgerEntry.objects.count(),0)
+        self.assertEqual(ExistingLedgerEntry.objects.count(),0)
         self.assertEqual(fixture.CommerceFulfillment.objects.count(),0)
         self.assertEqual(fixture.Order.objects.get(pk=self.order_id).status,"pending")
 
@@ -192,7 +192,7 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
         intent.save(update_fields=["provider_reference"])
         with self.assertRaises(PaymentHold):
             settle_existing_test_intent(pk,fixture.TX_HASH,pair)
-        self.assertEqual(LedgerEntry.objects.count(),0)
+        self.assertEqual(ExistingLedgerEntry.objects.count(),0)
 
     def test_wrong_owner_legacy_signed_and_live_database_guard(self):
         with self.assertRaises(PaymentHold):self.reserve(buyer=43)
