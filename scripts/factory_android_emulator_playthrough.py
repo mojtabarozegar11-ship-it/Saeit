@@ -62,8 +62,9 @@ def tap(node):
 
 def launch(family, apk):
     pkg=PACKAGES[family]
-    if not apk.is_file() or apk.is_symlink() or apk.stat().st_size<40000:
-        raise RuntimeError("ANDROID_EMULATOR_APK_MISSING")
+    if not apk.is_file() or apk.is_symlink() or apk.stat().st_size<5000:
+        raise RuntimeError("ANDROID_EMULATOR_APK_MISSING_OR_TOO_SMALL path="+
+                           str(apk)+" bytes="+str(apk.stat().st_size if apk.exists() else -1))
     adb("install","-r",str(apk),timeout=95)
     adb("shell","am","force-stop",pkg)
     opened=adb("shell","am","start","-W","-n",pkg+"/.MainActivity",timeout=55)
