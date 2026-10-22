@@ -1,0 +1,38 @@
+name: MojPlayWin isolated walletless TRX settlement safety tests
+on:
+  push:
+    branches: [fix/mpw-native-gateway-20261022]
+    paths:
+      - services/mpw_trx_walletless_core.py
+      - tests/test_mpw_trx_walletless_core.py
+      - .github/workflows/mpw-walletless-trx-kernel-20261022.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  walletless-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check walletless offline invoice and chain verifier module
+        run: |
+          set -euo pipefail
+          python3 -m py_compile services/mpw_trx_walletless_core.py tests/test_mpw_trx_walletless_core.py
+          python3 -m unittest discover -s tests -p 'test_mpw_trx_walletless_core.py' -v
+      - name: Assert no payment or integration side effects were added
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast,pathlib
+          p=pathlib.Path('services/mpw_trx_walletless_core.py')
+          tree=ast.parse(p.read_text())
+          forbidden={'requests','urllib','django','subprocess','os','socket','sqlite3'}
+          names={n.module.split('.')[0] for n in ast.walk(tree) if isinstance(n,ast.ImportFrom) and n.module}
+          names.update(alias.name.split('.')[0] for n in ast.walk(tree) if isinstance(n,ast.Import) for alias in n.names)
+          if names & forbidden:
+              raise SystemExit('Walletless kernel must not access external services or production database')
+          print('MPW_WALLETLESS_GUEST_CORE_NO_FINANCIAL_SIDE_EFFECTS=PASS')
+          PY
