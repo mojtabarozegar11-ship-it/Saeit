@@ -162,7 +162,19 @@ One result that would disconfirm the hypothesis:
 
 Do not infer user attributes from play behavior. Store notes only as long as needed and delete them under the team's retention policy.
 `},
-{slug:"narrative-branch-planner",name:"Narrative Branch Planner",format:"CSV state table",description:"Track choices, prerequisites, state changes and return paths in a branching story.",file:"narrative-branch-planner.csv",body:`node_id,scene,entry_condition,choice_id,choice_text,state_before,state_change,next_node,return_path,test_case
+{slug:"pixel-ui-pack",name:"Pixel UI Starter Pack",format:"CSS and SVG starter",description:"A small original, scalable interface starter with accessible buttons, panels and status tokens.",file:"pixel-ui-starter-pack.txt",body:`/* Pixel UI Starter Pack · original CSS template · adapt and test in your project */
+:root{--pixel-ink:#f4f7ff;--pixel-bg:#101625;--pixel-panel:#1b263a;--pixel-accent:#57e0c7;--pixel-focus:#ffd36e;--pixel-radius:8px;--pixel-gap:12px}
+.pixel-panel{background:var(--pixel-panel);color:var(--pixel-ink);padding:16px;border:2px solid #354967;border-radius:var(--pixel-radius);box-shadow:4px 4px 0 #080d18}
+.pixel-button{font:700 1rem/1.2 system-ui,sans-serif;color:var(--pixel-ink);background:#24435c;border:2px solid #6e9db1;padding:10px 14px;min-height:44px;border-radius:6px;cursor:pointer}
+.pixel-button:hover{background:#30627a}.pixel-button:focus-visible{outline:3px solid var(--pixel-focus);outline-offset:3px}.pixel-button[aria-pressed=true]{background:#126a62;border-color:var(--pixel-accent)}
+.pixel-status{padding:10px 12px;border-left:4px solid var(--pixel-accent);background:#142b31;color:var(--pixel-ink)}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+<!-- Minimal SVG panel frame: save as pixel-panel.svg; scale freely. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 80" role="img" aria-label="Empty framed panel"><path fill="#1b263a" stroke="#6e9db1" stroke-width="4" d="M8 8h144v64H8z"/><path fill="#101625" d="M16 16h128v48H16z"/></svg>
+
+Usage: This is a source template, not a tested game-ready asset pack. Verify contrast, keyboard focus, localization, licensing and rendering in your own build.
+`},{slug:"narrative-branch-planner",name:"Narrative Branch Planner",format:"CSV state table",description:"Track choices, prerequisites, state changes and return paths in a branching story.",file:"narrative-branch-planner.csv",body:`node_id,scene,entry_condition,choice_id,choice_text,state_before,state_change,next_node,return_path,test_case
 N01,Briefing,Always,C01,Ask for the source,trust=0,trust+1,N02,N05,player can reach ending
 N01,Briefing,Always,C02,Publish immediately,trust=0,trust-1,N03,N05,choice has visible consequence
 N02,Source check,trust>=1,C03,Verify the second record,verified=false,verified=true,N04,N05,unverified claim is not stated as fact
@@ -189,46 +201,8 @@ Services,QA/device testing,1,0,USD,once,=C5*D5,Use a real quote,
 Launch,Store assets and localization,1,0,USD,once,=C6*D6,Scope before purchase,
 Risk,Contingency reserve,1,0,USD,once,=C7*D7,Set percentage explicitly,
 TOTAL,,,,,,=SUM(G2:G7),Estimate only; not an accounting record,
-`},
-{slug:"release-manifest",name:"Release Manifest & QA",format:"JSON template",description:"Record a build's version, files, checksums, test evidence, known issues and rollback reference.",file:"release-manifest.json",body:`{
-  "product": "REPLACE_WITH_PRODUCT_ID",
-  "version": "1.0.0",
-  "build_date_utc": "YYYY-MM-DD",
-  "source_commit": "REPLACE_WITH_COMMIT",
-  "files": [
-    {"path": "index.html", "sha256": "REPLACE_WITH_64_HEX_SHA256"}
-  ],
-  "tests": [
-    {"name": "fresh install and launch", "result": "not_run", "evidence": ""}
-  ],
-  "known_issues": [],
-  "rollback_version": "",
-  "release_owner": ""
-}
-`},
-{slug:"store-listing-worksheet",name:"Store Listing Worksheet",format:"Markdown worksheet",description:"Write a precise game listing with a truthful hook, audience, controls, accessibility and platform facts.",file:"store-listing-worksheet.md",body:`# Store Listing Worksheet
-Working title:
-One-line hook (describe actual play):
-Player audience:
-Platform(s) verified:
-Languages verified:
-Typical session length (measured):
-Controls:
-Offline/online requirements:
-Accessibility options tested:
-Age/content notes:
-What is included:
-What is not included:
-Known limitations:
-Privacy and support links:
-Screenshot checklist:
-- [ ] Captured from the released build
-- [ ] No fake player counts, ratings or performance claims
-- [ ] Text is legible on a phone
-- [ ] Captions describe the real gameplay
-Final reviewer:
-Date:
-`}
+`
+
 ];
 const $=s=>document.querySelector(s),catalog=$("#catalog");
 for(const p of products){const card=document.createElement("article");card.className="card";const tag=document.createElement("span");tag.className="tag";tag.textContent="FREE BETA · "+p.format;const h=document.createElement("h2");h.textContent=p.name;const d=document.createElement("p");d.textContent=p.description;const b=document.createElement("button");b.type="button";b.textContent="Download "+p.format;b.setAttribute("aria-label","Download "+p.name);b.addEventListener("click",()=>download(p));card.append(tag,h,d,b);catalog.append(card);}
