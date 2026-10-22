@@ -42,6 +42,7 @@ jobs:
             tests/test_business_management_review.py \
             scripts/business_os_private_stage_smoke.py \
             scripts/business_os_cpanel_private_metrics.py \
+            scripts/business_os_cpanel_private_run.sh \
             docs/business-operating-system-20261022.md
           sha256sum "$RUNNER_TEMP/business-os-stage.tgz"
 
@@ -110,17 +111,10 @@ jobs:
           host_sha="$(timeout 30s ssh -F "$stage_root/config" business-os-cpanel "sha256sum '$stage_host/bundle.tgz'" | cut -d ' ' -f1)"
           test "$local_sha" = "$host_sha"
           timeout 60s ssh -F "$stage_root/config" business-os-cpanel "cd '$stage_host' && tar -tzf bundle.tgz > /dev/null && ! tar -tzf bundle.tgz | grep -Eq '(^/|(^|/)\.\.(/|$))' && tar -xzf bundle.tgz && python3 -B scripts/business_os_private_stage_smoke.py"
-          # Only the remote cPanel process may read the live Django database.
-          # Its private JSON stays on cPanel. All output (including errors) is
-          # suppressed at the SSH boundary, so Actions sees only exit status.
-          if timeout 90s ssh -F "$stage_root/config" business-os-cpanel \
-            "cd '$stage_host' && /home/zomorod2/Saeit/.venv/bin/python -B scripts/business_os_cpanel_private_metrics.py" \
-            > /dev/null 2>&1; then
-            echo "BUSINESS_OS_PRIVATE_REPORT_CREATED_ON_CPANEL"
-          else
-            echo "BUSINESS_OS_PRIVATE_PROBE_FAILED_NO_DATA_EXPORTED"
-            exit 1
-          fi
+          # Interpreter discovery is local to cPanel. Only fixed diagnostic
+          # markers cross SSH, never financial counts, findings, or exceptions.
+          timeout 90s ssh -F "$stage_root/config" business-os-cpanel \
+            "cd '$stage_host' && bash scripts/business_os_cpanel_private_run.sh"
           echo "PRIVATE_STAGE_ONLY=$stage_name"
           echo "No production app, database, service, cron, or public route was modified."
 
