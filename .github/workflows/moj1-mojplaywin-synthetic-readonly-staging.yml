@@ -1,0 +1,59 @@
+name: MOJ1 to MojPlayWin synthetic read-only staging proof
+on:
+  push:
+    branches: ['moj1/shasta-pilot-20261021']
+    paths:
+      - '.github/workflows/moj1-mojplaywin-synthetic-readonly-staging.yml'
+      - 'experiments/moj1-pilot/staging/**'
+      - 'experiments/moj1-pilot/tests/mojplaywin-staging-bridge.test.mjs'
+      - 'experiments/moj1-pilot/shasta-deployment.json'
+      - 'experiments/moj1-pilot/scripts/verify-shasta-readonly.mjs'
+      - 'experiments/moj1-pilot/scripts/bytecode-attestation.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj1-mpw-synthetic-staging
+  cancel-in-progress: false
+jobs:
+  synthetic-readonly-integration:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/moj1/shasta-pilot-20261021'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test guest-order shape and payment isolation offline
+        working-directory: experiments/moj1-pilot
+        run: node --test tests/mojplaywin-staging-bridge.test.mjs
+      - name: Read-only Shasta proof with no wallet secrets
+        working-directory: experiments/moj1-pilot
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(printenv TRON_PRIVATE_KEY || true)"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run compile
+          npm run preflight
+          node scripts/verify-shasta-readonly.mjs > "$RUNNER_TEMP/moj1_shasta_readonly_proof.json"
+      - name: Bind verified Shasta state to a synthetic guest order only
+        working-directory: experiments/moj1-pilot
+        shell: bash
+        run: |
+          set -euo pipefail
+          node staging/run-mojplaywin-staging.mjs "$RUNNER_TEMP/moj1_shasta_readonly_proof.json" > staging-evidence.json
+          node -e "const r=require('./staging-evidence.json');if(r.status!=='PASS'||r.paymentEnabled!==false||r.orderWriteEnabled!==false||r.deliveryEnabled!==false)process.exit(1)"
+          echo 'MOJ1_MPW_SYNTHETIC_READONLY_STAGING=PASS'
+          echo 'MOJPLAYWIN_LIVE_CHECKOUT=UNMODIFIED'
+          echo 'TRON_MAINNET=NOT_ACCESSED'
+      - name: Archive staging-only proof receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: moj1-mpw-synthetic-readonly-receipt
+          path: experiments/moj1-pilot/staging-evidence.json
+          if-no-files-found: error
+          retention-days: 14
