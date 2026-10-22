@@ -475,6 +475,11 @@ class RealDjangoWalletlessTests(unittest.TestCase):
             issue_secondary_guest_cookie_for_handoff,read_guest_buyer)
         from services.mpw_walletless_django_guest_handoff import (
             create_wallet_handoff,redeem_wallet_handoff)
+        with connection.cursor() as cur:
+            cur.execute("""UPDATE mpw_walletless_trx_reservation_v1
+                SET issued_at=UTC_TIMESTAMP(6),
+                    expires_at=DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 10 MINUTE)
+                WHERE id=%s""",[self.invoice_id])
         with patch("django.contrib.auth.get_user_model",return_value=User):
             cookie=issue_secondary_guest_cookie_for_handoff(42)
             self.assertEqual(read_guest_buyer(cookie),42)
