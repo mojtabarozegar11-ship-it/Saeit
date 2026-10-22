@@ -38,7 +38,10 @@ def private_factory(tmp_path, monkeypatch):
 def test_real_master_six_agent_tasks_are_claimed_and_audited(private_factory):
     call_command("seed_online_income_agents",verbosity=0)
     call_command("factory_native_enqueue",execute=True,verbosity=0)
-    agent=Agent.objects.get(code="economic-master-agent",active=True)
+    agent=Agent.objects.get(code="moj_1ro_1",active=True)
+    economic=Agent.objects.get(code="economic-master-agent",active=True)
+    assert not economic.capabilities.filter(code=ACTION,active=True).exists()
+    assert set(agent.capabilities.filter(active=True).values_list("code",flat=True))=={ACTION}
     assert agent.capabilities.filter(code=ACTION,active=True).exists()
     tasks=list(AgentTask.objects.filter(agent=agent,action_type=ACTION).order_by("pk"))
     assert len(tasks)==6
