@@ -61,7 +61,7 @@ else
 fi
 test "$(crontab -l | grep -Fc "$marker")" -eq 1
 "$py" -B - "$root/production-instructions" <<'PY'
-import json,sys
+import collections,json,sys
 from pathlib import Path
 area=Path(sys.argv[1])
 idx=json.loads((area/"owner-agri200-p0-index.json").read_text())
@@ -71,11 +71,30 @@ work_dir=area/"stage-02/literature-candidates"
 brief_dir=area/"stage-02/research-needed"
 stage3_dir=area/"stage-03/inbox"
 num_source=0; num_candidate=0; num_research=0; num_handoff=0
+tracked_gaps={
+    "under_four_topic_relevant_article_abstracts",
+    "insufficient_independent_publishers_or_domains",
+    "missing_bilingual_scope",
+    "duplicate_indexed_abstract_claims",
+    "fifth_distinct_verbatim_claim_unavailable",
+    "additional_provenance_or_validation_review",
+}
+gap_counts=collections.Counter()
 for n,w in enumerate(idx["order_ids_ranked"],1):
     topic="AGRI-%03d"%n
     name=w+"--r001.json"
     if (source_dir/(topic+"--r001.json")).is_file(): num_source+=1
-    if (work_dir/(topic+"--r001.json")).is_file(): num_candidate+=1
+    candidate_file=work_dir/(topic+"--r001.json")
+    if candidate_file.is_file():
+        num_candidate+=1
+        if not (source_dir/(topic+"--r001.json")).is_file():
+            try:
+                candidate=json.loads(candidate_file.read_text())
+                reason=candidate.get("evidence_gap_reason")
+                if reason in tracked_gaps:
+                    gap_counts[reason]+=1
+            except (OSError,ValueError,TypeError):
+                pass
     if (brief_dir/name).is_file(): num_research+=1
     if (stage3_dir/name).is_file(): num_handoff+=1
 assert stat["sites_changed"] is False
@@ -88,6 +107,9 @@ print("FACTORY_STAGE2_SCOUT_P0_SOURCE_PACKETS="+str(num_source))
 print("FACTORY_STAGE2_SCOUT_P0_BIBLIOGRAPHIC_WORKPAPERS="+str(num_candidate))
 print("FACTORY_STAGE2_SCOUT_P0_MISSING_SOURCE_BRIEFS="+str(num_research))
 print("FACTORY_STAGE2_SCOUT_P0_STAGE3_DOSSIERS="+str(num_handoff))
+for gap in sorted(tracked_gaps):
+    print("FACTORY_STAGE2_SCOUT_P0_EVIDENCE_GAP_"+
+          gap.upper()+"="+str(gap_counts[gap]))
 print("FACTORY_STAGE2_SCOUT_P0_ATTEMPTED_THIS_RUN="+str(stat["attempted_this_run"]))
 print("FACTORY_STAGE2_SCOUT_PROVIDER_ERRORS="+str(stat["external_provider_unavailable"]))
 print("FACTORY_STAGE2_SCOUT_PROVIDER_COOLDOWN_SKIPPED="+str(stat.get("requests_skipped_due_to_provider_cooldown",0)))

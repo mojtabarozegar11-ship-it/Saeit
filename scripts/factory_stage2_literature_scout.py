@@ -27,7 +27,7 @@ import urllib.parse
 import urllib.request
 
 SCHEMA="saeit.factory.stage2-literature-scout.v1"
-SCOUT_ALGO_VERSION="v4-normalized-scientific-synonyms"
+SCOUT_ALGO_VERSION="v5-publisher-diversity-gap-diagnostics"
 EVIDENCE_SCHEMA="saeit.factory.stage2-source-evidence.v1"
 TOPIC_ID=re.compile(r"AGRI-[0-9]{3}\Z")
 WORD_RE=re.compile(r"[a-z]{3,}")
@@ -393,9 +393,7 @@ def select_papers(results,topic_keys,worker):
         seen_ids.add(item["openalex_id"])
         seen_doi.add(item["doi"].lower())
         distinct.append(item)
-        if len(distinct)==20:
-            break
-    return distinct
+    return reserve_diverse_papers(distinct)
 
 
 def registrable_host(host):
@@ -407,6 +405,33 @@ def registrable_host(host):
     if len(parts)>2 and tuple(parts[-2:]) in suffix3:
         return ".".join(parts[-3:])
     return ".".join(parts[-2:])
+
+
+
+def reserve_diverse_papers(candidates):
+    """Reserve genuinely independent domains before enforcing the cache cap."""
+    ordered=sorted(candidates,key=lambda x:(
+        -x["relevance_score"],-x["publication_year"],x["openalex_id"]))
+    selected=[]
+    domains=set()
+    publishers=set()
+    for item in ordered:
+        domain=registrable_host(item["host"])
+        publisher=item["publisher"].casefold().strip()
+        if domain not in domains and publisher not in publishers:
+            selected.append(item)
+            domains.add(domain)
+            publishers.add(publisher)
+            if len(selected)==10:
+                break
+    selected_ids={item["openalex_id"] for item in selected}
+    for item in ordered:
+        if len(selected)==20:
+            break
+        if item["openalex_id"] not in selected_ids:
+            selected.append(item)
+            selected_ids.add(item["openalex_id"])
+    return selected
 
 
 def diverse_four_or_five(papers):
@@ -433,6 +458,29 @@ def diverse_four_or_five(papers):
             len(set(p["publisher"].lower() for p in chosen))<3):
         return []
     return chosen
+
+
+def evidence_gap_reason(order,papers):
+    """Explain the desk-research gate without claiming missing evidence exists."""
+    if len(papers)<4:
+        return "under_four_topic_relevant_article_abstracts"
+    chosen=diverse_four_or_five(papers)
+    if not chosen:
+        return "insufficient_independent_publishers_or_domains"
+    if set(locale_scopes(order))!={"fa-IR","en-US"}:
+        return "missing_bilingual_scope"
+    if len({paper["support_sentence"] for paper in chosen})!=len(chosen):
+        return "duplicate_indexed_abstract_claims"
+    if len(chosen)==4 and not any(
+            isinstance(p.get("support_sentences"),list)
+            and len(p["support_sentences"])>=2
+            and isinstance(p["support_sentences"][1],str)
+            and p["support_sentences"][1]!=p["support_sentence"]
+            and p["support_sentences"][1] not in
+                {q["support_sentence"] for q in chosen}
+            for p in chosen):
+        return "fifth_distinct_verbatim_claim_unavailable"
+    return "additional_provenance_or_validation_review"
 
 
 def locale_scopes(order):
@@ -675,7 +723,8 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
     cached=previous.get("indexed_abstract_candidates",[])
     if (previous.get("scout_algorithm_version") in
             ("v2-relevance-provenance",
-             "v3-four-source-safety-desk-research",SCOUT_ALGO_VERSION)
+             "v3-four-source-safety-desk-research",
+             "v4-normalized-scientific-synonyms",SCOUT_ALGO_VERSION)
             and isinstance(cached,list) and 4<=len(cached)<=20
             and previous.get("candidate_sha256")==sha(cached)):
         valid=[]
@@ -734,8 +783,8 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
                                      str(paper.get("openalex_id",""))) and
                         reliable_url(paper.get("url"),worker)==paper.get("host")):
                     by_doi.setdefault(paper["doi"].lower(),paper)
-            papers=sorted(by_doi.values(),key=lambda x:(
-                -x["relevance_score"],-x["publication_year"],x["doi"]))[:20]
+            # Preserve independent sources discovered in later query rounds.
+            papers=reserve_diverse_papers(list(by_doi.values()))
     except ProviderCoolingDown:
         return "provider_cooldown"
     except Exception as exc:
@@ -776,6 +825,7 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
         "candidate_sha256":sha(papers[:20]),
         "crossref_bibliographic_candidates":fallback,
         "indexed_abstract_candidate_count":len(papers),
+        "evidence_gap_reason":evidence_gap_reason(record,papers),
         "independent_publisher_fulltext_checked":False,
         "stage2_documentation_complete":False,"stage3_handoff":False,
         "commercial_release":False,"quality1000_approved":False,
