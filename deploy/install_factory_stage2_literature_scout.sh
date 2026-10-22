@@ -43,10 +43,18 @@ timeout 650s "$py" -B "$dest" --factory-private "$root" \
 # normal gates, not raw bibliographic candidates.
 timeout 120s "$py" -B "$main_agent" --factory-private "$root" --batch 250
 
-cron='*/2 * * * * /usr/bin/flock -n /home/githubops/factory-runtime/operations/production-instructions/.stage2-scout-minute.lock /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --stage2-program /home/githubops/factory-runtime/operations/production-instructions/stage2-research.py --batch 12 --workers 1 >> /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.log 2>&1 # SAEIT_FACTORY_STAGE2_SOURCE_DISCOVERY_V1'
+cron='*/2 * * * * /usr/bin/flock -n /home/githubops/factory-runtime/operations/production-instructions/.stage2-scout-minute.lock /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --stage2-program /home/githubops/factory-runtime/operations/production-instructions/stage2-research.py --batch 12 --workers 1 >> /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.log 2>&1 && /usr/bin/timeout 120s /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/stage2-research.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --batch 250 >> /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.log 2>&1 # SAEIT_FACTORY_STAGE2_SOURCE_DISCOVERY_V1'
 if grep -Fq "$marker" "$back/crontab.before"; then
   test "$(grep -Fc "$marker" "$back/crontab.before")" -eq 1
-  echo FACTORY_STAGE2_SCOUT_CRON=ALREADY_PRESENT
+  if grep -Fxq "$cron" "$back/crontab.before"; then
+    echo FACTORY_STAGE2_SCOUT_CRON=ALREADY_PRESENT
+  else
+    # Upgrade only this exact owned entry; preserve every unrelated job.
+    awk -v marker="$marker" -v replacement="$cron" '
+      index($0,marker) {print replacement; next} {print}
+    ' "$back/crontab.before" | crontab -
+    echo FACTORY_STAGE2_SCOUT_CRON=UPDATED
+  fi
 else
   { cat "$back/crontab.before"; printf '%s\n' "$cron"; } | crontab -
   echo FACTORY_STAGE2_SCOUT_CRON=INSTALLED
