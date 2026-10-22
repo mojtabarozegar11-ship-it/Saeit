@@ -45,31 +45,34 @@ jobs:
           d="$RUNNER_TEMP/company-mail-inspect"
           timeout 35s ssh -T -F "$d/config" company 'uapi --output=json Email list_pops' | python3 -c 'import sys,json; j=json.load(sys.stdin); result=j.get("result",{}) if isinstance(j,dict) else {}; data=result.get("data") or []; addresses=sorted({str(x.get("email","")).lower() for x in data if isinstance(x,dict) and str(x.get("email","")).lower().endswith("@zomorodmelal.ir")}); print("MAILBOX_QUERY_STATUS="+str(result.get("status","unknown"))); print("COMPANY_MAILBOX_COUNT="+str(len(addresses))); [print("COMPANY_MAILBOX="+a) for a in addresses]; print("MAILBOX_QUERY_ERRORS="+str(bool(result.get("errors"))))'
           timeout 30s ssh -T -F "$d/config" company 'sh -c '\''if command -v sendmail >/dev/null 2>&1; then echo SENDMAIL_BINARY=present; else echo SENDMAIL_BINARY=absent; fi; if test -r /etc/localdomains && grep -qix "zomorodmelal.ir" /etc/localdomains; then echo COMPANY_MAIL_LOCAL_ROUTE=yes; else echo COMPANY_MAIL_LOCAL_ROUTE=unknown_or_remote; fi; if command -v exim >/dev/null 2>&1; then echo EXIM_BINARY=present; fi'\'''
-      - name: Diagnose MX alignment and Exim queue for the one-time test
+      - name: Read cPanel mailbox bounce status without disclosing mail contents
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/company-mail-inspect"
-          python3 - <<'PY'
-          import socket
-          print('RUNNER_DNS_RESOLUTION_AVAILABLE='+str(bool(socket.getaddrinfo('zomorodmelal.ir',None))))
-          PY
           timeout 35s ssh -T -F "$d/config" company python3 - <<'PY'
-          import subprocess
-          p=subprocess.run(['/usr/sbin/exim','-bp'],capture_output=True,text=True,timeout=20)
-          print('MAIL_QUEUE_READ_STATUS='+str(p.returncode))
-          combined=p.stdout+'\n'+p.stderr
-          print('TEST_MAIL_QUEUED='+str('mojtaba.rozegar11@gmail.com' in combined or 'moj_1ro_1@zomorodmelal.ir' in combined))
-          print('MAIL_QUEUE_INSPECT_ERROR='+str(bool(p.stderr)))
+          import pathlib,time,email
+          from email import policy
+          root=pathlib.Path.home()/'mail'/'zomorodmelal.ir'/'moj_1ro_1'
+          print('MAILDIR_PRESENT='+str(root.is_dir()))
+          candidates=[]
+          for sub in ('new','cur'):
+              p=root/sub
+              files=[z for z in p.iterdir() if z.is_file()] if p.is_dir() else []
+              print('MAILDIR_'+sub.upper()+'_COUNT='+str(len(files)))
+              for f in sorted(files,key=lambda z:z.stat().st_mtime,reverse=True)[:30]:
+                  if f.stat().st_mtime > time.time()-3600: candidates.append(f)
+          print('MAILDIR_RECENT_COUNT='+str(len(candidates)))
+          recent_bounces=0
+          for f in candidates[:50]:
+              if f.stat().st_size>1000000: continue
+              with f.open('rb') as fp: msg=email.message_from_binary_file(fp,policy=policy.default)
+              s=str(msg.get('Subject','')).lower()
+              addr=str(msg.get('From','')).lower()
+              if 'mail delivery' in s or 'delivery status' in s or 'mailer-daemon' in addr or 'undeliverable' in s:
+                  recent_bounces+=1
+          print('MAILDIR_RECENT_BOUNCE_NOTICES='+str(recent_bounces))
           PY
-          if command -v dig >/dev/null 2>&1; then
-            echo 'CORPORATE_MX_BEGIN'
-            dig +short MX zomorodmelal.ir | head -5
-            echo 'CORPORATE_MX_END'
-            echo 'CORPORATE_SPF_BEGIN'
-            dig +short TXT zomorodmelal.ir | grep -i spf | cut -c1-220 || true
-            echo 'CORPORATE_SPF_END'
-          fi
       - name: Do not persist mail credentials
         if: always()
         run: |
