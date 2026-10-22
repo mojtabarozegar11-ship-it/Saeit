@@ -76,7 +76,10 @@ jobs:
       - name: Build original verified sources
         run: |
           New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP/private-six" | Out-Null
-          python scripts/factory_six_specialist_executors.py --factory-private "$env:RUNNER_TEMP/private-six" --all
+          python scripts/factory_seven_missing_builders.py --factory-private "$env:RUNNER_TEMP/private-six" --family F13
+          if ($LASTEXITCODE -ne 0) { throw "F13_SOURCE_BUILD_FAILED" }
+          python scripts/factory_seven_missing_builders.py --factory-private "$env:RUNNER_TEMP/private-six" --family F17
+          if ($LASTEXITCODE -ne 0) { throw "F17_SOURCE_BUILD_FAILED" }
           python scripts/factory_six_native_candidates.py --factory-private "$env:RUNNER_TEMP/private-six" --family F13 --output "$env:RUNNER_TEMP/real-f13"
           python scripts/factory_six_native_candidates.py --factory-private "$env:RUNNER_TEMP/private-six" --family F17 --output "$env:RUNNER_TEMP/real-f17"
       - name: Install pinned Windows native-packaging tool
@@ -86,8 +89,11 @@ jobs:
           python -m PyInstaller --noconfirm --clean --onefile --name GemRoutePilot --add-data "$env:RUNNER_TEMP/real-f13/source/levels.json;." --distpath "$env:RUNNER_TEMP/native-f13" --workpath "$env:RUNNER_TEMP/work-f13" --specpath "$env:RUNNER_TEMP/spec-f13" "$env:RUNNER_TEMP/real-f13/source/game.py"
           python -m PyInstaller --noconfirm --clean --onefile --name FieldLedgerPilot --distpath "$env:RUNNER_TEMP/native-f17" --workpath "$env:RUNNER_TEMP/work-f17" --specpath "$env:RUNNER_TEMP/spec-f17" "$env:RUNNER_TEMP/real-f17/source/desktop.py"
           & "$env:RUNNER_TEMP/native-f13/GemRoutePilot.exe" --self-test
+          if ($LASTEXITCODE -ne 0) { throw "F13_REAL_EXE_TEST_FAILED" }
           & "$env:RUNNER_TEMP/native-f17/FieldLedgerPilot.exe" --self-test
+          if ($LASTEXITCODE -ne 0) { throw "F17_REAL_EXE_TEST_FAILED" }
           & "$env:RUNNER_TEMP/native-f17/FieldLedgerPilot.exe" --csv "$env:RUNNER_TEMP/real-f17/source/sample.csv"
+          if ($LASTEXITCODE -ne 0) { throw "F17_NATIVE_SAMPLE_FAILED" }
           foreach ($f in @("$env:RUNNER_TEMP/native-f13/GemRoutePilot.exe","$env:RUNNER_TEMP/native-f17/FieldLedgerPilot.exe")) {
             $bytes=[System.IO.File]::ReadAllBytes($f)
             if ($bytes.Length -lt 30000 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90) { throw "NATIVE_WINDOWS_PE_INVALID" }
