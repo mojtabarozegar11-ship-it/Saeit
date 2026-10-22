@@ -281,6 +281,26 @@ class SourceScoutTests(unittest.TestCase):
         saved=STAGE2.read(path)
         self.assertIn(endpoint,saved["blocked_until_utc"])
 
+    def test_new_private_key_invalidates_old_anonymous_quota_cooldown(self):
+        import os
+        endpoint=SCOUT.SAFE_KEYS["openalex"]
+        state=self.area/"stage-02/literature-provider-cooldowns.json"
+        STAGE2.atomic(state,{
+            "schema":"saeit.factory.provider-cooldown.v1",
+            "blocked_until_utc":{endpoint:(dt.datetime.now(dt.timezone.utc)+
+                                          dt.timedelta(hours=6)).isoformat()},
+            "checked_utc":SCOUT.utc()})
+        # Previous anonymous 429 must not block a verified keyed source
+        # research retry; the normal five-source gate still applies.
+        with mock.patch.dict(os.environ,{"OPENALEX_API_KEY":"TestKey_1234567890123456"}):
+            result=SCOUT.run(self.root,self.program,fetcher=sample,
+                             backstop=lambda _:[],batch=1,workers=1)
+        self.assertEqual(result["source_evidence_automatically_documented"],1)
+        self.assertEqual(result["requests_skipped_due_to_provider_cooldown"],0)
+        after=STAGE2.read(state)
+        self.assertEqual(after["openalex_credential_mode"],"keyed")
+        self.assertNotIn(endpoint,after["blocked_until_utc"])
+
     def test_research_queries_rotate_without_weakening_claim_gate(self):
         order=self.order(1)
         seen=[]
