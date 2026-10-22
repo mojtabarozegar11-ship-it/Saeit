@@ -1,0 +1,145 @@
+name: Zomorod trust legal and financial public pages live 20261022
+on:
+  push:
+    branches: [zomorod/trust-validation-20261022]
+    paths: [.github/workflows/zomorod-trust-live-release-20261022.yml]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-trust-public-pages
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Gate irreversible writes behind syntax and fixture validation
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_trust_pages_safe_20261022.py
+          python3 scripts/zomorod_trust_pages_safe_20261022.py selftest
+      - name: Public baseline preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          for route in / /contact/ /company/ /about/ /store/ /admin/login/; do
+            test "$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route")" = "200"
+            echo "BASELINE_200=$route"
+          done
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Apply trust pages via pinned relay with private backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          stage="/home/zomorod2/.zm-trust-release-20261022-$GITHUB_RUN_ID"
+          backup="/home/zomorod2/.backups/zomorod-trust-20261022/$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel "umask 077; test ! -e '$stage'; install -d -m 700 '$stage'"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel "cat > '$stage/installer.py'" < scripts/zomorod_trust_pages_safe_20261022.py
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/installer.py' selftest"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel "umask 077; python3 '$stage/installer.py' apply --backup '$backup'"
+          echo "TRUST_RELEASE_APPLIED=yes"
+      - name: Verify public routes and rollback if any trust check fails
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          stage="/home/zomorod2/.zm-trust-release-20261022-$GITHUB_RUN_ID"
+          backup="/home/zomorod2/.backups/zomorod-trust-20261022/$GITHUB_RUN_ID"
+          check_public() {
+            local route marker body n
+            for route in /legal/ /financial-transparency/ /privacy/ /terms/; do
+              marker="zm-v7-information"
+              case "$route" in
+                /legal/) marker="هویت و اطلاعات حقوقی شرکت" ;;
+                /financial-transparency/) marker="شفافیت و ارزیابی اعتبار مالی" ;;
+                /privacy/) marker="حریم خصوصی و حفاظت اطلاعات" ;;
+                /terms/) marker="شرایط استفاده و همکاری" ;;
+              esac
+              n=0
+              while true; do
+                n=$((n+1))
+                if curl -fsSL --max-time 20 -H 'Cache-Control: no-cache' "https://zomorodmelal.ir$route" | grep -Fq "$marker"; then
+                  echo "PUBLIC_TRUST_VERIFIED=$route"
+                  break
+                fi
+                if [ "$n" -ge 3 ]; then
+                  echo "PUBLIC_TRUST_CHECK_FAILED=$route"
+                  return 1
+                fi
+                sleep 3
+              done
+            done
+            curl -fsSL --max-time 20 -H 'Cache-Control: no-cache' https://zomorodmelal.ir/contact/ | grep -Fq 'href="/financial-transparency/"'
+            echo "CONTACT_LINKS_VERIFIED=yes"
+          }
+          if check_public; then
+            timeout 35s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/installer.py' verify --backup '$backup'"
+            timeout 30s ssh -T -F "$d/config" saeit-cpanel "python3 -c 'import hashlib,pathlib;root=pathlib.Path.home()/\"public_html\";a=hashlib.sha256((root/\"index.html\").read_bytes()).hexdigest();b=hashlib.sha256((root/\".htaccess\").read_bytes()).hexdigest();assert a.startswith(\"fabfb662aa20\") and b.startswith(\"e96e5f0166f0\");print(\"HOMEPAGE_AND_SERVER_CONFIG_UNCHANGED=yes\")'"
+            echo "TRUST_RELEASE_RESULT=verified"
+          else
+            echo "STARTING_AUTO_ROLLBACK=yes"
+            timeout 65s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/installer.py' rollback --backup '$backup'"
+            exit 1
+          fi
+      - name: Remove private temporary staging script (retain private recovery backup)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          stage="/home/zomorod2/.zm-trust-release-20261022-$GITHUB_RUN_ID"
+          if test -f "$d/config"; then
+            ssh -T -F "$d/config" saeit-cpanel "if test -f '$stage/installer.py'; then chmod 600 '$stage/installer.py'; fi" || true
+          fi
+          rm -f "$d/vps.key" "$d/host.key" "$d/config" "$d/vps.known" "$d/host.known" "$d/host.candidate"
