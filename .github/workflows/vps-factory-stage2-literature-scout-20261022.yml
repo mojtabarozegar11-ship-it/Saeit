@@ -4,6 +4,8 @@ on:
     paths:
       - scripts/factory_stage2_literature_scout.py
       - scripts/factory_enroll_openalex.py
+      - scripts/factory_verify_openalex_activation.py
+      - tests/test_factory_verify_openalex_activation.py
       - tests/test_factory_enroll_openalex.py
       - tests/test_factory_stage2_literature_scout.py
       - deploy/install_factory_stage2_literature_scout.sh
@@ -13,6 +15,8 @@ on:
     paths:
       - scripts/factory_stage2_literature_scout.py
       - scripts/factory_enroll_openalex.py
+      - scripts/factory_verify_openalex_activation.py
+      - tests/test_factory_verify_openalex_activation.py
       - tests/test_factory_enroll_openalex.py
       - tests/test_factory_stage2_literature_scout.py
       - deploy/install_factory_stage2_literature_scout.sh
@@ -34,11 +38,12 @@ jobs:
           set -euo pipefail
           python3 -B -m unittest discover -s tests -p test_factory_stage2_literature_scout.py -v
           python3 -B -m unittest discover -s tests -p test_factory_enroll_openalex.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_verify_openalex_activation.py -v
           python3 -B -m unittest discover -s tests -p test_factory_stage2_research.py -v
           python3 -B -m unittest discover -s tests -p test_factory_stage1_handoff.py -v
           python3 -B -m unittest discover -s tests -p test_factory_agri200_p0_intake.py -v
           bash -n deploy/install_factory_stage2_literature_scout.sh
-          python3 -B -m py_compile scripts/factory_stage2_literature_scout.py scripts/factory_enroll_openalex.py
+          python3 -B -m py_compile scripts/factory_stage2_literature_scout.py scripts/factory_enroll_openalex.py scripts/factory_verify_openalex_activation.py
   private-vps-install:
     needs: validate
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-stage2-literature-scout-20261022]')
@@ -69,7 +74,7 @@ jobs:
           ssh_vps 'test "$(id -un)" = githubops && test "$(id -u)" -ne 0 && test -f "$HOME/factory-runtime/operations/production-instructions/stage2-research.py" && echo FACTORY_STAGE2_SCOUT_PREFLIGHT=PASS'
           remote_stage="/home/githubops/factory-runtime/operations/.stage2-scout-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           ssh_vps "umask 077; test ! -e '$remote_stage'; mkdir -m 700 '$remote_stage'"
-          for src in scripts/factory_stage2_literature_scout.py deploy/install_factory_stage2_literature_scout.sh scripts/factory_enroll_openalex.py; do
+          for src in scripts/factory_stage2_literature_scout.py deploy/install_factory_stage2_literature_scout.sh scripts/factory_enroll_openalex.py scripts/factory_verify_openalex_activation.py; do
             file="$(basename "$src")"
             cat "$src" | ssh_vps "umask 077; test ! -e '$remote_stage/$file'; cat > '$remote_stage/$file'; chmod 600 '$remote_stage/$file'"
             digest="$(sha256sum "$src" | awk '{print $1}')"
@@ -79,6 +84,15 @@ jobs:
           # Owner-authorized signup happens ON the private VPS. The OpenAlex
           # credential never reaches the GitHub runner, repository or logs.
           ssh_vps "python3 '$remote_stage/factory_enroll_openalex.py' --email 'mojtaba.rozegar11@gmail.com' --credential-dir '/home/githubops/factory-runtime/operations/production-instructions'"
+          # Confirm the owner's activation using a real authenticated request.
+          # No key or provider response body leaves VPS. Only if HTTP 200 is
+          # validated may stale keyed 403 cooldown be cleared and research retried.
+          activation_report="$(ssh_vps "python3 '$remote_stage/factory_verify_openalex_activation.py' --credential-dir '/home/githubops/factory-runtime/operations/production-instructions' --factory-private '/home/githubops/factory-runtime/private/autonomous-product-cycle'")"
+          printf '%s\n' "$activation_report"
+          if printf '%s\n' "$activation_report" | grep -Fxq 'FACTORY_OPENALEX_IMMEDIATE_RESEARCH_ALLOWED=true'; then
+            ssh_vps 'timeout 650s /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --stage2-program /home/githubops/factory-runtime/operations/production-instructions/stage2-research.py --batch 50 --workers 2'
+            ssh_vps 'timeout 120s /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/stage2-research.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --batch 250'
+          fi
           ssh_vps 'python3 -' <<'PY'
           import json
           from pathlib import Path
