@@ -53,7 +53,7 @@ def read_archive(path,expected_sha256):
         arff=[n for n in members if n.filename.rsplit("/",1)[-1]=="Rice_Cammeo_Osmancik.arff"]
         if len(arff)!=1:
             raise RuntimeError("F26_RICE_REAL_ARFF_FILE_MISSING")
-        text=archive.read(arff[0]).decode("utf8-sig")
+        text=archive.read(arff[0]).decode("utf-8-sig")
     return text, digest(raw)
 
 def parse_arff(source):
