@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400" role="img" aria-label="بازی هزارتوی پیکان‌ها">
+  <defs>
+    <linearGradient id="g" x2="1" y2="1"><stop stop-color="#f8faf5"/><stop offset="1" stop-color="#e0eadf"/></linearGradient>
+    <pattern id="dots" width="30" height="30" patternUnits="userSpaceOnUse"><circle cx="15" cy="15" r="1.5" fill="#c1d1bf"/></pattern>
+  </defs>
+  <rect width="640" height="400" rx="30" fill="#214a3d"/>
+  <rect x="42" y="29" width="556" height="342" rx="23" fill="url(#g)"/>
+  <rect x="42" y="29" width="556" height="342" rx="23" fill="url(#dots)"/>
+  <g stroke="#263631" stroke-width="19" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M92 93 H187 V166 H251 V94 H332"/>
+    <path d="M493 88 V181 H415 V249 H529"/>
+    <path d="M120 271 V180 H162"/>
+    <path d="M284 157 V306 H203 V338"/>
+    <path d="M348 335 V287 H397"/>
+    <path d="M546 305 V338"/>
+  </g>
+  <g fill="#263631">
+    <path d="M358 94 324 74V114Z"/>
+    <path d="M557 249 523 228V270Z"/>
+    <path d="M188 180 156 161V199Z"/>
+    <path d="M203 369 183 335H223Z"/>
+    <path d="M423 287 392 269V305Z"/>
+    <path d="M546 369 526 335H566Z"/>
+  </g>
+  <circle cx="320" cy="195" r="40" fill="#d2ad64" opacity=".9"/>
+  <path d="m312 175 20 20-20 20" stroke="#173f34" stroke-width="11" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,143 @@
+name: Zomorod Arrow Escape — third IT card, protected release
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/zomorod-arrow-escape-third-card.yml'
+      - 'games/arrow-escape/**'
+permissions:
+  contents: read
+concurrency:
+  group: zm-arrow-escape-third-card
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-zm-arrow-third-card-live-20261022]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Read source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate deterministic puzzle logic and scoped card update
+        run: |
+          set -euo pipefail
+          for file in index.html style.css engine.js app.js cover.svg route.htaccess deploy.py; do
+            test -s "games/arrow-escape/$file"
+          done
+          node --check games/arrow-escape/engine.js
+          node --check games/arrow-escape/app.js
+          node games/arrow-escape/engine.test.cjs
+          python3 games/arrow-escape/deploy.test.py
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          class Parser(HTMLParser): pass
+          path=Path('games/arrow-escape')
+          html=(path/'index.html').read_text('utf-8')
+          Parser().feed(html)
+          assert html.count('ZM-ARROW-ESCAPE-THIRD-CARD-20261022')==1
+          for asset in ['./style.css','./engine.js','./app.js']:
+              assert asset in html
+          assert (path/'route.htaccess').read_text('utf-8')=='PassengerEnabled off\nDirectoryIndex index.html\n'
+          PY
+      - name: Verify current public homepage and preserve original third-card content
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          import json,re
+          base='https://zomorodmelal.ir'
+          with urlopen(Request(base+'/',headers={'Cache-Control':'no-cache','User-Agent':'ArrowEscapePreflight/1'}),timeout=40) as response:
+              assert response.status==200
+              body=response.read(3500000)
+          match=re.search(rb'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',body,re.S)
+          assert match, 'current homepage manifest missing'
+          data=json.loads(match.group(1))
+          row=next(row for row in data['rows'] if row.get('id')=='ZM-R25')
+          assert len(row['cards'])==23
+          assert row['cards'][0]['id']=='ZM-R25-GAME-FARM-DOMINION-20261019'
+          assert row['cards'][1]['id']=='ZM-R25-GAME-RAMADAN-WAR-20261022'
+          assert row['cards'][2]['slug']=='website-design'
+          for route in ['/topics/zm-r25/website-design/','/ramadan-war/','/agriculture/','/research/']:
+              with urlopen(Request(base+route,headers={'User-Agent':'ArrowEscapePreflight/1'}),timeout=40) as response:
+                  assert response.status==200,route
+          try:
+              urlopen(Request(base+'/arrow-escape/',headers={'User-Agent':'ArrowEscapePreflight/1'}),timeout=35)
+              raise AssertionError('game route already exists')
+          except HTTPError as error:
+              assert error.code==404,error.code
+          print('EXISTING_THIRD_CARD_AND_LIVE_ROUTES=PASS')
+          PY
+      - name: Establish approved VPS to cPanel SSH relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Stage private release and prepare rollback
+        id: stage
+        run: |
+          set -euo pipefail
+          relay="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-arrow-escape-$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$relay/config" host "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage/incoming'"
+          timeout 60s scp -q -F "$relay/config" games/arrow-escape/deploy.py "host:$stage/incoming/deploy.py"
+          timeout 60s scp -q -F "$relay/config" games/arrow-escape/index.html "host:$stage/incoming/index.html"
+          timeout 60s scp -q -F "$relay/config" games/arrow-escape/style.css "host:$stage/incoming/style.css"
+          timeout 60s scp -q -F "$relay/config" games/arrow-escape/engine.js "host:$stage/incoming/engine.js"
+          timeout 60s scp -q -F "$relay/config" games/arrow-escape/app.js "host:$stage/incoming/app.js"
+          timeout 60s scp -q -F "$relay/config" games/arrow-escape/cover.svg "host:$stage/incoming/cover.svg"
+          timeout 60s scp -q -F "$relay/config" games/arrow-escape/route.htaccess "host:$stage/incoming/.htaccess"
+          timeout 60s ssh -T -F "$relay/config" host "python3 '$stage/incoming/deploy.py' prepare '$GITHUB_RUN_ID'"
+      - name: Publish the new route, then insert exactly one new third card
+        id: publish
+        run: |
+          set -euo pipefail
+          relay="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-arrow-escape-$GITHUB_RUN_ID"
+          timeout 90s ssh -T -F "$relay/config" host "python3 '$stage/incoming/deploy.py' publish '$GITHUB_RUN_ID'"
+          timeout 60s ssh -T -F "$relay/config" host "python3 '$stage/incoming/deploy.py' verify '$GITHUB_RUN_ID'"
+      - name: Confirm real public game assets and exact position
+        run: |
+          python3 - <<'PY'
+          import time,json,re
+          from urllib.request import Request,urlopen
+          base='https://zomorodmelal.ir'
+          def get(route):
+              with urlopen(Request(base+route,headers={'Cache-Control':'no-cache','User-Agent':'ArrowEscapeVerify/1'}),timeout=40) as response:
+                  assert response.status==200,route
+                  return response.read(3500000)
+          for attempt in range(10):
+              try:
+                  game=get('/arrow-escape/?v='+str(time.time_ns()))
+                  if b'ZM-ARROW-ESCAPE-THIRD-CARD-20261022' in game: break
+              except Exception:
+                  if attempt==9:raise
+              time.sleep(2)
+          else:
+              raise AssertionError('game marker not live')
+          for route,needle in [('/arrow-escape/app.js',b'ArrowMazeDebug'),
+                               ('/arrow-escape/engine.js',b'ArrowMazeCore'),
+                               ('/arrow-escape/style.css',b'.game-frame'),
+                               ('/arrow-escape/cover.svg',b'<svg')]:
+              assert needle in get(route),route
+          data=get('/?arrow='+str(time.time_ns()))
+          manifest=json.loads(re.search(rb'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',data,re.S).group(1))
+          row=next(row for row in manifest['rows'] if row.get('id')=='ZM-R25')
+          assert len(row['cards'])==24
+          assert row['cards'][2]['id']=='ZM-R25-GAME-ARROW-ESCAPE-20261022'
+          assert row['cards'][3]['slug']=='website-design'
+          for route in ['/agriculture/','/research/','/topics/zm-r25/website-design/','/ramadan-war/']:
+              get(route)
+          print('PUBLIC_ARROW_GAME_AND_THIRD_CARD=PASS')
+          PY
+      - name: Roll back exact release bytes after post-stage failure
+        if: failure() && steps.stage.outcome == 'success'
+        run: |
+          set -euo pipefail
+          relay="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-arrow-escape-$GITHUB_RUN_ID"
+          timeout 75s ssh -T -F "$relay/config" host "python3 '$stage/incoming/deploy.py' rollback '$GITHUB_RUN_ID'"

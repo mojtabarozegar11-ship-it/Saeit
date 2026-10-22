@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#142d2a">
+  <meta name="description" content="هزارتوی پیکان‌ها؛ بازی فکری رایگان با لمس ساده، مسیرهای تودرتو و مرحله‌های بی‌پایان. محصول سرگرمی زمرد ملل.">
+  <meta name="robots" content="index,follow">
+  <link rel="canonical" href="https://zomorodmelal.ir/arrow-escape/">
+  <title>هزارتوی پیکان‌ها | بازی فکری رایگان زمرد ملل</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<!-- ZM-ARROW-ESCAPE-THIRD-CARD-20261022 -->
+<div class="page-shell">
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="بازگشت به سایت زمرد ملل"><span class="mark">◆</span><span>زمرد <b>ملل</b><small> ZOMOROD MELAL</small></span></a>
+    <a class="back-link" href="/">بازگشت به سایت <span aria-hidden="true">↗</span></a>
+  </header>
+
+  <main>
+    <section class="intro" aria-labelledby="game-title">
+      <div class="eyebrow"><span class="live-dot"></span> ARROW ESCAPE / PUZZLE GAME</div>
+      <h1 id="game-title">هزارتوی <em>پیکان‌ها</em></h1>
+      <p>مسیرها را به ترتیب درست آزاد کن. فقط یک لمس؛ هزاران چالش تازه!</p>
+    </section>
+
+    <section class="game-frame" aria-label="بازی هزارتوی پیکان‌ها">
+      <div class="game-toolbar">
+        <div class="level-badge"><span class="small-label">مرحله</span><strong id="level">۱</strong></div>
+        <div class="progress-group">
+          <div class="progress-header"><span>مسیرهای آزادشده</span><b id="progressText">۰ / ۶</b></div>
+          <div class="track" aria-hidden="true"><span id="progressFill"></span></div>
+        </div>
+        <div class="hearts" aria-live="polite" aria-label="جان‌های باقی‌مانده"><span id="heartCount">♥ ♥ ♥ ♥ ♥</span></div>
+      </div>
+      <div class="board-surround">
+        <div class="board-decoration deco-1" aria-hidden="true">✳</div>
+        <div class="board-decoration deco-2" aria-hidden="true">✳</div>
+        <canvas id="gameBoard" width="720" height="720" aria-label="زمین بازی؛ برای آزادکردن هر پیکان روی مسیر آن لمس یا کلیک کنید"></canvas>
+        <div id="gameOverlay" class="game-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="overlayTitle">
+          <div class="overlay-card">
+            <span class="overlay-icon" id="overlayIcon">✦</span>
+            <h2 id="overlayTitle">مرحله تمام شد!</h2>
+            <p id="overlayMessage">عالی بود!</p>
+            <button class="primary-button" id="overlayAction" type="button">مرحله بعد <span aria-hidden="true">←</span></button>
+          </div>
+        </div>
+      </div>
+      <div id="statusText" class="status-text" role="status" aria-live="polite">از پیکان‌های آزاد شروع کن؛ مسیر مسدود حرکت نمی‌کند.</div>
+      <div class="game-actions">
+        <button type="button" class="action-button hint" id="hintButton"><span aria-hidden="true">✧</span> راهنمایی</button>
+        <button type="button" class="action-button" id="restartButton"><span aria-hidden="true">↻</span> شروع دوباره</button>
+        <button type="button" class="action-button icon-button" id="soundButton" aria-label="قطع صدا" aria-pressed="true">♫</button>
+      </div>
+    </section>
+
+    <section class="below-game">
+      <div class="stat"><b id="score">۰</b><span>امتیاز تو</span></div>
+      <div class="stat"><b id="bestLevel">۱</b><span>بالاترین مرحله</span></div>
+      <div class="stat"><b>∞</b><span>مرحله‌های تولیدشونده</span></div>
+    </section>
+    <details class="how-to">
+      <summary>چطور بازی کنم؟ <span aria-hidden="true">＋</span></summary>
+      <p>هر مسیر سیاه یک پیکان است. روی آن بزن تا در جهت نوکش از زمین خارج شود. اگر مسیر خروج به پیکان دیگری برخورد کند، حرکت انجام نمی‌شود و یک جان کم می‌شود. با پاک‌کردن همهٔ پیکان‌ها به مرحلهٔ بعد می‌روی. هر مرحله به‌صورت خودکار ساخته و حل‌پذیری‌اش بررسی می‌شود. پیشرفت در مرورگر خودت ذخیره می‌شود.</p>
+    </details>
+  </main>
+
+  <footer>© شرکت کشت و صنعت زمرد ملل · بازی مستقل و رایگان · <a href="/">صفحه اصلی</a></footer>
+</div>
+<script src="./engine.js" defer></script>
+<script src="./app.js" defer></script>
+</body>
+</html>
