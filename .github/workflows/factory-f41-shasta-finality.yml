@@ -7,13 +7,6 @@ on:
       - tests/test_factory_f41_shasta_finality.py
       - deploy/install_factory_f41_shasta_finality.sh
       - .github/workflows/factory-f41-shasta-finality.yml
-  push:
-    branches: [main]
-    paths:
-      - scripts/factory_f41_shasta_finality.py
-      - tests/test_factory_f41_shasta_finality.py
-      - deploy/install_factory_f41_shasta_finality.sh
-      - .github/workflows/factory-f41-shasta-finality.yml
 permissions: {contents: read}
 concurrency:
   group: factory-f41-shasta-finality-${{ github.ref }}

@@ -15,32 +15,46 @@ private="$base/private/autonomous-product-cycle"
 py="$base/.venv/bin/python"
 runner="$master/run-f41-queue.sh"
 source="$stage/factory_f41_auto_finality_scan.py"
+verified="$stage/factory_f41_shasta_finality.py"
+builder="$stage/factory_f41_multi_product_builder.py"
 wrapper="$stage/f41_master_queue_with_finality.sh"
 legacy="$stage/f41_master_queue_runner.sh"
 test -x "$py"
-test -f "$source" && test -f "$wrapper" && test -f "$legacy"
+test -f "$source" && test -f "$verified" && test -f "$builder" && test -f "$wrapper" && test -f "$legacy"
 test -f "$target/factory_f41_shasta_finality.py"
 test -f "$target/factory_f41_multi_product_builder.py"
 test -f "$runner" && test ! -L "$runner"
 test ! -L "$target"
 test ! -L "$source"
+test ! -L "$verified"
+test ! -L "$builder"
 test ! -L "$wrapper"
 test ! -L "$target/factory_f41_auto_finality_scan.py"
-# Do not replace an unknown existing master runner or unknown autoscan.
+test ! -L "$target/factory_f41_shasta_finality.py"
+test ! -L "$target/factory_f41_multi_product_builder.py"
+# Reject unexpected on-VPS edits to any production module.
+check_old_or_new() {
+  local remote="$1" old="$2" staged="$3"
+  local installed_sha stage_sha
+  installed_sha="$(sha256sum "$remote" | awk '{print $1}')"
+  stage_sha="$(sha256sum "$staged" | awk '{print $1}')"
+  if [[ "$installed_sha" != "$old" && "$installed_sha" != "$stage_sha" ]]; then
+    echo F41_TRC20_UPGRADE_UNEXPECTED_MODULE_DRIFT_BLOCKED
+    exit 1
+  fi
+}
+check_old_or_new "$target/factory_f41_multi_product_builder.py" "dd5962f0a400b1c947946b92ec12eb8bd8b7b9e9984094cffd76d26ef29c239c" "$builder"
+check_old_or_new "$target/factory_f41_shasta_finality.py" "6a8021d5f9b886306f2cb974927ec0d585be3fc2d5d1048f6aa214fd79e25e97" "$verified"
+check_old_or_new "$target/factory_f41_auto_finality_scan.py" "a3c2736a108ceaad3bc3b0085d088bda68155d41bf988529ed8be8954b34769b" "$source"
+# Do not replace an unknown existing master runner.
 if ! cmp -s "$runner" "$legacy" && ! cmp -s "$runner" "$wrapper"; then
   echo F41_AUTOSCAN_MASTER_RUNNER_DRIFT_BLOCKED
   exit 1
 fi
-if test -f "$target/factory_f41_auto_finality_scan.py"; then
-  cmp -s "$target/factory_f41_auto_finality_scan.py" "$source" || {
-    echo F41_AUTOSCAN_EXISTING_MODULE_DRIFT_BLOCKED
-    exit 1
-  }
-fi
 bash -n "$wrapper"
 bash -n "$legacy"
 bash -n "$stage/install.sh"
-"$py" -B -c 'import ast,sys;ast.parse(open(sys.argv[1],encoding="utf8").read())' "$source"
+"$py" -B -c 'import ast,sys;[ast.parse(open(p,encoding="utf8").read()) for p in sys.argv[1:]]' "$source" "$verified" "$builder"
 test -d "$private/f41-multiproduct/orders"
 test -d "$private/f41-multiproduct/outputs"
 test -d "$target/assets"
@@ -54,6 +68,9 @@ if ! cmp -s "$runner" "$legacy" && ! cmp -s "$runner" "$wrapper"; then
   echo F41_AUTOSCAN_CONCURRENT_MASTER_DRIFT_BLOCKED
   exit 1
 fi
+check_old_or_new "$target/factory_f41_multi_product_builder.py" "dd5962f0a400b1c947946b92ec12eb8bd8b7b9e9984094cffd76d26ef29c239c" "$builder"
+check_old_or_new "$target/factory_f41_shasta_finality.py" "6a8021d5f9b886306f2cb974927ec0d585be3fc2d5d1048f6aa214fd79e25e97" "$verified"
+check_old_or_new "$target/factory_f41_auto_finality_scan.py" "a3c2736a108ceaad3bc3b0085d088bda68155d41bf988529ed8be8954b34769b" "$source"
 backup="$ops/backups/f41-runner-before-autoscan-$run_id"
 test ! -L "$backup"
 if ! test -e "$backup"; then
@@ -61,9 +78,13 @@ if ! test -e "$backup"; then
 else
   cmp -s "$runner" "$backup" || cmp -s "$wrapper" "$runner"
 fi
-new_module="$target/.factory_f41_auto_finality_scan.$run_id.new"
-install -m 600 "$source" "$new_module"
-mv -f -- "$new_module" "$target/factory_f41_auto_finality_scan.py"
+# Stage and promote three compatible v2 modules while the authenticated F41 lock is held.
+for module in factory_f41_multi_product_builder factory_f41_shasta_finality factory_f41_auto_finality_scan; do
+  new_module="$target/.$module.$run_id.new"
+  install -m 600 "$stage/$module.py" "$new_module"
+  mv -f -- "$new_module" "$target/$module.py"
+  test "$(sha256sum "$stage/$module.py" | awk '{print $1}')" = "$(sha256sum "$target/$module.py" | awk '{print $1}')"
+done
 new_runner="$master/.run-f41-queue-autoscan.$run_id.new"
 install -m 700 "$wrapper" "$new_runner"
 mv -f -- "$new_runner" "$runner"
@@ -72,6 +93,8 @@ cmp -s "$runner" "$wrapper"
 test "$(crontab -l | grep -Fc SAEIT_MASTER_F41_PRIVATE_QUEUE_V1)" -eq 1
 # Verify the exact installed, authenticated master runner end-to-end now.
 /usr/bin/timeout 120s /bin/bash "$runner"
+echo F41_TRC20_SHASTA_ALLOWLISTED_PROOF_CODE=INSTALLED
+echo F41_TRC20_LIVE_ALLOWLIST_COUNT="$(printf '%s' "${F41_SHASTA_TRC20_ALLOWLIST:-}" | awk -F, '{if ($0 == "") print 0; else print NF}')"
 echo F41_AUTOSCAN_AUTHENTIC_MASTER_CYCLE=PASS
 echo F41_AUTOSCAN_INSTALLED_ON_VPS=PASS
 echo F41_AUTOSCAN_MOJ1RO1_CRON_15MIN=ACTIVE

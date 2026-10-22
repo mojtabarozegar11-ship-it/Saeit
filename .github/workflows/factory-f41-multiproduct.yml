@@ -16,7 +16,6 @@ on:
   push:
     branches: [main, feature/f41-multiproduct-value-engine-20261022]
     paths:
-      - scripts/factory_f41_multi_product_builder.py
       - scripts/factory_f41_extension_builders.py
       - tests/test_factory_f41_extensions.py
       - scripts/factory_f41_token_builder_v2.py
@@ -26,7 +25,6 @@ on:
       - factory_config/f41_samples/**
       - factory_assets/f41_demo_assets/**
       - deploy/install_factory_f41_multiproduct.sh
-      - .github/workflows/factory-f41-multiproduct.yml
 permissions: {contents: read}
 concurrency:
   group: factory-f41-multiproduct-${{ github.ref }}

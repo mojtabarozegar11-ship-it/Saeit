@@ -129,6 +129,22 @@ class ScanTests(unittest.TestCase):
         second = self.scan()
         self.assertEqual(second["reconciliation_orders"], 1)
 
+    def test_trc20_requires_two_rpc_slots_per_observation(self):
+        for i in range(4):
+            path = self.put(name=f"F41-token-merchant-{i}", built=False)
+            spec = json.loads(path.read_text("utf8"))
+            for inv in spec["data"]["invoices"]:
+                inv["asset"] = "TRC20"
+                inv["token_contract"] = "TWTBsKZPVuQgaGNbyJWJm9XR28g4wVBCNQ"
+            for obs in spec["data"]["observations"]:
+                obs["asset"] = "TRC20"
+            path.write_text(json.dumps(spec), encoding="utf8")
+            builder.build(path, self.outputs / path.stem)
+        result = self.scan(execute=False, issue=lambda *args: self.fail("dry-run network"))
+        self.assertEqual(result["rpc_budget_deferred"], 2)
+        self.assertEqual(result["deferred_due_to_cycle_cap"], 2)
+        self.assertEqual(result["proofs_created"], 0)
+
     def test_no_payment_code_is_added_to_old_runner(self):
         legacy = (ROOT / "deploy" / "f41_master_queue_runner.sh").read_text()
         wrapper = (ROOT / "deploy" / "f41_master_queue_with_finality.sh").read_text()
