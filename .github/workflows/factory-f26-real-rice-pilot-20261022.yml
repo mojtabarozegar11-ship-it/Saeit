@@ -5,6 +5,7 @@ on:
     paths:
       - scripts/factory_f26_real_rice_research_pilot.py
       - tests/test_factory_f26_real_rice_research_pilot.py
+      - tests/test_factory_f26_real_rice_private_install.py
       - deploy/factory_f26_real_rice_private_relay.sh
       - deploy/factory_f26_real_rice_private_install.py
       - .github/workflows/factory-f26-real-rice-pilot-20261022.yml
@@ -34,6 +35,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 -B -m unittest discover -s tests -p test_factory_f26_real_rice_research_pilot.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_f26_real_rice_private_install.py -v
+          bash -n deploy/factory_f26_real_rice_private_relay.sh
           python3 -B -m py_compile scripts/factory_f26_real_rice_research_pilot.py
       - name: Fetch explicitly licensed UCI rice morphology dataset over HTTPS
         shell: bash
