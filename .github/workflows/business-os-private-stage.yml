@@ -5,6 +5,8 @@ on:
     branches: [feature/evidence-led-business-os-20261022]
     paths:
       - '.github/workflows/business-os-private-stage.yml'
+      - 'scripts/business_os_cpanel_private_metrics.py'
+      - 'scripts/business_os_cpanel_private_run.sh'
   workflow_dispatch:
 
 permissions:
