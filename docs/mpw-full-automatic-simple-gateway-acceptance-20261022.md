@@ -62,3 +62,37 @@ download tests all pass.**
 
 This contract takes precedence over one-off UI changes, reports,
 or unverified "100/100" readiness declarations.
+
+
+## 22 October — anonymous checkout and browser handoff
+
+- The test-only Django guest module creates an individual password-disabled
+  buyer behind the scenes with no form or mandatory login.
+- The cookie is signed by Django and contains a 256-bit random claim.
+  Only its SHA256 digest is held in isolated MariaDB; HttpOnly, Secure,
+  SameSite=Lax and checkout-only path are enforced.
+- Atomic per-IP HMAC-keyed hourly throttle permits five new identities.
+- Guest checkout delegates to the same authenticated-order, immutable quote,
+  actual Django ledger, owner-scoped paid-status and private-download logic.
+- A 120-second, single-use high-entropy wallet browser transfer ticket
+  allows the TronLink DApp browser to obtain its OWN signed checkout cookie.
+  This avoids exposing the 30-day original guest claim via a deep link.
+- Ticket replay, forged claim, expiry, owner mismatch and missing receipt
+  all fail closed; the original browser token remains valid.
+- 15 real Django/MariaDB isolated tests passed on Actions run 39728316387:
+  https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39728316387
+- The suite includes simulated chain confirmation, real Django ledger
+  entries and the owner-only private-file download endpoint.
+
+## Remaining production blocks
+
+No real mainnet TRX transfer has been successfully dual-verified against
+two independently controlled authenticated TRON SolidityNode providers.
+No safe staging deployment with reversible migrations/restore and
+real money-to-file download has been proven. Guest routes remain UNMOUNTED
+and all code is guarded to run against a test_ MariaDB schema only.
+
+Before public use, scrub 120-second handoff tokens from webserver access
+logs, enforce edge rate limiting, verify the signed HTTPS wallet deep-link
+and complete a consented tiny mainnet payment in private staging.
+No production writes were made by these workflows.
