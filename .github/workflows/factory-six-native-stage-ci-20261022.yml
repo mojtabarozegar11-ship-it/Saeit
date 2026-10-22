@@ -6,6 +6,12 @@ on:
       - scripts/factory_six_native_candidates.py
       - scripts/factory_f14_browser_real_smoke.py
       - scripts/factory_six_native_candidate_bundle.py
+      - scripts/factory_specialist_formats.py
+      - scripts/factory_six_native_independent_rework.py
+      - scripts/factory_f14_browser_real_smoke.py
+      - tests/test_factory_six_native_independent_rework.py
+      - deploy/factory_six_native_review_relay.sh
+      - deploy/install_factory_six_native_rework.sh
       - deploy/factory_six_native_private_relay.sh
       - .github/workflows/factory-six-native-stage-ci-20261022.yml
   workflow_dispatch:
@@ -26,7 +32,10 @@ jobs:
         run: |
           bash -n deploy/factory_six_native_private_relay.sh
           bash -n deploy/factory_six_native_private_verify.sh
-          python3 -B -m py_compile scripts/factory_six_native_candidate_bundle.py
+          bash -n deploy/install_factory_six_native_rework.sh
+          bash -n deploy/factory_six_native_review_relay.sh
+          python3 -B -m py_compile scripts/factory_six_native_candidate_bundle.py scripts/factory_six_native_independent_rework.py
+          python3 -B -m unittest discover -s tests -p 'test_factory_six_native_independent_rework.py' -v
       - name: Generate and recheck all original source candidates
         run: |
           mkdir -p "$RUNNER_TEMP/private-six"
@@ -224,3 +233,16 @@ jobs:
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
         run: bash deploy/factory_six_native_private_verify.sh
+
+  review-and-queue-six-native-families:
+    needs: verify-all-six-on-private-vps
+    if: github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Independently recheck actual native VPS bytes and install private rework intake
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: bash deploy/factory_six_native_review_relay.sh
