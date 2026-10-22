@@ -5,6 +5,7 @@ mainnet-capable checkout adapter is installed AND all approval gates are true.
 A game URL, local storage value or a buyer-submitted TxID cannot enable sales.
 """
 from importlib import import_module
+import re
 from urllib.parse import unquote
 
 from django.conf import settings
@@ -30,7 +31,8 @@ def _adapter():
                 or module.mainnet_checkout_ready() is not True):
             return None
         return module
-    except (ImportError, AttributeError, OSError, RuntimeError, ValueError):
+    except Exception:
+        # Even a faulty or unresponsive gateway health check is not readiness.
         return None
 
 
@@ -92,9 +94,8 @@ def crown_cosmetic_checkout(request, product_id):
         if not isinstance(path, str):
             return _unavailable()
         normalized = unquote(path)
-        if (not normalized.startswith("/commerce/")
-                or normalized.startswith("//") or "\\" in normalized
-                or "?" in normalized or "#" in normalized
+        if (not re.fullmatch(r"/commerce/[a-z0-9/-]+", path)
+                or normalized != path
                 or any(part in (".", "..") for part in normalized.split("/"))):
             return _unavailable()
         return _private(HttpResponseRedirect(path))
