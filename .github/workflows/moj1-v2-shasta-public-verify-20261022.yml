@@ -1,0 +1,47 @@
+name: MOJ1 V2 public Shasta bytecode and escrow attestation (keyless)
+on:
+  push:
+    branches: ['moj1/shasta-pilot-20261021']
+    paths:
+      - '.github/workflows/moj1-v2-shasta-public-verify-20261022.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj1-v2-public-shasta-readonly
+  cancel-in-progress: false
+jobs:
+  verify-v2-public:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/moj1/shasta-pilot-20261021'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline syntax and pinned compilation
+        working-directory: experiments/moj1-pilot
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          node --check scripts/verify-v2-shasta-readonly.mjs
+          npm run compile
+          npm run preflight
+          node scripts/release-readiness-offline.mjs --assert-blocked
+      - name: Independent public Shasta read-only V1/V2 contract attestation
+        working-directory: experiments/moj1-pilot
+        run: |
+          node scripts/verify-v2-shasta-readonly.mjs
+          echo 'MOJ1_PRIVATE_KEYS=NONE'
+          echo 'MOJ1_CHAIN_BROADCAST=NONE'
+          echo 'MOJ1_REAL_SALES=BLOCKED'
+      - name: Preserve independent V2 contract and escrow proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: moj1-v2-public-shasta-attestation-${{ github.run_id }}
+          path: experiments/moj1-pilot/artifacts/v2-shasta-public-attestation.json
+          if-no-files-found: error
+          retention-days: 30
