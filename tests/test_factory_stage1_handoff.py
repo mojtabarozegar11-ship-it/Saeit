@@ -105,6 +105,25 @@ class IndependentStageOneTests(unittest.TestCase):
         self.assertTrue((self.root / "production-instructions/stage-02/inbox/WO-00000001--r002.json").is_file())
         self.assertEqual(STAGE.run(self.root)["returned_handoffs"], 0)
 
+    def test_stage1_handoff_releases_capacity_without_stage2_completion(self):
+        entries = [{"product_id": 10, "sha256": "c"*64,
+                    "research_quality_gate": {
+                        "schema": "saeit.factory.research-readiness.v1",
+                        "blockers": ["FIVE_DISTINCT_PUBLIC_SOURCES_WITH_LINKED_EVIDENCE_REQUIRED"],
+                        "research_gate_passed": False}}]
+        (self.root / "research-dossiers/autonomous-portfolio.json").write_text(
+            json.dumps({"entries": entries}))
+        self.assertEqual(GEN.generate(self.root, max_backlog=1)["action"], "issued")
+        self.assertEqual(GEN.generate(self.root, max_backlog=1)["action"], "capacity_hold")
+        self.assertEqual(STAGE.run(self.root)["new_handoffs"], 1)
+        resumed = GEN.generate(self.root, max_backlog=1)
+        self.assertEqual(resumed["action"], "issued")
+        report = json.loads((self.root / "production-instructions/order-status.json").read_text())
+        self.assertEqual(report["pending_stage1_instructions"], 1)
+        self.assertEqual(report["pending_downstream_or_rework_instructions"], 1)
+        self.assertTrue(report["stage1_capacity_independent_of_stage2"])
+        self.assertFalse(report["distribution_enabled"])
+
     def test_receipt_collision_never_overwrites_handoff(self):
         self.input_order()
         STAGE.run(self.root)
