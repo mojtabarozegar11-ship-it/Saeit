@@ -110,7 +110,26 @@ os.chmod(temp,p.stat().st_mode & 0o777)
 os.replace(temp,p)
 PY
   echo "PURCHASE_RELEASE_APPCONFIG_PATCHED"
-  (cd "$prod" && "$interpreter" -B manage.py check) > /dev/null 2>&1 || { echo "PURCHASE_RELEASE_DJANGO_CHECK_FAILED"; return 1; }
+  if ! (cd "$prod" && "$interpreter" -B manage.py check) > "$stage/django-check-private.log" 2>&1; then
+    "$interpreter" -B - "$stage/django-check-private.log" <<'PY'
+import pathlib,re,sys
+s=pathlib.Path(sys.argv[1]).read_text(encoding="utf-8",errors="replace")
+codes=re.findall(r"(?:(?:fields|models|admin|urls|security|auth)\.)[EW]\d{3}",s)
+for code in sorted(set(codes))[:5]:
+    print("PURCHASE_RELEASE_CHECK_CODE_" + code.replace(".", "_"))
+for kind in ("ModuleNotFoundError","ImportError","AttributeError","TypeError","ValueError","RuntimeError","SystemCheckError","ImproperlyConfigured","SyntaxError"):
+    if kind in s:
+        print("PURCHASE_RELEASE_CHECK_CLASS_" + kind)
+m=re.search(r"(?:cannot import name |has no attribute )['\"]([A-Za-z_][A-Za-z_0-9]*)['\"]",s)
+if m:
+    print("PURCHASE_RELEASE_CHECK_SYMBOL_" + m.group(1))
+m=re.search(r"No module named ['\"]([A-Za-z_][A-Za-z_0-9.]*)['\"]",s)
+if m and m.group(1).startswith(("core","command_center","config","django")):
+    print("PURCHASE_RELEASE_CHECK_MODULE_" + m.group(1).replace(".", "_"))
+PY
+    echo "PURCHASE_RELEASE_DJANGO_CHECK_FAILED"
+    return 1
+  fi
   restart || { echo "PURCHASE_RELEASE_PASSENGER_RESTART_FAILED"; return 1; }
   touch "$backup/applied"
   echo "PURCHASE_RELEASE_APPLIED_DJANGO_CHECK_OK"
