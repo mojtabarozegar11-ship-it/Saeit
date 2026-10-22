@@ -68,8 +68,9 @@ def crown_cosmetic_checkout(request, product_id):
     product = products.first()
     if product is None:
         raise Http404
+    metadata = product.metadata if isinstance(product.metadata, dict) else {}
     item = next((row for row in catalogue()
-                 if row["sku"] == (product.metadata or {}).get("crown_sku")), None)
+                 if row["sku"] == metadata.get("crown_sku")), None)
     expected_path = "/store/crown/{}/checkout/".format(product_id)
     if (not item or item["available"] is not True
             or item["checkout"] != expected_path or not gateway_ready()):
