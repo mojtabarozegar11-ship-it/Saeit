@@ -1,4 +1,4 @@
-name: Publish Ramadan War web game into Zomorod IT row card two
+name: Port Android Ramadan War to the existing web game route
 on:
   push:
     branches: [main]
@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Check standalone game and deployment script
+      - name: Check Android-parity web client and scoped updater
         run: |
           set -euo pipefail
           test -s games/ramadan-war/index.html
@@ -57,7 +57,7 @@ jobs:
             sleep 1
           done
           GAME_URL=http://127.0.0.1:8765/ NODE_PATH=/tmp/ramadan-playwright/node_modules node games/ramadan-war/site-smoke.cjs
-      - name: Confirm the target card and nearby production routes before editing
+      - name: Confirm the existing second card and nearby production routes before editing
         run: |
           python3 - <<'PY'
           from urllib.request import Request,urlopen
@@ -72,17 +72,22 @@ jobs:
             m=re.search(rb'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',body,re.S)
             assert m,'live homepage manifest not found'
             data=json.loads(m.group(1));row=next(r for r in data['rows'] if r.get('id')=='ZM-R25')
-            assert row['title']=='فناوری اطلاعات و خدمات دیجیتال' and len(row['cards'])==22
+            assert row['title']=='فناوری اطلاعات و خدمات دیجیتال' and len(row['cards'])==23
             assert row['cards'][0]['id']=='ZM-R25-GAME-FARM-DOMINION-20261019'
-            assert row['cards'][1]['slug']=='website-design'
-            assert not any(c.get('slug')=='ramadan-war' for c in row['cards'])
+            assert row['cards'][1]['id']=='ZM-R25-GAME-RAMADAN-WAR-20261022'
+            assert row['cards'][1]['canonicalUrl']=='/ramadan-war/' and row['cards'][2]['slug']=='website-design'
+          with urlopen(Request(root+'/ramadan-war/',headers={'Cache-Control':'no-cache','User-Agent':'RamadanWarWebPort/1'}),timeout=35) as r:
+           assert r.status==200
+           body=r.read(1000000)
+          assert b'ZM-RAMADAN-WAR-WEB-CARD-20261022' in body
+          print('EXISTING_GAME_ROUTE_BEFORE_UPDATE=PASS',flush=True)
           PY
       - name: Establish the pinned GitHub Actions to VPS to cPanel relay
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: bash games/farm-wars-v3/scripts/ssh_relay.sh
-      - name: Transfer only the standalone game and scoped installer to private staging
+      - name: Transfer the replacement web client and scoped updater to private staging
         id: stage
         run: |
           set -euo pipefail
@@ -95,7 +100,7 @@ jobs:
           timeout 50s scp -q -F "$d/config" games/ramadan-war/game.js "host:$stage/incoming/game.js"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/game.css "host:$stage/incoming/game.css"
           timeout 45s ssh -T -F "$d/config" host "python3 '$stage/incoming/deploy.py' prepare '$GITHUB_RUN_ID'"
-      - name: Publish game route then insert it at exactly position two
+      - name: Replace only game client files and preserve the second card
         id: publish
         run: |
           set -euo pipefail
@@ -135,7 +140,7 @@ jobs:
       - name: Test campaign controls on desktop and mobile browsers
         run: |
           GAME_URL=https://zomorodmelal.ir/ramadan-war/ NODE_PATH=/tmp/ramadan-playwright/node_modules node games/ramadan-war/site-smoke.cjs
-      - name: Roll back only this game's route and exact homepage version after failure
+      - name: Restore the previous game client files after any deployment or browser failure
         if: failure() && steps.stage.outcome == 'success'
         run: |
           set -euo pipefail
