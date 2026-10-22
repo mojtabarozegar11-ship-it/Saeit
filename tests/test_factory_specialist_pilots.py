@@ -126,6 +126,27 @@ class SpecialistPilotTests(unittest.TestCase):
         self.assertTrue(retry["retry_on_next_tick"])
         self.assertEqual(result["fully_verified_families"], 0)
 
+    def test_hash_correct_receipt_cannot_forge_specialist_approval(self):
+        with mock.patch.object(pilots.subprocess, "run", side_effect=self._write_generated):
+            status = pilots.cycle(self.output, self.manifest)
+        version = self.output / "family-pilots" / status["family"] / status["source_key"]
+        receipt = version / "technical-receipt.json"
+        original = json.loads(receipt.read_text())
+        self.assertTrue(pilots.verified_receipt(version, status["family"], status["source_key"]))
+        for changes in (
+            {"technical_quality_passed": False},
+            {"independent_specialist_review_completed": True},
+            {"owner_approval_recorded": True},
+            {"distribution_enabled": True},
+            {"schema": "malicious"},
+            {"commercial_release": True},
+        ):
+            forged = dict(original, **changes)
+            receipt.write_text(json.dumps(forged))
+            self.assertFalse(pilots.verified_receipt(version, status["family"], status["source_key"]))
+        receipt.write_text(json.dumps(original))
+        self.assertTrue(pilots.verified_receipt(version, status["family"], status["source_key"]))
+
     def test_expanded_family_set_is_explicit(self):
         self.assertEqual(len(pilots.FAMILIES), 11)
         self.assertEqual(pilots.FAMILIES["F37"], ("motion.gif", "motion.mp4"))
