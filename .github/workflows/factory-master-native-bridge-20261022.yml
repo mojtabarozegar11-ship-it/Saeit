@@ -4,6 +4,7 @@ on:
     branches: [feature/master-six-native-task-bridge-20261022, feature/moj1ro1-real-factory-agent-20261022, main]
     paths:
       - core/factory_native_review_gateway.py
+      - core/factory_f41_gateway.py
       - core/economic_tool_pack.py
       - core/economic_master_agent.py
       - core/management/commands/factory_native_enqueue.py
@@ -35,7 +36,7 @@ jobs:
         run: |
           set -euo pipefail
           bash -n deploy/install_factory_native_master_bridge.sh
-          python3 -B -m py_compile core/factory_native_review_gateway.py core/economic_tool_pack.py core/economic_master_agent.py core/management/commands/factory_native_enqueue.py
+          python3 -B -m py_compile core/factory_native_review_gateway.py core/factory_f41_gateway.py core/economic_tool_pack.py core/economic_master_agent.py core/management/commands/factory_native_enqueue.py
           python3 manage.py check
           python3 -B -m pytest -q core/tests/test_factory_native_master_bridge.py
           python3 -B -m pytest -q core/tests/test_worker_runner.py
@@ -65,7 +66,7 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
           test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           opts=(-i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15)
-          files=(core/factory_native_review_gateway.py core/economic_tool_pack.py core/economic_master_agent.py core/management/commands/seed_online_income_agents.py core/management/commands/factory_native_enqueue.py deploy/install_factory_native_master_bridge.sh)
+          files=(core/factory_native_review_gateway.py core/factory_f41_gateway.py core/economic_tool_pack.py core/economic_master_agent.py core/management/commands/seed_online_income_agents.py core/management/commands/factory_native_enqueue.py deploy/install_factory_native_master_bridge.sh)
           tar -cf "$work/source.tar" "${files[@]}"
           expected="$(sha256sum "$work/source.tar" | cut -d' ' -f1)"
           stage="/home/githubops/factory-runtime/operations/.native-master-bridge-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -78,7 +79,7 @@ jobs:
           root=Path(sys.argv[1]);expected=sys.argv[2]
           archive=root/'source.tar'
           assert hashlib.sha256(archive.read_bytes()).hexdigest()==expected
-          allowed={'core/factory_native_review_gateway.py','core/economic_tool_pack.py','core/economic_master_agent.py','core/management/commands/seed_online_income_agents.py','core/management/commands/factory_native_enqueue.py','deploy/install_factory_native_master_bridge.sh'}
+          allowed={'core/factory_native_review_gateway.py','core/factory_f41_gateway.py','core/economic_tool_pack.py','core/economic_master_agent.py','core/management/commands/seed_online_income_agents.py','core/management/commands/factory_native_enqueue.py','deploy/install_factory_native_master_bridge.sh'}
           with tarfile.open(archive,'r:') as tar:
               members=tar.getmembers()
               assert {m.name for m in members}==allowed

@@ -106,7 +106,7 @@ rollback_preseed() {
 }
 trap rollback_preseed EXIT
 for f in "${changed[@]}" "${added[@]}"; do
-  install -m 600 "$stage/new/$f" "$app/$f.f41-$"
+  install -m 600 "$stage/new/$f" "$app/$f.f41-$$"
   mv -f -- "$app/$f.f41-$$" "$app/$f"
 done
 "$py" manage.py check

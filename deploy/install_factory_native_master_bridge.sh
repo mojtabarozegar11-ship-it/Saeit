@@ -17,6 +17,7 @@ test "$(crontab -l | grep -c SAEIT_MASTER_AGENT_V1)" -eq 2
 command -v flock >/dev/null
 files=(
  core/factory_native_review_gateway.py
+ core/factory_f41_gateway.py
  core/economic_tool_pack.py
  core/economic_master_agent.py
  core/management/commands/seed_online_income_agents.py
