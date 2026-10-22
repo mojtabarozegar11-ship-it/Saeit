@@ -17,6 +17,24 @@ def diagnostic():
         raise SystemExit('Wrong cPanel identity')
     out = {'scope':'mpw-checkout-assets-readonly','writes':0,'roots':{},
            'asset_candidates':[],'source_references':[]}
+    for label, folder in {
+        'private_backup': BASE/'.private_mojplaywin_main_agents',
+        'public_revenue':ROOTS['web']/'mpw-editorial'/'revenue',
+        'public_asset_dir':ROOTS['web']/'mpw-editorial'/'revenue'/'assets',
+        'original_home_folder':ROOTS['web']/'design-preview-20261017',
+    }.items():
+        out.setdefault('directory_health',{})[label]={
+            'exists':folder.exists(),'is_dir':folder.is_dir(),
+            'symlink':folder.is_symlink(),
+            'private_permissions_ok':(not bool(folder.stat().st_mode & 0o077)) if label=='private_backup' and folder.exists() else None,
+        }
+    for label, path in {
+        'original_home_html':ROOTS['web']/'design-preview-20261017'/'production-home-20261017.html',
+        'passenger_entry':ROOTS['web']/'passenger_wsgi.py',
+        'routing':ROOTS['web']/'.htaccess',
+    }.items():
+        out.setdefault('file_health',{})[label]={
+            'is_file':path.is_file(),'symlink':path.is_symlink()}
     for label, root in ROOTS.items():
         out['roots'][label]={'exists':root.is_dir(),'symlink':root.is_symlink()}
         if not root.is_dir() or root.is_symlink():
