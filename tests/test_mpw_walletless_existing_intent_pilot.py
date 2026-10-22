@@ -18,6 +18,7 @@ from services.mpw_walletless_django_test_bridge import TrustedNodePair
 from services.mpw_walletless_existing_intent_pilot import (
     PROVIDER, WAITING, _decode, _encode, _key,
     reserve_existing_test_intent, settle_existing_test_intent,
+    existing_test_buyer_status,
 )
 
 from tests import test_mpw_walletless_real_django_orm_e2e as fixture
@@ -130,6 +131,7 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
 
     def test_finalized_two_source_trx_grants_exactly_one_real_product(self):
         pk,invoice,_=self.reserve()
+        self.assertEqual(existing_test_buyer_status(pk,42),{"status":"awaiting","can_download":False})
         self.assertEqual(settle_existing_test_intent(pk,fixture.TX_HASH,self.pair()),"paid")
         self.assertEqual(PaymentIntent.objects.get(pk=pk).status,"paid")
         self.assertEqual(fixture.Order.objects.get(pk=self.order_id).status,"paid")
@@ -139,9 +141,37 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
         self.assertEqual(record.metadata["walletless_receipt_event_id"],event.pk)
         self.assertEqual(record.metadata["evidence_digest"],event.payload_hash)
         self.assertEqual(fixture.CommerceFulfillment.objects.filter(item__order_id=self.order_id,status="ready").count(),1)
+        self.assertEqual(existing_test_buyer_status(pk,42),{
+            "status":"paid","can_download":True,
+            "download_path":f"/commerce/trx-easy/download/{pk}/",
+        })
+        with self.assertRaises(PaymentHold):existing_test_buyer_status(pk,43)
         with self.assertRaises(PaymentHold):
             settle_existing_test_intent(pk,fixture.TX_HASH,self.pair())
         self.assertEqual(LedgerEntry.objects.count(),1)
+
+    def test_no_paid_download_if_receipt_or_ledger_is_missing(self):
+        pk,_,_=self.reserve()
+        settle_existing_test_intent(pk,fixture.TX_HASH,self.pair())
+        PaymentWebhookEvent.objects.filter(payment_intent_id=pk).delete()
+        self.assertFalse(existing_test_buyer_status(pk,42)["can_download"])
+        self.assertEqual(fixture.Order.objects.get(pk=self.order_id).status,"paid")
+
+    def test_same_mainnet_hash_cannot_grant_to_second_order(self):
+        first,_,_=self.reserve()
+        settle_existing_test_intent(first,fixture.TX_HASH,self.pair())
+        other=fixture.Order.objects.create(customer_id=42,total=Decimal("0.03"),status="pending",currency="USD")
+        fixture.OrderItem.objects.create(order=other,unit_price=Decimal("0.03"),kind="digital")
+        second,quoted,_=self.reserve(order_id=other.pk,random_below=lambda upper:1)
+        pair=TrustedNodePair("provider-a","provider-b",
+            prove_a=lambda h:fixture.proof("provider-a",quoted.amount_sun,h),
+            prove_b=lambda h:fixture.proof("provider-b",quoted.amount_sun,h),
+            audited_as_independent=True)
+        with self.assertRaises(PaymentHold):
+            settle_existing_test_intent(second,fixture.TX_HASH,pair)
+        self.assertEqual(PaymentWebhookEvent.objects.count(),1)
+        self.assertEqual(LedgerEntry.objects.count(),1)
+        self.assertEqual(fixture.Order.objects.get(pk=other.pk).status,"pending")
 
     def test_unfinalized_trx_never_delivers_file(self):
         pk,_,_=self.reserve()
