@@ -144,7 +144,7 @@ def review_family(directory, family, aggregate):
                     or proof.get("apk_sha256")!=sha(files[apk_name])
                     or proof.get("screenshot_sha256")!=sha(files["emulator-screen.png"])
                     or proof.get("emulator_screen_size_bytes")!=len(files["emulator-screen.png"])
-                    or not files["emulator-screen.png"].startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+                    or not files["emulator-screen.png"].startswith(b"\x89PNG\r\n\x1a\n")
                     or type(proof.get("distinct_screen_colors")) is not int
                     or proof["distinct_screen_colors"]<5):
                 raise RuntimeError("REVIEW_ANDROID_EMULATOR_RUNTIME_INVALID")
