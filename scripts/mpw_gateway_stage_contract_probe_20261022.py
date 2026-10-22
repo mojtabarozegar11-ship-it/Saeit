@@ -30,9 +30,10 @@ def check():
     django.setup()
     from django.conf import settings
     from django.db import connection
+    from django.db.models import UniqueConstraint
     from django.urls import resolve
     from django.apps import apps
-    from core.models import Order, OrderItem, LedgerEntry
+    from core.models import Order, OrderItem, PaymentIntent, LedgerEntry
     from mpw_commerce.models import CommerceInvoice, CommerceReceipt, CommerceFulfillment
 
     names = set(connection.introspection.table_names())
@@ -80,6 +81,17 @@ def check():
             native_has_records[model_name] = False
             native_field_nullability[model_name] = {}
 
+    def reusable_table_shape(model):
+        # Only Django declared constraints and field names, no customer rows.
+        return {
+            'fields': [f.name for f in model._meta.fields],
+            'unique_fields': [f.name for f in model._meta.fields if f.unique],
+            'unique_together': [list(x) for x in model._meta.unique_together],
+            'explicit_unique_constraints': [list(c.fields)
+                for c in model._meta.constraints if isinstance(c,UniqueConstraint)],
+            'indexed_fields': [f.name for f in model._meta.fields if f.db_index],
+        }
+
     try:
         checkout = resolve('/store/product/72/checkout/')
         checkout_module = str(getattr(checkout.func, '__module__', ''))
@@ -120,6 +132,12 @@ def check():
         'native_checkout_model_fields': native_model_fields,
         'native_checkout_field_nullable': native_field_nullability,
         'native_checkout_has_existing_records': native_has_records,
+        'existing_financial_table_shapes': {
+            'PaymentIntent': reusable_table_shape(PaymentIntent),
+            'LedgerEntry': reusable_table_shape(LedgerEntry),
+            'CommerceInvoice': reusable_table_shape(CommerceInvoice),
+            'CommerceReceipt': reusable_table_shape(CommerceReceipt),
+        },
         'commerce_execution_flags': {flag: bool(getattr(settings, flag, False)) for flag in (
             'MPW_COMMERCE_RELEASE_READY',
             'MPW_COMMERCE_REAL_RPC_ENABLED',
