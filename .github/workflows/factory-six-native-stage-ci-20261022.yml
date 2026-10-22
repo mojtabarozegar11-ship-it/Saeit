@@ -6,6 +6,7 @@ on:
       - scripts/factory_six_native_candidates.py
       - scripts/factory_f14_browser_real_smoke.py
       - scripts/factory_android_emulator_runtime_check.py
+      - tests/test_factory_android_emulator_evidence.py
       - scripts/factory_six_native_candidate_bundle.py
       - scripts/factory_specialist_formats.py
       - scripts/factory_six_native_independent_rework.py
@@ -36,6 +37,7 @@ jobs:
           bash -n deploy/install_factory_six_native_rework.sh
           bash -n deploy/factory_six_native_review_relay.sh
           python3 -B -m py_compile scripts/factory_six_native_candidate_bundle.py scripts/factory_six_native_independent_rework.py
+          python3 -B -m unittest discover -s tests -p 'test_factory_android_emulator_evidence.py' -v
           python3 -B -m unittest discover -s tests -p 'test_factory_six_native_independent_rework.py' -v
       - name: Generate and recheck all original source candidates
         run: |
