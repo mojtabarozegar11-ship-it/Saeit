@@ -258,13 +258,36 @@ def run(root, source_run, expected_aggregate_sha256=None):
         "quality1000_approved":0,"review_sha256":report_sha},sort_keys=True))
     return report
 
+def latest_valid_source(root):
+    base=Path(root)/"native-candidate-evidence"
+    if base.is_symlink() or not base.is_dir():
+        raise RuntimeError("REVIEW_LATEST_SOURCE_ROOT_MISSING")
+    candidates=[]
+    for entry in base.iterdir():
+        if (not entry.is_symlink() and entry.is_dir()
+                and RUN.fullmatch(entry.name)
+                and (entry/"verified-six-private-native.json").is_file()
+                and not (entry/"verified-six-private-native.json").is_symlink()):
+            try:
+                id_number,attempt=map(int,entry.name.split("-"))
+            except (ValueError,TypeError):
+                continue
+            candidates.append((id_number,attempt,entry.name))
+    if not candidates:
+        raise RuntimeError("REVIEW_NO_COMPLETE_NATIVE_RUN")
+    return max(candidates)[2]
+
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("--factory-private",required=True)
-    p.add_argument("--source-run",required=True)
+    group=p.add_mutually_exclusive_group(required=True)
+    group.add_argument("--source-run")
+    group.add_argument("--latest",action="store_true")
     p.add_argument("--expected-aggregate-sha256")
     args=p.parse_args()
-    run(args.factory_private,args.source_run,args.expected_aggregate_sha256)
+    source=(latest_valid_source(args.factory_private)
+            if args.latest else args.source_run)
+    run(args.factory_private,source,args.expected_aggregate_sha256)
 
 if __name__=="__main__":
     main()
