@@ -1,0 +1,30 @@
+name: Windows private SSH key binary newline regression
+on:
+  push:
+    branches: [fix/native-windows-ssh-key-20261022]
+permissions: {contents: read}
+jobs:
+  windows-key-proof:
+    runs-on: windows-2022
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Verify GNU Bash relay syntax and LF-only private key writing
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash -n deploy/factory_six_native_private_relay.sh
+          bash -n deploy/factory_six_native_private_verify.sh
+          test -n "$VPS_KEY"
+          umask 077
+          f="$(mktemp)"
+          trap 'rm -f -- "$f"' EXIT
+          printf '%s' "$VPS_KEY" | python -c 'import sys;s=sys.stdin.buffer.read().decode("utf-8");s=s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n";sys.stdout.buffer.write(s.encode("utf-8"))' > "$f"
+          chmod 600 "$f"
+          ssh-keygen -y -P '' -f "$f" > /dev/null
+          echo WINDOWS_SSH_KEY_CROSS_PLATFORM_PARSE=PASS
