@@ -213,6 +213,10 @@ public final class MainActivity extends Activity {
     view = new WebView(this);
     WebSettings s = view.getSettings();
     s.setJavaScriptEnabled(true);
+    // Local DevTools is enabled only for debug APKs used by isolated CI.
+    if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+      WebView.setWebContentsDebuggingEnabled(true);
+    }
     s.setDomStorageEnabled(true);
     s.setAllowFileAccess(false);
     s.setAllowContentAccess(false);

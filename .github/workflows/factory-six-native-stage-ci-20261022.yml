@@ -1,7 +1,7 @@
 name: Real native candidates for six blocked factory lines
 on:
   push:
-    branches: [feature/six-native-candidate-builds-20261022, feature/factory-six-independent-rework-20261022, feature/six-device-and-independent-qa-evidence-20261022, feature/six-windows-acceptance-safe-main-20261022, main]
+    branches: [feature/six-native-candidate-builds-20261022, feature/factory-six-independent-rework-20261022, feature/six-device-and-independent-qa-evidence-20261022, feature/six-windows-acceptance-safe-main-20261022, feature/six-android-deep-apk-proof-20261022, main]
     paths:
       - scripts/factory_six_native_candidates.py
       - scripts/factory_f14_browser_real_smoke.py
@@ -217,8 +217,8 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           test -r /dev/kvm && test -w /dev/kvm
-          python3 -B -m pip install --disable-pip-version-check Pillow==11.3.0
-      - name: Install, launch, interact, and screenshot both REAL APKs on Android API 35 emulator
+          python3 -B -m pip install --disable-pip-version-check Pillow==11.3.0 websocket-client==1.8.0
+      - name: Install, interact, inspect DOM, persist inventory and screenshot both REAL APKs on Android 35
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35

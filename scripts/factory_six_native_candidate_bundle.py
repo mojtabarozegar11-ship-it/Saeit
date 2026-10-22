@@ -52,6 +52,13 @@ def actual_format_integrity(family, members):
         if proof_raw is not None:
             proof = json.loads(proof_raw.decode("utf8"))
             fid = family.lower()
+            deep_keys = ("webview_dom_runtime_verified",) + (
+                ("actual_48_levels_loaded", "next_level_transition_verified",
+                 "keyboard_player_movement_verified") if family == "F12" else
+                ("inventory_entry_written_in_apk",
+                 "inventory_storage_persisted_after_relaunch"))
+            if any(proof.get(key) is not True for key in deep_keys):
+                raise RuntimeError("ANDROID_DEEP_APK_BEHAVIOR_UNVERIFIED")
             if (proof.get("schema") != "saeit.factory.android-emulated-runtime-check.v1"
                     or proof.get("family") != family
                     or proof.get("package") != "com.zomorodmelal.factory." + fid

@@ -13,6 +13,9 @@ from pathlib import Path
 import re
 import subprocess
 import time
+import urllib.request
+import urllib.error
+import xml.etree.ElementTree as ET
 
 FAMILIES={"F12":"com.zomorodmelal.factory.f12",
           "F16":"com.zomorodmelal.factory.f16"}
@@ -29,6 +32,228 @@ def screenshot():
     if result.returncode or not result.stdout.startswith(b"\x89PNG\r\n\x1a\n"):
         raise RuntimeError("EMULATOR_SCREENSHOT_NOT_PNG")
     return result.stdout
+
+
+
+def tap_visible_app_control(family, pid):
+    """Actual adb touchscreen input at a control found by accessibility or live DOM."""
+    app_bounds = None
+    for attempt in range(4):
+        raw = run("exec-out", "uiautomator", "dump", "/dev/tty", timeout=45)
+        start = raw.find("<?xml")
+        finish = raw.find("</hierarchy>", start) if start >= 0 else -1
+        if finish < 0:
+            if attempt == 3:
+                raise RuntimeError("EMULATOR_ACCESSIBILITY_TREE_INCOMPLETE")
+            time.sleep(2)
+            continue
+        hierarchy = ET.fromstring(raw[start:finish + len("</hierarchy>")])
+        for node in hierarchy.iter("node"):
+            attrs = node.attrib
+            match = re.fullmatch(
+                r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",
+                attrs.get("bounds", ""))
+            if not match:
+                continue
+            x1, y1, x2, y2 = map(int, match.groups())
+            if x2 <= x1 or y2 <= y1:
+                continue
+            if attrs.get("class") == "android.webkit.WebView":
+                app_bounds = (x1, y1, x2, y2)
+            label = (attrs.get("text", "") + " " +
+                     attrs.get("content-desc", "")).lower()
+            matching = (
+                "next level" in label if family == "F12" else
+                attrs.get("class") == "android.widget.EditText"
+            )
+            if matching:
+                run("shell", "input", "tap", str((x1+x2)//2), str((y1+y2)//2))
+                return True
+        time.sleep(2)
+
+    # Some Android System WebView versions omit HTML descendants from
+    # accessibility. Derive a physical tap from a REAL DOM element and the
+    # current WebView viewport, never from arbitrary fixed coordinates.
+    if app_bounds is None:
+        raise RuntimeError("EMULATOR_APP_VIEW_BOUNDS_UNAVAILABLE")
+    with DebugWebView(pid) as dev:
+        rect = dev.evaluate("""(() => {
+          const el = document.getElementById(""" +
+            json.dumps("next" if family == "F12" else "name") + """);
+          if (!el) return null;
+          const b = el.getBoundingClientRect();
+          return {x:b.left+b.width/2, y:b.top+b.height/2,
+                  width:innerWidth, height:innerHeight,
+                  visible:b.width>0 && b.height>0};
+        })()""")
+    if (not isinstance(rect, dict) or not rect.get("visible")
+            or rect.get("width", 0) <= 0 or rect.get("height", 0) <= 0):
+        raise RuntimeError("EMULATOR_REAL_APP_CONTROL_NOT_VISIBLE")
+    x1, y1, x2, y2 = app_bounds
+    x = x1 + round(rect["x"] / rect["width"] * (x2-x1))
+    y = y1 + round(rect["y"] / rect["height"] * (y2-y1))
+    if not (x1 < x < x2 and y1 < y < y2):
+        raise RuntimeError("EMULATOR_APP_CONTROL_OUTSIDE_VIEW")
+    run("shell", "input", "tap", str(x), str(y))
+    return True
+
+class DebugWebView:
+    """Inspects the actual running debug APK over the emulator's local CDP socket."""
+    def __init__(self, pid):
+        self.pid = str(pid).split()[0]
+        if not self.pid.isdigit():
+            raise RuntimeError("EMULATOR_WEBVIEW_PID_INVALID")
+        self.connection = None
+        self.port = "9223"
+
+    def __enter__(self):
+        from websocket import create_connection
+        result = subprocess.run(
+            ["adb", "forward", "tcp:" + self.port,
+             "localabstract:webview_devtools_remote_" + self.pid],
+            capture_output=True, text=True, timeout=12)
+        if result.returncode:
+            raise RuntimeError("EMULATOR_WEBVIEW_DEBUG_FORWARD_FAILED")
+        try:
+            url = None
+            for _ in range(30):
+                try:
+                    with urllib.request.urlopen(
+                        "http://127.0.0.1:" + self.port + "/json", timeout=3
+                    ) as response:
+                        pages = json.load(response)
+                    url = next(
+                        row["webSocketDebuggerUrl"] for row in pages
+                        if row.get("type") == "page"
+                        and "appassets.androidplatform.net" in row.get("url", "")
+                        and row.get("webSocketDebuggerUrl")
+                    )
+                    break
+                except (OSError, ValueError, KeyError, StopIteration):
+                    time.sleep(1)
+            if not url:
+                raise RuntimeError("EMULATOR_REAL_WEBVIEW_PAGE_NOT_FOUND")
+            self.connection = create_connection(
+                url, timeout=12, suppress_origin=True)
+            return self
+        except BaseException:
+            self.__exit__(None, None, None)
+            raise
+
+    def __exit__(self, *_):
+        if self.connection is not None:
+            self.connection.close()
+            self.connection = None
+        subprocess.run(["adb", "forward", "--remove", "tcp:" + self.port],
+                       capture_output=True, text=True, timeout=12)
+
+    def evaluate(self, expression):
+        self.connection.send(json.dumps({
+            "id": 1, "method": "Runtime.evaluate",
+            "params": {
+                "expression": expression,
+                "returnByValue": True,
+                "awaitPromise": True
+            }
+        }))
+        for _ in range(20):
+            message = json.loads(self.connection.recv())
+            if message.get("id") != 1:
+                continue
+            result = message.get("result", {})
+            if result.get("exceptionDetails"):
+                raise RuntimeError("EMULATOR_WEBVIEW_JAVASCRIPT_EXCEPTION")
+            value = result.get("result", {})
+            if value.get("type") == "undefined":
+                raise RuntimeError("EMULATOR_WEBVIEW_UNDEFINED_RESULT")
+            return value.get("value")
+        raise RuntimeError("EMULATOR_WEBVIEW_NO_CDP_RESULT")
+
+
+def deep_application_acceptance(family, package, pid):
+    """Prove application-specific state in the REAL installed APK, not in source."""
+    if family == "F12":
+        with DebugWebView(pid) as dev:
+            first = dev.evaluate("""(() => ({
+              count: levels.length, index,
+              cells: document.querySelectorAll('#board button').length,
+              message: document.querySelector('#message').textContent
+            }))()""")
+            if (first.get("count") != 48 or first.get("index") != 0
+                    or first.get("cells") != 36
+                    or first.get("message") != "Level 1 of 48"):
+                raise RuntimeError("EMULATOR_F12_REAL_LEVELS_NOT_LOADED")
+            moved = dev.evaluate("""(() => {
+              document.getElementById('next').click();
+              const switched = index === 1 &&
+                  document.getElementById('message').textContent === 'Level 2 of 48';
+              let changed = false;
+              for (const [key, delta] of [
+                ['ArrowUp', -6], ['ArrowDown', 6],
+                ['ArrowLeft', -1], ['ArrowRight', 1]
+              ]) {
+                const before = player;
+                document.dispatchEvent(new KeyboardEvent('keydown',
+                     {key, bubbles: true, cancelable: true}));
+                if (player !== before) { changed = true; break; }
+              }
+              return {switched, changed, cells:
+                document.querySelectorAll('#board button').length};
+            })()""")
+            if (moved.get("switched") is not True
+                    or moved.get("changed") is not True
+                    or moved.get("cells") != 36):
+                raise RuntimeError("EMULATOR_F12_APK_GAMEPLAY_NOT_CONFIRMED")
+        return {"webview_dom_runtime_verified": True,
+                "actual_48_levels_loaded": True,
+                "next_level_transition_verified": True,
+                "keyboard_player_movement_verified": True}
+
+    token = "qa_apk_" + package.replace(".", "_")[-12:]
+    with DebugWebView(pid) as dev:
+        created = dev.evaluate("""(() => {
+          const name = """ + json.dumps(token) + """;
+          document.getElementById('name').value = name;
+          document.getElementById('quantity').value = '7';
+          document.getElementById('f').dispatchEvent(
+              new Event('submit', {bubbles: true, cancelable: true}));
+          const rows = JSON.parse(localStorage.getItem('field_ledger_local_v1') || '[]');
+          return {saved: rows.some(x => x.name === name && x.quantity === 7),
+                  visible: document.getElementById('items').textContent.includes(name)};
+        })()""")
+        if created != {"saved": True, "visible": True}:
+            raise RuntimeError("EMULATOR_F16_APK_STORAGE_NOT_WRITTEN")
+
+    # Let WebView commit its asynchronous localStorage journal before process death.
+    run("shell", "input", "keyevent", "3")  # HOME: normal activity pause
+    time.sleep(4)
+    run("shell", "am", "force-stop", package)
+    launch = run("shell", "am", "start", "-W", "-n",
+                 package + "/.MainActivity", timeout=65)
+    if "Status: ok" not in launch:
+        raise RuntimeError("EMULATOR_F16_REOPEN_FAILED")
+    time.sleep(3)
+    new_pid = run("shell", "pidof", package)
+    if not new_pid:
+        raise RuntimeError("EMULATOR_F16_REOPEN_NO_PROCESS")
+    with DebugWebView(new_pid) as dev:
+        persisted = None
+        for _ in range(20):
+            persisted = dev.evaluate("""(() => {
+              const name = """ + json.dumps(token) + """;
+              const rows = JSON.parse(localStorage.getItem('field_ledger_local_v1') || '[]');
+              return {saved: rows.some(x => x.name === name && x.quantity === 7),
+                      visible: document.getElementById('items').textContent.includes(name)};
+            })()""")
+            if persisted == {"saved": True, "visible": True}:
+                break
+            time.sleep(0.5)
+        if persisted != {"saved": True, "visible": True}:
+            raise RuntimeError("EMULATOR_F16_APK_STORAGE_NOT_PERSISTED:"
+                               + json.dumps(persisted, sort_keys=True))
+    return {"webview_dom_runtime_verified": True,
+            "inventory_entry_written_in_apk": True,
+            "inventory_storage_persisted_after_relaunch": True}
 
 def execute(family,apk,destination):
     if family not in FAMILIES:
@@ -60,8 +285,9 @@ def execute(family,apk,destination):
     first_pid=run("shell","pidof",pkg)
     if not first_pid:
         raise RuntimeError("EMULATOR_APP_PROCESS_NOT_ALIVE")
-    # Real Android input dispatch; safety: local synthetic emulator only.
-    run("shell","input","tap","200","360")
+    # Verify app-specific state first, then dispatch real accessibility-derived touch.
+    deep=deep_application_acceptance(family,pkg,first_pid)
+    tap_visible_app_control(family, run('shell', 'pidof', pkg))
     run("shell","input","swipe","280","390","120","390","270")
     time.sleep(2)
     after_pid=run("shell","pidof",pkg)
@@ -103,13 +329,15 @@ def execute(family,apk,destination):
         "independent_professional_review":False,
         "release_signing_verified":False,
         "quality_1000_certified":False,
-        "commercial_release":False
+        "commercial_release":False,
+        **deep
     }
     (destination/"emulator-proof.json").write_text(
         json.dumps(report,indent=2,sort_keys=True)+"\n",encoding="utf8")
     print("ANDROID_ACTUAL_EMULATOR_TEST="+json.dumps(
         {"family":family,"sdk":int(sdk),"touch":True,"screen_colors":unique,
-         "physical_device":False,"quality1000":False},sort_keys=True))
+         "physical_device":False,"quality1000":False,
+         "deep_apk_dom_qa":True},sort_keys=True))
 
 if __name__=="__main__":
     p=argparse.ArgumentParser()
