@@ -1,0 +1,3 @@
+invoice_id,network,asset,recipient,amount_base_units,token_contract
+A100,tron-mainnet,TRX,T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb,1000000,
+A200,shasta,TRX,T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb,2000000,
