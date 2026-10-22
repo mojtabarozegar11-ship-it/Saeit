@@ -89,6 +89,64 @@ class RealFamilyAdmission(unittest.TestCase):
                 ['pilot'],0,'FACTORY_SPECIALIST_PILOT={"status":"technical_pilots_verified"}','')):
                 report=ctrl.run(self.root,REGISTRY,SCRIPTS,self.root/'manifest.json')
             self.assertEqual(report['pilot_tick_result']['status'],'technical_pilots_verified')
+    def test_fake_pilot_stdout_is_not_proof_of_master_specialist_connection(self):
+        agent=types.SimpleNamespace(toolchain=lambda manifest:(self.root,Path(sys.executable)),
+                                    verified_receipt=lambda folder,family,key:False)
+        original_load=ctrl.load
+        def modules(name,path):
+            if name=='factory_40_verified_pilot_executor':return agent
+            return original_load(name,path)
+        forged='FACTORY_SPECIALIST_PILOT='+json.dumps({
+            'status':'pilot_built','family':'F27','source_key':'a'*20})
+        with patch.object(ctrl,'load',side_effect=modules):
+            with patch.object(ctrl.subprocess,'run',return_value=subprocess.CompletedProcess(
+                ['pilot'],0,forged,'')):
+                report=ctrl.run(self.root,REGISTRY,SCRIPTS,self.root/'manifest.json')
+        proof=report['pilot_tick_result']
+        self.assertEqual(proof['status'],'pilot_receipt_unverified')
+        self.assertFalse(proof['confirmed_private_new_pilot'])
+        self.assertFalse(proof['artifact_receipt_rechecked'])
+        self.assertFalse(report['commercial_release_enabled'])
+
+    def test_new_pilot_requires_actual_independent_hash_recheck(self):
+        from hashlib import sha256
+        key='b'*20
+        folder=self.root/'family-pilots'/'F27'/key
+        origin=ctrl.load
+        def verify(path,family,source_key):
+            if family!='F27' or source_key!=key or path!=folder:return False
+            receipt=json.loads((path/'technical-receipt.json').read_text())
+            file=path/'budget.xlsx'
+            return (file.is_file() and receipt['files']['budget.xlsx']==sha256(file.read_bytes()).hexdigest()
+                    and receipt['schema']=='saeit.factory.specialist-pilot.v1'
+                    and receipt['technical_quality_passed'] is True
+                    and receipt['independent_specialist_review_completed'] is False
+                    and receipt['commercial_release'] is False)
+        agent=types.SimpleNamespace(toolchain=lambda manifest:(self.root,Path(sys.executable)),
+                                    verified_receipt=verify)
+        def modules(name,path):
+            if name=='factory_40_verified_pilot_executor':return agent
+            return origin(name,path)
+        def build(args,**kwargs):
+            folder.mkdir(parents=True,exist_ok=True)
+            file=folder/'budget.xlsx'
+            file.write_bytes(b'actual private pilot bytes')
+            (folder/'technical-receipt.json').write_text(json.dumps({
+                'schema':'saeit.factory.specialist-pilot.v1',
+                'files':{'budget.xlsx':sha256(file.read_bytes()).hexdigest()},
+                'technical_quality_passed':True,
+                'independent_specialist_review_completed':False,
+                'commercial_release':False}))
+            return subprocess.CompletedProcess(args,0,
+                'FACTORY_SPECIALIST_PILOT='+json.dumps({
+                    'status':'pilot_built','family':'F27','source_key':key}), '')
+        with patch.object(ctrl,'load',side_effect=modules):
+            with patch.object(ctrl.subprocess,'run',side_effect=build):
+                report=ctrl.run(self.root,REGISTRY,SCRIPTS,self.root/'manifest.json')
+        self.assertTrue(report['pilot_tick_result']['artifact_receipt_rechecked'])
+        self.assertTrue(report['pilot_tick_result']['confirmed_private_new_pilot'])
+        self.assertFalse(report['warehouse_promotion_enabled'])
+
     def test_incomplete_registered_families_fail_closed(self):
         item=bridge.inventory(self.root,REGISTRY,proto,master)
         item['families'].pop()

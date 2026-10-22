@@ -1,0 +1,22 @@
+name: Specialist receipt integrity checks
+on:
+  push:
+    branches: [feature/moj1ro1-specialist-proof-20261022]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify specialist and controller regressions
+        run: |
+          python3 -B -m unittest discover -s tests -p test_factory_specialist_pilots.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_40_execution_controller.py -v

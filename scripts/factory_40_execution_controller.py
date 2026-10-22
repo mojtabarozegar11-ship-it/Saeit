@@ -142,6 +142,17 @@ def run(root,registry,module_dir,toolchain_manifest=None,pilot=True):
             if source.is_symlink() or formats.is_symlink() or not source.is_file() or not formats.is_file():
                 raise RuntimeError('CTRL_SPECIALIST_EXECUTABLE_MISSING')
             pilotmod=load('factory_40_verified_pilot_executor',source)
+            # Capture existing versions before dispatch. A forged stdout line
+            # cannot become a "new pilot", and a repaired old version is not new.
+            prior_versions=set()
+            for existing_family in PILOT_IDS:
+                family_root=root/'family-pilots'/existing_family
+                if family_root.is_dir() and not family_root.is_symlink():
+                    for version in family_root.iterdir():
+                        if (version.is_dir() and not version.is_symlink()
+                                and re.fullmatch(r'[0-9a-f]{20}', version.name)
+                                and (version/'technical-receipt.json').is_file()):
+                            prior_versions.add((existing_family,version.name))
             toolroot,python=pilotmod.toolchain(toolchain_manifest)
             if not python.is_file():raise RuntimeError('CTRL_INVALID_PINNED_TOOLCHAIN_PYTHON')
             try:
@@ -168,9 +179,25 @@ def run(root,registry,module_dir,toolchain_manifest=None,pilot=True):
                                   if line.startswith('FACTORY_SPECIALIST_PILOT='))
                         body=json.loads(line)
                         if not isinstance(body,dict):raise ValueError('invalid receipt')
-                        executed={'status':body.get('status','unknown'),
-                                  'family':body.get('family'),
-                                  'confirmed_private_new_pilot':body.get('status')=='pilot_built'}
+                        status=body.get('status','unknown')
+                        family=body.get('family')
+                        source_key=body.get('source_key')
+                        claimed_build=status=='pilot_built'
+                        credible=(claimed_build
+                            and isinstance(family,str) and family in PILOT_IDS
+                            and isinstance(source_key,str)
+                            and re.fullmatch(r'[0-9a-f]{20}',source_key) is not None
+                            and callable(getattr(pilotmod,'verified_receipt',None))
+                            and pilotmod.verified_receipt(
+                                root/'family-pilots'/family/source_key,family,source_key))
+                        new_version=(family,source_key) not in prior_versions if credible else False
+                        executed={'status':(status if not claimed_build or credible
+                                                   else 'pilot_receipt_unverified'),
+                                  'family':family if credible else None,
+                                  'source_key':source_key if credible else None,
+                                  'artifact_receipt_rechecked':bool(credible),
+                                  'confirmed_private_new_pilot':bool(credible and new_version),
+                                  'confirmed_private_repaired_pilot':bool(credible and not new_version)}
                     except (StopIteration,ValueError):
                         executed={'status':'pilot_receipt_not_parsable',
                                   'confirmed_private_new_pilot':False}
@@ -186,6 +213,9 @@ def run(root,registry,module_dir,toolchain_manifest=None,pilot=True):
               'pilot_tick_result':executed,'commercial_release_enabled':False,
               'warehouse_promotion_enabled':False,'store_publication_enabled':False,
               'customer_orders_created':0,'old_twelve_stage_governance_retained':True,
+              'requested_master_agent':'moj_1ro_1',
+              'factory_dispatch_runtime':'factory_40_execution_controller',
+              'master_agent_cryptographic_identity_verified':False,
               'real_full_adapters_currently_proven':list(sorted(fid for fid in FULL_PRODUCT_IDS
                      if any(x['family_id']==fid and x['completed_50_stage_products']>0 for x in rows))),
               'warning':'Pilot artifacts and queue entries do not constitute 50-stage validated sellable products.'}

@@ -181,11 +181,19 @@ def verified_receipt(folder, family, source_key):
         return False
     try:
         data = json.loads(receipt.read_text(encoding="utf-8"))
-        return (data.get("source_key") == source_key
+        return (data.get("schema") == "saeit.factory.specialist-pilot.v1"
+                and data.get("source_key") == source_key
                 and data.get("family") == family
+                and data.get("technical_quality_passed") is True
                 and data.get("commercial_release") is False
-                and set(data.get("files", {})) == set(FAMILIES[family])
-                and all((folder / name).is_file()
+                and data.get("independent_specialist_review_completed") is False
+                and data.get("distribution_enabled") is False
+                and data.get("owner_approval_recorded") is False
+                and isinstance(data.get("files"), dict)
+                and set(data["files"]) == set(FAMILIES[family])
+                and all(isinstance(data["files"][name], str)
+                        and re.fullmatch(r"[0-9a-f]{64}", data["files"][name])
+                        and (folder / name).is_file()
                         and not (folder / name).is_symlink()
                         and sha(folder / name) == data["files"][name]
                         for name in FAMILIES[family]))
