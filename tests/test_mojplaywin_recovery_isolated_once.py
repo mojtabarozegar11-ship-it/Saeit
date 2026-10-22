@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.mojplaywin_restore_files_isolated_runner import recover, safe_parts
+from scripts.mojplaywin_restore_files_isolated_runner import recover, safe_parts, safe_failure_code
 from scripts.mojplaywin_recovery_stream_vps import readiness, discover, STEM_RE, NEW_MANIFEST_RE
 
 
@@ -50,6 +50,16 @@ class RecoveryIsolationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 recover(buf,base)
             self.assertFalse((Path(td)/"outside").exists())
+
+    def test_failure_diagnostics_are_fixed_codes_without_private_paths(self):
+        self.assertEqual(safe_failure_code(ValueError(
+            "absolute archive link cannot be restored into sandbox")), "absolute_link")
+        self.assertEqual(safe_failure_code(ValueError(
+            "insufficient isolated capacity")), "capacity")
+        self.assertEqual(safe_failure_code(OSError(
+            "/home/private/customer-data/secret.txt")), "isolated_io")
+        self.assertEqual(safe_failure_code(ValueError(
+            "/home/private/customer-data/secret.txt")), "invalid_tar_member")
 
     def test_discovery_fails_closed_without_exact_verified_pair(self):
         with tempfile.TemporaryDirectory() as td:
