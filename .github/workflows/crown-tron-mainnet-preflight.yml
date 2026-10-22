@@ -1,0 +1,51 @@
+name: Crown TRON fail-closed checkout checks
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "services/mpw_crown_**"
+      - "services/mpw_trx_walletless_core.py"
+      - "services/mpw_tron_independent_solidified_rpc.py"
+      - "tests/test_crown_tron_mainnet_adapter.py"
+      - "tests/test_crown_trx_discovery.py"
+      - "core/crown_**"
+      - "config/urls.py"
+      - "config/settings.py"
+      - ".github/workflows/crown-tron-mainnet-preflight.yml"
+permissions:
+  contents: read
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "ci-only-crown-nonproduction-key"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+      CROWN_STORE_ENABLED: "false"
+      CROWN_PAYMENT_GATEWAY_APPROVED: "false"
+      CROWN_TRX_PAID_END_TO_END_ACCEPTED: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r requirements.txt
+      - name: Assert no production checkout flags
+        run: |
+          python - <<'PY'
+          from config import settings
+          assert settings.CROWN_STORE_ENABLED is False
+          assert settings.CROWN_PAYMENT_GATEWAY_APPROVED is False
+          assert settings.CROWN_TRX_PAID_END_TO_END_ACCEPTED is False
+          print("CROWN_PUBLIC_PAYMENT_GATE=CLOSED")
+          PY
+      - name: Tests (no external chain or wallet calls)
+        run: |
+          python -m pytest -q \
+            tests/test_crown_tron_mainnet_adapter.py \
+            tests/test_crown_trx_discovery.py \
+            tests/test_crown_checkout.py \
+            tests/test_crown_tron_receipts.py
