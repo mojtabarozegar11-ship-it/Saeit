@@ -22,6 +22,11 @@ jobs:
         with: {persist-credentials: false}
       - uses: actions/setup-python@v5
         with: {python-version: "3.11"}
+      - name: Validate private proof scripts safely
+        run: |
+          bash -n deploy/factory_six_native_private_relay.sh
+          bash -n deploy/factory_six_native_private_verify.sh
+          python3 -B -m py_compile scripts/factory_six_native_candidate_bundle.py
       - name: Generate and recheck all original source candidates
         run: |
           mkdir -p "$RUNNER_TEMP/private-six"
@@ -205,3 +210,17 @@ jobs:
         run: |
           bash deploy/factory_six_native_private_relay.sh F12 "$RUNNER_TEMP/bundle-F12"
           bash deploy/factory_six_native_private_relay.sh F16 "$RUNNER_TEMP/bundle-F16"
+
+  verify-all-six-on-private-vps:
+    needs: [f26-real-onnx, f14-real-chromium, f13-f17-real-windows-exe, f12-f16-real-android-apk]
+    if: github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Reopen exact six private native ZIPs and record aggregate SHA on VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: bash deploy/factory_six_native_private_verify.sh
