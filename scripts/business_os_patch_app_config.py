@@ -57,7 +57,18 @@ def patched(source):
         # Insert while still inside CoreConfig; never append after uninspected
         # top-level text or trailing comments.
         prior = "".join(lines[:cls.end_lineno])
-        candidate = prior + ("" if prior.endswith("\n") else "\n") + _READY + "".join(lines[cls.end_lineno:])
+        import re
+        body_line = lines[cls.body[-1].lineno - 1]
+        indent_match = re.match(r"^([ \t]+)", body_line)
+        if not indent_match:
+            raise ValueError("unsafe_multiline_indentation")
+        indent = indent_match.group(1)
+        next_indent = "\t" if indent.replace("\t", "") == "" else "    "
+        ready = (
+            indent + "def ready(self):\n"
+            + indent + next_indent + "from . import purchase_signals  # noqa: F401\n"
+        )
+        candidate = prior + ("" if prior.endswith("\n") else "\n") + ready + "".join(lines[cls.end_lineno:])
         shape = "multiline_extended"
     compile(candidate, "<validated-app-config>", "exec")
     transformed = ast.parse(candidate)
@@ -77,6 +88,8 @@ def self_test():
         "from django.apps import AppConfig\nclass CoreConfig(AppConfig): name = 'core'\n",
         "from django.apps import AppConfig\nclass CoreConfig(AppConfig): default_auto_field = 'django.db.models.BigAutoField'; name = 'core'\n",
         "from django.apps import AppConfig\n\nclass CoreConfig(AppConfig):\n    default_auto_field = 'django.db.models.BigAutoField'\n    name = 'core'\n",
+        "from django.apps import AppConfig\nclass CoreConfig(AppConfig):\n        name = 'core'\n",
+        "from django.apps import AppConfig\nclass CoreConfig(AppConfig):\n\tname = 'core'\n",
     ):
         output, _ = patched(source)
         assert "def ready(self)" in output
@@ -141,6 +154,7 @@ if __name__ == "__main__":
             "unexpected_compact_header", "unsafe_compact_body",
             "unexpected_patch_length", "missing_ready_hook",
             "existing_semantics_changed", "unavailable_app_config",
+            "unsafe_multiline_indentation",
         }
         print("PURCHASE_APP_CONFIG_PATCH_REFUSED_" + (reason if reason in safe_reasons else type(exc).__name__))
         raise SystemExit(1)

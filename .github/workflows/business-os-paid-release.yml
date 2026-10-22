@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/business-os-paid-release.yml'
       - 'scripts/business_os_purchase_cpanel_release.sh'
+      - 'scripts/business_os_patch_app_config.py'
   workflow_dispatch:
 
 permissions:
