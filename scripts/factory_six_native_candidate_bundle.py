@@ -43,6 +43,37 @@ def actual_format_integrity(family, members):
             if not {"base/manifest/AndroidManifest.xml","base/dex/classes.dex",
                     "base/assets/index.html"}.issubset(names):
                 raise RuntimeError("NATIVE_BUNDLE_FAKE_ANDROID_AAB")
+        # Emulated runtime evidence is bound to THIS debug APK's exact bytes.
+        # Screenshots and software-device tests never confer physical approval.
+        proof_raw = members.get("emulator-proof.json")
+        shot = members.get("emulator-screen.png")
+        if (proof_raw is None) != (shot is None):
+            raise RuntimeError("NATIVE_BUNDLE_UNPAIRED_EMULATOR_EVIDENCE")
+        if proof_raw is not None:
+            proof = json.loads(proof_raw.decode("utf8"))
+            fid = family.lower()
+            if (proof.get("schema") != "saeit.factory.android-emulated-runtime-check.v1"
+                    or proof.get("family") != family
+                    or proof.get("package") != "com.zomorodmelal.factory." + fid
+                    or proof.get("android_sdk") != 35
+                    or proof.get("virtual_device") is not True
+                    or proof.get("actual_install_verified") is not True
+                    or proof.get("actual_activity_start_verified") is not True
+                    or proof.get("real_emulated_touch_and_swipe_dispatched") is not True
+                    or proof.get("app_alive_after_interaction") is not True
+                    or proof.get("no_app_fatal_crash_observed") is not True
+                    or proof.get("physical_device_tested") is not False
+                    or proof.get("release_signing_verified") is not False
+                    or proof.get("independent_professional_review") is not False
+                    or proof.get("quality_1000_certified") is not False
+                    or proof.get("commercial_release") is not False
+                    or proof.get("apk_sha256") != hashlib.sha256(apk).hexdigest()
+                    or proof.get("screenshot_sha256") != hashlib.sha256(shot).hexdigest()
+                    or proof.get("emulator_screen_size_bytes") != len(shot)
+                    or not isinstance(proof.get("distinct_screen_colors"),int)
+                    or proof["distinct_screen_colors"] < 5
+                    or not shot.startswith(b"\x89PNG\r\n\x1a\n")):
+                raise RuntimeError("NATIVE_BUNDLE_FAKE_OR_MISMATCHED_EMULATOR_RUNTIME")
     elif family in ("F13","F17"):
         data = next(iter(native.values()))
         if (len(data) < 30_000 or data[:2] != b"MZ" or len(data) < 64):
