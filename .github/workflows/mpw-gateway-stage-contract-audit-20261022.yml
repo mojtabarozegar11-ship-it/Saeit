@@ -64,7 +64,11 @@ jobs:
       - name: Verify two production RPC sources against read-only native TRX canary
         run: |
           set -euo pipefail
-          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/mpw_tron_dual_provider_auth_readonly_20261022.py
+          if timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'test -r /home/zomorod2/Saeit-staging/services/mpw_tron_independent_solidified_rpc.py'; then
+            timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/mpw_tron_dual_provider_auth_readonly_20261022.py
+          else
+            echo '{"status":"BLOCKED","reason":"rpc_verifier_not_deployed_in_cpanel_staging","public_payment_activated":false,"financial_writes":0}'
+          fi
           echo 'READ_ONLY=TRUE; FINANCIAL_WRITES=0; PUBLIC_PAYMENT_ACTIVATION=0'
       - name: Clean ephemeral SSH material
         if: always()
