@@ -37,8 +37,9 @@ def produce_private_snapshot():
     django.setup()
     _phase = "model_import"
     from django.conf import settings
+    from django.core.exceptions import FieldError
     from django.utils import timezone
-    from django.db import connections
+    from django.db import DatabaseError, connections
     from core.models import AgentTask, ApprovalRequest, Order, Product
 
     # Load reviewed, version-pinned analysis only from the staged release.
@@ -65,22 +66,31 @@ def produce_private_snapshot():
         if not sqlite_path.is_file():
             raise RuntimeError("No existing read-only SQLite source")
     connections["default"].ensure_connection()
+
+    def safe_count(table, query):
+        # A table not deployed to this database is UNKNOWN, not zero.
+        # Continue checking the other independent sources.
+        try:
+            return observed(query(), table)
+        except (DatabaseError, FieldError):
+            return module.unknown(f"{table} query unavailable in production database")
+
     _phase = "queued_tasks_query"
-    queued_tasks = AgentTask.objects.filter(status="queued").count()
+    queued_tasks = safe_count("AgentTask", lambda: AgentTask.objects.filter(status="queued").count())
     _phase = "blocked_tasks_query"
-    blocked_tasks = AgentTask.objects.filter(status="blocked").count()
+    blocked_tasks = safe_count("AgentTask", lambda: AgentTask.objects.filter(status="blocked").count())
     _phase = "products_query"
-    active_products = Product.objects.filter(active=True).count()
+    active_products = safe_count("Product", lambda: Product.objects.filter(active=True).count())
     _phase = "orders_query"
-    orders = Order.objects.count()
+    orders = safe_count("Order", lambda: Order.objects.count())
     _phase = "approvals_query"
-    pending_approvals = ApprovalRequest.objects.filter(status="pending").count()
+    pending_approvals = safe_count("ApprovalRequest", lambda: ApprovalRequest.objects.filter(status="pending").count())
     metrics = {
-        "queued_tasks": observed(queued_tasks, "AgentTask"),
-        "blocked_tasks": observed(blocked_tasks, "AgentTask"),
-        "active_products": observed(active_products, "Product"),
-        "orders": observed(orders, "Order"),
-        "pending_approvals": observed(pending_approvals, "ApprovalRequest"),
+        "queued_tasks": queued_tasks,
+        "blocked_tasks": blocked_tasks,
+        "active_products": active_products,
+        "orders": orders,
+        "pending_approvals": pending_approvals,
         "independently_validated_market": module.unknown("Independent buyer-demand evidence not attached"),
         "verified_collected_cash": module.unknown("No payment-provider/ledger reconciliation"),
         "accepted_factory_products": module.unknown("VPS production and QA evidence not connected"),
