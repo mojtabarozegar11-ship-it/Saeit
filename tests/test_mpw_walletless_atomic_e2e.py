@@ -1,5 +1,6 @@
 """Isolated real MariaDB settlement simulations; no live invoices or money."""
 import unittest
+from pathlib import Path
 from dataclasses import replace
 from datetime import datetime,timedelta,timezone
 from decimal import Decimal
@@ -7,7 +8,7 @@ import pymysql
 from services.mpw_trx_walletless_core import PaymentHold,SolidifiedTransfer
 from services.mpw_trx_walletless_reservation import reserve_isolated
 from services.mpw_trx_walletless_finalize import settle_isolated,paid_entitlement_isolated,candidates_for_auto_reconcile
-from tests.test_mpw_walletless_mariadb_reservation import EphemeralMariaDBTests,connect,args,RECIPIENT,NOW
+from tests.test_mpw_walletless_mariadb_reservation import connect,args,RECIPIENT,NOW
 
 SENDER='T'+'B'*33
 TX1='a'*64
@@ -21,7 +22,15 @@ def solid(source,amount,tx=TX1,**kwargs):
     v.update(kwargs)
     return SolidifiedTransfer(**v)
 
-class AtomicPaymentTests(EphemeralMariaDBTests):
+class AtomicPaymentTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        c=connect()
+        for sql in Path('services/sql/mpw_walletless_trx_isolated_v1.sql').read_text().split(';'):
+            if sql.strip():
+                with c.cursor() as cur:cur.execute(sql)
+        c.commit();c.close()
+
     def setUp(self):
         self.c=connect()
         with self.c.cursor() as cur:
