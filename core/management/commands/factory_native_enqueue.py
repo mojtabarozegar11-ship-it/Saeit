@@ -12,7 +12,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from core.factory_native_review_gateway import (
-    ACTION, FAMILIES, digest, latest_snapshot, private_root, snapshot
+    ACTION, FAMILIES, digest, inspect_family, latest_snapshot, private_root, snapshot
 )
 from core.models import Agent, AgentCapability, AgentTask
 from core.economic_tool_pack import build_economic_gateway
@@ -47,6 +47,14 @@ class Command(BaseCommand):
             "requested_logical_orchestrator":"moj_1ro_1",
             "verified_task_runtime":"economic-master-agent",
         } for family in FAMILIES]
+        # Fail *before* touching the master database if any original native
+        # archive, policy flag, or external QA evidence was forged or tampered.
+        try:
+            verified_rows=[inspect_family(root,payload) for payload in evidence]
+        except (ValueError,KeyError,TypeError,OSError) as err:
+            raise CommandError("BRIDGE_NATIVE_ARTIFACT_UNVERIFIED:"+str(err)) from err
+        if len(verified_rows)!=6 or {r["family"] for r in verified_rows}!=set(FAMILIES):
+            raise CommandError("BRIDGE_ALL_SIX_NOT_PROVEN")
         if options["dry_run"]:
             self.stdout.write("MOJ1RO1_NATIVE_BRIDGE_DRY_RUN=VERIFIED_6")
             self.stdout.write("MOJ1RO1_NATIVE_BRIDGE_SOURCE_REWORK="+str(
