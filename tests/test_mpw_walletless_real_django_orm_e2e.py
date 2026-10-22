@@ -29,6 +29,7 @@ settings_module.SECRET_KEY="test-only-key-not-for-production"
 settings_module.INSTALLED_APPS=[]
 settings_module.USE_TZ=True
 settings_module.TIME_ZONE="UTC"
+settings_module.ALLOWED_HOSTS=["isolated.test","staging.test","testserver"]
 settings_module.DEFAULT_AUTO_FIELD="django.db.models.BigAutoField"
 settings_module.DATABASES={"default":{
     "ENGINE":"django.db.backends.mysql",
