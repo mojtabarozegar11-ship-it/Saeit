@@ -66,6 +66,15 @@ class VPSProductInstallerTests(unittest.TestCase):
         self.assertIn('scripts/'+dependency+' scripts/factory_personal_owner_passport_policy_20261020.py',wf)
         self.assertIn('VPS_FACTORY_REQUIRED_CUSTOMER_MODULE_STAGED=PASS',wf)
 
+    def test_legacy_upgrade_regression_helper_is_staged_and_importable(self):
+        """VPS unittest discovery must see the sibling tests helper package."""
+        source=Path(__file__).resolve().parents[1]
+        wf=(source/".github/workflows/vps-autonomous-product-install.yml").read_text(encoding="utf8")
+        self.assertTrue((source/"tests/test_factory_source_evolution.py").is_file())
+        self.assertIn('tests/test_factory_vps_product_cycle.py tests/test_factory_source_evolution.py',wf)
+        self.assertIn('VPS_FACTORY_LEGACY_SOURCE_EVOLUTION_FIXTURE_STAGED=PASS',wf)
+        self.assertIn('cd "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}" &&',wf)
+
 
 if __name__ == "__main__":
     unittest.main()
