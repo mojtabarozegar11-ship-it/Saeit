@@ -46,8 +46,14 @@ def hex_to_tron_address(value: str) -> str:
     return ("1" * (len(raw)-len(raw.lstrip(b"\0"))))+digits
 
 
-def parse_solidified_native_trx(txid: str, body: dict, info: dict, *, source_id: str) -> SolidifiedTransfer:
+def parse_solidified_native_trx(
+    txid: str, body: dict, info: dict, *, source_id: str, network: str = NETWORK,
+) -> SolidifiedTransfer:
     """Parse transaction body AND solidity receipt returned by same pinned provider."""
+    # An explicitly tagged Shasta observation can be audited but must NEVER
+    # masquerade as a payment accepted by the mainnet settlement kernel.
+    if network not in (NETWORK, "tron-shasta"):
+        raise PaymentHold("Unsupported TRON proof network")
     if not isinstance(txid,str) or not TX_ID.fullmatch(txid):
         raise PaymentHold("Malformed requested TRON transaction ID")
     if not source_id or not isinstance(body,dict) or not isinstance(info,dict):
@@ -89,7 +95,7 @@ def parse_solidified_native_trx(txid: str, body: dict, info: dict, *, source_id:
         raise PaymentHold("Malformed on-chain transaction timestamp")
     timestamp=datetime.fromtimestamp(ts_ms/1000,timezone.utc)
     return SolidifiedTransfer(
-        source_id=source_id,tx_hash=txid,network=NETWORK,
+        source_id=source_id,tx_hash=txid,network=network,
         recipient=recipient,sender=sender,amount_sun=amount,
         block_time=timestamp,solidified=True,transfer_contract=True,
         execution_success=True,
@@ -120,6 +126,11 @@ class RpcProvider:
             pass
         else:
             raise PaymentHold("IP-literal RPC hosts forbidden")
+        # This class powers MAINNET settlement only. Shasta/Nile RPC providers
+        # must never be accepted here even if configured with two operator IDs.
+        if (hostname in ("api.shasta.trongrid.io", "api.nileex.io", "nile.trongrid.io")
+            or re.search(r"(^|[.-])(shasta|nile|testnet)([.-]|$)", hostname)):
+            raise PaymentHold("Testnet provider cannot validate mainnet payments")
         if type(self.api_key) is not str or len(self.api_key)>512:
             raise PaymentHold("Untrusted RPC authentication material")
         if self.api_key_header not in ("TRON-PRO-API-KEY", "X-API-KEY"):
