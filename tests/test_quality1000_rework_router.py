@@ -143,5 +143,24 @@ class RouteQualityTest(unittest.TestCase):
         self.assertIsNone(entry["documentary_points"])
         self.assertFalse(entry["quality_1000_certified"])
 
+
+    def test_missing_family_is_quarantined_not_assigned_fake_agent(self):
+        self.assessment()
+        source=self.quality_folder/"current.json"
+        assessment=json.loads(source.read_text())
+        assessment["family_id"]=None
+        raw=(json.dumps(assessment,sort_keys=True)+"\n").encode()
+        source.write_bytes(raw)
+        orderfile=self.order_folder/"current.json"
+        order=json.loads(orderfile.read_text())
+        order["source_quality_receipt_sha256"]=hashlib.sha256(raw).hexdigest()
+        orderfile.write_text(json.dumps(order))
+        report=route(self.root)
+        self.assertEqual(report["routed_products"],1)
+        latest=json.loads((self.base/"specialist-routed-rework"/"test_recipe"/"current.json").read_text())
+        self.assertEqual(latest["disposition"],"QUARANTINED_UNMAPPED_FAMILY")
+        self.assertIsNone(latest["producer_module"])
+        self.assertFalse(latest["publication_allowed"])
+
 if __name__=="__main__":
     unittest.main()
