@@ -191,7 +191,7 @@ class RealDjangoWalletlessTests(unittest.TestCase):
     def setUp(self):
         c=raw_conn()
         with c.cursor() as cur:
-            for table in ("mpw_walletless_trx_guest_claim_v1","mpw_walletless_trx_guest_rate_v1",
+            for table in ("mpw_walletless_trx_guest_handoff_v1","mpw_walletless_trx_guest_claim_v1","mpw_walletless_trx_guest_rate_v1",
                           "mpw_walletless_trx_entitlement_v1","mpw_walletless_trx_ledger_v1",
                           "mpw_walletless_trx_receipt_v1","mpw_walletless_trx_reservation_v1",
                           "mpw_walletless_trx_allocator_v1"):
@@ -374,7 +374,7 @@ class RealDjangoWalletlessTests(unittest.TestCase):
         from django.http import Http404
         from services.mpw_walletless_django_guest_claim import COOKIE_NAME,read_guest_buyer
         from services.mpw_walletless_django_guest_staging_web import (
-            guest_start_order,guest_show_invoice,guest_invoice_status,guest_download_paid)
+            guest_start_order,guest_show_invoice,guest_invoice_status,guest_download_paid,guest_redeem_wallet_link)
         from django.utils import timezone as tz
         factory=RequestFactory()
         def req(method,path,cookie=None):
@@ -404,6 +404,22 @@ class RealDjangoWalletlessTests(unittest.TestCase):
             self.assertEqual(page.status_code,200)
             self.assertIn(b'Pay TRX in my wallet',page.content)
             self.assertIn(b'QR contains the address only',page.content)
+            import re
+            handoff_match=re.search(r'data-wallet-handoff="(/commerce/trx-easy/claim/[a-f0-9]{64}/)"',
+                          page.content.decode("utf8"))
+            self.assertIsNotNone(handoff_match)
+            new_browser=guest_redeem_wallet_link(
+                req("get",handoff_match.group(1)),handoff_match.group(1).strip("/").split("/")[-1])
+            self.assertEqual(new_browser.status_code,302)
+            second_cookie=new_browser.cookies[COOKIE_NAME].value
+            self.assertNotEqual(second_cookie,token)
+            self.assertEqual(read_guest_buyer(second_cookie),buyer)
+            other_browser=guest_invoice_status(
+                 req("get",f"/commerce/trx-easy/status/{invoice_id}/",second_cookie),invoice_id)
+            self.assertEqual(other_browser.status_code,200)
+            with self.assertRaises(Http404):
+                guest_redeem_wallet_link(
+                    req("get",handoff_match.group(1)),handoff_match.group(1).strip("/").split("/")[-1])
             repeat=guest_start_order(req("post","/commerce/trx-easy/start/779/",token),779)
             self.assertEqual(repeat["Location"],start["Location"])
             self.assertEqual(User.objects.filter(username__startswith="mpwguest_").count(),1)
