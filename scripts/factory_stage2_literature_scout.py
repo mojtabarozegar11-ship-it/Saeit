@@ -233,7 +233,7 @@ def citation_sentence(abstract, topic_keys):
         parts=sentence.split()
         if not 10<=len(parts)<=24 or not 58<=len(sentence)<=240:
             continue
-        normalized={normalize(w) for w in WORD_RE.findall(sentence)}
+        normalized={normalize(w) for w in WORD_RE.findall(sentence.lower())}
         matched=[k for k in topic_keys if k in normalized or any(
                  w.startswith(k) and len(k)>4 for w in normalized)]
         # Paper-level title AND abstract relevance is already enforced.
@@ -322,8 +322,8 @@ def usable_paper(work,topic_keys,worker):
     abstract=abstract_from_index(work.get("abstract_inverted_index"))
     if len(abstract)<210:
         return None
-    title_norm={normalize(w) for w in WORD_RE.findall(title)}
-    body_norm={normalize(w) for w in WORD_RE.findall(abstract)}
+    title_norm={normalize(w) for w in WORD_RE.findall(title.lower())}
+    body_norm={normalize(w) for w in WORD_RE.findall(abstract.lower())}
     title_hits=sum(k in title_norm for k in topic_keys)
     body_hits=sum(k in body_norm for k in topic_keys)
     if title_hits<1 or body_hits<min(2,len(topic_keys)):
@@ -575,7 +575,7 @@ def cite_candidates_crossref(items,title):
         doi=item.get("DOI")
         if not isinstance(title0,str) or not isinstance(doi,str):
             continue
-        overlap=lookup.intersection({normalize(w) for w in WORD_RE.findall(title0)})
+        overlap=lookup.intersection({normalize(w) for w in WORD_RE.findall(title0.lower())})
         if len(overlap)<min(2,len(lookup)):
             continue
         selected.append({"title":title0[:400],"doi":"https://doi.org/"+doi,
