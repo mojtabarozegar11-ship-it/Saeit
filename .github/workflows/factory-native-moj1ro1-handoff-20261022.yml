@@ -1,0 +1,50 @@
+name: Bind completed native production to moj_1ro_1 actual AgentTasks
+on:
+  workflow_run:
+    workflows: ["Real native candidates for six blocked factory lines"]
+    types: [completed]
+    branches: [main]
+  push:
+    branches: [feature/native-release-moj1ro1-handoff-20261022]
+    paths:
+      - deploy/factory_moj1ro1_after_native_success.sh
+      - .github/workflows/factory-native-moj1ro1-handoff-20261022.yml
+permissions: {contents: read}
+concurrency:
+  group: moj1ro1-native-followup-${{ github.event.workflow_run.id || github.sha }}
+  cancel-in-progress: false
+jobs:
+  verify-contract:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Check bounded, nonpublishing follow-up syntax and guardrails
+        run: |
+          set -euo pipefail
+          bash -n deploy/factory_moj1ro1_after_native_success.sh
+          grep -Fq 'MOJ1RO1_POST_NATIVE_GENUINE_TASKS=6' deploy/factory_moj1ro1_after_native_success.sh
+          grep -Fq 'MOJ1RO1_POST_NATIVE_PROFESSIONAL_QUALITY_1000=0' deploy/factory_moj1ro1_after_native_success.sh
+          echo MASTER_NATIVE_IMMEDIATE_HANDOFF_CONTRACT=PASS
+  deliver:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify six actual SHA-bound native candidates through the registered moj_1ro_1 agent
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          SOURCE_RUN: ${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+        run: |
+          set -euo pipefail
+          bash -n deploy/factory_moj1ro1_after_native_success.sh
+          bash deploy/factory_moj1ro1_after_native_success.sh "$SOURCE_RUN"
