@@ -84,13 +84,20 @@ jobs:
             StrictHostKeyChecking yes
             IdentitiesOnly yes
             BatchMode yes
-            ConnectTimeout 10
-            ConnectionAttempts 1
+            ConnectTimeout 15
+            ConnectionAttempts 3
             ForwardAgent no
             RequestTTY no
           EOF
           chmod 600 "$d/config"
-          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          for attempt in 1 2 3; do
+            if timeout 60s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null && test -s "$d/host.candidate"; then
+              break
+            fi
+            echo "MPW_CSS_PINNED_RELAY_RETRY=$attempt"
+            sleep 3
+          done
+          test -s "$d/host.candidate"
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
       - name: Put reviewed fintech CSS in private staging, never public yet
