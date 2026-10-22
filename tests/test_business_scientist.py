@@ -76,5 +76,5 @@ def test_real_blocked_work_precedes_generic_growth_work():
 
 def test_order_and_internal_ledger_records_are_not_called_settled_cash():
     plan = build_business_science_plan(_metrics())
-    assert "not independent verification" in plan["observed_operating_data"]["interpretation_limit"]
+    assert "not independent proof" in plan["observed_operating_data"]["interpretation_limit"]
     assert "orders are revenue" in plan["do_not_infer"]
