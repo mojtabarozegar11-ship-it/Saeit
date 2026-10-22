@@ -1,4 +1,4 @@
-name: Read-only paid-listener AppConfig compatibility check
+name: Guarded paid-purchase event listener release
 
 on:
   push:
@@ -49,7 +49,7 @@ jobs:
           done
           echo PURCHASE_RELEASE_BASELINE_SITES_HEALTHY
 
-      - name: Test cPanel AppConfig shape without production mutation
+      - name: Stage, verify and install bounded subscriber via cPanel relay
         shell: bash
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -112,9 +112,26 @@ jobs:
           echo PURCHASE_RELEASE_PRIVATE_STAGE_CHECKSUM_VERIFIED
           timeout 90s ssh -F "$stage_root/config" business-os-cpanel \
             "cd '$stage_host' && bash scripts/business_os_purchase_cpanel_release.sh --probe"
-          timeout 60s ssh -F "$stage_root/config" business-os-cpanel \
-            "cd '$stage_host' && bash scripts/business_os_purchase_cpanel_release.sh --check-app-config"
-          echo PURCHASE_DIAG_APP_CONFIG_READ_ONLY
+          if ! timeout 120s ssh -F "$stage_root/config" business-os-cpanel \
+            "cd '$stage_host' && bash scripts/business_os_purchase_cpanel_release.sh --apply"; then
+            echo PURCHASE_RELEASE_PRODUCTION_PREFLIGHT_OR_CHECK_FAILED
+            exit 1
+          fi
+          sleep 6
+          post_ok=1
+          for site in https://mojplaywin.com/ https://zomorodmelal.ir/; do
+            if ! curl -fLsS --max-time 20 --retry 2 --retry-delay 2 -o /dev/null "$site"; then
+              post_ok=0
+            fi
+          done
+          if test "$post_ok" -ne 1; then
+            echo PURCHASE_RELEASE_POST_HEALTH_FAILED_ROLLING_BACK
+            timeout 90s ssh -F "$stage_root/config" business-os-cpanel \
+              "cd '$stage_host' && bash scripts/business_os_purchase_cpanel_release.sh --rollback" || echo PURCHASE_RELEASE_ROLLBACK_REQUIRES_MANUAL_ATTENTION
+            exit 1
+          fi
+          echo PURCHASE_RELEASE_ACTIVE_EVENT_SUBSCRIBER_SITES_HEALTHY
+          echo PURCHASE_RELEASE_NO_CRON_NO_PAYMENT_MUTATION_NO_DB_MIGRATION
       - name: Clear runner-only SSH key copies
         if: always()
         shell: bash
