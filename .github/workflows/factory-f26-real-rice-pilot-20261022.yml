@@ -1,9 +1,14 @@
 name: F26 real-world rice research model — reproducible holdout
 on:
   push:
-    branches: [feature/f26-real-rice-uci-qa-20261022, fix/f26-basic-ci-no-ml-20261022, main]
+    branches: [feature/f26-real-rice-uci-qa-20261022, fix/f26-basic-ci-no-ml-20261022, feature/f26-rice-real-inference-cli-20261022, main]
     paths:
       - scripts/factory_f26_real_rice_research_pilot.py
+      - scripts/factory_f26_real_rice_cli.py
+      - scripts/factory_f26_rice_onnx_portable.py
+      - deploy/factory_f26_portable_private_relay.sh
+      - deploy/factory_f26_portable_private_install.py
+      - tests/test_factory_f26_real_rice_cli.py
       - tests/test_factory_f26_real_rice_research_pilot.py
       - tests/test_factory_f26_real_rice_private_install.py
       - deploy/factory_f26_real_rice_private_relay.sh
@@ -38,6 +43,8 @@ jobs:
           python3 -B -m unittest discover -s tests -p test_factory_f26_real_rice_private_install.py -v
           bash -n deploy/factory_f26_real_rice_private_relay.sh
           python3 -B -m py_compile scripts/factory_f26_real_rice_research_pilot.py
+          python3 -B -m py_compile scripts/factory_f26_real_rice_cli.py scripts/factory_f26_rice_onnx_portable.py deploy/factory_f26_portable_private_install.py
+          bash -n deploy/factory_f26_portable_private_relay.sh
       - name: Fetch explicitly licensed UCI rice morphology dataset over HTTPS
         shell: bash
         run: |
@@ -61,6 +68,99 @@ jobs:
             --out "$RUNNER_TEMP/f26-real-rice"
           python3 -B scripts/factory_f26_real_rice_research_pilot.py --verify "$RUNNER_TEMP/f26-real-rice"
           echo F26_REAL_RICE_HOLDOUT_ONNX=PASS
+      - name: Exercise SHA-pinned offline inference CLI on twelve real UCI grains
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_f26_real_rice_cli.py -v
+          python3 -B - "$RUNNER_TEMP/uci-rice-545.zip" "$RUNNER_TEMP/rice-inference.csv" <<'PY'
+          import csv,hashlib,importlib.util,sys
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location('rice','scripts/factory_f26_real_rice_research_pilot.py')
+          module=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          raw=Path(sys.argv[1]).read_bytes()
+          text,_=module.read_archive(sys.argv[1],hashlib.sha256(raw).hexdigest())
+          rows,_=module.parse_arff(text)
+          with open(sys.argv[2],'w',encoding='utf8',newline='') as file:
+              writer=csv.writer(file)
+              writer.writerow(module.FIELDS)
+              writer.writerows(rows[:12])
+          PY
+          python3 -B scripts/factory_f26_real_rice_cli.py --model-dir "$RUNNER_TEMP/f26-real-rice" --csv "$RUNNER_TEMP/rice-inference.csv" --out "$RUNNER_TEMP/rice-inference-result.json"
+          python3 -B - "$RUNNER_TEMP/rice-inference-result.json" "$RUNNER_TEMP/f26-real-rice/model_card.json" <<'PY'
+          import json,sys
+          from pathlib import Path
+          results=json.loads(Path(sys.argv[1]).read_text())
+          card=json.loads(Path(sys.argv[2]).read_text())
+          assert results['count']==12 and len(results['predictions'])==12
+          assert results['model_sha256']==card['onnx_model_sha256']
+          assert all(x['predicted_cultivar'] in ('Cammeo','Osmancik') for x in results['predictions'])
+          assert all(not x['independent_field_validation'] for x in results['predictions'])
+          assert results['no_external_service_called'] is True
+          assert results['commercial_release_authorized'] is False
+          assert results['human_expert_quality_1000_certified'] is False
+          print('F26_RICE_REAL_DATA_OFFLINE_CLI_INFERENCE=PASS')
+          PY
+      - name: Export minimal offline ONNX parameters and prove all 762 holdout labels
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/factory_f26_rice_onnx_portable.py --export --model-dir "$RUNNER_TEMP/f26-real-rice" --source-archive "$RUNNER_TEMP/uci-rice-545.zip" --out "$RUNNER_TEMP/rice-portable-spec.json"
+          python3 -S scripts/factory_f26_rice_onnx_portable.py --predict --model-dir "$RUNNER_TEMP/f26-real-rice" --runtime-spec "$RUNNER_TEMP/rice-portable-spec.json" --csv "$RUNNER_TEMP/rice-inference.csv" --out "$RUNNER_TEMP/rice-portable-result.json"
+          python3 -B - "$RUNNER_TEMP/rice-portable-result.json" "$RUNNER_TEMP/f26-real-rice/model_card.json" <<'PY'
+          import json,sys
+          from pathlib import Path
+          d=json.loads(Path(sys.argv[1]).read_text())
+          card=json.loads(Path(sys.argv[2]).read_text())
+          assert d['count']==12 and len(d['predictions'])==12
+          assert d['source_onnx_sha256']==card['onnx_model_sha256']
+          assert d['field_validated'] is False
+          assert d['quality_1000_certified'] is False
+          assert d['commercial_release_authorized'] is False
+          print('F26_PORTABLE_REPRODUCIBLE_OFFLINE_WITHOUT_SITE_PACKAGES=PASS')
+          PY
+      - name: Independently rehearse actual private deployment and verify immutable receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          private="$RUNNER_TEMP/private-portable-fixture"
+          run="90001234567-1"
+          original="$private/f26-real-data-research/$run"
+          stage="$private/f26-real-data-research/.incoming-portable-$run"
+          mkdir -p "$original" "$stage"
+          cp "$RUNNER_TEMP/f26-real-rice/"* "$original/"
+          cp scripts/factory_f26_real_rice_cli.py scripts/factory_f26_rice_onnx_portable.py "$stage/"
+          cp "$RUNNER_TEMP/rice-portable-spec.json" "$stage/portable-spec.json"
+          cp "$RUNNER_TEMP/rice-inference.csv" "$stage/rice-inference.csv"
+          python3 - "$original" "$stage" "$run" <<'PY'
+          import hashlib,json,sys
+          from pathlib import Path
+          original,stage,run=(Path(sys.argv[1]),Path(sys.argv[2]),sys.argv[3])
+          card=json.loads((original/"model_card.json").read_text())
+          received={
+              "schema":"saeit.factory.f26.real-rice-research-pilot.v1.vps-admission",
+              "run_id":run,
+              "research_model_sha256":card["onnx_model_sha256"],
+              "commercial_release_allowed":False,
+              "professional_quality_1000_certified":False,
+              "previous_f26_native_48_models_preserved":True
+          }
+          (original/"private-f26-real-data-receipt.json").write_text(json.dumps(received)+"\n")
+          names=("portable-spec.json","rice-inference.csv",
+                 "factory_f26_real_rice_cli.py","factory_f26_rice_onnx_portable.py")
+          proof={k:hashlib.sha256((stage/k).read_bytes()).hexdigest() for k in names}
+          (stage/"hash-manifest.json").write_text(json.dumps(proof)+"\n")
+          PY
+          python3 -B deploy/factory_f26_portable_private_install.py \
+            --factory-private "$private" --source-run "$run" \
+            --source-commit "$GITHUB_SHA" \
+            --hash-manifest "$stage/hash-manifest.json"
+          test -s "$private/f26-real-data-research/portable-$run/private-portable-deployment-receipt.json"
+          test -s "$original/rice_cultivar_real_pilot.onnx"
+          test -s "$private/f26-real-data-research/portable-$run/private-offline-prediction-proof.json"
+          echo F26_REAL_PORTABLE_PRIVATE_INSTALL_REHEARSAL=PASS
+
       - name: Privately admit SHA-bound real-data pilot into existing VPS F26 research evidence
         if: github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
         shell: bash
@@ -71,3 +171,12 @@ jobs:
           bash -n deploy/factory_f26_real_rice_private_relay.sh
           python3 -B -m py_compile deploy/factory_f26_real_rice_private_install.py
           bash deploy/factory_f26_real_rice_private_relay.sh "$RUNNER_TEMP/f26-real-rice"
+      - name: Admit and execute portable pure-Python predictor on private VPS
+        if: github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash deploy/factory_f26_portable_private_relay.sh "$RUNNER_TEMP/rice-portable-spec.json" "$RUNNER_TEMP/rice-inference.csv"
+          echo F26_PORTABLE_PRIVATE_VPS_NATIVELY_EXECUTED=PASS
