@@ -46,7 +46,11 @@ for f in "${added[@]}"; do
   test -s "$stage/new/$f" && test ! -L "$app/$f"
   if test -e "$app/$f"; then
     cmp -s "$app/$f" "$stage/new/$f" || {
-      echo "F41_UNKNOWN_EXISTING_BRIDGE:$f"; exit 1;
+      # Gateway's single known previous revision may be upgraded safely.
+      test "$f" = core/factory_f41_gateway.py &&
+        cmp -s "$app/$f" "$stage/old/$f" || {
+        echo "F41_UNKNOWN_EXISTING_BRIDGE:$f"; exit 1;
+      }
     }
   fi
 done

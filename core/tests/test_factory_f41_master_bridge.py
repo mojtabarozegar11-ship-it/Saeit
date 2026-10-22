@@ -76,6 +76,17 @@ def test_mutated_order_fails_without_reusing_verified_task(private_f41):
     assert AgentTask.objects.filter(action_type=ACTION).count() == 4
 
 
+def test_gateway_ignores_nonbinding_runtime_metadata(private_f41):
+    from core.factory_f41_gateway import inspect_order, roots, build_verified_order
+    root, ops = roots()
+    payload = inspect_order(root, ops, "F41-pilot-vesting")
+    payload["runtime_context"] = {"execution_id": "inject", "external_destination": "/tmp/unsafe"}
+    result = build_verified_order(payload)
+    assert result["verified_effect"] is True
+    assert result["financial_actions"] == 0
+    assert result["commercial_release"] is False
+
+
 @pytest.mark.django_db
 def test_symlink_and_forged_receipt_fail_closed(private_f41):
     call_command("seed_online_income_agents", verbosity=0)

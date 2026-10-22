@@ -74,8 +74,8 @@ def inspect_order(root, ops, order_id):
 def build_verified_order(payload):
     if os.getenv("MOJ_FACTORY_LOCAL_MODE") != "1":
         raise ValueError("F41_MASTER_PRIVATE_VPS_ONLY")
-    if type(payload) is not dict or set(payload) != {
-            "order_id", "kind", "product_id", "request_sha256"}:
+    if type(payload) is not dict or not {
+            "order_id", "kind", "product_id", "request_sha256"}.issubset(payload):
         raise ValueError("F41_MASTER_BOUND_PAYLOAD_REQUIRED")
     h = payload["request_sha256"]
     if type(h) is not str or not HASH.fullmatch(h):
