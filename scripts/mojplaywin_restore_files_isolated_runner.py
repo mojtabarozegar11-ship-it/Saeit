@@ -111,21 +111,35 @@ def recover(stream, directory):
                 raise ValueError("special file member not permitted in sandbox")
     # Never permit links to become parents before all ordinary files exist.
     for parts,target,is_symlink in links:
-        if not isinstance(target,str) or target.startswith("/"):
+        if not isinstance(target,str):
             raise ValueError("absolute archive link cannot be restored into sandbox")
-        candidate=posixpath.normpath(
-            posixpath.join(*(parts[:-1] if is_symlink else ()),target)
-        ) if is_symlink else posixpath.normpath(target)
-        safe_parts(candidate)
         path=base.joinpath(*parts)
         check_parents(base,parts)
+        if target.startswith("/"):
+            # Source-account paths are rebased INTO the isolated restore root.
+            # External absolute links are never materialized or followed.
+            if not is_symlink:
+                raise ValueError("absolute archive link cannot be restored into sandbox")
+            try:
+                relative=PurePosixPath(target).relative_to("/home/zomorod2")
+            except ValueError:
+                raise ValueError("unbacked absolute archive link")
+            candidate=str(relative)
+            safe_parts(candidate)
+            link_target=os.path.relpath(base.joinpath(*relative.parts),start=path.parent)
+        else:
+            candidate=posixpath.normpath(
+                posixpath.join(*(parts[:-1] if is_symlink else ()),target)
+            ) if is_symlink else posixpath.normpath(target)
+            safe_parts(candidate)
+            link_target=target
         referent=base.joinpath(*PurePosixPath(candidate).parts)
         if referent.is_symlink():
             raise ValueError("nested archive links not restored")
         if is_symlink:
             if path.exists() or path.is_symlink():
                 raise ValueError("link collision")
-            os.symlink(target,path)
+            os.symlink(link_target,path)
             result["symlinks_restored"]+=1
         else:
             if not referent.is_file() or path.exists() or path.is_symlink():
@@ -158,6 +172,7 @@ def safe_failure_code(exc):
         "incomplete restored regular file": "short_member",
         "special file member not permitted in sandbox": "special_member",
         "absolute archive link cannot be restored into sandbox": "absolute_link",
+        "unbacked absolute archive link": "unbacked_absolute_link",
         "nested archive links not restored": "nested_link",
         "link collision": "link_collision",
         "hardlink target missing": "hardlink_target",
