@@ -107,7 +107,9 @@ jobs:
     needs: measured-qa
     if: github.event_name == 'workflow_dispatch' || (github.repository == 'mojtabarozegar11-ship-it/Saeit' && contains(github.event.head_commit.message, '[approved-factory-unlimited-builds-20261019]'))
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    # Measured VPS regressions and private manufacturing already consumed the
+    # old 12-minute budget before the final signed-off integrity readbacks.
+    timeout-minutes: 22
     steps:
       - uses: actions/checkout@v4
       - name: Validate product and installer
