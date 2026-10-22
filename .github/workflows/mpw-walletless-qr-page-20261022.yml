@@ -4,6 +4,8 @@ on:
     branches: [feature/mpw-walletless-trx-e2e-20261022]
     paths:
       - services/mpw_trx_walletless_checkout_ui.py
+      - services/mpw_trx_walletless_one_tap_ui.py
+      - tests/test_mpw_trx_walletless_one_tap_ui.py
       - tests/test_mpw_walletless_checkout_ui.py
       - .github/workflows/mpw-walletless-qr-page-20261022.yml
   workflow_dispatch:
@@ -22,13 +24,17 @@ jobs:
           set -euo pipefail
           python3 -m py_compile services/mpw_trx_walletless_checkout_ui.py
           python3 -m unittest discover -s tests -p 'test_mpw_walletless_checkout_ui.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_trx_walletless_one_tap_ui.py' -v
       - name: Verify buyer script has valid browser syntax
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           from services.mpw_trx_walletless_checkout_ui import SCRIPT
+          from services.mpw_trx_walletless_one_tap_ui import WALLET_ACTION_JS
           Path('/tmp/mpw-walletless-script.js').write_text(SCRIPT)
+          Path('/tmp/mpw-one-tap-script.js').write_text(WALLET_ACTION_JS)
           PY
           node --check /tmp/mpw-walletless-script.js
+          node --check /tmp/mpw-one-tap-script.js
           echo "MPW_WALLETLESS_QR_AND_POLL=PASS; NO_LIVE_PAYMENTS=TRUE"
