@@ -127,3 +127,33 @@ try:
   }))
 except Exception as exc:
  print("MPW_TRON_RPC_SAFE_AST="+json.dumps({"error_type":type(exc).__name__}))
+
+
+# Probe the explicitly allowlisted live source with a PUBLIC example tx id
+# from official TRON documentation. A missing historical tx is NOT a node
+# failure. Print only response validity and method, NEVER transaction details.
+try:
+ paths=getattr(existing_rpc,"TRX_PATHS",frozenset())
+ allowed=[v for v in paths if type(v) is str and v.startswith("/walletsolidity/")]
+ print("MPW_TRON_RPC_ALLOWED_PATHS="+json.dumps({"paths":sorted(allowed),"all_readonly":all(x.startswith("/walletsolidity/") for x in allowed)}))
+ example_tx="c558bd35978267d8999baf6148703cbc94786f3f2e22893637588ca05437d7f0"
+ if callable(fn):
+  for method in sorted(allowed):
+   out=None
+   error=None
+   for key in ("value","txid"):
+    try:
+     data=fn(method,{key:example_tx})
+     out={
+       "method":method,
+       "response_object":type(data) is dict,
+       "has_solidified_tx_reference":bool(isinstance(data,dict) and (data.get("txID")==example_tx or data.get("id")==example_tx)),
+       "transaction_data_redacted":True,
+       "sample_is_verified_mainnet":False
+     }
+     break
+    except Exception as exc:
+     error=type(exc).__name__
+   print("MPW_TRON_RPC_DOC_EXAMPLE_READONLY="+json.dumps(out if out is not None else {"method":method,"error_type":error,"no_transaction_content_logged":True}))
+except Exception as exc:
+ print("MPW_TRON_RPC_DOC_EXAMPLE_READONLY="+json.dumps({"error_type":type(exc).__name__}))
