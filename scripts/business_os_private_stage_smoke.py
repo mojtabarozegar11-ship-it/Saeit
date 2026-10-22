@@ -3,6 +3,7 @@
 import ast
 import runpy
 import sys
+import subprocess
 from pathlib import Path
 
 
@@ -38,6 +39,7 @@ def main():
         raise RuntimeError("Expected private controller safety tests are missing")
     for test in private_tests:
         test()
+    subprocess.run(["bash", "-n", str(root / "scripts" / "business_os_private_cron.sh")], check=True)
     print(f"BUSINESS_OS_PRIVATE_STAGE_OK ast_files={len(paths)} policy_tests={len(tests) + len(factory_tests) + len(private_tests)}")
 
 

@@ -73,3 +73,21 @@ It does not publish, deploy, spend, trade, issue tokens, or bypass approvals.
 
 An internally generated report, successful CI job, created token, product
 metadata flag or simulated order **does not** itself count as commercial success.
+
+## 2026-10-22 private decision and bounded monitoring extension
+
+- A separate private decision file is written on each server, with strict
+  origin and freshness checks; missing cPanel data on the VPS is unknown.
+- A real active `moj_1ro_1` agent identity is checked in the existing
+  factory Django runtime without creating extra AgentTasks or capabilities.
+- Once both scheduled commands pass a live read-only preflight, a uniquely
+  marked cron entry may run every 15 minutes on each host. It changes only
+  private reports, leaves a recoverable crontab backup, and is removed by
+  `bash scripts/business_os_private_cron.sh --uninstall vps|cpanel` from
+  that exact staged release.
+- This is distributed autonomous observation/diagnosis, **not** a verified
+  cPanel-to-VPS private data transport, a payment settlement adapter, a
+  master task execution capability, or independently accepted production.
+- No cross-server data or financial observations are copied through CI.
+  Those integrations remain blocked pending tested authenticated transport,
+  reconciliation evidence and a dedicated scoped master capability.

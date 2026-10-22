@@ -1,4 +1,4 @@
-name: Business OS private staging via SSH relay
+name: Business OS private diagnostics and bounded schedule via SSH relay
 
 on:
   push:
@@ -9,6 +9,7 @@ on:
       - 'scripts/business_os_cpanel_private_run.sh'
       - 'scripts/business_os_vps_private_factory_metrics.py'
       - 'scripts/business_os_private_control.py'
+      - 'scripts/business_os_private_cron.sh'
       - 'scripts/business_os_vps_private_master_probe.py'
       - 'tests/test_business_os_private_control.py'
       - 'scripts/business_os_private_stage_smoke.py'
@@ -52,6 +53,7 @@ jobs:
             scripts/business_os_cpanel_private_run.sh \
             scripts/business_os_vps_private_factory_metrics.py \
             scripts/business_os_private_control.py \
+            scripts/business_os_private_cron.sh \
             scripts/business_os_vps_private_master_probe.py \
             tests/test_business_os_private_control.py \
             tests/test_business_os_vps_factory_source.py \
@@ -145,8 +147,26 @@ jobs:
           timeout 45s ssh -F "$stage_root/config" business-os-cpanel \
             "cd '$stage_host' && python3 -B scripts/business_os_private_control.py --node cpanel" > /dev/null 2>&1
           echo "BUSINESS_OS_CPANEL_PRIVATE_DECISION_CREATED"
-          echo "PRIVATE_STAGE_ONLY=$stage_name"
-          echo "No production app, database, service, cron, or public route was modified."
+          # Prove the scheduled command itself works before adding either cron.
+          timeout 90s ssh -F "$stage_root/config" business-os-vps \
+            "cd '$stage_vps' && bash -n scripts/business_os_private_cron.sh && bash scripts/business_os_private_cron.sh --run vps" > /dev/null 2>&1
+          timeout 90s ssh -F "$stage_root/config" business-os-cpanel \
+            "cd '$stage_host' && bash -n scripts/business_os_private_cron.sh && bash scripts/business_os_private_cron.sh --run cpanel" > /dev/null 2>&1
+          # The only persistent host mutation is a uniquely marked, reversible,
+          # fifteen-minute PRIVATE diagnostic cron on each server.
+          timeout 40s ssh -F "$stage_root/config" business-os-cpanel \
+            "cd '$stage_host' && bash scripts/business_os_private_cron.sh --install cpanel" > /dev/null 2>&1
+          if timeout 40s ssh -F "$stage_root/config" business-os-vps \
+            "cd '$stage_vps' && bash scripts/business_os_private_cron.sh --install vps" > /dev/null 2>&1; then
+            echo "BUSINESS_OS_PRIVATE_15MIN_VPS_AND_CPANEL_CRON_ACTIVE"
+          else
+            timeout 40s ssh -F "$stage_root/config" business-os-cpanel \
+              "cd '$stage_host' && bash scripts/business_os_private_cron.sh --uninstall cpanel" > /dev/null 2>&1 || :
+            echo "BUSINESS_OS_PRIVATE_SCHEDULE_ROLLED_BACK"
+            exit 1
+          fi
+          echo "PRIVATE_RELEASE=$stage_name"
+          echo "No website app code, database schema, transaction, service, or public route modified."
 
       - name: Clear runner-only SSH key copies
         if: always()
