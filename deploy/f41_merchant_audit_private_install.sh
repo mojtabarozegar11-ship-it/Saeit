@@ -15,7 +15,7 @@ python="$base/.venv/bin/python"
 ops="$base/operations"
 private="$base/private/autonomous-product-cycle"
 test -x "$python" && test -d "$ops" && test -d "$private"
-for name in f41_merchant_audit_cli.py verifier.py tests.py tests_verifier.py README.md LICENSE.txt invoices.csv payments.csv; do
+for name in f41_merchant_audit_cli.py verifier.py tests.py tests_verifier.py worker.py tests_worker.py README.md LICENSE.txt invoices.csv payments.csv; do
   test -f "$stage/$name" && test ! -L "$stage/$name"
 done
 dest="$ops/f41-merchant-audit/releases/$revision"
@@ -26,12 +26,12 @@ exec 9>"$ops/f41-merchant-audit/.install.lock"
 flock -w 30 9
 if test -e "$dest"; then
   test -d "$dest" && test ! -L "$dest"
-  for name in f41_merchant_audit_cli.py verifier.py tests.py tests_verifier.py README.md LICENSE.txt invoices.csv payments.csv; do
+  for name in f41_merchant_audit_cli.py verifier.py tests.py tests_verifier.py worker.py tests_worker.py README.md LICENSE.txt invoices.csv payments.csv; do
     cmp -s "$stage/$name" "$dest/$name" || { echo F41_MERCHANT_RELEASE_DRIFT; exit 1; }
   done
 else
   install -d -m 700 "$dest"
-  for name in f41_merchant_audit_cli.py verifier.py tests.py tests_verifier.py README.md LICENSE.txt invoices.csv payments.csv; do
+  for name in f41_merchant_audit_cli.py verifier.py tests.py tests_verifier.py worker.py tests_worker.py README.md LICENSE.txt invoices.csv payments.csv; do
     install -m 600 "$stage/$name" "$dest/$name"
   done
 fi
@@ -41,6 +41,57 @@ test ! -e "$demo" && test ! -L "$demo"
 "$python" -B "$dest/f41_merchant_audit_cli.py" --invoices "$dest/invoices.csv" --payments "$dest/payments.csv" --out "$demo"
 "$python" -B "$dest/f41_merchant_audit_cli.py" --invoices "$dest/invoices.csv" --payments "$dest/payments.csv" --out "$demo" --verify
 "$python" -B "$dest/verifier.py" --help >/dev/null
+"$python" -B "$dest/worker.py" --help >/dev/null
+# Smoke-test the REAL private inbox -> reconciled report path without any network.
+smoke="$pilot/intake-smoke-$run_id"
+test ! -e "$smoke" && test ! -L "$smoke"
+install -d -m 700 "$smoke" "$smoke/inbox" "$smoke/inbox/job-smoke"
+install -m 600 "$dest/invoices.csv" "$smoke/inbox/job-smoke/invoices.csv"
+install -m 600 "$dest/payments.csv" "$smoke/inbox/job-smoke/payments.csv"
+install -m 600 /dev/null "$smoke/inbox/job-smoke/READY"
+F41_WORKER_ONCHAIN_ENABLED=0 "$python" -B "$dest/worker.py" --runtime "$smoke"
+"$python" -B - "$smoke" <<'PY'
+import json,sys
+from pathlib import Path
+root=Path(sys.argv[1])
+status=json.loads((root/"outbox/job-smoke/status.json").read_text())
+assert status["result"]=="COMPLETE_READONLY",status
+assert status["delivery_authorized"] is False
+assert status["onchain_check_enabled"] is False
+assert (root/"outbox/job-smoke/reconciliation/integrity.json").is_file()
+print("F41_MERCHANT_REAL_INTAKE_SMOKE=PASS")
+PY
+# Live intake is PRIVATE and empty until properly sealed invoices arrive.
+runtime="$ops/f41-merchant-audit"
+"$python" -B "$dest/worker.py" --runtime "$runtime"
+runner="$runtime/run-private-worker.sh"
+next_runner="$runtime/.run-private-worker-$run_id.tmp"
+test ! -e "$next_runner" && test ! -L "$next_runner"
+printf '#!/usr/bin/env bash\nset -euo pipefail\numask 077\nexport F41_WORKER_ONCHAIN_ENABLED=1\nexec "%s" -B "%s/worker.py" --runtime "%s"\n' "$python" "$dest" "$runtime" > "$next_runner"
+chmod 700 "$next_runner"
+mv -- "$next_runner" "$runner"
+# Preserve all existing user crontab entries; only add a distinct F41 marker.
+if ! command -v crontab >/dev/null; then
+  echo F41_MERCHANT_SCHEDULER_MISSING
+  exit 1
+fi
+if original="$(crontab -l 2>&1)"; then
+  :
+elif [[ "$original" == *"no crontab for"* ]]; then
+  original=""
+else
+  echo F41_MERCHANT_CRONTAB_UNREADABLE
+  exit 1
+fi
+if ! printf '%s\n' "$original" | grep -Fq '# F41_PRIVATE_INTAKE'; then
+  {
+    if test -n "$original"; then printf '%s\n' "$original"; fi
+    printf '%s\n' "* * * * * $runner >/dev/null 2>&1 # F41_PRIVATE_INTAKE"
+  } | crontab -
+fi
+crontab -l | grep -Fq '# F41_PRIVATE_INTAKE'
+echo F41_MERCHANT_PRIVATE_SCHEDULER_REGISTERED=true
+echo F41_MERCHANT_PRIVATE_INBOX="$runtime/inbox"
 "$python" -B - "$dest" "$pilot/evaluation-$revision.zip" <<'PY'
 from pathlib import Path
 import sys,zipfile
