@@ -18,6 +18,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import sys
 import time
 import threading
@@ -37,7 +38,8 @@ STOP={"for","the","and","with","from","guide","basics","basic","how","to",
       "management","project","projects","manual","planner","worksheet",
       "workbook","field","farm","farming","garden","gardening","production",
       "small","scale","beginner","best","safe","using","method","methods",
-      "planning","calendar","new","advanced","improve","improved","issues"}
+      "planning","calendar","new","advanced","improve","improved","issues",
+      "rescue","diagnose","successful","overview","identification"}
 RISK=re.compile(r"(pesticid|insecticid|herbicid|fungicid|mushroom|"
                 r"forag|poison|tox|livestock|hatch|slaughter|"
                 r"food safety|food process|bee|beekeep|chicken|poultry)",
@@ -47,6 +49,7 @@ MAX_DOC=6_000_000
 # Never classify a throttled provider as "no scientific references exist".
 PROVIDER_LOCK=threading.Lock()
 PROVIDER_NEXT_ALLOWED={}
+PROVIDER_DEADLINE_UTC={}
 MINIMUM_SPACING_SECONDS=0.7
 
 class ProviderCoolingDown(RuntimeError):
@@ -65,8 +68,12 @@ def _slot(endpoint):
 
 def _limit_provider(endpoint, seconds):
     with PROVIDER_LOCK:
-        PROVIDER_NEXT_ALLOWED[endpoint]=max(PROVIDER_NEXT_ALLOWED.get(endpoint,0),
-                                            time.monotonic()+seconds)
+        deadline=time.monotonic()+max(0,seconds)
+        if deadline>=PROVIDER_NEXT_ALLOWED.get(endpoint,0):
+            PROVIDER_NEXT_ALLOWED[endpoint]=deadline
+            PROVIDER_DEADLINE_UTC[endpoint]=(
+                dt.datetime.now(dt.timezone.utc)+
+                dt.timedelta(seconds=max(0,seconds))).isoformat()
 
 def _retry_after(headers, default=120):
     value=headers.get("Retry-After") if headers else None
@@ -75,6 +82,53 @@ def _retry_after(headers, default=120):
     except (ValueError,TypeError):
         return default
 
+
+
+def openalex_api_key():
+    """Use an optional private, owner-only key. Never print, log or commit it."""
+    key=os.environ.get("OPENALEX_API_KEY","").strip()
+    if not key:
+        path=Path.home()/"factory-runtime/operations/production-instructions/.openalex-api-key"
+        if path.is_symlink():
+            raise RuntimeError("SCOUT_OPENALEX_KEY_SYMLINK")
+        if path.exists():
+            info=path.stat()
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid!=os.getuid()
+                    or info.st_mode & 0o077):
+                raise RuntimeError("SCOUT_OPENALEX_KEY_PERMISSIONS")
+            key=path.read_text(encoding="ascii").strip()
+    if key and not re.fullmatch(r"[A-Za-z0-9_-]{16,200}",key):
+        raise RuntimeError("SCOUT_OPENALEX_KEY_FORMAT")
+    return key
+
+
+def query_variants(title):
+    """Rotate honest bibliographic search terms, without weakening evidence gates."""
+    base=" ".join(keys(title)[:4]) or title
+    # Title synonyms are search-only: accepted papers still need original
+    # subject-term overlap, real abstracts, and independent publishers.
+    replacements={
+        "houseplant":"indoor ornamental horticulture",
+        "watering":"irrigation water stress",
+        "yellow":"chlorosis",
+        "potting":"growing substrate",
+        "seedling":"seed germination transplant",
+        "mushroom":"fungal cultivation",
+        "hydroponic":"soilless cultivation",
+        "greenhouse":"protected cultivation",
+        "cutting":"vegetative propagation",
+        "pest":"integrated pest management",
+        "soil":"soil fertility",
+        "compost":"organic matter compost",
+        "lighting":"photosynthesis light intensity",
+        "storage":"postharvest preservation",
+    }
+    changed=[]
+    for term in keys(title):
+        changed.extend(replacements.get(term,term).split())
+    enriched=" ".join(dict.fromkeys(changed[:9])).strip()
+    variants=[title,base,enriched]
+    return list(dict.fromkeys(v for v in variants if v))
 
 
 def sha(value):
@@ -113,6 +167,27 @@ def keys(title):
     if not unique:
         unique=[normalize(x) for x in WORD_RE.findall(str(title).lower())
                 if len(x)>4][:3]
+    # Common educational terms need their conservative scientific aliases.
+    # Aliases do not waive abstract evidence or publisher-diversity gates.
+    synonyms={
+        "houseplant":("indoor","ornamental"),
+        "watering":("irrigation","moisture"),
+        "yellow":("chlorosis",),
+        "leaf":("foliar",),
+        "lighting":("photosynthesis","irradiance"),
+        "potting":("substrate",),
+        "cutting":("propagation",),
+        "seedling":("germination",),
+        "hydroponic":("soilless",),
+        "greenhouse":("protected",),
+        "compost":("organic","matter"),
+    }
+    for term in unique[:4]:
+        for alias in synonyms.get(term,()):
+            if alias not in unique:
+                unique.append(alias)
+            if len(unique)>=7:
+                return unique[:7]
     return unique[:7]
 
 
@@ -391,9 +466,13 @@ def request_json(endpoint,parameters,timeout=10):
         raise RuntimeError("SCOUT_UNTRUSTED_API_ENDPOINT")
     query=urllib.parse.urlencode(parameters)
     url=endpoint+"?"+query
-    req=urllib.request.Request(url,headers={
-        "User-Agent":"SaeitFactoryResearchScout/1.0 (non-commercial provenance verification)",
-        "Accept":"application/json"})
+    headers={
+        "User-Agent":"SaeitFactoryResearchScout/1.1 (source verification; bounded)",
+        "Accept":"application/json"}
+    key=openalex_api_key() if endpoint==SAFE_KEYS["openalex"] else ""
+    if key:
+        headers["Authorization"]="Bearer "+key
+    req=urllib.request.Request(url,headers=headers)
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             return None
@@ -415,9 +494,18 @@ def request_json(endpoint,parameters,timeout=10):
             return obj
     except urllib.error.HTTPError as exc:
         if exc.code==429:
-            # Distinguish provider throttling from an actual lack of research.
-            # All already-submitted jobs see this process-wide circuit breaker.
-            _limit_provider(endpoint,_retry_after(exc.headers))
+            # Anonymous OpenAlex has a tiny shared DAILY budget. Without a
+            # Retry-After header, avoid hammering it each cron invocation.
+            if exc.headers and exc.headers.get("Retry-After"):
+                seconds=_retry_after(exc.headers)
+            elif endpoint==SAFE_KEYS["openalex"] and not key:
+                now=dt.datetime.now(dt.timezone.utc)
+                tomorrow=(now+dt.timedelta(days=1)).replace(
+                    hour=0,minute=2,second=0,microsecond=0)
+                seconds=max(120,(tomorrow-now).total_seconds())
+            else:
+                seconds=600
+            _limit_provider(endpoint,seconds)
             raise RuntimeError("SCOUT_API_RATE_LIMITED_429") from None
         if exc.code in (500,502,503,504):
             _limit_provider(endpoint,30)
@@ -427,10 +515,9 @@ def request_json(endpoint,parameters,timeout=10):
 
 
 def fetch_openalex(title):
-    # A narrowly worded topic may have no exact scientific article title;
-    # retry with its meaningful subject terms, but never bypass the
-    # independently checked relevance/abstract/source-diversity gates.
-    subject=" ".join(keys(title)[:4]) or title
+    # The caller selects a deterministic query variant on successive retries.
+    # Even broad results must pass strict paper and provenance validation.
+    subject=" ".join(keys(title)[:3]) or title
     data=request_json(SAFE_KEYS["openalex"],{
         "search":subject,
         "per_page":40,
@@ -490,15 +577,52 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
     if evidence_path.exists():
         return "already_seeded"
     terms=keys(title)
+    previous={}
+    if output.exists():
+        previous=worker.read(output)
+        if (previous.get("schema")!=SCHEMA or
+                previous.get("source_product_id")!=ident or
+                previous.get("order_id")!=order_id):
+            raise RuntimeError("SCOUT_CANDIDATE_IDENTITY_CHANGED")
+    prior_round=previous.get("search_round",-1)
+    if type(prior_round) is not int:
+        raise RuntimeError("SCOUT_INVALID_SEARCH_ROUND")
+    round_no=prior_round+1
+    if not 0<=round_no<=10000:
+        raise RuntimeError("SCOUT_INVALID_SEARCH_ROUND")
+    queries=query_variants(title)
+    query=queries[round_no%len(queries)]
     try:
-        raw=fetcher(title)
+        raw=fetcher(query)
         papers=select_papers(raw,terms,worker)
+        # Preserve previously verified abstract candidates across query
+        # variants; a mismatching digest discards stale/tampered cache.
+        cached=previous.get("indexed_abstract_candidates",[])
+        if (isinstance(cached,list) and
+                previous.get("candidate_sha256")==sha(cached)):
+            by_doi={p["doi"].lower():p for p in papers}
+            for paper in cached[:20]:
+                if (isinstance(paper,dict) and
+                        isinstance(paper.get("doi"),str) and
+                        paper["doi"].startswith("https://doi.org/") and
+                        isinstance(paper.get("relevance_score"),int) and
+                        isinstance(paper.get("publication_year"),int) and
+                        isinstance(paper.get("publisher"),str) and
+                        isinstance(paper.get("title"),str) and
+                        isinstance(paper.get("support_sentence"),str) and
+                        isinstance(paper.get("abstract_sha256"),str) and
+                        re.fullmatch(r"https://openalex\.org/W[0-9]{6,15}",
+                                     str(paper.get("openalex_id",""))) and
+                        reliable_url(paper.get("url"),worker)==paper.get("host")):
+                    by_doi.setdefault(paper["doi"].lower(),paper)
+            papers=sorted(by_doi.values(),key=lambda x:(
+                -x["relevance_score"],-x["publication_year"],x["doi"]))[:20]
     except ProviderCoolingDown:
         return "provider_cooldown"
     except Exception as exc:
         packet={
             "schema":SCHEMA,"source_product_id":ident,"order_id":order_id,
-            "source_search_query":title,
+            "source_search_query":query,"search_round":round_no,
             "status":"external_research_api_unavailable",
             "last_error":type(exc).__name__+":"+str(exc)[:160],
             "research_completed":False,"source_verified_count":0,
@@ -525,9 +649,11 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
             pass
     candidate={
         "schema":SCHEMA,"source_product_id":ident,"order_id":order_id,
-        "source_search_query":title,"search_keywords":terms,
+        "source_search_query":query,"search_keywords":terms,
+        "search_round":round_no,
         "status":"indexed_references_found_require_additional_research",
-        "indexed_abstract_candidates":papers[:12],
+        "indexed_abstract_candidates":papers[:20],
+        "candidate_sha256":sha(papers[:20]),
         "crossref_bibliographic_candidates":fallback,
         "indexed_abstract_candidate_count":len(papers),
         "independent_publisher_fulltext_checked":False,
@@ -559,6 +685,28 @@ def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
             fcntl.flock(lk.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:
             return {"already_running":True}
+        # Restore provider cooldown across cron processes; no global secret
+        # or external database is needed. The scout lock serializes writers.
+        provider_state=stage/"literature-provider-cooldowns.json"
+        with PROVIDER_LOCK:
+            PROVIDER_NEXT_ALLOWED.clear()
+            PROVIDER_DEADLINE_UTC.clear()
+        if provider_state.exists():
+            old_state=worker.read(provider_state)
+            if old_state.get("schema")!="saeit.factory.provider-cooldown.v1":
+                raise RuntimeError("SCOUT_BAD_PROVIDER_COOLDOWN_STATE")
+            for endpoint,until in old_state.get("blocked_until_utc",{}).items():
+                if endpoint not in SAFE_KEYS.values():
+                    continue
+                try:
+                    deadline=dt.datetime.fromisoformat(until)
+                    if deadline.tzinfo is None:
+                        continue
+                    seconds=(deadline-dt.datetime.now(dt.timezone.utc)).total_seconds()
+                    if seconds>0:
+                        _limit_provider(endpoint,min(seconds,86400))
+                except (ValueError,TypeError):
+                    continue
         # New P0 orders run before retries. Provider failures retry in minutes,
         # substantive source gaps in hours. Neither blocks other P0 orders.
         unsearched=[]
@@ -612,6 +760,15 @@ def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
             "human_specialist_reviews_completed":0,
             "sites_changed":False,"checked_utc":utc()
         }
+        with PROVIDER_LOCK:
+            blocked=dict(PROVIDER_DEADLINE_UTC)
+        worker.atomic(provider_state,{
+            "schema":"saeit.factory.provider-cooldown.v1",
+            "blocked_until_utc":blocked,"checked_utc":utc()})
+        report["openalex_key_configured"]=bool(openalex_api_key())
+        report["provider_cooldown_active"]=any(
+            dt.datetime.fromisoformat(v)>dt.datetime.now(dt.timezone.utc)
+            for v in blocked.values())
         worker.atomic(stage/"literature-scout-status.json",report)
         return report
 

@@ -234,5 +234,69 @@ class SourceScoutTests(unittest.TestCase):
         self.assertEqual(path.read_bytes(),before)
 
 
+
+    def test_private_api_key_is_sent_as_header_and_never_reported(self):
+        import os
+        endpoint=SCOUT.SAFE_KEYS["openalex"]
+        secret="OpenAlexTestKey_123456789012345"
+        seen=[]
+        class GoodResponse:
+            status=200
+            headers={}
+            def __enter__(self): return self
+            def __exit__(self,*args): return False
+            def read(self,n): return b'{"results":[]}'
+        class GoodOpener:
+            def open(self,request,timeout=None):
+                seen.append(request.get_header("Authorization"))
+                return GoodResponse()
+        SCOUT.PROVIDER_NEXT_ALLOWED.clear()
+        with mock.patch.dict(os.environ,{"OPENALEX_API_KEY":secret}):
+            with mock.patch.object(SCOUT.urllib.request,"build_opener",
+                                   return_value=GoodOpener()):
+                result=SCOUT.request_json(endpoint,{"search":"soil"})
+        self.assertEqual(result["results"],[])
+        self.assertEqual(seen,["Bearer "+secret])
+        self.assertNotIn(secret,json.dumps(result))
+
+    def test_provider_cooldown_persists_across_process_runs(self):
+        endpoint=SCOUT.SAFE_KEYS["openalex"]
+        path=self.area/"stage-02/literature-provider-cooldowns.json"
+        tomorrow=(dt.datetime.now(dt.timezone.utc)+
+                  dt.timedelta(minutes=5)).isoformat()
+        STAGE2.atomic(path,{
+            "schema":"saeit.factory.provider-cooldown.v1",
+            "blocked_until_utc":{endpoint:tomorrow},
+            "checked_utc":SCOUT.utc()})
+        SCOUT.PROVIDER_NEXT_ALLOWED.clear()
+        def attempt(_):
+            SCOUT.request_json(endpoint,{"search":"houseplants"})
+            return []
+        with mock.patch.object(SCOUT.urllib.request,"build_opener",
+                               side_effect=AssertionError("no remote call during cooldown")):
+            got=SCOUT.run(self.root,self.program,fetcher=attempt,
+                          backstop=lambda _:[],batch=1,workers=1)
+        self.assertEqual(got["requests_skipped_due_to_provider_cooldown"],1)
+        self.assertTrue(got["provider_cooldown_active"])
+        saved=STAGE2.read(path)
+        self.assertIn(endpoint,saved["blocked_until_utc"])
+
+    def test_research_queries_rotate_without_weakening_claim_gate(self):
+        order=self.order(1)
+        seen=[]
+        def empty(query):
+            seen.append(query)
+            return []
+        self.assertEqual(SCOUT.sources_for_topic(
+            self.root,STAGE2,order,empty,lambda _:[]),"needs_more_research")
+        self.assertEqual(SCOUT.sources_for_topic(
+            self.root,STAGE2,order,empty,lambda _:[]),"needs_more_research")
+        self.assertEqual(seen,SCOUT.query_variants("Houseplant Rescue Guide")[:2])
+        packet=STAGE2.read(
+            self.area/"stage-02/literature-candidates/AGRI-001--r001.json")
+        self.assertEqual(packet["search_round"],1)
+        self.assertFalse(packet["stage3_handoff"])
+        self.assertFalse((self.area/"stage-02/source-evidence/AGRI-001--r001.json").exists())
+
 if __name__=="__main__":
     unittest.main()
