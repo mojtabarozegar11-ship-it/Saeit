@@ -1,0 +1,43 @@
+{
+  "schema": "saeit.factory.f41-product-request.v1",
+  "kind": "reconciliation",
+  "product_id": "merchant_receipts_demo",
+  "data": {
+    "invoices": [
+      {
+        "id": "order1",
+        "network": "shasta",
+        "asset": "TRX",
+        "recipient": "TWTBsKZPVuQgaGNbyJWJm9XR28g4wVBCNQ",
+        "amount_base_units": "17000000"
+      },
+      {
+        "id": "order2",
+        "network": "shasta",
+        "asset": "TRX",
+        "recipient": "TWTBsKZPVuQgaGNbyJWJm9XR28g4wVBCNQ",
+        "amount_base_units": "25000000"
+      }
+    ],
+    "observations": [
+      {
+        "invoice_id": "order1",
+        "txid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "network": "shasta",
+        "asset": "TRX",
+        "recipient": "TWTBsKZPVuQgaGNbyJWJm9XR28g4wVBCNQ",
+        "amount_base_units": "17000000",
+        "node_receipt_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "invoice_id": "order2",
+        "txid": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "network": "shasta",
+        "asset": "TRX",
+        "recipient": "TWTBsKZPVuQgaGNbyJWJm9XR28g4wVBCNQ",
+        "amount_base_units": "24000000",
+        "node_receipt_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      }
+    ]
+  }
+}

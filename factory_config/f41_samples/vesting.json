@@ -1,0 +1,23 @@
+{
+  "schema": "saeit.factory.f41-product-request.v1",
+  "kind": "vesting",
+  "product_id": "treasury_vesting_demo",
+  "data": {
+    "total_supply": "1000000",
+    "months": 12,
+    "allocations": [
+      {
+        "bucket": "team",
+        "amount": "400000",
+        "start_month": 1,
+        "duration_months": 12
+      },
+      {
+        "bucket": "community",
+        "amount": "500000",
+        "start_month": 4,
+        "duration_months": 9
+      }
+    ]
+  }
+}

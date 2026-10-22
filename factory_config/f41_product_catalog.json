@@ -1,0 +1,93 @@
+{
+  "schema": "saeit.factory.f41-product-catalog.v2",
+  "line_id": "F41",
+  "name": "Zomorod Blockchain Commerce & Digital Asset Factory",
+  "architecture": "pluggable_products",
+  "target_generation": 100,
+  "verified_generation": 0,
+  "quality_1000_certified": false,
+  "remote_deployment": false,
+  "coordinator": "moj_1ro_1",
+  "authenticated_workorder_binding": "pending",
+  "production_mode": "private_measured_candidates",
+  "financial_operations_allowed": false,
+  "active_builders": [
+    {
+      "kind": "vesting",
+      "buyer": "token project operators and treasury teams",
+      "value": "accurate cap tables and multi-month vesting export",
+      "delivery": "CSV + machine-auditable JSON",
+      "model": "paid planning kit or custom integration",
+      "commercially_validated": false
+    },
+    {
+      "kind": "reconciliation",
+      "buyer": "digital-product merchants using TRON",
+      "value": "catch mismatched, duplicate and missing crypto invoice payments",
+      "delivery": "CSV + fail-closed decision report",
+      "model": "merchant subscription or reconciliation service",
+      "commercially_validated": false
+    },
+    {
+      "kind": "provenance",
+      "buyer": "digital studios, creators and buyers",
+      "value": "immutable SHA-256 inventory for asset delivery integrity",
+      "delivery": "hashed provenance manifest",
+      "model": "license-delivery evidence kit",
+      "commercially_validated": false
+    },
+    {
+      "kind": "nft_metadata",
+      "buyer": "membership programs and digital collectible studios",
+      "value": "verifiable media-linked NFT collection pre-mint metadata",
+      "delivery": "per-token metadata plus media checksums",
+      "model": "project setup kit",
+      "commercially_validated": false
+    },
+    {
+      "kind": "trc20_fixed_supply",
+      "buyer": "authorized blockchain test teams",
+      "value": "testnet-ready fixed supply token source with reproducible compile",
+      "delivery": "Solidity source and locked specification",
+      "model": "engineering service after audits",
+      "commercially_validated": false
+    }
+  ],
+  "extensions_not_yet_built": [
+    "TRC721 full contract generation",
+    "TRC1155",
+    "staking and vesting smart contracts",
+    "DAO governance",
+    "audited escrow",
+    "wallet SDK",
+    "onchain indexing",
+    "chain analytics",
+    "royalty accounting",
+    "certificate verification API",
+    "digital rights marketplace",
+    "bridge security testing",
+    "smart contract fuzzing",
+    "multi-chain security monitors",
+    "real-world asset compliance tooling"
+  ],
+  "cash_conversion_gate": {
+    "customer_interviews_required": 15,
+    "serious_paid_commitments_required": 3,
+    "paying_customers_required": 3,
+    "positive_after_direct_cost_margin_required": true,
+    "actual_interviews": 0,
+    "verified_paid_commitments": 0,
+    "verified_paying_customers": 0,
+    "commercial_sale_allowed": false,
+    "automated_token_trading_allowed": false,
+    "market_liquidity_guaranteed": false
+  },
+  "safety": {
+    "real_chain_broadcasts": 0,
+    "mainnet_launch_authorized": false,
+    "independent_security_audit_done": false,
+    "independent_legal_review_done": false,
+    "owner_sale_approval_recorded": false,
+    "site_deployment": false
+  }
+}
