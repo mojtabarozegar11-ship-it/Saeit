@@ -694,6 +694,9 @@ def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
         # Restore provider cooldown across cron processes; no global secret
         # or external database is needed. The scout lock serializes writers.
         provider_state=stage/"literature-provider-cooldowns.json"
+        # Anonymous rate limits must not block an owner-activated key.
+        # Still preserve cooldowns when the authentication mode is unchanged.
+        openalex_mode="keyed" if openalex_api_key() else "anonymous"
         with PROVIDER_LOCK:
             PROVIDER_NEXT_ALLOWED.clear()
             PROVIDER_DEADLINE_UTC.clear()
@@ -701,8 +704,11 @@ def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
             old_state=worker.read(provider_state)
             if old_state.get("schema")!="saeit.factory.provider-cooldown.v1":
                 raise RuntimeError("SCOUT_BAD_PROVIDER_COOLDOWN_STATE")
+            previous_mode=old_state.get("openalex_credential_mode","anonymous")
             for endpoint,until in old_state.get("blocked_until_utc",{}).items():
                 if endpoint not in SAFE_KEYS.values():
+                    continue
+                if endpoint==SAFE_KEYS["openalex"] and previous_mode!=openalex_mode:
                     continue
                 try:
                     deadline=dt.datetime.fromisoformat(until)
@@ -770,8 +776,9 @@ def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
             blocked=dict(PROVIDER_DEADLINE_UTC)
         worker.atomic(provider_state,{
             "schema":"saeit.factory.provider-cooldown.v1",
-            "blocked_until_utc":blocked,"checked_utc":utc()})
-        report["openalex_key_configured"]=bool(openalex_api_key())
+            "blocked_until_utc":blocked,"openalex_credential_mode":openalex_mode,
+            "checked_utc":utc()})
+        report["openalex_key_configured"]=openalex_mode=="keyed"
         report["provider_cooldown_active"]=any(
             dt.datetime.fromisoformat(v)>dt.datetime.now(dt.timezone.utc)
             for v in blocked.values())
