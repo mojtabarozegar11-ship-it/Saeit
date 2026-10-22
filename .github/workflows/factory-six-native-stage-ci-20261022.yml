@@ -1,7 +1,7 @@
 name: Real native candidates for six blocked factory lines
 on:
   push:
-    branches: [feature/six-native-candidate-builds-20261022, main]
+    branches: [feature/six-native-candidate-builds-20261022, feature/factory-six-independent-rework-20261022, main]
     paths:
       - scripts/factory_six_native_candidates.py
       - scripts/factory_f14_browser_real_smoke.py
