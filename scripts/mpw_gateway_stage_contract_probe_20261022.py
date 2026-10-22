@@ -40,6 +40,14 @@ def check():
     order_fields = {f.name for f in Order._meta.get_fields()}
     ledger_fields = {f.name for f in LedgerEntry._meta.get_fields()}
     fulfillment_fields = {f.name for f in CommerceFulfillment._meta.get_fields()}
+    with connection.cursor() as cur:
+        cur.execute('SHOW DATABASES')  # metadata only; do not print names
+        schemas = [str(row[0]) for row in cur.fetchall()]
+        cur.execute('SHOW GRANTS')  # read only; do not print grant strings
+        grants = [str(row[0]).upper() for row in cur.fetchall()]
+    test_dbs = sum(name.lower().startswith('test_') for name in schemas)
+    may_create_db = any(' ON *.* ' in item and (
+        'ALL PRIVILEGES' in item or 'CREATE' in item) for item in grants)
 
     try:
         checkout = resolve('/store/product/72/checkout/')
@@ -64,12 +72,21 @@ def check():
             'mpw_walletless_trx_receipt_v1',
             'mpw_walletless_trx_guest_claim_v1',
         )),
-        'legacy_invoice_signature_mandatory_in_model': all(
-            field in invoice_fields for field in (
-                'expected_sender', 'sender_challenge', 'sender_signature_verified_at')),
-        'real_model_fields_present': all((
+        'legacy_invoice_signing_fields': {
+            field: field in invoice_fields for field in (
+                'expected_sender', 'sender_challenge', 'sender_signature_verified_at')},
+        'real_model_contracts': {
+            'order_owner_status_currency': {'customer', 'status', 'currency'} <= order_fields,
+            'receipt_invoice_network_tx': {'invoice', 'network', 'tx_hash'} <= receipt_fields,
+            'ledger_order_reference_metadata': {'order', 'reference', 'metadata'} <= ledger_fields,
+            'fulfillment_item_kind_status': {'item', 'kind', 'status'} <= fulfillment_fields,
+            'invoice_order_recipient_amount': {'order', 'recipient', 'amount_atomic'} <= invoice_fields,
+        },
+        'isolated_test_db_visible_count': test_dbs,
+        'privilege_to_create_new_db_detected': may_create_db,
+        'all_core_model_checks': all((
             {'customer', 'status', 'currency'} <= order_fields,
-            {'order', 'network', 'tx_hash'} <= receipt_fields,
+            {'invoice', 'network', 'tx_hash'} <= receipt_fields,
             {'order', 'reference', 'metadata'} <= ledger_fields,
             {'item', 'kind', 'status'} <= fulfillment_fields,
             {'order', 'recipient', 'amount_atomic'} <= invoice_fields,
