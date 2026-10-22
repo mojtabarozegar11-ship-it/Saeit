@@ -71,11 +71,9 @@ def tap_visible_app_control(family, pid):
                 return True
         time.sleep(2)
 
-    # Some Android System WebView versions omit HTML descendants from
-    # accessibility. Derive a physical tap from a REAL DOM element and the
-    # current WebView viewport, never from arbitrary fixed coordinates.
-    if app_bounds is None:
-        raise RuntimeError("EMULATOR_APP_VIEW_BOUNDS_UNAVAILABLE")
+    # Some Android System WebView versions omit HTML descendants from the
+    # accessibility tree. Send real touch input through WebView's compositor
+    # at a live DOM control's center (not a synthetic JavaScript .click()).
     with DebugWebView(pid) as dev:
         rect = dev.evaluate("""(() => {
           const el = document.getElementById(""" +
@@ -86,15 +84,10 @@ def tap_visible_app_control(family, pid):
                   width:innerWidth, height:innerHeight,
                   visible:b.width>0 && b.height>0};
         })()""")
-    if (not isinstance(rect, dict) or not rect.get("visible")
-            or rect.get("width", 0) <= 0 or rect.get("height", 0) <= 0):
-        raise RuntimeError("EMULATOR_REAL_APP_CONTROL_NOT_VISIBLE")
-    x1, y1, x2, y2 = app_bounds
-    x = x1 + round(rect["x"] / rect["width"] * (x2-x1))
-    y = y1 + round(rect["y"] / rect["height"] * (y2-y1))
-    if not (x1 < x < x2 and y1 < y < y2):
-        raise RuntimeError("EMULATOR_APP_CONTROL_OUTSIDE_VIEW")
-    run("shell", "input", "tap", str(x), str(y))
+        if (not isinstance(rect, dict) or not rect.get("visible")
+                or rect.get("width", 0) <= 0 or rect.get("height", 0) <= 0):
+            raise RuntimeError("EMULATOR_REAL_APP_CONTROL_NOT_VISIBLE")
+        dev.touch(rect["x"], rect["y"])
     return True
 
 class DebugWebView:
@@ -146,6 +139,26 @@ class DebugWebView:
             self.connection = None
         subprocess.run(["adb", "forward", "--remove", "tcp:" + self.port],
                        capture_output=True, text=True, timeout=12)
+
+    def touch(self, x, y):
+        if not all(isinstance(v, (int, float)) and v >= 0 for v in (x, y)):
+            raise RuntimeError("EMULATOR_REAL_CONTROL_COORDINATES_INVALID")
+        for message_id, kind, points in (
+            (2, "touchStart", [{"x": x, "y": y}]),
+            (3, "touchEnd", [])
+        ):
+            self.connection.send(json.dumps({
+                "id": message_id, "method": "Input.dispatchTouchEvent",
+                "params": {"type": kind, "touchPoints": points}
+            }))
+            for _ in range(20):
+                response = json.loads(self.connection.recv())
+                if response.get("id") == message_id:
+                    if response.get("error"):
+                        raise RuntimeError("EMULATOR_REAL_WEBVIEW_TOUCH_REJECTED")
+                    break
+            else:
+                raise RuntimeError("EMULATOR_REAL_WEBVIEW_TOUCH_NO_RESULT")
 
     def evaluate(self, expression):
         self.connection.send(json.dumps({
