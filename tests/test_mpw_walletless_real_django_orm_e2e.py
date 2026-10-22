@@ -45,17 +45,29 @@ import django
 django.setup()
 from django.db import models,connection
 
+class User(models.Model):
+    name=models.CharField(max_length=40,default='Test Buyer')
+    class Meta:app_label="test_core";db_table="test_mpw_core_user"
+
+class Product(models.Model):
+    active=models.BooleanField(default=True)
+    currency=models.CharField(max_length=10,default='USD')
+    price=models.DecimalField(max_digits=14,decimal_places=2)
+    class Meta:app_label="test_core";db_table="test_mpw_core_product"
+
 class Order(models.Model):
     customer_id=models.BigIntegerField()
     total=models.DecimalField(max_digits=14,decimal_places=2)
     currency=models.CharField(max_length=10,default="USD")
     status=models.CharField(max_length=30,default="pending")
     updated_at=models.DateTimeField(auto_now=True)
+    created_at=models.DateTimeField(auto_now_add=True)
     class Meta:app_label="test_core";db_table="test_mpw_core_order"
 
 class OrderItem(models.Model):
     order=models.ForeignKey(Order,on_delete=models.CASCADE,related_name="items")
     unit_price=models.DecimalField(max_digits=14,decimal_places=2)
+    product=models.ForeignKey(Product,on_delete=models.PROTECT,null=True)
     kind=models.CharField(max_length=16,default="digital")
     class Meta:app_label="test_core";db_table="test_mpw_core_orderitem"
 
@@ -94,7 +106,7 @@ class CommerceFulfillment(models.Model):
 
 ARTIFACT=None
 def _private_file(item):
-    assert item.kind=="digital"
+    if hasattr(item,"kind"):assert item.kind=="digital"
     return Path(ARTIFACT)
 
 def order_snapshot(order):
@@ -108,7 +120,7 @@ def order_snapshot(order):
 
 sys.modules["core"]=types.ModuleType("core")
 fake_core=types.ModuleType("core.models")
-fake_core.Order=Order;fake_core.LedgerEntry=LedgerEntry;fake_core.OrderItem=OrderItem
+fake_core.Order=Order;fake_core.LedgerEntry=LedgerEntry;fake_core.OrderItem=OrderItem;fake_core.Product=Product
 sys.modules["core.models"]=fake_core
 sys.modules["mpw_commerce"]=types.ModuleType("mpw_commerce")
 fake_models=types.ModuleType("mpw_commerce.models")
@@ -116,6 +128,9 @@ fake_models.CommerceInvoice=CommerceInvoice
 fake_models.CommerceReceipt=CommerceReceipt
 fake_models.CommerceFulfillment=CommerceFulfillment
 sys.modules["mpw_commerce.models"]=fake_models
+fake_buyer_orders=types.ModuleType("mpw_commerce.buyer_orders")
+fake_buyer_orders._eligible=lambda p:bool(p.active and p.currency=="USD" and p.price>0)
+sys.modules["mpw_commerce.buyer_orders"]=fake_buyer_orders
 fake_settlement=types.ModuleType("mpw_commerce.settlement")
 fake_settlement.order_snapshot=order_snapshot
 sys.modules["mpw_commerce.settlement"]=fake_settlement
@@ -149,7 +164,7 @@ class RealDjangoWalletlessTests(unittest.TestCase):
         file.write(b"PK\x03\x04minimal-test-only-artifact");file.close()
         ARTIFACT=file.name
         with connection.schema_editor() as editor:
-            for obj in (Order,OrderItem,LedgerEntry,CommerceInvoice,CommerceReceipt,CommerceFulfillment):
+            for obj in (User,Product,Order,OrderItem,LedgerEntry,CommerceInvoice,CommerceReceipt,CommerceFulfillment):
                 editor.create_model(obj)
         c=raw_conn()
         for sql in Path("services/sql/mpw_walletless_trx_isolated_v1.sql").read_text().split(";"):
@@ -160,7 +175,7 @@ class RealDjangoWalletlessTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         with connection.schema_editor() as editor:
-            for obj in (CommerceFulfillment,CommerceReceipt,CommerceInvoice,LedgerEntry,OrderItem,Order):
+            for obj in (CommerceFulfillment,CommerceReceipt,CommerceInvoice,LedgerEntry,OrderItem,Order,Product,User):
                 editor.delete_model(obj)
         Path(ARTIFACT).unlink(missing_ok=True)
 
@@ -173,8 +188,10 @@ class RealDjangoWalletlessTests(unittest.TestCase):
                 cur.execute("DELETE FROM "+table)
             cur.execute("INSERT INTO mpw_walletless_trx_allocator_v1(recipient) VALUES (%s)",(RECIPIENT,))
         c.commit();c.close()
-        for model in (CommerceFulfillment,LedgerEntry,CommerceReceipt,CommerceInvoice,OrderItem,Order):
+        for model in (CommerceFulfillment,LedgerEntry,CommerceReceipt,CommerceInvoice,OrderItem,Order,Product,User):
             model.objects.all().delete()
+        User.objects.create(pk=42)
+        Product.objects.create(pk=779,active=True,currency="USD",price=Decimal("0.03"))
         order=Order.objects.create(customer_id=42,total=Decimal("0.03"),status="pending",currency="USD")
         OrderItem.objects.create(order=order,unit_price=Decimal("0.03"),kind="digital")
         conn=raw_conn()
@@ -314,6 +331,33 @@ class RealDjangoWalletlessTests(unittest.TestCase):
             self.assertIn('attachment',response['Content-Disposition'])
             self.assertEqual(response['Cache-Control'],'no-store, private, max-age=0')
             response.close()
+
+    def test_one_click_buy_creates_real_test_order_invoice_idempotently(self):
+        from django.test import RequestFactory
+        from django.utils import timezone as tz
+        from services.mpw_walletless_django_staging_web import _start_order,_show_invoice
+        req=RequestFactory().post("/commerce/trx-easy/start/779/",secure=True,HTTP_HOST="staging.test")
+        req.user=SimpleNamespace(pk=42,is_authenticated=True,is_active=True)
+        with (patch("services.mpw_walletless_django_staging_web._ensure_test",return_value=connection),
+              patch("django.contrib.auth.get_user_model",return_value=User),
+              patch("services.mpw_walletless_django_staging_web._rate_provider",
+                    side_effect=lambda:(Decimal("0.30"),tz.now())),
+              patch("services.mpw_walletless_django_staging_web._configured_receiver",
+                    return_value=RECIPIENT)):
+            first=_start_order(req,779)
+            self.assertEqual(first.status_code,302)
+            self.assertIn("/commerce/trx-easy/invoice/",first["Location"])
+            qty=Order.objects.count()
+            second=_start_order(req,779)
+            self.assertEqual(second["Location"],first["Location"])
+            self.assertEqual(Order.objects.count(),qty)
+            invoice_id=int(first["Location"].strip("/").split("/")[-1])
+            page=_show_invoice(req,invoice_id)
+            self.assertEqual(page.status_code,200)
+            self.assertIn(b'Pay TRX in my wallet',page.content)
+            self.assertIn(b'QR contains the address only',page.content)
+            self.assertFalse(LedgerEntry.objects.filter(
+                order__customer_id=42,metadata__payment_method="walletless_trx").exists())
 
     def test_missing_private_file_cannot_grant(self):
         global ARTIFACT
