@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - scripts/factory_stage2_literature_scout.py
+      - scripts/factory_enroll_openalex.py
+      - tests/test_factory_enroll_openalex.py
       - tests/test_factory_stage2_literature_scout.py
       - deploy/install_factory_stage2_literature_scout.sh
       - .github/workflows/vps-factory-stage2-literature-scout-20261022.yml
@@ -10,6 +12,8 @@ on:
     branches: [main]
     paths:
       - scripts/factory_stage2_literature_scout.py
+      - scripts/factory_enroll_openalex.py
+      - tests/test_factory_enroll_openalex.py
       - tests/test_factory_stage2_literature_scout.py
       - deploy/install_factory_stage2_literature_scout.sh
       - .github/workflows/vps-factory-stage2-literature-scout-20261022.yml
@@ -29,11 +33,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 -B -m unittest discover -s tests -p test_factory_stage2_literature_scout.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_enroll_openalex.py -v
           python3 -B -m unittest discover -s tests -p test_factory_stage2_research.py -v
           python3 -B -m unittest discover -s tests -p test_factory_stage1_handoff.py -v
           python3 -B -m unittest discover -s tests -p test_factory_agri200_p0_intake.py -v
           bash -n deploy/install_factory_stage2_literature_scout.sh
-          python3 -B -m py_compile scripts/factory_stage2_literature_scout.py
+          python3 -B -m py_compile scripts/factory_stage2_literature_scout.py scripts/factory_enroll_openalex.py
   private-vps-install:
     needs: validate
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-stage2-literature-scout-20261022]')
@@ -64,13 +69,16 @@ jobs:
           ssh_vps 'test "$(id -un)" = githubops && test "$(id -u)" -ne 0 && test -f "$HOME/factory-runtime/operations/production-instructions/stage2-research.py" && echo FACTORY_STAGE2_SCOUT_PREFLIGHT=PASS'
           remote_stage="/home/githubops/factory-runtime/operations/.stage2-scout-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           ssh_vps "umask 077; test ! -e '$remote_stage'; mkdir -m 700 '$remote_stage'"
-          for src in scripts/factory_stage2_literature_scout.py deploy/install_factory_stage2_literature_scout.sh; do
+          for src in scripts/factory_stage2_literature_scout.py deploy/install_factory_stage2_literature_scout.sh scripts/factory_enroll_openalex.py; do
             file="$(basename "$src")"
             cat "$src" | ssh_vps "umask 077; test ! -e '$remote_stage/$file'; cat > '$remote_stage/$file'; chmod 600 '$remote_stage/$file'"
             digest="$(sha256sum "$src" | awk '{print $1}')"
             ssh_vps "test \"\$(sha256sum '$remote_stage/$file' | awk '{print \$1}')\" = '$digest'"
           done
           ssh_vps "bash -n '$remote_stage/install_factory_stage2_literature_scout.sh' && bash '$remote_stage/install_factory_stage2_literature_scout.sh' '$remote_stage/factory_stage2_literature_scout.py'"
+          # Owner-authorized signup happens ON the private VPS. The OpenAlex
+          # credential never reaches the GitHub runner, repository or logs.
+          ssh_vps "python3 '$remote_stage/factory_enroll_openalex.py' --email 'mojtaba.rozegar11@gmail.com' --credential-dir '/home/githubops/factory-runtime/operations/production-instructions'"
           ssh_vps 'python3 -' <<'PY'
           import json
           from pathlib import Path

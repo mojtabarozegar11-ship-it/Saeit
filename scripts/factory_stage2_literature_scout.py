@@ -507,6 +507,12 @@ def request_json(endpoint,parameters,timeout=10):
                 seconds=600
             _limit_provider(endpoint,seconds)
             raise RuntimeError("SCOUT_API_RATE_LIMITED_429") from None
+        if exc.code==403 and endpoint==SAFE_KEYS["openalex"] and key:
+            # Newly created agent keys require the owner's email activation.
+            # A failed authorization is NOT a missing research source. Keep
+            # the retry bounded until the owner verifies the email address.
+            _limit_provider(endpoint,600)
+            raise RuntimeError("SCOUT_OPENALEX_KEY_NOT_YET_USABLE_403") from None
         if exc.code in (500,502,503,504):
             _limit_provider(endpoint,30)
             raise RuntimeError("SCOUT_PROVIDER_TEMPORARY_"+str(exc.code)) from None
