@@ -6,7 +6,7 @@ The owner rated the previous release 10/100. This release does not claim a 100/1
 
 - Ten optimized WebP assets: a detailed maritime fortress background a command-aircraft boss and eight distinct top-down aircraft sprites with transparency. Total transfer is about 0.76 MB, served from the existing origin without CDN dependencies.
 - Original generated source assets were created using the built-in image-generation tool, then cropped into sprites and encoded for runtime use. The exact terrain and sprite prompts are retained below. Existing vector art remains as a loading/failure fallback.
-- Cached environment canvases, moving fog, aircraft ground shadows, live exhaust, muzzle flashes, hit flashes, blast rings, smoke, debris and score popups. Particle and effect lists remain bounded.
+- Cached reflected environment tiles avoid abrupt scrolling seams; moving fog, aircraft ground shadows, live exhaust, muzzle flashes, hit flashes, blast rings, smoke, debris and score popups. Particle and effect lists remain bounded.
 - Enemy aircraft replace polygon icons; boss encounters use a multi-turret command aircraft with attack telegraphs and a phase/health display.
 - A compact cockpit and simplified launch screen replace the large pre-game dashboard. Charge percentages are visible on touch abilities.
 - Pointer steering uses a relative drag anchor, preventing the aircraft from jumping to the initial finger position. The player stays above the ability controls.
