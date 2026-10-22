@@ -40,7 +40,8 @@ class AutonomousBrain:
             ).exists()
         )
         return {
-            "unfinished_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status__in=("queued","running","blocked")).count(),
+            "unfinished_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status__in=("queued","running")).count(),
+            "blocked_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status="blocked").count(),
             "failed_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status="failed").count(),
             "market_research_complete": market_research_complete,
             "opportunity_scored": opportunity_scored,
@@ -56,6 +57,8 @@ class AutonomousBrain:
         c=[]
         if s["unfinished_tasks"]:
             return [Candidate("continue_existing_work","An unfinished task must be resolved first.",10,10,10,1)]
+        if s.get("blocked_tasks", 0):
+            return [Candidate("await_owner_or_evidence", "An approval/evidence gate is blocked; never clone its task or bypass its dependency.",10,10,10,1)]
         # Do not design or promote an offer until research and scoring each
         # completed with a verified effect. This prevents speculative offer creation.
         if not s["market_research_complete"]:
