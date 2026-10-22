@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Safely extend the existing minute factory without altering its runner or site deployments.
-set -euo pipefail
+set -Eeuo pipefail
+trap 'echo "OWNER500_AUTONOMY_INSTALL_FAIL_LINE=$LINENO" >&2' ERR
 umask 077
 test "$(id -un)" = githubops
 test "$(id -u)" -ne 0
@@ -36,8 +37,12 @@ flock -w 40 8
 old_cron="$(mktemp "$ops/backups/owner500-cron-before.XXXXXXXX")"
 crontab -l > "$old_cron"
 chmod 600 "$old_cron"
-test "$(grep -Ec '^[^#]*SAEIT_FACTORY_EVERY_MINUTE_V1' "$old_cron" || true)" -eq 1
-test "$(grep -Ec "^[^#]*$marker" "$old_cron" || true)" -le 1
+minute_count="$(grep -Ec '^[^#]*SAEIT_FACTORY_EVERY_MINUTE_V1' "$old_cron" || true)"
+owner_count="$(grep -Ec "^[^#]*$marker" "$old_cron" || true)"
+echo "OWNER500_AUTONOMY_EXISTING_MINUTE_CRON_ENTRIES=$minute_count"
+echo "OWNER500_AUTONOMY_EXISTING_OWNER_CRON_ENTRIES=$owner_count"
+test "$minute_count" -eq 1
+test "$owner_count" -le 1
 backup="$ops/backups/owner500-autonomy-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 install -d -m 700 "$backup"
 cp -p "$old_cron" "$backup/previous.cron"
