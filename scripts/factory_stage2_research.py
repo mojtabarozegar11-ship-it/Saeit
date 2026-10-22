@@ -130,6 +130,36 @@ def verified_stage1_packet(area, packet_name):
     return packet, order
 
 
+def verified_return(area, name):
+    """Accept a research-specific return from a later stage, not a fake intake."""
+    match = INBOX_FILE.fullmatch(name)
+    if match is None or int(match.group(2)) < 2:
+        raise RuntimeError("STAGE2_RETURN_FILENAME_INVALID")
+    ident, version = match.group(1), int(match.group(2))
+    item = read(area / "stage-02" / "return-inbox" / name)
+    old_name = ident + "--r" + str(version - 1).zfill(3) + ".json"
+    prior = read(area / "stage-02" / "completed-dossiers" / old_name)
+    proof = read(area / "stage-02" / "receipts" / old_name)
+    if (item.get("schema") != RETURN_SCHEMA
+            or item.get("order_id") != ident
+            or item.get("revision") != version
+            or item.get("target_stage") != 2
+            or type(item.get("source_stage")) is not int
+            or item["source_stage"] not in range(3, 11)
+            or not isinstance(item.get("reason"), str)
+            or len(item["reason"].strip()) < 12
+            or item.get("previous_research_sha256") != sha(prior)
+            or proof.get("stage_2_completed") is not True
+            or proof.get("research_sha256") != sha(prior)):
+        raise RuntimeError("STAGE2_UNTRUSTED_RETURN")
+    base, order = verified_stage1_packet(area, ident + "--r001.json")
+    packet = dict(base, revision=version, returned_from_stage=item["source_stage"],
+                  stage_1_original_packet_sha256=sha(base),
+                  stage_2_return_sha256=sha(item),
+                  stage_2_status="returned_for_research_rework")
+    return packet, order
+
+
 def validate_public_https(url):
     if not isinstance(url, str) or len(url) > 400:
         raise ValueError("STAGE2_INVALID_URL")
@@ -263,7 +293,7 @@ def research_output(packet, order, evidence, metrics):
     return {
         "schema": RESEARCH_SCHEMA, "stage": 2, "source_product_id": order["source_product_id"],
         "order_id": packet["order_id"], "revision": packet["revision"],
-        "stage_1_handoff_sha256": sha(packet),
+        "stage_1_handoff_sha256": packet.get("stage_1_original_packet_sha256", sha(packet)),
         "evidence_sha256": sha(evidence),
         "desk_research_status": "source_linked_desk_research_documented",
         "scope_note": "Documents research sources and claims; NOT a finished manuscript or independent expert attestation.",
@@ -353,15 +383,25 @@ def stage2_loop(root, batch=100):
             if file.is_symlink() or not file.is_file() or INBOX_FILE.fullmatch(file.name) is None:
                 raise RuntimeError("STAGE2_UNEXPECTED_INBOX_FILE:" + file.name)
             packet = read(file)
-            candidates.append((prioritize(packet), file.name, packet))
-        candidates.sort(key=lambda x: x[0])
+            candidates.append((prioritize(packet), 1, file.name, packet))
+        returns = area / "stage-02" / "return-inbox"
+        directory(returns)
+        for file in returns.iterdir():
+            if file.is_symlink() or not file.is_file() or INBOX_FILE.fullmatch(file.name) is None:
+                raise RuntimeError("STAGE2_UNEXPECTED_RETURN_FILE:" + file.name)
+            # Verify each return before ranking it; no unsourced return can override
+            # original source order or bypass proven stage-2 research.
+            packet, order = verified_return(area, file.name)
+            candidates.append((prioritize(packet), 0, file.name, packet))
+        candidates.sort(key=lambda x: (x[0][0], x[1], x[0][1], x[0][2]))
+
         total = len(candidates)
         completed = 0
         already = 0
         missing = 0
         invalid = 0
         attempted = 0
-        for _priority, name, packet in candidates:
+        for _priority, is_new, name, packet in candidates:
             if attempted >= batch:
                 break
             key = name
@@ -382,7 +422,8 @@ def stage2_loop(root, batch=100):
                 continue
             attempted += 1
             try:
-                packet, order = verified_stage1_packet(area, name)
+                packet, order = (verified_stage1_packet(area, name) if is_new == 1
+                                 else verified_return(area, name))
                 if not evidence_file.is_file():
                     if write_brief(area, packet, order, "INDEPENDENT_SOURCE_EVIDENCE_NOT_SUPPLIED"):
                         missing += 1
