@@ -41,7 +41,7 @@ jobs:
           assert 'RamadanWarDebug' in gamejs and not any(line.startswith('+') for line in gamejs.splitlines())
           PY
           node --check games/ramadan-war/game.js
-      - name: Test the complete campaign in desktop and mobile browser before deployment
+      - name: Test timed firing, special weapons and save resume before deployment
         run: |
           set -euo pipefail
           mkdir -p /tmp/ramadan-playwright && cd /tmp/ramadan-playwright
