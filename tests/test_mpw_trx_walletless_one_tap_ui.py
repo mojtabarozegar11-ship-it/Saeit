@@ -44,7 +44,7 @@ class NativeTRXOneTapTests(unittest.TestCase):
     def test_wallet_requires_explicit_click_and_no_client_payment_authority(self):
         self.assertIn('payButton.addEventListener("click"',WALLET_ACTION_JS)
         self.assertIn('app.trx.sendTransaction(recipient,Number(sun))',WALLET_ACTION_JS)
-        self.assertIn("server-only payment verification",__import__("services.mpw_trx_walletless_one_tap_ui",fromlist=["__doc__"]).__doc__)
+        self.assertIn("server-only reconciliation",__import__("services.mpw_trx_walletless_one_tap_ui",fromlist=["__doc__"]).__doc__)
         self.assertNotIn('fetch(',WALLET_ACTION_JS)
         self.assertNotIn('can_download=true',WALLET_ACTION_JS)
         self.assertNotIn('download.href',WALLET_ACTION_JS)
