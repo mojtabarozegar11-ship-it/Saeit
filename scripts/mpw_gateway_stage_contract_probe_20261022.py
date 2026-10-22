@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+"""Metadata-only MojPlayWin staging readiness check. NO DATABASE WRITES.
+
+Outputs booleans and public route identifiers, never credentials, addresses,
+customer data, amounts, database names or private file paths.
+"""
+import json
+import os
+import sys
+from pathlib import Path
+
+STAGE = Path('/home/zomorod2/Saeit-staging')
+ROOT = Path('/home/zomorod2/mojplaywin.com')
+
+
+def check():
+    if STAGE.is_symlink() or ROOT.is_symlink() or not STAGE.is_dir():
+        raise RuntimeError('Unexpected cPanel staging environment')
+    passenger = ROOT / 'passenger_wsgi.py'
+    if passenger.is_symlink() or not passenger.is_file():
+        raise RuntimeError('Passenger root not verified')
+    if "APP='/home/zomorod2/Saeit-staging'" not in passenger.read_text('utf8', 'replace'):
+        raise RuntimeError('Passenger source does not match expected staging code')
+
+    os.chdir(STAGE)
+    sys.path.insert(0, str(STAGE))
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+    import django
+    django.setup()
+    from django.conf import settings
+    from django.db import connection
+    from django.urls import resolve
+    from core.models import Order, OrderItem, LedgerEntry
+    from mpw_commerce.models import CommerceInvoice, CommerceReceipt, CommerceFulfillment
+
+    names = set(connection.introspection.table_names())
+    db_name = str(connection.settings_dict.get('NAME', ''))
+    invoice_fields = {f.name for f in CommerceInvoice._meta.get_fields()}
+    receipt_fields = {f.name for f in CommerceReceipt._meta.get_fields()}
+    order_fields = {f.name for f in Order._meta.get_fields()}
+    ledger_fields = {f.name for f in LedgerEntry._meta.get_fields()}
+    fulfillment_fields = {f.name for f in CommerceFulfillment._meta.get_fields()}
+
+    try:
+        checkout = resolve('/store/product/72/checkout/')
+        checkout_module = str(getattr(checkout.func, '__module__', ''))
+    except Exception:
+        checkout_module = ''
+
+    # Only present/absent configuration signals; never log keys or addresses.
+    possible_cred_names = (
+        'TRON_PRO_API_KEY', 'TRONGRID_API_KEY', 'NODIT_API_KEY',
+        'MPW_TRON_RPC_PRIMARY_API_KEY', 'MPW_TRON_RPC_SECONDARY_API_KEY',
+    )
+    configured_cred_count = sum(bool(os.environ.get(k)) for k in possible_cred_names)
+    return {
+        'probe': 'READ_ONLY_GATEWAY_STAGING_CONTRACT',
+        'db_backend_mysql': connection.vendor == 'mysql',
+        'db_name_is_isolated_test_prefix': db_name.lower().startswith('test_'),
+        'stage_models_loaded': True,
+        'walletless_table_count': sum(name in names for name in (
+            'mpw_walletless_trx_allocator_v1',
+            'mpw_walletless_trx_reservation_v1',
+            'mpw_walletless_trx_receipt_v1',
+            'mpw_walletless_trx_guest_claim_v1',
+        )),
+        'legacy_invoice_signature_mandatory_in_model': all(
+            field in invoice_fields for field in (
+                'expected_sender', 'sender_challenge', 'sender_signature_verified_at')),
+        'real_model_fields_present': all((
+            {'customer', 'status', 'currency'} <= order_fields,
+            {'order', 'network', 'tx_hash'} <= receipt_fields,
+            {'order', 'reference', 'metadata'} <= ledger_fields,
+            {'item', 'kind', 'status'} <= fulfillment_fields,
+            {'order', 'recipient', 'amount_atomic'} <= invoice_fields,
+        )),
+        'checkout_django_handler_found': bool(checkout_module),
+        'merchant_rpc_credential_candidates_present': configured_cred_count,
+        'feature_flag_public_walletless': bool(getattr(settings,
+            'MPW_WALLETLESS_TRX_PUBLIC_ENABLED', False)),
+        'feature_flag_test_adapter': bool(getattr(settings,
+            'MPW_WALLETLESS_TRX_TEST_ADAPTER', False)),
+        'no_sql_mutation': True,
+        'no_customer_data_collected': True,
+        'no_financial_writes': True,
+    }
+
+
+if __name__ == '__main__':
+    print(json.dumps(check(), sort_keys=True))
