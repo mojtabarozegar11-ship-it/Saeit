@@ -47,7 +47,7 @@ def test_exact_install_status_rollback_and_idempotency(mock_release):
     for name, payload in source.items():
         assert (stage / name).read_bytes() == payload
     urls = (stage / "config/urls.py").read_text()
-    assert urls.count("crown_cosmetic_checkout") == 2
+    assert urls.count("crown_cosmetic_checkout") == 3
     assert "store/crown/<int:product_id>/checkout/" in urls
     assert (stage / "tmp/restart.txt").exists()
     with pytest.raises(RuntimeError, match="already used"):
