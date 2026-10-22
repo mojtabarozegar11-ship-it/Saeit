@@ -65,6 +65,29 @@ print("SIX_NATIVE_REWORK_REAL_PRIVATE_QA_QUEUE=6")
 print("SIX_NATIVE_REWORK_SOURCE_DEFECTS="+str(data["source_rework_needed"]))
 print("SIX_NATIVE_REWORK_SPECIALIST_APPROVAL=GATED")
 PY
+# Recheck the known previous native snapshot against its original SHA.
+# This shows an actual F14 accessibility repair, not a declared improvement.
+baseline="$private/native-candidate-evidence/39714521227-1/verified-six-private-native.json"
+if test -s "$baseline" && test ! -L "$baseline"; then
+    "$py" -B "$target/factory_six_native_independent_rework.py" --factory-private "$private" --source-run 39714521227-1 --expected-aggregate-sha256 bb1fa0e832ce6f840cff99f8aca1729cab1e4c6aa669635c10dd8b120e47b7ae > "$backup/baseline-review.txt"
+    "$py" -B - "$private" "$run_id" <<'F14DELTA'
+import json,sys
+from pathlib import Path
+base=Path(sys.argv[1])/"quality-excellence"/"six-native-rework"
+prior=json.loads((base/"39714521227-1"/"F14.json").read_text())
+current=json.loads((base/sys.argv[2]/"F14.json").read_text())
+pre=set(prior["remediable_source_defects"])
+post=set(current["remediable_source_defects"])
+if not {"canvas_accessible_name_missing","score_live_region_missing"}.issubset(pre):
+    raise RuntimeError("F14_BASELINE_MISSING_EXPECTED_DEFECTS")
+if post.intersection(pre):
+    raise RuntimeError("F14_ACCESSIBILITY_REWORK_NOT_FIXED")
+if prior["artifact_sha256"]==current["artifact_sha256"]:
+    raise RuntimeError("F14_SOURCE_VERSION_NOT_CHANGED")
+print("F14_PROVEN_ACCESSIBILITY_DEFECTS_CLOSED="+str(len(pre-post)))
+print("F14_NATIVE_ARTIFACT_VERSION_CHANGED=PASS")
+F14DELTA
+fi
 if test "$(grep -Fc "$marker" "$backup/crontab-before")" -gt 1; then
     echo SIX_NATIVE_DUPLICATE_SCHEDULER
     exit 1
