@@ -1,0 +1,162 @@
+name: Crown Defender cosmetic catalogue prelaunch with private rollback
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/mpw_crown_catalog_seed.py
+      - tests/test_crown_catalog_seed.py
+      - .github/workflows/mpw-crown-catalog-prelaunch.yml
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-crown-catalog-prelaunch.yml
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-crown-catalog-prod
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check seed safety invariants
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_crown_catalog_seed.py
+          python3 - <<'PY'
+          import ast
+          src=open("scripts/mpw_crown_catalog_seed.py",encoding="utf-8").read()
+          root=ast.parse(src)
+          assert "rights_cleared" in src and "crown_checkout_verified" in src
+          assert "GET_LOCK" in src and "OrderItem.objects.filter" in src
+          assert "CROWN_CATALOG_PURCHASES_ENABLED=NO" in src
+          assert "transaction.atomic" in src
+          print("CROWN_CATALOG_SAFE_STATIC_CHECK=PASS")
+          PY
+
+  publish:
+    needs: validate
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      contains(github.event.head_commit.message, '[approved-crown-catalog-20261022]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require unpriced, disabled live catalogue and preserved live routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from urllib.request import Request,urlopen
+          root="https://mojplaywin.com"
+          for path in ("/","/games/","/studio/","/store/","/games/crown-defender/"):
+              with urlopen(Request(root+path,headers={"Cache-Control":"no-cache"}),timeout=24) as r:
+                  assert r.status == 200
+          with urlopen(Request(root+"/api/crown-defender/fleet/",headers={"Accept":"application/json","Cache-Control":"no-cache"}),timeout=24) as r:
+              data=json.load(r)
+          expected={"cd-spectre","cd-valkyrie","cd-tempest","cd-phoenix","cd-sovereign"}
+          assert data["game"]=="crown-defender" and {x["sku"] for x in data["items"]}==expected
+          assert all(x["price"]=="0.00" and x["available"] is False and x["checkout"] is None for x in data["items"])
+          print("CROWN_CATALOG_LIVE_PRECONDITION=PASS")
+          PY
+      - name: Establish pinned SSH relay through existing VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-crown-catalog-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo 'CROWN_CATALOG_PINNED_RELAY=PASS'
+      - name: Seed five inactive-for-payment cosmetics in MariaDB only
+        id: seed
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-crown-catalog-ssh"
+          timeout 75s ssh -T -F "$d/config" saeit-cpanel \
+            "cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - install '$GITHUB_RUN_ID'" \
+            < scripts/mpw_crown_catalog_seed.py
+      - name: Verify public SKU prices but no purchase links or payment changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,time
+          from urllib.request import Request,urlopen
+          root="https://mojplaywin.com"
+          prices={"cd-spectre":"4.99","cd-valkyrie":"5.99","cd-tempest":"7.99","cd-phoenix":"9.99","cd-sovereign":"12.99"}
+          for trial in range(5):
+              with urlopen(Request(root+"/api/crown-defender/fleet/?catalog_verify="+str(trial),headers={"Accept":"application/json","Cache-Control":"no-cache"}),timeout=24) as r:
+                  data=json.load(r)
+              items=data["items"]
+              if {x["sku"]:x["price"] for x in items}==prices:break
+              time.sleep(2)
+          assert {x["sku"]:x["price"] for x in items}==prices
+          assert all(x["available"] is False and x["checkout"] is None for x in items)
+          for path in ("/","/games/","/studio/","/store/","/games/crown-defender/"):
+              with urlopen(Request(root+path,headers={"Cache-Control":"no-cache"}),timeout=24) as r:
+                  assert r.status==200
+                  if path.endswith("/crown-defender/"):
+                      assert b'Air Supremacy' in r.read(150000)
+          print("CROWN_CATALOG_PUBLIC_PRICE_AND_FAIL_CLOSED=PASS")
+          PY
+          d="$RUNNER_TEMP/mpw-crown-catalog-ssh"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel \
+            "cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify '$GITHUB_RUN_ID'" \
+            < scripts/mpw_crown_catalog_seed.py
+      - name: Restore only untouched new cosmetic products if smoke fails
+        if: failure() && steps.seed.outcome == 'success'
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-crown-catalog-ssh"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel \
+            "cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'" \
+            < scripts/mpw_crown_catalog_seed.py
