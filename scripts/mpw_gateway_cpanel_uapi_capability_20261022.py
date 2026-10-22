@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Read-only cPanel UAPI capability probe: never disclose database identities."""
 import json
+import getpass
 import os
 import shutil
 import subprocess
@@ -31,18 +32,22 @@ def check():
         'no_database_creation_attempted': True,
         'no_passwords_or_database_names_logged': True,
         'writes': 0,
+        'user_account_matches_expected': getpass.getuser() == 'zomorod2',
     }
     if not allowed:
+        return result
+    if result['user_account_matches_expected'] is not True:
         return result
     for function, label in (
         ('list_databases', 'mysql_list_databases_allowed'),
         ('list_users', 'mysql_list_users_allowed'),
     ):
         task = subprocess.run(
-            [exe, '--output=json', 'Mysql', function],
+            [exe, '--user=zomorod2', '--output=json', 'Mysql', function],
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, timeout=18, check=False,
         )
+        result[label + '_exit_code'] = task.returncode
         if task.returncode != 0 or len(task.stdout) > 500000:
             continue
         try:
