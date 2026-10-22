@@ -180,6 +180,38 @@ class SourceScoutTests(unittest.TestCase):
         self.assertEqual(result,"traceable_abstracts")
         self.assertTrue((self.area/"stage-02/source-evidence/AGRI-001--r001.json").exists())
 
+    def test_normalized_scientific_synonyms_recover_relevant_abstracts(self):
+        # English -ing/-ation words stem differently. Synonyms must use
+        # the same normalization as indexed paper title and abstract terms.
+        self.assertIn("irrig",SCOUT.keys("Watering Guide"))
+        self.assertIn("moisture",SCOUT.keys("Watering Guide"))
+        self.assertIn("substrate",SCOUT.keys("Potting Guide"))
+        self.assertIn("germin",SCOUT.keys("Seedling Guide"))
+        self.assertIn("propag",SCOUT.keys("Cutting Guide"))
+        self.assertIn(SCOUT.normalize("photosynthesis"),SCOUT.keys("Lighting Guide"))
+        self.assertTrue(any("irrigation" in value for value in
+                            SCOUT.query_variants("Watering Guide")))
+        article=study("Watering Guide",1)
+        article["display_name"]=(
+            "Evaluating irrigation schedule and soil moisture under "
+            "greenhouse growing conditions for ornamental crops")
+        finding=(
+            "Irrigation scheduling and soil moisture monitoring changed "
+            "vegetative growth and root development across repeated "
+            "controlled greenhouse treatment groups."
+        )
+        article["abstract_inverted_index"]=indexed(
+            finding+" Researchers recorded irrigation frequency and "
+            "moisture content by calibrated sensors in replicated growing "
+            "systems. The investigators analyzed measured growth outcomes "
+            "with statistical comparisons between monitored and "
+            "unmonitored treatment groups. Further independent work "
+            "should determine applicability under other climate conditions "
+            "and production scales."
+        )
+        self.assertIsNotNone(SCOUT.usable_paper(
+            article,SCOUT.keys("Watering Guide"),STAGE2))
+
     def test_unrelated_papers_cannot_be_promoted(self):
         def unrelated(title):
             return sample("unrelated hydroelectric turbine mechanics")
