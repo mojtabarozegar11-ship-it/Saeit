@@ -13,7 +13,7 @@ from django.urls import NoReverseMatch, reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 
-from .models import LedgerEntry, OrderItem, Product
+from .models import LedgerEntry, OrderItem, PaymentIntent, Product
 from .crown_tron_receipts import PROVIDER as WALLETLESS_PROVIDER, verified_walletless_credit
 from .crown_checkout import gateway_ready
 
@@ -36,7 +36,7 @@ def owned_skus(user):
         order = item.order
         try:
             intent = order.payment_intent
-        except Order.payment_intent.RelatedObjectDoesNotExist:
+        except PaymentIntent.DoesNotExist:
             # A legacy/manual paid order without a verified payment intent is
             # not proof of ownership and must never break the entire fleet API.
             continue
