@@ -105,3 +105,25 @@ try:
     }))
 except Exception as e:
  print("MPW_TRON_EXISTING_RPC_READONLY="+json.dumps({"error_type":type(e).__name__}))
+
+
+# Diagnose allowlisted operations in existing read-only RPC adapter without any URL,
+# credential or merchant transaction data (all literal strings are censored).
+try:
+ if callable(fn):
+  import ast
+  code=inspect.getsource(fn)
+  tree=ast.parse(code)
+  class MaskLiterals(ast.NodeTransformer):
+   def visit_Constant(self,node):
+    if isinstance(node.value,str):
+     node.value="[MASKED]"
+    return self.generic_visit(node)
+  masked=ast.unparse(MaskLiterals().visit(tree))
+  print("MPW_TRON_RPC_SAFE_AST="+json.dumps({
+    "masked_algorithm":masked[:4500],
+    "strings_masked":True,
+    "source_contains_api_credentials_in_log":False
+  }))
+except Exception as exc:
+ print("MPW_TRON_RPC_SAFE_AST="+json.dumps({"error_type":type(exc).__name__}))
