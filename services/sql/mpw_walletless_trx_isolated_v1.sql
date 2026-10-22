@@ -77,3 +77,13 @@ CREATE TABLE IF NOT EXISTS mpw_walletless_trx_guest_claim_v1 (
   UNIQUE KEY mpw_walletless_guest_one_secret(secret_sha256),
   KEY mpw_walletless_guest_expiry(expires_at)
 ) ENGINE=InnoDB;
+
+
+-- Atomic hourly registration throttle keyed by HMAC of server-observed IP.
+-- No raw IP address is persisted. This is NOT a substitute for edge WAF.
+CREATE TABLE IF NOT EXISTS mpw_walletless_trx_guest_rate_v1 (
+  rate_key CHAR(64) NOT NULL,
+  attempts INT UNSIGNED NOT NULL,
+  created_at DATETIME(6) NOT NULL,
+  PRIMARY KEY(rate_key)
+) ENGINE=InnoDB;
