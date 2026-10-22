@@ -1,0 +1,65 @@
+name: F41 Shasta SolidityNode reconciliation hardening
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/factory_f41_shasta_finality.py
+      - tests/test_factory_f41_shasta_finality.py
+      - deploy/install_factory_f41_shasta_finality.sh
+      - .github/workflows/factory-f41-shasta-finality.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_f41_shasta_finality.py
+      - tests/test_factory_f41_shasta_finality.py
+      - deploy/install_factory_f41_shasta_finality.sh
+      - .github/workflows/factory-f41-shasta-finality.yml
+permissions: {contents: read}
+concurrency:
+  group: factory-f41-shasta-finality-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  finality-safety:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Syntax and fake-chain hostile scenarios
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_f41_shasta_finality.sh
+          python3 -B -m unittest discover -s tests -p test_factory_f41_shasta_finality.py -v
+          echo F41_FINALITY_NEGATIVE_TESTS=PASS
+  private-vps-install:
+    needs: finality-safety
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Isolated Shasta read-only preflight then install through pinned SSH relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          work="$(mktemp -d)"
+          chmod 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          opts=(-i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15)
+          host=githubops@178.239.147.150
+          stage="/home/githubops/factory-runtime/operations/.f41-finality-stage-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh -T "${opts[@]}" "$host" "umask 077; mkdir -m 700 '$stage'"
+          scp "${opts[@]}" scripts/factory_f41_shasta_finality.py "$host:$stage/factory_f41_shasta_finality.py"
+          scp "${opts[@]}" deploy/install_factory_f41_shasta_finality.sh "$host:$stage/install.sh"
+          ssh -T "${opts[@]}" "$host" "bash -n '$stage/install.sh' && bash '$stage/install.sh' '$stage' '$GITHUB_RUN_ID'"
