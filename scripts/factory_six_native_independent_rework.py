@@ -128,6 +128,13 @@ def review_family(directory, family, aggregate):
                 raise RuntimeError("REVIEW_ANDROID_EMULATOR_SCREEN_MISSING")
             proof=json.loads(files["emulator-proof.json"].decode("utf8"))
             apk_name=next(name for name in files if name.endswith(".apk"))
+            deep_keys = ("webview_dom_runtime_verified",) + (
+                ("actual_48_levels_loaded", "next_level_transition_verified",
+                 "keyboard_player_movement_verified") if family == "F12" else
+                ("inventory_entry_written_in_apk",
+                 "inventory_storage_persisted_after_relaunch"))
+            if any(proof.get(key) is not True for key in deep_keys):
+                raise RuntimeError("ANDROID_DEEP_APK_BEHAVIOR_UNVERIFIED")
             if (proof.get("schema")!="saeit.factory.android-emulated-runtime-check.v1"
                     or proof.get("family")!=family
                     or proof.get("package")!="com.zomorodmelal.factory."+family.lower()
@@ -149,6 +156,7 @@ def review_family(directory, family, aggregate):
                     or proof["distinct_screen_colors"]<5):
                 raise RuntimeError("REVIEW_ANDROID_EMULATOR_RUNTIME_INVALID")
             checked.append("android_api35_actual_emulated_install_launch_touch_screen_proof")
+            checked.append("android_webview_real_apk_deep_state_and_persistence_proof")
         elif "emulator-screen.png" in files:
             raise RuntimeError("REVIEW_ANDROID_EMULATOR_SCREEN_UNPAIRED")
     elif family in ("F13","F17"):
