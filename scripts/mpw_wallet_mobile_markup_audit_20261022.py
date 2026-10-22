@@ -18,4 +18,6 @@ def safe(line):
  return line[:240]
 for i in sorted(show):
  print('MPW_WALLET_SOURCE_LINE %d %s'%(i+1,safe(lines[i])))
+for i in range(150,min(len(lines),280)):
+ print('MPW_JS_DETAIL %d %s'%(i+1,safe(lines[i])))
 print('MPW_WALLET_AUDIT='+json.dumps({'lines':len(lines),'inline_scripts':len(re.findall('<script',s,re.I)),'inline_styles':len(re.findall('<style',s,re.I)),'viewport':bool(re.search('name=[\"\\\']viewport',s,re.I)),'audit_only':True}))
