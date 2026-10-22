@@ -1,0 +1,44 @@
+name: F26 private VPS offline runtime probe
+on:
+  push:
+    branches: [feature/f26-rice-real-inference-cli-20261022]
+    paths:
+      - .github/workflows/f26-rice-vps-cli-probe-20261022.yml
+permissions: {contents: read}
+jobs:
+  private-readonly:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Check existing model and Python dependencies through pinned SSH without writes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          work="$(mktemp -d)"
+          chmod 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.buffer.read().decode("utf8");s=s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n";sys.stdout.buffer.write(s.encode("utf8"))' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh -T -i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
+          import importlib.util,os,subprocess,json
+          from pathlib import Path
+          base=Path.home()/'factory-runtime'
+          root=base/'private/autonomous-product-cycle/f26-real-data-research'
+          targets=[]
+          for p in (Path('/usr/bin/python3'),base/'.venv/bin/python',base/'.venv/bin/python3'):
+              if p.is_file() and p not in targets:
+                  targets.append(p)
+          for candidate in targets:
+              data=subprocess.run([str(candidate),'-c','import importlib.util,json;print(json.dumps({n:importlib.util.find_spec(n) is not None for n in ("onnxruntime","onnx","numpy")}))'],capture_output=True,text=True,timeout=12)
+              print('F26_VPS_RUNTIME_PROBE='+json.dumps({'python':str(candidate),'modules':data.stdout.strip() if data.returncode==0 else 'unavailable'}))
+          print('F26_VPS_AVAILABLE_BYTES='+str(os.statvfs(str(root)).f_bavail*os.statvfs(str(root)).f_frsize))
+          versions=[p for p in root.iterdir() if p.is_dir() and not p.is_symlink() and (p/'private-f26-real-data-receipt.json').is_file()]
+          print('F26_VPS_PRIVATE_RESEARCH_VERSIONS='+str(len(versions)))
+          print('F26_VPS_PROBE_MAKES_NO_WRITES=PASS')
+          PY
