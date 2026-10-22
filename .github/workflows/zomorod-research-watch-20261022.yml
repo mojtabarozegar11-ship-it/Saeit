@@ -1,0 +1,139 @@
+name: Publish Zomorod research watch 2026-10-22
+on:
+  pull_request:
+    paths:
+      - "content/zomorod-research-watch-20261022/**"
+      - ".github/workflows/zomorod-research-watch-20261022.yml"
+  push:
+    branches: [main]
+    paths:
+      - "content/zomorod-research-watch-20261022/**"
+      - ".github/workflows/zomorod-research-watch-20261022.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-research-watch-20261022
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Persian page, publication claims and isolated target
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+          p=Path("content/zomorod-research-watch-20261022/index.html")
+          s=p.read_text(encoding="utf8")
+          class Check(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.tags=[];self.h1=0;self.title=0
+              def handle_starttag(self,tag,attrs):
+                  self.tags.append((tag,dict(attrs)))
+                  if tag=="h1":self.h1+=1
+              def handle_endtag(self,tag):pass
+              def handle_data(self,data):
+                  if data.strip() and self.tags and self.tags[-1][0]=="title":self.title+=1
+          c=Check();c.feed(s)
+          assert s.startswith("<!doctype html>")
+          assert s.count("<h1>")==1 and c.h1==1
+          assert 'rel="canonical"' in s and "application/ld+json" in s
+          for doi in ["10.1038/s41598-026-74839-z","10.3389/fsufs.2026.1942701","10.3389/fsufs.2026.1959282"]:
+              assert doi in s
+          for phrase in ["داوری‌شده","محدودیت","بازتولیدپذیری","آزمایش کم‌هزینه","مجتبی روزگار","مدیرعامل شرکت کشت‌وصنعت زمرد ملل"]:
+              assert phrase in s,phrase
+          assert len(s)>9000
+          assert s.count('href="https://doi.org/')==6
+          print("HTML_SEO_DOI_EVIDENCE_AND_AUTHORSHIP=verified")
+          PY
+  publish:
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Establish pinned authenticated VPS-to-cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-research-watch"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host zm-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host zm-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump zm-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" zm-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "PINNED_RELAY=verified"
+      - name: Stage only the new report page and confirm the route is unused
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-research-watch"
+          ssh -F "$d/config" zm-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          web="$HOME/public_html"
+          route="$web/research/updates/20261022"
+          backup="$HOME/.backups/zomorod-research-watch/$sha"
+          test ! -e "$route" && test ! -L "$web/research" && test ! -L "$web/research/updates"
+          test ! -e "$backup"
+          mkdir -m 700 -p "$backup/staging"
+          REMOTE
+          scp -F "$d/config" content/zomorod-research-watch-20261022/index.html \
+            "zm-cpanel:/home/zomorod2/.backups/zomorod-research-watch/$GITHUB_SHA/staging/index.html"
+          ssh -F "$d/config" zm-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";route="$web/research/updates/20261022"
+          stage="$HOME/.backups/zomorod-research-watch/$sha/staging/index.html"
+          test -s "$stage" && test ! -e "$route" && test ! -L "$web/research/updates"
+          mkdir -p "$route"
+          install -m 644 "$stage" "$route/.index.$sha"
+          mv "$route/.index.$sha" "$route/index.html"
+          rollback() { rc=$?; trap - EXIT; if test "$rc" -ne 0 && grep -Fq 'ZM-RESEARCH-WATCH-20261022' "$route/index.html" 2>/dev/null; then rm -f "$route/index.html"; rmdir "$route" 2>/dev/null || true; fi; exit "$rc"; }
+          trap rollback EXIT
+          code="$(curl -sSL --max-time 30 -o "$stage.public" -w '%{http_code}' "https://zomorodmelal.ir/research/updates/20261022/?release=$sha" || true)"
+          test "$code" = 200
+          grep -Fq 'سه پژوهش تازه با کاربرد عملی برای تحقیق‌وتوسعه کشاورزی' "$stage.public"
+          grep -Fq '10.3389/fsufs.2026.1959282' "$stage.public"
+          echo "LIVE_REPORT_PAGE=verified URL=/research/updates/20261022/"
+          trap - EXIT
+          REMOTE
