@@ -1,4 +1,4 @@
-name: Guarded paid-purchase event listener release
+name: Read-only cPanel paid-purchase startup diagnosis
 
 on:
   push:
@@ -47,7 +47,7 @@ jobs:
           done
           echo PURCHASE_RELEASE_BASELINE_SITES_HEALTHY
 
-      - name: Stage, verify and install bounded subscriber via cPanel relay
+      - name: Inspect previous Django check failure without changing production
         shell: bash
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -110,26 +110,16 @@ jobs:
           echo PURCHASE_RELEASE_PRIVATE_STAGE_CHECKSUM_VERIFIED
           timeout 90s ssh -F "$stage_root/config" business-os-cpanel \
             "cd '$stage_host' && bash scripts/business_os_purchase_cpanel_release.sh --probe"
-          if ! timeout 120s ssh -F "$stage_root/config" business-os-cpanel \
-            "cd '$stage_host' && bash scripts/business_os_purchase_cpanel_release.sh --apply"; then
-            echo PURCHASE_RELEASE_PRODUCTION_PREFLIGHT_OR_CHECK_FAILED
-            exit 1
-          fi
-          sleep 6
-          post_ok=1
-          for site in https://mojplaywin.com/ https://zomorodmelal.ir/; do
-            if ! curl -fLsS --max-time 20 --retry 2 --retry-delay 2 -o /dev/null "$site"; then
-              post_ok=0
-            fi
-          done
-          if test "$post_ok" -ne 1; then
-            echo PURCHASE_RELEASE_POST_HEALTH_FAILED_ROLLING_BACK
-            timeout 90s ssh -F "$stage_root/config" business-os-cpanel \
-              "cd '$stage_host' && bash scripts/business_os_purchase_cpanel_release.sh --rollback" || echo PURCHASE_RELEASE_ROLLBACK_REQUIRES_MANUAL_ATTENTION
-            exit 1
-          fi
-          echo PURCHASE_RELEASE_ACTIVE_EVENT_SUBSCRIBER_SITES_HEALTHY
-          echo PURCHASE_RELEASE_NO_CRON_NO_PAYMENT_MUTATION_NO_DB_MIGRATION
+          prior_log="/home/zomorod2/Saeit-staging/releases/business-os-paid-527acb305208/django-check-private.log"
+          timeout 40s ssh -F "$stage_root/config" business-os-cpanel \
+            "if test -f '$prior_log'; then
+               echo PURCHASE_DIAG_PRIVATE_LOG_PRESENT
+               wc -c < '$prior_log' | awk '{print \"PURCHASE_DIAG_LOG_BYTES_\",\$1}'
+               grep -Eo '(ModuleNotFoundError|ImportError|AttributeError|TypeError|ValueError|RuntimeError|SystemCheckError|ImproperlyConfigured|SyntaxError|OperationalError|PermissionError|FileNotFoundError|NameError|AssertionError|CommandError|Traceback|Unknown command|No such file or directory|Permission denied)' '$prior_log' | sort -u || true
+             else
+               echo PURCHASE_DIAG_PREVIOUS_LOG_ABSENT
+             fi"
+          echo PURCHASE_DIAG_NO_LIVE_CHANGES
       - name: Clear runner-only SSH key copies
         if: always()
         shell: bash
