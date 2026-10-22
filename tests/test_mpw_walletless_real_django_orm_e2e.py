@@ -68,6 +68,8 @@ class OrderItem(models.Model):
     order=models.ForeignKey(Order,on_delete=models.CASCADE,related_name="items")
     unit_price=models.DecimalField(max_digits=14,decimal_places=2)
     product=models.ForeignKey(Product,on_delete=models.PROTECT,null=True)
+    quantity=models.PositiveIntegerField(default=1)
+    currency=models.CharField(max_length=10,default="USD")
     kind=models.CharField(max_length=16,default="digital")
     class Meta:app_label="test_core";db_table="test_mpw_core_orderitem"
 
