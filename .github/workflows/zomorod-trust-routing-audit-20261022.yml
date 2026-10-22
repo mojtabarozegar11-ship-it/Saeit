@@ -1,0 +1,87 @@
+name: Zomorod safe routing inspection 20261022
+on:
+  push:
+    branches: [zomorod/trust-validation-20261022]
+    paths: [.github/workflows/zomorod-trust-routing-audit-20261022.yml]
+permissions:
+  contents: read
+jobs:
+  route_audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Read only rewrite routing and public file resolution
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'REMOTE_PY'
+          from pathlib import Path
+          import re
+          web=Path.home()/'public_html'
+          ht=(web/'.htaccess').read_text(errors='replace')
+          print('SAFE_ROUTING_AUDIT=yes')
+          for line in ht.splitlines():
+              l=line.strip()
+              if re.match(r'(?i)^(rewrite(rule|cond|base|engine)|directoryindex|fallbackresource|passenger|addhandler|options|error(document)?|<ifmodule|</ifmodule)',l):
+                  redacted=l.replace(str(Path.home()),'[HOME]')
+                  redacted=re.sub(r'(?i)(password|token|secret|private_key|apikey|api_key)[^\s]*','[REDACTED]',redacted)
+                  print('WEB_RULE',redacted[:240])
+          for rel in ('index.html','contact/index.html','company/index.html','privacy','legal','financial-transparency','terms'):
+              p=web/rel
+              print('SAFE_ROUTE_FILE',rel,'exists',int(p.exists()),'dir',int(p.is_dir()),'link',int(p.is_symlink()))
+          REMOTE_PY
+          for route in /contact/ /contact/index.html /company/ /company/index.html /legal/ /legal/index.html; do
+            curl -sS --max-time 12 -o /dev/null -w "PUBLIC_ROUTE $route %{http_code} %{redirect_url}\n" "https://zomorodmelal.ir$route" || true
+          done
+      - name: Remove ephemeral runner SSH credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/zomorod-baseline-inventory/vps.key" "$RUNNER_TEMP/zomorod-baseline-inventory/host.key"
