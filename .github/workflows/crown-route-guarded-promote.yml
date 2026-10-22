@@ -23,6 +23,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Run narrow reversible-promotion tests
+        run: |
+          python3 -m pip install -q pytest
+          python3 -m pytest -q tests/test_crown_python_route_promotion.py
       - name: Validate Python sources and safe defaults
         run: |
           python3 -m py_compile scripts/mpw_crown_python_route_safe_publish.py core/crown_checkout.py core/crown_tron_receipts.py core/crown_fleet.py
