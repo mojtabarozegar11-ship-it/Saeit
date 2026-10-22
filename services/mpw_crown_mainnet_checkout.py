@@ -203,9 +203,8 @@ def _validate_order(order, intent):
     if len(parts) != 1 or parts[0].quantity != 1:
         raise PaymentHold("Invoice must contain exactly one jet")
     item = parts[0]
-    if (item.currency != "USD" or item.unit_price != order.total
-            or item.product.price != order.total):
-        raise PaymentHold("Jet price changed since invoice issuance")
+    if item.currency != "USD" or item.unit_price != order.total:
+        raise PaymentHold("Invoice line-item value mismatch")
     product, _ = _product(item.product_id)
     if product.pk != item.product_id:
         raise PaymentHold("Invoice product invalid")
@@ -236,6 +235,26 @@ def start_crown_checkout(*, buyer_id, product_id):
             get_user_model().objects.select_for_update().get(pk=buyer_id)
             if sku in owned_skus(buyer):
                 raise PaymentHold("Jet already owned")
+            # Retry-safe: return the same unexpired pending invoice for this jet.
+            pending = PaymentIntent.objects.select_for_update().select_related("order").filter(
+                order__customer_id=buyer_id, order__status="pending",
+                order__items__product_id=product_id, provider=PROVIDER,
+                status=AWAITING,
+            ).order_by("-id")[:30]
+            for previous in pending:
+                try:
+                    old = _unpack(previous)
+                    if (old.recipient == receiver
+                            and datetime.now(timezone.utc) < old.expires_at):
+                        return "/commerce/crown/invoice/{}/".format(previous.pk)
+                except PaymentHold:
+                    continue
+            # Prevent unbounded abandoned invoices from authenticated bots.
+            if PaymentIntent.objects.filter(
+                order__customer_id=buyer_id, provider=PROVIDER,
+                created_at__gte=datetime.now(timezone.utc)-timedelta(hours=24),
+            ).count() >= 20:
+                raise PaymentHold("Daily Crown invoice limit reached")
             product, checked_sku = _product(product_id)
             if checked_sku != sku:
                 raise PaymentHold("Product changed")
@@ -356,8 +375,7 @@ def crown_invoice(request, intent_id):
         invoice = _unpack(intent)
         if intent.status != AWAITING or intent.order.status != "pending":
             raise PaymentHold("Order is not awaiting settlement")
-        if datetime.now(timezone.utc) > invoice.expires_at:
-            raise PaymentHold("Invoice expired. Do not transfer funds.")
+        expired = datetime.now(timezone.utc) > invoice.expires_at
         _validate_order(intent.order, intent)
         if invoice.recipient != _configuration()[0]:
             raise PaymentHold("Merchant recipient changed")
@@ -377,6 +395,19 @@ def crown_invoice(request, intent_id):
                 status=409, content_type="text/plain; charset=utf-8",
             ))
         return _secure(HttpResponseRedirect(request.path))
+    if expired:
+        # Late verification remains possible if the on-chain transfer was mined on time.
+        # Never show expired payment instructions that invite new transfers.
+        token = get_token(request)
+        notice = format_html(
+            '<h3>Invoice expired — do not send funds.</h3>'
+            '<p>If you already paid within the valid window, submit the '
+            'transaction hash below for independent verification.</p>'
+            '<form method="post"><input type="hidden" name="csrfmiddlewaretoken" value="{}">'
+            '<input name="txid" maxlength="64" required autocomplete="off">'
+            '<button>Verify my earlier payment</button></form>', token,
+        )
+        return _secure(HttpResponse(notice, content_type="text/html; charset=utf-8"))
     exact = Decimal(invoice.amount_sun) / Decimal(1_000_000)
     token = get_token(request)
     body = format_html(
