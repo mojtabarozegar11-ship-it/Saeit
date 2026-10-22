@@ -75,6 +75,12 @@ class VPSProductInstallerTests(unittest.TestCase):
         self.assertIn('VPS_FACTORY_LEGACY_SOURCE_EVOLUTION_FIXTURE_STAGED=PASS',wf)
         self.assertIn('cd "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}" &&',wf)
 
+    def test_vps_deployment_budget_covers_measured_product_reinspection(self):
+        """The live 12-minute window previously cancelled after actual factory work."""
+        source=Path(__file__).resolve().parents[1]
+        wf=(source/".github/workflows/vps-autonomous-product-install.yml").read_text(encoding="utf8")
+        self.assertIn('timeout-minutes: 22',wf)
+
 
 if __name__ == "__main__":
     unittest.main()
