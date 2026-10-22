@@ -33,7 +33,7 @@ def check():
     from django.db.models import UniqueConstraint
     from django.urls import resolve
     from django.apps import apps
-    from core.models import Order, OrderItem, PaymentIntent, LedgerEntry
+    from core.models import Order, OrderItem, PaymentIntent, LedgerEntry, PaymentWebhookEvent
     from mpw_commerce.models import CommerceInvoice, CommerceReceipt, CommerceFulfillment
 
     names = set(connection.introspection.table_names())
@@ -142,9 +142,14 @@ def check():
         'existing_financial_table_shapes': {
             'PaymentIntent': reusable_table_shape(PaymentIntent),
             'LedgerEntry': reusable_table_shape(LedgerEntry),
+            'PaymentWebhookEvent': reusable_table_shape(PaymentWebhookEvent),
             'CommerceInvoice': reusable_table_shape(CommerceInvoice),
             'CommerceReceipt': reusable_table_shape(CommerceReceipt),
         },
+        'no_ddl_walletless_model_tables_present': all(
+            model._meta.db_table in names for model in (
+                Order, OrderItem, PaymentIntent, LedgerEntry, PaymentWebhookEvent,
+                CommerceFulfillment, CommerceInvoice, CommerceReceipt)),
         'commerce_execution_flags': {flag: bool(getattr(settings, flag, False)) for flag in (
             'MPW_COMMERCE_RELEASE_READY',
             'MPW_COMMERCE_REAL_RPC_ENABLED',
