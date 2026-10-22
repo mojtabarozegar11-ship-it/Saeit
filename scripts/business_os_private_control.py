@@ -130,6 +130,65 @@ def decision(vps=None, cpanel=None, now=None):
     }
 
 
+# Change in an observed count is not proof that our diagnosis caused it.
+# Each release compares only its own local, permission-restricted receipts.
+PROGRESS_SIGNALS = {
+    "classify_factory_blockers": ("factory_vps", "blocked_tasks", "decrease"),
+    "measure_factory_stage_throughput": ("factory_vps", "queued_tasks", "decrease"),
+    "instrument_local_order_funnel": ("local_cpanel", "orders", "increase"),
+    "classify_local_approval_gates": ("local_cpanel", "pending_approvals", "decrease"),
+}
+
+
+def assess_previous_cycle(previous, current, node):
+    baseline = {
+        "state": "baseline_required",
+        "causal_effect_proven": False,
+        "commercial_success_proven": False,
+    }
+    if not isinstance(previous, dict) or previous.get("schema") != current["schema"]:
+        return baseline
+    try:
+        recent = datetime.fromisoformat(previous["generated_at"].replace("Z", "+00:00"))
+        present = datetime.fromisoformat(current["generated_at"].replace("Z", "+00:00"))
+        age = (present - recent).total_seconds()
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return baseline
+    if recent.tzinfo is None or not (0 <= age <= MAX_AGE_SECONDS):
+        return baseline
+    action = previous.get("candidate", {}).get("action")
+    signal = PROGRESS_SIGNALS.get(action)
+    if signal is None or signal[0] != ("factory_vps" if node == "vps" else "local_cpanel"):
+        return {
+            **baseline, "state": "no_applicable_local_outcome_metric",
+            "prior_action": action if isinstance(action, str) else "unknown",
+        }
+    scope, name, target_direction = signal
+    first = previous.get("observation", {}).get(scope, {}).get(name, {})
+    last = current.get("observation", {}).get(scope, {}).get(name, {})
+    if (not isinstance(first, dict) or not isinstance(last, dict)
+            or first.get("state") != "observed" or last.get("state") != "observed"
+            or not first.get("source") or first.get("source") != last.get("source")
+            or type(first.get("value")) is not int or type(last.get("value")) is not int
+            or first["value"] < 0 or last["value"] < 0):
+        return {**baseline, "state": "not_comparable", "prior_action": action}
+    change = last["value"] - first["value"]
+    return {
+        "state": "observed_count_delta_only",
+        "prior_action": action,
+        "metric": name,
+        "delta": change,
+        "trend": "increase" if change > 0 else "decrease" if change < 0 else "unchanged",
+        "directional_signal": (
+            "aligned" if (change > 0 and target_direction == "increase")
+            or (change < 0 and target_direction == "decrease")
+            else "unchanged" if change == 0 else "opposite"
+        ),
+        "causal_effect_proven": False,
+        "commercial_success_proven": False,
+    }
+
+
 def _read_private(path):
     if path.is_symlink() or not path.is_file():
         raise ValueError("missing_or_linked_snapshot")
@@ -181,6 +240,7 @@ def run_stage(node, root):
     result["unchanged_from_previous"] = bool(
         previous and previous.get("fingerprint") == result["fingerprint"])
     result["execution"] = "deduplicated_diagnostic_receipt_only"
+    result["previous_cycle_assessment"] = assess_previous_cycle(previous, result, node)
     _write_private(old_path, result)
     return result
 

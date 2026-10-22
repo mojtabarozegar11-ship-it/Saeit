@@ -1,7 +1,7 @@
 """Offline safety and evidence provenance tests for the private decision cycle."""
 from datetime import datetime, timedelta, timezone
 
-from scripts.business_os_private_control import decision, normalize
+from scripts.business_os_private_control import assess_previous_cycle, decision, normalize
 
 NOW = datetime(2026, 10, 22, 12, tzinfo=timezone.utc)
 
@@ -107,3 +107,41 @@ def test_absent_local_snapshots_cannot_infer_sales():
     result = decision(now=NOW)
     assert result["candidate"]["action"] == "connect_private_observers"
     assert result["observation"]["local_cpanel"]["orders"]["state"] == "unknown"
+
+
+def test_factory_blocker_decrease_is_only_a_count_signal():
+    first = decision(vps=report("vps", blocked=4), now=NOW)
+    second = decision(vps=report("vps", blocked=2),
+                      now=NOW + timedelta(minutes=10))
+    outcome = assess_previous_cycle(first, second, "vps")
+    assert outcome["state"] == "observed_count_delta_only"
+    assert outcome["delta"] == -2
+    assert outcome["directional_signal"] == "aligned"
+    assert outcome["causal_effect_proven"] is False
+
+
+def test_local_orders_count_increase_does_not_prove_cash():
+    before = report("cpanel")
+    after = report("cpanel")
+    after["metrics"]["orders"]["value"] = 1
+    first = decision(cpanel=before, now=NOW)
+    second = decision(cpanel=after, now=NOW + timedelta(minutes=15))
+    outcome = assess_previous_cycle(first, second, "cpanel")
+    assert outcome["delta"] == 1
+    assert outcome["directional_signal"] == "aligned"
+    assert outcome["commercial_success_proven"] is False
+
+
+def test_progress_requires_matching_source_and_valid_measurements():
+    before = decision(vps=report("vps", blocked=4), now=NOW)
+    changed = report("vps", blocked=2)
+    changed["metrics"]["blocked_tasks"]["source"] = "cpanel_local_django:wrong"
+    second = decision(vps=changed, now=NOW + timedelta(minutes=10))
+    assert assess_previous_cycle(before, second, "vps")["state"] == "not_comparable"
+
+
+def test_progress_requires_existing_recent_baseline():
+    present = decision(vps=report("vps"), now=NOW)
+    assert assess_previous_cycle(None, present, "vps")["state"] == "baseline_required"
+    old = decision(vps=report("vps"), now=NOW - timedelta(hours=4))
+    assert assess_previous_cycle(old, present, "vps")["state"] == "baseline_required"

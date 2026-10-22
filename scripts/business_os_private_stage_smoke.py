@@ -15,7 +15,8 @@ def main():
         + list((root / "command_center").rglob("*.py"))
     )
     paths += [root / "scripts" / "business_os_private_control.py",
-              root / "scripts" / "business_os_vps_private_master_probe.py"]
+              root / "scripts" / "business_os_vps_private_master_probe.py",
+              root / "scripts" / "business_os_private_cron_verify.py"]
     if not paths:
         raise RuntimeError("No management code to validate")
     for path in paths:
@@ -39,8 +40,14 @@ def main():
         raise RuntimeError("Expected private controller safety tests are missing")
     for test in private_tests:
         test()
+    cycle_ns = runpy.run_path(str(root / "tests" / "test_business_os_private_cron_verify.py"))
+    cycle_tests = [value for name, value in cycle_ns.items() if name.startswith("test_")]
+    if len(cycle_tests) < 3:
+        raise RuntimeError("Expected private recurring-cycle tests are missing")
+    for test in cycle_tests:
+        test()
     subprocess.run(["bash", "-n", str(root / "scripts" / "business_os_private_cron.sh")], check=True)
-    print(f"BUSINESS_OS_PRIVATE_STAGE_OK ast_files={len(paths)} policy_tests={len(tests) + len(factory_tests) + len(private_tests)}")
+    print(f"BUSINESS_OS_PRIVATE_STAGE_OK ast_files={len(paths)} policy_tests={len(tests) + len(factory_tests) + len(private_tests) + len(cycle_tests)}")
 
 
 if __name__ == "__main__":
