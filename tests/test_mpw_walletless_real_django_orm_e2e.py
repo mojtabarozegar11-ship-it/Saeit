@@ -19,6 +19,7 @@ from services.mpw_trx_walletless_reservation import reserve_isolated
 from services.mpw_walletless_django_test_bridge import (
     settle_to_django_test_database,TrustedNodePair,
 )
+from services.mpw_walletless_django_test_invoice import reserve_to_django_test_database
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "_walletless_ephemeral_settings")
 settings_module=types.ModuleType("_walletless_ephemeral_settings")
@@ -68,6 +69,9 @@ class LedgerEntry(models.Model):
 
 class CommerceInvoice(models.Model):
     order=models.ForeignKey(Order,on_delete=models.CASCADE)
+    network=models.CharField(max_length=32,default='tron-mainnet')
+    recipient=models.CharField(max_length=100,default='')
+    amount_atomic=models.CharField(max_length=50,default='')
     status=models.CharField(max_length=16)
     class Status:
         AWAITING="awaiting"
@@ -121,6 +125,9 @@ NOW=__import__("datetime").datetime(2026,10,22,3,0,tzinfo=timezone.utc)
 RECIPIENT="T"+"A"*33
 SENDER="T"+"B"*33
 TX_HASH="a"*64
+fake_native=types.ModuleType("scripts.mojplaywin_native_chain_verify")
+fake_native.tron_address_to_hex=lambda v: "41"+"AB"*20 if v==RECIPIENT else (_ for _ in ()).throw(ValueError("bad recipient"))
+sys.modules["scripts.mojplaywin_native_chain_verify"]=fake_native
 
 def raw_conn():
     return pymysql.connect(host="127.0.0.1",user="walletless",password="local-only-no-money",
@@ -214,6 +221,34 @@ class RealDjangoWalletlessTests(unittest.TestCase):
         self.settle()
         with self.assertRaises(PaymentHold):self.settle()
         self.assertEqual(LedgerEntry.objects.filter(order_id=self.order_id).count(),1)
+
+    def test_walletless_django_invoice_creation_without_signature(self):
+        c=raw_conn()
+        with c.cursor() as cur:
+            cur.execute("DELETE FROM mpw_walletless_trx_reservation_v1 WHERE id=%s",(self.invoice_id,))
+        c.commit();c.close()
+        def issue(customer=42):
+            return reserve_to_django_test_database(self.order_id,customer,
+                rate_provider=lambda:(Decimal("0.30"),NOW),
+                configured_receiver=lambda:RECIPIENT,now=NOW)
+        i,sun,created=issue()
+        self.assertTrue(created)
+        self.assertEqual(sun,100000)
+        self.assertEqual(issue(),(i,sun,False))
+        with self.assertRaises(PaymentHold):issue(customer=78)
+        self.assertFalse(LedgerEntry.objects.filter(order_id=self.order_id).exists())
+
+    def test_signed_invoice_blocks_new_walletless_reservation(self):
+        c=raw_conn()
+        with c.cursor() as cur:
+            cur.execute("DELETE FROM mpw_walletless_trx_reservation_v1 WHERE id=%s",(self.invoice_id,))
+        c.commit();c.close()
+        CommerceInvoice.objects.create(order_id=self.order_id,status="awaiting")
+        with self.assertRaises(PaymentHold):
+            reserve_to_django_test_database(self.order_id,42,
+                rate_provider=lambda:(Decimal("0.30"),NOW),
+                configured_receiver=lambda:RECIPIENT,now=NOW)
+        self.assertFalse(LedgerEntry.objects.filter(order_id=self.order_id).exists())
 
     def test_missing_private_file_cannot_grant(self):
         global ARTIFACT
