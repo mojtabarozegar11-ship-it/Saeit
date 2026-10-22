@@ -94,7 +94,7 @@ test "$(crontab -l | grep -Fc SAEIT_MASTER_F41_PRIVATE_QUEUE_V1)" -eq 1
 # Verify the exact installed, authenticated master runner end-to-end now.
 /usr/bin/timeout 120s /bin/bash "$runner"
 echo F41_TRC20_SHASTA_ALLOWLISTED_PROOF_CODE=INSTALLED
-echo F41_TRC20_LIVE_ALLOWLIST_COUNT="$(printf '%s' "${F41_SHASTA_TRC20_ALLOWLIST:-}" | awk -F, '{if ($0 == "") print 0; else print NF}')"
+echo F41_TRC20_LIVE_ALLOWLIST_COUNT="$(printf '%s' "${F41_SHASTA_TRC20_ALLOWLIST:-}" | awk -F, 'END {print NR ? NF : 0}')"
 echo F41_AUTOSCAN_AUTHENTIC_MASTER_CYCLE=PASS
 echo F41_AUTOSCAN_INSTALLED_ON_VPS=PASS
 echo F41_AUTOSCAN_MOJ1RO1_CRON_15MIN=ACTIVE
