@@ -43,6 +43,23 @@ def actual_format_integrity(family, members):
             if not {"base/manifest/AndroidManifest.xml","base/dex/classes.dex",
                     "base/assets/index.html"}.issubset(names):
                 raise RuntimeError("NATIVE_BUNDLE_FAKE_ANDROID_AAB")
+        if "android-real-interactive-proof.json" in members:
+            runtime=json.loads(members["android-real-interactive-proof.json"].decode("utf8"))
+            executed=runtime.get("families",[])
+            target=next((x for x in executed if x.get("family")==family),None)
+            if (runtime.get("schema")!="saeit.factory.native-android-emulator-interactive.v1"
+                    or runtime.get("environment")!="actual_android_emulator"
+                    or runtime.get("native_emulator_install_ui_interaction_verified") is not True
+                    or runtime.get("physical_device_tested") is not False
+                    or runtime.get("independent_human_specialist_review") is not False
+                    or runtime.get("quality_1000_certified") is not False
+                    or runtime.get("public_release") is not False
+                    or not isinstance(executed,list) or len(executed)!=2
+                    or {x.get("family") for x in executed}!={"F12","F16"}
+                    or not isinstance(target,dict)
+                    or target.get("apk_sha256")!=hashlib.sha256(apk).hexdigest()
+                    or len(target.get("checks",[]))<5):
+                raise RuntimeError("NATIVE_BUNDLE_EMULATOR_EVIDENCE_MISMATCH")
     elif family in ("F13","F17"):
         data = next(iter(native.values()))
         if (len(data) < 30_000 or data[:2] != b"MZ" or len(data) < 64):
