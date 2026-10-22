@@ -173,7 +173,7 @@ class RealDjangoWalletlessTests(unittest.TestCase):
             self.invoice_id,self.amount,_=reserve_isolated(conn,order_id=order.pk,
                customer_id=42,recipient=RECIPIENT,usd_total=Decimal("0.03"),
                usd_per_trx=Decimal("0.30"),quote_observed_at=NOW,
-               now=NOW,is_amount_reserved=lambda amount:False,random_below=lambda n:0)
+               now=NOW,legacy_amount_reserved=lambda amount:False,random_below=lambda n:0)
         finally:conn.close()
         self.order_id=order.pk
 
