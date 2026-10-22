@@ -1,10 +1,11 @@
 name: F26 real rice training-only domain guard and VPS evidence
 on:
   push:
-    branches: [feature/f26-research-abstention-guard-20261022, main]
+    branches: [feature/f26-research-abstention-guard-20261022, fix/f26-guard-path-type-20261022, main]
     paths:
       - scripts/factory_f26_rice_research_guard.py
       - tests/test_factory_f26_rice_research_guard.py
+      - tests/test_factory_f26_research_guard_private_install.py
       - deploy/factory_f26_research_guard_private_install.py
       - deploy/factory_f26_research_guard_private_relay.sh
       - .github/workflows/factory-f26-research-domain-guard-20261022.yml
@@ -31,6 +32,7 @@ jobs:
           bash -n deploy/factory_f26_research_guard_private_relay.sh
           python3 -B -m py_compile scripts/factory_f26_rice_research_guard.py deploy/factory_f26_research_guard_private_install.py
           python3 -B -m unittest discover -s tests -p test_factory_f26_rice_research_guard.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_f26_research_guard_private_install.py -v
       - name: Install pinned CPU-only model evaluation packages
         run: python3 -m pip install --disable-pip-version-check numpy==2.1.3 scikit-learn==1.5.2 onnx==1.17.0 onnxruntime==1.20.1
       - name: Re-fetch immutable public UCI source bytes

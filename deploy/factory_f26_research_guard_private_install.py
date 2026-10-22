@@ -24,6 +24,7 @@ def digest(path,limit=1_000_000):
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 def document(p, limit=150_000):
+    p=Path(p)
     if p.is_symlink() or not p.is_file() or p.stat().st_size>limit:
         raise RuntimeError("F26_GUARD_VPS_UNSAFE_JSON")
     v=json.loads(p.read_text("utf8"))
@@ -49,6 +50,7 @@ def locate(root, guard):
                  or receipt.get("professional_quality_1000_certified") is not False
                  or receipt.get("previous_f26_native_48_models_preserved") is not True
                  or card.get("onnx_model_sha256")!=guard["model_onnx_sha256"]
+                 or digest(folder/"rice_cultivar_real_pilot.onnx",16_000_000)!=guard["model_onnx_sha256"]
                  or card.get("dataset",{}).get("download_archive_sha256")!=guard["source_dataset_sha256"]
                  or card.get("quality_1000_certified") is not False):
                 continue
