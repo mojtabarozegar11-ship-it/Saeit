@@ -46,7 +46,7 @@ jobs:
           for phrase in ["داوری‌شده","محدودیت","بازتولیدپذیری","آزمایش کم‌هزینه","مجتبی روزگار","مدیرعامل شرکت کشت‌وصنعت زمرد ملل"]:
               assert phrase in s,phrase
           assert len(s)>9000
-          assert s.count('href="https://doi.org/')==3
+          assert s.count('href="https://doi.org/')==6
           print("HTML_SEO_DOI_EVIDENCE_AND_AUTHORSHIP=verified")
           PY
   publish:
