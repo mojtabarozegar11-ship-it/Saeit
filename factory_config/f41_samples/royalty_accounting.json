@@ -1,0 +1,23 @@
+{
+  "schema": "saeit.factory.f41-product-request.v1",
+  "kind": "royalty_accounting",
+  "product_id": "f41_royalty_accounting_demo",
+  "data": {
+    "sales": [
+      {
+        "sale_id": "sale001",
+        "net_base_units": "10001"
+      }
+    ],
+    "payees": [
+      {
+        "id": "creator",
+        "basis_points": 7000
+      },
+      {
+        "id": "studio",
+        "basis_points": 3000
+      }
+    ]
+  }
+}

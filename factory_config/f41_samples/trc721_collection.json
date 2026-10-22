@@ -1,0 +1,16 @@
+{
+  "schema": "saeit.factory.f41-product-request.v1",
+  "kind": "trc721_collection",
+  "product_id": "f41_trc721_collection_demo",
+  "data": {
+    "collection": "ZomorodArt",
+    "symbol": "ZART",
+    "items": [
+      {
+        "token_id": 1,
+        "owner_ref": "seller001",
+        "asset_file": "demo_art.svg"
+      }
+    ]
+  }
+}

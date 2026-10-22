@@ -1,0 +1,18 @@
+{
+  "schema": "saeit.factory.f41-product-request.v1",
+  "kind": "rwa_eligibility",
+  "product_id": "f41_rwa_eligibility_demo",
+  "data": {
+    "asset_ref": "asset_001",
+    "jurisdiction": "EU",
+    "documents": [
+      "license_terms.txt"
+    ],
+    "checklist": {
+      "issuer_identified": false,
+      "ownership_documents_reviewed": false,
+      "transfer_restrictions_reviewed": false,
+      "regulated_offering_reviewed": false
+    }
+  }
+}

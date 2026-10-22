@@ -1,0 +1,18 @@
+{
+  "schema": "saeit.factory.f41-product-request.v1",
+  "kind": "security_monitor",
+  "product_id": "f41_security_monitor_demo",
+  "data": {
+    "alert_threshold_base_units": "1000",
+    "allowed_recipients": [
+      "safe_wallet"
+    ],
+    "observations": [
+      {
+        "txid": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "recipient": "new_wallet",
+        "amount_base_units": "900"
+      }
+    ]
+  }
+}

@@ -102,7 +102,7 @@ class MultiproductTests(unittest.TestCase):
     def test_catalog_does_not_claim_real_sales(self):
         catalog = json.loads((ROOT / "factory_config" / "f41_product_catalog.json").read_text())
         self.assertEqual(catalog["line_id"], "F41")
-        self.assertEqual(len(catalog["active_builders"]), 5)
+        self.assertEqual(len(catalog["active_builders"]), 20)
         self.assertFalse(catalog["cash_conversion_gate"]["commercial_sale_allowed"])
         self.assertEqual(catalog["cash_conversion_gate"]["verified_paying_customers"], 0)
         self.assertFalse(catalog["quality_1000_certified"])

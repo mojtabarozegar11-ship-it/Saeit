@@ -1,0 +1,21 @@
+{
+  "schema": "saeit.factory.f41-product-request.v1",
+  "kind": "escrow_milestones",
+  "product_id": "f41_escrow_milestones_demo",
+  "data": {
+    "escrow_ref": "escrow_test",
+    "total_base_units": "10000",
+    "milestones": [
+      {
+        "id": "design",
+        "amount_base_units": "4000",
+        "approval_evidence_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      {
+        "id": "delivery",
+        "amount_base_units": "6000",
+        "approval_evidence_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    ]
+  }
+}
