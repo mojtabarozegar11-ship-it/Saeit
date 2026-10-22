@@ -4,6 +4,7 @@ on:
     branches: [zomorod/trust-validation-20261022]
     paths:
       - scripts/zomorod_trust_pages_safe_20261022.py
+      - scripts/zomorod_trust_contact_safe_20261022.py
       - .github/workflows/zomorod-trust-pages-selftest-20261022.yml
   pull_request:
     paths:
@@ -21,3 +22,5 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/zomorod_trust_pages_safe_20261022.py
           python3 scripts/zomorod_trust_pages_safe_20261022.py selftest
+          python3 -m py_compile scripts/zomorod_trust_contact_safe_20261022.py
+          python3 scripts/zomorod_trust_contact_safe_20261022.py selftest
