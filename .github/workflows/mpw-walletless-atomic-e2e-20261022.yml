@@ -6,8 +6,10 @@ on:
       - services/mpw_trx_walletless_core.py
       - services/mpw_trx_walletless_reservation.py
       - services/mpw_trx_walletless_finalize.py
+      - services/mpw_trx_walletless_reconcile.py
       - services/sql/mpw_walletless_trx_isolated_v1.sql
       - tests/test_mpw_walletless_atomic_e2e.py
+      - tests/test_mpw_walletless_reconciler_e2e.py
       - .github/workflows/mpw-walletless-atomic-e2e-20261022.yml
   workflow_dispatch:
 permissions: {contents: read}
@@ -38,9 +40,10 @@ jobs:
       - name: Compile financial core and test contracts
         run: |
           set -euo pipefail
-          python3 -m py_compile services/mpw_trx_walletless_core.py services/mpw_trx_walletless_reservation.py services/mpw_trx_walletless_finalize.py tests/test_mpw_walletless_atomic_e2e.py
+          python3 -m py_compile services/mpw_trx_walletless_core.py services/mpw_trx_walletless_reservation.py services/mpw_trx_walletless_finalize.py tests/test_mpw_walletless_atomic_e2e.py tests/test_mpw_walletless_reconciler_e2e.py services/mpw_trx_walletless_reconcile.py
       - name: Prove atomic invoice receipt ledger and buyer-only grant
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_mpw_walletless_atomic_e2e.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_walletless_reconciler_e2e.py' -v
           echo "MPW_WALLETLESS_FULL_ATOMIC_MARIADB_CI=PASS; LIVE_PAYMENTS=0"
