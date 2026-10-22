@@ -88,6 +88,57 @@ def inputs(root, family, dest):
             raise RuntimeError("NATIVE_SOURCE_TRANSFER_HASH_MISMATCH")
     return {filename: sha(dest / filename) for filename in files}
 
+def windows_source_inputs(root, family, dest):
+    """Native Windows runner: independently revalidate its original producer.
+
+    The Linux factory supervisor uses fcntl and cannot run on Windows; this
+    does not weaken the source proof, as archive/member/source hashes are
+    checked again here and the exact builder family IDs are constrained.
+    """
+    import zipfile
+    if family not in ("F13", "F17"):
+        raise RuntimeError("NATIVE_WINDOWS_ONLY_SPECIALIST")
+    builder = module("factory_seven_missing_builders.py")
+    candidate = builder.create(root, family)
+    if candidate.get("family_id") != family:
+        raise RuntimeError("NATIVE_WIN_BUILDER_WRONG_FAMILY")
+    digest = candidate.get("private_archive_sha256", "")
+    if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+        raise RuntimeError("NATIVE_WIN_INVALID_VERSION")
+    name = "fieldwork_" + SLUGS[family] + "_pilot"
+    folder = root / "engineering-gaps" / "seven-builders" / name / digest[:20]
+    receipt = json.loads((folder / "technical_receipt.json").read_text(encoding="utf8"))
+    if (receipt.get("schema") != "zomorodmelal.factory.seven-gap-private.v1"
+            or receipt.get("family_id") != family
+            or receipt.get("commercial_release_allowed") is not False
+            or receipt.get("independent_quality_1000_passed") is not False
+            or receipt.get("native_distribution_verified") is not False
+            or receipt.get("private_archive_sha256") != digest):
+        raise RuntimeError("NATIVE_WIN_RECEIPT_POLICY_FAILED")
+    zipped = folder / (name + "-internal-qa.zip")
+    if sha(zipped) != digest:
+        raise RuntimeError("NATIVE_WIN_ZIP_HASH_MISMATCH")
+    recorded = receipt.get("source_files", {})
+    required = ({"game.py", "levels.json", "README.txt"} if family == "F13"
+                else {"desktop.py", "sample.csv", "cases.json", "README.txt"})
+    if not isinstance(recorded, dict) or not required.issubset(recorded):
+        raise RuntimeError("NATIVE_WIN_SOURCE_CONTRACT_BROKEN")
+    with zipfile.ZipFile(zipped) as archive:
+        if archive.testzip() is not None or set(archive.namelist()) != {
+                name + "/" + x for x in recorded}:
+            raise RuntimeError("NATIVE_WIN_ZIP_MEMBERS_INVALID")
+        for filename, expected in recorded.items():
+            src = folder / name / filename
+            if (src.is_symlink() or not src.is_file()
+                    or sha(src) != expected
+                    or hashlib.sha256(archive.read(name + "/" + filename)).hexdigest() != expected):
+                raise RuntimeError("NATIVE_WIN_SOURCE_HASH_FAIL")
+    dest.mkdir(parents=True, mode=0o700)
+    for filename in sorted(recorded):
+        shutil.copyfile(folder / name / filename, dest / filename)
+    return {filename: sha(dest / filename) for filename in recorded}
+
+
 def android_project(out, family):
     """Offline asset-only Android WebView, with no network permissions."""
     if family not in ("F12", "F16"):
@@ -213,7 +264,9 @@ def prepare(root, out, family):
     if out.is_symlink() or out.exists():
         raise RuntimeError("NATIVE_OUTPUT_ALREADY_EXISTS")
     out.mkdir(mode=0o700, parents=True)
-    hashes = inputs(root, family, out / "source")
+    hashes = (windows_source_inputs(root, family, out / "source")
+              if sys.platform == "win32" and family in ("F13", "F17")
+              else inputs(root, family, out / "source"))
     if family in ("F12", "F16"):
         android_project(out, family)
     (out / "preparation-receipt.json").write_text(
