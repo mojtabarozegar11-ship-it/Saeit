@@ -42,6 +42,12 @@ jobs:
           python3 -B -m unittest discover -s tests -p test_f41_merchant_audit_cli.py -v
           python3 -B -m unittest discover -s tests -p test_f41_tron_mainnet_check.py -v
           python3 -B -m py_compile scripts/f41_merchant_audit_cli.py scripts/f41_tron_mainnet_check.py
+          pack="$RUNNER_TEMP/f41-buyer-package"
+          mkdir -m 700 "$pack"
+          cp scripts/f41_merchant_audit_cli.py "$pack/f41_merchant_audit_cli.py"
+          cp scripts/f41_tron_mainnet_check.py "$pack/verifier.py"
+          python3 -B "$pack/verifier.py" --help >/dev/null
+          echo F41_MERCHANT_BUYER_PACKAGING_IMPORT=PASS
           out="$RUNNER_TEMP/f41-merchant-audit-demo"
           python3 -B scripts/f41_merchant_audit_cli.py --invoices examples/f41-merchant-audit/invoices.csv --payments examples/f41-merchant-audit/payments.csv --out "$out"
           python3 -B scripts/f41_merchant_audit_cli.py --invoices examples/f41-merchant-audit/invoices.csv --payments examples/f41-merchant-audit/payments.csv --out "$out" --verify
@@ -84,7 +90,7 @@ jobs:
           printf 'Host f41-vps\n  HostName 178.239.147.150\n  User githubops\n  IdentityFile %s/key\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n  UserKnownHostsFile %s/known\n  BatchMode yes\n  ConnectTimeout 15\n' "$work" "$work" > "$work/config"
           stage="/home/githubops/factory-runtime/operations/.f41-merchant-stage-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           ssh -F "$work/config" -T f41-vps "umask 077; mkdir -m 700 '$stage'"
-          scp -F "$work/config" scripts/f41_merchant_audit_cli.py "f41-vps:$stage/cli.py"
+          scp -F "$work/config" scripts/f41_merchant_audit_cli.py "f41-vps:$stage/f41_merchant_audit_cli.py"
           scp -F "$work/config" scripts/f41_tron_mainnet_check.py "f41-vps:$stage/verifier.py"
           scp -F "$work/config" tests/test_f41_merchant_audit_cli.py "f41-vps:$stage/tests.py"
           scp -F "$work/config" tests/test_f41_tron_mainnet_check.py "f41-vps:$stage/tests_verifier.py"
