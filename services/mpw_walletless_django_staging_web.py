@@ -187,7 +187,7 @@ def _start_order(request,product_id):
         f"/commerce/trx-easy/invoice/{invoice_id}/"))
 
 
-def _show_invoice(request,invoice_id):
+def _show_invoice(request,invoice_id,*,guest_checkout=False,wallet_handoff_path=None):
     from django.http import HttpResponse,Http404
     conn=_ensure_test(request)
     order,row=_owner_invoice(conn,invoice_id,request.user.pk)
@@ -201,7 +201,8 @@ def _show_invoice(request,invoice_id):
         quote_usd_per_trx=Decimal(str(rate)),
         issued_at=issued.replace(tzinfo=timezone.utc),
         expires_at=expires.replace(tzinfo=timezone.utc))
-    html,csp=render_one_tap_invoice(invoice,status_path=f"/commerce/trx-easy/status/{invoice_id}/")
+    html,csp=render_one_tap_invoice(invoice,status_path=f"/commerce/trx-easy/status/{invoice_id}/",
+             guest_checkout=guest_checkout,wallet_handoff_path=wallet_handoff_path)
     response=HttpResponse(html,content_type="text/html; charset=utf-8")
     response["Content-Security-Policy"]=csp
     return _nocache(response)
