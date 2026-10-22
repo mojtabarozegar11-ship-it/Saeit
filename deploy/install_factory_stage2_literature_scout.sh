@@ -38,12 +38,12 @@ chmod 600 "$dest"
 # Real outside-source retrieval; fail-closed source filtering and traceable
 # abstract claims. Up to 100 remaining P0 orders in this first run.
 timeout 650s "$py" -B "$dest" --factory-private "$root" \
-    --stage2-program "$main_agent" --batch 100 --workers 4
+    --stage2-program "$main_agent" --batch 50 --workers 2
 # Promote ONLY independently source-linked dossier work that passes stage 2's
 # normal gates, not raw bibliographic candidates.
 timeout 120s "$py" -B "$main_agent" --factory-private "$root" --batch 250
 
-cron='*/2 * * * * /usr/bin/flock -n /home/githubops/factory-runtime/operations/production-instructions/.stage2-scout-minute.lock /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --stage2-program /home/githubops/factory-runtime/operations/production-instructions/stage2-research.py --batch 25 --workers 3 >> /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.log 2>&1 # SAEIT_FACTORY_STAGE2_SOURCE_DISCOVERY_V1'
+cron='*/2 * * * * /usr/bin/flock -n /home/githubops/factory-runtime/operations/production-instructions/.stage2-scout-minute.lock /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --stage2-program /home/githubops/factory-runtime/operations/production-instructions/stage2-research.py --batch 12 --workers 1 >> /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.log 2>&1 # SAEIT_FACTORY_STAGE2_SOURCE_DISCOVERY_V1'
 if grep -Fq "$marker" "$back/crontab.before"; then
   test "$(grep -Fc "$marker" "$back/crontab.before")" -eq 1
   echo FACTORY_STAGE2_SCOUT_CRON=ALREADY_PRESENT
@@ -75,13 +75,14 @@ assert stat["human_specialist_reviews_completed"]==0
 assert stat["attempted_this_run"]>0
 assert num_source>=3, "Original three vetted sources missing"
 assert num_handoff>=3, "Stage 2 pilot lost"
-assert num_source+num_candidate>=3+stat["attempted_this_run"]-stat["previously_seeded"]-stat["external_provider_unavailable"]
+assert num_source+num_candidate>=3+stat["attempted_this_run"]-stat["previously_seeded"]-stat["external_provider_unavailable"]-stat.get("requests_skipped_due_to_provider_cooldown",0)
 print("FACTORY_STAGE2_SCOUT_P0_SOURCE_PACKETS="+str(num_source))
 print("FACTORY_STAGE2_SCOUT_P0_BIBLIOGRAPHIC_WORKPAPERS="+str(num_candidate))
 print("FACTORY_STAGE2_SCOUT_P0_MISSING_SOURCE_BRIEFS="+str(num_research))
 print("FACTORY_STAGE2_SCOUT_P0_STAGE3_DOSSIERS="+str(num_handoff))
 print("FACTORY_STAGE2_SCOUT_P0_ATTEMPTED_THIS_RUN="+str(stat["attempted_this_run"]))
 print("FACTORY_STAGE2_SCOUT_PROVIDER_ERRORS="+str(stat["external_provider_unavailable"]))
+print("FACTORY_STAGE2_SCOUT_PROVIDER_COOLDOWN_SKIPPED="+str(stat.get("requests_skipped_due_to_provider_cooldown",0)))
 print("FACTORY_STAGE2_SCOUT_INDEPENDENT_EXPERT_APPROVALS=0")
 print("FACTORY_STAGE2_SCOUT_SITE_PUBLICATIONS=0")
 PY
