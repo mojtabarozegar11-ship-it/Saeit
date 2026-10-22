@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS mpw_walletless_trx_reservation_v1 (
 
 
 -- Financial evidence belongs to the same transaction as the invoice status update.
--- Preproduction-only standalone ledger and entitlement tables; production must
+-- Preproduction-only standalone ledger and entitlement tables. Production must
 -- use Django's actual LedgerEntry and CommerceFulfillment, NOT these shadow tables.
 CREATE TABLE IF NOT EXISTS mpw_walletless_trx_receipt_v1 (
   invoice_id BIGINT UNSIGNED NOT NULL,
