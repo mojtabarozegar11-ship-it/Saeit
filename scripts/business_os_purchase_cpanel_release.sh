@@ -151,6 +151,9 @@ case "${1:-}" in
   --probe)
     probe
     ;;
+  --check-app-config)
+    "$interpreter" -B "$stage/scripts/business_os_patch_app_config.py" --check "$prod/core/apps.py"
+    ;;
   --apply)
     if ! apply; then rollback; exit 1; fi
     ;;

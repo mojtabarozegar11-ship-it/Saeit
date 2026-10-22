@@ -133,6 +133,14 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (ValueError, SyntaxError, OSError, AssertionError):
-        print("PURCHASE_APP_CONFIG_PATCH_REFUSED")
+    except (ValueError, SyntaxError, OSError, AssertionError) as exc:
+        reason = str(exc)
+        safe_reasons = {
+            "unexpected_app_config_structure", "unexpected_app_config_base",
+            "custom_app_config_body", "custom_app_config_field", "not_core_app",
+            "unexpected_compact_header", "unsafe_compact_body",
+            "unexpected_patch_length", "missing_ready_hook",
+            "existing_semantics_changed", "unavailable_app_config",
+        }
+        print("PURCHASE_APP_CONFIG_PATCH_REFUSED_" + (reason if reason in safe_reasons else type(exc).__name__))
         raise SystemExit(1)
