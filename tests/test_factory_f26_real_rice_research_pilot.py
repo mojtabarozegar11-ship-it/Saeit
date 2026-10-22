@@ -63,9 +63,7 @@ class RealRicePilotTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,"NONNUMERIC_FEATURE"):
             m.parse_arff(s)
         with self.assertRaisesRegex(RuntimeError,"BAD_ROW_OR_LABEL"):
-            m.parse_arff(sample().replace("Cammeo","Unknown",1).replace(
-                  "@attribute Class {Unknown,Osmancik}",
-                  "@attribute Class {Cammeo,Osmancik}"))
+            m.parse_arff(sample().replace(",Cammeo\n",",Unknown\n",1))
 
 if __name__=="__main__":
     unittest.main()
