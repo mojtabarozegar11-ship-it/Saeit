@@ -61,7 +61,7 @@ jobs:
           timeout 110s ssh "${ssh_opts[@]}" "$destination" "bash -s -- '$expected_sha' '$message_sha' '$GITHUB_RUN_ID'" <<'REMOTE'
           set -euo pipefail
           umask 077
-          python3 - "$1" "$2" <<'PY_INSTALL'
+          python3 - "$1" "$2" "$3" <<'PY_INSTALL'
           import hashlib
           import os
           from pathlib import Path
