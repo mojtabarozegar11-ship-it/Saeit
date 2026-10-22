@@ -342,7 +342,7 @@ def reconcile(root):
             value=read(path)
             if value.get('status') in ('recipe_created','equivalent_program_exists'):
                 by_request[value.get('request_sha256')]=value.get('result',{})
-        rows=[]
+        rows=[];linked=[]
         for path in area.glob('*.json'):
             if not re.fullmatch(r'[a-f0-9]{64}\.json',path.name):continue
             row=read(path);result=by_request.get(row.get('design_request_sha256'),{})
@@ -361,8 +361,52 @@ def reconcile(root):
                        measured_successful_tests=qa['successful_tests'],build50_verified=False,
                        warehouse_acceptance='pending_verified_50_stage_build',commercial_release=False)
             designer.save(path,row);rows.append(row)
+            # A native order is not complete just because its technical prototype
+            # passed unit tests. Issue a separate, source-bound PRIVATE receipt
+            # so engineering can prove which real bytes were produced for which
+            # unchanged instruction. Do not modify the authoritative work order.
+            order_id=row.get('source_id')
+            if not isinstance(order_id,str) or not re.fullmatch(r'WO-[0-9]{8}',order_id):continue
+            order_file=root/'production-instructions/orders'/(order_id+'.json')
+            try:
+                order=read(order_file)
+                if (order.get('schema')!='saeit.factory.production-instructions.v1'
+                        or order.get('instruction_kind')!='private_factory_work_order'
+                        or not re.fullmatch(r'[a-f0-9]{64}',str(order.get('fingerprint','')))
+                        or order.get('id')!=order_id
+                        or order.get('status') not in ('issued','in_engineering','blocked_rework')
+                        or order.get('public_distribution_allowed') is not False
+                        or digest(order)!=row.get('source_revision_sha256')):continue
+                ticket_key=digest({'origin':row.get('origin'),'id':order_id,'record':order})
+                if path.stem!=ticket_key:continue
+                design_file=root/'design-intake'/(ticket_key+'.json')
+                if design_file.is_symlink() or not design_file.is_file():continue
+                if hashlib.sha256(design_file.read_bytes()).hexdigest()!=row.get('design_file_sha256'):continue
+                design=read(design_file)
+                upstream=design.get('upstream',{})
+                if (upstream.get('source_id')!=order_id
+                        or upstream.get('record_sha256')!=digest(order)):continue
+            except (OSError,ValueError,KeyError,AttributeError):continue
+            receipt={'schema':'saeit.factory.work-order-technical-candidate.v1',
+                     'work_order':order_id,'source_order_sha256':digest(order),
+                     'design_request_sha256':row['design_request_sha256'],
+                     'design_file_sha256':row['design_file_sha256'],
+                     'recipe':recipe,'artifact_sha256':actual,
+                     'measured_successful_tests':qa['successful_tests'],
+                     'technical_prototype_verified':True,
+                     'work_order_completed_verified':False,
+                     'quality_1000_certified':False,'commercial_release':False,
+                     'public_distribution_allowed':False}
+            receipts=root/'production-instructions/technical-candidate-receipts'
+            designer.private(receipts)
+            dest=receipts/(order_id+'-'+digest(order)+'.json')
+            if dest.exists() and read(dest)!=receipt:continue
+            designer.save(dest,receipt)
+            linked.append(order_id)
         status={'technical_prototypes':len(set(x['recipe'] for x in rows)),
                 'functional_products':len(set(x['functional_sha256'] for x in rows)),
                 'source_revisions_with_prototype':len(rows),'commercial_release':False,
-                'build50_verified_products':0}
+                'build50_verified_products':0,
+                'native_work_orders_with_source_bound_technical_candidate':len(set(linked)),
+                'native_work_orders_completed_verified_by_reconciliation':0}
         designer.save(area/'production-results.json',status);return status

@@ -147,6 +147,52 @@ class DesignIntakeTests(unittest.TestCase):
         result=intake.cycle(self.root,now=10**12)
         self.assertEqual(result['enqueued'],1)
 
+    def test_real_native_work_order_gets_private_hash_bound_candidate_not_completion(self):
+        ident='WO-00000001'
+        record=self.record('site_need',ident=ident)
+        record.update(id=ident,origin='site-topic-snapshot',phase='engineering_specification',
+                      schema='saeit.factory.production-instructions.v1',
+                      instruction_kind='private_factory_work_order',fingerprint='a'*64,
+                      status='issued',public_distribution_allowed=False)
+        order_file=self.root/'production-instructions/orders'/(ident+'.json')
+        designer.save(order_file,record)
+        self.assertEqual(intake.cycle(self.root)['enqueued'],1)
+        built=designer.cycle(self.root)
+        self.assertEqual(built['new_recipes'],1)
+        recipe=built['actions'][0]['result']['recipe']
+        maker.manufacture(recipe,self.root/'generated-product-recipes',self.root/'digital-products')
+        ticket=next(x for x in (self.root/'engineering-intake').glob('*.json') if len(x.stem)==64)
+        row=json.loads(ticket.read_text())
+        specfile=self.root/'design-intake'/(ticket.stem+'.json')
+        self.assertEqual(hashlib.sha256(specfile.read_bytes()).hexdigest(),row['design_file_sha256'])
+        self.assertEqual(json.loads(specfile.read_text())['upstream']['record_sha256'],intake.digest(record))
+        first=intake.reconcile(self.root)
+        self.assertEqual(first['native_work_orders_with_source_bound_technical_candidate'],1)
+        receipts=list((self.root/'production-instructions/technical-candidate-receipts').glob('*.json'))
+        self.assertEqual(len(receipts),1)
+        receipt=json.loads(receipts[0].read_text())
+        self.assertEqual(receipt['work_order'],ident)
+        self.assertEqual(receipt['source_order_sha256'],intake.digest(record))
+        self.assertGreaterEqual(receipt['measured_successful_tests'],3)
+        self.assertFalse(receipt['work_order_completed_verified'])
+        self.assertFalse(receipt['quality_1000_certified'])
+        self.assertEqual(json.loads(order_file.read_text())['status'],'issued')
+        self.assertEqual(intake.reconcile(self.root)['native_work_orders_with_source_bound_technical_candidate'],1)
+        self.assertEqual(len(list(receipts[0].parent.glob('*.json'))),1)
+        record['instruction']='The upstream work order changed after design was accepted.'
+        designer.save(order_file,record)
+        self.assertEqual(intake.reconcile(self.root)['native_work_orders_with_source_bound_technical_candidate'],0)
+        self.assertEqual(len(list(receipts[0].parent.glob('*.json'))),1)
+
+    def test_generic_order_cannot_be_credited_with_unrelated_internal_product(self):
+        ident='WO-00000002'
+        designer.save(self.root/'production-instructions/orders'/(ident+'.json'),{
+            'id':ident,'origin':'site-topic-snapshot','status':'issued','phase':'engineering_specification',
+            'subject':'Generic unimplemented order','public_distribution_allowed':False})
+        self.assertEqual(intake.cycle(self.root)['enqueued'],0)
+        self.assertEqual(intake.reconcile(self.root)['native_work_orders_with_source_bound_technical_candidate'],0)
+        self.assertFalse((self.root/'production-instructions/technical-candidate-receipts').exists())
+
     def test_research_brief_does_not_bypass_the_existing_evidence_gate(self):
         path=self.root/'research-dossiers/product-1/evidence_manifest.json'
         designer.save(path,{'product_id':1,'engineering_brief':{'schema':intake.SCHEMA,'blueprint':'inventory_coverage'},
