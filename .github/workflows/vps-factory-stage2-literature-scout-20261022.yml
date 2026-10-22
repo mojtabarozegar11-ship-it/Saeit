@@ -59,10 +59,10 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$stage/known" 2>/dev/null
           test "$(ssh-keygen -lf "$stage/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           ssh_vps() {
-            ssh -i "$stage/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$stage/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+            ssh -i "$stage/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$stage/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectionAttempts=3 -o ConnectTimeout=20 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
           }
           ssh_vps 'test "$(id -un)" = githubops && test "$(id -u)" -ne 0 && test -f "$HOME/factory-runtime/operations/production-instructions/stage2-research.py" && echo FACTORY_STAGE2_SCOUT_PREFLIGHT=PASS'
-          remote_stage="/home/githubops/factory-runtime/operations/.stage2-scout-$GITHUB_RUN_ID"
+          remote_stage="/home/githubops/factory-runtime/operations/.stage2-scout-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           ssh_vps "umask 077; test ! -e '$remote_stage'; mkdir -m 700 '$remote_stage'"
           for src in scripts/factory_stage2_literature_scout.py deploy/install_factory_stage2_literature_scout.sh; do
             file="$(basename "$src")"
