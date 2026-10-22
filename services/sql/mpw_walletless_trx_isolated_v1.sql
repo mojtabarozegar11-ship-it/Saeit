@@ -22,3 +22,42 @@ CREATE TABLE IF NOT EXISTS mpw_walletless_trx_reservation_v1 (
     UNIQUE KEY mpw_walletless_verified_tx(network, verified_tx_hash),
     KEY mpw_walletless_pending(status,issued_at)
 ) ENGINE=InnoDB;
+
+
+-- Financial evidence belongs to the same transaction as the invoice status update.
+-- Preproduction-only standalone ledger and entitlement tables; production must
+-- use Django's actual LedgerEntry and CommerceFulfillment, NOT these shadow tables.
+CREATE TABLE IF NOT EXISTS mpw_walletless_trx_receipt_v1 (
+  invoice_id BIGINT UNSIGNED NOT NULL,
+  network VARCHAR(20) NOT NULL,
+  tx_hash CHAR(64) NOT NULL,
+  sender VARCHAR(42) NOT NULL,
+  evidence_sha256 CHAR(64) NOT NULL,
+  confirmed_at DATETIME(6) NOT NULL,
+  PRIMARY KEY(invoice_id),
+  UNIQUE KEY mpw_walletless_global_replay(network,tx_hash),
+  CONSTRAINT mpw_walletless_receipt_invoice_fk FOREIGN KEY (invoice_id)
+    REFERENCES mpw_walletless_trx_reservation_v1(id)
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS mpw_walletless_trx_ledger_v1 (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  invoice_id BIGINT UNSIGNED NOT NULL,
+  amount_usd DECIMAL(18,4) NOT NULL,
+  asset VARCHAR(3) NOT NULL,
+  reference CHAR(64) NOT NULL,
+  PRIMARY KEY(id),
+  UNIQUE KEY mpw_walletless_ledger_per_invoice(invoice_id),
+  UNIQUE KEY mpw_walletless_ledger_per_tx(reference),
+  CONSTRAINT mpw_walletless_ledger_invoice_fk FOREIGN KEY(invoice_id)
+    REFERENCES mpw_walletless_trx_reservation_v1(id)
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS mpw_walletless_trx_entitlement_v1 (
+  invoice_id BIGINT UNSIGNED NOT NULL,
+  customer_id BIGINT UNSIGNED NOT NULL,
+  order_id BIGINT UNSIGNED NOT NULL,
+  granted_at DATETIME(6) NOT NULL,
+  PRIMARY KEY(invoice_id),
+  UNIQUE KEY mpw_walletless_entitlement_per_order(order_id),
+  CONSTRAINT mpw_walletless_entitlement_invoice_fk FOREIGN KEY(invoice_id)
+    REFERENCES mpw_walletless_trx_reservation_v1(id)
+) ENGINE=InnoDB;
