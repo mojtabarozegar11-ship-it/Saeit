@@ -14,6 +14,7 @@ py="$base/.venv/bin/python"
 test -d "$stage" && test ! -L "$stage"
 test -x "$py" && test -f "$app/manage.py"
 test -d "$private" && test -d "$ops/f41-multiproduct/assets"
+test -s "$ops/f41-multiproduct/factory_f41_extension_builders.py"
 test -f "$app/core/management/commands/factory_native_enqueue.py"
 test -x "$master/run-native-qa.sh"
 echo F41_MASTER_INITIAL_PATHS=PASS
@@ -66,11 +67,11 @@ for f in "${changed[@]}" "${added[@]}"; do
 done
 crontab -l > "$backup/cron-before"
 test "$(grep -Fc SAEIT_MASTER_F41_PRIVATE_QUEUE_V1 "$backup/cron-before")" -le 1
-for kind in vesting reconciliation provenance nft_metadata; do
+for kind in vesting reconciliation provenance nft_metadata trc721_collection trc1155_inventory staking_simulator dao_vote escrow_milestones watch_wallet_sdk onchain_indexer chain_analytics royalty_accounting certificate_verifier_api rights_marketplace bridge_risk contract_fuzz security_monitor rwa_eligibility; do
   test -s "$ops/f41-multiproduct/samples/$kind.json"
 done
 install -d -m 700 "$private/orders" "$private/outputs"
-for kind in vesting reconciliation provenance nft_metadata; do
+for kind in vesting reconciliation provenance nft_metadata trc721_collection trc1155_inventory staking_simulator dao_vote escrow_milestones watch_wallet_sdk onchain_indexer chain_analytics royalty_accounting certificate_verifier_api rights_marketplace bridge_risk contract_fuzz security_monitor rwa_eligibility; do
   key="${kind//_/-}"
   target="$private/orders/F41-pilot-$key.json"
   test ! -L "$target"
@@ -134,16 +135,15 @@ assert set(agent.capabilities.filter(active=True).values_list("code",flat=True))
     "factory_native_review","factory_f41_private_build"}
 tasks=list(AgentTask.objects.filter(agent=agent,action_type="factory_f41_private_build",
     input_data__order_id__startswith="F41-pilot-"))
-assert len(tasks)==4 and {t.output_data["kind"] for t in tasks}=={
-    "vesting","reconciliation","provenance","nft_metadata"}
+assert len(tasks)==19 and {t.output_data["kind"] for t in tasks}==set("""vesting reconciliation provenance nft_metadata trc721_collection trc1155_inventory staking_simulator dao_vote escrow_milestones watch_wallet_sdk onchain_indexer chain_analytics royalty_accounting certificate_verifier_api rights_marketplace bridge_risk contract_fuzz security_monitor rwa_eligibility""".split())
 assert all(t.status=="completed" and t.execution_id and
     t.output_data.get("verified_effect") is True and
     t.output_data.get("quality_1000_certified") is False and
     t.output_data.get("commercial_release") is False for t in tasks)
 audits=AuditLog.objects.filter(action="tool_invocation_completed",
     target_type="AgentTask",target_id__in=[str(t.pk) for t in tasks]).count()
-assert audits>=4
-print("F41_MOJ1RO1_AUTHENTIC_TASKS=4")
+assert audits>=19
+print("F41_MOJ1RO1_AUTHENTIC_TASKS=19")
 print("F41_MOJ1RO1_AUDIT_LOGS="+str(audits))
 PY
 # Independent recurring queue scanner; no speculative orders are auto-minted.
