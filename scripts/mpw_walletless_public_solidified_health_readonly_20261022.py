@@ -57,3 +57,23 @@ print('MPW_WALLETLESS_TRON_REAL_PROVIDERS='+json.dumps({
  'native_transfer_dual_receipt_roundtrip_proven':False,
  'finance_mutations':0,
  'public_activation':False},sort_keys=True))
+
+
+# Existing MojPlayWin RPC implementation: inspect function contract without values.
+import inspect,sys
+sys.path.insert(0,str(APP))
+try:
+ from scripts import mojplaywin_native_rpc_clients as existing_rpc
+ fn=getattr(existing_rpc,"tron_solidity_rpc",None)
+ if callable(fn):
+  sig=inspect.signature(fn)
+  print('MPW_TRON_EXISTING_RPC_FUNCTION='+json.dumps({
+    'present':True,'parameter_names_only':list(sig.parameters),
+    'callable_module':'scripts.mojplaywin_native_rpc_clients',
+    'already_proven_as_second_independent_provider':False,
+    'secret_values_printed':False
+  },sort_keys=True))
+ else:
+  print('MPW_TRON_EXISTING_RPC_FUNCTION='+json.dumps({'present':False}))
+except Exception as exc:
+ print('MPW_TRON_EXISTING_RPC_FUNCTION='+json.dumps({'present':False,'error_type':type(exc).__name__}))
