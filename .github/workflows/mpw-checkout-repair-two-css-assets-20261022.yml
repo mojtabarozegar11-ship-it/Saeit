@@ -28,16 +28,24 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json,urllib.request,urllib.error,os
+          import json,urllib.request,urllib.error,os,time
           paths=('/','/store/','/store/product/72/checkout/',
                  '/store/product/225/checkout/','/store/product/879/checkout/',
                  '/farnaz/','/saman/','/picm/')
           data={}
           for p in paths:
-            req=urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache'})
-            try:
-              with urllib.request.urlopen(req,timeout=20) as res: data[p]=res.status
-            except urllib.error.HTTPError as ex:data[p]=ex.code
+            for attempt in range(4):
+              req=urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache'})
+              try:
+                with urllib.request.urlopen(req,timeout=16) as res:data[p]=res.status
+                break
+              except urllib.error.HTTPError as ex:
+                data[p]=ex.code
+                break
+              except (urllib.error.URLError,TimeoutError) as ex:
+                print('MPW_CSS_BASELINE_TLS_RETRY='+p+' attempt '+str(attempt+1))
+                if attempt==3:raise RuntimeError('Baseline inaccessible after four attempts: '+p) from ex
+                time.sleep(2)
           print('MPW_CSS_REPAIR_BEFORE='+json.dumps(data,sort_keys=True))
           if any(v!=200 for v in data.values()):raise RuntimeError('Baseline not healthy; stop without write')
           with open(os.environ['RUNNER_TEMP']+'/mpw-css-before.json','w') as f:json.dump(data,f)
@@ -107,9 +115,9 @@ jobs:
         run: |
           set -euo pipefail
           origin=https://mojplaywin.com/mpw-editorial/revenue/assets
-          curl --fail --silent --show-error --location --max-time 24 --header 'Cache-Control: no-cache' "$origin/mpw-fintech-checkout-v2.css?v=20261021" -o "$RUNNER_TEMP/mpw-fintech-public.css"
+          curl --fail --silent --show-error --location --retry 4 --retry-all-errors --retry-delay 2 --max-time 24 --header 'Cache-Control: no-cache' "$origin/mpw-fintech-checkout-v2.css?v=20261021" -o "$RUNNER_TEMP/mpw-fintech-public.css"
           test "$(sha256sum "$RUNNER_TEMP/mpw-fintech-public.css" | awk '{print $1}')" = '2eaa44985afddd5b840f60d0f1c04a48ab76126f632e167e255592b86847ed47'
-          curl --fail --silent --show-error --location --max-time 24 --header 'Cache-Control: no-cache' "$origin/home-shared-v1.css?v=20261020" -o "$RUNNER_TEMP/mpw-home-public.css"
+          curl --fail --silent --show-error --location --retry 4 --retry-all-errors --retry-delay 2 --max-time 24 --header 'Cache-Control: no-cache' "$origin/home-shared-v1.css?v=20261020" -o "$RUNNER_TEMP/mpw-home-public.css"
           test "$(wc -c < "$RUNNER_TEMP/mpw-home-public.css")" -gt 1500
           grep -Fq 'Exact native CSS extracted' "$RUNNER_TEMP/mpw-home-public.css"
           echo 'MPW_CSS_BOTH_PUBLIC_LINKS=200_VERIFIED'
@@ -117,14 +125,22 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json,urllib.request,urllib.error,os
+          import json,urllib.request,urllib.error,os,time
           with open(os.environ['RUNNER_TEMP']+'/mpw-css-before.json') as f:original=json.load(f)
           now={}
           for p in original:
-            req=urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache'})
-            try:
-              with urllib.request.urlopen(req,timeout=20) as res:now[p]=res.status
-            except urllib.error.HTTPError as ex:now[p]=ex.code
+            for attempt in range(4):
+              req=urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache'})
+              try:
+                with urllib.request.urlopen(req,timeout=16) as res:now[p]=res.status
+                break
+              except urllib.error.HTTPError as ex:
+                now[p]=ex.code
+                break
+              except (urllib.error.URLError,TimeoutError) as ex:
+                print('MPW_CSS_POST_TLS_RETRY='+p+' attempt '+str(attempt+1))
+                if attempt==3:raise RuntimeError('Postrelease inaccessible after four attempts: '+p) from ex
+                time.sleep(2)
           print('MPW_CSS_REPAIR_AFTER='+json.dumps(now,sort_keys=True))
           if now!=original:raise RuntimeError('Site regression, trigger exact CSS rollback')
           print('MPW_CSS_SIBLINGS_UNCHANGED=PASS')
