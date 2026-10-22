@@ -130,6 +130,7 @@ class MainnetSecurityTests(unittest.TestCase):
             raise AssertionError("unapproved TRC20 never calls network")
         result = check.evaluate(i, p, lookup=never, receipt_lookup=never, tokens=set())
         self.assertEqual(result["records"][0]["status"], "TOKEN_CONTRACT_NOT_OPERATOR_APPROVED")
+        self.assertEqual(result["network_lookups_attempted"], 0)
 
     def test_mock_trc20_match_not_live_proof(self):
         i, p = samples(asset="TRC20")
@@ -138,6 +139,7 @@ class MainnetSecurityTests(unittest.TestCase):
                                 tokens={check.tron_hex(TOKEN)})
         self.assertTrue(result["records"][0]["node_payload_matches_invoice"])
         self.assertFalse(result["records"][0]["live_solidified_node_evidence"])
+        self.assertEqual(result["network_lookups_attempted"], 2)
 
     def test_rpc_errors_fail_closed(self):
         i, p = samples()

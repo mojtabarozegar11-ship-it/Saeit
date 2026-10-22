@@ -198,6 +198,7 @@ def evaluate(invoice_blob, payment_blob, lookup=body, receipt_lookup=info, token
         raise ValueError("F41_APPROVED_TOKEN_CONFIG_INVALID")
     simulated = lookup is not body or receipt_lookup is not info
     entries = []
+    calls = 0
     for record in baseline["invoices"]:
         ident = record["invoice_id"]
         inv = inv_map[ident]
@@ -213,12 +214,17 @@ def evaluate(invoice_blob, payment_blob, lookup=body, receipt_lookup=info, token
                 if inv["asset"] == "TRC20" and tron_hex(inv["token_contract"]) not in tokens:
                     status = "TOKEN_CONTRACT_NOT_OPERATOR_APPROVED"
                 else:
+                    calls += 1
                     transaction = lookup(txid)
                     body_digest = checksum(transaction)
                     if inv["asset"] == "TRX":
                         status, matches = check_trx(inv, txid, transaction)
                     else:
-                        receipt = receipt_lookup(txid) if success_body(transaction, txid, "TriggerSmartContract") is None else {}
+                        if success_body(transaction, txid, "TriggerSmartContract") is None:
+                            calls += 1
+                            receipt = receipt_lookup(txid)
+                        else:
+                            receipt = {}
                         receipt_digest = checksum(receipt) if receipt else None
                         status, matches = check_token(inv, txid, transaction, receipt, tron_hex(inv["token_contract"]))
             except (ValueError, OSError, TimeoutError, UnicodeError,
@@ -239,7 +245,8 @@ def evaluate(invoice_blob, payment_blob, lookup=body, receipt_lookup=info, token
         "body_endpoint": BODY_URL, "receipt_endpoint": INFO_URL,
         "input_sha256": {"invoices.csv": hashlib.sha256(invoice_blob).hexdigest(),
                          "payments.csv": hashlib.sha256(payment_blob).hexdigest()},
-        "records": entries, "network_lookups_attempted": len(candidates),
+        "records": entries, "query_candidates": len(candidates),
+        "network_lookups_attempted": calls,
         "live_matched_count": sum(int(x["live_solidified_node_evidence"]) for x in entries),
         "simulation": simulated, "proofs_are_node_responses_not_independent_audits": True,
         "signed_by_owner": False, "customer_delivery_authorized": False,
