@@ -61,3 +61,19 @@ CREATE TABLE IF NOT EXISTS mpw_walletless_trx_entitlement_v1 (
   CONSTRAINT mpw_walletless_entitlement_invoice_fk FOREIGN KEY(invoice_id)
     REFERENCES mpw_walletless_trx_reservation_v1(id)
 ) ENGINE=InnoDB;
+
+
+-- Temporary guest identity proof for the isolated Django test gateway only.
+-- Each guest is mapped to a distinct Django user whose password is unusable.
+-- The raw cookie secret is NEVER stored in MariaDB.
+CREATE TABLE IF NOT EXISTS mpw_walletless_trx_guest_claim_v1 (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  buyer_id BIGINT UNSIGNED NOT NULL,
+  secret_sha256 CHAR(64) NOT NULL,
+  created_at DATETIME(6) NOT NULL,
+  expires_at DATETIME(6) NOT NULL,
+  PRIMARY KEY(id),
+  UNIQUE KEY mpw_walletless_guest_one_buyer(buyer_id),
+  UNIQUE KEY mpw_walletless_guest_one_secret(secret_sha256),
+  KEY mpw_walletless_guest_expiry(expires_at)
+) ENGINE=InnoDB;
