@@ -2,33 +2,32 @@ const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 (async()=>{
  const browser=await chromium.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
- try {
+ try{
   for(const v of [{name:'desktop',width:1365,height:900,mobile:false},{name:'mobile',width:390,height:844,mobile:true}]){
    const context=await browser.newContext({viewport:{width:v.width,height:v.height},isMobile:v.mobile,hasTouch:v.mobile});
    const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push('page: '+e.message));page.on('console',m=>{if(m.type()==='error')errors.push('console: '+m.text())});page.on('requestfailed',r=>errors.push('request: '+r.url()+' '+(r.failure()?.errorText||'')));
    const response=await page.goto(process.env.GAME_URL,{waitUntil:'domcontentloaded',timeout:45000});assert.equal(response.status(),200);
-   await page.locator('#menu h1').waitFor();
-   try{await page.waitForFunction(()=>window.RamadanWarDebug&&Array.isArray(window.RamadanWarDebug.heroes),null,{timeout:10000})}catch(e){
-    const diag=await page.evaluate(()=>({url:location.href,title:document.title,scripts:[...document.scripts].map(x=>({src:x.src,type:x.type,defer:x.defer})),css:[...document.styleSheets].map(x=>x.href),debug:!!window.RamadanWarDebug,ready:document.readyState}));
-    console.error('GAME_RUNTIME_DIAGNOSTIC='+JSON.stringify({diag,errors}));throw e
-   }
+   await page.locator('#home h1').waitFor();
+   await page.waitForFunction(()=>window.RamadanWarDebug&&Array.isArray(window.RamadanWarDebug.heroes),null,{timeout:10000});
    assert.equal(await page.evaluate(()=>window.RamadanWarDebug.heroes.length),30);
-   assert.match(await page.locator('#menu').innerText(),/۳۰/);
+   assert.equal(await page.evaluate(()=>window.RamadanWarDebug.skills.length),6);
    await page.evaluate(()=>window.RamadanWarDebug.selectHero(1));
-   assert.equal(await page.locator('#heroName').innerText(),'حاج قاسم سلیمانی');
+   assert.equal(await page.locator('#heroName').innerText(),'حاج قاسم — قاسم سلیمانی');
    await page.evaluate(()=>window.RamadanWarDebug.selectHero(0));
    await page.evaluate(()=>window.RamadanWarDebug.start());
    await page.locator('#hud:not(.hidden)').waitFor();
-   let state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.hp,100);assert.equal(state.stage,0);assert.equal(state.mode,'play');
-   await page.waitForTimeout(220);
+   await page.evaluate(()=>{for(let i=0;i<30;i++)window.RamadanWarDebug.tick(.04)});
+   let state=await page.evaluate(()=>window.RamadanWarDebug.getState());
+   assert.equal(state.hp,100);assert.equal(state.lives,100);assert.equal(state.stage,0);assert.equal(state.mode,'game');
+   assert.equal(state.rockets,12);assert.equal(state.drones,3);assert(state.enemies>0,'mission enemy spawn');
    await page.evaluate(()=>{window.RamadanWarDebug.fire();window.RamadanWarDebug.rocket();window.RamadanWarDebug.drone()});
-   state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.shots,1);assert(state.rockets<3);assert.equal(state.drones,0);
+   state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.shots,1);assert.equal(state.rockets,11);assert.equal(state.drones,2);
    await page.reload({waitUntil:'domcontentloaded'});
    assert.match(await page.locator('#start').innerText(),/ادامه/);
    await page.locator('#start').click();
-   state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.stage,0);assert(state.rockets<3);assert.equal(state.drones,0);assert.equal(state.mode,'play');
+   state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.stage,0);assert.equal(state.rockets,11);assert.equal(state.drones,2);assert.equal(state.mode,'game');
    assert.equal(errors.length,0,errors.join('\n'));
-   await context.close();console.log('RAMADAN_WEB_'+v.name.toUpperCase()+'_PASS heroes=30 controls=fire+rocket+drone');
+   await context.close();console.log('RAMADAN_WEB_'+v.name.toUpperCase()+'_PASS native_campaign=6 heroes=30 lives=100 weapons=rocket+drone save=resume');
   }
  }finally{await browser.close()}
 })().catch(e=>{console.error(e);process.exit(1)});
