@@ -19,7 +19,7 @@ class Command(BaseCommand):
             return
 
         active = AgentTask.objects.filter(
-            agent=agent, status__in=("queued","running","blocked")
+            agent=agent, status__in=("queued","running")
         ).order_by("created_at").first()
         if active:
             self.stdout.write(
@@ -27,10 +27,18 @@ class Command(BaseCommand):
             )
             return
 
+        blocked = AgentTask.objects.filter(agent=agent, status="blocked").order_by("created_at").first()
+        if blocked:
+            self.stdout.write(
+                f"BRAIN_PENDING_APPROVAL task={blocked.pk} action={blocked.action_type} "
+                "status=blocked; independent business diagnostics may continue"
+            )
+            return
+
         decision = AutonomousBrain().decide()
         chosen = decision["chosen"]
         action = chosen["action"]
-        if action == "continue_existing_work":
+        if action in ("continue_existing_work", "await_owner_or_evidence"):
             self.stdout.write("BRAIN_CONTINUE")
             return
         capability = agent.capabilities.filter(code=action, active=True).first()
