@@ -1,10 +1,11 @@
 name: Real native candidates for six blocked factory lines
 on:
   push:
-    branches: [feature/six-native-candidate-builds-20261022, feature/factory-six-independent-rework-20261022, main]
+    branches: [feature/six-native-candidate-builds-20261022, feature/factory-six-independent-rework-20261022, feature/six-device-and-independent-qa-evidence-20261022, main]
     paths:
       - scripts/factory_six_native_candidates.py
       - scripts/factory_f14_browser_real_smoke.py
+      - scripts/factory_android_emulator_runtime_check.py
       - scripts/factory_six_native_candidate_bundle.py
       - scripts/factory_specialist_formats.py
       - scripts/factory_six_native_independent_rework.py
@@ -157,7 +158,7 @@ jobs:
           bash deploy/factory_six_native_private_relay.sh F17 "$RUNNER_TEMP/bundle-F17"
   f12-f16-real-android-apk:
     runs-on: ubuntu-24.04
-    timeout-minutes: 19
+    timeout-minutes: 42
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
@@ -202,6 +203,26 @@ jobs:
             echo "ANDROID_NATIVE_DEBUG_APK_AAB_VERIFIED=$family"
           done
           echo F12_F16_NATIVE_ANDROID_BINARY_BUILDS=PASS
+      - name: Enable accelerated KVM for real Android 35 emulator
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          test -r /dev/kvm && test -w /dev/kvm
+          python3 -B -m pip install --disable-pip-version-check Pillow==11.3.0
+      - name: Install, launch, interact, and screenshot both REAL APKs on Android API 35 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            python3 -B scripts/factory_android_emulator_runtime_check.py --family F12 --apk "$RUNNER_TEMP/real-f12/android/app/build/outputs/apk/debug/app-debug.apk" --out "$RUNNER_TEMP/real-f12/emulator-check"
+            python3 -B scripts/factory_android_emulator_runtime_check.py --family F16 --apk "$RUNNER_TEMP/real-f16/android/app/build/outputs/apk/debug/app-debug.apk" --out "$RUNNER_TEMP/real-f16/emulator-check"
       - name: Package and independently verify Android debug binaries
         run: |
           set -euo pipefail
@@ -209,7 +230,7 @@ jobs:
             family="F$id"
             root="$RUNNER_TEMP/real-f$id"
             project="$root/android"
-            python3 -B scripts/factory_six_native_candidate_bundle.py --family "$family" --out "$RUNNER_TEMP/bundle-$family" --checks "real Gradle debug APK AAB signed APK and asset integrity" --file "$project/app/build/outputs/apk/debug/app-debug.apk" --file "$project/app/build/outputs/bundle/debug/app-debug.aab" --file "$root/preparation-receipt.json"
+            python3 -B scripts/factory_six_native_candidate_bundle.py --family "$family" --out "$RUNNER_TEMP/bundle-$family" --checks "Real Gradle APK AAB; API35 emulator app installation, launch, touch, swipe, alive, screenshot and no fatal crash" --file "$project/app/build/outputs/apk/debug/app-debug.apk" --file "$project/app/build/outputs/bundle/debug/app-debug.aab" --file "$root/preparation-receipt.json" --file "$root/emulator-check/emulator-proof.json" --file "$root/emulator-check/emulator-screen.png"
             python3 -B scripts/factory_six_native_candidate_bundle.py --family "$family" --out "$RUNNER_TEMP/bundle-$family" --verify
           done
       - name: Privately stage two Android debug builds on pinned VPS
