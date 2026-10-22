@@ -1,0 +1,130 @@
+name: MojPlayWin mobile wallet single-template guarded live repair
+on:
+  push:
+    branches: [fix/mpw-native-gateway-20261022]
+    paths:
+      - .github/workflows/mpw-wallet-mobile-live-release-20261022.yml
+      - scripts/mpw_wallet_mobile_markup_audit_20261022.py
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Compile the read-only probe
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_buyer_checkout_contract_readonly.py
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-gateway100-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Compile guard and run fail-closed local contract test
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_wallet_mobile_safe_repair_20261022.py
+          python3 scripts/mpw_wallet_mobile_safe_repair_20261022.py selftest
+      - name: Render all four affected products with strict CSP before any changes
+        run: |
+          set -euo pipefail
+          timeout 110s ssh -T -F "$RUNNER_TEMP/mpw-gateway100-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - preview" < scripts/mpw_wallet_mobile_safe_repair_20261022.py
+      - name: Syntax-check wallet JavaScript with Node.js in isolated runner
+        run: |
+          set -euo pipefail
+          timeout 110s ssh -T -F "$RUNNER_TEMP/mpw-gateway100-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - emit_js" < scripts/mpw_wallet_mobile_safe_repair_20261022.py > "$RUNNER_TEMP/mpw-mobile-wallet.js"
+          node --check "$RUNNER_TEMP/mpw-mobile-wallet.js"
+          rm -f "$RUNNER_TEMP/mpw-mobile-wallet.js"
+          echo "MPW_MOBILE_WALLET_NODE_SYNTAX=PASS"
+      - name: Publish only the reviewed live mobile checkout template
+        id: install
+        run: |
+          set -euo pipefail
+          timeout 110s ssh -T -F "$RUNNER_TEMP/mpw-gateway100-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - publish '$GITHUB_RUN_ID'" < scripts/mpw_wallet_mobile_safe_repair_20261022.py
+      - name: Verify backed-up, hashed live template and all four Django checkout pages
+        run: |
+          set -euo pipefail
+          timeout 110s ssh -T -F "$RUNNER_TEMP/mpw-gateway100-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify '$GITHUB_RUN_ID'" < scripts/mpw_wallet_mobile_safe_repair_20261022.py
+      - name: Restart only MojPlayWin Passenger application
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/mpw-gateway100-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          site=Path('/home/zomorod2/mojplaywin.com')
+          if site.is_symlink() or not site.is_dir():raise RuntimeError('Unexpected site root')
+          wsgi=site/'passenger_wsgi.py'
+          if wsgi.is_symlink() or "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):raise RuntimeError('Unexpected Passenger target')
+          folder=site/'tmp'
+          if folder.is_symlink():raise RuntimeError('Unsafe restart directory')
+          folder.mkdir(exist_ok=True)
+          (folder/'restart.txt').touch()
+          print('MPW_WALLET_PASSENGER_RESTART_REQUESTED=PASS')
+          PY
+      - name: Public storefront and checkout GET health with zero test orders
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,urllib.error,urllib.parse,json
+          checks=[]
+          for path in ['/store/','/accounts/login/','/commerce/book/779/','/store/product/72/checkout/','/store/product/225/checkout/','/store/product/779/checkout/','/store/product/879/checkout/']:
+            try:
+              with urllib.request.urlopen(urllib.request.Request('https://mojplaywin.com'+path,headers={'Cache-Control':'no-cache'}),timeout=25) as resp:
+                status=resp.status;host=urllib.parse.urlparse(resp.geturl()).netloc
+            except urllib.error.HTTPError as e:
+              status=e.code;host='mojplaywin.com'
+            if status!=200 or host not in ('mojplaywin.com','www.mojplaywin.com'):
+              raise RuntimeError('Checkout public GET regression: '+path+' status='+str(status))
+            checks.append({'path':path,'status':status})
+          print('MPW_WALLET_MOBILE_PUBLIC_GET='+json.dumps(checks))
+          print('MPW_WALLET_MOBILE_REAL_PAYMENT_ATTEMPTED=NO')
+          PY
+      - name: Restore original template if any release verification fails
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          set -euo pipefail
+          timeout 110s ssh -T -F "$RUNNER_TEMP/mpw-gateway100-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'" < scripts/mpw_wallet_mobile_safe_repair_20261022.py
+          ssh -T -F "$RUNNER_TEMP/mpw-gateway100-ssh/config" saeit-cpanel "touch /home/zomorod2/mojplaywin.com/tmp/restart.txt"
+      - name: Remove private SSH relay material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-gateway100-ssh"
