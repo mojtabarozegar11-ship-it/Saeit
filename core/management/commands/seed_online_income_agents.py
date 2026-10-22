@@ -6,6 +6,7 @@ from core.models import Agent, AgentCapability
 
 CAPABILITIES = [
     ("factory_native_review", "Factory native evidence review", "Reopen independently reviewed private native build receipts and queue verified specialist/device gaps. No commercial release.", "low"),
+    ("factory_f41_private_build", "F41 private blockchain utility build", "Build only bounded vetted F41 orders in the private warehouse; no wallets, network, sales or public deployment.", "low"),
     ("income_market_research", "Income market research", "Research legal online markets, demand, competitors and payment feasibility.", "low"),
     ("income_opportunity_score", "Income opportunity scoring", "Score opportunities by startup cost, time-to-revenue, margin, scalability, risk and automation potential.", "low"),
     ("income_offer_design", "Offer design", "Design measurable online service, digital product, SaaS, education, content, affiliate or commerce offers.", "medium"),
@@ -21,10 +22,10 @@ MASTER_AGENT = (
     "Build the project, remove blockers, create market-ready assets, commercialize them, and increase verified revenue.",
 )
 
-ASSIGNMENTS = [code for code, *_ in CAPABILITIES if code != "factory_native_review"]
+ASSIGNMENTS = [code for code, *_ in CAPABILITIES if code not in ("factory_native_review", "factory_f41_private_build")]
 
 FACTORY_AGENT = ("moj_1ro_1","MOJ Factory Orchestrator",
-    "Route six evidence-bound native product specialist and device tests without commercial release.")
+    "Route verified F41 private work orders and six native specialist tests without commercial release.")
 
 
 class Command(BaseCommand):
@@ -52,7 +53,7 @@ class Command(BaseCommand):
             code=code, defaults={"name": name,"mission": mission,
                                  "risk_level":"low","active":True})
         # Never grant payment, trading, deployment, or other financial tools.
-        factory.capabilities.set([capabilities["factory_native_review"]])
+        factory.capabilities.set([capabilities["factory_native_review"], capabilities["factory_f41_private_build"]])
 
         # The runtime has one operational economic agent. Legacy split income agents
         # are retained only as historical records and must never receive new work.

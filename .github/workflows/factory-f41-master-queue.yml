@@ -1,0 +1,89 @@
+name: F41 authenticated moj_1ro_1 private order queue
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - core/factory_f41_gateway.py
+      - core/economic_tool_pack.py
+      - core/management/commands/factory_f41_enqueue.py
+      - core/management/commands/seed_online_income_agents.py
+      - core/management/commands/factory_native_enqueue.py
+      - core/tests/test_factory_f41_master_bridge.py
+      - deploy/install_factory_f41_master_bridge.sh
+      - deploy/f41_master_queue_runner.sh
+      - .github/workflows/factory-f41-master-queue.yml
+  push:
+    branches: [main, feature/f41-master-queue-20261022]
+    paths:
+      - core/factory_f41_gateway.py
+      - core/economic_tool_pack.py
+      - core/management/commands/factory_f41_enqueue.py
+      - core/management/commands/seed_online_income_agents.py
+      - core/management/commands/factory_native_enqueue.py
+      - core/tests/test_factory_f41_master_bridge.py
+      - deploy/install_factory_f41_master_bridge.sh
+      - deploy/f41_master_queue_runner.sh
+      - .github/workflows/factory-f41-master-queue.yml
+permissions: {contents: read}
+concurrency:
+  group: f41-master-queue-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  private-quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Validate bridge sources and bounded runtime tests
+        env:
+          SECRET_KEY: ci-secret-key
+          DEBUG: 'False'
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_f41_master_bridge.sh
+          bash -n deploy/f41_master_queue_runner.sh
+          python -m compileall -q core/factory_f41_gateway.py core/management/commands/factory_f41_enqueue.py
+          pip install -r requirements.txt
+          pytest -q core/tests/test_factory_f41_master_bridge.py core/tests/test_factory_native_master_bridge.py
+  private-vps-install:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [private-quality]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false, fetch-depth: 0}
+      - name: Authenticated F41 queue registration and private master pilot
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          work="$(mktemp -d)"
+          chmod 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          opts=(-i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10)
+          host=githubops@178.239.147.150
+          stage="/home/githubops/factory-runtime/operations/.f41-master-stage-$GITHUB_RUN_ID"
+          ssh -T "${opts[@]}" "$host" "umask 077; mkdir -m 700 '$stage' '$stage/new' '$stage/old' '$stage/new/core' '$stage/new/core/management' '$stage/new/core/management/commands' '$stage/old/core' '$stage/old/core/management' '$stage/old/core/management/commands'"
+          for name in core/economic_tool_pack.py core/management/commands/seed_online_income_agents.py core/management/commands/factory_native_enqueue.py; do
+            mkdir -p "$work/old/$(dirname "$name")"
+            git show "457568c5e49fd8e7c15dc1307d4e68eaff4038b6:$name" > "$work/old/$name"
+            scp "${opts[@]}" "$work/old/$name" "$host:$stage/old/$name"
+          done
+          for name in core/economic_tool_pack.py core/management/commands/seed_online_income_agents.py core/management/commands/factory_native_enqueue.py core/factory_f41_gateway.py core/management/commands/factory_f41_enqueue.py; do
+            scp "${opts[@]}" "$name" "$host:$stage/new/$name"
+          done
+          scp "${opts[@]}" deploy/install_factory_f41_master_bridge.sh "$host:$stage/install.sh"
+          scp "${opts[@]}" deploy/f41_master_queue_runner.sh "$host:$stage/runner.sh"
+          ssh -T "${opts[@]}" "$host" "bash -n '$stage/install.sh' && bash '$stage/install.sh' '$stage'"

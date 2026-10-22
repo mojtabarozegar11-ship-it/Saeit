@@ -65,7 +65,7 @@ class Command(BaseCommand):
                 code="moj_1ro_1",active=True).first()
             if not master:
                 raise CommandError("BRIDGE_VERIFIED_DJANGO_MOJ1RO1_INACTIVE")
-            if set(master.capabilities.filter(active=True).values_list("code",flat=True))!={ACTION}:
+            if set(master.capabilities.filter(active=True).values_list("code",flat=True))!={ACTION,"factory_f41_private_build"}:
                 raise CommandError("BRIDGE_FACTORY_AGENT_UNEXPECTED_PRIVILEGES")
             capability=master.capabilities.filter(code=ACTION,active=True).first()
             if not capability or capability.risk_level!="low":

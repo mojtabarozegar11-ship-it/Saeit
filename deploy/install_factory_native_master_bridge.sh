@@ -95,7 +95,7 @@ proof=snapshot(root,run)
 master=Agent.objects.get(code="moj_1ro_1",active=True)
 economic=Agent.objects.get(code="economic-master-agent",active=True)
 assert not economic.capabilities.filter(code="factory_native_review",active=True).exists()
-assert set(master.capabilities.filter(active=True).values_list("code",flat=True))=={"factory_native_review"}
+assert set(master.capabilities.filter(active=True).values_list("code",flat=True))=={"factory_native_review","factory_f41_private_build"}
 assert master.capabilities.filter(code="factory_native_review",active=True,risk_level="low").count()==1
 tasks=list(AgentTask.objects.filter(agent=master,action_type="factory_native_review",
            input_data__source_run=run).order_by("pk"))

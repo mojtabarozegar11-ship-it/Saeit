@@ -72,7 +72,7 @@ from core.models import Agent,AgentTask,AuditLog
 from core.factory_native_review_gateway import snapshot,digest
 run=sys.argv[1];root=Path(sys.argv[2]);data=snapshot(root,run)
 agent=Agent.objects.get(code="moj_1ro_1",active=True)
-assert set(agent.capabilities.filter(active=True).values_list("code",flat=True))=={"factory_native_review"}
+assert set(agent.capabilities.filter(active=True).values_list("code",flat=True))=={"factory_native_review","factory_f41_private_build"}
 tasks=list(AgentTask.objects.filter(agent=agent,action_type="factory_native_review",
             input_data__source_run=run).order_by("pk"))
 assert len(tasks)==6 and {t.input_data["family"] for t in tasks}=={
