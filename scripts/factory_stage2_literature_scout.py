@@ -231,12 +231,23 @@ def select_papers(results,topic_keys,worker):
     return distinct
 
 
+def registrable_host(host):
+    # Conservative offline eTLD grouping: never mistake many subdomains
+    # under one institutional publisher for independent domains.
+    parts=host.lower().removeprefix("www.").split(".")
+    suffix3={("co","uk"),("ac","uk"),("org","uk"),("gov","uk"),
+             ("edu","au"),("com","au"),("co","nz"),("com","br")}
+    if len(parts)>2 and tuple(parts[-2:]) in suffix3:
+        return ".".join(parts[-3:])
+    return ".".join(parts[-2:])
+
+
 def diverse_five(papers):
     chosen=[]
     domains=set()
     publishers=set()
     for paper in papers:
-        domain=paper["host"].removeprefix("www.")
+        domain=registrable_host(paper["host"])
         publisher=paper["publisher"].lower()
         if domain in domains or publisher in publishers:
             continue
@@ -251,7 +262,7 @@ def diverse_five(papers):
         if paper not in chosen:
             chosen.append(paper)
     if (len(chosen)!=5 or
-            len(set(p["host"].removeprefix("www.") for p in chosen))<3 or
+            len(set(registrable_host(p["host"]) for p in chosen))<3 or
             len(set(p["publisher"].lower() for p in chosen))<3):
         return []
     return chosen
@@ -358,8 +369,12 @@ def request_json(endpoint,parameters,timeout=10):
 
 
 def fetch_openalex(title):
+    # A narrowly worded topic may have no exact scientific article title;
+    # retry with its meaningful subject terms, but never bypass the
+    # independently checked relevance/abstract/source-diversity gates.
+    subject=" ".join(keys(title)[:4]) or title
     data=request_json(SAFE_KEYS["openalex"],{
-        "search.title_and_abstract":title,
+        "search":subject,
         "per_page":40,
         "select":"id,display_name,doi,publication_year,type,is_retracted,abstract_inverted_index,primary_location,cited_by_count"
     },timeout=12)
