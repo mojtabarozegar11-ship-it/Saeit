@@ -24,7 +24,13 @@ def main():
         raise RuntimeError("Expected evidence-policy smoke tests are missing")
     for test in tests:
         test()
-    print(f"BUSINESS_OS_PRIVATE_STAGE_OK ast_files={len(paths)} policy_tests={len(tests)}")
+    factory_namespace = runpy.run_path(str(root / "tests" / "test_business_os_vps_factory_source.py"))
+    factory_tests = [value for name, value in factory_namespace.items() if name.startswith("test_")]
+    if len(factory_tests) < 3:
+        raise RuntimeError("Expected factory observer source tests are missing")
+    for test in factory_tests:
+        test()
+    print(f"BUSINESS_OS_PRIVATE_STAGE_OK ast_files={len(paths)} policy_tests={len(tests) + len(factory_tests)}")
 
 
 if __name__ == "__main__":
