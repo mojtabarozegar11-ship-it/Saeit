@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Check Android-parity web client and scoped updater
+      - name: Check the release marker, Android-parity client and scoped updater
         run: |
           set -euo pipefail
           test -s games/ramadan-war/index.html
