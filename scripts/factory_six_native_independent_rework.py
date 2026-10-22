@@ -123,6 +123,23 @@ def review_family(directory, family, aggregate):
                     raise RuntimeError("REVIEW_ANDROID_REQUIRED_BUILD_OUTPUT_MISSING")
         checked=["real_native_android_apk_aab_bytes","asset_and_dex_integrity",
                  "runner_debug_signature_assertion_in_source_receipt"]
+        if "android-real-interactive-proof.json" in files:
+            proof=json.loads(files["android-real-interactive-proof.json"].decode("utf8"))
+            target=next((r for r in proof.get("families",[])
+                         if r.get("family")==family),None)
+            apk=next(blob for name,blob in files.items() if name.endswith(".apk"))
+            if (proof.get("schema")!="saeit.factory.native-android-emulator-interactive.v1"
+                    or proof.get("environment")!="actual_android_emulator"
+                    or proof.get("native_emulator_install_ui_interaction_verified") is not True
+                    or proof.get("physical_device_tested") is not False
+                    or proof.get("independent_human_specialist_review") is not False
+                    or proof.get("quality_1000_certified") is not False
+                    or proof.get("public_release") is not False
+                    or not isinstance(target,dict)
+                    or target.get("apk_sha256")!=sha(apk)
+                    or len(target.get("checks",[]))<5):
+                raise RuntimeError("REVIEW_ANDROID_EMULATOR_INTEGRITY_FAILED")
+            checked.append("actual_android_emulator_gameplay_or_persistent_inventory_qa")
     elif family in ("F13","F17"):
         exe=[blob for name,blob in files.items() if name.lower().endswith(".exe")]
         if len(exe)!=1 or len(exe[0])<30000 or exe[0][:2]!=b"MZ":
