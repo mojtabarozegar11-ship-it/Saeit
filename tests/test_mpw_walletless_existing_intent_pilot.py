@@ -18,7 +18,7 @@ from services.mpw_walletless_django_test_bridge import TrustedNodePair
 from services.mpw_walletless_existing_intent_pilot import (
     PROVIDER, WAITING, _decode, _encode, _key,
     reserve_existing_test_intent, settle_existing_test_intent,
-    existing_test_buyer_status,
+    existing_test_buyer_status, open_existing_test_paid_file,
 )
 
 from tests import test_mpw_walletless_real_django_orm_e2e as fixture
@@ -156,6 +156,19 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
         PaymentWebhookEvent.objects.filter(payment_intent_id=pk).delete()
         self.assertFalse(existing_test_buyer_status(pk,42)["can_download"])
         self.assertEqual(fixture.Order.objects.get(pk=self.order_id).status,"paid")
+
+    def test_download_opens_actual_private_file_only_after_paid_receipt(self):
+        pk,_,_=self.reserve()
+        with self.assertRaises(PaymentHold):
+            open_existing_test_paid_file(pk,42)
+        settle_existing_test_intent(pk,fixture.TX_HASH,self.pair())
+        with self.assertRaises(PaymentHold):
+            open_existing_test_paid_file(pk,43)
+        with open_existing_test_paid_file(pk,42) as delivered:
+            self.assertEqual(delivered.read(),b"PK\x03\x04minimal-test-only-artifact")
+        PaymentWebhookEvent.objects.filter(payment_intent_id=pk).delete()
+        with self.assertRaises(PaymentHold):
+            open_existing_test_paid_file(pk,42)
 
     def test_same_mainnet_hash_cannot_grant_to_second_order(self):
         first,_,_=self.reserve()
