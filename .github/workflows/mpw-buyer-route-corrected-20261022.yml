@@ -4,6 +4,7 @@ on:
     branches: [fix/mpw-native-gateway-20261022]
     paths:
       - .github/workflows/mpw-buyer-route-corrected-20261022.yml
+      - scripts/mpw_wallet_mobile_markup_audit_20261022.py
   workflow_dispatch:
 permissions: {contents: read}
 jobs:
