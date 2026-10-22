@@ -190,12 +190,25 @@ try {
   }
   const distributorHex = String(await token.distributor().call());
   const distributorAddress = tronWeb.address.fromHex(distributorHex);
-  const [escrowed, governanceOnChain] = await Promise.all([
+  // MojGenesisDistributor is CREATEd inside the MojCoin constructor. Its
+  // ABI is not automatically published in Shasta getcontract, so attach the
+  // compiled local ABI explicitly for read-only verification.
+  const genesisArtifact = JSON.parse(await readFile(
+    new URL('../build/contracts/MojGenesisDistributor.json', import.meta.url), 'utf8'));
+  if (genesisArtifact.contractName !== 'MojGenesisDistributor' ||
+      !genesisArtifact.abi?.some(x => x.type === 'function' && x.name === 'governance') ||
+      !genesisArtifact.abi?.some(x => x.type === 'function' && x.name === 'distributed')) {
+    throw new Error('Missing compiled genesis ABI; do not deploy NFT');
+  }
+  const distributor = tronWeb.contract(genesisArtifact.abi, distributorAddress);
+  const [escrowed, governanceOnChain, distributed] = await Promise.all([
     token.balanceOf(distributorAddress).call(),
-    tronWeb.contract().at(distributorAddress).then(x => x.governance().call())
+    distributor.governance().call(),
+    distributor.distributed().call()
   ]);
   if (BigInt(escrowed.toString()) !== BigInt(supply.toString()) ||
-      tronWeb.address.fromHex(String(governanceOnChain)) !== governance) {
+      tronWeb.address.fromHex(String(governanceOnChain)) !== governance ||
+      String(distributed) !== 'false') {
     throw new Error('Genesis escrow/governance verification failed; do not deploy NFT');
   }
 
