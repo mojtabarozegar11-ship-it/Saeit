@@ -111,6 +111,17 @@ def check():
         'MPW_TRON_RPC_PRIMARY_API_KEY', 'MPW_TRON_RPC_SECONDARY_API_KEY',
     )
     configured_cred_count = sum(bool(os.environ.get(k)) for k in possible_cred_names)
+    dual_rpc_required = (
+        'MPW_TRON_RPC_A_SOURCE_ID', 'MPW_TRON_RPC_A_OPERATOR_ID',
+        'MPW_TRON_RPC_A_ENDPOINT', 'MPW_TRON_RPC_A_API_KEY',
+        'MPW_TRON_RPC_A_AUTH_HEADER', 'MPW_TRON_RPC_B_SOURCE_ID',
+        'MPW_TRON_RPC_B_OPERATOR_ID', 'MPW_TRON_RPC_B_ENDPOINT',
+        'MPW_TRON_RPC_B_API_KEY', 'MPW_TRON_RPC_B_AUTH_HEADER',
+    )
+    dual_rpc_canary = (
+        'MPW_TRON_RPC_CANARY_TXID', 'MPW_TRON_RPC_CANARY_SENDER',
+        'MPW_TRON_RPC_CANARY_RECEIVER', 'MPW_TRON_RPC_CANARY_AMOUNT_SUN',
+    )
     return {
         'probe': 'READ_ONLY_GATEWAY_STAGING_CONTRACT',
         'db_backend_mysql': connection.vendor == 'mysql',
@@ -168,6 +179,9 @@ def check():
         )),
         'checkout_django_handler_found': bool(checkout_module),
         'merchant_rpc_credential_candidates_present': configured_cred_count,
+        'dual_rpc_config_fields_all_present': all(bool(os.environ.get(k)) for k in dual_rpc_required),
+        'dual_rpc_canary_fields_all_present': all(bool(os.environ.get(k)) for k in dual_rpc_canary),
+        'dual_rpc_independence_reviewed': os.environ.get('MPW_TRON_RPC_INDEPENDENCE_REVIEWED') == '1',
         'feature_flag_public_walletless': bool(getattr(settings,
             'MPW_WALLETLESS_TRX_PUBLIC_ENABLED', False)),
         'feature_flag_test_adapter': bool(getattr(settings,
