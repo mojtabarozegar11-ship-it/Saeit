@@ -191,6 +191,26 @@ def is_owner_agri_p0(item):
             and item.get("priority")=="P0"
             and re.fullmatch(r"AGRI-[0-9]{3}",str(item.get("source_product_id",""))) is not None)
 
+def stage1_handed_off(area, item):
+    """Only a matching stage-1 receipt frees intake quota, not downstream QA.
+
+    This deliberately never probes stage 2's progress, capacity or availability.
+    """
+    name = item["id"] + "--r001.json"
+    receipt = area / "stage-01" / "receipts" / name
+    if not receipt.exists():
+        return False
+    doc = read_json(receipt, max_bytes=20_000)
+    if (doc.get("schema") != "saeit.factory.stage-handoff.v1"
+            or doc.get("order_id") != item["id"]
+            or doc.get("revision") != 1
+            or doc.get("stage_1_completed") is not True
+            or doc.get("source_order_sha256") != checksum(item)
+            or not HASH_RE.fullmatch(str(doc.get("stage_2_packet_sha256", "")))):
+        raise RuntimeError("ORDERS_STAGE1_RECEIPT_MISMATCH:" + name)
+    return True
+
+
 def generate(root,max_backlog=MAX_BACKLOG):
     root=Path(root).expanduser().resolve()
     if not root.is_dir() or root.is_symlink():raise RuntimeError("ORDERS_FACTORY_ROOT_MISSING")
@@ -211,11 +231,15 @@ def generate(root,max_backlog=MAX_BACKLOG):
         # Do not let 300 blocked research tasks starve genuinely distinct
         # product specifications. Each lane has its own bounded quota.
         # Unknown and unsourced work counts against the manufacturing lane.
-        pending=[x for x in old if x["status"]!="completed_verified"]
+        # Intake quota belongs to stage 1 alone. Once an order has a valid
+        # handoff receipt (or is already in a downstream/rework state), it
+        # CANNOT continue consuming stage-1 capacity.
+        pending=[x for x in old if x["status"]=="issued" and not stage1_handed_off(area,x)]
         research_pending=sum(consumes_research_capacity(x) for x in pending)
         owner_p0_pending=sum(is_owner_agri_p0(x) for x in pending)
         manufacturing_pending=len(pending)-research_pending-owner_p0_pending
         active=len(pending)
+        downstream_count=len(old)-sum(x["status"]=="completed_verified" for x in old)-active
         # Source-originated engineering briefs take priority over speculative
         # backlog tasks. Fingerprints still enforce exactly-once issuance.
         candidates=local_input_tasks(root)+local_research_tasks(root)
@@ -254,6 +278,9 @@ def generate(root,max_backlog=MAX_BACKLOG):
         report={"schema":SCHEMA,"last_scan_utc":stamp(),"last_action":action,
                 "last_order":order_id,"instructions_issued_total":len(old)+int(bool(selected)),
                 "pending_instructions":active,
+                "pending_stage1_instructions":active,
+                "pending_downstream_or_rework_instructions":downstream_count,
+                "stage1_capacity_independent_of_stage2":True,
                 "pending_research_instructions":research_pending,
                 "pending_manufacturing_instructions":manufacturing_pending,
                 "pending_owner_agri_p0_instructions":owner_p0_pending,
