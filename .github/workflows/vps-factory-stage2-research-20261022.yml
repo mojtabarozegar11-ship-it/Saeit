@@ -1,0 +1,96 @@
+name: Independent stage-two source-grounded research on VPS
+on:
+  pull_request:
+    paths:
+      - scripts/factory_stage2_research.py
+      - docs/agri_p0_stage2_curated_research_sources_20261022.json
+      - tests/test_factory_stage2_research.py
+      - deploy/install_factory_stage2_research.sh
+      - .github/workflows/vps-factory-stage2-research-20261022.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_stage2_research.py
+      - docs/agri_p0_stage2_curated_research_sources_20261022.json
+      - tests/test_factory_stage2_research.py
+      - deploy/install_factory_stage2_research.sh
+      - .github/workflows/vps-factory-stage2-research-20261022.yml
+permissions:
+  contents: read
+concurrency:
+  group: factory-stage2-research-vps
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate independent evidence-based stage two and genuine later-stage return routing
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_stage2_research.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_stage1_handoff.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_agri200_p0_intake.py -v
+          bash -n deploy/install_factory_stage2_research.sh
+          python3 -B -m py_compile scripts/factory_stage2_research.py
+  private-vps-install:
+    needs: validate
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-factory-stage2-p0-20261022]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Add independent research agent to existing VPS, without touching live sites
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          stage="$RUNNER_TEMP/stage2-vps"
+          install -d -m 700 "$stage"
+          trap 'rm -rf -- "$stage"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$stage/key"
+          chmod 600 "$stage/key"
+          ssh-keygen -y -P "" -f "$stage/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$stage/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$stage/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh_vps() {
+            ssh -i "$stage/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$stage/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          ssh_vps 'test "$(id -un)" = githubops && test "$(id -u)" -ne 0 && test -d "$HOME/factory-runtime/private/autonomous-product-cycle/production-instructions/stage-02/inbox" && echo FACTORY_STAGE2_PREFLIGHT=PASS'
+          remote_stage="/home/githubops/factory-runtime/operations/.stage2-research-$GITHUB_RUN_ID"
+          ssh_vps "umask 077; test ! -e '$remote_stage'; mkdir -m 700 '$remote_stage'"
+          for src in scripts/factory_stage2_research.py docs/agri_p0_stage2_curated_research_sources_20261022.json deploy/install_factory_stage2_research.sh; do
+            file="$(basename "$src")"
+            cat "$src" | ssh_vps "umask 077; test ! -e '$remote_stage/$file'; cat > '$remote_stage/$file'; chmod 600 '$remote_stage/$file'"
+            digest="$(sha256sum "$src" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$remote_stage/$file' | awk '{print \$1}')\" = '$digest'"
+          done
+          ssh_vps "bash -n '$remote_stage/install_factory_stage2_research.sh' && bash '$remote_stage/install_factory_stage2_research.sh' '$remote_stage/factory_stage2_research.py' '$remote_stage/agri_p0_stage2_curated_research_sources_20261022.json'"
+          ssh_vps 'python3 -' <<'PY'
+          import json
+          from pathlib import Path
+          p=Path.home()/"factory-runtime/private/autonomous-product-cycle/production-instructions"
+          i=json.loads((p/"owner-agri200-p0-index.json").read_text())
+          assert len(i["order_ids_ranked"])==200
+          for x in i["order_ids_ranked"][:3]:
+              name=x+"--r001.json"
+              research=json.loads((p/"stage-02/completed-dossiers"/name).read_text())
+              packet=json.loads((p/"stage-03/inbox"/name).read_text())
+              receipt=json.loads((p/"stage-02/receipts"/name).read_text())
+              assert research["stage2_documentation_complete"] is True
+              assert research["independent_scientific_review"] is False
+              assert research["external_source_live_recheck"] is False
+              assert packet["stage_3_status"]=="received_pending_design"
+              assert packet["quality1000_approved"] is False and packet["public_distribution_allowed"] is False
+              assert receipt["stage_2_completed"] is True
+          print("FACTORY_STAGE2_REAL_P0_RESEARCH_HANDOFFS=3")
+          print("FACTORY_STAGE2_STAGE3_SOURCE_LINKED_PACKETS=3")
+          print("FACTORY_STAGE2_QA1000_CERTIFIED=0")
+          print("FACTORY_LIVE_SITES_CHANGED=false")
+          PY
