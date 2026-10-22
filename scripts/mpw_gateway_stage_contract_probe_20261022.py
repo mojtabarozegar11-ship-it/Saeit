@@ -90,6 +90,13 @@ def check():
             'explicit_unique_constraints': [list(c.fields)
                 for c in model._meta.constraints if isinstance(c,UniqueConstraint)],
             'indexed_fields': [f.name for f in model._meta.fields if f.db_index],
+            'nullable_business_fields': {f.name: bool(f.null) for f in model._meta.fields
+                if f.name in ('expected_sender','sender_challenge','sender_challenge_id',
+                    'sender_signature_verified_at','verified_sender_address',
+                    'payment_intent','recipient','amount_atomic','invoice',
+                    'tx_hash','reference','metadata','provider_reference')},
+            'status_values': list(dict(model._meta.get_field('status').choices).keys())
+                if any(f.name=='status' for f in model._meta.fields) else [],
         }
 
     try:
