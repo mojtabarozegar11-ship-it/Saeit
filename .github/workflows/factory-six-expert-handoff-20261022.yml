@@ -1,0 +1,22 @@
+name: Six specialist evidence packet preflight
+on:
+  push:
+    branches: [feature/six-specialist-evidence-handoff-20261022]
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Verify all 6 specialist handoff receipts and refuse forged approvals
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_factory_six_specialist_evidence_handoff.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_factory_six_native_independent_rework.py' -v
+          python3 -B -m py_compile scripts/factory_six_specialist_evidence_handoff.py
+          echo SIX_EXPERT_HANDOFF_NO_FALSE_APPROVALS=PASS
