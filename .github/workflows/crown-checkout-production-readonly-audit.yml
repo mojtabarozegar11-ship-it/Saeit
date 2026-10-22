@@ -30,6 +30,7 @@ jobs:
           print('CROWN_PUBLIC_PRODUCTS='+str(len(items)))
           print('CROWN_PUBLIC_PAYABLE_ITEMS='+str(sum(row.get('available') is True for row in items)))
           print('CROWN_PUBLIC_PURCHASE_URLS='+str(sum(bool(row.get('checkout')) for row in items)))
+          assert all(row.get('available') is False and row.get('checkout') is None for row in items), 'UNEXPECTED_LIVE_CROWN_SALES'
           PY
       - name: Pinned existing GitHub to VPS to cPanel relay - read only
         shell: bash
