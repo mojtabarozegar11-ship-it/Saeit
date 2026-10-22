@@ -48,15 +48,34 @@ class RealRicePilotTests(unittest.TestCase):
                 m.read_archive(path,known)
 
     def test_duplicate_feature_leakage_and_class_conflict(self):
+        # Always runs even on minimal Django CI runners without scikit-learn.
+        rows,y=m.parse_arff(sample())
+        pairs,removed=m.unique_labeled_examples(rows+[rows[0],rows[1]],
+                                                  y+[y[0],y[1]])
+        self.assertEqual(len(pairs),len(rows))
+        self.assertEqual(removed,2)
+        parts=[list(range(offset,len(rows),3)) for offset in range(3)]
+        self.assertTrue(m.validate_disjoint_split(pairs,parts))
+        with self.assertRaisesRegex(RuntimeError,"SPLIT_DATA_LEAKAGE"):
+            m.validate_disjoint_split(pairs,[parts[0]+[parts[1][0]],parts[1],parts[2]])
+        with self.assertRaisesRegex(RuntimeError,"SPLIT_DATA_LEAKAGE"):
+            m.validate_disjoint_split(pairs,[parts[0][1:],parts[1],parts[2]])
+        with self.assertRaisesRegex(RuntimeError,"CONTRADICTORY_DUPLICATE"):
+            m.unique_labeled_examples(rows+[rows[0]],y+[1-y[0]])
+        with self.assertRaisesRegex(RuntimeError,"FEATURE_LABEL_LENGTH_MISMATCH"):
+            m.unique_labeled_examples(rows,y[:-1])
+
+    @unittest.skipUnless(importlib.util.find_spec("sklearn") is not None,
+                         "Actual sklearn split runs in dedicated F26 training CI")
+    def test_actual_stratified_sklearn_training_holdout(self):
         rows,y=m.parse_arff(sample())
         pairs,parts,removed=m.split_unique(rows+[rows[0],rows[1]],
                                             y+[y[0],y[1]])
         self.assertEqual(len(pairs),len(rows))
         self.assertEqual(removed,2)
         self.assertEqual(sum(map(len,parts)),len(rows))
+        self.assertTrue(m.validate_disjoint_split(pairs,parts))
         self.assertEqual(len(set(parts[0])|set(parts[1])|set(parts[2])),len(rows))
-        with self.assertRaisesRegex(RuntimeError,"CONTRADICTORY_DUPLICATE"):
-            m.split_unique(rows+[rows[0]],y+[1-y[0]])
 
     def test_no_nonnumeric_or_missing_and_no_hallucinated_class(self):
         s=sample().replace("13000,","?,",1)

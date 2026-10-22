@@ -1,7 +1,7 @@
 name: F26 real-world rice research model — reproducible holdout
 on:
   push:
-    branches: [feature/f26-real-rice-uci-qa-20261022, main]
+    branches: [feature/f26-real-rice-uci-qa-20261022, fix/f26-basic-ci-no-ml-20261022, main]
     paths:
       - scripts/factory_f26_real_rice_research_pilot.py
       - tests/test_factory_f26_real_rice_research_pilot.py
