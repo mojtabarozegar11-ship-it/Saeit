@@ -1,0 +1,115 @@
+name: Publish Ramadan War web game into Zomorod IT row card two
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/zomorod-ramadan-war-web-card.yml']
+permissions:
+  contents: read
+concurrency:
+  group: zm-ramadan-war-second-card
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-zm-ramadan-card-live-20261022]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check standalone game and deployment script
+        run: |
+          set -euo pipefail
+          python3 -m py_compile games/ramadan-war/deploy.py
+          node --check games/ramadan-war/site-smoke.cjs
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import re
+          class Check(HTMLParser): pass
+          html=Path('games/ramadan-war/index.html').read_text(encoding='utf-8')
+          Check().feed(html)
+          assert html.count('ZM-RAMADAN-WAR-WEB-CARD-20261022') == 1
+          script=re.findall(r'<script>([\s\S]*?)</script>',html)
+          assert len(script)==1 and 'RamadanWarDebug' in script[0]
+          Path('/tmp/ramadan-game-inline.js').write_text(script[0],encoding='utf-8')
+          PY
+          node --check /tmp/ramadan-game-inline.js
+      - name: Confirm the target card and nearby production routes before editing
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          import json,re
+          root='https://zomorodmelal.ir'
+          for route in ['/','/topics/zm-r25/game-development/','/farm-wars/','/agriculture/','/research/']:
+           with urlopen(Request(root+route,headers={'Cache-Control':'no-cache','User-Agent':'RamadanWarReleasePreflight/1'}),timeout=35) as r:
+            assert r.status==200,(route,r.status)
+            body=r.read(2600000) if route=='/' else b''
+           print('PROTECTED_ROUTE_BEFORE',route,'200',flush=True)
+           if route=='/':
+            m=re.search(rb'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',body,re.S)
+            assert m,'live homepage manifest not found'
+            data=json.loads(m.group(1));row=next(r for r in data['rows'] if r.get('id')=='ZM-R25')
+            assert row['title']=='فناوری اطلاعات و خدمات دیجیتال' and len(row['cards'])==22
+            assert row['cards'][0]['id']=='ZM-R25-GAME-FARM-DOMINION-20261019'
+            assert row['cards'][1]['slug']=='website-design'
+            assert not any(c.get('slug')=='ramadan-war' for c in row['cards'])
+          PY
+      - name: Establish the pinned GitHub Actions to VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Transfer only the standalone game and scoped installer to private staging
+        id: stage
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-ramadan-war-$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$d/config" host "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage/incoming'"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/deploy.py "host:$stage/incoming/deploy.py"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/index.html "host:$stage/incoming/index.html"
+          timeout 45s ssh -T -F "$d/config" host "python3 '$stage/incoming/deploy.py' prepare '$GITHUB_RUN_ID'"
+      - name: Publish game route then insert it at exactly position two
+        id: publish
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-ramadan-war-$GITHUB_RUN_ID"
+          timeout 75s ssh -T -F "$d/config" host "python3 '$stage/incoming/deploy.py' publish '$GITHUB_RUN_ID'"
+          timeout 55s ssh -T -F "$d/config" host "python3 '$stage/incoming/deploy.py' verify '$GITHUB_RUN_ID'"
+      - name: Verify the public game route and card order
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          import json,re
+          root='https://zomorodmelal.ir'
+          with urlopen(Request(root+'/ramadan-war/?release='+__import__('time').time_ns().__str__(),headers={'Cache-Control':'no-cache,no-store'}),timeout=40) as r:
+           assert r.status==200;game=r.read(1000000)
+          assert b'ZM-RAMADAN-WAR-WEB-CARD-20261022' in game
+          assert b'canvas' in game and b'RamadanWarDebug' in game
+          with urlopen(Request(root+'/?ramadan_card='+__import__('time').time_ns().__str__(),headers={'Cache-Control':'no-cache,no-store'}),timeout=40) as r:
+           data=r.read(2600000)
+          d=json.loads(re.search(rb'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',data,re.S).group(1))
+          row=next(x for x in d['rows'] if x.get('id')=='ZM-R25')
+          assert row['cards'][1]['id']=='ZM-R25-GAME-RAMADAN-WAR-20261022'
+          assert row['cards'][1]['canonicalUrl']=='/ramadan-war/' and row['cards'][2]['slug']=='website-design'
+          print('LIVE_CARD_TWO_AND_GAME_ROUTE=PASS')
+          PY
+      - name: Test campaign controls on desktop and mobile browsers
+        run: |
+          mkdir -p /tmp/ramadan-playwright && cd /tmp/ramadan-playwright
+          npm init -y >/dev/null
+          npm install --silent --no-audit --no-fund --no-save playwright@1.55.0
+          npx playwright install chromium
+          cd "$GITHUB_WORKSPACE"
+          GAME_URL=https://zomorodmelal.ir/ramadan-war/ NODE_PATH=/tmp/ramadan-playwright/node_modules node games/ramadan-war/site-smoke.cjs
+      - name: Roll back only this game's route and exact homepage version after failure
+        if: failure() && steps.stage.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-ramadan-war-$GITHUB_RUN_ID"
+          timeout 65s ssh -T -F "$d/config" host "python3 '$stage/incoming/deploy.py' rollback '$GITHUB_RUN_ID'"
