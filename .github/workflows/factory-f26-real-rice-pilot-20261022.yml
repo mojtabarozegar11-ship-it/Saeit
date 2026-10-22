@@ -5,6 +5,7 @@ on:
     paths:
       - scripts/factory_f26_real_rice_research_pilot.py
       - scripts/factory_f26_real_rice_cli.py
+      - scripts/factory_f26_rice_onnx_portable.py
       - tests/test_factory_f26_real_rice_cli.py
       - tests/test_factory_f26_real_rice_research_pilot.py
       - tests/test_factory_f26_real_rice_private_install.py
@@ -96,6 +97,24 @@ jobs:
           assert results['commercial_release_authorized'] is False
           assert results['human_expert_quality_1000_certified'] is False
           print('F26_RICE_REAL_DATA_OFFLINE_CLI_INFERENCE=PASS')
+          PY
+      - name: Export minimal offline ONNX parameters and prove all 762 holdout labels
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/factory_f26_rice_onnx_portable.py --export --model-dir "$RUNNER_TEMP/f26-real-rice" --source-archive "$RUNNER_TEMP/uci-rice-545.zip" --out "$RUNNER_TEMP/rice-portable-spec.json"
+          python3 -S scripts/factory_f26_rice_onnx_portable.py --predict --model-dir "$RUNNER_TEMP/f26-real-rice" --runtime-spec "$RUNNER_TEMP/rice-portable-spec.json" --csv "$RUNNER_TEMP/rice-inference.csv" --out "$RUNNER_TEMP/rice-portable-result.json"
+          python3 -B - "$RUNNER_TEMP/rice-portable-result.json" "$RUNNER_TEMP/f26-real-rice/model_card.json" <<'PY'
+          import json,sys
+          from pathlib import Path
+          d=json.loads(Path(sys.argv[1]).read_text())
+          card=json.loads(Path(sys.argv[2]).read_text())
+          assert d['count']==12 and len(d['predictions'])==12
+          assert d['source_onnx_sha256']==card['onnx_model_sha256']
+          assert d['field_validated'] is False
+          assert d['quality_1000_certified'] is False
+          assert d['commercial_release_authorized'] is False
+          print('F26_PORTABLE_REPRODUCIBLE_OFFLINE_WITHOUT_SITE_PACKAGES=PASS')
           PY
       - name: Privately admit SHA-bound real-data pilot into existing VPS F26 research evidence
         if: github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
