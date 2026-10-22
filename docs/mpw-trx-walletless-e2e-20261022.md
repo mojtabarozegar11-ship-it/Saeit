@@ -103,3 +103,37 @@ Do NOT fill legacy sender-signature fields with forged values or disable the tes
   including no-signature invoice issuance, idempotency and rejection of
   conflicting signed invoices, real test ledger settlement and delivery.
 - No production deployment, wallet transfer, or actual Mainnet confirmation.
+
+
+## 22 October: independent TRON mainnet verifier implementation and real cPanel checks
+
+- Implemented `services/mpw_tron_independent_solidified_rpc.py`: read-only
+  `/walletsolidity/gettransactionbyid` plus
+  `/walletsolidity/gettransactioninfobyid` parser, Base58Check native
+  address verification, tx body/receipt matching, strict success and
+  solidification checks, HTTPS source validation, and independent operator
+  identities. No broadcast, payment or order writes.
+- 12 offline security tests PASS, Actions 39719435124.
+- Two actual named operator probes over GitHub -> VPS -> cPanel:
+  TronGrid public GET did not return accepted healthy solidified metadata;
+  Nodit requires valid credentials and returned HTTP 403 using documented
+  public demonstration authorization. Actions 39719787558.
+- Existing cPanel `tron_solidity_rpc(path,request)` wrapper exists but
+  probing a read-only `getnowblock` path yielded NativeRpcUnavailable.
+  This may reflect a restricted method allowlist; it is NOT proof that
+  all existing TRON transaction methods are offline. Actions 39720105981.
+
+### Blocking production-readiness finding
+
+**ZERO of the TWO separately governed real RPC finality providers have
+passed an authenticated body+receipt transaction roundtrip in live staging.**
+Do not auto-approve or fulfill based on two source labels alone.
+Provider A and B must each be configured with valid provider-scoped API
+credentials or self-managed nodes, independently verified operator identities,
+TLS hostname allowlists and trusted SolidityNode transaction body/receipt
+endpoints. Verify both against the same known already-solidified native TRX
+transfer, compare sender/receiver/exact SUN/time/status, then run consented
+low-value staging purchase, real Django ledger and buyer-only delivery tests.
+
+The operator test does not access funds or production orders, and
+the public payment flag remains OFF. No API secrets are placed in git or logs.
