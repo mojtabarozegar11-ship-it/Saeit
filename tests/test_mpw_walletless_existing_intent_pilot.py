@@ -229,6 +229,82 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
         self.assertEqual(fixture.CommerceFulfillment.objects.count(),0)
         self.assertEqual(fixture.Order.objects.get(pk=self.order_id).status,"pending")
 
+    def test_real_rpc_parser_connects_to_existing_payment_tables(self):
+        """The actual solidity RPC parser, rather than hand-made proof objects,
+        must be able to drive the no-DDL Django settlement atomically.
+        Network transport stays mocked; no TRX is transferred.
+        """
+        from services.mpw_tron_independent_solidified_rpc import (
+            RpcProvider, hex_to_tron_address, verified_live_pair,
+        )
+        receiver_hex="41"+"22"*20
+        sender_hex="41"+"11"*20
+        canonical_receiver=hex_to_tron_address(receiver_hex)
+        ms=int((fixture.NOW+timedelta(minutes=1)).timestamp()*1000)
+        calls=[]
+        with patch.object(fixture,"RECIPIENT",canonical_receiver):
+            pk,invoice,_=self.reserve()
+            tx_body={"txID":fixture.TX_HASH,"raw_data":{
+                "timestamp":ms-3_000,"contract":[{"type":"TransferContract",
+                "parameter":{"value":{"owner_address":sender_hex,
+                "to_address":receiver_hex,"amount":invoice.amount_sun}}}]},
+                "ret":[{"contractRet":"SUCCESS"}]}
+            tx_info={"id":fixture.TX_HASH,"blockNumber":70_000_001,
+                     "blockTimeStamp":ms,"receipt":{}}
+            first=RpcProvider("rpc-a","operator-a","https://node-a.example.org")
+            second=RpcProvider("rpc-b","operator-b","https://node-b.example.com")
+
+            def transport(provider,path,txid):
+                calls.append((provider.source_id,path,txid))
+                if path.endswith("gettransactionbyid"):
+                    return json.loads(json.dumps(tx_body))
+                return dict(tx_info)
+
+            pair=verified_live_pair(first,second,
+                trusted_operator_attestation=True,transport=transport)
+            self.assertEqual(settle_existing_test_intent(pk,fixture.TX_HASH,pair),"paid")
+            self.assertEqual(len(calls),4)
+            self.assertTrue(all(txid==fixture.TX_HASH for _,_,txid in calls))
+            self.assertTrue(existing_test_buyer_status(pk,42)["can_download"])
+            self.assertEqual(ExistingLedgerEntry.objects.count(),1)
+
+    def test_rpc_disagreement_rolls_back_entire_existing_ledger(self):
+        from services.mpw_tron_independent_solidified_rpc import (
+            RpcProvider, hex_to_tron_address, verified_live_pair,
+        )
+        receiver_hex="41"+"22"*20
+        sender_hex="41"+"11"*20
+        ms=int((fixture.NOW+timedelta(minutes=1)).timestamp()*1000)
+        with patch.object(fixture,"RECIPIENT",hex_to_tron_address(receiver_hex)):
+            pk,invoice,_=self.reserve()
+            body={"txID":fixture.TX_HASH,"raw_data":{
+                "timestamp":ms-1_000,"contract":[{"type":"TransferContract",
+                "parameter":{"value":{"owner_address":sender_hex,
+                "to_address":receiver_hex,"amount":invoice.amount_sun}}}]},
+                "ret":[{"contractRet":"SUCCESS"}]}
+            info={"id":fixture.TX_HASH,"blockNumber":70_000_001,
+                  "blockTimeStamp":ms,"receipt":{}}
+            a=RpcProvider("rpc-a","operator-a","https://node-a.example.org")
+            b=RpcProvider("rpc-b","operator-b","https://node-b.example.com")
+
+            def transport(provider,path,txid):
+                if path.endswith("gettransactionbyid"):
+                    return dict(body)
+                reply=dict(info)
+                if provider.source_id=="rpc-b":
+                    reply["blockTimeStamp"]=ms+3_000
+                return reply
+
+            pair=verified_live_pair(a,b,trusted_operator_attestation=True,
+                                    transport=transport)
+            with self.assertRaises(PaymentHold):
+                settle_existing_test_intent(pk,fixture.TX_HASH,pair)
+            self.assertEqual(ExistingLedgerEntry.objects.count(),0)
+            self.assertEqual(PaymentWebhookEvent.objects.count(),0)
+            self.assertEqual(fixture.CommerceFulfillment.objects.count(),0)
+            self.assertEqual(PaymentIntent.objects.get(pk=pk).status,WAITING)
+            self.assertEqual(fixture.Order.objects.get(pk=self.order_id).status,"pending")
+
     def test_tampered_quote_or_sender_is_not_a_ledger_receipt(self):
         pk,_,_=self.reserve()
         pair=self.pair()
