@@ -20,6 +20,7 @@ const assert=require('node:assert/strict');
    let state=await page.evaluate(()=>window.RamadanWarDebug.getState());
    assert.equal(state.hp,100);assert.equal(state.lives,100);assert.equal(state.stage,0);assert.equal(state.mode,'game');
    assert.equal(state.rockets,12);assert.equal(state.drones,3);assert(state.enemies>0,'mission enemy spawn');
+   await page.evaluate(()=>window.RamadanWarDebug.spawnTestEnemy());
    await page.evaluate(()=>{window.RamadanWarDebug.fire();window.RamadanWarDebug.rocket();window.RamadanWarDebug.drone()});
    state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.shots,1);assert.equal(state.rockets,11);assert.equal(state.drones,2);
    await page.reload({waitUntil:'domcontentloaded'});
