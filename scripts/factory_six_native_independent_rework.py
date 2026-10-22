@@ -131,6 +131,23 @@ def review_family(directory, family, aggregate):
         if offset<64 or offset+4>len(exe[0]) or exe[0][offset:offset+4]!=b"PE\x00\x00":
             raise RuntimeError("REVIEW_WINDOWS_PE_SIGNATURE_MISSING")
         checked=["real_native_windows_pe_bytes","source_ci_executable_smoke_receipt"]
+        if "windows-native-proof.json" in files:
+            acceptance=json.loads(files["windows-native-proof.json"].decode("utf8"))
+            detailed=acceptance.get("families",{}).get(family,{})
+            if (acceptance.get("schema")!="saeit.factory.windows-native-interactive-acceptance.v1"
+                    or acceptance.get("real_windows_runner_execute") is not True
+                    or acceptance.get("independent_security_expert_approved") is not False
+                    or acceptance.get("quality_1000_certified") is not False
+                    or detailed.get("sha256")!=sha(exe[0])
+                    or (family=="F13" and
+                        (detailed.get("playthroughs_from_actual_exe")!=48
+                         or detailed.get("level_paths_verified")!=48))
+                    or (family=="F17" and
+                        (detailed.get("real_packaged_csv_invoices_tested")!=6
+                         or detailed.get("invalid_inventory_rows_rejected")!=9
+                         or detailed.get("exact_decimal_math_verified") is not True))):
+                raise RuntimeError("REVIEW_WINDOWS_INTERACTIVE_EVIDENCE_INCOMPLETE")
+            checked.append("windows_real_pe_48_game_or_15_inventory_execution_proof")
     elif family=="F14":
         if not {"mini_game.html","game.js","browser-proof.json"}.issubset(files):
             raise RuntimeError("REVIEW_BROWSER_SOURCE_PROOF_MISSING")
