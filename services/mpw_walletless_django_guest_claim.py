@@ -10,6 +10,8 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
 import secrets
+import ipaddress
+import time
 
 from services.mpw_trx_walletless_core import PaymentHold
 from services.mpw_walletless_django_test_bridge import _test_only_guard
@@ -65,11 +67,11 @@ def read_guest_buyer(cookie:str,*,django_settings=None,db=None)->int|None:
                         db=db or connection)
 
 
-def create_guest_buyer(*,django_settings=None,db=None):
+def create_guest_buyer(*,remote_ip:str,django_settings=None,db=None):
     """Return (Django buyer id, signed bearer). Invoked only under CSRF-protected POST.
 
-    Caller must enforce public ingress rate-limiting before creating a new
-    guest. The adapter is entirely locked to a test_ schema.
+    The adapter enforces atomic per-IP rate limits; the public edge must
+    independently impose global limits. Entirely locked to a test_ schema.
     """
     from django.core import signing
     from django.db import transaction, connection
@@ -78,7 +80,28 @@ def create_guest_buyer(*,django_settings=None,db=None):
     config=django_settings or settings
     conn=db or connection
     _validate_env(config,conn)
+    try:
+        normalized_ip=ipaddress.ip_address(remote_ip).compressed
+    except (TypeError,ValueError) as exc:
+        raise PaymentHold("Missing authentic remote client address") from exc
+    if not isinstance(config.SECRET_KEY,str) or len(config.SECRET_KEY)<16:
+        raise PaymentHold("Missing server signing secret")
+    hour=int(time.time()//3600)
+    rate_key=hmac.new(config.SECRET_KEY.encode("utf8"),
+                     ("walletless-guest:"+str(hour)+":"+normalized_ip).encode("utf8"),
+                     hashlib.sha256).hexdigest()
     with transaction.atomic(using=conn.alias):
+        with conn.cursor() as cursor:
+            cursor.execute(
+              """INSERT INTO mpw_walletless_trx_guest_rate_v1
+                (rate_key,attempts,created_at) VALUES (%s,1,UTC_TIMESTAMP(6))
+                ON DUPLICATE KEY UPDATE attempts=attempts+1""",[rate_key])
+            cursor.execute(
+              """SELECT attempts FROM mpw_walletless_trx_guest_rate_v1
+                 WHERE rate_key=%s FOR UPDATE""",[rate_key])
+            item=cursor.fetchone()
+            if item is None or item[0]>5:
+                raise PaymentHold("Hourly anonymous checkout limit reached")
         model=get_user_model()
         username="mpwguest_"+secrets.token_hex(18)
         ident=secrets.token_hex(32)
