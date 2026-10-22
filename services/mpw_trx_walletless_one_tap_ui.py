@@ -50,21 +50,28 @@ if (!canSend) {
 } else {
   appButton.hidden=true;
 }
+// A wallet call can time out after a broadcast; never offer a rapid second
+// payment on the same invoice based solely on a client-side error or reply.
+let attempted=false;
 payButton.addEventListener("click",async()=>{
-  if(!canSend)return;
+  if(!canSend||attempted)return;
+  attempted=true;
   payButton.disabled=true;
   note.textContent="Review recipient, amount and TRON network in your wallet. Approve only if correct.";
   try {
     const result=await app.trx.sendTransaction(recipient,Number(sun));
     // Browser wallet results are UNTRUSTED and are NEVER used to grant a download.
-    if(!result||!result.result) {
-      note.textContent="No verified payment yet. Check your wallet; do not pay twice.";
+    if(result===false||result?.result===false) {
+      note.textContent="Wallet did not confirm. Check wallet activity before any retry; do not pay twice.";
     } else {
-      note.textContent="Transfer submitted. The site is checking TRON automatically. Do not pay twice.";
+      note.textContent="Wallet request completed. The site checks TRON automatically. Do not pay twice.";
     }
   }catch(err){
-    note.textContent="The wallet did not finish the transfer. Check wallet activity before retrying.";
-  }finally{payButton.disabled=false;}
+    note.textContent="Wallet response is uncertain. Check activity before retrying; the site keeps verifying.";
+  }finally{
+    payButton.hidden=true;
+    window.dispatchEvent(new Event("mpw-wallet-submitted"));
+  }
 });
 })();"""
 
