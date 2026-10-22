@@ -13,7 +13,9 @@ from decimal import Decimal
 from contextlib import contextmanager
 import hashlib
 import json
+import os
 import secrets
+import stat
 
 from services.mpw_trx_walletless_core import (
     ADDRESS, NETWORK, INVOICE_TTL, InvoiceIntent, PaymentHold, issue_intent,
@@ -324,3 +326,33 @@ def existing_test_buyer_status(intent_id: int, buyer_id: int, *, db=None,
         return {"status": "review", "can_download": False}
     return {"status": "paid", "can_download": True,
             "download_path": f"/commerce/trx-easy/download/{intent_id}/"}
+
+
+def open_existing_test_paid_file(intent_id: int, buyer_id: int, *, db=None,
+                                 settings=None):
+    """Open a real private artifact ONLY after ownership and ledger verification.
+
+    Caller owns the returned file object and MUST close it or use FileResponse.
+    Uses O_NOFOLLOW and fstat so symlink swaps cannot expose arbitrary files.
+    """
+    state = existing_test_buyer_status(intent_id, buyer_id,db=db,settings=settings)
+    if state.get("can_download") is not True:
+        raise PaymentHold("No independently verified buyer entitlement")
+    from core.models import PaymentIntent, OrderItem
+    from mpw_commerce.fulfillment import _private_file
+    intent=PaymentIntent.objects.select_related("order").get(pk=intent_id)
+    if intent.order.customer_id != buyer_id or intent.provider != PROVIDER:
+        raise PaymentHold("Payment intent is not owned by buyer")
+    item=OrderItem.objects.get(order=intent.order)
+    source=_private_file(item)
+    if source.is_symlink() or not source.is_file():
+        raise PaymentHold("Private product unavailable")
+    flags=os.O_RDONLY | getattr(os,"O_CLOEXEC",0) | getattr(os,"O_NOFOLLOW",0)
+    fd=os.open(str(source),flags)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise PaymentHold("Not a regular downloadable file")
+        return os.fdopen(fd,"rb")
+    except BaseException:
+        os.close(fd)
+        raise
