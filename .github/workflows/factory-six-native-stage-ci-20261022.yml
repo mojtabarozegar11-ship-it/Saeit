@@ -1,0 +1,139 @@
+name: Real native candidates for six blocked factory lines
+on:
+  push:
+    branches: [feature/six-native-candidate-builds-20261022]
+    paths:
+      - scripts/factory_six_native_candidates.py
+      - scripts/factory_f14_browser_real_smoke.py
+      - .github/workflows/factory-six-native-stage-ci-20261022.yml
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: saeit-six-native-candidate-ci
+  cancel-in-progress: false
+jobs:
+  f26-real-onnx:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Generate and recheck all original source candidates
+        run: |
+          python3 -B scripts/factory_six_specialist_executors.py --factory-private "$RUNNER_TEMP/private-six" --all
+          python3 -B scripts/factory_six_native_candidates.py --factory-private "$RUNNER_TEMP/private-six" --family F26 --output "$RUNNER_TEMP/real-f26"
+      - name: Install pinned CPU ONNX checker and runtime
+        run: python3 -m pip install --disable-pip-version-check numpy==2.1.3 onnx==1.17.0 onnxruntime==1.20.1
+      - name: Serialize and run all 48 real ONNX models against holdouts
+        run: |
+          python3 -B scripts/factory_six_native_candidates.py --factory-private "$RUNNER_TEMP/private-six" --family F26 --output "$RUNNER_TEMP/real-f26" --onnx
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ["RUNNER_TEMP"])/"real-f26"
+          d=json.loads((p/"native-proof.json").read_text())
+          assert d["actual_onnxruntime_models_checked"]==48
+          assert d["holdout_predictions_checked"]==192
+          assert len(list((p/"native").glob("*.onnx")))==48
+          assert not d["independent_quality_1000_certified"] and not d["commercial_release"]
+          print("F26_REAL_ONNX_FORMAT_AND_INFERENCE=PASS")
+          PY
+  f14-real-chromium:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Create verified F14 private game
+        run: |
+          python3 -B scripts/factory_six_specialist_executors.py --factory-private "$RUNNER_TEMP/private-six" --all
+          python3 -B scripts/factory_six_native_candidates.py --factory-private "$RUNNER_TEMP/private-six" --family F14 --output "$RUNNER_TEMP/real-f14"
+      - name: Install pinned real Chromium automation
+        run: |
+          python3 -m pip install --disable-pip-version-check playwright==1.56.0
+          python3 -m playwright install chromium
+      - name: Actually play the browser game in desktop and mobile viewports
+        run: |
+          python3 -B scripts/factory_f14_browser_real_smoke.py --source "$RUNNER_TEMP/real-f14/source" --proof "$RUNNER_TEMP/real-f14/browser-proof.json"
+          echo F14_REAL_INTERACTIVE_BROWSER_QA=PASS
+  f13-f17-real-windows-exe:
+    runs-on: windows-2022
+    timeout-minutes: 18
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Build original verified sources
+        run: |
+          python scripts/factory_six_specialist_executors.py --factory-private "$env:RUNNER_TEMP/private-six" --all
+          python scripts/factory_six_native_candidates.py --factory-private "$env:RUNNER_TEMP/private-six" --family F13 --output "$env:RUNNER_TEMP/real-f13"
+          python scripts/factory_six_native_candidates.py --factory-private "$env:RUNNER_TEMP/private-six" --family F17 --output "$env:RUNNER_TEMP/real-f17"
+      - name: Install pinned Windows native-packaging tool
+        run: python -m pip install --disable-pip-version-check pyinstaller==6.16.0
+      - name: Build two authentic Windows PE executables
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --name GemRoutePilot --add-data "$env:RUNNER_TEMP/real-f13/source/levels.json;." --distpath "$env:RUNNER_TEMP/native-f13" --workpath "$env:RUNNER_TEMP/work-f13" --specpath "$env:RUNNER_TEMP/spec-f13" "$env:RUNNER_TEMP/real-f13/source/game.py"
+          python -m PyInstaller --noconfirm --clean --onefile --name FieldLedgerPilot --distpath "$env:RUNNER_TEMP/native-f17" --workpath "$env:RUNNER_TEMP/work-f17" --specpath "$env:RUNNER_TEMP/spec-f17" "$env:RUNNER_TEMP/real-f17/source/desktop.py"
+          & "$env:RUNNER_TEMP/native-f13/GemRoutePilot.exe" --self-test
+          & "$env:RUNNER_TEMP/native-f17/FieldLedgerPilot.exe" --self-test
+          & "$env:RUNNER_TEMP/native-f17/FieldLedgerPilot.exe" --csv "$env:RUNNER_TEMP/real-f17/source/sample.csv"
+          foreach ($f in @("$env:RUNNER_TEMP/native-f13/GemRoutePilot.exe","$env:RUNNER_TEMP/native-f17/FieldLedgerPilot.exe")) {
+            $bytes=[System.IO.File]::ReadAllBytes($f)
+            if ($bytes.Length -lt 30000 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90) { throw "NATIVE_WINDOWS_PE_INVALID" }
+            Write-Host ("WINDOWS_REAL_PE_SHA256=" + (Get-FileHash $f -Algorithm SHA256).Hash)
+          }
+          Write-Host "F13_F17_NATIVE_WINDOWS_EXE_EXECUTION=PASS"
+  f12-f16-real-android-apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 19
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+      - name: Verify original F12/F16 source and prepare offline Android projects
+        run: |
+          set -euo pipefail
+          python3 -B scripts/factory_six_specialist_executors.py --factory-private "$RUNNER_TEMP/private-six" --all
+          python3 -B scripts/factory_six_native_candidates.py --factory-private "$RUNNER_TEMP/private-six" --family F12 --output "$RUNNER_TEMP/real-f12"
+          python3 -B scripts/factory_six_native_candidates.py --factory-private "$RUNNER_TEMP/private-six" --family F16 --output "$RUNNER_TEMP/real-f16"
+      - name: Install pinned Android platform tools
+        run: |
+          set -euo pipefail
+          echo "SDK=$ANDROID_HOME"
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKM"
+          "$SDKM" "platforms;android-35" "build-tools;35.0.0" >/dev/null
+      - name: Build and independently validate actual Android debug APK and AAB
+        run: |
+          set -euo pipefail
+          for family in F12 F16; do
+            project="$RUNNER_TEMP/real-$(echo "$family" | tr '[:upper:]' '[:lower:]')/android"
+            gradle --no-daemon -p "$project" :app:assembleDebug :app:bundleDebug
+            apk="$project/app/build/outputs/apk/debug/app-debug.apk"
+            aab="$project/app/build/outputs/bundle/debug/app-debug.aab"
+            test -s "$apk" && test -s "$aab"
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$apk"
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | head -n 4
+            unzip -l "$apk" | grep -q 'assets/index.html'
+            unzip -l "$apk" | grep -q 'assets/'
+            unzip -t "$aab" >/dev/null
+            sha256sum "$apk" "$aab"
+            echo "ANDROID_NATIVE_DEBUG_APK_AAB_VERIFIED=$family"
+          done
+          echo F12_F16_NATIVE_ANDROID_BINARY_BUILDS=PASS
