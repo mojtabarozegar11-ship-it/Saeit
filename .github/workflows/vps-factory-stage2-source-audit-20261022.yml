@@ -1,0 +1,94 @@
+name: Read-only Stage 2 scientific source diagnostics
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/vps-factory-stage2-source-audit-20261022.yml
+permissions:
+  contents: read
+jobs:
+  inspect-vps:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && contains(github.event.head_commit.message, '[approved-stage2-source-audit-20261022]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - name: Read original literature candidates without changing the factory
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          mkdir -m 700 "$RUNNER_TEMP/stage2-audit"
+          key="$RUNNER_TEMP/stage2-audit/key"
+          known="$RUNNER_TEMP/stage2-audit/known"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$key"
+          chmod 600 "$key"
+          ssh-keygen -y -P "" -f "$key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$known" 2>/dev/null
+          test "$(ssh-keygen -lf "$known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh -i "$key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
+          import collections,importlib.util,json
+          from pathlib import Path
+          root=Path.home()/"factory-runtime"
+          p=root/"private/autonomous-product-cycle/production-instructions"
+          script=root/"operations/production-instructions/stage2-literature-scout.py"
+          index=json.loads((p/"owner-agri200-p0-index.json").read_text())
+          stat=json.loads((p/"stage-02/literature-scout-status.json").read_text())
+          hist=collections.Counter()
+          samples=[]
+          max_subjects=[]
+          total=0
+          for n,ident in enumerate(index["order_ids_ranked"],1):
+              doc=p/"stage-02/literature-candidates"/("AGRI-%03d"%n+"--r001.json")
+              if not doc.is_file(): continue
+              value=json.loads(doc.read_text())
+              num=value.get("indexed_abstract_candidate_count",0)
+              cross=len(value.get("crossref_bibliographic_candidates",[]))
+              hist["indexed_"+str(min(10,num))]+=1
+              hist["crossref_"+str(min(10,cross))]+=1
+              hist["state_"+str(value.get("status"))]+=1
+              total+=1
+              if num>0 and len(max_subjects)<10:
+                  z=value["indexed_abstract_candidates"][0]
+                  max_subjects.append({"topic_id":"AGRI-%03d"%n,"indexed":num,
+                      "crossref":cross,"sample_title":str(z.get("title",""))[:90],
+                      "host":z.get("host"),"publisher":z.get("publisher")})
+              if len(samples)<10:
+                  samples.append({"topic_id":"AGRI-%03d"%n,
+                                  "indexed":num,"crossref":cross})
+          print("SCOUT_AUDIT_CANDIDATE_FILES="+str(total))
+          print("SCOUT_AUDIT_HIST="+json.dumps(dict(hist),sort_keys=True))
+          print("SCOUT_AUDIT_FIRST_TEN="+json.dumps(samples,ensure_ascii=False))
+          print("SCOUT_AUDIT_NONZERO_SAMPLES="+json.dumps(max_subjects,ensure_ascii=False))
+          spec=importlib.util.spec_from_file_location("stage2scout",str(script))
+          s=importlib.util.module_from_spec(spec);spec.loader.exec_module(s)
+          for n in (4,31,100):
+              work_id=index["order_ids_ranked"][n-1]
+              packet=json.loads((p/"stage-02/inbox"/(work_id+"--r001.json")).read_text())
+              edition=next(q for q in packet["work_order"]["editions"] if q["locale"]=="en-US")
+              title=edition["title"]
+              try:
+                  raw=s.fetch_openalex(title)
+                  keys=s.keys(title)
+                  accepted=s.select_papers(raw,keys,s.load_worker(root/"operations/production-instructions/stage2-research.py"))
+                  first=[]
+                  for paper in raw[:4]:
+                      loc=paper.get("primary_location") or {}
+                      oa=paper.get("best_oa_location") or {}
+                      idx=paper.get("abstract_inverted_index")
+                      first.append({"title":str(paper.get("display_name",""))[:100],
+                          "retracted":paper.get("is_retracted"),
+                          "type":paper.get("type"),"has_abstract":bool(idx),
+                          "doi":bool(paper.get("doi")),
+                          "primary_url":str(loc.get("landing_page_url",""))[:120],
+                          "oa_url":str(oa.get("landing_page_url",""))[:120]})
+                  print("SCOUT_AUDIT_REAL_TOPIC="+str(n)+": "+
+                        json.dumps({"title":title,"terms":keys,"returned":len(raw),
+                          "passing_structural_filters":len(accepted),
+                          "first":first},ensure_ascii=False))
+              except Exception as e:
+                  print("SCOUT_AUDIT_API_ERROR="+str(n)+":"+str(type(e).__name__)+":"+str(e)[:130])
+          print("SCOUT_AUDIT_WRITE_OPERATIONS=0")
+          PY
