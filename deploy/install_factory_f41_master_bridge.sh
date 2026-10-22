@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Install real F41 AgentTask production bridge; keep sites, wallets and F01-F40 untouched.
 set -euo pipefail
+trap 'echo "F41_MASTER_INSTALL_FAILED_LINE=$LINENO"' ERR
 umask 077
 test "$#" -eq 1 && test "$(id -un)" = githubops
 stage="$1"
@@ -15,10 +16,13 @@ test -x "$py" && test -f "$app/manage.py"
 test -d "$private" && test -d "$ops/f41-multiproduct/assets"
 test -f "$app/core/management/commands/factory_native_enqueue.py"
 test -x "$master/run-native-qa.sh"
+echo F41_MASTER_INITIAL_PATHS=PASS
 test "$(crontab -l | grep -c SAEIT_MASTER_AGENT_V1)" -eq 2
 command -v flock >/dev/null
+echo F41_MASTER_CRON_AND_FLOCK=PASS
 exec 9>"$master/master-cycle.lock"
 flock -w 100 9
+echo F41_MASTER_LOCK_ACQUIRED=PASS
 changed=(
   core/economic_tool_pack.py
   core/management/commands/seed_online_income_agents.py
@@ -46,6 +50,7 @@ for f in "${added[@]}"; do
     }
   fi
 done
+echo F41_MASTER_LIVE_SOURCE_PREFLIGHT=PASS
 for f in "${changed[@]}" "${added[@]}"; do
   "$py" -B -m py_compile "$stage/new/$f"
 done
