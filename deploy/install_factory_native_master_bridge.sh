@@ -92,7 +92,10 @@ from core.models import Agent,AgentTask,AuditLog
 root=Path.home()/"factory-runtime/private/autonomous-product-cycle"
 run=latest_snapshot(root)
 proof=snapshot(root,run)
-master=Agent.objects.get(code="economic-master-agent",active=True)
+master=Agent.objects.get(code="moj_1ro_1",active=True)
+economic=Agent.objects.get(code="economic-master-agent",active=True)
+assert not economic.capabilities.filter(code="factory_native_review",active=True).exists()
+assert set(master.capabilities.filter(active=True).values_list("code",flat=True))=={"factory_native_review"}
 assert master.capabilities.filter(code="factory_native_review",active=True,risk_level="low").count()==1
 tasks=list(AgentTask.objects.filter(agent=master,action_type="factory_native_review",
            input_data__source_run=run).order_by("pk"))
@@ -134,7 +137,7 @@ fi
 test "$(crontab -l | grep -Fc "$marker")" -eq 1
 test "$(crontab -l | grep -c SAEIT_MASTER_AGENT_V1)" -eq 2
 trap - EXIT
-echo MOJ1RO1_NATIVE_EXISTING_MASTER_CONNECTED=PASS
+echo MOJ1RO1_NATIVE_REAL_FACTORY_AGENT_IDENTITY_CONNECTED=PASS
 echo MOJ1RO1_NATIVE_15MIN_SCHEDULE=ACTIVE
 echo MOJ1RO1_NATIVE_PUBLIC_RELEASES=0
 echo MOJ1RO1_NATIVE_BACKUP="$backup"

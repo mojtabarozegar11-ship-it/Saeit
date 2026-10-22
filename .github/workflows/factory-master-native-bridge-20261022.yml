@@ -1,7 +1,7 @@
 name: Authenticated master ↔ six native specialist QA tasks
 on:
   push:
-    branches: [feature/master-six-native-task-bridge-20261022, main]
+    branches: [feature/master-six-native-task-bridge-20261022, feature/moj1ro1-real-factory-agent-20261022, main]
     paths:
       - core/factory_native_review_gateway.py
       - core/economic_tool_pack.py
