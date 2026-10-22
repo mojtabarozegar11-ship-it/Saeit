@@ -8,6 +8,10 @@ on:
       - 'scripts/business_os_cpanel_private_metrics.py'
       - 'scripts/business_os_cpanel_private_run.sh'
       - 'scripts/business_os_vps_private_factory_metrics.py'
+      - 'scripts/business_os_private_control.py'
+      - 'scripts/business_os_vps_private_master_probe.py'
+      - 'tests/test_business_os_private_control.py'
+      - 'scripts/business_os_private_stage_smoke.py'
   workflow_dispatch:
 
 permissions:
@@ -47,6 +51,9 @@ jobs:
             scripts/business_os_cpanel_private_metrics.py \
             scripts/business_os_cpanel_private_run.sh \
             scripts/business_os_vps_private_factory_metrics.py \
+            scripts/business_os_private_control.py \
+            scripts/business_os_vps_private_master_probe.py \
+            tests/test_business_os_private_control.py \
             tests/test_business_os_vps_factory_source.py \
             docs/business-operating-system-20261022.md
           sha256sum "$RUNNER_TEMP/business-os-stage.tgz"
@@ -113,6 +120,12 @@ jobs:
           if timeout 90s ssh -F "$stage_root/config" business-os-vps \
             "cd '$stage_vps' && python3 -B scripts/business_os_vps_private_factory_metrics.py" > /dev/null 2>&1; then
             echo "BUSINESS_OS_VPS_PRIVATE_FACTORY_REPORT_CREATED"
+            timeout 30s ssh -F "$stage_root/config" business-os-vps \
+              "cd '$stage_vps' && python3 -B scripts/business_os_private_control.py --node vps" > /dev/null 2>&1
+            echo "BUSINESS_OS_VPS_PRIVATE_DECISION_CREATED"
+            timeout 45s ssh -F "$stage_root/config" business-os-vps \
+              "cd '$stage_vps' && export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 DJANGO_SETTINGS_MODULE=config.settings && /home/githubops/factory-runtime/.venv/bin/python -B scripts/business_os_vps_private_master_probe.py" > /dev/null 2>&1
+            echo "BUSINESS_OS_MOJ1RO1_ACTIVE_IDENTITY_CONFIRMED"
           else
             echo "BUSINESS_OS_VPS_PRIVATE_FACTORY_SOURCE_UNAVAILABLE"
             exit 1
@@ -129,6 +142,9 @@ jobs:
           # markers cross SSH, never financial counts, findings, or exceptions.
           timeout 90s ssh -F "$stage_root/config" business-os-cpanel \
             "cd '$stage_host' && bash scripts/business_os_cpanel_private_run.sh"
+          timeout 45s ssh -F "$stage_root/config" business-os-cpanel \
+            "cd '$stage_host' && python3 -B scripts/business_os_private_control.py --node cpanel" > /dev/null 2>&1
+          echo "BUSINESS_OS_CPANEL_PRIVATE_DECISION_CREATED"
           echo "PRIVATE_STAGE_ONLY=$stage_name"
           echo "No production app, database, service, cron, or public route was modified."
 

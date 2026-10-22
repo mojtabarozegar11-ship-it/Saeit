@@ -13,6 +13,8 @@ def main():
         list((root / "core").rglob("*.py"))
         + list((root / "command_center").rglob("*.py"))
     )
+    paths += [root / "scripts" / "business_os_private_control.py",
+              root / "scripts" / "business_os_vps_private_master_probe.py"]
     if not paths:
         raise RuntimeError("No management code to validate")
     for path in paths:
@@ -30,7 +32,13 @@ def main():
         raise RuntimeError("Expected factory observer source tests are missing")
     for test in factory_tests:
         test()
-    print(f"BUSINESS_OS_PRIVATE_STAGE_OK ast_files={len(paths)} policy_tests={len(tests) + len(factory_tests)}")
+    private_ns = runpy.run_path(str(root / "tests" / "test_business_os_private_control.py"))
+    private_tests = [value for name, value in private_ns.items() if name.startswith("test_")]
+    if len(private_tests) < 8:
+        raise RuntimeError("Expected private controller safety tests are missing")
+    for test in private_tests:
+        test()
+    print(f"BUSINESS_OS_PRIVATE_STAGE_OK ast_files={len(paths)} policy_tests={len(tests) + len(factory_tests) + len(private_tests)}")
 
 
 if __name__ == "__main__":
