@@ -176,3 +176,45 @@ def test_tampered_mariadb_intent_never_settles(jet_buyer, approved_test_sources)
     with pytest.raises(PaymentHold):
         shop._unpack(intent)
     assert owned_skus(buyer) == []
+
+
+@pytest.mark.django_db
+@override_settings(ALLOWED_HOSTS=["mojplaywin.com"],
+                   CROWN_TRX_AUTO_DISCOVERY_ENABLED=True,
+                   CROWN_TRX_INDEXER_KEY="test-indexer-key-for-tests")
+def test_auto_discovery_requires_two_rpc_proofs_before_unlock(
+    jet_buyer, approved_test_sources, monkeypatch,
+):
+    """Buyer does not supply TxID; indexed hash is independently reverified."""
+    from django.core.cache import cache
+    cache.clear()
+    buyer, _, product = jet_buyer
+    url = shop.start_crown_checkout(buyer_id=buyer.pk, product_id=product.pk)
+    _mock_chain(monkeypatch)
+    monkeypatch.setattr(shop, "discover_native_candidates", lambda invoice, key: [TX])
+    client = Client(HTTP_HOST="mojplaywin.com")
+    client.force_login(buyer)
+    assert client.get(url).status_code == 302
+    assert owned_skus(buyer) == ["cd-spectre"]
+    assert client.get(url).status_code == 200
+    assert LedgerEntry.objects.count() == 1
+
+
+@pytest.mark.django_db
+@override_settings(ALLOWED_HOSTS=["mojplaywin.com"],
+                   CROWN_TRX_AUTO_DISCOVERY_ENABLED=True,
+                   CROWN_TRX_INDEXER_KEY="test-indexer-key-for-tests")
+def test_indexer_fake_candidate_does_not_grant_jet(
+    jet_buyer, approved_test_sources, monkeypatch,
+):
+    from django.core.cache import cache
+    cache.clear()
+    buyer, _, product = jet_buyer
+    url = shop.start_crown_checkout(buyer_id=buyer.pk, product_id=product.pk)
+    _mock_chain(monkeypatch, amount_offset=1)
+    monkeypatch.setattr(shop, "discover_native_candidates", lambda invoice, key: [TX])
+    client = Client(HTTP_HOST="mojplaywin.com")
+    client.force_login(buyer)
+    assert client.get(url).status_code == 200
+    assert owned_skus(buyer) == []
+    assert not LedgerEntry.objects.exists()
