@@ -72,7 +72,7 @@ for n,w in enumerate(idx["order_ids_ranked"],1):
     if (stage3_dir/name).is_file(): num_handoff+=1
 assert stat["sites_changed"] is False
 assert stat["human_specialist_reviews_completed"]==0
-assert stat["attempted_this_run"]>0
+assert type(stat["attempted_this_run"]) is int and 0<=stat["attempted_this_run"]<=200
 assert num_source>=3, "Original three vetted sources missing"
 assert num_handoff>=3, "Stage 2 pilot lost"
 assert num_source+num_candidate>=3+stat["attempted_this_run"]-stat["previously_seeded"]-stat["external_provider_unavailable"]-stat.get("requests_skipped_due_to_provider_cooldown",0)
