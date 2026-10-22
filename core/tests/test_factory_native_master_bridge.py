@@ -41,7 +41,7 @@ def test_real_master_six_agent_tasks_are_claimed_and_audited(private_factory):
     agent=Agent.objects.get(code="moj_1ro_1",active=True)
     economic=Agent.objects.get(code="economic-master-agent",active=True)
     assert not economic.capabilities.filter(code=ACTION,active=True).exists()
-    assert set(agent.capabilities.filter(active=True).values_list("code",flat=True))=={ACTION}
+    assert set(agent.capabilities.filter(active=True).values_list("code",flat=True))=={ACTION,"factory_f41_private_build"}
     assert agent.capabilities.filter(code=ACTION,active=True).exists()
     tasks=list(AgentTask.objects.filter(agent=agent,action_type=ACTION).order_by("pk"))
     assert len(tasks)==6
