@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/crown-checkout-production-readonly-audit.yml
+      - scripts/mpw_crown_python_route_safe_publish.py
 permissions:
   contents: read
 jobs:
@@ -11,6 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile guarded Python release script
+        run: python3 -m py_compile scripts/mpw_crown_python_route_safe_publish.py
       - name: Public payment gate baseline (no buy attempt)
         run: |
           python3 - <<'PY'
