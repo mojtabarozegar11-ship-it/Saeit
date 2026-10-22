@@ -138,3 +138,36 @@ def install_guest_cookie(response,token):
         secure=True,httponly=True,samesite="Lax",
     )
     return response
+
+
+def issue_secondary_guest_cookie_for_handoff(buyer_id:int,*,django_settings=None,db=None)->str:
+    """Create a NEW signed browser claim for an existing guest, no password/account.
+
+    MUST only be invoked from atomic redeem_handoff() after one-time ticket
+    validation and consumption; not an HTTP route.
+    """
+    from django.conf import settings
+    from django.db import connection
+    from django.core import signing
+    from django.contrib.auth import get_user_model
+    config=django_settings or settings
+    conn=db or connection
+    _validate_env(config,conn)
+    if type(buyer_id) is not int or buyer_id<=0:
+        raise PaymentHold("Invalid guest buyer")
+    if not get_user_model().objects.filter(pk=buyer_id,is_active=True).exists():
+        raise PaymentHold("Guest buyer is inactive")
+    secret=secrets.token_hex(32)
+    digest=hashlib.sha256(secret.encode("ascii")).hexdigest()
+    issued=_now_naive()
+    with conn.cursor() as cursor:
+        cursor.execute(
+          """INSERT INTO mpw_walletless_trx_guest_claim_v1
+            (buyer_id,secret_sha256,created_at,expires_at)
+            VALUES (%s,%s,%s,%s)""",
+          [buyer_id,digest,issued,issued+timedelta(seconds=COOKIE_LIFETIME)])
+        claim_id=int(cursor.lastrowid)
+    cookie=signing.dumps({"id":claim_id,"secret":secret},salt=COOKIE_SALT)
+    if len(cookie)>CLAIM_MAX_LENGTH:
+        raise PaymentHold("Invalid generated guest transfer cookie")
+    return cookie
