@@ -1,0 +1,153 @@
+name: MOJ1 guarded V2 escrow-only Shasta deployment (VPS-signed)
+on:
+  push:
+    branches: ['moj1/shasta-pilot-20261021']
+    paths: ['.github/workflows/moj1-v2-shasta-escrow-only-20261022.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj1-shasta-v2-escrow-broadcast
+  cancel-in-progress: false
+jobs:
+  deploy-token:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/moj1/shasta-pilot-20261021'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run unchanged pilot tests, compile and Shasta guard
+        working-directory: experiments/moj1-pilot
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run compile
+          npm run preflight
+          node --check scripts/deploy-v2-shasta.mjs
+          node scripts/release-readiness-offline.mjs --assert-blocked
+          echo MOJ1_V2_PREDEPLOY_OFFLINE=PASS
+      - name: Package reviewed pilot and exact Node runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          cp "$(command -v node)" "$RUNNER_TEMP/moj1-v2-node"
+          tar -C experiments -czf "$RUNNER_TEMP/moj1-v2-pilot.tar.gz" moj1-pilot
+          (cd "$RUNNER_TEMP" && sha256sum moj1-v2-node moj1-v2-pilot.tar.gz > moj1-v2-sha256.txt)
+          echo MOJ1_TOKEN_RUNTIME_PACKED=YES
+      - name: Deploy guarded V2 escrow only from private VPS with verified test governance
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          if [ -z "$VPS_SSH_PRIVATE_KEY" ]; then echo MOJ1_VPS_SSH=UNAVAILABLE; exit 1; fi
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/moj1_v2_ssh"
+          chmod 600 "$RUNNER_TEMP/moj1_v2_ssh"
+          trap 'rm -f "$RUNNER_TEMP/moj1_v2_ssh"' EXIT
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null > "$RUNNER_TEMP/moj1_v2_known_hosts"
+          ssh-keygen -lf "$RUNNER_TEMP/moj1_v2_known_hosts" -E sha256 | grep -Fq 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          opts=(-o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/moj1_v2_known_hosts" -i "$RUNNER_TEMP/moj1_v2_ssh")
+          timeout 40s ssh "${opts[@]}" githubops@178.239.147.150 'umask 077; install -d -m 700 "$HOME/.local/share/moj1-shasta-test-20261021"'
+          timeout 750s scp "${opts[@]}" "$RUNNER_TEMP/moj1-v2-node" "$RUNNER_TEMP/moj1-v2-pilot.tar.gz" "$RUNNER_TEMP/moj1-v2-sha256.txt" githubops@178.239.147.150:.local/share/moj1-shasta-test-20261021/
+          timeout 850s ssh "${opts[@]}" githubops@178.239.147.150 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          set +x
+          umask 077
+          private="$HOME/.local/share/moj1-shasta-test-20261021"
+          test "$(stat -c '%a' "$private")" = 700
+          test "$(stat -c '%a' "$private/wallet.key")" = 600
+          test "$(stat -c '%a' "$private/governance-test-owners/owner-1.key")" = 600
+          test "$(stat -c '%a' "$private/governance-test-owners/owner-2.key")" = 600
+          test "$(stat -c '%a' "$private/governance-test-owners/owner-3.key")" = 600
+          (cd "$private" && sha256sum -c moj1-v2-sha256.txt)
+          install -d -m 700 "$private/runtime-v2"
+          tar -C "$private/runtime-v2" -xzf "$private/moj1-v2-pilot.tar.gz"
+          chmod 700 "$private/moj1-v2-node"
+          node="$private/moj1-v2-node"
+          "$node" --version
+          cd "$private/runtime-v2/moj1-pilot"
+          test -f build/contracts/MojPilotGovernance.json
+          owners="$(python3 - "$private/governance-test-owners/owners-public.json" <<'PY_OWNERS'
+          import json,sys
+          data=json.load(open(sys.argv[1]))
+          assert data['network']=='SHASTA_TEST_ONLY' and data['production_approved'] is False
+          owners=[x['address_base58'] for x in data['owners']]
+          assert len(owners)==3 and len(set(owners))==3
+          print(','.join(owners))
+          PY_OWNERS
+          )"
+          # Reconcile the original token txID WITHOUT A KEY before deciding
+          # whether any new deployment is permissible. Never retry a pending tx.
+          export MOJ1_DEPLOY_JOURNAL_PATH="$private/moj1-token-broadcast-journal.json"
+          "$node" scripts/reconcile-shasta.mjs > "$private/token-readonly-reconciliation.json"
+          python3 - "$private/token-readonly-reconciliation.json" <<'PY_RECON'
+          import json,sys
+          d=json.load(open(sys.argv[1]))
+          assert d['noPrivateKey'] is True and d['noBroadcast'] is True
+          state={x['name']:x['status'] for x in d['result']}
+          assert state.get('MojCoin') in ('VERIFIED','ALREADY_VERIFIED'), state
+          assert state.get('MojAssets') in ('NOT_STARTED','VERIFIED','ALREADY_VERIFIED'), state
+          print('MOJ1_TOKEN_ORIGINAL_TX_READONLY_RECOVERED=PASS')
+          print('MOJ1_NFT_RECONCILIATION_STATUS='+state['MojAssets'])
+          PY_RECON
+          export TRON_PRIVATE_KEY
+          TRON_PRIVATE_KEY="$(python3 - "$private/wallet.key" <<'PY_KEY'
+          import os,stat,sys
+          p=sys.argv[1]
+          mode=stat.S_IMODE(os.stat(p).st_mode)
+          assert mode==0o600 and not os.path.islink(p)
+          data=open(p,'rb').read()
+          assert len(data)==32
+          print(data.hex())
+          PY_KEY
+          )"
+          export MOJ1_WALLET_METADATA="$private/wallet-public.json"
+          "$node" --input-type=module -e '
+          import {TronWeb} from "tronweb";
+          import fs from "node:fs";
+          const wallet=JSON.parse(fs.readFileSync(process.env.MOJ1_WALLET_METADATA,"utf8"));
+          const tron=new TronWeb({fullHost:"https://api.shasta.trongrid.io",privateKey:process.env.TRON_PRIVATE_KEY});
+          if(wallet.address_base58!=="TWTBsKZPVuQgaGNbyJWJm9XR28g4wVBCNQ" || wallet.address_base58!==tron.defaultAddress.base58) throw Error("WALLET_ADDRESS_MISMATCH");
+          const sun=await tron.trx.getBalance(wallet.address_base58);
+          if(BigInt(sun)<1000000000n) throw Error("SHASTA_MIN_1000_TEST_TRX_REQUIRED");
+          console.log("MOJ1_SHASTA_PREDEPLOY_WALLET_MATCH=PASS");
+          console.log("MOJ1_SHASTA_TOKEN_PREDEPLOY_BALANCE_SUN="+sun);
+          '
+          export MOJ1_SHASTA_GOV_OWNERS="$owners"
+          export MOJ_SHASTA_GOVERNANCE
+          MOJ_SHASTA_GOVERNANCE="$(python3 - "$private/governance-deploy-receipt.json" <<'PY_GOV'
+          import json,sys
+          d=json.load(open(sys.argv[1]))
+          assert d['status']=='TEST_GOVERNANCE_ONCHAIN_VERIFIED'
+          assert d['mode']=='SHASTA_TEST_ONLY' and d['mainnet'] is False
+          print(d['governanceAddress'])
+          PY_GOV
+          )"
+          export MOJ1_DEPLOY_JOURNAL_PATH="$private/moj1-token-broadcast-journal.json"
+          export MOJ1_V2_DEPLOY_CONFIRM=SHASTA_V2_ESCROW_ONLY
+          export MOJ1_V2_DEPLOY_JOURNAL_PATH="$private/moj1-v2-token-broadcast-journal.json"
+          "$node" scripts/deploy-v2-shasta.mjs > "$private/v2-escrow-only-onchain-receipt.json"
+          unset TRON_PRIVATE_KEY
+          python3 - "$private/v2-escrow-only-onchain-receipt.json" <<'PY_V2_RECEIPT'
+          import json,sys
+          d=json.load(open(sys.argv[1]))
+          assert d['result']=='V2_SHASTA_ESCROW_ONLY_VERIFIED'
+          assert d['network']=='Shasta' and d['distributed'] is False
+          assert d['mainnet'] is False and d['publicSale'] is False and d['paymentTouched'] is False
+          assert d['supplyWhole']==d['escrowedWhole']=='100000000000'
+          assert len(d['bytecodeEvidence'])==2
+          print('MOJ1_V2_SHASTA_CANDIDATE_TOKEN='+d['tokenAddress'])
+          print('MOJ1_V2_SHASTA_CANDIDATE_ESCROW='+d['factoryAddress'])
+          print('MOJ1_V2_BYTECODE_AND_ESCROW_ATTESTATION=PASS')
+          print('MOJ1_V1_SHASTA_UNMODIFIED=YES')
+          print('MOJ1_V2_MAINNET_AND_REAL_SALE=BLOCKED')
+          PY_V2_RECEIPT
+          REMOTE
