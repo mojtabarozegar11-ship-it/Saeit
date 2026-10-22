@@ -48,6 +48,27 @@ def check():
             stderr=subprocess.DEVNULL, timeout=18, check=False,
         )
         result[label + '_exit_code'] = task.returncode
+        if task.returncode:
+            # Errors may contain private installation details. Report only a
+            # fixed category, never stderr/stdout, usernames, paths or tokens.
+            diagnostic = (task.stderr + task.stdout[:2000]).lower()
+            markers = (
+                (b'permission denied', 'os_permission'),
+                (b'not authorized', 'authorization'),
+                (b'access denied', 'authorization'),
+                (b'license', 'license'),
+                (b'cannot connect', 'service_connection'),
+                (b'could not connect', 'service_connection'),
+                (b'missing', 'missing_dependency'),
+                (b'not found', 'missing_dependency'),
+                (b'cloudlinux', 'cloudlinux_environment'),
+                (b'invalid option', 'unsupported_option'),
+                (b'unknown option', 'unsupported_option'),
+            )
+            result[label + '_error_category'] = next(
+                (category for marker, category in markers if marker in diagnostic),
+                'unclassified',
+            )
         if task.returncode != 0 or len(task.stdout) > 500000:
             continue
         try:
