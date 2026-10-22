@@ -1,0 +1,26 @@
+name: Six specialist executable producer verification
+on:
+  push:
+    branches: [feature/six-specialist-executors-20261022]
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  six-real-producers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Real offline producers and tamper detection
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_40_execution_controller.sh
+          python3 -B -m unittest discover -s tests -p 'test_factory_six_specialist_executors.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_factory_seven_missing_builders.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_factory_40_execution_controller.py' -v
+          echo SIX_WORKERS_SOURCE_CI=PASS
