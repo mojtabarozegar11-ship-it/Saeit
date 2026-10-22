@@ -20,6 +20,7 @@ from pathlib import Path
 import re
 import sys
 import time
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -42,6 +43,38 @@ RISK=re.compile(r"(pesticid|insecticid|herbicid|fungicid|mushroom|"
                 r"food safety|food process|bee|beekeep|chicken|poultry)",
                 re.I)
 MAX_DOC=6_000_000
+# One machine-wide process gate for anonymous API traffic, shared by all threads.
+# Never classify a throttled provider as "no scientific references exist".
+PROVIDER_LOCK=threading.Lock()
+PROVIDER_NEXT_ALLOWED={}
+MINIMUM_SPACING_SECONDS=0.7
+
+class ProviderCoolingDown(RuntimeError):
+    """Another request already hit a temporary provider quota; leave work queued."""
+
+def _slot(endpoint):
+    with PROVIDER_LOCK:
+        now=time.monotonic()
+        deadline=PROVIDER_NEXT_ALLOWED.get(endpoint,0)
+        wait=max(0.0,deadline-now)
+        if wait>4:
+            raise ProviderCoolingDown("SCOUT_PROVIDER_COOLING_DOWN")
+        PROVIDER_NEXT_ALLOWED[endpoint]=max(now,deadline)+MINIMUM_SPACING_SECONDS
+    if wait:
+        time.sleep(wait)
+
+def _limit_provider(endpoint, seconds):
+    with PROVIDER_LOCK:
+        PROVIDER_NEXT_ALLOWED[endpoint]=max(PROVIDER_NEXT_ALLOWED.get(endpoint,0),
+                                            time.monotonic()+seconds)
+
+def _retry_after(headers, default=120):
+    value=headers.get("Retry-After") if headers else None
+    try:
+        return min(1800,max(30,int(value)))
+    except (ValueError,TypeError):
+        return default
+
 
 
 def sha(value):
@@ -364,20 +397,33 @@ def request_json(endpoint,parameters,timeout=10):
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             return None
+    _slot(endpoint)
     opener=urllib.request.build_opener(NoRedirect)
-    with opener.open(req,timeout=timeout) as response:
-        if response.status!=200:
-            raise RuntimeError("SCOUT_API_NOT_OK:"+str(response.status))
-        length=response.headers.get("Content-Length")
-        if length and int(length)>MAX_DOC:
-            raise RuntimeError("SCOUT_API_RESPONSE_TOO_LARGE")
-        data=response.read(MAX_DOC+1)
-        if len(data)>MAX_DOC:
-            raise RuntimeError("SCOUT_API_RESPONSE_TOO_LARGE")
-        obj=json.loads(data.decode("utf8"))
-        if not isinstance(obj,dict):
-            raise RuntimeError("SCOUT_NONOBJECT_API_RESPONSE")
-        return obj
+    try:
+        with opener.open(req,timeout=timeout) as response:
+            if response.status!=200:
+                raise RuntimeError("SCOUT_API_NOT_OK:"+str(response.status))
+            length=response.headers.get("Content-Length")
+            if length and int(length)>MAX_DOC:
+                raise RuntimeError("SCOUT_API_RESPONSE_TOO_LARGE")
+            data=response.read(MAX_DOC+1)
+            if len(data)>MAX_DOC:
+                raise RuntimeError("SCOUT_API_RESPONSE_TOO_LARGE")
+            obj=json.loads(data.decode("utf8"))
+            if not isinstance(obj,dict):
+                raise RuntimeError("SCOUT_NONOBJECT_API_RESPONSE")
+            return obj
+    except urllib.error.HTTPError as exc:
+        if exc.code==429:
+            # Distinguish provider throttling from an actual lack of research.
+            # All already-submitted jobs see this process-wide circuit breaker.
+            _limit_provider(endpoint,_retry_after(exc.headers))
+            raise RuntimeError("SCOUT_API_RATE_LIMITED_429") from None
+        if exc.code in (500,502,503,504):
+            _limit_provider(endpoint,30)
+            raise RuntimeError("SCOUT_PROVIDER_TEMPORARY_"+str(exc.code)) from None
+        # Do not include the URL or possible API key in diagnostics.
+        raise RuntimeError("SCOUT_PROVIDER_HTTP_"+str(exc.code)) from None
 
 
 def fetch_openalex(title):
@@ -447,6 +493,8 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
     try:
         raw=fetcher(title)
         papers=select_papers(raw,terms,worker)
+    except ProviderCoolingDown:
+        return "provider_cooldown"
     except Exception as exc:
         packet={
             "schema":SCHEMA,"source_product_id":ident,"order_id":order_id,
@@ -511,27 +559,39 @@ def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
             fcntl.flock(lk.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:
             return {"already_running":True}
-        pending=[]
+        # New P0 orders run before retries. Provider failures retry in minutes,
+        # substantive source gaps in hours. Neither blocks other P0 orders.
+        unsearched=[]
+        retries=[]
+        now=dt.datetime.now(dt.timezone.utc)
         for rank,ident in enumerate(ids,1):
-            path=area/"stage-02"/"inbox"/(ident+"--r001.json")
-            packet,order=worker.verified_stage1_packet(area,path.name)
+            packet,order=worker.verified_stage1_packet(
+                area,ident+"--r001.json")
             if order.get("source_product_id")!="AGRI-%03d"%rank:
                 raise RuntimeError("SCOUT_INDEX_ORDER_MISMATCH")
             if (stage/"source-evidence"/(order["source_product_id"]+"--r001.json")).exists():
                 continue
             out=stage/"literature-candidates"/(order["source_product_id"]+"--r001.json")
-            if out.exists():
-                old=worker.read(out)
-                try:
-                    checked=dt.datetime.fromisoformat(old["checked_utc"])
-                    if dt.datetime.now(dt.timezone.utc)-checked<dt.timedelta(hours=18):
-                        continue
-                except (ValueError,KeyError,TypeError):
-                    pass
-            pending.append(order)
-        selected=pending[:batch]
+            if not out.exists():
+                unsearched.append(order)
+                continue
+            old=worker.read(out)
+            try:
+                checked=dt.datetime.fromisoformat(old["checked_utc"])
+                if checked.tzinfo is None:
+                    raise ValueError("SCOUT_NAIVE_CANDIDATE_TIMESTAMP")
+            except (ValueError,KeyError,TypeError):
+                checked=dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+            # A 429 must not impose the same 18-hour hold as a fully explored
+            # evidence gap. Retain a small cooldown to respect provider quotas.
+            is_provider_error=old.get("status")=="external_research_api_unavailable"
+            minimum=dt.timedelta(minutes=12) if is_provider_error else dt.timedelta(hours=8)
+            if now-checked>=minimum:
+                retries.append((checked,rank,order))
+        retries.sort(key=lambda x:(x[0],x[1]))
+        selected=(unsearched+[v[2] for v in retries])[:batch]
         counts={"traceable_abstracts":0,"needs_more_research":0,
-                "api_unavailable":0,"already_seeded":0}
+                "api_unavailable":0,"already_seeded":0,"provider_cooldown":0}
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
             futures=[pool.submit(sources_for_topic,root,worker,o,fetcher,backstop)
                      for o in selected]
@@ -544,6 +604,9 @@ def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
             "source_evidence_automatically_documented":counts["traceable_abstracts"],
             "still_require_manual_or_external_research":counts["needs_more_research"],
             "external_provider_unavailable":counts["api_unavailable"],
+            "requests_skipped_due_to_provider_cooldown":counts["provider_cooldown"],
+            "new_orders_prioritized_before_retries":True,
+            "provider_rate_limit_is_not_source_absence":True,
             "previously_seeded":counts["already_seeded"],
             "desk_research_verification_required":True,
             "human_specialist_reviews_completed":0,
