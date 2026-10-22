@@ -2,7 +2,7 @@ name: Activate evidence-gated operational controller for all forty factory famil
 on:
   push:
     branches: [main]
-    paths: ["scripts/factory_build50_native_media.py", "scripts/factory_native_media_review.py", "tests/test_factory_build50_native_media.py", "scripts/factory_build50_learning_4.py", "scripts/factory_learning_independent_review.py", "tests/test_factory_build50_learning_4.py", "scripts/factory_build50_creative_kits.py", "scripts/factory_creative_independent_review.py", "tests/test_factory_build50_creative_kits.py", ".github/workflows/vps-forty-family-operational-controller-20261020.yml", "scripts/factory_40_execution_controller.py", "tests/test_factory_40_execution_controller.py", "scripts/factory_build50_f31_planner.py", "scripts/factory_f31_independent_review.py", "tests/test_factory_build50_f31_planner.py", "deploy/install_factory_40_execution_controller.sh", "scripts/factory_batch5_build.py", "scripts/factory_batch5_specs.py", "scripts/factory_batch5_review.py", "tests/test_factory_batch5.py", "scripts/factory_product_planner.py", "scripts/factory_product_routes.py", "tests/test_factory_product_planner.py", "scripts/factory_build50_f18_webapps.py", "scripts/factory_f18_independent_review.py", "scripts/factory_capability_organizer.py", "tests/test_factory_f18_and_organizer.py"]
+    paths: ["scripts/factory_six_specialist_executors.py", "tests/test_factory_six_specialist_executors.py", "scripts/factory_build50_native_media.py", "scripts/factory_native_media_review.py", "tests/test_factory_build50_native_media.py", "scripts/factory_build50_learning_4.py", "scripts/factory_learning_independent_review.py", "tests/test_factory_build50_learning_4.py", "scripts/factory_build50_creative_kits.py", "scripts/factory_creative_independent_review.py", "tests/test_factory_build50_creative_kits.py", ".github/workflows/vps-forty-family-operational-controller-20261020.yml", "scripts/factory_40_execution_controller.py", "tests/test_factory_40_execution_controller.py", "scripts/factory_build50_f31_planner.py", "scripts/factory_f31_independent_review.py", "tests/test_factory_build50_f31_planner.py", "deploy/install_factory_40_execution_controller.sh", "scripts/factory_batch5_build.py", "scripts/factory_batch5_specs.py", "scripts/factory_batch5_review.py", "tests/test_factory_batch5.py", "scripts/factory_product_planner.py", "scripts/factory_product_routes.py", "tests/test_factory_product_planner.py", "scripts/factory_build50_f18_webapps.py", "scripts/factory_f18_independent_review.py", "scripts/factory_capability_organizer.py", "tests/test_factory_f18_and_organizer.py"]
 permissions: {contents: read}
 concurrency:
   group: saeit-forty-family-operational-controller-activation
@@ -25,6 +25,7 @@ jobs:
           bash -n deploy/install_factory_40_execution_controller.sh
           python3 -m py_compile scripts/factory_40_execution_controller.py
           python3 -m unittest discover -s tests -p 'test_factory_40_execution_controller.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_factory_six_specialist_executors.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_build50_family_bridge.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_build50_f31_planner.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_batch5.py' -v
@@ -82,7 +83,7 @@ jobs:
           d="$RUNNER_TEMP/forty-proof-ssh"
           folder="/home/githubops/factory-runtime/operations/.forty-control-release-$GITHUB_RUN_ID"
           ssh -T -F "$d/config" saeit-factory-verified "umask 077; test ! -e '$folder'; mkdir -m 700 '$folder'"
-          files=(scripts/factory_40_execution_controller.py scripts/factory_40_family_master.py scripts/factory_build50_family_bridge.py scripts/factory_build_50.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_build50_f31_planner.py scripts/factory_f31_independent_review.py scripts/factory_batch5_build.py scripts/factory_batch5_specs.py scripts/factory_batch5_review.py deploy/install_factory_40_execution_controller.sh scripts/factory_product_planner.py scripts/factory_product_routes.py scripts/factory_build50_f18_webapps.py scripts/factory_f18_independent_review.py scripts/factory_capability_organizer.py scripts/factory_build50_f19_web_template.py scripts/factory_f19_independent_web_review.py scripts/factory_build50_f34_icon_kit.py scripts/factory_f34_independent_icon_review.py scripts/factory_build50_workbook.py scripts/factory_build50_creative_kits.py scripts/factory_creative_independent_review.py scripts/factory_build50_learning_4.py scripts/factory_learning_independent_review.py scripts/factory_build50_native_media.py scripts/factory_native_media_review.py)
+          files=(scripts/factory_six_specialist_executors.py scripts/factory_seven_missing_builders.py scripts/factory_40_execution_controller.py scripts/factory_40_family_master.py scripts/factory_build50_family_bridge.py scripts/factory_build_50.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_build50_f31_planner.py scripts/factory_f31_independent_review.py scripts/factory_batch5_build.py scripts/factory_batch5_specs.py scripts/factory_batch5_review.py deploy/install_factory_40_execution_controller.sh scripts/factory_product_planner.py scripts/factory_product_routes.py scripts/factory_build50_f18_webapps.py scripts/factory_f18_independent_review.py scripts/factory_capability_organizer.py scripts/factory_build50_f19_web_template.py scripts/factory_f19_independent_web_review.py scripts/factory_build50_f34_icon_kit.py scripts/factory_f34_independent_icon_review.py scripts/factory_build50_workbook.py scripts/factory_build50_creative_kits.py scripts/factory_creative_independent_review.py scripts/factory_build50_learning_4.py scripts/factory_learning_independent_review.py scripts/factory_build50_native_media.py scripts/factory_native_media_review.py)
           # One bounded transfer replaces per-file SCP/SSH handshakes.
           tar -cf - --transform='s,.*/,,' "${files[@]}" | ssh -T -F "$d/config" saeit-factory-verified "umask 077; tar -xf - --no-same-owner --no-same-permissions -C '$folder'; chmod 600 '$folder'/*"
           manifest="$RUNNER_TEMP/forty-controller.sha256"
@@ -125,6 +126,17 @@ jobs:
               assert cron.count(marker)==1,marker
           print('FORTY_REAL_FAMILY_QUEUE_VERIFIED='+str(d['counts']['registered']))
           print('FORTY_FULL_VERIFIED_EXECUTORS='+str(d['counts']['families_with_real_50_stage_products']))
+          six=json.loads((h/'private/autonomous-product-cycle/quality-excellence/six-agent-supervisor/last-execution.json').read_text('utf8'))
+          assert six['schema']=='saeit.factory.six-specialist-executors.v1'
+          assert len(six['registered_workers'])==6
+          assert set(six['registered_workers'])=={'F12','F13','F14','F16','F17','F26'}
+          assert six['technical_candidates_rechecked']==6
+          assert all(x['agent_executed'] and x['technical_candidate_hash_verified'] for x in six['outcomes'])
+          assert six['native_50_stage_executors_certified']==0
+          assert six['independent_quality_1000_certified']==0
+          assert not six['public_release_authorized'] and six['sites_modified']==0
+          print('SIX_FACTORY_SPECIALIST_EXECUTORS_PRIVATE_CANDIDATES=6')
+          print('SIX_FACTORY_NATIVE_50_STAGE_PROVEN=0')
           print('FORTY_REAL_PRIVATE_PILOT_WORK='+json.dumps(d['pilot_tick_result'],sort_keys=True))
           print('FORTY_OPERATIONAL_CRON_ACTIVE=PASS')
           print('FORTY_NO_FALSE_SELLABLE_PRODUCTS=PASS')
