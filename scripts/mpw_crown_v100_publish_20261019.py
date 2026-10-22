@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Game-only, atomically reversible upgrade from Crown Defender V100 to V100 (portrait release).
+"""Game-only, atomically reversible Crown Defender easy-100-lives balance release.
 
 Scope: /home/zomorod2/mojplaywin.com/design-preview-20261017/mpw-crown-defender-20261019/index.html.
 Does not edit rewrite rules, the Studio page, Django, store, cPanel settings or any subsite.
@@ -9,7 +9,7 @@ import hashlib, json, os, re, stat, sys, tempfile
 HOME=Path('/home/zomorod2')
 GAME=HOME/'mojplaywin.com/design-preview-20261017/mpw-crown-defender-20261019/index.html'
 BACKUPS=HOME/'.mpw-crown-v100-snapshots'
-PREVIOUS_SHA='0502c503125de832a0e1455e4eef73bc2015e0b94adc7e84551962a7d0560def'
+PREVIOUS_SHA='be3c830c50ec6c29e5a08d955d99fe634de989206153cc34718e632572a5c9e2'
 MARKERS=(b'Crown Defender V100',b'Celestial Dominion',b'id="game"',b'id="start"',b'id="pause"',b'id="shopPane"',b'id="energy"',b'id="emp"',b'id="portraitOverdrive"',b'id="portraitChrono"',b'Boss Rush',b'width="540" height="960"',b'window.__mpwCrownDefenderTest')
 
 def digest(raw):return hashlib.sha256(raw).hexdigest()
@@ -24,7 +24,7 @@ def verify_payload(raw):
     return digest(raw)
 def runpaths(run):
     if not re.fullmatch(r'[0-9]{8,16}',run):stop('Invalid GitHub run number')
-    return (HOME/('.mpw-crown-game-stage-'+run+'.html'),BACKUPS/('v40-'+run+'.html'),BACKUPS/('v100-'+run+'.json'))
+    return (HOME/('.mpw-crown-game-stage-'+run+'.html'),BACKUPS/('before-easy100-'+run+'.html'),BACKUPS/('easy100-'+run+'.json'))
 def write_atomic(path,raw,mode):
     if path.is_symlink():stop('Symlink denied '+str(path))
     fd,temp=tempfile.mkstemp(dir=str(path.parent),prefix='.crown-v100-')
@@ -43,7 +43,7 @@ def install(run,newsha):
         stop('Unsafe parent path')
     if backup.exists() or manifest.exists():stop('Run backup already exists')
     old=GAME.read_bytes();new=stage.read_bytes()
-    if digest(old)!=PREVIOUS_SHA:stop('Unexpected live V40 SHA; concurrent edit or different version')
+    if digest(old)!=PREVIOUS_SHA:stop('Unexpected live V100 SHA; concurrent edit or different version')
     if verify_payload(new)!=newsha:stop('Staged V100 source differs from approved GitHub SHA')
     BACKUPS.mkdir(mode=0o700,exist_ok=True)
     if BACKUPS.is_symlink():stop('Unsafe backup storage')

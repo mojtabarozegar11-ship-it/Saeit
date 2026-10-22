@@ -1,4 +1,4 @@
-name: MojPlayWin Crown Defender V100 one-pass upgrade
+name: MojPlayWin Crown Defender easy 100 lives game-only release
 # Rerun with guarded current Studio page length; protect 10 preexisting field guides.
 on:
   push:
@@ -16,7 +16,7 @@ jobs:
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
       github.ref == 'refs/heads/main' &&
       github.event_name == 'push' &&
-      contains(github.event.head_commit.message, '[approved-mpw-crown-v100-20261019]')
+      contains(github.event.head_commit.message, '[approved-mpw-crown-easy100-20261022]')
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
@@ -33,11 +33,11 @@ jobs:
           import hashlib,importlib.util
           s=Path('games/crown-defender/index.html').read_bytes()
           sha=hashlib.sha256(s).hexdigest()
-          assert sha=='be3c830c50ec6c29e5a08d955d99fe634de989206153cc34718e632572a5c9e2'
+          assert sha=='6f4ba27c68a2bb5f414d94a52883c12e916762c69bc1cd8a418b1ea188fc5232'
           spec=importlib.util.spec_from_file_location('v100','scripts/mpw_crown_v100_publish_20261019.py')
           m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
           assert m.verify_payload(s)==sha
-          for marker in [b'window.__mpwCrownDefenderTest',b'Celestial Dominion',b'id="shopPane"',b'id="pause"',b'localStorage',b'getState:',b'portraitOverdrive',b'portraitChrono',b'Boss Rush',b'width="540" height="960"']:
+          for marker in [b'window.__mpwCrownDefenderTest',b'Celestial Dominion',b'id="shopPane"',b'id="pause"',b'localStorage',b'getState:',b'portraitOverdrive',b'portraitChrono',b'Boss Rush',b'function startingLives(){return 100}','♥ 100 / 100'.encode('utf-8'),b'width="540" height="960"']:
             assert marker in s,marker
           print('MPW_CROWN_V100_PREFLIGHT=PASS bytes='+str(len(s)))
           PY
@@ -48,7 +48,7 @@ jobs:
           PY
           node --check /tmp/mpw-crown-v100.js
           echo 'MPW_CROWN_V100_JS_PARSE=PASS'
-      - name: Capture protected-route baseline and require current V40 game
+      - name: Capture protected-route baseline and require current V100 game
         shell: bash
         run: |
           set -euo pipefail
