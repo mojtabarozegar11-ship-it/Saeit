@@ -60,7 +60,7 @@ def test_catalogue_requires_checkout_verification_and_unambiguous_sku(purchase):
     # An approved product still cannot expose a dead or guessed payment link.
     assert catalogue()[0]["available"] is False
     assert catalogue()[0]["checkout"] is None
-    with patch("core.crown_fleet.reverse", return_value=f"/store/crown/{purchase.p.pk}/checkout/"):
+    with patch("core.crown_fleet.gateway_ready", return_value=True), patch("core.crown_fleet.reverse", return_value=f"/store/crown/{purchase.p.pk}/checkout/"):
         item = catalogue()[0]
         assert item["available"] is True
         assert item["checkout"] == f"/store/crown/{purchase.p.pk}/checkout/"
@@ -74,7 +74,7 @@ def test_catalogue_requires_checkout_verification_and_unambiguous_sku(purchase):
 @override_settings(CROWN_STORE_ENABLED=True)
 def test_checkout_must_be_local_store_route(purchase):
     for invalid in ("https://other.example/checkout/", "//other.example/store/", "/admin/", "/store/../admin/"):
-        with patch("core.crown_fleet.reverse", return_value=invalid):
+        with patch("core.crown_fleet.gateway_ready", return_value=True), patch("core.crown_fleet.reverse", return_value=invalid):
             assert catalogue()[0]["available"] is False
             assert catalogue()[0]["checkout"] is None
 
