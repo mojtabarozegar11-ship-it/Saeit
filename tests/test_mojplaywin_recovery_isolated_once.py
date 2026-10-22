@@ -51,6 +51,49 @@ class RecoveryIsolationTests(unittest.TestCase):
                 recover(buf,base)
             self.assertFalse((Path(td)/"outside").exists())
 
+    def test_source_account_absolute_symlink_is_rebased_inside_sandbox(self):
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td)/"private"
+            base.mkdir(mode=0o700)
+            buf=io.BytesIO()
+            with tarfile.open(fileobj=buf, mode="w") as tar:
+                for name in ("Saeit-staging/assets/data.txt", "mojplaywin.com/index.html"):
+                    raw=b"safe synthetic content"
+                    item=tarfile.TarInfo(name)
+                    item.size=len(raw)
+                    tar.addfile(item,io.BytesIO(raw))
+                link=tarfile.TarInfo("mojplaywin.com/alias.txt")
+                link.type=tarfile.SYMTYPE
+                link.linkname="/home/zomorod2/Saeit-staging/assets/data.txt"
+                tar.addfile(link)
+            buf.seek(0)
+            report=recover(buf,base)
+            restored=base/"mojplaywin.com"/"alias.txt"
+            self.assertTrue(report["restore_complete"])
+            self.assertTrue(restored.is_symlink())
+            self.assertEqual(restored.resolve(),base/"Saeit-staging"/"assets"/"data.txt")
+            self.assertFalse(restored.readlink().is_absolute())
+
+    def test_absolute_symlink_outside_two_backed_roots_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td)/"private"
+            base.mkdir(mode=0o700)
+            buf=io.BytesIO()
+            with tarfile.open(fileobj=buf, mode="w") as tar:
+                for name in ("Saeit-staging/a", "mojplaywin.com/b"):
+                    raw=b"data"
+                    item=tarfile.TarInfo(name)
+                    item.size=len(raw)
+                    tar.addfile(item,io.BytesIO(raw))
+                link=tarfile.TarInfo("mojplaywin.com/outside")
+                link.type=tarfile.SYMTYPE
+                link.linkname="/etc/passwd"
+                tar.addfile(link)
+            buf.seek(0)
+            with self.assertRaisesRegex(ValueError, "unbacked absolute archive link"):
+                recover(buf,base)
+            self.assertFalse((base/"mojplaywin.com"/"outside").exists())
+
     def test_failure_diagnostics_are_fixed_codes_without_private_paths(self):
         self.assertEqual(safe_failure_code(ValueError(
             "absolute archive link cannot be restored into sandbox")), "absolute_link")

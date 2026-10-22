@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/mojplaywin-plt-fileonly-backup-recovery-diagnostic-20261022.yml"
+      - "scripts/mojplaywin_restore_files_isolated_runner.py"
+      - "tests/test_mojplaywin_recovery_isolated_once.py"
 permissions:
   contents: read
 concurrency:
