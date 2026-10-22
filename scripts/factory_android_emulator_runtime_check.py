@@ -42,7 +42,10 @@ def tap_visible_app_control(family):
         start = raw.find("<?xml")
         if start < 0:
             raise RuntimeError("EMULATOR_ACCESSIBILITY_TREE_MISSING")
-        hierarchy = ET.fromstring(raw[start:])
+        finish = raw.find("</hierarchy>", start)
+        if finish < 0:
+            raise RuntimeError("EMULATOR_ACCESSIBILITY_TREE_INCOMPLETE")
+        hierarchy = ET.fromstring(raw[start:finish + len("</hierarchy>")])
         for node in hierarchy.iter("node"):
             attrs = node.attrib
             label = (attrs.get("text", "") + " " +
