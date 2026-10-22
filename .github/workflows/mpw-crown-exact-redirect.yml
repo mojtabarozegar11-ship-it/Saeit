@@ -1,0 +1,156 @@
+name: MojPlayWin Crown exact spelling redirect with private rollback
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/mpw_crown_exact_redirect.py
+      - .github/workflows/mpw-crown-exact-redirect.yml
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-crown-exact-redirect.yml
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify exact-insertion function never changes unrelated bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_crown_exact_redirect.py
+          python3 - <<'PY'
+          import importlib.util
+          spec=importlib.util.spec_from_file_location('crown','scripts/mpw_crown_exact_redirect.py')
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          for sep in (b'\n',b'\r\n'):
+              old=sep.join((b'RewriteEngine On',*m.ANCHOR_LINES,b'RewriteRule ^.*$ /design-preview-20261017/mpw-crown-defender-20261019/index.html [END,QSD]',b''))
+              new=m.insert_alias(old)
+              block=sep.join(m.BLOCK_LINES)+sep
+              assert new.replace(block,b'',1)==old
+              assert new.count(block)==1
+              assert m.BEFORE_SHA=='a1a2e42ab3e001f3eca6ee2027d409ee8c40d6b87cf91b9e66106bd841909b48'
+          print('CROWN_EXACT_REWRITE_PURE_TEST=PASS')
+          PY
+  publish:
+    needs: validate
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      contains(github.event.head_commit.message, '[approved-crown-exact-route-20261022]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Capture protected URL baseline and require missing alias
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import urlopen
+          from urllib.error import HTTPError
+          paths=('/','/games/','/studio/','/store/','/games/crown-defender/')
+          for path in paths:
+              with urlopen('https://mojplaywin.com'+path,timeout=23) as r:
+                  assert r.status==200
+                  body=r.read(150000)
+                  if path.endswith('/crown-defender/'):
+                      assert b'Air Supremacy' in body
+              print('CROWN_EXACT_BASELINE='+path+' 200')
+          try:
+              with urlopen('https://mojplaywin.com/games/corwn-defender/',timeout=20) as r:
+                  raise RuntimeError('Alias no longer missing: inspect before write')
+          except HTTPError as e:
+              if e.code!=404:raise
+          print('CROWN_EXACT_BEFORE=404')
+          PY
+      - name: Establish pinned GitHub-to-VPS-to-cPanel SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-crown-exact-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo 'CROWN_EXACT_RELAY_PINNED=YES'
+      - name: Patch one rewrite rule after exact-SHA backup
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-crown-exact-ssh"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel "python3 - install '$GITHUB_RUN_ID'" < scripts/mpw_crown_exact_redirect.py
+      - name: Verify 301 to the same original HTML and untouched route status
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          root='https://mojplaywin.com'
+          canonical=root+'/games/crown-defender/'
+          legacy=root+'/games/corwn-defender/'
+          for path in ('/','/games/','/studio/','/store/','/games/crown-defender/'):
+              with urlopen(Request(root+path,headers={'Cache-Control':'no-cache'}),timeout=25) as r:
+                  assert r.status==200,path
+                  if path.endswith('/crown-defender/'):
+                      assert b'Air Supremacy' in r.read(150000)
+          with urlopen(Request(legacy,headers={'Cache-Control':'no-cache'}),timeout=25) as r:
+              assert r.status==200 and r.url==canonical
+              assert b'Air Supremacy' in r.read(150000)
+          print('CROWN_EXACT_301_AND_PROTECTED_ROUTES=PASS')
+          PY
+          d="$RUNNER_TEMP/mpw-crown-exact-ssh"
+          timeout 20s ssh -T -F "$d/config" saeit-cpanel "python3 - status '$GITHUB_RUN_ID'" < scripts/mpw_crown_exact_redirect.py
+      - name: Restore only previous attested rewrite file if smoke fails
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-crown-exact-ssh"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_crown_exact_redirect.py
