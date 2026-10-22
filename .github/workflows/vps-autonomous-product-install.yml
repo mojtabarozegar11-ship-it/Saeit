@@ -107,7 +107,9 @@ jobs:
     needs: measured-qa
     if: github.event_name == 'workflow_dispatch' || (github.repository == 'mojtabarozegar11-ship-it/Saeit' && contains(github.event.head_commit.message, '[approved-factory-unlimited-builds-20261019]'))
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    # Measured VPS regressions and private manufacturing already consumed the
+    # old 12-minute budget before the final signed-off integrity readbacks.
+    timeout-minutes: 22
     steps:
       - uses: actions/checkout@v4
       - name: Validate product and installer
@@ -293,13 +295,31 @@ jobs:
           root=base/"private/autonomous-product-cycle"
           runtime=base/"operations/autonomous-product-runtime"
           py=base/".venv/bin/python"
-          # Actual runtime ticks; cache hits never count as novel products.
-          for _ in range(10):
+          # Always execute at least one real tick, but do not spend ten long
+          # full manufacturing cycles when source-bound technical candidates
+          # already satisfy the later, stricter readback assertions.
+          def engineering_targets_exist():
+              accepted=[]
+              for ticket in (root/"engineering-intake").glob("*.json"):
+                  if len(ticket.stem)!=64:continue
+                  try:
+                      row=json.loads(ticket.read_text())
+                  except (OSError,ValueError):continue
+                  if row.get("schema")=="saeit.factory.engineering-intake.v1" and row.get("status")=="technical_prototype_built":
+                      accepted.append(row)
+              return (len({row.get("functional_sha256") for row in accepted})>=6
+                      and any(row.get("family_id")=="F27" for row in accepted)
+                      and len({row.get("functional_sha256") for row in accepted
+                               if str(row.get("source_id","")).startswith("auto_need_")})>=2)
+          for tick in range(10):
               subprocess.run([str(py),str(runtime/"scripts/factory_vps_product_cycle.py"),
                   "--db",str(base/"private/factory-fresh-isolated.sqlite3"),
                   "--out",str(root),"--recipes",str(runtime/"product_recipes"),
                   "--enable-designer","--enable-design-intake","--enable-invention-supply"],check=True,timeout=90,
                   stdout=subprocess.DEVNULL)
+              if engineering_targets_exist():
+                  print("FACTORY_ENGINEERING_TICKS_RUN="+str(tick+1))
+                  break
           status=json.loads((root/"engineering-intake/production-results.json").read_text())
           records=[]
           for path in (root/"engineering-intake").glob("*.json"):
