@@ -1,0 +1,6 @@
+F41 Merchant Crypto Export Audit Toolkit -- EVALUATION TERMS
+Copyright (c) 2026 Mojtaba Roozegar. All rights reserved.
+Provided for technical evaluation only. No resale, redistribution, paid customer
+release, warranty, independent security assurance or on-chain payment validation
+is represented by this preview. Commercial licensing requires separate approval.
+No private keys, real wallet operations or payment settlement are included.
