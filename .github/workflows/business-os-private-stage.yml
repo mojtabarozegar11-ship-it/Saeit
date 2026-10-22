@@ -152,24 +152,22 @@ jobs:
             "cd '$stage_vps' && bash -n scripts/business_os_private_cron.sh && bash scripts/business_os_private_cron.sh --run vps" > /dev/null 2>&1
           timeout 90s ssh -F "$stage_root/config" business-os-cpanel \
             "cd '$stage_host' && bash -n scripts/business_os_private_cron.sh && bash scripts/business_os_private_cron.sh --run cpanel" > /dev/null 2>&1
-          # Preserve only fixed status markers and numeric exit codes in CI.
-          timeout 30s ssh -F "$stage_root/config" business-os-vps \
-            "command -v crontab >/dev/null && crontab -l >/dev/null 2>&1" > /dev/null 2>&1 && echo "VPS_CRON_READABLE" || echo "VPS_CRON_READ_NOT_CONFIRMED"
+          # VPS crontab installation returned 74 (write denied/failed) in
+          # run 39814747223. Respect that boundary: observe VPS read-only;
+          # do not retry a protected cron write or escalate permissions.
+          # cPanel scheduling is independent: its local controller now makes
+          # cPanel-local economic diagnostics without a VPS snapshot.
+          if timeout 30s ssh -F "$stage_root/config" business-os-vps \
+            "crontab -l 2>/dev/null | grep -Fq '# SAEIT_BUSINESS_OS_PRIVATE_V1'"; then
+            echo "BUSINESS_OS_VPS_PRIVATE_CRON_MARKER_PRESENT_READONLY"
+          else
+            echo "BUSINESS_OS_VPS_PRIVATE_CRON_MARKER_NOT_CONFIRMED"
+          fi
           timeout 40s ssh -F "$stage_root/config" business-os-cpanel \
             "cd '$stage_host' && bash scripts/business_os_private_cron.sh --install cpanel" > /dev/null 2>&1
-          vps_code=0
-          timeout 40s ssh -F "$stage_root/config" business-os-vps \
-            "cd '$stage_vps' && bash scripts/business_os_private_cron.sh --install vps" > /dev/null 2>&1 || vps_code=$?
-          if test "$vps_code" -eq 0; then
-            echo "BUSINESS_OS_PRIVATE_15MIN_VPS_AND_CPANEL_CRON_ACTIVE"
-          else
-            echo "BUSINESS_OS_VPS_CRON_INSTALL_EXIT=$vps_code"
-            rollback_code=0
-            timeout 40s ssh -F "$stage_root/config" business-os-cpanel \
-              "cd '$stage_host' && bash scripts/business_os_private_cron.sh --uninstall cpanel" > /dev/null 2>&1 || rollback_code=$?
-            echo "BUSINESS_OS_CPANEL_ROLLBACK_EXIT=$rollback_code"
-            exit 1
-          fi
+          echo "BUSINESS_OS_CPANEL_PRIVATE_15MIN_CRON_INSTALLED"
+          echo "BUSINESS_OS_VPS_PRIVATE_15MIN_CRON_BLOCKED_EXIT_74"
+          echo "::warning::VPS crontab write failed in prior run; no VPS schedule installation attempted. cPanel local diagnostics only."
           echo "PRIVATE_RELEASE=$stage_name"
           echo "No website app code, database schema, transaction, service, or public route modified."
 
