@@ -82,6 +82,18 @@ test('forged reference spans and absent compiled runtime are refused', () => {
   assert.throws(() => attestBytecode(second), /COMPILED_RUNTIME_INVALID_HEX/);
 });
 
+test('factory-created escrow requires an attested token parent and exact runtime', () => {
+  const input = fixture({name: 'MojGenesisDistributor', withImmutable: true});
+  input.artifact.immutableReferences = {};
+  delete input.chainInfo.smart_contract.bytecode;
+  assert.throws(() => attestBytecode(input), /CHAIN_CREATION_INVALID_HEX/);
+  input.factoryParentAttested = true;
+  assert.match(attestBytecode(input).method, /^ATTESTED_PARENT_PLUS_RUNTIME_MATCH/);
+  assert.equal(attestBytecode(input).creationSha256, null);
+  input.chainInfo.runtimecode = '61' + input.chainInfo.runtimecode.slice(2);
+  assert.throws(() => attestBytecode(input), /RUNTIME_CODE_MISMATCH/);
+});
+
 test('missing chain bytecode is never interpreted as an empty contract', () => {
   const input = fixture();
   delete input.chainInfo.smart_contract.bytecode;

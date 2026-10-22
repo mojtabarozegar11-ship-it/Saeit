@@ -40,20 +40,25 @@ function immutableSpans(artifact, byteLength) {
 }
 
 export function attestBytecode({name, artifact, chainInfo, constructorAddresses,
-                                immutableAddresses = [], addressToHex}) {
+                                immutableAddresses = [], addressToHex,
+                                factoryParentAttested = false}) {
   if (!/^[A-Za-z0-9]+$/.test(name) || artifact?.contractName !== name ||
       typeof addressToHex !== 'function' || !Array.isArray(constructorAddresses) ||
       !Array.isArray(immutableAddresses)) {
     throw new Error('ATTESTATION_INPUT_INVALID');
   }
   const original = canonicalHex(artifact.bytecode, name + '_COMPILED_CREATION');
-  const deployedCreation = canonicalHex(chainInfo?.smart_contract?.bytecode,
-    name + '_CHAIN_CREATION');
+  // Contracts created from inside another contract may not expose creation
+  // bytecode through getcontractinfo. Only the escrow of an already attested
+  // MojCoin parent may use this explicit, runtime-only provenance path.
+  const factoryRuntimeOnly = name === 'MojGenesisDistributor' &&
+    factoryParentAttested === true &&
+    !chainInfo?.smart_contract?.bytecode;
+  const deployedCreation = factoryRuntimeOnly ? null :
+    canonicalHex(chainInfo?.smart_contract?.bytecode, name + '_CHAIN_CREATION');
   const args = constructorAddresses.map(address => addressWord(address, addressToHex)).join('');
-  // On TRON the creation bytecode may be exposed without the appended constructor
-  // arguments, so accept exactly one of these two documented representations.
-  // Constructor/state identity is verified independently by the read-only caller.
-  if (deployedCreation !== original && deployedCreation !== original + args) {
+  if (deployedCreation !== null &&
+      deployedCreation !== original && deployedCreation !== original + args) {
     throw new Error(name + '_CREATION_CODE_MISMATCH');
   }
   const runtime = canonicalHex(chainInfo?.runtimecode, name + '_CHAIN_RUNTIME');
@@ -101,12 +106,14 @@ export function attestBytecode({name, artifact, chainInfo, constructorAddresses,
   }
   return {
     contract: name,
-    method: spans.length ? (declaredSlots === spans.length ?
-      'CREATION_AND_RUNTIME_MATCH_WITH_CHECKED_IMMUTABLES' :
-      'CREATION_AND_RUNTIME_MATCH_WITH_VERIFIED_IMMUTABLE_ADDRESS_SLOTS') :
-      'CREATION_AND_EXACT_RUNTIME_MATCH',
+    method: (factoryRuntimeOnly ? 'ATTESTED_PARENT_PLUS_' : 'CREATION_AND_') +
+      (spans.length ? (declaredSlots === spans.length ?
+        'RUNTIME_MATCH_WITH_CHECKED_IMMUTABLES' :
+        'RUNTIME_MATCH_WITH_VERIFIED_IMMUTABLE_ADDRESS_SLOTS') :
+        'EXACT_RUNTIME_MATCH'),
     immutableSlots: spans.length,
-    creationSha256: createHash('sha256').update(deployedCreation, 'hex').digest('hex'),
+    creationSha256: deployedCreation === null ? null :
+      createHash('sha256').update(deployedCreation, 'hex').digest('hex'),
     runtimeSha256: createHash('sha256').update(runtime, 'hex').digest('hex')
   };
 }

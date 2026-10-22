@@ -68,6 +68,8 @@ for (const item of deployed) {
     () => tron.trx.getContractInfo(item.address), 'CODE_'+item.name);
   bytecodeEvidence.push(attestBytecode({
     ...item, artifact:artifacts[item.name], chainInfo:info,
+    factoryParentAttested:item.name === 'MojGenesisDistributor' &&
+      bytecodeEvidence.some(p => p.contract === 'MojCoin'),
     addressToHex:address => tron.address.toHex(address)
   }));
 }
