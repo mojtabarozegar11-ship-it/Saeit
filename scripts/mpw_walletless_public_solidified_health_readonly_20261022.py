@@ -29,7 +29,9 @@ for label,url in pairs:
  result={'provider':label,'reachable':False,'solidified_block':False,
          'fresh_under_10min':False,'auth_required_or_error':False}
  try:
-  req=urllib.request.Request(url,method='POST',data=b'{}',headers={'Content-Type':'application/json','Accept':'application/json'})
+  headers={'Accept':'application/json'}
+  if label=='Nodit':headers['X-API-KEY']='nodit-demo'  # documented public demo credential; never use for production
+  req=urllib.request.Request(url,method='GET',headers=headers)
   with opener.open(req,timeout=12) as response:
    if response.status!=200:raise RuntimeError('not 200')
    raw=response.read(120001)
@@ -45,6 +47,7 @@ for label,url in pairs:
  except (urllib.error.HTTPError,urllib.error.URLError,RuntimeError,ValueError,KeyError,TimeoutError,OSError) as exc:
   result['auth_required_or_error']=True
   result['error_class']=type(exc).__name__
+  if isinstance(exc,urllib.error.HTTPError): result['http_status']=exc.code
  results.append(result)
 print('MPW_WALLETLESS_TRON_REAL_PROVIDERS='+json.dumps({
  'sources':results,
