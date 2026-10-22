@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS mpw_walletless_trx_guest_claim_v1 (
   created_at DATETIME(6) NOT NULL,
   expires_at DATETIME(6) NOT NULL,
   PRIMARY KEY(id),
-  UNIQUE KEY mpw_walletless_guest_one_buyer(buyer_id),
+  KEY mpw_walletless_guest_buyer(buyer_id),
   UNIQUE KEY mpw_walletless_guest_one_secret(secret_sha256),
   KEY mpw_walletless_guest_expiry(expires_at)
 ) ENGINE=InnoDB;
@@ -86,4 +86,20 @@ CREATE TABLE IF NOT EXISTS mpw_walletless_trx_guest_rate_v1 (
   attempts INT UNSIGNED NOT NULL,
   created_at DATETIME(6) NOT NULL,
   PRIMARY KEY(rate_key)
+) ENGINE=InnoDB;
+
+-- 120-second single-use wallet-browser handoff; raw token is never stored.
+-- A separately signed guest cookie is issued only AFTER ticket redemption.
+CREATE TABLE IF NOT EXISTS mpw_walletless_trx_guest_handoff_v1 (
+  ticket_sha256 CHAR(64) NOT NULL,
+  invoice_id BIGINT UNSIGNED NOT NULL,
+  buyer_id BIGINT UNSIGNED NOT NULL,
+  created_at DATETIME(6) NOT NULL,
+  expires_at DATETIME(6) NOT NULL,
+  consumed_at DATETIME(6) NULL,
+  PRIMARY KEY(ticket_sha256),
+  KEY mpw_walletless_handoff_buyer_time(buyer_id,created_at),
+  KEY mpw_walletless_handoff_expiry(expires_at),
+  CONSTRAINT mpw_walletless_handoff_invoice_fk FOREIGN KEY(invoice_id)
+     REFERENCES mpw_walletless_trx_reservation_v1(id)
 ) ENGINE=InnoDB;
