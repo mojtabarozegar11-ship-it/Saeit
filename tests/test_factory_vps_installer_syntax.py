@@ -80,6 +80,8 @@ class VPSProductInstallerTests(unittest.TestCase):
         source=Path(__file__).resolve().parents[1]
         wf=(source/".github/workflows/vps-autonomous-product-install.yml").read_text(encoding="utf8")
         self.assertIn('timeout-minutes: 22',wf)
+        self.assertIn('if engineering_targets_exist():',wf)
+        self.assertIn('FACTORY_ENGINEERING_TICKS_RUN=',wf)
 
 
 if __name__ == "__main__":
