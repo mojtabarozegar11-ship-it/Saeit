@@ -1,0 +1,98 @@
+name: F41 multi-product value engine and VPS private install
+on:
+  pull_request:
+    paths:
+      - scripts/factory_f41_multi_product_builder.py
+      - scripts/factory_f41_token_builder_v2.py
+      - tests/test_factory_f41_multiproduct.py
+      - tests/test_factory_f41_token_manifest_security.py
+      - factory_config/f41_product_catalog.json
+      - factory_config/f41_samples/**
+      - factory_assets/f41_demo_assets/**
+      - deploy/install_factory_f41_multiproduct.sh
+      - .github/workflows/factory-f41-multiproduct.yml
+  push:
+    branches: [main, feature/f41-multiproduct-value-engine-20261022]
+    paths:
+      - scripts/factory_f41_multi_product_builder.py
+      - scripts/factory_f41_token_builder_v2.py
+      - tests/test_factory_f41_multiproduct.py
+      - tests/test_factory_f41_token_manifest_security.py
+      - factory_config/f41_product_catalog.json
+      - factory_config/f41_samples/**
+      - factory_assets/f41_demo_assets/**
+      - deploy/install_factory_f41_multiproduct.sh
+      - .github/workflows/factory-f41-multiproduct.yml
+permissions: {contents: read}
+concurrency:
+  group: factory-f41-multiproduct-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  private-quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Test four real functional products and full receipt security
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_f41_multiproduct.sh
+          python3 -B -m unittest discover -s tests -p 'test_factory_f41_*.py' -v
+          for kind in vesting reconciliation provenance nft_metadata; do
+            python3 -B scripts/factory_f41_multi_product_builder.py \
+              --spec "factory_config/f41_samples/$kind.json" \
+              --out "$RUNNER_TEMP/f41-$kind" --assets factory_assets/f41_demo_assets
+            python3 -B scripts/factory_f41_multi_product_builder.py \
+              --spec "factory_config/f41_samples/$kind.json" \
+              --out "$RUNNER_TEMP/f41-$kind" --assets factory_assets/f41_demo_assets --verify
+          done
+          python3 -B scripts/factory_f41_token_builder_v2.py --spec factory_config/f41_pilot_token.json --out "$RUNNER_TEMP/f41-trc20"
+          python3 -B scripts/factory_f41_token_builder_v2.py --spec factory_config/f41_pilot_token.json --out "$RUNNER_TEMP/f41-trc20" --verify
+      - name: Compile official TRON token source with pinned compiler
+        working-directory: ${{ runner.temp }}/f41-trc20
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund
+          npx --no-install tronbox compile
+          test -s build/contracts/FactoryFixedSupplyToken.json
+          echo F41_TRON_NATIVE_COMPILATION=PASS
+  private-vps-install:
+    needs: private-quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install four isolated utilities with authenticated SSH relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          work="$(mktemp -d)"
+          chmod 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          opts=(-i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15)
+          host=githubops@178.239.147.150
+          stage="/home/githubops/factory-runtime/operations/.f41-multi-stage-$GITHUB_RUN_ID"
+          ssh -T "${opts[@]}" "$host" "umask 077; mkdir -m 700 '$stage'"
+          scp "${opts[@]}" scripts/factory_f41_multi_product_builder.py "$host:$stage/factory_f41_multi_product_builder.py"
+          scp "${opts[@]}" scripts/factory_f41_token_builder_v2.py "$host:$stage/factory_f41_token_builder.py"
+          scp "${opts[@]}" factory_config/f41_product_catalog.json "$host:$stage/catalog.json"
+          for kind in vesting reconciliation provenance nft_metadata; do
+            scp "${opts[@]}" "factory_config/f41_samples/$kind.json" "$host:$stage/$kind.json"
+          done
+          scp "${opts[@]}" factory_assets/f41_demo_assets/demo_art.svg "$host:$stage/demo_art.svg"
+          scp "${opts[@]}" factory_assets/f41_demo_assets/license_terms.txt "$host:$stage/license_terms.txt"
+          scp "${opts[@]}" deploy/install_factory_f41_multiproduct.sh "$host:$stage/install.sh"
+          ssh -T "${opts[@]}" "$host" "bash -n '$stage/install.sh' && bash '$stage/install.sh' '$stage'"

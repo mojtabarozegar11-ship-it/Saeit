@@ -1,0 +1,12 @@
+{
+  "schema": "saeit.factory.f41-product-request.v1",
+  "kind": "provenance",
+  "product_id": "asset_integrity_demo",
+  "data": {
+    "files": [
+      "license_terms.txt",
+      "demo_art.svg"
+    ],
+    "claimed_license": "Owner-supplied pending independent verification"
+  }
+}
