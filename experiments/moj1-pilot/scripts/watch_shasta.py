@@ -97,6 +97,35 @@ def classify(latest, solid):
     return "UNVERIFIED"
 
 
+def validate_worker_instruction(data):
+    if not isinstance(data, dict) or data.get("schema_version") != 1:
+        raise RuntimeError("WORKER_MESSAGE_SCHEMA_INVALID")
+    if data.get("recipient") != "MOJ1_SHASTA_TEST_READONLY_WATCH":
+        raise RuntimeError("WORKER_MESSAGE_RECIPIENT_INVALID")
+    if data.get("network") != "Shasta" or data.get("wallet") != WALLET:
+        raise RuntimeError("WORKER_MESSAGE_SCOPE_INVALID")
+    if data.get("command") != "CHECK_SHASTA_FUNDING_READONLY":
+        raise RuntimeError("WORKER_MESSAGE_COMMAND_DENIED")
+    message_id = data.get("message_id")
+    if not isinstance(message_id, str) or len(message_id) > 100 or not message_id.startswith("moj1-worker-instruction-"):
+        raise RuntimeError("WORKER_MESSAGE_ID_INVALID")
+    required = {"NO_PRIVATE_KEY_READ", "NO_BROADCAST", "NO_MAINNET", "NO_REAL_TRX",
+                "NO_CAPTCHA_BYPASS", "NO_ACCOUNT_LOGIN", "NO_CONTRACT_DEPLOYMENT"}
+    if data.get("restrictions") is None or set(data["restrictions"]) != required:
+        raise RuntimeError("WORKER_MESSAGE_RESTRICTIONS_INVALID")
+    return message_id
+
+
+def read_worker_instruction():
+    path = MONITOR / "inbox.json"
+    if not path.exists() and not path.is_symlink():
+        return None
+    assert_file(path)
+    if path.stat().st_size > 4096:
+        raise RuntimeError("WORKER_MESSAGE_TOO_LARGE")
+    return validate_worker_instruction(json.loads(path.read_text(encoding="utf-8")))
+
+
 def run_self_test():
     z = {"account_present": False, "balance_sun": 0}
     f = {"account_present": True, "balance_sun": 2_000_000}
@@ -106,6 +135,20 @@ def run_self_test():
     assert classify(f, a) == "UNVERIFIED"
     assert classify(a, a) == "UNFUNDED"
     assert classify(z, f) == "UNVERIFIED"
+    good = {"schema_version": 1, "recipient": "MOJ1_SHASTA_TEST_READONLY_WATCH",
+            "network": "Shasta", "wallet": WALLET,
+            "command": "CHECK_SHASTA_FUNDING_READONLY",
+            "message_id": "moj1-worker-instruction-test",
+            "restrictions": ["NO_PRIVATE_KEY_READ", "NO_BROADCAST", "NO_MAINNET",
+                             "NO_REAL_TRX", "NO_CAPTCHA_BYPASS",
+                             "NO_ACCOUNT_LOGIN", "NO_CONTRACT_DEPLOYMENT"]}
+    assert validate_worker_instruction(good) == "moj1-worker-instruction-test"
+    try:
+        validate_worker_instruction(dict(good, command="DEPLOY_SHASTA"))
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("Unsafe worker command was not rejected")
     print("MOJ1_SHASTA_WATCH_SELF_TEST=PASS")
 
 
@@ -166,12 +209,17 @@ def main():
             "broadcast_count": 0,
             "mainnet_accessed": False,
             "deployment_performed": False,
+            "worker_message_id": None,
+            "worker_message_acknowledged": False,
         }
         try:
+            message_id = read_worker_instruction()
+            receipt["worker_message_id"] = message_id
             receipt["public_owner_fingerprint"] = validate_public_state()
             receipt["latest"] = get_shasta_account("/wallet/getaccount")
             receipt["solidified"] = get_shasta_account("/walletsolidity/getaccount")
             receipt["state"] = classify(receipt["latest"], receipt["solidified"])
+            receipt["worker_message_acknowledged"] = bool(message_id and receipt["state"] != "UNVERIFIED")
         except Exception as exc:
             receipt["error_code"] = type(exc).__name__ + ":" + str(exc)[:100]
         record_receipt(receipt)
