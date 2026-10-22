@@ -33,7 +33,7 @@ jobs:
           import hashlib,importlib.util
           s=Path('games/crown-defender/index.html').read_bytes()
           sha=hashlib.sha256(s).hexdigest()
-          assert sha=='412dc14b9fde4b47cd33a8bf907eb8d7d3979822dedd8807903da0c5a6140b16'
+          assert sha=='855d01ac93d43129310be06a75cddad0ad4bc70c4de8789fd76aa8debed19899'
           spec=importlib.util.spec_from_file_location('v120','scripts/mpw_crown_air_publish.py')
           m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
           assert m.verify_payload(s)==sha
@@ -205,7 +205,7 @@ jobs:
             with urlopen(root+'/mpw-crown-air-assets-20261022/'+p.name,timeout=20) as r:
               raw=r.read(); assert r.status==200 and 'image/webp' in r.headers.get('Content-Type','')
             assert hashlib.sha256(raw).digest()==hashlib.sha256(p.read_bytes()).digest()
-          print('CROWN_AIR_PUBLIC_ASSETS=9_VERIFIED')
+          print('CROWN_AIR_PUBLIC_ASSETS=10_VERIFIED')
           print('MPW_CROWN_Air Supremacy_LIVE_VERIFIED=YES')
           PY
           d="$RUNNER_TEMP/mpw-crown-ssh"

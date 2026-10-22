@@ -37,7 +37,7 @@ def test_install_verify_and_rollback_preserve_neighbor(release):
     mod.install(run, digest)
     mod.status(run)
     assert mod.digest(game.read_bytes()) == digest
-    assert len(list(mod.ASSET_DIR.iterdir())) == 9
+    assert len(list(mod.ASSET_DIR.iterdir())) == 10
     assert neighbor.read_bytes() == b"leave unchanged"
     mod.rollback(run)
     assert game.read_bytes() == old
