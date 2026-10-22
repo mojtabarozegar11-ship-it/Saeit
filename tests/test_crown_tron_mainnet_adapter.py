@@ -256,3 +256,16 @@ def test_actual_mariadb_named_lock_atomic_settlement(
     with pytest.raises(PaymentHold):
         shop._settle(intent.pk, buyer.pk, TX)
     assert LedgerEntry.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_legacy_paid_order_missing_payment_intent_fails_closed(jet_buyer):
+    buyer, _, product = jet_buyer
+    order = Order.objects.create(
+        customer=buyer, status="paid", total=Decimal("4.99"), currency="USD",
+    )
+    OrderItem.objects.create(
+        order=order, product=product, quantity=1,
+        unit_price=Decimal("4.99"), currency="USD",
+    )
+    assert owned_skus(buyer) == []  # No real PaymentIntent or chain evidence.
