@@ -6,6 +6,7 @@ customer data, amounts, database names or private file paths.
 """
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -30,6 +31,7 @@ def check():
     from django.conf import settings
     from django.db import connection
     from django.urls import resolve
+    from django.apps import apps
     from core.models import Order, OrderItem, LedgerEntry
     from mpw_commerce.models import CommerceInvoice, CommerceReceipt, CommerceFulfillment
 
@@ -48,6 +50,24 @@ def check():
     test_dbs = sum(name.lower().startswith('test_') for name in schemas)
     may_create_db = any(' ON *.* ' in item and (
         'ALL PRIVILEGES' in item or 'CREATE' in item) for item in grants)
+    # DDL on the *existing* schema is distinct from global CREATE DATABASE.
+    # Read grants, not data rows. Do not print account/db identifiers.
+    safe_name = re.escape(db_name.upper())
+    current_scopes = re.compile(r'\bON\s+(?:`?' + safe_name + r'`?)\.\*\s+TO\b')
+    scoped = [g for g in grants if current_scopes.search(g)]
+    globals_ = [g for g in grants if ' ON *.* TO ' in g]
+    relevant_grants = scoped + globals_
+    can_create_table = any('ALL PRIVILEGES' in g or
+        re.search(r'\bCREATE\b', g.split(' ON ', 1)[0]) for g in relevant_grants)
+    can_alter_table = any('ALL PRIVILEGES' in g or
+        re.search(r'\bALTER\b', g.split(' ON ', 1)[0]) for g in relevant_grants)
+    native_model_fields = {}
+    for model_name in ('NativeInvoice', 'NativeChainTransfer', 'MerchantWalletProof'):
+        try:
+            native = apps.get_model('mpw_native_checkout', model_name)
+            native_model_fields[model_name] = [f.name for f in native._meta.fields][:40]
+        except LookupError:
+            native_model_fields[model_name] = []
 
     try:
         checkout = resolve('/store/product/72/checkout/')
@@ -84,6 +104,9 @@ def check():
         },
         'isolated_test_db_visible_count': test_dbs,
         'privilege_to_create_new_db_detected': may_create_db,
+        'existing_schema_create_table_grant_detected': bool(can_create_table),
+        'existing_schema_alter_table_grant_detected': bool(can_alter_table),
+        'native_checkout_model_fields': native_model_fields,
         'all_core_model_checks': all((
             {'customer', 'status', 'currency'} <= order_fields,
             {'invoice', 'network', 'tx_hash'} <= receipt_fields,
