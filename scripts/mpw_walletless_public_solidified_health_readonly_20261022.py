@@ -77,3 +77,31 @@ try:
   print('MPW_TRON_EXISTING_RPC_FUNCTION='+json.dumps({'present':False}))
 except Exception as exc:
  print('MPW_TRON_EXISTING_RPC_FUNCTION='+json.dumps({'present':False,'error_type':type(exc).__name__}))
+
+
+# Reuse the site's EXISTING read-only solidity RPC wrapper, no new credentials.
+# Only /walletsolidity/getnowblock is queried, never a write or wallet address.
+try:
+ if callable(fn):
+  for pth in ("/walletsolidity/getnowblock","walletsolidity/getnowblock"):
+   try:
+    raw=fn(pth,{})
+    block=raw.get("block_header",{}).get("raw_data",{}) if isinstance(raw,dict) else {}
+    height=block.get("number")
+    age=abs(time.time()-block.get("timestamp",0)/1000) if type(block.get("timestamp")) is int else None
+    success=type(height) is int and height>1000000 and age is not None and age<600
+    print("MPW_TRON_EXISTING_RPC_READONLY="+json.dumps({
+      "path_variant": "absolute" if pth.startswith("/") else "relative",
+      "valid_solidified_block":success,
+      "secret_values_printed":False,
+      "is_second_independent_provider":False
+    }))
+    if success:break
+   except Exception as e:
+    print("MPW_TRON_EXISTING_RPC_READONLY="+json.dumps({
+      "path_variant":"absolute" if pth.startswith("/") else "relative",
+      "valid_solidified_block":False,"error_type":type(e).__name__,
+      "secret_values_printed":False
+    }))
+except Exception as e:
+ print("MPW_TRON_EXISTING_RPC_READONLY="+json.dumps({"error_type":type(e).__name__}))
