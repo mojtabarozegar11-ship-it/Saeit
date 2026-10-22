@@ -7,6 +7,7 @@ on:
       - '.github/workflows/business-os-private-stage.yml'
       - 'scripts/business_os_cpanel_private_metrics.py'
       - 'scripts/business_os_cpanel_private_run.sh'
+      - 'scripts/business_os_vps_private_factory_metrics.py'
   workflow_dispatch:
 
 permissions:
@@ -45,6 +46,8 @@ jobs:
             scripts/business_os_private_stage_smoke.py \
             scripts/business_os_cpanel_private_metrics.py \
             scripts/business_os_cpanel_private_run.sh \
+            scripts/business_os_vps_private_factory_metrics.py \
+            tests/test_business_os_vps_factory_source.py \
             docs/business-operating-system-20261022.md
           sha256sum "$RUNNER_TEMP/business-os-stage.tgz"
 
@@ -105,6 +108,15 @@ jobs:
           vps_sha="$(timeout 30s ssh -F "$stage_root/config" business-os-vps "sha256sum '$stage_vps/bundle.tgz'" | cut -d ' ' -f1)"
           test "$local_sha" = "$vps_sha"
           timeout 60s ssh -F "$stage_root/config" business-os-vps "cd '$stage_vps' && tar -tzf bundle.tgz > /dev/null && ! tar -tzf bundle.tgz | grep -Eq '(^/|(^|/)\.\.(/|$))' && tar -xzf bundle.tgz && python3 -B scripts/business_os_private_stage_smoke.py"
+          # Factory truth remains on the VPS. SSH/Actions sees only a fixed
+          # success/failure marker, never private report contents or counts.
+          if timeout 90s ssh -F "$stage_root/config" business-os-vps \
+            "cd '$stage_vps' && python3 -B scripts/business_os_vps_private_factory_metrics.py" > /dev/null 2>&1; then
+            echo "BUSINESS_OS_VPS_PRIVATE_FACTORY_REPORT_CREATED"
+          else
+            echo "BUSINESS_OS_VPS_PRIVATE_FACTORY_SOURCE_UNAVAILABLE"
+            exit 1
+          fi
 
           stage_host="/home/zomorod2/Saeit-staging/releases/$stage_name"
           timeout 40s ssh -F "$stage_root/config" business-os-cpanel 'test -d /home/zomorod2/Saeit-staging'
