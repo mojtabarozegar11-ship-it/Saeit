@@ -30,6 +30,7 @@ jobs:
           import re
           class Check(HTMLParser): pass
           html=Path('games/ramadan-war/index.html').read_text(encoding='utf-8')
+          assert Path('games/ramadan-war/route.htaccess').read_text(encoding='utf-8') == 'PassengerEnabled off\nDirectoryIndex index.html\n'
           Check().feed(html)
           assert html.count('ZM-RAMADAN-WAR-WEB-CARD-20261022') == 1
           script=re.findall(r'<script>([\s\S]*?)</script>',html)
@@ -71,6 +72,7 @@ jobs:
           timeout 45s ssh -T -F "$d/config" host "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage/incoming'"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/deploy.py "host:$stage/incoming/deploy.py"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/index.html "host:$stage/incoming/index.html"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/route.htaccess "host:$stage/incoming/.htaccess"
           timeout 45s ssh -T -F "$d/config" host "python3 '$stage/incoming/deploy.py' prepare '$GITHUB_RUN_ID'"
       - name: Publish game route then insert it at exactly position two
         id: publish
