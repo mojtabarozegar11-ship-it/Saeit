@@ -21,7 +21,7 @@ test -s scripts/factory_six_native_candidate_bundle.py
 work="$(mktemp -d)"
 chmod 700 "$work"
 trap 'rm -rf -- "$work"' EXIT
-printf '%s' "$VPS_KEY" | python -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$work/key"
+printf '%s' "$VPS_KEY" | python -c 'import sys;s=sys.stdin.buffer.read().decode("utf-8");s=s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n";sys.stdout.buffer.write(s.encode("utf-8"))' > "$work/key"
 chmod 600 "$work/key"
 ssh-keygen -y -P "" -f "$work/key" >/dev/null
 ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
