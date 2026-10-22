@@ -99,3 +99,5 @@ jobs:
       - name: Clean temporary runner keys
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
+
+# Post-release independent integrity recheck, no writes.
