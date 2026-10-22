@@ -138,10 +138,10 @@ def restart_marker():
 
 
 def install(run: str):
-    prior, intended = prepared_files()
     folder = BACKUPS / run
     if folder.exists() or folder.is_symlink():
         halt("Release identifier already used")
+    prior, intended = prepared_files()
     BACKUPS.mkdir(mode=0o700, exist_ok=True)
     folder.mkdir(mode=0o700)
     manifest = {"run": run, "paths": {}, "status": "prepared"}
