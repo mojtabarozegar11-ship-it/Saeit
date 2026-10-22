@@ -27,7 +27,7 @@ import urllib.parse
 import urllib.request
 
 SCHEMA="saeit.factory.stage2-literature-scout.v1"
-SCOUT_ALGO_VERSION="v2-relevance-provenance"
+SCOUT_ALGO_VERSION="v3-four-source-safety-desk-research"
 EVIDENCE_SCHEMA="saeit.factory.stage2-source-evidence.v1"
 TOPIC_ID=re.compile(r"AGRI-[0-9]{3}\Z")
 WORD_RE=re.compile(r"[a-z]{3,}")
@@ -222,7 +222,8 @@ def abstract_from_index(mapping):
     return text[:12000]
 
 
-def citation_sentence(abstract, topic_keys):
+def citation_sentences(abstract, topic_keys, limit=2):
+    """Return up to two distinct verbatim, topic-linked indexed-abstract sentences."""
     text=abstract.replace("\n"," ").strip()
     if len(text)<210:
         return None
@@ -247,9 +248,18 @@ def citation_sentence(abstract, topic_keys):
         if not sentence.endswith((".","!","?")):
             continue
         ranked.append((len(matched),len(sentence),sentence))
-    if not ranked:
-        return None
-    return sorted(ranked,key=lambda q:(-q[0],q[1]))[0][2]
+    distinct=[]
+    for _,_,sentence in sorted(ranked,key=lambda q:(-q[0],q[1])):
+        if sentence not in distinct:
+            distinct.append(sentence)
+        if len(distinct)==limit:
+            break
+    return distinct
+
+
+def citation_sentence(abstract, topic_keys):
+    candidates=citation_sentences(abstract,topic_keys,limit=1)
+    return candidates[0] if candidates else None
 
 
 def reliable_url(value,worker):
@@ -328,9 +338,10 @@ def usable_paper(work,topic_keys,worker):
     body_hits=sum(k in body_norm for k in topic_keys)
     if title_hits<1 or body_hits<min(2,len(topic_keys)):
         return None
-    excerpt=citation_sentence(abstract,topic_keys)
-    if not excerpt:
+    excerpts=citation_sentences(abstract,topic_keys)
+    if not excerpts:
         return None
+    excerpt=excerpts[0]
     ident=work.get("id")
     if not isinstance(ident,str) or not re.fullmatch(
             r"https://openalex\.org/W[0-9]{6,15}",ident):
@@ -340,7 +351,7 @@ def usable_paper(work,topic_keys,worker):
         "title":title, "publication_year":year, "publisher":publisher,
         "venue":source.get("display_name"), "abstract_sha256":
             hashlib.sha256(abstract.encode("utf8")).hexdigest(),
-        "support_sentence":excerpt,
+        "support_sentence":excerpt, "support_sentences":excerpts,
         "relevance_score":3*title_hits+body_hits,
         "retrieval_type":"OpenAlex indexed abstract",
     }
@@ -381,7 +392,7 @@ def registrable_host(host):
     return ".".join(parts[-2:])
 
 
-def diverse_five(papers):
+def diverse_four_or_five(papers):
     chosen=[]
     domains=set()
     publishers=set()
@@ -400,7 +411,7 @@ def diverse_five(papers):
             break
         if paper not in chosen:
             chosen.append(paper)
-    if (len(chosen)!=5 or
+    if (len(chosen)<4 or
             len(set(registrable_host(p["host"]) for p in chosen))<3 or
             len(set(p["publisher"].lower() for p in chosen))<3):
         return []
@@ -427,13 +438,16 @@ def locale_scopes(order):
 
 
 def evidence_from_papers(order,revision,papers,worker):
-    if RISK.search(str(order.get("subject",""))):
-        return None
-    chosen=diverse_five(papers)
+    chosen=diverse_four_or_five(papers)
     if not chosen:
         return None
     locales=locale_scopes(order)
     if set(locales)!={"fa-IR","en-US"}:
+        return None
+    # Five claims cannot merely repeat the same quoted text under
+    # different publication IDs. Genuine source diversity is insufficient
+    # when all claimed findings are indistinguishable.
+    if len({p["support_sentence"] for p in chosen})!=len(chosen):
         return None
     sources=[]
     claims=[]
@@ -458,8 +472,35 @@ def evidence_from_papers(order,revision,papers,worker):
             "id":"claim"+str(n), "statement":paper["support_sentence"],
             "source_ids":[ident],
             "assertion_type":"verbatim_short_indexed_abstract_sentence",
-            "original_publisher_verification":"not_performed"
+            "original_publisher_verification":"not_performed",
+            "indexed_sentence_sha256":
+                hashlib.sha256(paper["support_sentence"].encode("utf8")).hexdigest()
         })
+    # Stage 2 requires five independently traceable claims, but only four
+    # scientific source publications. A genuinely different verbatim passage
+    # from the fourth publication can be a fifth claim; a repeated quote cannot.
+    if len(chosen)==4:
+        second=next((
+            (n,p["support_sentences"][1]) for n,p in enumerate(chosen,1)
+            if isinstance(p.get("support_sentences"),list)
+            and len(p["support_sentences"])>=2
+            and isinstance(p["support_sentences"][1],str)
+            and p["support_sentences"][1] != p["support_sentence"]
+            and p["support_sentences"][1] not in
+                [item["statement"] for item in claims]
+        ),None)
+        if second is None:
+            return None
+        source_n,statement=second
+        claims.append({
+            "id":"claim5","statement":statement,
+            "source_ids":["scholar"+str(source_n)],
+            "assertion_type":"second_distinct_verbatim_indexed_abstract_sentence",
+            "original_publisher_verification":"not_performed",
+            "indexed_sentence_sha256":
+                hashlib.sha256(statement.encode("utf8")).hexdigest()
+        })
+    safety_sensitive=bool(RISK.search(str(order.get("subject",""))))
     result={
         "schema":EVIDENCE_SCHEMA,
         "source_product_id":order["source_product_id"],
@@ -468,13 +509,15 @@ def evidence_from_papers(order,revision,papers,worker):
         "locale_scopes":locales, "sources":sources, "claims":claims,
         "scientific_review_completed":False,
         "public_distribution_allowed":False,
+        "requires_independent_specialist_review":True,
+        "safety_sensitive_review_hold":safety_sensitive,
         "collection_method":"openalex_verified_short_abstract_extracts_not_primary_pages",
         "independent_original_page_recheck":False,
         "research_quality_limitations":[
             "Quoted sentences are grounded in retrieved index abstracts but original publisher full text has not been inspected.",
             "Bibliographic metadata is not proof of field performance, local agronomic safety or commercial value.",
             "Scientific specialist review, original publisher checking and complete localized book manuscripts are still required."
-        ]
+        ] + (["Safety-sensitive subject: no operational advice, treatment protocol, approval, or publication until appropriate independent specialist review."] if safety_sensitive else [])
     }
     worker.validate_evidence(result,order,revision)
     return result
@@ -609,6 +652,39 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
                 previous.get("source_product_id")!=ident or
                 previous.get("order_id")!=order_id):
             raise RuntimeError("SCOUT_CANDIDATE_IDENTITY_CHANGED")
+    # Reuse already indexed and digest-checked abstracts before charging
+    # another API search. This only creates a preliminary desk-research
+    # packet, never a human attestation, product approval or release.
+    cached=previous.get("indexed_abstract_candidates",[])
+    if (previous.get("scout_algorithm_version") in
+            ("v2-relevance-provenance",SCOUT_ALGO_VERSION)
+            and isinstance(cached,list) and 4<=len(cached)<=20
+            and previous.get("candidate_sha256")==sha(cached)):
+        valid=[]
+        for paper in cached:
+            if (not isinstance(paper,dict)
+                    or not isinstance(paper.get("doi"),str)
+                    or not paper["doi"].startswith("https://doi.org/")
+                    or not isinstance(paper.get("publisher"),str)
+                    or len(paper["publisher"].strip())<6
+                    or not isinstance(paper.get("title"),str)
+                    or len(paper["title"])<18
+                    or not isinstance(paper.get("support_sentence"),str)
+                    or not re.fullmatch(r"[0-9a-f]{64}",
+                            str(paper.get("abstract_sha256","")))
+                    or not re.fullmatch(r"https://openalex\.org/W[0-9]{6,15}",
+                            str(paper.get("openalex_id","")))
+                    or reliable_url(paper.get("url"),worker)!=paper.get("host")):
+                continue
+            valid.append(paper)
+        if len(valid)>=4:
+            try:
+                ready=evidence_from_papers(record,1,valid,worker)
+                if ready is not None:
+                    worker.atomic(evidence_path,ready)
+                    return "traceable_abstracts"
+            except (RuntimeError,ValueError,KeyError,TypeError):
+                pass
     prior_round=previous.get("search_round",-1)
     if type(prior_round) is not int:
         raise RuntimeError("SCOUT_INVALID_SEARCH_ROUND")
