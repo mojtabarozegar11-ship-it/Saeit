@@ -1,0 +1,15 @@
+name: Durable six-worker evidence regression
+on:
+  push:
+    branches: [fix/six-specialist-full-run-proof-20261022]
+permissions: {contents: read}
+jobs:
+  test-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: python3 -B -m unittest discover -s tests -p test_factory_six_specialist_executors.py -v

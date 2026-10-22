@@ -288,7 +288,34 @@ def run(root, all_six=False):
                    "public_release_authorized": False, "sites_modified": 0,
                    "turn": turn + len(chosen)}
         atomic(cursor, {"schema": SCHEMA, "turn": summary["turn"]})
-        atomic(ops / "last-execution.json", summary)
+        # Preserve full-batch evidence across five-minute one-worker ticks.
+        # Legacy deployed readback expects last-execution to describe all six.
+        if all_six:
+            atomic(ops / "last-execution.json", summary)
+        else:
+            atomic(ops / "last-single-worker-execution.json", summary)
+        if all_six:
+            # A concurrent cron --tick must NEVER erase evidence of the
+            # six-family activation batch. Keep a separately addressable
+            # complete result plus an immutable hash-named private receipt.
+            raw = json.dumps(summary, sort_keys=True, separators=(",", ":")).encode() + bytes([10])
+            proof_dir = ops / "complete-six-proofs"
+            if proof_dir.is_symlink():
+                raise RuntimeError("SIX_COMPLETE_PROOF_ROOT_UNSAFE")
+            proof_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+            proof = proof_dir / (hashlib.sha256(raw).hexdigest() + ".json")
+            if proof.is_symlink():
+                raise RuntimeError("SIX_COMPLETE_PROOF_SYMLINK")
+            if proof.exists():
+                if proof.read_bytes() != raw:
+                    raise RuntimeError("SIX_COMPLETE_PROOF_CONFLICT")
+            else:
+                with proof.open("xb") as out:
+                    out.write(raw)
+                    out.flush()
+                    os.fsync(out.fileno())
+                os.chmod(proof, 0o600)
+            atomic(ops / "last-full-six-execution.json", summary)
         print("FACTORY_SIX_AGENT_EXECUTION=" + json.dumps(summary, sort_keys=True))
         return summary
 

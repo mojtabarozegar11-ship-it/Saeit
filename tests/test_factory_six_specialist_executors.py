@@ -72,12 +72,22 @@ class SixWorkerRegression(unittest.TestCase):
         self.assertFalse(result["public_release_authorized"])
 
     def test_one_worker_per_tick_with_persisted_rotation(self):
+        baseline=agent.run(self.root,all_six=True)
         observed=[]
         for i in range(6):
             outcome=agent.run(self.root)
             observed.append(outcome["selected"][0])
             self.assertEqual(outcome["technical_candidates_rechecked"],1)
         self.assertEqual(observed,list(agent.FAMILIES))
+        protected=self.root/"quality-excellence"/"six-agent-supervisor"
+        full=json.loads((protected/"last-execution.json").read_text())
+        immutable=json.loads((protected/"last-full-six-execution.json").read_text())
+        last_tick=json.loads((protected/"last-single-worker-execution.json").read_text())
+        self.assertEqual(full["technical_candidates_rechecked"],6)
+        self.assertEqual(immutable["technical_candidates_rechecked"],6)
+        self.assertEqual(last_tick["technical_candidates_rechecked"],1)
+        self.assertEqual(full["outcomes"],baseline["outcomes"])
+        self.assertEqual(len(list((protected/"complete-six-proofs").glob("*.json"))),1)
 
 if __name__=="__main__":
     unittest.main()
