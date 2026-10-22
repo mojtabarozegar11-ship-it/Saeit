@@ -6,6 +6,7 @@ on:
       - scripts/factory_f26_real_rice_research_pilot.py
       - tests/test_factory_f26_real_rice_research_pilot.py
       - deploy/factory_f26_real_rice_private_relay.sh
+      - deploy/factory_f26_real_rice_private_install.py
       - .github/workflows/factory-f26-real-rice-pilot-20261022.yml
   workflow_dispatch:
 permissions: {contents: read}
@@ -17,7 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 17
     env:
-      F26_UCI_EXPECTED_SHA256: "DISCOVERY_ONLY_DO_NOT_DEPLOY"
+      F26_UCI_EXPECTED_SHA256: "fe94e42046b829de21b92b0ffb6a22774fde021328cae799faa802a14e8dbed9"
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
@@ -49,15 +50,21 @@ jobs:
         run: |
           set -euo pipefail
           source_digest="$(sha256sum "$RUNNER_TEMP/uci-rice-545.zip" | cut -d' ' -f1)"
-          if [[ "$F26_UCI_EXPECTED_SHA256" != "DISCOVERY_ONLY_DO_NOT_DEPLOY" ]]; then
-            test "$source_digest" = "$F26_UCI_EXPECTED_SHA256"
-          else
-            test "$GITHUB_REF" != 'refs/heads/main'
-            echo "F26_DATASET_FIRST_RUN_SHA256_TO_PIN=$source_digest"
-          fi
+          test "$source_digest" = "$F26_UCI_EXPECTED_SHA256"
+          echo F26_PUBLIC_SOURCE_UCI_ZIP_PIN_VERIFIED=PASS
           python3 -B scripts/factory_f26_real_rice_research_pilot.py \
             --archive "$RUNNER_TEMP/uci-rice-545.zip" \
             --expected-archive-sha256 "$source_digest" \
             --out "$RUNNER_TEMP/f26-real-rice"
           python3 -B scripts/factory_f26_real_rice_research_pilot.py --verify "$RUNNER_TEMP/f26-real-rice"
           echo F26_REAL_RICE_HOLDOUT_ONNX=PASS
+      - name: Privately admit SHA-bound real-data pilot into existing VPS F26 research evidence
+        if: github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash -n deploy/factory_f26_real_rice_private_relay.sh
+          python3 -B -m py_compile deploy/factory_f26_real_rice_private_install.py
+          bash deploy/factory_f26_real_rice_private_relay.sh "$RUNNER_TEMP/f26-real-rice"
