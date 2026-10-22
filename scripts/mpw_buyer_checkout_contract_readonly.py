@@ -20,20 +20,25 @@ class Inputs(HTMLParser):
   if tag=='button':self.buttons+=1
   if tag=='script':self.scripts+=1
 result=[]
-for pk in (72,225):
+for pk in (72,225,779):
  r=RequestFactory().get(f'/store/product/{pk}/checkout/',secure=True,HTTP_HOST='mojplaywin.com')
  r.user=SimpleNamespace(is_authenticated=True,is_active=True,pk=-10490)
  response=product_checkout_page(r,pk)
  source=response.content.decode('utf8','replace')
  parser=Inputs();parser.feed(source)
- relative=sorted(set(re.findall(r'[/](?:api|store|checkout|accounts)/[a-z0-9_/-]{1,90}',source,re.I)))[:50]
+ relative=sorted(set(re.findall(r'/(?:commerce|api|store|accounts)/[a-z0-9_/-]{1,100}',source,re.I)))[:50]
  resolved=[]
  for path in relative:
   try:
-   target=resolve(path)
+   contract_path=path+'123456789/' if path.endswith('/commerce/checkout/status/') else path
+   target=resolve(contract_path)
    resolved.append({'path':path,'valid':True,'handler':target.func.__module__})
   except Exception:
    resolved.append({'path':path,'valid':False})
+ expected={'/commerce/checkout/order/','/commerce/checkout/challenge/','/commerce/checkout/verify/','/commerce/checkout/invoice/','/commerce/checkout/status/'}
+ found={row['path'] for row in resolved if row['valid']}
+ if not expected.issubset(found) or any(not row['valid'] for row in resolved):
+  raise RuntimeError('Live checkout JS refers to unresolved API route for product '+str(pk))
  result.append({'id':pk,'status':response.status_code,'html_bytes':len(source),'buttons':parser.buttons,'scripts':parser.scripts,'forms':parser.forms,'relative_routes':resolved,'fake_user':True,'new_order_created':False})
 print('MPW_AUTHENTICATED_BUYER_CHECKOUT_CONTRACT='+json.dumps(result,ensure_ascii=False))
 # Strict privacy check: an unauthenticated/synthetic user is never granted any paid item.
