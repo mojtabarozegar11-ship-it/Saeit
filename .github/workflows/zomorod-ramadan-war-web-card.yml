@@ -141,7 +141,7 @@ jobs:
           assert b'canvas' in game and b'./game.js' in game and b'./game.css' in game
           with urlopen(Request(root+'/ramadan-war/game.js?asset='+str(time.time_ns()),headers={'Cache-Control':'no-cache,no-store'}),timeout=35) as r:js=r.read(250000)
           assert b'RamadanWarDebug' in js and b'engine3d.js' in js
-          for asset,needle in [('engine3d.js',b'three.module.js'),('three.module.js',b'WebGLRenderer'),('three.core.min.js',b'WebGLRenderer')]:
+          for asset,needle in [('engine3d.js',b'three.module.js'),('three.module.js',b'WebGLRenderer'),('three.core.min.js',b'Matrix4')]:
            with urlopen(Request(root+'/ramadan-war/'+asset+'?asset='+str(time.time_ns()),headers={'Cache-Control':'no-cache,no-store'}),timeout=35) as r:
             assert r.status==200;asset_body=r.read(1200000)
            assert needle in asset_body,asset
