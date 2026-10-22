@@ -1,7 +1,7 @@
 name: Six specialist evidence packet preflight
 on:
   push:
-    branches: [feature/six-specialist-evidence-handoff-20261022]
+    branches: [feature/six-specialist-evidence-handoff-20261022, main]
   workflow_dispatch:
 permissions: {contents: read}
 jobs:
@@ -20,3 +20,110 @@ jobs:
           python3 -B -m unittest discover -s tests -p 'test_factory_six_native_independent_rework.py' -v
           python3 -B -m py_compile scripts/factory_six_specialist_evidence_handoff.py
           echo SIX_EXPERT_HANDOFF_NO_FALSE_APPROVALS=PASS
+
+  install-private-review-queue:
+    needs: prove
+    if: github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Transfer pinned scripts and create six unsigned specialist dossiers on VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          work="$(mktemp -d)"
+          trap 'rm -rf -- "$work"' EXIT
+          chmod 700 "$work"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.buffer.read().decode("utf8");s=s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n";sys.stdout.buffer.write(s.encode())' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P "" -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          opts=(-i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15)
+          host=githubops@178.239.147.150
+          run="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          stage="/home/githubops/factory-runtime/operations/.six-expert-handoff-$run"
+          ssh -T "${opts[@]}" "$host" "set -eu; test \"\$(id -un)\" = githubops; test ! -e '$stage'; install -d -m 700 '$stage'"
+          for file in factory_six_specialist_evidence_handoff.py factory_f26_real_rice_readonly_vps_proof.py; do
+            sha="$(sha256sum "scripts/$file" | cut -d' ' -f1)"
+            scp -q "${opts[@]}" "scripts/$file" "$host:$stage/$file"
+            actual="$(ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$file' | cut -d' ' -f1")"
+            test "$actual" = "$sha"
+          done
+          ssh -T "${opts[@]}" "$host" "bash -se -- '$stage'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          stage="$1"
+          base="$HOME/factory-runtime"
+          private="$base/private/autonomous-product-cycle"
+          python="$base/.venv/bin/python"
+          out="$base/operations/six-expert-handoff"
+          test -x "$python" && test -d "$private/native-candidate-evidence"
+          test -d "$private/quality-excellence/six-native-rework"
+          test -d "$private/f26-real-data-research"
+          test ! -L "$private" && test ! -L "$out" && test ! -L "$stage"
+          test -s "$stage/factory_six_specialist_evidence_handoff.py"
+          test -s "$stage/factory_f26_real_rice_readonly_vps_proof.py"
+          install -d -m 700 "$out"
+          exec 9>"$base/operations/.six-expert-handoff.lock"
+          flock -w 90 9
+          # First verify every supplied source and the prior F26 real-data chain.
+          "$python" -B "$stage/factory_six_specialist_evidence_handoff.py" --factory-private "$private" --f26-verifier "$stage/factory_f26_real_rice_readonly_vps_proof.py" --dry-run
+          "$python" -B "$stage/factory_six_specialist_evidence_handoff.py" --factory-private "$private" --f26-verifier "$stage/factory_f26_real_rice_readonly_vps_proof.py"
+          # Install immutable versioned scripts; older versions never overwritten.
+          version="$out/versions/$(sha256sum "$stage/factory_six_specialist_evidence_handoff.py" | cut -d' ' -f1)"
+          test ! -L "$out/versions" && test ! -L "$version"
+          if ! test -d "$version"; then
+            install -d -m 700 "$version"
+            for file in factory_six_specialist_evidence_handoff.py factory_f26_real_rice_readonly_vps_proof.py; do
+              install -m 600 "$stage/$file" "$version/$file"
+              test "$(sha256sum "$stage/$file" | cut -d' ' -f1)" = "$(sha256sum "$version/$file" | cut -d' ' -f1)"
+            done
+          fi
+          marker=SAEIT_SIX_EXPERT_HANDOFF_V1
+          before="$(mktemp)"
+          trap 'rm -f "$before"' EXIT
+          crontab -l > "$before"
+          count="$(grep -Fc "$marker" "$before" || :)"
+          test "$count" -le 1
+          if test "$count" -eq 0; then
+            { cat "$before"; printf '4,19,34,49 * * * * /usr/bin/flock -n %s/.six-expert-handoff-periodic.lock /usr/bin/timeout 180s %s -B %s/factory_six_specialist_evidence_handoff.py --factory-private %s --f26-verifier %s/factory_f26_real_rice_readonly_vps_proof.py >> %s/six-expert-handoff.log 2>&1 # %s\n' "$base/operations" "$python" "$version" "$private" "$version" "$out" "$marker"; } | crontab -
+          fi
+          test "$(crontab -l | grep -Fc "$marker")" -eq 1
+          test "$(crontab -l | grep -Fc SAEIT_SIX_NATIVE_INDEPENDENT_REVIEW_V1)" -eq 1
+          "$python" -B - "$private" <<'PY'
+          import json,sys,hashlib
+          from pathlib import Path
+          p=Path(sys.argv[1])/"quality-excellence/six-expert-handoff"
+          ds=[q for q in p.iterdir() if q.is_dir() and (q/"manifest.json").is_file()]
+          assert ds
+          latest=max(ds,key=lambda q:tuple(map(int,q.name.split("-"))))
+          manifest=json.loads((latest/"manifest.json").read_text())
+          assert manifest["six_real_product_families_bound"]==6 and manifest["native_files_linked"]==56
+          assert manifest["real_rice_f26_independently_reverified"] is True
+          assert manifest["third_party_approved_families"]==0 and manifest["independent_quality_1000_certified_families"]==0
+          assert manifest["commercial_release_allowed"] is False and manifest["website_mutations"]==0
+          assert set(manifest["case_manifest_sha256"])=={"F12","F13","F14","F16","F17","F26"}
+          for family,expected in manifest["case_manifest_sha256"].items():
+              content=(latest/(family+".json")).read_bytes()
+              assert hashlib.sha256(content).hexdigest()==expected
+              dossier=json.loads(content)
+              assert dossier["human_approvals"]==[] and dossier["trusted_human_reviewer_identities"]==[]
+              assert len(dossier["external_review_protocols"])==3
+              assert dossier["commercial_release_authorized"] is False
+          print("FACTORY_SIX_REAL_EXPERT_HANDOFF_DOSSIERS=6")
+          print("FACTORY_SIX_EXTERNAL_TEST_PROTOCOLS=18")
+          print("FACTORY_SIX_INDEPENDENT_SIGNED_APPROVALS=0")
+          print("FACTORY_SIX_REAL_UCI_PROOF_LINK=PASS")
+          print("FACTORY_SIX_HANDOFF_MANIFEST_SHA256="+hashlib.sha256((latest/"manifest.json").read_bytes()).hexdigest())
+          print("FACTORY_SIX_LIVE_SITE_MUTATIONS=0")
+          PY
+          echo FACTORY_SIX_EXPERT_HANDOFF_CRON_ACTIVE=PASS
+          REMOTE
