@@ -10,6 +10,7 @@ from decimal import Decimal
 import json
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.db import models, connection
 from django.conf import settings
@@ -169,6 +170,39 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
         PaymentWebhookEvent.objects.filter(payment_intent_id=pk).delete()
         with self.assertRaises(PaymentHold):
             open_existing_test_paid_file(pk,42)
+
+    def test_staging_http_invoice_trust_wallet_status_and_private_download(self):
+        from services.mpw_walletless_existing_intent_staging_web import (
+            _show_invoice,_invoice_status,_download_paid,
+        )
+        from django.http import Http404
+        request=SimpleNamespace(user=SimpleNamespace(
+            pk=42,is_authenticated=True,is_active=True),
+            is_secure=lambda:True,get_host=lambda:"staging.test")
+        stolen=SimpleNamespace(user=SimpleNamespace(
+            pk=43,is_authenticated=True,is_active=True),
+            is_secure=lambda:True,get_host=lambda:"staging.test")
+        pk,_,_=self.reserve()
+        with patch("django.utils.timezone.now",return_value=fixture.NOW+timedelta(seconds=10)):
+            response=_show_invoice(request,pk)
+        self.assertEqual(response.status_code,200)
+        self.assertIn(b"Open in Trust Wallet (TRX)",response.content)
+        self.assertIn(b"link.trustwallet.com/send?",response.content)
+        self.assertIn("Content-Security-Policy",response)
+        self.assertFalse(json.loads(_invoice_status(request,pk).content)["can_download"])
+        with self.assertRaises(Http404):
+            _show_invoice(stolen,pk)
+        with self.assertRaises(Http404):
+            _download_paid(request,pk)
+        settle_existing_test_intent(pk,fixture.TX_HASH,self.pair())
+        self.assertTrue(json.loads(_invoice_status(request,pk).content)["can_download"])
+        download=_download_paid(request,pk)
+        self.assertEqual(download.status_code,200)
+        self.assertEqual(b"".join(download.streaming_content),
+            b"PK\x03\x04minimal-test-only-artifact")
+        download.close()
+        with self.assertRaises(Http404):
+            _download_paid(stolen,pk)
 
     def test_same_mainnet_hash_cannot_grant_to_second_order(self):
         first,_,_=self.reserve()
