@@ -1,0 +1,83 @@
+{
+  "revision": "2026-10-22",
+  "owner": "ChatGPT direct-authored work; no factory worker content generation",
+  "deployment": "GitHub Actions via the existing VPS-to-cPanel relay after validation",
+  "allocation": {
+    "zomorodmelal.ir": {
+      "new_free_agriculture_products": 10,
+      "new_educational_games": 5,
+      "source_review_articles": 10
+    },
+    "mojplaywin.com": {
+      "new_browser_games": 10,
+      "new_digital_products": 10
+    }
+  },
+  "baseline_verified_2026_10_22": {
+    "zomorod_store": "One free wheat seed-rate planner is public. The store explicitly says online purchases and withdrawals are disabled while the bank acceptance is pending.",
+    "zomorod_games": "The /games/ route currently returns 404; the new game library needs a new route.",
+    "mpw_games": "Five original free browser beta games are public under /game-releases/20261021/; the new ten must use different core mechanics.",
+    "mpw_store": "Two digital books have verified crypto checkout; other store offerings are discovery cards, not evidence of active checkout.",
+    "zomorod_research": "A research page and a 50-entry wheat library already exist. The ten new reviews must use distinct recent primary studies and link to relevant pages."
+  },
+  "zomorod_free_products": [
+    {"slug":"greenhouse-margin-planner","title":"برآوردگر حاشیه سود گلخانه","calculation":"درآمد فروش منهای بذر/نشا، انرژی، آب، نهاده، بسته‌بندی و هزینه کار؛ با بازه عدم‌قطعیت"},
+    {"slug":"irrigation-water-budget","title":"دفتر بودجه آب آبیاری","calculation":"تبدیل دبی و زمان به حجم آب و هزینه؛ گزارش فرض‌ها و واحدها"},
+    {"slug":"soil-sampling-map","title":"برنامه‌ریز نمونه‌برداری خاک","calculation":"چیدمان شبکه نمونه‌برداری و شناسه نمونه؛ بدون توصیه کودی خودکار"},
+    {"slug":"nutrient-unit-converter","title":"مبدل واحد عناصر غذایی","calculation":"تبدیل غلظت و سطح؛ نمایش صریح درصد عنصر و ترکیب برچسب محصول"},
+    {"slug":"orchard-planting-density","title":"محاسبه‌گر تراکم کاشت باغ","calculation":"تعداد نهال بر اساس فاصله ردیف و درخت با کسر مساحت راه و حاشیه"},
+    {"slug":"poultry-flock-recordbook","title":"دفتر پایش گله طیور","calculation":"ثبت روزانه تلفات، خوراک و وزن؛ روندهای توصیفی بدون تشخیص بیماری"},
+    {"slug":"aquaculture-feed-log","title":"ثبت و تحلیل خوراک آبزیان","calculation":"خوراک مصرفی، زیست‌توده نمونه‌گیری‌شده و FCR توصیفی؛ هشدار محدودیت داده"},
+    {"slug":"harvest-loss-estimator","title":"برآوردگر ضایعات برداشت","calculation":"مقایسه جرم برداشت و محصول قابل فروش، درصد ضایعات و ارزش فرضی"},
+    {"slug":"seed-lot-comparator","title":"مقایسه‌گر بچ بذر","calculation":"مقایسه قوه نامیه، خلوص و وزن هزار دانه بر اساس برگه آزمایش واردشده"},
+    {"slug":"farm-energy-budget","title":"دفتر هزینه انرژی مزرعه","calculation":"مصرف ثبت‌شده سوخت/برق و هزینه بر واحد محصول؛ بدون پیش‌بینی قیمت"}
+  ],
+  "zomorod_games": [
+    {"slug":"water-allocation-lab","title":"آزمایشگاه تقسیم آب","mechanic":"پازل تخصیص محدود آب میان قطعات با بازخورد آموزشی"},
+    {"slug":"greenhouse-balance","title":"تعادل گلخانه","mechanic":"بازی تصمیم‌گیری نوبتی درباره تهویه، نور و انرژی؛ مدل آموزشی ساده"},
+    {"slug":"orchard-pollinator-path","title":"مسیر گرده‌افشان باغ","mechanic":"پازل شبکه‌ای زیستگاه و پیوند گل‌دهی؛ بدون توصیه سم‌پاشی"},
+    {"slug":"biosecurity-route","title":"مسیر بهداشت گله","mechanic":"پازل ترتیب ورود، پاکیزگی و جداسازی مسیرها؛ محتوای آموزشی غیرتشخیصی"},
+    {"slug":"pond-oxygen-watch","title":"نگهبان اکسیژن استخر","mechanic":"بازی پایش روند فرضی اکسیژن و انتخاب اقدام در سناریوهای آموزشی"}
+  ],
+  "mojplaywin_games": [
+    {"slug":"circuit-bloom","title":"Circuit Bloom","mechanic":"Logic circuit routing"},
+    {"slug":"type-expedition","title":"Type Expedition","mechanic":"Typing accuracy and word progression"},
+    {"slug":"stack-architect","title":"Stack Architect","mechanic":"Spatial block placement and stability"},
+    {"slug":"cryptic-grid","title":"Cryptic Grid","mechanic":"Word deduction with limited clues"},
+    {"slug":"split-second-chef","title":"Split-Second Chef","mechanic":"Queue planning and timed task sequencing"},
+    {"slug":"vector-run","title":"Vector Run","mechanic":"Lane-switching obstacle course with route choices"},
+    {"slug":"treasure-ledger","title":"Treasure Ledger","mechanic":"Arithmetic and resource allocation puzzle"},
+    {"slug":"echo-atlas","title":"Echo Atlas","mechanic":"Map and landmark recall quiz"},
+    {"slug":"neon-debate","title":"Neon Debate","mechanic":"Branching narrative with evidence-based choices"},
+    {"slug":"orbit-garden","title":"Orbit Garden","mechanic":"Planets-and-seeds orbital placement puzzle"}
+  ],
+  "mojplaywin_digital_products": [
+    {"slug":"indie-launch-kit","title":"Indie Game Launch Kit","deliverables":"Store-page checklist, release calendar, QA sheet, and asset rights ledger"},
+    {"slug":"browser-game-starter","title":"Browser Game Starter","deliverables":"Accessible HTML/CSS/JS project scaffold, local save pattern, and test guide"},
+    {"slug":"level-design-workbook","title":"Level Design Workbook","deliverables":"Mechanic map, difficulty curve worksheet, and playtest forms"},
+    {"slug":"game-accessibility-checklist","title":"Game Accessibility Checklist","deliverables":"Input, contrast, motion, text, and assistive-technology review sheet"},
+    {"slug":"playtest-fieldbook","title":"Playtest Fieldbook","deliverables":"Consent-aware session notes, task scripts, and observation matrix"},
+    {"slug":"pixel-ui-pack","title":"Pixel UI Starter Pack","deliverables":"Original scalable interface components and documented usage rights"},
+    {"slug":"narrative-branch-planner","title":"Narrative Branch Planner","deliverables":"Choice graph template, state table, and continuity checklist"},
+    {"slug":"game-metrics-starter","title":"Game Metrics Starter","deliverables":"Privacy-minimizing event dictionary and retention analysis worksheet"},
+    {"slug":"localization-ready-kit","title":"Localization-Ready Kit","deliverables":"String extraction template, pluralization test cases, and pseudo-localization guide"},
+    {"slug":"small-studio-budget-kit","title":"Small Studio Budget Kit","deliverables":"Scope, milestone, contractor, and contingency planning workbook"}
+  ],
+  "science_articles": [
+    {"slug":"sorghum-pangenome","title":"پنگنوم سورگوم و کشف صفات در تنوع ژنتیکی","doi":"10.1038/s41586-026-10229-9","published":"2026-03-11","journal":"Nature"},
+    {"slug":"maize-nitrogen-module","title":"ماژول ژنتیکی انتقال نیترات و کارایی نیتروژن در ذرت","doi":"10.1038/s41588-026-02532-y","published":"2026-03-13","journal":"Nature Genetics","note":"Include publisher correction DOI 10.1038/s41588-026-02575-1"},
+    {"slug":"genomic-prediction-ensemble","title":"پیش‌بینی ژنومی چندمحصولی با یادگیری تجمیعی GEG2P","doi":"10.1038/s41467-026-75788-x","published":"2026-07-20","journal":"Nature Communications"},
+    {"slug":"edited-crop-detection","title":"تشخیص برنج ویرایش‌شده در مخلوط غذایی با نمونه‌برداری تطبیقی نانوپور","doi":"10.1038/s41538-026-00846-z","published":"2026-05-11","journal":"npj Science of Food"},
+    {"slug":"cea-energy-water-model","title":"مدل انرژی و آب برای ارزیابی اولیه کشاورزی محیط‌کنترل‌شده","doi":"10.1016/j.seta.2026.105347","published":"2026-09","journal":"Sustainable Energy Technologies and Assessments"},
+    {"slug":"microgreens-biostimulants","title":"پیش‌تیمار زیستی و عملکرد میکروگرین نخود و روکولا","doi":"10.3389/fpls.2026.1913861","published":"2026-08-31","journal":"Frontiers in Plant Science"},
+    {"slug":"turkey-vision-forecast","title":"بینایی ماشین و پیش‌بینی وزن بوقلمون در سامانه پرورش","doi":"10.3389/fanim.2026.1868845","published":"2026","journal":"Frontiers in Animal Science"},
+    {"slug":"aquaculture-water-ml","title":"یادگیری ماشین برای پیش‌بینی کیفیت آب آبزی‌پروری","doi":"10.3389/fenvs.2026.1879710","published":"2026-07-15","journal":"Frontiers in Environmental Science"},
+    {"slug":"biofertilizer-field-trials","title":"کود زیستی و محرک میکروبی گیاه در آزمون‌های مزرعه‌ای","doi":"10.3389/fagro.2026.1730147","published":"2026","journal":"Frontiers in Agronomy"},
+    {"slug":"precision-viticulture-economics","title":"اقتصاد کاربرد فناوری دقیق در تاکستان","doi":"10.1007/s11119-026-10345-6","published":"2026","journal":"Precision Agriculture"}
+  ],
+  "release_policy": {
+    "zomorod_store": "Publish the ten new calculators as free informational tools; do not claim online purchase is enabled because the public store reports that payment activation is pending.",
+    "mojplaywin_store": "Do not expose paid purchase buttons until each file, license, listed price, checkout mapping, and post-payment delivery have been verified. Free beta download is allowed only after the actual product files are built and tested.",
+    "games": "Deploy to additive new namespaces; keep existing games and store routes unchanged. Validate keyboard/touch behavior, mobile layout, local-only data storage, and no external payment/tracking."
+  }
+}
