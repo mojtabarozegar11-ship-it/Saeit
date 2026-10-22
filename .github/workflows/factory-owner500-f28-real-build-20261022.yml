@@ -1,0 +1,95 @@
+name: Owner 500 backlog -> three real F28 technical products
+on:
+  push:
+    branches: [feature/factory-demand-500-20261022]
+    paths:
+      - scripts/factory_owner500_f28_real_builder.py
+      - tests/test_factory_owner500_f28_real_builder.py
+      - .github/workflows/factory-owner500-f28-real-build-20261022.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: owner500-real-f28-private-manufacture
+  cancel-in-progress: false
+jobs:
+  verify-production-and-customer-extract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify three actual builds, independent ZIP acceptance and replay guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/factory_owner500_f28_real_builder.py
+          PYTHONPATH=scripts python3 -B -m unittest discover -s tests -p 'test_factory_owner500_f28_real_builder.py' -v
+          echo OWNER500_F28_REAL_BUILD_AND_REVIEW_TESTS=PASS
+  privately-produce-on-vps:
+    needs: verify-production-and-customer-extract
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/factory-demand-500-20261022'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Pinned SSH, actual F28 product builds, independent customer ZIP tests (no site writes)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d)"
+          chmod 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          host="githubops@178.239.147.150"
+          stage="/home/githubops/factory-runtime/operations/.owner500-real-f28-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh -T "${opts[@]}" "$host" "set -eu; test \"\$(id -un)\" = githubops; test ! -e '$stage'; install -d -m 700 '$stage'"
+          files=(factory_config/owner_demand_500_20261022.json scripts/factory_owner500_f28_real_builder.py scripts/factory_design_intake.py scripts/factory_recipe_designer.py scripts/factory_product_maker.py scripts/factory_verified_customer_cycle_20261021.py scripts/factory_personal_owner_passport_policy_20261020.py)
+          for src in "${files[@]}"; do
+            name="${src##*/}"
+            scp -q "${opts[@]}" "$src" "$host:$stage/$name"
+            expected="$(sha256sum "$src" | cut -d' ' -f1)"
+            actual="$(ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$name' | cut -d' ' -f1")"
+            test "$expected" = "$actual"
+          done
+          echo OWNER500_F28_TRANSFER_PINNED_SHA256=PASS
+          timeout 750s ssh -T "${opts[@]}" "$host" "bash -se -- '$stage'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          stage="$1"
+          base="$HOME/factory-runtime"
+          private="$base/private/autonomous-product-cycle"
+          operations="$base/operations"
+          python="$base/.venv/bin/python"
+          test "$(id -un)" = githubops
+          test -d "$private" && test ! -L "$private" && test -x "$python"
+          exec 8>"$operations/autonomous-product-cycle.lock"
+          flock -w 180 8
+          exec 9>"$private/.production-cycle.lock"
+          flock -w 60 9
+          "$python" -B "$stage/factory_owner500_f28_real_builder.py" \
+            --factory-private "$private" \
+            --owner-catalog "$stage/owner_demand_500_20261022.json" \
+            --scripts-dir "$stage" \
+            --limit 3
+          echo OWNER500_F28_PRIVATE_REAL_BUILD=PASS
+          echo OWNER500_F28_PUBLICATION=0
+          echo OWNER500_F28_PROFESSIONAL_QUALITY1000_CERTIFIED=0
+          REMOTE
+          echo OWNER500_F28_SITE_CHANGES=0
+          ssh -T "${opts[@]}" "$host" "rm -f -- '$stage/owner_demand_500_20261022.json' '$stage/factory_owner500_f28_real_builder.py' '$stage/factory_design_intake.py' '$stage/factory_recipe_designer.py' '$stage/factory_product_maker.py' '$stage/factory_verified_customer_cycle_20261021.py' '$stage/factory_personal_owner_passport_policy_20261020.py'; rmdir '$stage'"
