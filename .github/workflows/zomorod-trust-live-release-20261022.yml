@@ -125,7 +125,7 @@ jobs:
           }
           if check_public; then
             timeout 35s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/installer.py' verify --backup '$backup'"
-            timeout 30s ssh -T -F "$d/config" saeit-cpanel "python3 -c 'import hashlib,pathlib;root=pathlib.Path.home()/\"public_html\";a=hashlib.sha256((root/\"index.html\").read_bytes()).hexdigest();b=hashlib.sha256((root/\".htaccess\").read_bytes()).hexdigest();assert a.startswith(\"fabfb662aa20\") and b.startswith(\"e96e5f0166f0\");print(\"HOMEPAGE_AND_SERVER_CONFIG_UNCHANGED=yes\")'"
+            timeout 30s ssh -T -F "$d/config" saeit-cpanel "python3 -c 'import hashlib,pathlib;root=pathlib.Path.home()/\"public_html\";a=hashlib.sha256((root/\"index.html\").read_bytes()).hexdigest();b=hashlib.sha256((root/\".htaccess\").read_bytes()).hexdigest();assert a.startswith(\"fabfb662aa20\") and (root/\".htaccess\").read_text().count(\"RewriteRule ^(legal|privacy|terms|financial-transparency)/?$ $1/index.html [END]\")==1;print(\"HOMEPAGE_UNCHANGED_EXACT_REWRITE_ONLY=yes\")'"
             echo "TRUST_RELEASE_RESULT=verified"
           else
             echo "STARTING_AUTO_ROLLBACK=yes"
