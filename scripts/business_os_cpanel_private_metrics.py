@@ -15,9 +15,11 @@ import tempfile
 
 PRODUCTION_ROOT = Path("/home/zomorod2/Saeit")
 STAGING_RELEASES = Path("/home/zomorod2/Saeit-staging/releases")
+_phase = "paths"
 
 
 def produce_private_snapshot():
+    global _phase
     source_root = Path(__file__).resolve().parent.parent
     # A fixed output location, guaranteed to stay under the intended private
     # cPanel staging hierarchy; never accept an arbitrary output path.
@@ -28,15 +30,19 @@ def produce_private_snapshot():
 
     sys.path.insert(0, str(PRODUCTION_ROOT))
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    _phase = "django_import"
     import django
 
+    _phase = "django_setup"
     django.setup()
+    _phase = "model_import"
     from django.utils import timezone
     from core.models import AgentTask, ApprovalRequest, Order, Product
 
     # Load reviewed, version-pinned analysis only from the staged release.
     # Do not import/overwrite the installed production 'core' package.
     review_path = source_root / "core" / "business_management.py"
+    _phase = "review_load"
     spec = importlib.util.spec_from_file_location("business_os_staged_review", review_path)
     if spec is None or spec.loader is None:
         raise RuntimeError("Invalid staged review code")
@@ -49,6 +55,7 @@ def produce_private_snapshot():
     def observed(value, table):
         return module.observed(value, f"cpanel_local_django:{table}", captured_at)
 
+    _phase = "metrics_read"
     metrics = {
         "queued_tasks": observed(AgentTask.objects.filter(status="queued").count(), "AgentTask"),
         "blocked_tasks": observed(AgentTask.objects.filter(status="blocked").count(), "AgentTask"),
@@ -60,6 +67,7 @@ def produce_private_snapshot():
         "accepted_factory_products": module.unknown("VPS production and QA evidence not connected"),
         "site_health": module.unknown("Independent site health sensor not connected"),
     }
+    _phase = "review_compute"
     report = module.review_business(metrics)
     report.update({
         "generated_at": captured_at,
@@ -67,6 +75,7 @@ def produce_private_snapshot():
         "metrics": metrics,
     })
 
+    _phase = "private_write"
     private_dir = source_root / "private"
     private_dir.mkdir(mode=0o700, exist_ok=True)
     os.chmod(private_dir, 0o700)
@@ -91,7 +100,10 @@ if __name__ == "__main__":
     try:
         produce_private_snapshot()
     except Exception:
-        # Intentionally suppress all traceback, business data, paths and counts.
-        print("BUSINESS_OS_PRIVATE_PROBE_FAILED", file=sys.stderr)
-        raise SystemExit(1)
+        # Fixed exit codes expose only the technical phase, no exception details.
+        raise SystemExit({
+            "paths": 71, "django_import": 72, "django_setup": 73,
+            "model_import": 74, "review_load": 75, "metrics_read": 76,
+            "review_compute": 77, "private_write": 78,
+        }.get(_phase, 79))
     print("BUSINESS_OS_PRIVATE_REPORT_CREATED")
