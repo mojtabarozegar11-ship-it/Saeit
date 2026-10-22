@@ -66,29 +66,47 @@ def decision(vps=None, cpanel=None, now=None):
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
         raise ValueError("aware_time_required")
-    vps = normalize(vps, "vps", now) if vps is not None else {
+    factory_connected = vps is not None
+    cpanel_connected = cpanel is not None
+    vps = normalize(vps, "vps", now) if factory_connected else {
         key: unknown("factory_snapshot_not_connected") for key in KEYS["vps"]
     }
-    cpanel = normalize(cpanel, "cpanel", now) if cpanel is not None else {
+    cpanel = normalize(cpanel, "cpanel", now) if cpanel_connected else {
         key: unknown("private_cpanel_snapshot_not_connected") for key in KEYS["cpanel"]
     }
     blocked = _value(vps, "blocked_tasks")
     queued = _value(vps, "queued_tasks")
-    if blocked is not None and blocked > 0:
+    orders = _value(cpanel, "orders")
+    local_approvals = _value(cpanel, "pending_approvals")
+    # A missing remote source is not a failure of the *local* source. Until an
+    # authenticated private bridge exists, VPS and cPanel decide separately.
+    if factory_connected and blocked is not None and blocked > 0:
         action, target, reason = ("classify_factory_blockers", "factory",
                                   "Observed blocked VPS tasks; measure reasons and owner/evidence gates")
-    elif queued is not None and queued > 0:
+    elif factory_connected and queued is not None and queued > 0:
         action, target, reason = ("measure_factory_stage_throughput", "factory",
                                   "Observed queued VPS tasks; no verified completion rate")
-    elif blocked is None or queued is None:
+    elif factory_connected and (blocked is None or queued is None):
         action, target, reason = ("repair_factory_observability", "factory",
                                   "Fresh authenticated factory task counts unavailable")
-    elif _value(cpanel, "orders") is not None and _value(cpanel, "orders") == 0:
+    elif cpanel_connected and orders is None:
+        action, target, reason = ("repair_local_order_observability", "cpanel",
+                                  "Authenticated local order count unavailable; cannot infer zero sales")
+    elif cpanel_connected and orders == 0:
         action, target, reason = ("instrument_local_order_funnel", "cpanel",
                                   "No orders observed in local cPanel Django; other stores unknown")
+    elif cpanel_connected and local_approvals is not None and local_approvals > 0:
+        action, target, reason = ("classify_local_approval_gates", "cpanel",
+                                  "Observed local pending approvals; no specialist approval implied")
+    elif cpanel_connected and orders is not None and orders > 0:
+        action, target, reason = ("reconcile_payment_settlement", "cpanel",
+                                  "Local orders exist; cash settlement, refunds and delivery unverified")
+    elif factory_connected:
+        action, target, reason = ("reconcile_business_evidence", "factory",
+                                  "Factory readiness, independent acceptance and demand unverified")
     else:
-        action, target, reason = ("reconcile_business_evidence", "business",
-                                  "Commercial cash, independent acceptance and customer outcomes unverified")
+        action, target, reason = ("connect_private_observers", "business",
+                                  "No fresh authenticated local snapshots supplied")
     # Stable across identical measurements; timestamps alone never create new work.
     state = {"vps": {k: (v["state"], v.get("value"), v.get("reason")) for k, v in vps.items()},
              "cpanel": {k: (v["state"], v.get("value"), v.get("reason")) for k, v in cpanel.items()},
@@ -98,6 +116,7 @@ def decision(vps=None, cpanel=None, now=None):
         "schema": "saeit.business-os.private-decision.v1",
         "generated_at": now.isoformat(),
         "orchestrator": "moj_1ro_1",
+        "delivery_to_orchestrator": "not_connected",
         "observation": {"factory_vps": vps, "local_cpanel": cpanel},
         "candidate": {"action": action, "target": target, "reason": reason,
                       "authority": "private_diagnostic_only",

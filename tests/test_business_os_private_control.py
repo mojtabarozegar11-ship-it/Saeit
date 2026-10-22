@@ -74,4 +74,36 @@ def test_money_and_factory_release_never_auto_execute():
 def test_cpanel_counts_do_not_replace_independent_factory_counts():
     result = decision(cpanel=report("cpanel", blocked=55, queued=100), now=NOW)
     assert result["observation"]["factory_vps"]["queued_tasks"]["state"] == "unknown"
-    assert result["candidate"]["action"] == "repair_factory_observability"
+    assert result["candidate"]["action"] == "instrument_local_order_funnel"
+
+
+def test_cpanel_local_orders_do_not_wait_for_factory_source():
+    sample = report("cpanel")
+    sample["metrics"]["orders"]["value"] = 3
+    result = decision(cpanel=sample, now=NOW)
+    assert result["candidate"]["action"] == "reconcile_payment_settlement"
+    assert result["candidate"]["authority"] == "private_diagnostic_only"
+    assert result["observation"]["factory_vps"]["blocked_tasks"]["state"] == "unknown"
+    assert result["commercial_result"] == "unverified"
+
+
+def test_cpanel_unknown_orders_are_not_silent_zero():
+    sample = report("cpanel")
+    sample["metrics"]["orders"]["state"] = "unknown"
+    result = decision(cpanel=sample, now=NOW)
+    assert result["candidate"]["action"] == "repair_local_order_observability"
+
+
+def test_local_pending_approvals_trigger_diagnostic_only():
+    sample = report("cpanel")
+    sample["metrics"]["orders"]["value"] = 3
+    sample["metrics"]["pending_approvals"]["value"] = 2
+    result = decision(cpanel=sample, now=NOW)
+    assert result["candidate"]["action"] == "classify_local_approval_gates"
+    assert "approval" in result["candidate"]["forbidden_effects"]
+
+
+def test_absent_local_snapshots_cannot_infer_sales():
+    result = decision(now=NOW)
+    assert result["candidate"]["action"] == "connect_private_observers"
+    assert result["observation"]["local_cpanel"]["orders"]["state"] == "unknown"
