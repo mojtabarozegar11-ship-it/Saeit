@@ -13,7 +13,27 @@ import re
 ACTION = "factory_f41_private_build"
 ORDER = re.compile(r"F41-[a-z0-9-]{3,56}\Z")
 HASH = re.compile(r"[0-9a-f]{64}\Z")
-KINDS = ("vesting", "reconciliation", "provenance", "nft_metadata")
+KINDS = (
+    "vesting",
+    "reconciliation",
+    "provenance",
+    "nft_metadata",
+    "trc721_collection",
+    "trc1155_inventory",
+    "staking_simulator",
+    "dao_vote",
+    "escrow_milestones",
+    "watch_wallet_sdk",
+    "onchain_indexer",
+    "chain_analytics",
+    "royalty_accounting",
+    "certificate_verifier_api",
+    "rights_marketplace",
+    "bridge_risk",
+    "contract_fuzz",
+    "security_monitor",
+    "rwa_eligibility",
+)
 
 
 def _safe_dir(path):

@@ -24,6 +24,8 @@ def private_f41(tmp_path, monkeypatch):
     (private / "outputs").mkdir()
     shutil.copy2(project / "scripts" / "factory_f41_multi_product_builder.py",
                  operations / "factory_f41_multi_product_builder.py")
+    shutil.copy2(project / "scripts" / "factory_f41_extension_builders.py",
+                 operations / "factory_f41_extension_builders.py")
     for name in ("demo_art.svg", "license_terms.txt"):
         shutil.copy2(project / "factory_assets" / "f41_demo_assets" / name,
                      operations / "assets" / name)
@@ -96,3 +98,28 @@ def test_symlink_and_forged_receipt_fail_closed(private_f41):
     with pytest.raises(CommandError, match="PREFLIGHT_FAILED"):
         call_command("factory_f41_enqueue", execute=True, verbosity=0)
     assert AgentTask.objects.filter(action_type=ACTION).count() == 0
+
+
+@pytest.mark.django_db
+def test_all_nineteen_prototypes_are_audited_real_master_tasks(private_f41):
+    project = Path(__file__).resolve().parents[2]
+    all_kinds = ("vesting", "reconciliation", "provenance", "nft_metadata", "trc721_collection", "trc1155_inventory", "staking_simulator", "dao_vote", "escrow_milestones", "watch_wallet_sdk", "onchain_indexer", "chain_analytics", "royalty_accounting", "certificate_verifier_api", "rights_marketplace", "bridge_risk", "contract_fuzz", "security_monitor", "rwa_eligibility")
+    for kind in all_kinds[4:]:
+        shutil.copy2(project / "factory_config" / "f41_samples" / (kind + ".json"),
+                     private_f41 / "orders" / ("F41-pilot-" + kind.replace("_", "-") + ".json"))
+    call_command("seed_online_income_agents", verbosity=0)
+    call_command("factory_f41_enqueue", dry_run=True, verbosity=0)
+    assert AgentTask.objects.filter(action_type=ACTION).count() == 0
+    call_command("factory_f41_enqueue", execute=True, verbosity=0)
+    master = Agent.objects.get(code="moj_1ro_1", active=True)
+    tasks = list(AgentTask.objects.filter(agent=master, action_type=ACTION))
+    assert len(tasks) == len(all_kinds) == 19
+    assert {x.output_data["kind"] for x in tasks} == set(all_kinds)
+    assert all(x.status == "completed" and x.output_data["verified_effect"]
+               and not x.output_data["quality_1000_certified"]
+               and not x.output_data["commercial_release"]
+               and x.output_data["financial_actions"] == 0 for x in tasks)
+    assert AuditLog.objects.filter(action="tool_invocation_completed",
+        target_type="AgentTask", target_id__in=[str(t.pk) for t in tasks]).count() == 19
+    call_command("factory_f41_enqueue", execute=True, verbosity=0)
+    assert AgentTask.objects.filter(action_type=ACTION).count() == 19
