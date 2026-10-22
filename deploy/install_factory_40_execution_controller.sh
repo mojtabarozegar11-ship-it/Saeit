@@ -33,7 +33,7 @@ backup="$ops/backups/forty-execution-$stamp"
 install -d -m 700 "$backup"
 crontab -l > "$backup/crontab-before.txt"
 chmod 600 "$backup/crontab-before.txt"
-for name in factory_40_execution_controller.py factory_40_family_master.py factory_build50_family_bridge.py factory_build_50.py factory_specialist_pilots.py factory_specialist_formats.py factory_build50_f31_planner.py factory_f31_independent_review.py factory_batch5_build.py factory_batch5_specs.py factory_batch5_review.py factory_product_planner.py factory_product_routes.py factory_build50_f18_webapps.py factory_f18_independent_review.py factory_capability_organizer.py factory_build50_f19_web_template.py factory_f19_independent_web_review.py factory_build50_f34_icon_kit.py factory_f34_independent_icon_review.py factory_build50_workbook.py factory_build50_creative_kits.py factory_creative_independent_review.py factory_build50_learning_4.py factory_learning_independent_review.py factory_build50_native_media.py factory_native_media_review.py;do
+for name in factory_six_specialist_executors.py factory_seven_missing_builders.py factory_40_execution_controller.py factory_40_family_master.py factory_build50_family_bridge.py factory_build_50.py factory_specialist_pilots.py factory_specialist_formats.py factory_build50_f31_planner.py factory_f31_independent_review.py factory_batch5_build.py factory_batch5_specs.py factory_batch5_review.py factory_product_planner.py factory_product_routes.py factory_build50_f18_webapps.py factory_f18_independent_review.py factory_capability_organizer.py factory_build50_f19_web_template.py factory_f19_independent_web_review.py factory_build50_f34_icon_kit.py factory_f34_independent_icon_review.py factory_build50_workbook.py factory_build50_creative_kits.py factory_creative_independent_review.py factory_build50_learning_4.py factory_learning_independent_review.py factory_build50_native_media.py factory_native_media_review.py;do
  test -s "$source_dir/$name" && test ! -L "$source_dir/$name"
  if test -f "$target/$name";then
   test ! -L "$target/$name"
@@ -44,6 +44,25 @@ for name in factory_40_execution_controller.py factory_40_family_master.py facto
  mv -f "$tmp" "$target/$name"
 done
 "$py" -B -m py_compile "$target"/*.py
+# Repair six previously blocked specialist producer routes using the real
+# audited source/runtime builders, and verify their exact candidate ZIP bytes.
+# Source pilots stay private and must NOT be counted as signed APK/EXE/ONNX.
+"$py" -B "$target/factory_six_specialist_executors.py" --factory-private "$private" --all
+"$py" -B - "$private" <<'SIXPROOF'
+import json,sys
+from pathlib import Path
+p=Path(sys.argv[1])/"quality-excellence"/"six-agent-supervisor"/"last-execution.json"
+d=json.loads(p.read_text(encoding="utf8"))
+assert d["schema"]=="saeit.factory.six-specialist-executors.v1"
+assert set(d["registered_workers"])=={"F12","F13","F14","F16","F17","F26"}
+assert len(d["outcomes"])==6 and d["technical_candidates_rechecked"]==6
+assert all(o["agent_executed"] and o["technical_candidate_hash_verified"] for o in d["outcomes"])
+assert d["native_50_stage_executors_certified"]==0
+assert d["independent_quality_1000_certified"]==0
+assert not d["public_release_authorized"] and d["sites_modified"]==0
+print("SIX_PRIVATE_SPECIALIST_AGENTS_REAL_ARTIFACTS_VERIFIED=6")
+print("SIX_NATIVE_FINAL_RELEASES=0")
+SIXPROOF
 "$py" -B "$target/factory_build50_f18_webapps.py" --factory-private "$private"
 # Five additional executable engineering families, each with independent BUILD50 proof.
 "$py" -B "$target/factory_batch5_build.py" --factory-private "$private"
@@ -149,6 +168,7 @@ exec >> "$ops/forty-execution.log" 2>&1
 /usr/bin/timeout 90s "$py" -B "$target/factory_build50_f31_planner.py" --factory-private "$private" || echo F31_PERIODIC_BUILD_REQUIRES_REWORK
 /usr/bin/timeout 240s "$py" -B "$target/factory_product_planner.py" --factory-private "$private" --registry "$registry" --dispatch --max-execute 1 || echo PER_PRODUCT_PLANNER_REQUIRES_REVIEW
 /usr/bin/timeout 45s "$py" -B "$target/factory_capability_organizer.py" --factory-private "$private" --registry "$registry" --ops "$ops" --source-repo "$ops/multisite-deploy-source" || echo CAPABILITY_ORGANIZER_REQUIRES_REVIEW
+/usr/bin/timeout 135s "$py" -B "$target/factory_six_specialist_executors.py" --factory-private "$private" || echo SIX_SPECIALIST_AGENT_REWORK_PENDING
 exec "$py" -B "$target/factory_40_execution_controller.py" --factory-private "$private" --registry "$registry" --module-dir "$target" --toolchain-manifest "$toolchain"
 SH
 chmod 700 "$target/periodic-dispatch.sh"
