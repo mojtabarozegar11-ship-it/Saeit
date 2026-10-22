@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: zm-arrow-escape-third-card
+  group: zm-arrow-cube-cachefix-20261022
   cancel-in-progress: false
 jobs:
   correct:
