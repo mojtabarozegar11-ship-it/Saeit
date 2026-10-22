@@ -268,3 +268,59 @@ def settle_existing_test_intent(intent_id: int, tx_hash: str,
         order.status="paid"
         order.save(update_fields=["status", "updated_at"])
     return "paid"
+
+
+def existing_test_buyer_status(intent_id: int, buyer_id: int, *, db=None,
+                               settings=None) -> dict:
+    """Read-only owner-scoped entitlement check; never trusts payment browser UI."""
+    if type(intent_id) is not int or intent_id <= 0 or type(buyer_id) is not int or buyer_id <= 0:
+        raise PaymentHold("Invalid buyer or invoice")
+    from django.conf import settings as django_settings
+    from django.db import connection
+    from core.models import PaymentIntent, LedgerEntry, PaymentWebhookEvent, OrderItem
+    from mpw_commerce.models import CommerceFulfillment
+    from mpw_commerce.fulfillment import _private_file
+
+    db = db or connection
+    settings = settings or django_settings
+    _test_db(settings, db)
+    intent = PaymentIntent.objects.select_related("order").filter(
+        pk=intent_id, order__customer_id=buyer_id, provider=PROVIDER,
+    ).first()
+    if intent is None:
+        raise PaymentHold("Buyer has no such payment intent")
+    invoice = _decode(intent)
+    if (intent.status != "paid" or intent.order.status != "paid"
+            or Decimal(intent.order.total) != invoice.usd_total):
+        return {"status": "awaiting", "can_download": False}
+    receipt = PaymentWebhookEvent.objects.filter(
+        provider=PROVIDER, payment_intent=intent,
+        event_type="tron_finalized", status="processed",
+    ).first()
+    if receipt is None or not receipt.payload_hash:
+        return {"status": "review", "can_download": False}
+    ledger = LedgerEntry.objects.filter(
+        order=intent.order, payment_intent=intent, entry_type="credit",
+        currency="USD", amount=invoice.usd_total,
+        reference="walletless:"+NETWORK+":"+receipt.event_id,
+    ).first()
+    if (ledger is None or not isinstance(ledger.metadata, dict)
+            or ledger.metadata.get("network") != NETWORK
+            or ledger.metadata.get("tx_hash") != receipt.event_id
+            or ledger.metadata.get("evidence_digest") != receipt.payload_hash
+            or ledger.metadata.get("walletless_receipt_event_id") != receipt.pk):
+        return {"status": "review", "can_download": False}
+    items = list(OrderItem.objects.filter(order=intent.order)[:2])
+    if len(items) != 1 or not CommerceFulfillment.objects.filter(
+        item=items[0], kind="digital", status=CommerceFulfillment.Status.READY,
+    ).exists():
+        return {"status": "review", "can_download": False}
+    try:
+        source = _private_file(items[0])
+        private_file_ready = not source.is_symlink() and source.is_file()
+    except (OSError, ValueError):
+        private_file_ready = False
+    if not private_file_ready:
+        return {"status": "review", "can_download": False}
+    return {"status": "paid", "can_download": True,
+            "download_path": f"/commerce/trx-easy/download/{intent_id}/"}
