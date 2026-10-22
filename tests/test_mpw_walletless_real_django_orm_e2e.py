@@ -58,7 +58,7 @@ class OrderItem(models.Model):
 
 class LedgerEntry(models.Model):
     order=models.ForeignKey(Order,on_delete=models.CASCADE)
-    payment_intent_id=models.BigIntegerField(null=True)
+    payment_intent=models.BigIntegerField(null=True)
     entry_type=models.CharField(max_length=30)
     amount=models.DecimalField(max_digits=14,decimal_places=2)
     currency=models.CharField(max_length=10)
