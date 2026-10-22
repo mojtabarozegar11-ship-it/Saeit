@@ -188,7 +188,7 @@ class SourceScoutTests(unittest.TestCase):
         self.assertIn("substrate",SCOUT.keys("Potting Guide"))
         self.assertIn("germin",SCOUT.keys("Seedling Guide"))
         self.assertIn("propag",SCOUT.keys("Cutting Guide"))
-        self.assertIn("photosynthesis",SCOUT.keys("Lighting Guide"))
+        self.assertIn(SCOUT.normalize("photosynthesis"),SCOUT.keys("Lighting Guide"))
         self.assertTrue(any("irrigation" in value for value in
                             SCOUT.query_variants("Watering Guide")))
         article=study("Watering Guide",1)
