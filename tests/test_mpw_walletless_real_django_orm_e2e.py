@@ -417,6 +417,39 @@ class RealDjangoWalletlessTests(unittest.TestCase):
                 guest_invoice_status(req("get","/commerce/trx-easy/status/"+str(invoice_id)+"/",token+"tampered"),invoice_id)
             from services.mpw_walletless_django_staging_web import _trusted_status
             self.assertFalse(_trusted_status(connection,invoice_id,buyer)["can_download"])
+            from services.mpw_walletless_django_test_bridge import settle_to_django_test_database,TrustedNodePair
+            from datetime import datetime,timezone
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT amount_sun FROM mpw_walletless_trx_reservation_v1 WHERE id=%s",[invoice_id])
+                exact_sun=int(cursor.fetchone()[0])
+            def proof_guest(source):
+                return SolidifiedTransfer(
+                    source_id=source,tx_hash="d"*64,network="tron-mainnet",
+                    recipient=RECIPIENT,sender=SENDER,amount_sun=exact_sun,
+                    block_time=datetime.now(timezone.utc),solidified=True,
+                    transfer_contract=True,execution_success=True)
+            pair=TrustedNodePair("guest-node-a","guest-node-b",
+                  prove_a=lambda tx:proof_guest("guest-node-a"),
+                  prove_b=lambda tx:proof_guest("guest-node-b"),
+                  audited_as_independent=True)
+            self.assertEqual(settle_to_django_test_database(invoice_id,"d"*64,pair),"paid")
+            state=guest_invoice_status(
+                req("get",f"/commerce/trx-easy/status/{invoice_id}/",token),invoice_id)
+            paid=__import__("json").loads(state.content)
+            self.assertEqual(paid["status"],"paid")
+            self.assertTrue(paid["can_download"])
+            self.assertEqual(paid["download_path"],f"/commerce/trx-easy/download/{invoice_id}/")
+            download=guest_download_paid(
+                req("get",paid["download_path"],token),invoice_id)
+            self.assertEqual(download.status_code,200)
+            self.assertEqual(download["Cache-Control"],"no-store, private, max-age=0")
+            self.assertIn("attachment",download["Content-Disposition"])
+            download.close()
+            with self.assertRaises(Http404):
+                guest_download_paid(req("get",paid["download_path"],token+"tampered"),invoice_id)
+            with self.assertRaises(Http404):
+                guest_download_paid(req("get",paid["download_path"],None),invoice_id)
 
     def test_guest_rate_limit_five_per_hour(self):
         from services.mpw_walletless_django_guest_claim import create_guest_buyer
