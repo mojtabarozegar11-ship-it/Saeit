@@ -1,0 +1,99 @@
+name: Zomorod Arrow Cube 3D — immutable-URL cache correction
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/zomorod-arrow-cube-cachefix.yml'
+      - 'games/arrow-escape/**'
+permissions:
+  contents: read
+concurrency:
+  group: zm-arrow-escape-third-card
+  cancel-in-progress: false
+jobs:
+  correct:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-zm-arrow-cube-cachefix-20261022]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate cache revision and keep original game safe
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          path=Path('games/arrow-escape')
+          ast.parse((path/'cachefix.py').read_text('utf-8'))
+          html=(path/'index.html').read_text('utf-8')
+          for asset in ['./style.css?v=cube3d-20261022-2',
+                        './cube-engine.js?v=cube3d-20261022-2',
+                        './app.js?v=cube3d-20261022-2']:
+              assert asset in html,asset
+          assert html.count('ZM-ARROW-ESCAPE-THIRD-CARD-20261022')==1
+          PY
+          node --check games/arrow-escape/app.js
+          node --check games/arrow-escape/cube-engine.js
+      - name: Connect existing private VPS and cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Snapshot live bytes and prepare two-file correction
+        id: stage
+        run: |
+          set -euo pipefail
+          relay="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-arrow-cube-cachefix-$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$relay/config" host "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage/incoming'"
+          timeout 60s scp -q -F "$relay/config" games/arrow-escape/cachefix.py "host:$stage/incoming/cachefix.py"
+          timeout 60s scp -q -F "$relay/config" games/arrow-escape/index.html "host:$stage/incoming/index.html"
+          timeout 60s ssh -T -F "$relay/config" host "python3 '$stage/incoming/cachefix.py' prepare '$GITHUB_RUN_ID'"
+      - name: Upgrade cache keys without touching any adjacent card
+        run: |
+          set -euo pipefail
+          relay="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-arrow-cube-cachefix-$GITHUB_RUN_ID"
+          timeout 90s ssh -T -F "$relay/config" host "python3 '$stage/incoming/cachefix.py' publish '$GITHUB_RUN_ID'"
+          timeout 60s ssh -T -F "$relay/config" host "python3 '$stage/incoming/cachefix.py' verify '$GITHUB_RUN_ID'"
+      - name: Public HTTP verification of versioned CSS JS and card artwork
+        run: |
+          python3 - <<'PY'
+          import json,re,time
+          from urllib.request import Request,urlopen
+          base='https://zomorodmelal.ir'
+          def get(path):
+              with urlopen(Request(base+path,headers={'Cache-Control':'no-cache',
+                        'User-Agent':'ArrowCubeCacheVerify/1'}),timeout=45) as res:
+                  assert res.status==200,path
+                  return res.read(3500000)
+          for attempt in range(10):
+              html=get('/arrow-escape/?cache='+str(time.time_ns()))
+              if b'style.css?v=cube3d-20261022-2' in html:break
+              time.sleep(2)
+          else:raise AssertionError('cache-corrected HTML missing')
+          assert b'.cube-stage' in get('/arrow-escape/style.css?v=cube3d-20261022-2')
+          assert b'ArrowCubeCore' in get('/arrow-escape/cube-engine.js?v=cube3d-20261022-2')
+          assert b'ArrowMazeDebug' in get('/arrow-escape/app.js?v=cube3d-20261022-2')
+          assert b'<svg' in get('/arrow-escape/cover.svg?v=cube3d-20261022-2')
+          homepage=get('/?cache='+str(time.time_ns()))
+          match=re.search(rb'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',homepage,re.S)
+          assert match
+          row=next(r for r in json.loads(match.group(1))['rows'] if r.get('id')=='ZM-R25')
+          assert len(row['cards'])==24
+          assert row['cards'][2]['title']=='بازی مکعب پیکان‌ها'
+          assert row['cards'][2]['image']=='/arrow-escape/cover.svg?v=cube3d-20261022-2'
+          assert row['cards'][3]['slug']=='website-design'
+          print('LIVE_CUBE_STYLES_AND_CARD_ART_BUSTED=PASS')
+          PY
+      - name: Restore byte-exact HTML and homepage on any failed validation
+        if: failure() && steps.stage.outcome == 'success'
+        run: |
+          set -euo pipefail
+          relay="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-arrow-cube-cachefix-$GITHUB_RUN_ID"
+          timeout 75s ssh -T -F "$relay/config" host "python3 '$stage/incoming/cachefix.py' rollback '$GITHUB_RUN_ID'"
