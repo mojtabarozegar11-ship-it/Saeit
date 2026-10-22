@@ -93,4 +93,22 @@ class EnrollmentTests(unittest.TestCase):
                          "PROVIDER_HTTP_ERROR_500")
         self.assertFalse(self.target.exists())
 
+
+class PendingActivationCooldownTests(unittest.TestCase):
+    def test_openalex_403_causes_bounded_shared_cooldown(self):
+        scout_path=PATH.parent/"factory_stage2_literature_scout.py"
+        scout_spec=importlib.util.spec_from_file_location("scout_for_auth_test",scout_path)
+        scout=importlib.util.module_from_spec(scout_spec)
+        scout_spec.loader.exec_module(scout)
+        error=urllib.error.HTTPError(scout.SAFE_KEYS["openalex"],403,
+                                     "not activated",{},io.BytesIO(b"never log me"))
+        with mock.patch.object(scout,"openalex_api_key",return_value="oax_private_example_0123456789"), \
+             mock.patch.object(scout,"_slot"), \
+             mock.patch.object(scout,"_limit_provider") as cooldown, \
+             mock.patch.object(scout.urllib.request,"build_opener") as opener:
+            opener.return_value.open.side_effect=error
+            with self.assertRaisesRegex(RuntimeError,"SCOUT_OPENALEX_KEY_NOT_YET_USABLE_403"):
+                scout.request_json(scout.SAFE_KEYS["openalex"],{"search":"wheat"})
+            cooldown.assert_called_once_with(scout.SAFE_KEYS["openalex"],600)
+
 if __name__ == "__main__": unittest.main()
