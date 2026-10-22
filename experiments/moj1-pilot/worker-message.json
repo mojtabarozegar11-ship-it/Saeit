@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "message_id": "moj1-worker-instruction-20261022-01",
+  "recipient": "MOJ1_SHASTA_TEST_READONLY_WATCH",
+  "network": "Shasta",
+  "wallet": "TWTBsKZPVuQgaGNbyJWJm9XR28g4wVBCNQ",
+  "command": "CHECK_SHASTA_FUNDING_READONLY",
+  "objective_fa": "هر ۱۰ دقیقه موجودی کیف پول آزمایشی Shasta را بررسی کن، شواهد شبکه را ثبت کن و در صورت دریافت TRX فقط وضعیت آمادگی استقرار را اعلام کن.",
+  "restrictions": [
+    "NO_PRIVATE_KEY_READ",
+    "NO_BROADCAST",
+    "NO_MAINNET",
+    "NO_REAL_TRX",
+    "NO_CAPTCHA_BYPASS",
+    "NO_ACCOUNT_LOGIN",
+    "NO_CONTRACT_DEPLOYMENT"
+  ],
+  "blocker_fa": "دریافت TRX رایگان آزمایشی از مسیر رسمی با تأیید انسانی در صورت نیاز؛ دستور ارسال تراکنش یا استقرار صادر نشده است."
+}
