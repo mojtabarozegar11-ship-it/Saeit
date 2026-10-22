@@ -318,5 +318,69 @@ class SourceScoutTests(unittest.TestCase):
         self.assertFalse(packet["stage3_handoff"])
         self.assertFalse((self.area/"stage-02/source-evidence/AGRI-001--r001.json").exists())
 
+
+    def test_relevant_article_sentence_may_use_one_specific_topic_term(self):
+        # Title and full abstract retain multiple relevant keys, while a
+        # single true supporting sentence need not repeat the whole title.
+        p=study("Houseplant Rescue Guide",1)
+        sentence=("Houseplant experiments measured plant growth differences "
+                  "under multiple irrigation treatments and environmental "
+                  "conditions across consecutive observation periods.")
+        abstract=(sentence+" Indoor ornamental specimens were examined. "
+                  "Further evidence should be assessed for regional safety "
+                  "and commercial applicability before practical use in "
+                  "controlled commercial production and educational training.")
+        p["abstract_inverted_index"]=indexed(abstract)
+        keys=SCOUT.keys("Houseplant Rescue Guide")
+        hit=SCOUT.usable_paper(p,keys,STAGE2)
+        self.assertIsNotNone(hit, msg={"keys":keys,
+                "title":p["display_name"],
+                "title_hits":len(set(keys) & {SCOUT.normalize(w) for w in SCOUT.WORD_RE.findall(p["display_name"])}),
+                "body_hits":len(set(keys) & {SCOUT.normalize(w) for w in SCOUT.WORD_RE.findall(SCOUT.abstract_from_index(p["abstract_inverted_index"]))}),
+                "source_url":p["primary_location"]["landing_page_url"],
+                "abstract_len":len(SCOUT.abstract_from_index(p["abstract_inverted_index"])),
+                "citation":SCOUT.citation_sentence(
+                    SCOUT.abstract_from_index(p["abstract_inverted_index"]),keys)})
+        self.assertEqual(hit["support_sentence"],sentence)
+
+    def test_accepted_indexed_location_recovers_article_specific_url(self):
+        p=study("Houseplant Rescue Guide",1)
+        p["primary_location"]["landing_page_url"]=p["doi"]
+        p["best_oa_location"]={"landing_page_url":p["doi"]}
+        p["locations"]=[
+            {"landing_page_url":"https://unreviewed.example.org/preprint",
+             "version":"submittedVersion"},
+            {"landing_page_url":"https://university.example.edu/record/123",
+             "version":"acceptedVersion"}]
+        hit=SCOUT.usable_paper(p,SCOUT.keys("Houseplant Rescue Guide"),STAGE2)
+        self.assertIsNotNone(hit)
+        self.assertEqual(hit["host"],"university.example.edu")
+        self.assertNotIn("unreviewed",hit["url"])
+
+    def test_old_research_packets_get_one_versioned_relevance_retry(self):
+        index=STAGE2.read(self.area/"owner-agri200-p0-index.json")
+        now=dt.datetime.now(dt.timezone.utc)
+        for n in range(1,201):
+            packet={
+                "schema":SCOUT.SCHEMA,
+                "source_product_id":"AGRI-%03d"%n,
+                "order_id":index["order_ids_ranked"][n-1],
+                "status":"indexed_references_found_require_additional_research",
+                "checked_utc":now.isoformat(),
+                "search_round":0,
+                "scout_algorithm_version":(
+                    None if n==1 else SCOUT.SCOUT_ALGO_VERSION)}
+            STAGE2.atomic(self.area/"stage-02/literature-candidates"/
+                          ("AGRI-%03d"%n+"--r001.json"),packet)
+        seen=[]
+        def fetch(title):
+            seen.append(title)
+            return sample("Houseplant Rescue Guide")
+        result=SCOUT.run(self.root,self.program,fetcher=fetch,
+                         backstop=lambda _:[],batch=1,workers=1)
+        self.assertEqual(result["attempted_this_run"],1)
+        self.assertEqual(len(seen),1)
+        self.assertTrue((self.area/"stage-02/source-evidence/AGRI-001--r001.json").is_file())
+
 if __name__=="__main__":
     unittest.main()
