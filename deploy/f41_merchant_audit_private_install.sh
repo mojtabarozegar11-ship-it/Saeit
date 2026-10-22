@@ -15,7 +15,7 @@ python="$base/.venv/bin/python"
 ops="$base/operations"
 private="$base/private/autonomous-product-cycle"
 test -x "$python" && test -d "$ops" && test -d "$private"
-for name in cli.py verifier.py tests.py tests_verifier.py README.md LICENSE.txt invoices.csv payments.csv; do
+for name in f41_merchant_audit_cli.py verifier.py tests.py tests_verifier.py README.md LICENSE.txt invoices.csv payments.csv; do
   test -f "$stage/$name" && test ! -L "$stage/$name"
 done
 dest="$ops/f41-merchant-audit/releases/$revision"
@@ -26,27 +26,27 @@ exec 9>"$ops/f41-merchant-audit/.install.lock"
 flock -w 30 9
 if test -e "$dest"; then
   test -d "$dest" && test ! -L "$dest"
-  for name in cli.py verifier.py tests.py tests_verifier.py README.md LICENSE.txt invoices.csv payments.csv; do
+  for name in f41_merchant_audit_cli.py verifier.py tests.py tests_verifier.py README.md LICENSE.txt invoices.csv payments.csv; do
     cmp -s "$stage/$name" "$dest/$name" || { echo F41_MERCHANT_RELEASE_DRIFT; exit 1; }
   done
 else
   install -d -m 700 "$dest"
-  for name in cli.py verifier.py tests.py tests_verifier.py README.md LICENSE.txt invoices.csv payments.csv; do
+  for name in f41_merchant_audit_cli.py verifier.py tests.py tests_verifier.py README.md LICENSE.txt invoices.csv payments.csv; do
     install -m 600 "$stage/$name" "$dest/$name"
   done
 fi
 # Verify actual executable on this VPS, using a new private demo folder.
 demo="$pilot/demo-$run_id"
 test ! -e "$demo" && test ! -L "$demo"
-"$python" -B "$dest/cli.py" --invoices "$dest/invoices.csv" --payments "$dest/payments.csv" --out "$demo"
-"$python" -B "$dest/cli.py" --invoices "$dest/invoices.csv" --payments "$dest/payments.csv" --out "$demo" --verify
+"$python" -B "$dest/f41_merchant_audit_cli.py" --invoices "$dest/invoices.csv" --payments "$dest/payments.csv" --out "$demo"
+"$python" -B "$dest/f41_merchant_audit_cli.py" --invoices "$dest/invoices.csv" --payments "$dest/payments.csv" --out "$demo" --verify
 "$python" -B "$dest/verifier.py" --help >/dev/null
 "$python" -B - "$dest" "$pilot/evaluation-$revision.zip" <<'PY'
 from pathlib import Path
 import sys,zipfile
 root=Path(sys.argv[1])
 out=Path(sys.argv[2])
-names=("cli.py","verifier.py","README.md","LICENSE.txt","invoices.csv","payments.csv")
+names=("f41_merchant_audit_cli.py","verifier.py","README.md","LICENSE.txt","invoices.csv","payments.csv")
 if out.exists() or out.is_symlink():
     with zipfile.ZipFile(out,"r") as z:
         assert sorted(z.namelist()) == sorted(names)
