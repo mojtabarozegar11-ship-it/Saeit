@@ -142,6 +142,8 @@ CROWN_TRX_DEDICATED_RECEIVER_ATTESTED = env.bool(
 CROWN_TRX_PAID_END_TO_END_ACCEPTED = env.bool(
     "CROWN_TRX_PAID_END_TO_END_ACCEPTED", default=False)
 CROWN_TRX_MERCHANT_RECEIVER = env("CROWN_TRX_MERCHANT_RECEIVER", default="")
+CROWN_TRX_AUTO_DISCOVERY_ENABLED = env.bool("CROWN_TRX_AUTO_DISCOVERY_ENABLED", default=False)
+CROWN_TRX_INDEXER_KEY = env("CROWN_TRX_INDEXER_KEY", default="")
 CROWN_TRX_RPC_PROVIDERS = [
     {"source_id": "crown_rpc_a", "operator_id": env("CROWN_TRX_RPC_A_OPERATOR", default=""),
      "endpoint": env("CROWN_TRX_RPC_A_ORIGIN", default=""),
