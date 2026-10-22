@@ -82,6 +82,20 @@ jobs:
           print(','.join(owners))
           PY_OWNERS
           )"
+          # Reconcile the original token txID WITHOUT A KEY before deciding
+          # whether any new deployment is permissible. Never retry a pending tx.
+          export MOJ1_DEPLOY_JOURNAL_PATH="$private/moj1-token-broadcast-journal.json"
+          "$node" scripts/reconcile-shasta.mjs > "$private/token-readonly-reconciliation.json"
+          python3 - "$private/token-readonly-reconciliation.json" <<'PY_RECON'
+          import json,sys
+          d=json.load(open(sys.argv[1]))
+          assert d['noPrivateKey'] is True and d['noBroadcast'] is True
+          state={x['name']:x['status'] for x in d['result']}
+          assert state.get('MojCoin') in ('VERIFIED','ALREADY_VERIFIED'), state
+          assert state.get('MojAssets') in ('NOT_STARTED','VERIFIED','ALREADY_VERIFIED'), state
+          print('MOJ1_TOKEN_ORIGINAL_TX_READONLY_RECOVERED=PASS')
+          print('MOJ1_NFT_RECONCILIATION_STATUS='+state['MojAssets'])
+          PY_RECON
           export TRON_PRIVATE_KEY
           TRON_PRIVATE_KEY="$(python3 - "$private/wallet.key" <<'PY_KEY'
           import os,stat,sys
