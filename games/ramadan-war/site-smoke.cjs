@@ -20,6 +20,7 @@ const assert=require('node:assert/strict');
    await page.evaluate(()=>window.RamadanWarDebug.start());
    await page.locator('#hud:not(.hidden)').waitFor();
    let state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.hp,100);assert.equal(state.stage,0);assert.equal(state.mode,'play');
+   await page.waitForTimeout(220);
    await page.evaluate(()=>{window.RamadanWarDebug.fire();window.RamadanWarDebug.rocket();window.RamadanWarDebug.drone()});
    state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.shots,1);assert(state.rockets<3);assert.equal(state.drones,0);
    await page.reload({waitUntil:'domcontentloaded'});
