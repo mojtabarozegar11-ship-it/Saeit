@@ -35,27 +35,21 @@ def screenshot():
 
 
 
-def tap_visible_app_control(family):
-    """Use accessibility UI bounds, never guessed screen coordinates."""
-    for attempt in range(2):
+def tap_visible_app_control(family, pid):
+    """Actual adb touchscreen input at a control found by accessibility or live DOM."""
+    app_bounds = None
+    for attempt in range(4):
         raw = run("exec-out", "uiautomator", "dump", "/dev/tty", timeout=45)
         start = raw.find("<?xml")
-        if start < 0:
-            raise RuntimeError("EMULATOR_ACCESSIBILITY_TREE_MISSING")
-        finish = raw.find("</hierarchy>", start)
+        finish = raw.find("</hierarchy>", start) if start >= 0 else -1
         if finish < 0:
-            raise RuntimeError("EMULATOR_ACCESSIBILITY_TREE_INCOMPLETE")
+            if attempt == 3:
+                raise RuntimeError("EMULATOR_ACCESSIBILITY_TREE_INCOMPLETE")
+            time.sleep(2)
+            continue
         hierarchy = ET.fromstring(raw[start:finish + len("</hierarchy>")])
         for node in hierarchy.iter("node"):
             attrs = node.attrib
-            label = (attrs.get("text", "") + " " +
-                     attrs.get("content-desc", "")).lower()
-            matching = (
-                "next level" in label if family == "F12" else
-                attrs.get("class") == "android.widget.EditText"
-            )
-            if not matching:
-                continue
             match = re.fullmatch(
                 r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",
                 attrs.get("bounds", ""))
@@ -64,12 +58,44 @@ def tap_visible_app_control(family):
             x1, y1, x2, y2 = map(int, match.groups())
             if x2 <= x1 or y2 <= y1:
                 continue
-            run("shell", "input", "tap", str((x1+x2)//2), str((y1+y2)//2))
-            return True
-        if attempt == 0:
-            run("shell", "input", "swipe", "400", "800", "400", "300", "300")
-            time.sleep(1)
-    raise RuntimeError("EMULATOR_APP_CONTROL_NOT_EXPOSED_IN_UI_TREE")
+            if attrs.get("class") == "android.webkit.WebView":
+                app_bounds = (x1, y1, x2, y2)
+            label = (attrs.get("text", "") + " " +
+                     attrs.get("content-desc", "")).lower()
+            matching = (
+                "next level" in label if family == "F12" else
+                attrs.get("class") == "android.widget.EditText"
+            )
+            if matching:
+                run("shell", "input", "tap", str((x1+x2)//2), str((y1+y2)//2))
+                return True
+        time.sleep(2)
+
+    # Some Android System WebView versions omit HTML descendants from
+    # accessibility. Derive a physical tap from a REAL DOM element and the
+    # current WebView viewport, never from arbitrary fixed coordinates.
+    if app_bounds is None:
+        raise RuntimeError("EMULATOR_APP_VIEW_BOUNDS_UNAVAILABLE")
+    with DebugWebView(pid) as dev:
+        rect = dev.evaluate("""(() => {
+          const el = document.getElementById(""" +
+            json.dumps("next" if family == "F12" else "name") + """);
+          if (!el) return null;
+          const b = el.getBoundingClientRect();
+          return {x:b.left+b.width/2, y:b.top+b.height/2,
+                  width:innerWidth, height:innerHeight,
+                  visible:b.width>0 && b.height>0};
+        })()""")
+    if (not isinstance(rect, dict) or not rect.get("visible")
+            or rect.get("width", 0) <= 0 or rect.get("height", 0) <= 0):
+        raise RuntimeError("EMULATOR_REAL_APP_CONTROL_NOT_VISIBLE")
+    x1, y1, x2, y2 = app_bounds
+    x = x1 + round(rect["x"] / rect["width"] * (x2-x1))
+    y = y1 + round(rect["y"] / rect["height"] * (y2-y1))
+    if not (x1 < x < x2 and y1 < y < y2):
+        raise RuntimeError("EMULATOR_APP_CONTROL_OUTSIDE_VIEW")
+    run("shell", "input", "tap", str(x), str(y))
+    return True
 
 class DebugWebView:
     """Inspects the actual running debug APK over the emulator's local CDP socket."""
@@ -261,7 +287,7 @@ def execute(family,apk,destination):
         raise RuntimeError("EMULATOR_APP_PROCESS_NOT_ALIVE")
     # Verify app-specific state first, then dispatch real accessibility-derived touch.
     deep=deep_application_acceptance(family,pkg,first_pid)
-    tap_visible_app_control(family)
+    tap_visible_app_control(family, run('shell', 'pidof', pkg))
     run("shell","input","swipe","280","390","120","390","270")
     time.sleep(2)
     after_pid=run("shell","pidof",pkg)
