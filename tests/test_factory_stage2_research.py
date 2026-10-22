@@ -119,6 +119,43 @@ class StageTwoTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "STAGE2_SOURCES_NOT_INDEPENDENT"):
             STAGE2.validate_evidence(content, order, 1)
 
+    def test_genuine_return_from_stage3_is_researched_and_reissued_at_revision2(self):
+        order = self.stage1()
+        evidence = self.research_source(order, 1)
+        self.assertEqual(STAGE2.stage2_loop(self.root)["newly_completed_research_dossiers"], 1)
+        original = STAGE2.read(self.area /
+            "stage-02/completed-dossiers/WO-00000001--r001.json")
+        returned = {
+            "schema": STAGE2.RETURN_SCHEMA, "order_id": order["id"],
+            "revision": 2, "target_stage": 2, "source_stage": 3,
+            "reason": "Design needs independently linked diagnostic distinctions",
+            "previous_research_sha256": STAGE2.sha(original)
+        }
+        STAGE2.atomic(self.area / "stage-02/return-inbox/WO-00000001--r002.json", returned)
+        self.assertEqual(STAGE2.stage2_loop(self.root)["newly_documented_missing_sources"], 1)
+        revised = dict(evidence, revision=2)
+        revised["claims"] = copy.deepcopy(evidence["claims"])
+        revised["claims"][0]["statement"] += " Keep the underlying observations explicit."
+        STAGE2.atomic(self.area / "stage-02/source-evidence/AGRI-001--r002.json", revised)
+        result = STAGE2.stage2_loop(self.root)
+        self.assertEqual(result["newly_completed_research_dossiers"], 1)
+        self.assertTrue((self.area / "stage-03/inbox/WO-00000001--r002.json").exists())
+        self.assertEqual(STAGE2.stage2_loop(self.root)["newly_completed_research_dossiers"], 0)
+
+    def test_fake_stage3_return_is_rejected(self):
+        order = self.stage1()
+        self.research_source(order, 1)
+        STAGE2.stage2_loop(self.root)
+        invalid = {
+            "schema": STAGE2.RETURN_SCHEMA, "order_id": order["id"],
+            "revision": 2, "target_stage": 2, "source_stage": 3,
+            "reason": "Material requires more research evidence",
+            "previous_research_sha256": "0"*64
+        }
+        STAGE2.atomic(self.area / "stage-02/return-inbox/WO-00000001--r002.json", invalid)
+        with self.assertRaisesRegex(RuntimeError, "STAGE2_UNTRUSTED_RETURN"):
+            STAGE2.stage2_loop(self.root)
+
     def test_seeding_real_catalog_requires_index_and_all_200_stage1_receipts(self):
         AGRI.install(self.root, CATALOG)
         self.assertEqual(STAGE1.run(self.root, batch=250)["new_handoffs"], 200)
