@@ -112,7 +112,7 @@ assert proof["completed_professional_quality_1000_certifications"]==0
 print("MOJ1RO1_NATIVE_REAL_MASTER_TASKS=6")
 print("MOJ1RO1_NATIVE_REAL_MASTER_GATEWAY_AUDITS="+str(count))
 print("MOJ1RO1_NATIVE_EXTERNAL_PROFESSIONAL_GATES=6")
-print("MOJ1RO1_NATIVE_AGENT_IDENTITY=economic-master-agent")
+print("MOJ1RO1_NATIVE_AGENT_IDENTITY="+master.code)
 PY
 if test -f "$master/run-native-qa.sh"; then cp -p "$master/run-native-qa.sh" "$backup/run-native-qa.sh"; fi
 cat > "$master/run-native-qa.sh.proposed" <<'SH'
