@@ -1,0 +1,54 @@
+name: MojPlayWin Shasta bounded signed transfer and solidified receipt (test only)
+on:
+  push:
+    branches: ['moj1/shasta-pilot-20261021']
+    paths:
+      - '.github/workflows/mpw-shasta-bounded-payment-e2e-20261022.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-one-time-native-shasta-payment-e2e
+  cancel-in-progress: false
+jobs:
+  shasta-test-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/moj1/shasta-pilot-20261021'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Syntax check; never authorize mainnet via this workflow
+        run: |
+          set -euo pipefail
+          node --check scripts/mpw_shasta_bounded_transfer_v1.mjs
+          grep -Fq "const ENDPOINT = 'https://api.shasta.trongrid.io'" scripts/mpw_shasta_bounded_transfer_v1.mjs
+          echo TEST_NETWORK=SHASTA_ONLY
+      - name: Transfer exactly 100000 Shasta SUN once with VPS-only test key, then verify solidity
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          if [ -z "$VPS_SSH_PRIVATE_KEY" ]; then echo 'SSH_RELAY=UNAVAILABLE'; exit 1; fi
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/mpw_shasta_ssh"
+          chmod 600 "$RUNNER_TEMP/mpw_shasta_ssh"
+          trap 'rm -f "$RUNNER_TEMP/mpw_shasta_ssh"' EXIT
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null > "$RUNNER_TEMP/mpw_shasta_known"
+          ssh-keygen -lf "$RUNNER_TEMP/mpw_shasta_known" -E sha256 | grep -Fq 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          opts=(-o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/mpw_shasta_known" -i "$RUNNER_TEMP/mpw_shasta_ssh")
+          timeout 60s ssh "${opts[@]}" githubops@178.239.147.150 'set -e; private="$HOME/.local/share/moj1-shasta-test-20261021"; test "$(stat -c %a "$private")" = 700; test "$(stat -c %a "$private/wallet.key")" = 600; test -f "$private/runtime-token/moj1-pilot/node_modules/tronweb/package.json"; test -x "$private/moj1-node"; test -d "$private/runtime-token/moj1-pilot/scripts"'
+          timeout 70s scp "${opts[@]}" scripts/mpw_shasta_bounded_transfer_v1.mjs githubops@178.239.147.150:.local/share/moj1-shasta-test-20261021/runtime-token/moj1-pilot/scripts/mpw_shasta_bounded_transfer_v1.mjs
+          timeout 350s ssh "${opts[@]}" githubops@178.239.147.150 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          private="$HOME/.local/share/moj1-shasta-test-20261021"
+          test "$(stat -c %a "$private/wallet.key")" = 600
+          test "$(stat -c %a "$private")" = 700
+          export SHASTA_TRANSFER_CONFIRM=ONE_TEST_TRANSFER_100000_SUN
+          unset TRON_PRIVATE_KEY TRON_FULL_HOST TRON_NETWORK || true
+          flock -n "$private/mpw-shasta-bounded-transfer.lock" "$private/moj1-node" "$private/runtime-token/moj1-pilot/scripts/mpw_shasta_bounded_transfer_v1.mjs"
+          REMOTE
+          echo 'TESTNET_ONLY=PASS; MAINNET_BROADCAST=NONE; LIVE_MERCHANT_CREDIT=NONE'
