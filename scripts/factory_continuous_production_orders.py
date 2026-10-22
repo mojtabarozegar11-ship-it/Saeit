@@ -185,6 +185,12 @@ def consumes_research_capacity(item):
             and bool(item["blocker"].strip())
             and item.get("requesting_site") is None)
 
+def is_owner_agri_p0(item):
+    """Separately budget owner-priority bilingual booklets, preserving existing lanes."""
+    return (item.get("origin")=="owner_requested_agri200_p0"
+            and item.get("priority")=="P0"
+            and re.fullmatch(r"AGRI-[0-9]{3}",str(item.get("source_product_id",""))) is not None)
+
 def generate(root,max_backlog=MAX_BACKLOG):
     root=Path(root).expanduser().resolve()
     if not root.is_dir() or root.is_symlink():raise RuntimeError("ORDERS_FACTORY_ROOT_MISSING")
@@ -207,7 +213,8 @@ def generate(root,max_backlog=MAX_BACKLOG):
         # Unknown and unsourced work counts against the manufacturing lane.
         pending=[x for x in old if x["status"]!="completed_verified"]
         research_pending=sum(consumes_research_capacity(x) for x in pending)
-        manufacturing_pending=len(pending)-research_pending
+        owner_p0_pending=sum(is_owner_agri_p0(x) for x in pending)
+        manufacturing_pending=len(pending)-research_pending-owner_p0_pending
         active=len(pending)
         # Source-originated engineering briefs take priority over speculative
         # backlog tasks. Fingerprints still enforce exactly-once issuance.
@@ -249,6 +256,7 @@ def generate(root,max_backlog=MAX_BACKLOG):
                 "pending_instructions":active,
                 "pending_research_instructions":research_pending,
                 "pending_manufacturing_instructions":manufacturing_pending,
+                "pending_owner_agri_p0_instructions":owner_p0_pending,
                 "research_capacity_available":max(0,max_backlog-research_pending),
                 "manufacturing_capacity_available":max(0,max_backlog-manufacturing_pending),
                 "candidate_instructions":len(candidates),
