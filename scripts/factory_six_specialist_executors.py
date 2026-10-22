@@ -288,7 +288,12 @@ def run(root, all_six=False):
                    "public_release_authorized": False, "sites_modified": 0,
                    "turn": turn + len(chosen)}
         atomic(cursor, {"schema": SCHEMA, "turn": summary["turn"]})
-        atomic(ops / "last-execution.json", summary)
+        # Preserve full-batch evidence across five-minute one-worker ticks.
+        # Legacy deployed readback expects last-execution to describe all six.
+        if all_six:
+            atomic(ops / "last-execution.json", summary)
+        else:
+            atomic(ops / "last-single-worker-execution.json", summary)
         if all_six:
             # A concurrent cron --tick must NEVER erase evidence of the
             # six-family activation batch. Keep a separately addressable
