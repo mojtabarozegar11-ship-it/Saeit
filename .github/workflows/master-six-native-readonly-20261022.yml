@@ -56,7 +56,10 @@ jobs:
           review=snapshot(root,source)
           assert review["reviewed_families"]==6 and review["verified_native_candidate_files"]==56
           assert review["completed_professional_quality_1000_certifications"]==0
-          agent=Agent.objects.get(code="economic-master-agent",active=True)
+          agent=Agent.objects.get(code="moj_1ro_1",active=True)
+          economic=Agent.objects.get(code="economic-master-agent",active=True)
+          assert not economic.capabilities.filter(code="factory_native_review",active=True).exists()
+          assert set(agent.capabilities.filter(active=True).values_list("code",flat=True))=={"factory_native_review"}
           assert agent.capabilities.filter(code="factory_native_review",active=True,risk_level="low").count()==1
           tasks=list(AgentTask.objects.filter(agent=agent,action_type="factory_native_review",input_data__source_run=source).order_by("pk"))
           assert len(tasks)==6
@@ -65,7 +68,7 @@ jobs:
               and t.output_data.get("quality_1000_certified") is False and
               t.output_data.get("commercial_release") is False and t.output_data.get("website_mutations")==0
               for t in tasks)
-          count=AuditLog.objects.filter(target_type="AgentTask",action="tool_invocation_completed",
+          count=AuditLog.objects.filter(actor_type="agent",actor_id=str(agent.pk),target_type="AgentTask",action="tool_invocation_completed",
               target_id__in=[str(t.pk) for t in tasks]).count()
           assert count>=6
           digest_proof=digest(root/"quality-excellence/six-native-rework"/source/"review.json")
@@ -78,7 +81,7 @@ jobs:
           print("MASTER_NATIVE_READONLY_PROFESSIONAL_CERTIFICATIONS=0")
           print("MASTER_NATIVE_READONLY_PUBLIC_RELEASES=0")
           print("MASTER_NATIVE_READONLY_REAL_AGENT_ID="+agent.code)
-          print("MASTER_NATIVE_REQUESTED_ALIAS_MOJ_1RO_1_UNVERIFIED=true")
+          print("MASTER_NATIVE_MOJ1RO1_INDEPENDENT_REGISTERED_ACTOR=PASS")
           PY
           echo MASTER_NATIVE_READONLY_NO_SERVER_CHANGES=PASS
           REMOTE
