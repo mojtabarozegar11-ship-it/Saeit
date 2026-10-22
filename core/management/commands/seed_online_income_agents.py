@@ -21,7 +21,10 @@ MASTER_AGENT = (
     "Build the project, remove blockers, create market-ready assets, commercialize them, and increase verified revenue.",
 )
 
-ASSIGNMENTS = [code for code, *_ in CAPABILITIES]
+ASSIGNMENTS = [code for code, *_ in CAPABILITIES if code != "factory_native_review"]
+
+FACTORY_AGENT = ("moj_1ro_1","MOJ Factory Orchestrator",
+    "Route six evidence-bound native product specialist and device tests without commercial release.")
 
 
 class Command(BaseCommand):
@@ -44,8 +47,15 @@ class Command(BaseCommand):
         )
         agent.capabilities.set([capabilities[c] for c in ASSIGNMENTS])
 
+        code, name, mission = FACTORY_AGENT
+        factory, _ = Agent.objects.update_or_create(
+            code=code, defaults={"name": name,"mission": mission,
+                                 "risk_level":"low","active":True})
+        # Never grant payment, trading, deployment, or other financial tools.
+        factory.capabilities.set([capabilities["factory_native_review"]])
+
         # The runtime has one operational economic agent. Legacy split income agents
         # are retained only as historical records and must never receive new work.
         Agent.objects.filter(code__startswith="income-").exclude(code=code).update(active=False)
 
-        self.stdout.write(self.style.SUCCESS("Economic Master Agent and online-income capabilities are seeded; legacy income agents are inactive."))
+        self.stdout.write(self.style.SUCCESS("Economic Master Agent and dedicated moj_1ro_1 factory agent seeded, with financial capabilities isolated."))
