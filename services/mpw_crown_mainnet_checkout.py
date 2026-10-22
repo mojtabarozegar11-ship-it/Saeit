@@ -15,6 +15,7 @@ import json
 import secrets
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db import connection, transaction
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.middleware.csrf import get_token
@@ -31,6 +32,7 @@ from services.mpw_tron_independent_solidified_rpc import (
     RpcProvider, verify_distinct_provider_config, query_solidified_transfer,
     query_solidified_head,
 )
+from services.mpw_crown_trx_discovery import discover_native_candidates
 
 PROVIDER = "mpw_walletless_trx_v1"
 AWAITING = "awaiting_chain"
@@ -106,6 +108,11 @@ def _configuration():
     if connection.vendor != "mysql" or connection.alias != "default":
         raise PaymentHold("Existing MariaDB is required")
     recipient = _address(getattr(settings, "CROWN_TRX_MERCHANT_RECEIVER", ""))
+    if getattr(settings, "CROWN_TRX_AUTO_DISCOVERY_ENABLED", False) is not True:
+        raise PaymentHold("Automatic reconciliation requires explicit approval")
+    key = getattr(settings, "CROWN_TRX_INDEXER_KEY", "")
+    if not isinstance(key, str) or not 10 <= len(key) <= 512:
+        raise PaymentHold("Authenticated deposit indexer required")
     providers = _providers()
     _quote_sources()
     return recipient, providers
@@ -116,7 +123,7 @@ def mainnet_checkout_ready():
     try:
         _configuration()
         return True
-    except (PaymentHold, Exception):
+    except Exception:
         return False
 
 
@@ -384,6 +391,23 @@ def crown_invoice(request, intent_id):
             "This invoice is unavailable or expired. Do not pay it.",
             status=410, content_type="text/plain; charset=utf-8",
         ))
+    if request.method == "GET":
+        # Invoice-page driven discovery; the indexer NEVER grants ownership.
+        # Settlement is always confirmed by both independent solidified nodes.
+        if (datetime.now(timezone.utc) < invoice.expires_at + timedelta(hours=1)
+                and cache.add("crown-tron-autoscan:" + str(intent.pk), 1, timeout=25)):
+            try:
+                candidates = discover_native_candidates(
+                    invoice, settings.CROWN_TRX_INDEXER_KEY,
+                )
+                for candidate in candidates:
+                    try:
+                        _settle(intent.pk, request.user.pk, candidate)
+                    except Exception:
+                        continue
+                    return _secure(HttpResponseRedirect(request.path))
+            except Exception:
+                pass
     if request.method == "POST":
         txid = request.POST.get("txid", "").strip().lower()
         try:
@@ -400,6 +424,7 @@ def crown_invoice(request, intent_id):
         # Never show expired payment instructions that invite new transfers.
         token = get_token(request)
         notice = format_html(
+            '<meta http-equiv="refresh" content="30">'
             '<h3>Invoice expired — do not send funds.</h3>'
             '<p>If you already paid within the valid window, submit the '
             'transaction hash below for independent verification.</p>'
@@ -413,6 +438,7 @@ def crown_invoice(request, intent_id):
     body = format_html(
         '<!doctype html><html lang="en"><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<meta http-equiv="refresh" content="30">'
         '<title>Crown Defender · TRX invoice</title>'
         '<style>body{{background:#080d1b;color:#fff;font:16px system-ui;'
         'display:grid;place-items:center;min-height:95vh}}main{{max-width:420px;'
