@@ -1,0 +1,124 @@
+name: F26 real rice training-only domain guard and VPS evidence
+on:
+  push:
+    branches: [feature/f26-research-abstention-guard-20261022, main]
+    paths:
+      - scripts/factory_f26_rice_research_guard.py
+      - tests/test_factory_f26_rice_research_guard.py
+      - deploy/factory_f26_research_guard_private_install.py
+      - deploy/factory_f26_research_guard_private_relay.sh
+      - .github/workflows/factory-f26-research-domain-guard-20261022.yml
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: saeit-f26-private-research-domain-guard
+  cancel-in-progress: false
+jobs:
+  guard-research-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify scripts, SSH relay and adversarial abstention regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/factory_f26_research_guard_private_relay.sh
+          python3 -B -m py_compile scripts/factory_f26_rice_research_guard.py deploy/factory_f26_research_guard_private_install.py
+          python3 -B -m unittest discover -s tests -p test_factory_f26_rice_research_guard.py -v
+      - name: Install pinned CPU-only model evaluation packages
+        run: python3 -m pip install --disable-pip-version-check numpy==2.1.3 scikit-learn==1.5.2 onnx==1.17.0 onnxruntime==1.20.1
+      - name: Re-fetch immutable public UCI source bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 --location --max-time 90 --retry 2 --fail --silent --show-error \
+           'https://archive.ics.uci.edu/static/public/545/rice%2Bcammeo%2Band%2Bosmancik.zip' \
+           -o "$RUNNER_TEMP/uci-rice-545.zip"
+          echo "fe94e42046b829de21b92b0ffb6a22774fde021328cae799faa802a14e8dbed9  $RUNNER_TEMP/uci-rice-545.zip" | sha256sum -c -
+      - name: Independently retrain original real-data research classifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/factory_f26_real_rice_research_pilot.py \
+            --archive "$RUNNER_TEMP/uci-rice-545.zip" \
+            --expected-archive-sha256 fe94e42046b829de21b92b0ffb6a22774fde021328cae799faa802a14e8dbed9 \
+            --out "$RUNNER_TEMP/research-model"
+          python3 -B scripts/factory_f26_real_rice_research_pilot.py --verify "$RUNNER_TEMP/research-model"
+          python3 -B scripts/factory_f26_rice_onnx_portable.py \
+            --export --model-dir "$RUNNER_TEMP/research-model" \
+            --source-archive "$RUNNER_TEMP/uci-rice-545.zip" \
+            --out "$RUNNER_TEMP/portable-spec.json"
+      - name: Learn only from training rows and test abstention on untouched holdout
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/factory_f26_rice_research_guard.py --export \
+            --archive "$RUNNER_TEMP/uci-rice-545.zip" \
+            --expected-archive-sha256 fe94e42046b829de21b92b0ffb6a22774fde021328cae799faa802a14e8dbed9 \
+            --model-dir "$RUNNER_TEMP/research-model" \
+            --portable-spec "$RUNNER_TEMP/portable-spec.json" \
+            --portable-script scripts/factory_f26_rice_onnx_portable.py \
+            --out "$RUNNER_TEMP/guard-spec.json"
+          python3 -B - "$RUNNER_TEMP/uci-rice-545.zip" "$RUNNER_TEMP/rice-samples.csv" <<'PY'
+          import csv,hashlib,importlib.util,sys
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location('rice','scripts/factory_f26_real_rice_research_pilot.py')
+          pilot=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(pilot)
+          archive=Path(sys.argv[1])
+          raw,_=pilot.read_archive(archive,hashlib.sha256(archive.read_bytes()).hexdigest())
+          rows,_=pilot.parse_arff(raw)
+          with Path(sys.argv[2]).open("w",encoding="utf8",newline="") as out:
+              writer=csv.writer(out);writer.writerow(pilot.FIELDS);writer.writerows(rows[:12])
+          PY
+      - name: Execute research-only classifier and deliberately unfamiliar case offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -S scripts/factory_f26_rice_research_guard.py --predict \
+            --model-dir "$RUNNER_TEMP/research-model" \
+            --portable-spec "$RUNNER_TEMP/portable-spec.json" \
+            --portable-script scripts/factory_f26_rice_onnx_portable.py \
+            --guard-spec "$RUNNER_TEMP/guard-spec.json" \
+            --csv "$RUNNER_TEMP/rice-samples.csv" --out "$RUNNER_TEMP/guard-real-sample-proof.json"
+          python3 -S scripts/factory_f26_rice_research_guard.py --predict \
+            --model-dir "$RUNNER_TEMP/research-model" \
+            --portable-spec "$RUNNER_TEMP/portable-spec.json" \
+            --portable-script scripts/factory_f26_rice_onnx_portable.py \
+            --guard-spec "$RUNNER_TEMP/guard-spec.json" \
+            --features 1000000 8000 1000 900 0.8 1000200 0.6 \
+            --out "$RUNNER_TEMP/guard-unfamiliar-proof.json"
+          python3 -B - "$RUNNER_TEMP" <<'PY'
+          import json,sys
+          from pathlib import Path
+          p=Path(sys.argv[1])
+          g=json.loads((p/'guard-spec.json').read_text())
+          normal=json.loads((p/'guard-real-sample-proof.json').read_text())
+          odd=json.loads((p/'guard-unfamiliar-proof.json').read_text())
+          assert g["domain_bounds_derived_from_training_only"] is True
+          assert g["heldout_test_not_used_to_tune_bounds"] is True
+          assert g["holdout"]["samples"]==762
+          assert normal["rows"]==12 and normal["quality_1000_certified"] is False
+          assert odd["rows"]==1 and odd["abstentions"]==1
+          assert odd["predictions"][0]["research_prediction"] is None
+          assert "outside_training_distribution" in odd["predictions"][0]["abstention_reasons"]
+          assert odd["commercial_release_authorized"] is False
+          print("F26_REAL_TRAIN_ONLY_GUARD_ABSTENTION=PASS")
+          print("F26_GUARD_UNTOUCHED_TEST_COVERAGE="+str(g["holdout"]["research_prediction_coverage"]))
+          PY
+      - name: Private VPS guarded inference, isolated from websites and original model
+        if: github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash deploy/factory_f26_research_guard_private_relay.sh \
+            "$RUNNER_TEMP/guard-spec.json" "$RUNNER_TEMP/rice-samples.csv" \
+            scripts/factory_f26_rice_research_guard.py
