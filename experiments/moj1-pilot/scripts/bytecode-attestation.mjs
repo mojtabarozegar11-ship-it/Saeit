@@ -62,7 +62,26 @@ export function attestBytecode({name, artifact, chainInfo, constructorAddresses,
     throw new Error(name + '_RUNTIME_LENGTH_MISMATCH');
   }
   const spans = immutableSpans(artifact, runtime.length / 2);
+  const declaredSlots = spans.length;
   const expectedValues = new Set(immutableAddresses.map(address => addressWord(address, addressToHex)));
+  // Some TronBox artifacts omit solc immutableReferences. Infer a slot only
+  // where a complete 32-byte, separately state-verified address is present
+  // on chain and the compiled runtime differs in exactly that slot.
+  for (const value of expectedValues) {
+    let index = 0;
+    while ((index = runtime.indexOf(value, index)) !== -1) {
+      const covered = spans.some(span => index >= span.start && index < span.end);
+      if (index % 2 === 0 && !covered &&
+          compiledRuntime.slice(index, index + value.length) !== value) {
+        spans.push({start: index, end: index + value.length});
+      }
+      index += 2;
+    }
+  }
+  spans.sort((a, b) => a.start - b.start);
+  for (let i = 1; i < spans.length; ++i) {
+    if (spans[i].start < spans[i - 1].end) throw new Error('OVERLAPPING_IMMUTABLE_SPANS');
+  }
   if (spans.length && !expectedValues.size) throw new Error(name + '_UNBOUND_IMMUTABLES');
   let cursor = 0;
   for (const span of spans) {
@@ -75,11 +94,16 @@ export function attestBytecode({name, artifact, chainInfo, constructorAddresses,
     cursor = span.end;
   }
   if (runtime.slice(cursor) !== compiledRuntime.slice(cursor)) {
-    throw new Error(name + '_RUNTIME_CODE_MISMATCH');
+    const first = [...runtime].findIndex((digit, i) =>
+      i >= cursor && digit !== compiledRuntime[i]);
+    throw new Error(name + '_RUNTIME_CODE_MISMATCH_AT_HEX_' + first +
+      '_DECLARED_' + declaredSlots + '_ALLOWED_' + expectedValues.size);
   }
   return {
     contract: name,
-    method: spans.length ? 'CREATION_AND_RUNTIME_MATCH_WITH_CHECKED_IMMUTABLES' :
+    method: spans.length ? (declaredSlots === spans.length ?
+      'CREATION_AND_RUNTIME_MATCH_WITH_CHECKED_IMMUTABLES' :
+      'CREATION_AND_RUNTIME_MATCH_WITH_VERIFIED_IMMUTABLE_ADDRESS_SLOTS') :
       'CREATION_AND_EXACT_RUNTIME_MATCH',
     immutableSlots: spans.length,
     creationSha256: createHash('sha256').update(deployedCreation, 'hex').digest('hex'),

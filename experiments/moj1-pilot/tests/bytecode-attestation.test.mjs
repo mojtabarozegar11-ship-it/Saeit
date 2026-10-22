@@ -66,6 +66,13 @@ test('only declared immutable slots may differ from compiled runtime', () => {
   assert.throws(() => attestBytecode(input), /IMMUTABLE_VALUE_MISMATCH/);
 });
 
+test('known immutable addresses can be identified when TronBox omits slot metadata', () => {
+  const input = fixture({name: 'MojGenesisDistributor', withImmutable: true});
+  input.artifact.immutableReferences = {};
+  assert.equal(attestBytecode(input).method,
+    'CREATION_AND_RUNTIME_MATCH_WITH_VERIFIED_IMMUTABLE_ADDRESS_SLOTS');
+});
+
 test('forged reference spans and absent compiled runtime are refused', () => {
   const input = fixture({name: 'MojCoin', withImmutable: true});
   input.artifact.immutableReferences = {'101': [{start: 40, length: 32}]};
