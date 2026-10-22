@@ -115,11 +115,18 @@ def main():
             flags["buyer_checkout_route"] = route_resolves(f"/store/product/{PRODUCT_ID}/checkout/")
             flags["status_and_download_routes"] = all(route_resolves(path) for path in (
                 "/commerce/checkout/status/1/", "/commerce/download/1/"))
+            # A native invoice can point to core.Order rather than a separate
+            # CommerceOrder class. Validate the actual Django relation.
             try:
-                model_names = {model.__name__ for model in apps.get_app_config("mpw_commerce").get_models()}
-            except (LookupError, ImportError):
-                model_names = set()
-            flags["commerce_invoice_models"] = {"CommerceInvoice", "CommerceOrder"}.issubset(model_names)
+                invoice_cls = apps.get_model("mpw_commerce", "CommerceInvoice")
+                order_field = invoice_cls._meta.get_field("order")
+                flags["commerce_invoice_models"] = bool(
+                    (order_field.many_to_one or order_field.one_to_one)
+                    and order_field.related_model is not None
+                    and hasattr(order_field.related_model, "_meta")
+                )
+            except (LookupError, AttributeError, ValueError):
+                flags["commerce_invoice_models"] = False
             flags["incoming_chain_reconciler_command"] = "mpw_commerce_reconcile" in get_commands()
             flags["receiver_enabled"] = (
                 getattr(settings, "MOJ_COMMERCE_RECEIVER_ENABLED", False) is True
