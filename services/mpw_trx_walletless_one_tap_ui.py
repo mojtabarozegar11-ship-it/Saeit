@@ -28,10 +28,14 @@ const sun=BigInt(root.dataset.sun);
 const app=window.tron && window.tron.tronWeb || window.tronWeb;
 const acceptedHost=(location.hostname==="mojplaywin.com"||location.hostname==="www.mojplaywin.com");
 const approvedInvoice=/^\/commerce\/trx-easy\/invoice\/[1-9][0-9]*\/$/.test(location.pathname);
-if (!acceptedHost||!approvedInvoice) {
+const guestClaim=root.dataset.guest==="true";
+const oneTime=root.dataset.walletHandoff||"";
+const ticketOk=/^\/commerce\/trx-easy\/claim\/[a-f0-9]{64}\/$/.test(oneTime);
+const launchTarget=guestClaim?(ticketOk?location.origin+oneTime:""):location.href.split("#")[0];
+if (!acceptedHost||!approvedInvoice||!launchTarget) {
   appButton.hidden=true;
 } else {
-  const p={url:location.href.split("#")[0],action:"open",protocol:"TronLink",version:"1.0"};
+  const p={url:launchTarget,action:"open",protocol:"TronLink",version:"1.0"};
   appButton.href="tronlinkoutside://pull.activity?param="+encodeURIComponent(JSON.stringify(p));
 }
 if(!/^\d+\.\d{6}$/.test(amount)||!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(recipient)||
@@ -71,7 +75,7 @@ BUTTONS = """<section aria-label="Easy TRX payment">
 </section>"""
 
 
-def render_one_tap_invoice(invoice: InvoiceIntent, *, status_path: str) -> tuple[bytes,str]:
+def render_one_tap_invoice(invoice: InvoiceIntent, *, status_path: str, guest_checkout:bool=False, wallet_handoff_path:str|None=None) -> tuple[bytes,str]:
     if not isinstance(invoice,InvoiceIntent) or invoice.network != NETWORK:
         raise PaymentHold("Invalid merchant TRX invoice")
     if not isinstance(status_path,str) or not STATUS_ROUTE.fullmatch(status_path):
@@ -86,8 +90,20 @@ def render_one_tap_invoice(invoice: InvoiceIntent, *, status_path: str) -> tuple
                       BUTTONS+'\n<p>QR contains the address only.',1)
     if html.count('<main id="checkout"')!=1:
         raise PaymentHold("Unexpected invoice frame")
+    if guest_checkout is True:
+        if wallet_handoff_path is not None and not __import__("re").fullmatch(
+            r"/commerce/trx-easy/claim/[a-f0-9]{64}/",wallet_handoff_path
+        ):
+            raise PaymentHold("Untrusted one-time guest wallet handoff link")
+        extra=' data-guest="true"'
+        if wallet_handoff_path is not None:
+            extra+=' data-wallet-handoff="'+escape(wallet_handoff_path,quote=True)+'"'
+    elif wallet_handoff_path is not None:
+        raise PaymentHold("Only validated guest invoices may have a wallet handoff")
+    else:
+        extra=""
     html=html.replace('<main id="checkout"',
-                      '<main data-sun="'+str(invoice.amount_sun)+'" id="checkout"',1)
+                      '<main data-sun="'+str(invoice.amount_sun)+'"'+extra+' id="checkout"',1)
     if html.count("</body>")!=1:
         raise PaymentHold("Unsafe HTML script boundary")
     html=html.replace("</body>","<script>"+WALLET_ACTION_JS+"</script></body>",1)
