@@ -123,6 +123,34 @@ def review_family(directory, family, aggregate):
                     raise RuntimeError("REVIEW_ANDROID_REQUIRED_BUILD_OUTPUT_MISSING")
         checked=["real_native_android_apk_aab_bytes","asset_and_dex_integrity",
                  "runner_debug_signature_assertion_in_source_receipt"]
+        if "emulator-proof.json" in files:
+            if "emulator-screen.png" not in files:
+                raise RuntimeError("REVIEW_ANDROID_EMULATOR_SCREEN_MISSING")
+            proof=json.loads(files["emulator-proof.json"].decode("utf8"))
+            apk_name=next(name for name in files if name.endswith(".apk"))
+            if (proof.get("schema")!="saeit.factory.android-emulated-runtime-check.v1"
+                    or proof.get("family")!=family
+                    or proof.get("package")!="com.zomorodmelal.factory."+family.lower()
+                    or proof.get("virtual_device") is not True
+                    or proof.get("android_sdk")!=35
+                    or any(proof.get(k) is not True for k in (
+                        "actual_install_verified","actual_activity_start_verified",
+                        "real_emulated_touch_and_swipe_dispatched",
+                        "app_alive_after_interaction","no_app_fatal_crash_observed"))
+                    or any(proof.get(k) is not False for k in (
+                        "physical_device_tested","independent_professional_review",
+                        "release_signing_verified","quality_1000_certified",
+                        "commercial_release"))
+                    or proof.get("apk_sha256")!=sha(files[apk_name])
+                    or proof.get("screenshot_sha256")!=sha(files["emulator-screen.png"])
+                    or proof.get("emulator_screen_size_bytes")!=len(files["emulator-screen.png"])
+                    or not files["emulator-screen.png"].startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+                    or type(proof.get("distinct_screen_colors")) is not int
+                    or proof["distinct_screen_colors"]<5):
+                raise RuntimeError("REVIEW_ANDROID_EMULATOR_RUNTIME_INVALID")
+            checked.append("android_api35_actual_emulated_install_launch_touch_screen_proof")
+        elif "emulator-screen.png" in files:
+            raise RuntimeError("REVIEW_ANDROID_EMULATOR_SCREEN_UNPAIRED")
     elif family in ("F13","F17"):
         exe=[blob for name,blob in files.items() if name.lower().endswith(".exe")]
         if len(exe)!=1 or len(exe[0])<30000 or exe[0][:2]!=b"MZ":
