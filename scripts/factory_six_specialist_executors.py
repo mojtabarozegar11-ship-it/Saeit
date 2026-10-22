@@ -186,6 +186,15 @@ def build_browser(root):
     stage = Path(tempfile.mkdtemp(prefix=".f14-", dir=str(base)))
     try:
         formats.render("F14", stage)
+        # Repackage exact original renderer outputs deterministically: zipfile.write
+        # otherwise embeds new filesystem timestamps and fakes a new version.
+        bundle = stage / "browser_game.zip"
+        with zipfile.ZipFile(str(bundle), "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for member in ("game.js", "mini_game.html"):
+                info = zipfile.ZipInfo(member, date_time=(2020, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = 0o100644 << 16
+                archive.writestr(info, (stage / member).read_bytes())
         names = {"mini_game.html", "game.js", "browser_game.zip"}
         if not all((stage / n).is_file() and not (stage / n).is_symlink() for n in names):
             raise RuntimeError("SIX_BROWSER_DELIVERABLES_MISSING")
