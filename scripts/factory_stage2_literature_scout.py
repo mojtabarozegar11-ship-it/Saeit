@@ -27,7 +27,7 @@ import urllib.parse
 import urllib.request
 
 SCHEMA="saeit.factory.stage2-literature-scout.v1"
-SCOUT_ALGO_VERSION="v3-four-source-safety-desk-research"
+SCOUT_ALGO_VERSION="v4-normalized-scientific-synonyms"
 EVIDENCE_SCHEMA="saeit.factory.stage2-source-evidence.v1"
 TOPIC_ID=re.compile(r"AGRI-[0-9]{3}\Z")
 WORD_RE=re.compile(r"[a-z]{3,}")
@@ -111,17 +111,25 @@ def query_variants(title):
     replacements={
         "houseplant":"indoor ornamental horticulture",
         "watering":"irrigation water stress",
+        "water":"irrigation water stress",
+        "irrig":"irrigation water stress",
         "yellow":"chlorosis",
         "potting":"growing substrate",
+        "pott":"growing substrate",
         "seedling":"seed germination transplant",
+        "seedl":"seed germination transplant",
         "mushroom":"fungal cultivation",
         "hydroponic":"soilless cultivation",
         "greenhouse":"protected cultivation",
         "cutting":"vegetative propagation",
+        "cutt":"vegetative propagation",
+        "propag":"vegetative propagation",
+        "germin":"seed germination",
         "pest":"integrated pest management",
         "soil":"soil fertility",
         "compost":"organic matter compost",
         "lighting":"photosynthesis light intensity",
+        "light":"photosynthesis light intensity",
         "storage":"postharvest preservation",
     }
     changed=[]
@@ -173,20 +181,29 @@ def keys(title):
     synonyms={
         "houseplant":("indoor","ornamental"),
         "watering":("irrigation","moisture"),
+        "water":("irrigation","moisture"),
         "yellow":("chlorosis",),
         "leaf":("foliar",),
         "lighting":("photosynthesis","irradiance"),
+        "light":("photosynthesis","irradiance"),
         "potting":("substrate",),
+        "pott":("substrate",),
         "cutting":("propagation",),
+        "cutt":("propagation",),
         "seedling":("germination",),
+        "seedl":("germination",),
         "hydroponic":("soilless",),
         "greenhouse":("protected",),
         "compost":("organic","matter"),
     }
     for term in unique[:4]:
         for alias in synonyms.get(term,()):
-            if alias not in unique:
-                unique.append(alias)
+            # The article title/abstract tokens are normalized as well.
+            # Raw "irrigation" never equals indexed "irrig"; the historic
+            # mismatch silently erased valid source relevance evidence.
+            normalized_alias=normalize(alias)
+            if normalized_alias not in unique:
+                unique.append(normalized_alias)
             if len(unique)>=7:
                 return unique[:7]
     return unique[:7]
@@ -657,7 +674,8 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
     # packet, never a human attestation, product approval or release.
     cached=previous.get("indexed_abstract_candidates",[])
     if (previous.get("scout_algorithm_version") in
-            ("v2-relevance-provenance",SCOUT_ALGO_VERSION)
+            ("v2-relevance-provenance",
+             "v3-four-source-safety-desk-research",SCOUT_ALGO_VERSION)
             and isinstance(cached,list) and 4<=len(cached)<=20
             and previous.get("candidate_sha256")==sha(cached)):
         valid=[]
