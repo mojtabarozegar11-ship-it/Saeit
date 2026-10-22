@@ -41,7 +41,13 @@ minute_count="$(grep -Ec '^[^#]*SAEIT_FACTORY_EVERY_MINUTE_V1' "$old_cron" || tr
 owner_count="$(grep -Ec "^[^#]*$marker" "$old_cron" || true)"
 echo "OWNER500_AUTONOMY_EXISTING_MINUTE_CRON_ENTRIES=$minute_count"
 echo "OWNER500_AUTONOMY_EXISTING_OWNER_CRON_ENTRIES=$owner_count"
-test "$minute_count" -eq 1
+# Existing factory main cron is a separate subsystem; do not rewrite it here.
+# Only block ambiguous duplicate markers. The dedicated owner500 runner can
+# be installed even when main's marker is missing (a separately reported gap).
+test "$minute_count" -le 1
+if test "$minute_count" -eq 0; then
+  echo OWNER500_AUTONOMY_MAIN_MINUTE_SCHEDULE_NOT_VERIFIED=YES
+fi
 test "$owner_count" -le 1
 backup="$ops/backups/owner500-autonomy-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 install -d -m 700 "$backup"
