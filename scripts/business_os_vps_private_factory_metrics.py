@@ -114,6 +114,11 @@ def main():
     db = Path.home().resolve() / "factory-runtime" / "private" / "factory-fresh-isolated.sqlite3"
     report = build_factory_snapshot(source_root, db)
     _write_private(source_root, report)
+    # A successful run must prove the task sensor works, not merely that a
+    # JSON file could be written. No counts or source contents are emitted.
+    if not all(report["metrics"][key]["state"] == "observed"
+               for key in ("queued_tasks", "blocked_tasks")):
+        raise RuntimeError("Factory task schema unavailable")
 
 
 if __name__ == "__main__":
