@@ -27,12 +27,13 @@ export async function openDeploymentJournal(path, context) {
   if (typeof path !== 'string' || !isAbsolute(path)) {
     throw new Error('MOJ1_DEPLOY_JOURNAL_PATH must be an absolute persistent filesystem path');
   }
-  // Only two explicitly enumerated Shasta-only deployment manifests are supported.
+  // Only explicitly enumerated Shasta-only deployment manifests are supported.
   // A governance bootstrap uses a separate journal, so a token deployment cannot
   // overwrite or disguise a previously uncertain governance transaction.
   const manifest = context?.artifacts;
   const keys = manifest && Object.keys(manifest).sort().join(',');
-  const validManifest = keys === 'MojAssets,MojCoin' || keys === 'MojPilotGovernance';
+  const validManifest = keys === 'MojAssets,MojCoin' || keys === 'MojPilotGovernance' ||
+    keys === 'MojCoinGuarded';
   if (!context || context.network !== 'Shasta' ||
       !context.governance || !validManifest) {
     throw new Error('Invalid Shasta deployment journal identity');

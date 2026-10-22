@@ -51,7 +51,8 @@ export function attestBytecode({name, artifact, chainInfo, constructorAddresses,
   // Contracts created from inside another contract may not expose creation
   // bytecode through getcontractinfo. Only the escrow of an already attested
   // MojCoin parent may use this explicit, runtime-only provenance path.
-  const factoryRuntimeOnly = name === 'MojGenesisDistributor' &&
+  const factoryRuntimeOnly = (name === 'MojGenesisDistributor' ||
+    name === 'MojGenesisFactoryGuarded') &&
     factoryParentAttested === true &&
     !chainInfo?.smart_contract?.bytecode;
   const deployedCreation = factoryRuntimeOnly ? null :
