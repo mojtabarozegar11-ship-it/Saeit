@@ -53,6 +53,7 @@ jobs:
           from core.models import Agent,AgentTask,AuditLog
           root=Path.home()/"factory-runtime/private/autonomous-product-cycle"
           source=latest_snapshot(root)
+          print("MASTER_NATIVE_READONLY_CURRENT_SOURCE_RUN="+source)
           review=snapshot(root,source)
           assert review["reviewed_families"]==6 and review["verified_native_candidate_files"]==56
           assert review["completed_professional_quality_1000_certifications"]==0
