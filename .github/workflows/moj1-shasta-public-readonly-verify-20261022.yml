@@ -1,0 +1,42 @@
+name: MOJ1 Shasta deployment independently verified keyless
+on:
+  push:
+    branches: ['moj1/shasta-pilot-20261021']
+    paths:
+      - '.github/workflows/moj1-shasta-public-readonly-verify-20261022.yml'
+      - 'experiments/moj1-pilot/shasta-deployment.json'
+      - 'experiments/moj1-pilot/scripts/verify-shasta-readonly.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj1-shasta-public-readonly-verify
+  cancel-in-progress: false
+jobs:
+  read-only-contract-proof:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/moj1/shasta-pilot-20261021'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Compile exact public artifacts without wallet access
+        working-directory: experiments/moj1-pilot
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run compile
+          npm run preflight
+      - name: Verify all four deployed Shasta contracts with zero signing keys
+        working-directory: experiments/moj1-pilot
+        run: |
+          set -euo pipefail
+          test -z "${TRON_PRIVATE_KEY:-}"
+          node scripts/verify-shasta-readonly.mjs
+          echo MOJ1_SHASTA_PUBLIC_READ_ONLY=PASS
+          echo MOJ1_REAL_PAYMENTS=UNCHANGED
+          echo MOJ1_MAINNET=NOT_ACCESSED
