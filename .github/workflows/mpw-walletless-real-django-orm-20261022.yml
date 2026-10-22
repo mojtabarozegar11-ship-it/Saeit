@@ -8,6 +8,8 @@ on:
       - services/mpw_walletless_django_staging_web.py
       - services/mpw_walletless_django_guest_claim.py
       - services/mpw_walletless_django_guest_staging_web.py
+      - services/mpw_walletless_django_guest_handoff.py
+      - services/mpw_trx_walletless_one_tap_ui.py
       - services/sql/mpw_walletless_trx_isolated_v1.sql
       - tests/test_mpw_walletless_real_django_orm_e2e.py
       - .github/workflows/mpw-walletless-real-django-orm-20261022.yml
@@ -42,7 +44,7 @@ jobs:
       - name: Compile production-write guards and Django test fixture
         run: |
           set -euo pipefail
-          python3 -m py_compile services/mpw_walletless_django_test_bridge.py services/mpw_walletless_django_test_invoice.py services/mpw_walletless_django_staging_web.py services/mpw_walletless_django_guest_claim.py services/mpw_walletless_django_guest_staging_web.py tests/test_mpw_walletless_real_django_orm_e2e.py
+          python3 -m py_compile services/mpw_walletless_django_test_bridge.py services/mpw_walletless_django_test_invoice.py services/mpw_walletless_django_staging_web.py services/mpw_walletless_django_guest_claim.py services/mpw_walletless_django_guest_staging_web.py services/mpw_walletless_django_guest_handoff.py services/mpw_trx_walletless_one_tap_ui.py tests/test_mpw_walletless_real_django_orm_e2e.py
       - name: Verify actual Django ORM atomic receipt ledger and digital delivery
         run: |
           set -euo pipefail
