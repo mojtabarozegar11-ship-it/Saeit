@@ -8,6 +8,7 @@ from command_center.views import dashboard as staff_dashboard
 from core.views import home, platform_page, taniya_studio
 from core.mojplaywin_views import venture
 from core.commerce_views import store_home, auctions_home
+from core.crown_checkout import crown_cosmetic_checkout
 from core.product_seo_views import product_detail
 from core.seo_views import site_search, robots_txt, sitemap_xml
 from core.weather_views import weather
@@ -48,6 +49,7 @@ urlpatterns = [
     path("sitemap.xml", sitemap_xml, name="sitemap_xml"),
     path("store/", store_home, name="store"),
     path("store/product/<int:product_id>/", product_detail, name="store_product_detail"),
+    path("store/crown/<int:product_id>/checkout/", crown_cosmetic_checkout, name="crown_cosmetic_checkout"),
     path("auctions/", auctions_home, name="auctions"),
     path("company-gallery/", company_gallery, name="company_gallery"),
     path("company-content/<slug:slug>/", company_content_feed, name="company_content_feed"),

@@ -14,6 +14,8 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 
 from .models import LedgerEntry, OrderItem, Product
+from .crown_tron_receipts import PROVIDER as WALLETLESS_PROVIDER, verified_walletless_credit
+from .crown_checkout import gateway_ready
 
 SKUS = ("cd-spectre", "cd-valkyrie", "cd-tempest", "cd-phoenix", "cd-sovereign")
 
@@ -24,7 +26,6 @@ def owned_skus(user):
     owned = set()
     items = OrderItem.objects.filter(
         order__customer=user, order__status="paid",
-        order__payment_intent__status="succeeded",
         product__product_type="game_cosmetic", quantity=1,
     ).select_related("order__payment_intent", "product")
     for item in items:
@@ -39,13 +40,21 @@ def owned_skus(user):
                 or not intent.provider_reference or intent.provider in ("", "not_configured", "demo")):
             continue
         ledger = LedgerEntry.objects.filter(order=order)
-        if ledger.filter(entry_type__in=("refund", "reversal", "chargeback")).exists():
+        if (ledger.filter(entry_type__in=("refund", "reversal", "chargeback")).exists()
+                or order.items.count() != 1 or item.line_total != order.total):
+            continue
+        if intent.provider == WALLETLESS_PROVIDER:
+            # The walletless pilot records status=paid and a verified TRON
+            # credit, never a synthetic "payment" ledger from a browser.
+            if verified_walletless_credit(order, intent):
+                owned.add(sku)
+            continue
+        if intent.status != "succeeded":
             continue
         paid = ledger.filter(
             payment_intent=intent, entry_type="payment", currency=order.currency,
         ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-        item_total = sum((x.line_total for x in order.items.all()), Decimal("0"))
-        if paid == order.total == item_total:
+        if paid == order.total:
             owned.add(sku)
     return sorted(owned)
 
@@ -86,6 +95,7 @@ def catalogue():
         checkout = _verified_checkout_route(p) if p else None
         available = bool(
             getattr(settings, "CROWN_STORE_ENABLED", False) is True
+            and gateway_ready() is True
             and p and checkout and sku not in duplicates and p.currency == "USD" and p.price >= Decimal("4.00")
             and md.get("crown_checkout_verified") is True
             and md.get("rights_cleared") is True
