@@ -68,18 +68,8 @@ precheck() {
     fi
   done
   test -f "$prod/core/apps.py" && test ! -L "$prod/core/apps.py" || return 1
-  # Do not overwrite a customized AppConfig startup hook.
-  "$interpreter" -B - "$prod/core/apps.py" <<'PY'
-from pathlib import Path
-import ast,sys
-s=Path(sys.argv[1]).read_text(encoding="utf-8")
-tree=ast.parse(s)
-klass=[n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=="CoreConfig"]
-if len(klass)!=1 or tree.body[-1] is not klass[0] or 'name="core"' not in s.replace(" ", ""):
-    raise SystemExit(2)
-if any(isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name=="ready" for n in klass[0].body) or "purchase_signals" in s:
-    raise SystemExit(3)
-PY
+  "$interpreter" -B "$stage/scripts/business_os_patch_app_config.py" --self-test > /dev/null || return 1
+  "$interpreter" -B "$stage/scripts/business_os_patch_app_config.py" --check "$prod/core/apps.py" || return 1
   # Verify full application imports *before* changing any live file.
   (cd "$prod" && "$interpreter" -B manage.py check) > /dev/null 2>&1
 }
@@ -98,17 +88,7 @@ apply() {
     install -m 0644 "$stage/$rel" "$prod/$rel" || { echo "PURCHASE_RELEASE_MODULE_INSTALL_FAILED"; return 1; }
   done
   echo "PURCHASE_RELEASE_MODULES_INSTALLED"
-  "$interpreter" -B - "$prod/core/apps.py" <<'PY'
-from pathlib import Path
-import os,sys
-p=Path(sys.argv[1])
-s=p.read_text(encoding="utf-8")
-s += "\n    def ready(self):\n        from . import purchase_signals  # noqa: F401\n"
-temp=p.with_name("apps.py.paid-purchase-new")
-temp.write_text(s,encoding="utf-8")
-os.chmod(temp,p.stat().st_mode & 0o777)
-os.replace(temp,p)
-PY
+  "$interpreter" -B "$stage/scripts/business_os_patch_app_config.py" --apply "$prod/core/apps.py" || { echo "PURCHASE_RELEASE_APPCONFIG_PATCH_FAILED"; return 1; }
   echo "PURCHASE_RELEASE_APPCONFIG_PATCHED"
   if ! (cd "$prod" && "$interpreter" -B manage.py check) > "$stage/django-check-private.log" 2>&1; then
     "$interpreter" -B - "$stage/django-check-private.log" <<'PY'
