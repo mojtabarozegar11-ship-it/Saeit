@@ -108,3 +108,28 @@ jobs:
           print("FACTORY_STAGE2_REVIEWER_SIGNATURES_CREATED=0")
           print("FACTORY_WEBSITES_UNCHANGED=true")
           PY
+# Aggregate only non-sensitive source-candidate diagnostics on VPS.
+          # These numbers distinguish provider access from evidence matching.
+          ssh_vps 'python3 -' <<'PY'
+          import collections,json
+          from pathlib import Path
+          area=Path.home()/"factory-runtime/private/autonomous-product-cycle/production-instructions"
+          counts=collections.Counter()
+          bins=collections.Counter()
+          idx=json.loads((area/"owner-agri200-p0-index.json").read_text())
+          for n,_ in enumerate(idx["order_ids_ranked"],1):
+              key="AGRI-%03d"%n+"--r001.json"
+              p=area/"stage-02/literature-candidates"/key
+              if not p.is_file():
+                  counts["no_workpaper"]+=1
+                  continue
+              packet=json.loads(p.read_text())
+              counts[packet.get("status","unknown")]+=1
+              size=packet.get("indexed_abstract_candidate_count")
+              if type(size) is int:
+                  bins[str(min(size,5)) if size<5 else "5+"]+=1
+          for k,v in sorted(counts.items()):
+              print("FACTORY_STAGE2_WORKPAPER_STATUS_"+k.upper()+"="+str(v))
+          for k,v in sorted(bins.items()):
+              print("FACTORY_STAGE2_VERIFIED_ABSTRACT_CANDIDATE_BIN_"+k.replace("+","PLUS")+"="+str(v))
+          PY
