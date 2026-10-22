@@ -404,6 +404,7 @@ class RealDjangoWalletlessTests(unittest.TestCase):
             self.assertEqual(page.status_code,200)
             self.assertIn(b'Pay TRX in my wallet',page.content)
             self.assertIn(b'QR contains the address only',page.content)
+            self.assertNotIn(token,page.content.decode('utf8'))
             import re
             handoff_match=re.search(r'data-wallet-handoff="(/commerce/trx-easy/claim/[a-f0-9]{64}/)"',
                           page.content.decode("utf8"))
@@ -468,6 +469,30 @@ class RealDjangoWalletlessTests(unittest.TestCase):
                 guest_download_paid(req("get",paid["download_path"],token+"tampered"),invoice_id)
             with self.assertRaises(Http404):
                 guest_download_paid(req("get",paid["download_path"],None),invoice_id)
+
+    def test_guest_wallet_handoff_expiry_and_owner_scoping(self):
+        from services.mpw_walletless_django_guest_claim import (
+            issue_secondary_guest_cookie_for_handoff,read_guest_buyer)
+        from services.mpw_walletless_django_guest_handoff import (
+            create_wallet_handoff,redeem_wallet_handoff)
+        with patch("django.contrib.auth.get_user_model",return_value=User):
+            cookie=issue_secondary_guest_cookie_for_handoff(42)
+            self.assertEqual(read_guest_buyer(cookie),42)
+            link=create_wallet_handoff(invoice_id=self.invoice_id,buyer_id=42)
+            ticket=link.strip("/").split("/")[-1]
+            with self.assertRaises(PaymentHold):
+                create_wallet_handoff(invoice_id=self.invoice_id,buyer_id=314)
+            with connection.cursor() as cur:
+                cur.execute(
+                    """UPDATE mpw_walletless_trx_guest_handoff_v1
+                       SET expires_at=DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 1 SECOND)
+                       WHERE ticket_sha256=%s""",
+                    [__import__("hashlib").sha256(ticket.encode()).hexdigest()])
+            with self.assertRaises(PaymentHold):
+                redeem_wallet_handoff(ticket)
+            with self.assertRaises(PaymentHold):
+                redeem_wallet_handoff("0"*64)
+            self.assertEqual(read_guest_buyer(cookie),42)
 
     def test_guest_rate_limit_five_per_hour(self):
         from services.mpw_walletless_django_guest_claim import create_guest_buyer
