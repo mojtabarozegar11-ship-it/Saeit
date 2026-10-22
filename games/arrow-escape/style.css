@@ -68,3 +68,47 @@ footer a{color:#587565}
  .game-overlay{inset:6px}
 }
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+/* True six-sided 3D playing field; no flat-board fallback masquerading as a cube. */
+.cube-surround{overflow:hidden;padding:0;background:radial-gradient(circle at 52% 30%,#e9eee8,#d4dfd7 65%,#c2d2c5);border:1px solid #bfcfc1;box-shadow:inset 0 2px 30px #31534013}
+.cube-stage{--cube-edge:clamp(235px,52vw,378px);height:clamp(365px,76vw,610px);position:relative;overflow:hidden;perspective:980px;perspective-origin:50% 42%;touch-action:none;cursor:grab;user-select:none;isolation:isolate}
+.cube-stage:active{cursor:grabbing}.cube-stage:focus-visible{outline:3px solid #a6843b;outline-offset:-5px}
+.orbit-glow{position:absolute;inset:7% 10% 3%;background:radial-gradient(ellipse at center,#fffefac9 0,#f1f6f077 40%,transparent 69%);pointer-events:none}
+.cube-shadow{position:absolute;left:50%;top:79%;width:58%;height:11%;transform:translateX(-50%);background:#173a2e55;border-radius:50%;filter:blur(24px);pointer-events:none}
+.cube-rotator{position:absolute;left:calc(50% - var(--cube-edge) / 2);top:calc(49% - var(--cube-edge) / 2);height:var(--cube-edge);width:var(--cube-edge);transform-style:preserve-3d;will-change:transform}
+.cube{position:relative;height:100%;width:100%;transform-style:preserve-3d;transform:rotateX(-27deg) rotateY(-34deg);will-change:transform}
+.cube.turning{transition:transform .58s cubic-bezier(.2,.7,.19,1)}
+.cube-face{position:absolute;inset:0;overflow:hidden;backface-visibility:hidden;-webkit-backface-visibility:hidden;border:2px solid #c1c5b7;border-radius:3px;background:linear-gradient(140deg,#fffdf1,#e4e4d7);box-shadow:inset 0 0 27px #8f9e9122,0 0 12px #304c3511}
+.cube-face.face-front{transform:translateZ(calc(var(--cube-edge) / 2));background:linear-gradient(125deg,#f8f7eb,#e7e8de)}
+.cube-face.face-back{transform:rotateY(180deg) translateZ(calc(var(--cube-edge) / 2));background:linear-gradient(150deg,#eff0e6,#d9e0d8)}
+.cube-face.face-right{transform:rotateY(90deg) translateZ(calc(var(--cube-edge) / 2));background:linear-gradient(115deg,#edf0e7,#cfd9cf)}
+.cube-face.face-left{transform:rotateY(-90deg) translateZ(calc(var(--cube-edge) / 2));background:linear-gradient(145deg,#e8ebe0,#d0d9cd)}
+.cube-face.face-top{transform:rotateX(90deg) translateZ(calc(var(--cube-edge) / 2));background:linear-gradient(130deg,#fffff7,#f1efe5)}
+.cube-face.face-bottom{transform:rotateX(-90deg) translateZ(calc(var(--cube-edge) / 2));background:linear-gradient(145deg,#c8d5c9,#bdcbbf)}
+.surface-grain{position:absolute;inset:0;pointer-events:none;opacity:.42;background-image:radial-gradient(#60776b20 1px,transparent 1px);background-size:19px 19px}
+.face-arrows{position:absolute;inset:4%;width:92%;height:92%;overflow:visible;touch-action:none;pointer-events:auto}
+.cube-arrow{cursor:pointer;transform-origin:center;transform-box:fill-box}
+.arrow-touch{fill:none;stroke:transparent;stroke-width:.72;stroke-linecap:round;stroke-linejoin:round;pointer-events:stroke}
+.arrow-stroke{fill:none;stroke:#273b36;stroke-width:.22;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;filter:drop-shadow(.035px .06px .03px #10271b22)}
+.arrow-head{fill:#253b35;stroke:#f5f5eb;stroke-width:.018;pointer-events:visiblePainted}
+.cube-arrow.hinted .arrow-stroke{stroke:#b58c37;stroke-width:.30;filter:drop-shadow(0 0 .11px #e5b850)}
+.cube-arrow.hinted .arrow-head{fill:#b58c37}
+.cube-arrow.blocked .arrow-stroke,.cube-arrow.blocked .arrow-head{stroke:#db574f;fill:#db574f}
+.cube-arrow.flying{pointer-events:none}
+.face-corner{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 0 1px #fafcf399}
+.drag-tip{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);width:max-content;max-width:93%;padding:9px 16px;border-radius:99px;color:#244737;background:#ffffffc9;backdrop-filter:blur(8px);font-size:12px;font-weight:800;box-shadow:0 5px 18px #14442a1c;pointer-events:none;transition:opacity .25s}
+.drag-tip.muted{opacity:.52}
+.view-controls{position:absolute;left:12px;top:50%;transform:translateY(-50%);display:grid;gap:8px;z-index:2}
+.view-controls button{border:1px solid #d3dfd1;background:#fffffff0;backdrop-filter:blur(7px);color:#204637;font-size:19px;font-weight:900;border-radius:11px;width:39px;height:41px;box-shadow:0 4px 12px #19442613}
+.view-controls button:active{transform:scale(.94);background:#f4eacf}
+.game-frame{box-shadow:0 22px 65px #244c3525}
+.game-toolbar .hearts{font-weight:800;font-size:16px;letter-spacing:0;color:#d36159}
+@media(max-width:640px){
+ .cube-stage{--cube-edge:clamp(204px,64vw,298px);height:clamp(350px,100vw,445px);perspective:800px}
+ .cube-rotator{top:calc(45% - var(--cube-edge) / 2)}
+ .cube-shadow{top:72%;width:66%}
+ .drag-tip{bottom:15px;font-size:10px;padding:7px 12px}
+ .view-controls{left:7px;top:49%;gap:6px}
+ .view-controls button{width:31px;height:34px;font-size:17px;border-radius:8px}
+ .game-toolbar .hearts{font-size:13px}
+}

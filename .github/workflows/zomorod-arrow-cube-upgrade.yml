@@ -1,0 +1,135 @@
+name: Zomorod Arrow Cube 3D — guarded existing game upgrade
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/zomorod-arrow-cube-upgrade.yml'
+      - 'games/arrow-escape/**'
+permissions:
+  contents: read
+concurrency:
+  group: zm-arrow-escape-third-card
+  cancel-in-progress: false
+jobs:
+  upgrade:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-zm-arrow-cube-3d-upgrade-20261022]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check new 3D engine, 250 puzzle stages and protected update invariants
+        run: |
+          set -euo pipefail
+          for file in index.html style.css engine.js cube-engine.js app.js cover.svg upgrade.py; do
+            test -s "games/arrow-escape/$file"
+          done
+          node --check games/arrow-escape/engine.js
+          node --check games/arrow-escape/cube-engine.js
+          node --check games/arrow-escape/app.js
+          node games/arrow-escape/engine.test.cjs
+          node games/arrow-escape/cube-engine.test.cjs
+          python3 -m py_compile games/arrow-escape/upgrade.py
+          python3 games/arrow-escape/upgrade.test.py
+          python3 - <<'PY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+          path = Path('games/arrow-escape')
+          html = (path/'index.html').read_text('utf-8')
+          HTMLParser().feed(html)
+          assert html.count('ZM-ARROW-ESCAPE-THIRD-CARD-20261022') == 1
+          for asset in ('./style.css','./engine.js','./cube-engine.js','./app.js'):
+              assert asset in html, asset
+          assert 'cube-stage' in html and 'puzzleCube' in html
+          assert 'مکعب پیکان‌ها' in html
+          PY
+      - name: Verify 2D predecessor and third-card slot exist publicly
+        run: |
+          python3 - <<'PY'
+          import json,re
+          from urllib.request import Request,urlopen
+          base='https://zomorodmelal.ir'
+          def load(path):
+              with urlopen(Request(base+path,headers={'Cache-Control':'no-cache',
+                        'User-Agent':'ArrowCubeUpgradePreflight/1'}),timeout=45) as response:
+                  assert response.status==200,path
+                  return response.read(3500000)
+          html=load('/?cube-preflight=1')
+          match=re.search(rb'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',html,re.S)
+          assert match
+          row=next(r for r in json.loads(match.group(1))['rows'] if r.get('id')=='ZM-R25')
+          assert len(row['cards'])==24
+          assert row['cards'][2]['id']=='ZM-R25-GAME-ARROW-ESCAPE-20261022'
+          assert row['cards'][2]['title']=='بازی هزارتوی پیکان‌ها'
+          assert row['cards'][3]['slug']=='website-design'
+          game=load('/arrow-escape/?cube-preflight=1')
+          assert 'هزارتوی پیکان‌ها'.encode() in game
+          assert b'./cube-engine.js' not in game
+          print('LIVE_PREDECESSOR_AND_THIRD_CARD=PASS')
+          PY
+      - name: Establish approved VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Snapshot existing game and protected pages before upgrade
+        id: stage
+        run: |
+          set -euo pipefail
+          relay="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-arrow-cube-upgrade-$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$relay/config" host "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage/incoming'"
+          for file in index.html style.css engine.js cube-engine.js app.js cover.svg upgrade.py; do
+            timeout 60s scp -q -F "$relay/config" "games/arrow-escape/$file" "host:$stage/incoming/$file"
+          done
+          timeout 75s ssh -T -F "$relay/config" host "python3 '$stage/incoming/upgrade.py' prepare '$GITHUB_RUN_ID'"
+      - name: Publish 3D cube while preserving all neighboring cards
+        id: publish
+        run: |
+          set -euo pipefail
+          relay="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-arrow-cube-upgrade-$GITHUB_RUN_ID"
+          timeout 90s ssh -T -F "$relay/config" host "python3 '$stage/incoming/upgrade.py' publish '$GITHUB_RUN_ID'"
+          timeout 60s ssh -T -F "$relay/config" host "python3 '$stage/incoming/upgrade.py' verify '$GITHUB_RUN_ID'"
+      - name: Independently verify public game files and original card order
+        run: |
+          python3 - <<'PY'
+          import json,re,time
+          from urllib.request import Request,urlopen
+          base='https://zomorodmelal.ir'
+          def load(path):
+              with urlopen(Request(base+path,headers={'Cache-Control':'no-cache',
+                        'User-Agent':'ArrowCubeUpgradePublicVerify/1'}),timeout=45) as response:
+                  assert response.status==200,path
+                  return response.read(3500000)
+          for attempt in range(10):
+              game=load('/arrow-escape/?v='+str(time.time_ns()))
+              if b'./cube-engine.js' in game and 'مکعب پیکان‌ها'.encode() in game:break
+              time.sleep(3)
+          else:raise AssertionError('3D HTML not live')
+          for name,marker in [('app.js',b'ArrowMazeDebug'),('cube-engine.js',b'ArrowCubeCore'),
+                               ('engine.js',b'ArrowMazeCore'),('style.css',b'.cube-stage'),
+                               ('cover.svg',b'<svg')]:
+              assert marker in load('/arrow-escape/'+name+'?v='+str(time.time_ns())),name
+          data=load('/?cube-check='+str(time.time_ns()))
+          match=re.search(rb'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',data,re.S)
+          assert match
+          row=next(r for r in json.loads(match.group(1))['rows'] if r.get('id')=='ZM-R25')
+          assert len(row['cards'])==24
+          assert row['cards'][2]['id']=='ZM-R25-GAME-ARROW-ESCAPE-20261022'
+          assert row['cards'][2]['title']=='بازی مکعب پیکان‌ها'
+          assert row['cards'][3]['slug']=='website-design'
+          for route in ['/agriculture/','/research/','/topics/zm-r25/website-design/','/ramadan-war/']:
+              load(route)
+          print('LIVE_3D_CUBE_AND_UNCHANGED_CARD_ORDER=PASS')
+          PY
+      - name: Restore byte-exact predecessor if publication or verification fails
+        if: failure() && steps.stage.outcome == 'success'
+        run: |
+          set -euo pipefail
+          relay="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-arrow-cube-upgrade-$GITHUB_RUN_ID"
+          timeout 90s ssh -T -F "$relay/config" host "python3 '$stage/incoming/upgrade.py' rollback '$GITHUB_RUN_ID'"
