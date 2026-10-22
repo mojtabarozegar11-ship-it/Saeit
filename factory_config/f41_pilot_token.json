@@ -1,0 +1,10 @@
+{
+  "schema": "saeit.factory.f41-token-spec.v1",
+  "name": "Factory Pilot Token",
+  "symbol": "FPT",
+  "supply_tokens": "1000000",
+  "decimals": 18,
+  "network": "shasta",
+  "standard": "TRC-20",
+  "mode": "fixed_supply"
+}

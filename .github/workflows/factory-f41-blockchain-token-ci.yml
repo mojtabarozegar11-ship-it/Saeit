@@ -1,0 +1,81 @@
+name: F41 private blockchain token production line
+on:
+  pull_request:
+    paths:
+      - scripts/factory_f41_token_builder.py
+      - tests/test_factory_f41_token_builder.py
+      - factory_config/f41_blockchain_line.json
+      - factory_config/f41_pilot_token.json
+      - deploy/install_factory_f41_blockchain_line.sh
+      - .github/workflows/factory-f41-blockchain-token-ci.yml
+  push:
+    branches: [main, feature/f41-blockchain-token-line-20261022]
+    paths:
+      - scripts/factory_f41_token_builder.py
+      - tests/test_factory_f41_token_builder.py
+      - factory_config/f41_blockchain_line.json
+      - factory_config/f41_pilot_token.json
+      - deploy/install_factory_f41_blockchain_line.sh
+      - .github/workflows/factory-f41-blockchain-token-ci.yml
+permissions: {contents: read}
+concurrency:
+  group: f41-blockchain-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline-quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Security and regression tests
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_f41_blockchain_line.sh
+          python3 -B -m unittest discover -s tests -p 'test_factory_f41_token_builder.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_factory_40_family_master.py' -v
+          python3 -B scripts/factory_f41_token_builder.py --spec factory_config/f41_pilot_token.json --out "$RUNNER_TEMP/f41-private"
+          python3 -B scripts/factory_f41_token_builder.py --spec factory_config/f41_pilot_token.json --out "$RUNNER_TEMP/f41-private" --verify
+      - name: Compile actual fixed supply TRC-20 with pinned TRON Solidity 0.8.20
+        working-directory: ${{ runner.temp }}/f41-private
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund
+          npx --no-install tronbox compile
+          test -s build/contracts/FactoryFixedSupplyToken.json
+          node -e 'const a=require("./build/contracts/FactoryFixedSupplyToken.json");if(!a.bytecode||!a.abi||!a.abi.some(x=>x.name==="totalSupply"))process.exit(1)'
+          echo F41_ACTUAL_TVM_COMPILATION=PASS
+  private-vps-install:
+    needs: offline-quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Stage original sources and privately install one pilot on VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          work="$(mktemp -d)"
+          chmod 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          opts=(-i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15)
+          host=githubops@178.239.147.150
+          stage="/home/githubops/factory-runtime/operations/.f41-staging-$GITHUB_RUN_ID"
+          ssh -T "${opts[@]}" "$host" "umask 077; mkdir -m 700 '$stage'"
+          scp "${opts[@]}" scripts/factory_f41_token_builder.py "$host:$stage/factory_f41_token_builder.py"
+          scp "${opts[@]}" factory_config/f41_blockchain_line.json "$host:$stage/line.json"
+          scp "${opts[@]}" factory_config/f41_pilot_token.json "$host:$stage/pilot.json"
+          scp "${opts[@]}" deploy/install_factory_f41_blockchain_line.sh "$host:$stage/install.sh"
+          ssh -T "${opts[@]}" "$host" "bash -n '$stage/install.sh' && bash '$stage/install.sh' '$stage/factory_f41_token_builder.py' '$stage/line.json' '$stage/pilot.json'"
