@@ -67,6 +67,7 @@ jobs:
           --health-timeout=5s
           --health-retries=8
     env:
+      DJANGO_SETTINGS_MODULE: config.settings
       DATABASE_URL: mysql://root:ci-only-crown-root@127.0.0.1:3306/crown_ci
       DEBUG: "true"
       SECRET_KEY: "ci-only-crown-mariadb-key"
