@@ -1,7 +1,7 @@
 {
   "schema": "saeit.factory.stage2-source-evidence.v1",
   "compiled_date": "2026-10-22",
-  "method": "Publicly checked independent RHS and university extension documents; source claims are concise paraphrases, not unlicensed copied text.",
+  "method": "Source-linked desk research on primary public Royal Horticultural Society and independent university-extension pages, checked 2026-10-22; no expert or commercial approval is implied.",
   "bundles": [
     {
       "schema": "saeit.factory.stage2-source-evidence.v1",
@@ -266,6 +266,587 @@
       "scientific_review_completed": false,
       "public_distribution_allowed": false,
       "editorial_note": "Desk research compiled from independently opened institutional guidance webpages on 2026-10-22; the automated worker will only perform structure/provenance checks. Independent expert verification, regional chemical legality and manuscript editing remain separate downstream gates."
+    },
+    {
+      "schema": "saeit.factory.stage2-source-evidence.v1",
+      "source_product_id": "AGRI-004",
+      "revision": 1,
+      "locale_scopes": {
+        "fa-IR": "برای خانه‌ها و آپارتمان‌های ایران، روش نگهداری سانسوریا و زامیفولیا با تأکید بر زهکشی، نور محیط و خطر تماس حیوانات خانگی بازبینی و محلی‌سازی شود.",
+        "en-US": "For US indoor growers, study snake plant and ZZ plant care, differentiate their watering requirements, and include pet toxicity and drainage cautions."
+      },
+      "sources": [
+        {
+          "id": "source1",
+          "publisher": "Royal Horticultural Society",
+          "title": "How to grow sansevierias and snake plants",
+          "url": "https://www.rhs.org.uk/plants/sansevieria/growing-guide",
+          "checked_date": "2026-10-22",
+          "evidence_note": "RHS explains that sansevierias tolerate a range of indoor lighting, prefer free-draining media and should not remain waterlogged."
+        },
+        {
+          "id": "source2",
+          "publisher": "North Carolina State University Extension",
+          "title": "ZZ Plant Zamioculcas zamiifolia houseplant care",
+          "url": "https://plants.ces.ncsu.edu/plants/zamioculcas-zamiifolia/common-name/zz-plant/",
+          "checked_date": "2026-10-22",
+          "evidence_note": "NCSU describes ZZ rhizomes, drought tolerance, shade performance, well-drained potting mixtures and toxicity precautions for animals."
+        },
+        {
+          "id": "source3",
+          "publisher": "University of Missouri Extension",
+          "title": "Caring for Houseplants Missouri University Extension",
+          "url": "https://extension.missouri.edu/publications/g6510",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Missouri Extension differentiates houseplant symptoms caused by watering extremes, root damage, inadequate light, salt build-up and cold."
+        },
+        {
+          "id": "source4",
+          "publisher": "University of Georgia Extension",
+          "title": "Growing Indoor Plants with Success University of Georgia",
+          "url": "https://extension.uga.edu/publications/detail.html?number=B1318",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Georgia Extension discusses houseplant media aeration and drainage, temperature, lighting, repotting and conditional fertilizer management."
+        }
+      ],
+      "claims": [
+        {
+          "id": "claim1",
+          "statement": "Sansevieria tolerates both brightly lit and lower-light rooms but benefits from a free-draining medium and avoiding excessive irrigation.",
+          "source_ids": [
+            "source1"
+          ]
+        },
+        {
+          "id": "claim2",
+          "statement": "Zamioculcas zamiifolia stores water in fleshy rhizomes, tolerates periods of drought and needs an aerated potting substrate.",
+          "source_ids": [
+            "source2"
+          ]
+        },
+        {
+          "id": "claim3",
+          "statement": "ZZ plant ingestion can be harmful to household pets, so indoor placement must consider animal access rather than horticultural performance alone.",
+          "source_ids": [
+            "source2"
+          ]
+        },
+        {
+          "id": "claim4",
+          "statement": "Missouri Extension lists snake plant as an easier-care houseplant and recommends thorough watering followed by allowing the substrate to dry.",
+          "source_ids": [
+            "source3"
+          ]
+        },
+        {
+          "id": "claim5",
+          "statement": "Georgia Extension identifies access to root-zone air and controlled substrate moisture as fundamental requirements for healthy potted houseplants.",
+          "source_ids": [
+            "source4"
+          ]
+        }
+      ],
+      "scientific_review_completed": false,
+      "public_distribution_allowed": false,
+      "editorial_note": "Short original paraphrases tied to manually inspected extension and RHS webpages on 2026-10-22. Stage 2 desk research only; region-specific expert safety, legal validation and commercial QA are separate downstream gates."
+    },
+    {
+      "schema": "saeit.factory.stage2-source-evidence.v1",
+      "source_product_id": "AGRI-005",
+      "revision": 1,
+      "locale_scopes": {
+        "fa-IR": "برای پرورش پتوس و فیلودندرون در خانه‌های ایران، قلمه‌زنی، نور غیرمستقیم، آبیاری و پاکیزگی بستر جداگانه ارزیابی شود.",
+        "en-US": "For US homes, investigate pothos and philodendron separately, covering practical water propagation, media, and indoor lighting requirements."
+      },
+      "sources": [
+        {
+          "id": "source1",
+          "publisher": "Pennsylvania State University Extension",
+          "title": "Pothos as a Houseplant University Extension Guide",
+          "url": "https://extension.psu.edu/pothos-as-a-houseplant",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Penn State describes pothos as an indoor tropical climbing vine and covers foliage traits and placement under domestic light conditions."
+        },
+        {
+          "id": "source2",
+          "publisher": "University of Missouri Extension",
+          "title": "Home Propagation of Houseplants University Extension",
+          "url": "https://extension.missouri.edu/publications/g6560",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Missouri Extension gives plant-specific propagation techniques including rooting philodendron and pothos in water and correct orientation of snake plant sections."
+        },
+        {
+          "id": "source3",
+          "publisher": "University of Georgia Extension",
+          "title": "Growing Indoor Plants with Success University of Georgia",
+          "url": "https://extension.uga.edu/publications/detail.html?number=B1318",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Georgia Extension discusses houseplant media aeration and drainage, temperature, lighting, repotting and conditional fertilizer management."
+        },
+        {
+          "id": "source4",
+          "publisher": "Royal Horticultural Society",
+          "title": "How to Help a Poorly Houseplant RHS Advice",
+          "url": "https://www.rhs.org.uk/plants/types/houseplants/how-to-help-a-poorly-houseplant",
+          "checked_date": "2026-10-22",
+          "evidence_note": "RHS advises symptom-led inspections of light, moisture, pests and placement before treating struggling houseplants."
+        }
+      ],
+      "claims": [
+        {
+          "id": "claim1",
+          "statement": "Penn State identifies pothos as a resilient tropical climbing foliage plant commonly used indoors, including by relatively inexperienced growers.",
+          "source_ids": [
+            "source1"
+          ]
+        },
+        {
+          "id": "claim2",
+          "statement": "Missouri Extension lists rooting pothos stem material in water among applicable home propagation methods.",
+          "source_ids": [
+            "source2"
+          ]
+        },
+        {
+          "id": "claim3",
+          "statement": "Missouri Extension also describes rooting philodendron stems in water, with spring and early summer often favorable for propagation.",
+          "source_ids": [
+            "source2"
+          ]
+        },
+        {
+          "id": "claim4",
+          "statement": "Georgia Extension emphasizes adequate substrate aeration and drainage in potted houseplants, both relevant after rooted cuttings are transplanted.",
+          "source_ids": [
+            "source3"
+          ]
+        },
+        {
+          "id": "claim5",
+          "statement": "RHS identifies insufficient light as a possible contributor to pale foliage and elongated growth, requiring diagnosis before treatment.",
+          "source_ids": [
+            "source4"
+          ]
+        }
+      ],
+      "scientific_review_completed": false,
+      "public_distribution_allowed": false,
+      "editorial_note": "Short original paraphrases tied to manually inspected extension and RHS webpages on 2026-10-22. Stage 2 desk research only; region-specific expert safety, legal validation and commercial QA are separate downstream gates."
+    },
+    {
+      "schema": "saeit.factory.stage2-source-evidence.v1",
+      "source_product_id": "AGRI-006",
+      "revision": 1,
+      "locale_scopes": {
+        "fa-IR": "برای شرایط نورگیری آپارتمان‌های ایران، نسبت نور طبیعی و مصنوعی، سمت پنجره و فصل، بدون تجویز یک برنامهٔ ثابت برای همهٔ گونه‌ها بررسی شود.",
+        "en-US": "For North American apartments, study window orientation, artificial lighting intensity and duration, and plant-specific seasonal moisture needs."
+      },
+      "sources": [
+        {
+          "id": "source1",
+          "publisher": "University of Minnesota Extension",
+          "title": "Lighting for Indoor Plants and Starting Seeds Extension",
+          "url": "https://extension.umn.edu/garden-and-home/yard-and-garden/gardening-in-minnesota/lighting-for-indoor-plants",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Minnesota Extension explains indoor light categories, matching plant requirements to window aspects, grow light spectra and photoperiod."
+        },
+        {
+          "id": "source2",
+          "publisher": "Royal Horticultural Society",
+          "title": "How to Help a Poorly Houseplant RHS Advice",
+          "url": "https://www.rhs.org.uk/plants/types/houseplants/how-to-help-a-poorly-houseplant",
+          "checked_date": "2026-10-22",
+          "evidence_note": "RHS advises symptom-led inspections of light, moisture, pests and placement before treating struggling houseplants."
+        },
+        {
+          "id": "source3",
+          "publisher": "University of Georgia Extension",
+          "title": "Growing Indoor Plants with Success University of Georgia",
+          "url": "https://extension.uga.edu/publications/detail.html?number=B1318",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Georgia Extension discusses houseplant media aeration and drainage, temperature, lighting, repotting and conditional fertilizer management."
+        },
+        {
+          "id": "source4",
+          "publisher": "University of Missouri Extension",
+          "title": "Caring for Houseplants Missouri University Extension",
+          "url": "https://extension.missouri.edu/publications/g6510",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Missouri Extension differentiates houseplant symptoms caused by watering extremes, root damage, inadequate light, salt build-up and cold."
+        }
+      ],
+      "claims": [
+        {
+          "id": "claim1",
+          "statement": "Minnesota Extension distinguishes low, moderate and high light conditions and relates them to plant species and window location.",
+          "source_ids": [
+            "source1"
+          ]
+        },
+        {
+          "id": "claim2",
+          "statement": "Minnesota Extension explains that artificial lighting spectrum and photoperiod affect vegetative growth and flowering, so light choice depends on the crop.",
+          "source_ids": [
+            "source1"
+          ]
+        },
+        {
+          "id": "claim3",
+          "statement": "RHS warns that direct summer sunlight may scorch susceptible foliage while insufficient light can cause weak elongated growth.",
+          "source_ids": [
+            "source2"
+          ]
+        },
+        {
+          "id": "claim4",
+          "statement": "Georgia Extension treats adequate lighting as one of several interacting conditions determining indoor plant vigor rather than an isolated factor.",
+          "source_ids": [
+            "source3"
+          ]
+        },
+        {
+          "id": "claim5",
+          "statement": "Missouri Extension identifies long internodes and weak pale leaves as possible symptoms of inadequate light or other adverse growing conditions.",
+          "source_ids": [
+            "source4"
+          ]
+        }
+      ],
+      "scientific_review_completed": false,
+      "public_distribution_allowed": false,
+      "editorial_note": "Short original paraphrases tied to manually inspected extension and RHS webpages on 2026-10-22. Stage 2 desk research only; region-specific expert safety, legal validation and commercial QA are separate downstream gates."
+    },
+    {
+      "schema": "saeit.factory.stage2-source-evidence.v1",
+      "source_product_id": "AGRI-007",
+      "revision": 1,
+      "locale_scopes": {
+        "fa-IR": "برای کاربرد خانگی در ایران، بستر گلدان با زهکشی، تهویه، تأمین رطوبت و تفاوت گونه‌ها بررسی شود؛ نسخهٔ تجاری آمادهٔ فروش نیست.",
+        "en-US": "For US container gardeners, compare porous potting mixes, oxygen access to roots, container depth and drainage, with no universal soil recipe."
+      },
+      "sources": [
+        {
+          "id": "source1",
+          "publisher": "University of Georgia Extension",
+          "title": "Gardening in Containers and Soilless Planting Mixes",
+          "url": "https://extension.uga.edu/publications/detail.html?number=C787&title=gardening-in-containers",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Georgia Extension explains different drainage in containers and the role of porous substrates in keeping oxygen available to roots."
+        },
+        {
+          "id": "source2",
+          "publisher": "Pennsylvania State University Extension",
+          "title": "Propagating Houseplants Penn State Extension",
+          "url": "https://extension.psu.edu/propagating-houseplants",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Penn State recommends disease-free cuttings, clean tools, well-aerated propagating media, high but controlled humidity and indirect light."
+        },
+        {
+          "id": "source3",
+          "publisher": "Royal Horticultural Society",
+          "title": "How to Help a Poorly Houseplant RHS Advice",
+          "url": "https://www.rhs.org.uk/plants/types/houseplants/how-to-help-a-poorly-houseplant",
+          "checked_date": "2026-10-22",
+          "evidence_note": "RHS advises symptom-led inspections of light, moisture, pests and placement before treating struggling houseplants."
+        },
+        {
+          "id": "source4",
+          "publisher": "University of Missouri Extension",
+          "title": "Caring for Houseplants Missouri University Extension",
+          "url": "https://extension.missouri.edu/publications/g6510",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Missouri Extension differentiates houseplant symptoms caused by watering extremes, root damage, inadequate light, salt build-up and cold."
+        }
+      ],
+      "claims": [
+        {
+          "id": "claim1",
+          "statement": "Georgia Extension notes that water movement and drainage in shallow containers differ from those in open ground and require suitably porous mixtures.",
+          "source_ids": [
+            "source1"
+          ]
+        },
+        {
+          "id": "claim2",
+          "statement": "Poorly aerated, saturated container media can stress roots and increase their susceptibility to root-associated disease.",
+          "source_ids": [
+            "source1"
+          ]
+        },
+        {
+          "id": "claim3",
+          "statement": "Penn State describes perlite and coarse bark as propagation media components supporting drainage and aeration around new roots.",
+          "source_ids": [
+            "source2"
+          ]
+        },
+        {
+          "id": "claim4",
+          "statement": "RHS recommends checking the actual growing medium and growing conditions before treating apparent indoor plant water stress.",
+          "source_ids": [
+            "source3"
+          ]
+        },
+        {
+          "id": "claim5",
+          "statement": "Missouri Extension associates yellowing foliage with possible poor drainage, tight potting media and excess irrigation.",
+          "source_ids": [
+            "source4"
+          ]
+        }
+      ],
+      "scientific_review_completed": false,
+      "public_distribution_allowed": false,
+      "editorial_note": "Short original paraphrases tied to manually inspected extension and RHS webpages on 2026-10-22. Stage 2 desk research only; region-specific expert safety, legal validation and commercial QA are separate downstream gates."
+    },
+    {
+      "schema": "saeit.factory.stage2-source-evidence.v1",
+      "source_product_id": "AGRI-008",
+      "revision": 1,
+      "locale_scopes": {
+        "fa-IR": "برای کاربران ایران، قلمه‌زنی گیاهان آپارتمانی با کنترل بیماری، پاکیزگی ابزار، رطوبت، زمان و نوع قلمه بررسی شود.",
+        "en-US": "For American home gardeners, research clean propagation techniques and species-specific rooting approaches, including ventilation and disease controls."
+      },
+      "sources": [
+        {
+          "id": "source1",
+          "publisher": "Pennsylvania State University Extension",
+          "title": "Propagating Houseplants Penn State Extension",
+          "url": "https://extension.psu.edu/propagating-houseplants",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Penn State recommends disease-free cuttings, clean tools, well-aerated propagating media, high but controlled humidity and indirect light."
+        },
+        {
+          "id": "source2",
+          "publisher": "University of Missouri Extension",
+          "title": "Home Propagation of Houseplants University Extension",
+          "url": "https://extension.missouri.edu/publications/g6560",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Missouri Extension gives plant-specific propagation techniques including rooting philodendron and pothos in water and correct orientation of snake plant sections."
+        },
+        {
+          "id": "source3",
+          "publisher": "University of Georgia Extension",
+          "title": "Growing Indoor Plants with Success University of Georgia",
+          "url": "https://extension.uga.edu/publications/detail.html?number=B1318",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Georgia Extension discusses houseplant media aeration and drainage, temperature, lighting, repotting and conditional fertilizer management."
+        },
+        {
+          "id": "source4",
+          "publisher": "Royal Horticultural Society",
+          "title": "How to Help a Poorly Houseplant RHS Advice",
+          "url": "https://www.rhs.org.uk/plants/types/houseplants/how-to-help-a-poorly-houseplant",
+          "checked_date": "2026-10-22",
+          "evidence_note": "RHS advises symptom-led inspections of light, moisture, pests and placement before treating struggling houseplants."
+        }
+      ],
+      "claims": [
+        {
+          "id": "claim1",
+          "statement": "Penn State recommends sourcing houseplant cuttings from healthy parent plants and working with clean equipment and disease-free propagation materials.",
+          "source_ids": [
+            "source1"
+          ]
+        },
+        {
+          "id": "claim2",
+          "statement": "Penn State describes rooting cuttings under bright indirect light with moist but not saturated propagation media and controlled humidity.",
+          "source_ids": [
+            "source1"
+          ]
+        },
+        {
+          "id": "claim3",
+          "statement": "Missouri Extension differentiates propagation methods by species, including water rooting for pothos and philodendron stems.",
+          "source_ids": [
+            "source2"
+          ]
+        },
+        {
+          "id": "claim4",
+          "statement": "Georgia Extension explains that poor potting medium aeration can compromise root health during transfer and ongoing container growth.",
+          "source_ids": [
+            "source3"
+          ]
+        },
+        {
+          "id": "claim5",
+          "statement": "RHS recommends inspecting stressed plants and isolating troubled specimens when diagnosing problems that might spread among houseplants.",
+          "source_ids": [
+            "source4"
+          ]
+        }
+      ],
+      "scientific_review_completed": false,
+      "public_distribution_allowed": false,
+      "editorial_note": "Short original paraphrases tied to manually inspected extension and RHS webpages on 2026-10-22. Stage 2 desk research only; region-specific expert safety, legal validation and commercial QA are separate downstream gates."
+    },
+    {
+      "schema": "saeit.factory.stage2-source-evidence.v1",
+      "source_product_id": "AGRI-009",
+      "revision": 1,
+      "locale_scopes": {
+        "fa-IR": "برای ارکیدهٔ پروانه‌ای در خانه‌های ایران، نور، دما، ریشه، آبیاری، بستر پوست‌درختی و عوامل گل‌دهی دوباره جداگانه بررسی شود.",
+        "en-US": "For US orchid keepers, focus on Phalaenopsis humidity, filtered light, airy media and conditional reblooming, without guaranteed flowering claims."
+      },
+      "sources": [
+        {
+          "id": "source1",
+          "publisher": "Royal Horticultural Society",
+          "title": "How to Grow Phalaenopsis Moth Orchids at Home",
+          "url": "https://www.rhs.org.uk/plants/phalaenopsis/growing-guide",
+          "checked_date": "2026-10-22",
+          "evidence_note": "RHS discusses filtered light, warm conditions, bark-based media, root moisture, repotting and factors influencing reblooming."
+        },
+        {
+          "id": "source2",
+          "publisher": "Pennsylvania State University Extension",
+          "title": "Orchids as Houseplants Phalaenopsis and Paphiopedilum",
+          "url": "https://extension.psu.edu/orchids-as-houseplants",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Penn State describes household orchid placement, aerated media, conditional irrigation and distinct needs of Phalaenopsis and slipper orchids."
+        },
+        {
+          "id": "source3",
+          "publisher": "University of Maryland Extension",
+          "title": "Care of Phalaenopsis Orchids Moth Orchids",
+          "url": "https://www.extension.umd.edu/resource/care-phalaenopsis-orchids-moth-orchids",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Maryland Extension details moth orchid reblooming factors, particularly adequate light and seasonal nighttime cooling, without guaranteeing flowers."
+        },
+        {
+          "id": "source4",
+          "publisher": "University of Missouri Extension",
+          "title": "Home Propagation of Houseplants University Extension",
+          "url": "https://extension.missouri.edu/publications/g6560",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Missouri Extension gives plant-specific propagation techniques including rooting philodendron and pothos in water and correct orientation of snake plant sections."
+        }
+      ],
+      "claims": [
+        {
+          "id": "claim1",
+          "statement": "RHS recommends bright but filtered light and appropriately warm conditions for Phalaenopsis moth orchids, protecting foliage from strong summer sun.",
+          "source_ids": [
+            "source1"
+          ]
+        },
+        {
+          "id": "claim2",
+          "statement": "Penn State describes open well-drained orchid media and suitable root aeration as important for Phalaenopsis kept indoors.",
+          "source_ids": [
+            "source2"
+          ]
+        },
+        {
+          "id": "claim3",
+          "statement": "Maryland Extension identifies insufficient light as one common reason moth orchids fail to rebloom under household conditions.",
+          "source_ids": [
+            "source3"
+          ]
+        },
+        {
+          "id": "claim4",
+          "statement": "Maryland Extension also describes seasonal cooler nighttime temperatures as a possible flowering stimulus rather than a guaranteed outcome.",
+          "source_ids": [
+            "source3"
+          ]
+        },
+        {
+          "id": "claim5",
+          "statement": "Missouri Extension distinguishes orchid propagation requirements from ordinary softwood cuttings and notes humidity and suitable organic media needs.",
+          "source_ids": [
+            "source4"
+          ]
+        }
+      ],
+      "scientific_review_completed": false,
+      "public_distribution_allowed": false,
+      "editorial_note": "Short original paraphrases tied to manually inspected extension and RHS webpages on 2026-10-22. Stage 2 desk research only; region-specific expert safety, legal validation and commercial QA are separate downstream gates."
+    },
+    {
+      "schema": "saeit.factory.stage2-source-evidence.v1",
+      "source_product_id": "AGRI-010",
+      "revision": 1,
+      "locale_scopes": {
+        "fa-IR": "برای شرایط ایران، تشخیص آفات آپارتمانی و اقدامات پیشگیرانه و غیرشیمیایی بررسی شود؛ استفاده از سم فقط پس از تأیید مقررات محلی مجاز است.",
+        "en-US": "For North American indoor gardeners, distinguish pests visually, prioritize monitoring and isolation, and defer pesticide recommendations to local law."
+      },
+      "sources": [
+        {
+          "id": "source1",
+          "publisher": "University of Minnesota Extension",
+          "title": "Managing Insects on Indoor Plants Extension Advice",
+          "url": "https://extension.umn.edu/garden-and-home/yard-and-garden/yard-and-garden-insects/insects-on-indoor-plants",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Minnesota Extension emphasizes regular pest inspection, quarantine and sanitation, and nonchemical interventions before registered pesticides."
+        },
+        {
+          "id": "source2",
+          "publisher": "Pennsylvania State University Extension",
+          "title": "Pest and Disease Problems of Indoor Plants Extension",
+          "url": "https://extension.psu.edu/pest-and-disease-problems-of-indoor-plants",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Penn State describes indoor pest identification, appearance of aphids, mealybugs, scale and thrips, and preventive monitoring."
+        },
+        {
+          "id": "source3",
+          "publisher": "University of Maryland Extension",
+          "title": "Diagnose Indoor Plant Problems and Pest Symptoms",
+          "url": "https://extension.umd.edu/resource/diagnose-indoor-plant-problems",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Maryland Extension presents a symptom-to-cause table including root rot, watering problems, mealybugs, spider mites and whiteflies."
+        },
+        {
+          "id": "source4",
+          "publisher": "Royal Horticultural Society",
+          "title": "How to Help a Poorly Houseplant RHS Advice",
+          "url": "https://www.rhs.org.uk/plants/types/houseplants/how-to-help-a-poorly-houseplant",
+          "checked_date": "2026-10-22",
+          "evidence_note": "RHS advises symptom-led inspections of light, moisture, pests and placement before treating struggling houseplants."
+        }
+      ],
+      "claims": [
+        {
+          "id": "claim1",
+          "statement": "Minnesota Extension recommends regularly inspecting leaves, stems and pot edges for insects and isolating newly acquired or infested houseplants.",
+          "source_ids": [
+            "source1"
+          ]
+        },
+        {
+          "id": "claim2",
+          "statement": "Penn State identifies aphids, mealybugs, scale insects and thrips among common indoor plant pests with differing visible signs.",
+          "source_ids": [
+            "source2"
+          ]
+        },
+        {
+          "id": "claim3",
+          "statement": "Maryland Extension records spider mites, mealybugs and whiteflies as potential contributors to yellowing or visibly weakened houseplant foliage.",
+          "source_ids": [
+            "source3"
+          ]
+        },
+        {
+          "id": "claim4",
+          "statement": "Minnesota Extension recommends using feasible nonchemical methods such as washing, manual removal and pruning before considering pesticide use.",
+          "source_ids": [
+            "source1"
+          ]
+        },
+        {
+          "id": "claim5",
+          "statement": "RHS advises checking environmental stress and pests when an indoor plant deteriorates, rather than assuming one symptom has only one cause.",
+          "source_ids": [
+            "source4"
+          ]
+        }
+      ],
+      "scientific_review_completed": false,
+      "public_distribution_allowed": false,
+      "editorial_note": "Short original paraphrases tied to manually inspected extension and RHS webpages on 2026-10-22. Stage 2 desk research only; region-specific expert safety, legal validation and commercial QA are separate downstream gates."
     }
   ]
 }

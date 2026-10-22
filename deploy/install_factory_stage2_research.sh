@@ -29,7 +29,7 @@ if test -e "$dest"; then
     cp -p "$dest" "$back/stage2-research.before.py"
 fi
 "$py" -B -c 'import ast,sys;ast.parse(open(sys.argv[1],encoding="utf8").read())' "$src"
-"$py" -B -c 'import json,sys;v=json.load(open(sys.argv[1],encoding="utf8"));assert len(v["bundles"])==3' "$curated"
+"$py" -B -c 'import json,sys;v=json.load(open(sys.argv[1],encoding="utf8"));assert 3<=len(v["bundles"])<=200' "$curated"
 temp="$(mktemp "$ops/.stage2.XXXXXX")"
 install -m 600 "$src" "$temp"
 mv -f "$temp" "$dest"
