@@ -51,7 +51,7 @@ def study(query,n):
         "publication_year":2020+n,
         "type":"article","is_retracted":False,
         "primary_location":{
-            "landing_page_url":"https://research"+str(n)+".sciencepublisher.org/article",
+            "landing_page_url":"https://scientificpublisher"+str(n)+".org/article",
             "source":{"host_organization_name":"Scientific Publisher "+str(n),
                       "display_name":"Applied Horticulture Journal "+str(n)}},
         "abstract_inverted_index":indexed(abstract)
