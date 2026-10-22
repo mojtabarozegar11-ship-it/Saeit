@@ -1,0 +1,107 @@
+name: Independent read-only six specialist handoff proof
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-six-expert-handoff-readonly-20261022.yml
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  verify-live-private-dossiers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Verify current six private evidence dossiers without changing VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          temp="$(mktemp -d)"
+          trap 'rm -rf -- "$temp"' EXIT
+          chmod 700 "$temp"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.buffer.read().decode("utf8");s=s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n";sys.stdout.buffer.write(s.encode())' > "$temp/key"
+          chmod 600 "$temp/key"
+          ssh-keygen -y -P "" -f "$temp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$temp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -T -i "$temp/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = githubops
+          before="$(crontab -l)"
+          test "$(printf '%s\n' "$before" | grep -Fc SAEIT_SIX_EXPERT_HANDOFF_V1)" -eq 1
+          test "$(printf '%s\n' "$before" | grep -Fc SAEIT_SIX_NATIVE_INDEPENDENT_REVIEW_V1)" -eq 1
+          "$HOME/factory-runtime/.venv/bin/python" -B - <<'PY'
+          import hashlib,json,re
+          from pathlib import Path
+          root=Path.home()/"factory-runtime/private/autonomous-product-cycle"
+          folder=root/"quality-excellence/six-expert-handoff"
+          assert not folder.is_symlink() and folder.is_dir()
+          versions=[p for p in folder.iterdir() if p.is_dir() and not p.is_symlink()
+                    and re.fullmatch(r"[0-9]{5,18}-[0-9]{1,3}",p.name)
+                    and (p/"manifest.json").is_file()]
+          assert versions
+          latest=max(versions,key=lambda p:tuple(map(int,p.name.split("-"))))
+          manifest_bytes=(latest/"manifest.json").read_bytes()
+          m=json.loads(manifest_bytes)
+          assert m["schema"]=="saeit.factory.six-expert-handoff.v1"
+          assert m["native_run"]==latest.name
+          assert m["six_real_product_families_bound"]==6
+          assert m["native_files_linked"]==56
+          assert m["real_rice_f26_independently_reverified"] is True
+          assert m["machine_qc_receipts"]==6
+          assert m["third_party_approved_families"]==0
+          assert m["physical_hardware_approved_families"]==0
+          assert m["independent_quality_1000_certified_families"]==0
+          assert m["commercial_release_allowed"] is False
+          assert m["website_mutations"]==0
+          native=root/"native-candidate-evidence"/latest.name
+          check=root/"quality-excellence/six-native-rework"/latest.name
+          sha=lambda path:hashlib.sha256(path.read_bytes()).hexdigest()
+          assert sha(native/"verified-six-private-native.json")==m["native_aggregate_sha256"]
+          assert sha(check/"review.json")==m["native_review_sha256"]
+          named={"F12","F13","F14","F16","F17","F26"}
+          counts={"F12":2,"F13":1,"F14":2,"F16":2,"F17":1,"F26":48}
+          assert set(m["case_manifest_sha256"])==named
+          assert {row["family"] for row in m["families"]}==named
+          protocols=0
+          for family in sorted(named):
+              path=latest/(family+".json")
+              assert path.is_file() and not path.is_symlink()
+              assert sha(path)==m["case_manifest_sha256"][family]
+              d=json.loads(path.read_text("utf8"))
+              assert d["family"]==family
+              assert d["number_of_native_files"]==counts[family]
+              assert d["native_candidate_archive_sha256"]==sha(native/family/"technical-native-candidate.zip")
+              assert d["native_candidate_receipt_sha256"]==sha(native/family/"technical-native-receipt.json")
+              assert d["original_independent_review_sha256"]==sha(check/"review.json")
+              assert d["machine_review_sha256"]==sha(check/(family+".json"))
+              assert d["trusted_human_reviewer_identities"]==[]
+              assert d["human_approvals"]==[]
+              assert set(d["required_signed_roles"])=={"domain_specialist","independent_quality_auditor","rights_reviewer","owner"}
+              assert len(d["external_review_protocols"])==3
+              assert all(x["real_test_executed"] is False and
+                         x["acceptance_status"]=="not_yet_verified" for x in d["external_review_protocols"])
+              assert d["physical_device_testing_verified"] is False
+              assert d["independent_quality_1000_certified"] is False
+              assert d["commercial_release_authorized"] is False
+              assert d["public_websites_mutated"] is False
+              protocols+=len(d["external_review_protocols"])
+          f26=json.loads((latest/"F26.json").read_text())
+          assert f26["research_model_evidence"]["real_uci_pilot_independently_verified"] is True
+          assert f26["research_model_evidence"]["independent_field_testing_complete"] is False
+          assert protocols==18
+          print("INDEPENDENT_SIX_HANDOFF_VPS_SHA_VERIFIED=6")
+          print("INDEPENDENT_SIX_HANDOFF_NATIVE_FORMAT_FILES=56")
+          print("INDEPENDENT_SIX_HANDOFF_THIRD_PARTY_PROTOCOLS=18")
+          print("INDEPENDENT_SIX_HANDOFF_REAL_UCI_F26=VERIFIED")
+          print("INDEPENDENT_SIX_HANDOFF_SIGNED_EXPERT_APPROVALS=0")
+          print("INDEPENDENT_SIX_HANDOFF_QUALITY_1000=0")
+          print("INDEPENDENT_SIX_HANDOFF_PUBLIC_SITE_MUTATIONS=0")
+          print("INDEPENDENT_SIX_HANDOFF_MANIFEST_SHA256="+hashlib.sha256(manifest_bytes).hexdigest())
+          PY
+          echo INDEPENDENT_SIX_HANDOFF_CRON_COUNT=1
+          echo INDEPENDENT_SIX_HANDOFF_READONLY_NO_VPS_WRITES=PASS
+          REMOTE
