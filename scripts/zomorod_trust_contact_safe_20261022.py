@@ -4,6 +4,9 @@ from __future__ import annotations
 import argparse,hashlib,html,json,os
 from pathlib import Path
 CONTACT_SHA="62631e0ccd54"
+REFINE_SHA="63375f7a39fc"
+OLD_LAYOUT='<div class="zm-v7-content-grid"><details id="zm-trust-legal"'
+NEW_LAYOUT='<div class="zm-v7-content-grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));align-items:start"><details id="zm-trust-legal"'
 MARKER="zm-public-trust-sections-20261022"
 CLOSE="</section></main>"
 NAV='<a href="/api/health/">وضعیت سامانه ←</a></div>'
@@ -71,7 +74,7 @@ def enrich(src):
     out=src.replace(NAV,NAV[:-6]+links+'</div>',1)
     section='<section id="'+MARKER+'" aria-label="اطلاعات حقوقی مالی و حریم خصوصی"><h2>اعتبارسنجی و شفافیت شرکت</h2>'
     section+='<p class="summary">اطلاعات این بخش تنها برای بررسی آگاهانه است؛ هیچ رتبه مالی، ضمانت بانکی یا مجوز تخصصی بدون مدرک ادعا نمی‌شود.</p>'
-    section+='<div class="zm-v7-content-grid">'
+    section+='<div class="zm-v7-content-grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));align-items:start">'
     for key,v in PAGES.items():
         section+='<details id="'+ANCHORS[key]+'" class="zm-v7-content-card">'
         section+='<summary style="cursor:pointer;color:#f1d58e;font-size:20px;font-weight:bold">'+html.escape(v["heading"])+'</summary>'
@@ -87,6 +90,26 @@ def enrich(src):
     assert out.count('class="zm-v7-header"')==src.count('class="zm-v7-header"')==1
     assert out.count('class="zm-v7-footer"')==src.count('class="zm-v7-footer"')==1
     return out
+
+def refine(site,backup):
+    target=validated(site,backup)
+    prior=target.read_bytes()
+    assert sha(prior).startswith(REFINE_SHA),"Live contact has changed; stop to protect other edits."
+    src=prior.decode('utf-8')
+    assert src.count(OLD_LAYOUT)==1 and src.count(NEW_LAYOUT)==0
+    after=src.replace(OLD_LAYOUT,NEW_LAYOUT,1).encode('utf-8')
+    assert not backup.exists()
+    backup.mkdir(mode=0o700,parents=True)
+    (backup/'before.html').write_bytes(prior)
+    (backup/'manifest.json').write_text(json.dumps({'before':sha(prior),'after':sha(after)}),encoding='utf8')
+    try:
+        atomic(target,after)
+        verify(site,backup)
+    except Exception:
+        if sha(target.read_bytes())==sha(after):atomic(target,prior)
+        raise
+    print('TRUST_LAYOUT_REFINEMENT=applied')
+    print('HEADER_FOOTER_HOME_HTACCESS_DB_TOUCHED=no')
 
 def atomic(path,data):
     tmp=path.with_name('.'+path.name+'.trust-next')
@@ -146,15 +169,16 @@ def selftest():
     changed=enrich(fixture)
     assert changed.count(MARKER)==1 and changed.count('href="#zm-trust-legal"')==1
     assert len(changed)>len(fixture)
+    assert 'align-items:start' in changed and 'min(100%,420px)' in changed
     print('TRUST_CONTACT_SELFTEST=passed')
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument('mode',choices=['selftest','apply','verify','rollback'])
+    p.add_argument('mode',choices=['selftest','apply','refine','verify','rollback'])
     p.add_argument('--site',default=str(Path.home()/'public_html'))
     p.add_argument('--backup',default='')
     a=p.parse_args()
     if a.mode=='selftest':return selftest()
     assert a.backup
-    return {'apply':apply,'verify':verify,'rollback':rollback}[a.mode](Path(a.site),Path(a.backup))
+    return {'apply':apply,'refine':refine,'verify':verify,'rollback':rollback}[a.mode](Path(a.site),Path(a.backup))
 if __name__=='__main__':main()
