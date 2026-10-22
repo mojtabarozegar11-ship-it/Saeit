@@ -37,6 +37,7 @@ test -s "$private/quality-excellence/six-native-rework/$run/review.json"
 export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 DJANGO_SETTINGS_MODULE=config.settings
 export MOJ_PAID_LLM_ENABLED=0 MOJ_LLM_DAILY_CALL_BUDGET=0 MOJ_LLM_MAX_COST_MINOR=0
 cd "$base/django-app"
+set +e
 "$py" -B - "$run" "$private" <<'PY'
 import sys
 from pathlib import Path
@@ -55,6 +56,7 @@ print("MOJ1RO1_NATIVE_TRIGGER_BOUND_REVIEW_SHA256="+digest(
     root/"quality-excellence/six-native-rework"/run/"review.json"))
 PY
 status=$?
+set -e
 if test "$status" -eq 3; then
     echo MOJ1RO1_NATIVE_TRIGGER_SUPERSEDED_PRIVATE_NO_WRITE
     exit 0
