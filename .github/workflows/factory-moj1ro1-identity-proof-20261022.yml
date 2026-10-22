@@ -1,0 +1,66 @@
+name: Factory moj_1ro_1 identity and agent proof (read-only)
+on:
+  push:
+    branches: [feature/six-device-and-independent-qa-evidence-20261022]
+    paths: [.github/workflows/factory-moj1ro1-identity-proof-20261022.yml]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Inspect live central-agent registry and runtime without changing VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          temp="$(mktemp -d)"
+          chmod 700 "$temp"
+          trap 'rm -rf -- "$temp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.buffer.read().decode("utf8");s=s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n";sys.stdout.buffer.write(s.encode())' > "$temp/key"
+          chmod 600 "$temp/key"
+          ssh-keygen -y -P '' -f "$temp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$temp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -T -i "$temp/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 DJANGO_SETTINGS_MODULE=config.settings
+          cd "$HOME/factory-runtime/django-app"
+          "$HOME/factory-runtime/.venv/bin/python" -B - <<'PY'
+          import django
+          django.setup()
+          from core.models import Agent,AgentTask,AuditLog
+          from pathlib import Path
+          import os,re
+          for code in ("moj_1ro_1","moj-1ro-1","moj1ro1","economic-master-agent"):
+              qs=Agent.objects.filter(code=code)
+              print("MOJ_IDENTITY_DATABASE_"+code.replace("-","_")+"="+str(qs.count()))
+              if qs.count()==1:
+                  agent=qs.first()
+                  print("MOJ_IDENTITY_ACTIVE_"+code.replace("-","_")+"="+str(agent.active))
+                  print("MOJ_IDENTITY_COMPLETED_TASKS_"+code.replace("-","_")+"="+str(
+                      AgentTask.objects.filter(agent=agent,status="completed").count()))
+          matches=[]
+          for f in Path("/proc").iterdir():
+              if not f.name.isdecimal() or int(f.name)==os.getpid():
+                  continue
+              try:
+                  raw=(f/"cmdline").read_bytes().lower()
+              except (OSError,PermissionError):
+                  continue
+              if any(s in raw for s in (b"moj_1ro_1",b"moj-1ro-1",b"moj1ro1")):
+                  # Only process ID and executable path basename are disclosed.
+                  first=raw.split(b"\0",1)[0]
+                  matches.append((int(f.name),Path(first.decode(errors="ignore")).name[:50]))
+          print("MOJ_IDENTITY_MATCHING_PROCESSES="+str(len(matches)))
+          for pid,comm in sorted(matches)[:10]:
+              print("MOJ_IDENTITY_PID_COMM="+str(pid)+":"+comm)
+          root=Path.home()/"factory-runtime/operations"
+          print("MOJ_40_CONTROLLER_LIVE_INSTALL="+str((root/"40-family-execution").is_dir()))
+          print("MOJ_NATIVE_REWORK_LIVE_INSTALL="+str((root/"six-native-rework").is_dir()))
+          print("MOJ_NAMED_MASTER_READONLY_INSPECTION=PASS")
+          PY
+          REMOTE
