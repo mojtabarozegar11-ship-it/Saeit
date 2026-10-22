@@ -118,5 +118,30 @@ class RouteQualityTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,"INVALID_1000_QUALITY_SCORE"):
             inspect(a,raw,o)
 
+
+    def test_legacy_edition_quarantine_is_actionable_not_certified(self):
+        assessment={"schema":"saeit.factory.quality-rework.v2",
+                    "recipe":"test_recipe","quality_status":"QUARANTINE_AUDIT_ERROR",
+                    "defects":["P0_AUDIT_ERROR_ValueError"],
+                    "quality_points_verified":None,"premium_quality_approved":False,
+                    "commercial_release_allowed":False}
+        raw=(json.dumps(assessment,sort_keys=True)+"\n").encode()
+        order={"schema":"saeit.factory.production-rework-order.v1",
+               "recipe":"test_recipe","artifact_sha256":None,
+               "source_quality_receipt_sha256":hashlib.sha256(raw).hexdigest(),
+               "commercial_publish_allowed":False,"owner_release_approval_required":True,
+               "signed_external_quality_approval_required":True,
+               "unresolved_technical_or_domain_defects":["P0_AUDIT_ERROR_ValueError"]}
+        (self.quality_folder/"current.json").write_bytes(raw)
+        (self.order_folder/"current.json").write_text(json.dumps(order))
+        result=route(self.root)
+        self.assertEqual(result["routed_products"],1)
+        self.assertEqual(result["queued_issues"],1)
+        entry=json.loads((self.base/"specialist-routed-rework"/"test_recipe"/"current.json").read_text())
+        self.assertEqual(entry["disposition"],"QUARANTINED_NEEDS_ORIGINAL_SOURCE")
+        self.assertIsNone(entry["artifact_sha256"])
+        self.assertIsNone(entry["documentary_points"])
+        self.assertFalse(entry["quality_1000_certified"])
+
 if __name__=="__main__":
     unittest.main()
