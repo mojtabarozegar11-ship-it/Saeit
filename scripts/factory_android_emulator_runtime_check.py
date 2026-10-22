@@ -10,12 +10,10 @@ import hashlib
 import io
 import json
 from pathlib import Path
-import re
 import subprocess
 import time
 import urllib.request
 import urllib.error
-import xml.etree.ElementTree as ET
 
 FAMILIES={"F12":"com.zomorodmelal.factory.f12",
           "F16":"com.zomorodmelal.factory.f16"}
@@ -36,44 +34,9 @@ def screenshot():
 
 
 def tap_visible_app_control(family, pid):
-    """Actual adb touchscreen input at a control found by accessibility or live DOM."""
-    app_bounds = None
-    for attempt in range(4):
-        raw = run("exec-out", "uiautomator", "dump", "/dev/tty", timeout=45)
-        start = raw.find("<?xml")
-        finish = raw.find("</hierarchy>", start) if start >= 0 else -1
-        if finish < 0:
-            if attempt == 3:
-                raise RuntimeError("EMULATOR_ACCESSIBILITY_TREE_INCOMPLETE")
-            time.sleep(2)
-            continue
-        hierarchy = ET.fromstring(raw[start:finish + len("</hierarchy>")])
-        for node in hierarchy.iter("node"):
-            attrs = node.attrib
-            match = re.fullmatch(
-                r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",
-                attrs.get("bounds", ""))
-            if not match:
-                continue
-            x1, y1, x2, y2 = map(int, match.groups())
-            if x2 <= x1 or y2 <= y1:
-                continue
-            if attrs.get("class") == "android.webkit.WebView":
-                app_bounds = (x1, y1, x2, y2)
-            label = (attrs.get("text", "") + " " +
-                     attrs.get("content-desc", "")).lower()
-            matching = (
-                "next level" in label if family == "F12" else
-                attrs.get("class") == "android.widget.EditText"
-            )
-            if matching:
-                run("shell", "input", "tap", str((x1+x2)//2), str((y1+y2)//2))
-                return True
-        time.sleep(2)
-
-    # Some Android System WebView versions omit HTML descendants from the
-    # accessibility tree. Send real touch input through WebView's compositor
-    # at a live DOM control's center (not a synthetic JavaScript .click()).
+    """Dispatch a real compositor touch at an element in the installed APK."""
+    # System WebView can intermittently omit all HTML nodes from uiautomator.
+    # CDP touchStart/touchEnd acts on the actual running WebView compositor.
     with DebugWebView(pid) as dev:
         rect = dev.evaluate("""(() => {
           const el = document.getElementById(""" +
@@ -87,6 +50,9 @@ def tap_visible_app_control(family, pid):
         if (not isinstance(rect, dict) or not rect.get("visible")
                 or rect.get("width", 0) <= 0 or rect.get("height", 0) <= 0):
             raise RuntimeError("EMULATOR_REAL_APP_CONTROL_NOT_VISIBLE")
+        if not (0 < rect["x"] < rect["width"] and
+                0 < rect["y"] < rect["height"]):
+            raise RuntimeError("EMULATOR_REAL_APP_CONTROL_OUTSIDE_VIEWPORT")
         dev.touch(rect["x"], rect["y"])
     return True
 
