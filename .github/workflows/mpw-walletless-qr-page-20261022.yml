@@ -1,0 +1,34 @@
+name: MojPlayWin walletless TRX QR invoice and mobile poll contracts
+on:
+  push:
+    branches: [feature/mpw-walletless-trx-e2e-20261022]
+    paths:
+      - services/mpw_trx_walletless_checkout_ui.py
+      - tests/test_mpw_walletless_checkout_ui.py
+      - .github/workflows/mpw-walletless-qr-page-20261022.yml
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  offline-qr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install pure Python QR encoder in isolated runner
+        run: python3 -m pip install --disable-pip-version-check 'segno==1.6.6'
+      - name: Run exact-amount QR invoice and secure status checks
+        run: |
+          set -euo pipefail
+          python3 -m py_compile services/mpw_trx_walletless_checkout_ui.py
+          python3 -m unittest discover -s tests -p 'test_mpw_walletless_checkout_ui.py' -v
+      - name: Verify buyer script has valid browser syntax
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from services.mpw_trx_walletless_checkout_ui import SCRIPT
+          Path('/tmp/mpw-walletless-script.js').write_text(SCRIPT)
+          PY
+          node --check /tmp/mpw-walletless-script.js
+          echo "MPW_WALLETLESS_QR_AND_POLL=PASS; NO_LIVE_PAYMENTS=TRUE"
