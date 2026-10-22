@@ -90,7 +90,23 @@ def ticket(assessment, raw, order):
     state = inspect(assessment, raw, order)
     family = state["family_id"]
     if not isinstance(family, str) or not FAMILY.fullmatch(family):
-        raise ValueError("ROUTER_UNKNOWN_FAMILY")
+        jobs=[{"criterion": None, "name": "P0_UNMAPPED_PRODUCT_FAMILY",
+               "adapter": "family_classification_specialist",
+               "action": "prove_original_family_identity_and_regrade_then_requeue",
+               "type": "family_identity_quarantine", "status": "OPEN"}]
+        return {
+            "schema": "saeit.quality1000.specialist-route.v2",
+            "recipe": state["recipe"], "family_id": None,
+            "source_receipt_sha256": state["assessment_sha256"],
+            "artifact_sha256": state["artifact_sha256"],
+            "producer_module": None,
+            "criteria_total": 100, "documentary_points": state["documentary_points"],
+            "task_count": 1, "tasks": jobs,
+            "external_signed_review_required": True,
+            "master_task_dispatch_verified": False, "certified_quality_points": None,
+            "quality_1000_certified": False, "publication_allowed": False,
+            "payment_activation_allowed": False, "disposition": "QUARANTINED_UNMAPPED_FAMILY",
+        }
     pending = set(state["missing_documentary_groups"])
     order_rows = order.get("required_criterion_work")
     if not isinstance(order_rows, list) or len(order_rows) != len(pending):
