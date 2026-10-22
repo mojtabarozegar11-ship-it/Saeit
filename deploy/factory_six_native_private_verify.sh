@@ -23,7 +23,10 @@ from datetime import datetime,timezone
 from pathlib import Path
 root=Path(sys.argv[1])
 assert root.is_dir() and not root.is_symlink()
-assert root.resolve().is_relative_to((Path.home()/"factory-runtime/private/autonomous-product-cycle").resolve())
+try:
+    root.resolve().relative_to((Path.home()/"factory-runtime/private/autonomous-product-cycle").resolve())
+except ValueError:
+    raise RuntimeError("PRIVATE_NATIVE_ROOT_OUTSIDE_FACTORY")
 families=("F12","F13","F14","F16","F17","F26")
 proofs=[]
 for family in families:
