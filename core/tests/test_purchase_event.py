@@ -162,3 +162,40 @@ def test_dual_node_tron_receipt_can_trigger_only_with_ledger_evidence(django_use
         action="paid_purchase_operating_review", target_id=str(intent.pk)
     )
     assert saved.after_state["proof_kind"] == "dual_node_tron_settlement_receipt"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_paid_order_signal_triggers_after_receipts_commit(django_user_model):
+    """The order change arrives before ledger/event creation in one transaction."""
+    from django.db import transaction
+
+    order, intent = fixture_intent(django_user_model, "signal")
+    digest = hashlib.sha256(b"simulated dual node receipt").hexdigest()
+    tx = "b" * 64
+    with transaction.atomic():
+        intent.provider = "mpw_walletless_trx_v1"
+        intent.status = "paid"
+        intent.save(update_fields=["provider", "status"])
+        order.status = "paid"
+        order.save(update_fields=["status"])  # subscriber waits for COMMIT
+        event = PaymentWebhookEvent.objects.create(
+            provider=intent.provider, event_id=tx, event_type="tron_finalized",
+            payment_intent=intent, payload_hash=digest, status="processed",
+        )
+        LedgerEntry.objects.create(
+            order=order, payment_intent=intent, entry_type="credit",
+            amount=intent.amount, currency=intent.currency,
+            reference=f"walletless:tron-mainnet:{tx}",
+            metadata={
+                "payment_method": intent.provider,
+                "network": "tron-mainnet",
+                "tx_hash": tx,
+                "evidence_digest": digest,
+                "walletless_receipt_event_id": event.pk,
+            },
+        )
+        assert not AuditLog.objects.filter(action="paid_purchase_operating_review").exists()
+
+    assert AuditLog.objects.filter(
+        action="paid_purchase_operating_review", target_id=str(intent.pk)
+    ).count() == 1

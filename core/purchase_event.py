@@ -132,3 +132,39 @@ def schedule_paid_purchase_review(payment_intent_id, *, provider, event_id):
             _LOG.exception("Paid-purchase management review failed")
 
     transaction.on_commit(run)
+
+
+def process_paid_order_review(order_id):
+    """Handle any paid-order transition backed by a recognized durable receipt.
+
+    This is an idempotent local observer; it does not dispatch to the VPS
+    factory or grant buyer access. Unknown payment rails are left untouched.
+    """
+    events = (
+        PaymentWebhookEvent.objects.filter(
+            payment_intent__order_id=order_id,
+            event_type__in=("payment.succeeded", "tron_finalized"),
+            status="processed",
+        )
+        .order_by("pk")
+        .values("payment_intent_id", "provider", "event_id")[:8]
+    )
+    for event in events:
+        if process_paid_purchase_review(
+            event["payment_intent_id"],
+            provider=event["provider"],
+            event_id=event["event_id"],
+        ):
+            return True
+    return False
+
+
+def schedule_paid_order_review(order_id, *, using=None):
+    """Run immediately upon the commit of a paid Order save."""
+    def run():
+        try:
+            process_paid_order_review(order_id)
+        except Exception:
+            _LOG.exception("Paid-order management signal failed")
+
+    transaction.on_commit(run, using=using)
