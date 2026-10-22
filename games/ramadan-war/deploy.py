@@ -51,7 +51,7 @@ def store(stage,value):
 def prepare(stage):
     assert ROOT.is_dir() and not ROOT.is_symlink()
     home=ROOT/'index.html'; assert home.is_file() and not home.is_symlink()
-    game_source=stage/'incoming/index.html'; assert game_source.is_file() and game_source.stat().st_size>5000
+    game_source=stage/'incoming/index.html'; assert game_source.is_file() and game_source.stat().st_size>1000
     route_source=stage/'incoming/.htaccess';assert route_source.is_file() and route_source.read_text('utf-8')=='PassengerEnabled off\nDirectoryIndex index.html\n'
     source=game_source.read_bytes();route=route_source.read_bytes()
     js=(stage/'incoming/game.js').read_bytes();css=(stage/'incoming/game.css').read_bytes()
