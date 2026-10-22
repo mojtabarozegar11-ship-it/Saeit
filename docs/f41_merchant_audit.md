@@ -54,3 +54,25 @@ A repeated TxID causes manual-review status across every affected invoice. Diffe
 - This toolkit is deliberately isolated from MojPlayWin, cPanel production, the real MOJ1 contract and moj_1ro_1 financial actions.
 - When moving beyond internal QA: independent security review, customer evaluation of a real problem, documentation of rights, separate chain-finality integration and approval of applicable commercial terms are required.
 - Passing automated tests is NOT quality 1000 certification, commercial validation, or evidence of cash liquidity.
+
+## Read-only mainnet TRON evidence (advanced private evaluation)
+
+A second executable, f41_tron_mainnet_check.py, can query pinned TRON mainnet SolidityNode body and execution receipt endpoints. It is deliberately **off** during ordinary CSV reconciliation and does not poll or touch production site data.
+
+Use it only with real, permissioned merchant exports containing real mainnet transaction IDs. The included synthetic example transaction IDs are NOT on-chain and cannot prove payments.
+
+    python3 -B scripts/f41_tron_mainnet_check.py \
+      --invoices path/to/real-invoices.csv \
+      --payments path/to/real-payments.csv \
+      --out /secure/private/new-node-evidence
+
+- Scope: up to 10 strictly matching mainnet invoice/payment pairs per invocation; excess is rejected before any calls. Shasta entries are ineligible.
+- TRX: require exact transaction ID, successful native transfer, recipient, amount, and SolidityNode solidification.
+- TRC20: require an explicitly operator-approved token contract and one exact Transfer event in a successful solidified receipt, with contract, recipient, and integer base-unit amount matched.
+- Token contracts default to DENIED. Set F41_MAINNET_TRC20_ALLOWLIST to up to 8 comma-separated, checksummed TRON contract addresses that your operator has independently reviewed. Never copy a token contract from an untrusted invoice into this allowlist.
+- The optional F41_MAINNET_TRON_PRO_API_KEY is read as a request header but is never written to reports. This tool uses only https://api.trongrid.io; it cannot be pointed to arbitrary remote RPC servers.
+- RPC errors, unavailable transactions, mismatches, duplicates and malformed event logs all fail closed. Outputs include node-response SHA-256 hashes and a private integrity manifest.
+- It is evidence from ONE externally operated SolidityNode service, NOT an independent auditor, second-node consensus, guarantee against RPC compromise, or legal/financial certification.
+- Passing mainnet checks still NEVER authorizes order fulfillment, customer delivery, escrow settlement, exchange listing, or sale. A separate reviewed production gate is required.
+
+References: official TRON Developer Hub SolidityNode GetTransactionById and GetTransactionInfoById API documentation.
