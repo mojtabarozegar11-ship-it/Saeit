@@ -120,6 +120,47 @@ jobs:
           assert d['commercial_release_authorized'] is False
           print('F26_PORTABLE_REPRODUCIBLE_OFFLINE_WITHOUT_SITE_PACKAGES=PASS')
           PY
+      - name: Independently rehearse actual private deployment and verify immutable receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          private="$RUNNER_TEMP/private-portable-fixture"
+          run="90001234567-1"
+          original="$private/f26-real-data-research/$run"
+          stage="$private/f26-real-data-research/.incoming-portable-$run"
+          mkdir -p "$original" "$stage"
+          cp "$RUNNER_TEMP/f26-real-rice/"* "$original/"
+          cp scripts/factory_f26_real_rice_cli.py scripts/factory_f26_rice_onnx_portable.py "$stage/"
+          cp "$RUNNER_TEMP/rice-portable-spec.json" "$stage/portable-spec.json"
+          cp "$RUNNER_TEMP/rice-inference.csv" "$stage/rice-inference.csv"
+          python3 - "$original" "$stage" "$run" <<'PY'
+          import hashlib,json,sys
+          from pathlib import Path
+          original,stage,run=(Path(sys.argv[1]),Path(sys.argv[2]),sys.argv[3])
+          card=json.loads((original/"model_card.json").read_text())
+          received={
+              "schema":"saeit.factory.f26.real-rice-research-pilot.v1.vps-admission",
+              "run_id":run,
+              "research_model_sha256":card["onnx_model_sha256"],
+              "commercial_release_allowed":False,
+              "professional_quality_1000_certified":False,
+              "previous_f26_native_48_models_preserved":True
+          }
+          (original/"private-f26-real-data-receipt.json").write_text(json.dumps(received)+"\n")
+          names=("portable-spec.json","rice-inference.csv",
+                 "factory_f26_real_rice_cli.py","factory_f26_rice_onnx_portable.py")
+          proof={k:hashlib.sha256((stage/k).read_bytes()).hexdigest() for k in names}
+          (stage/"hash-manifest.json").write_text(json.dumps(proof)+"\n")
+          PY
+          python3 -B deploy/factory_f26_portable_private_install.py \
+            --factory-private "$private" --source-run "$run" \
+            --source-commit "$GITHUB_SHA" \
+            --hash-manifest "$stage/hash-manifest.json"
+          test -s "$private/f26-real-data-research/portable-$run/private-portable-deployment-receipt.json"
+          test -s "$original/rice_cultivar_real_pilot.onnx"
+          test -s "$private/f26-real-data-research/portable-$run/private-offline-prediction-proof.json"
+          echo F26_REAL_PORTABLE_PRIVATE_INSTALL_REHEARSAL=PASS
+
       - name: Privately admit SHA-bound real-data pilot into existing VPS F26 research evidence
         if: github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
         shell: bash
