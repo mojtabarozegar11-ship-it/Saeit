@@ -151,6 +151,8 @@ class DesignIntakeTests(unittest.TestCase):
         ident='WO-00000001'
         record=self.record('site_need',ident=ident)
         record.update(id=ident,origin='site-topic-snapshot',phase='engineering_specification',
+                      schema='saeit.factory.production-instructions.v1',
+                      instruction_kind='private_factory_work_order',fingerprint='a'*64,
                       status='issued',public_distribution_allowed=False)
         order_file=self.root/'production-instructions/orders'/(ident+'.json')
         designer.save(order_file,record)
