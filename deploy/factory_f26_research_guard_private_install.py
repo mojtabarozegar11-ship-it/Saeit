@@ -50,6 +50,7 @@ def locate(root, guard):
                  or receipt.get("professional_quality_1000_certified") is not False
                  or receipt.get("previous_f26_native_48_models_preserved") is not True
                  or card.get("onnx_model_sha256")!=guard["model_onnx_sha256"]
+                 or digest(folder/"rice_cultivar_real_pilot.onnx",16_000_000)!=guard["model_onnx_sha256"]
                  or card.get("dataset",{}).get("download_archive_sha256")!=guard["source_dataset_sha256"]
                  or card.get("quality_1000_certified") is not False):
                 continue
