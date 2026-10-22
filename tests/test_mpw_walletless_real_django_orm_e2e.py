@@ -370,7 +370,6 @@ class RealDjangoWalletlessTests(unittest.TestCase):
 
     def test_anonymous_one_click_checkout_claim_status_paid_download(self):
         from django.test import RequestFactory
-        from django.contrib.auth.models import AnonymousUser
         from django.http import Http404
         from services.mpw_walletless_django_guest_claim import COOKIE_NAME,read_guest_buyer
         from services.mpw_walletless_django_guest_staging_web import (
@@ -380,7 +379,7 @@ class RealDjangoWalletlessTests(unittest.TestCase):
         def req(method,path,cookie=None):
             r=getattr(factory,method)(path,secure=True,HTTP_HOST="isolated.test")
             r._dont_enforce_csrf_checks=True
-            r.user=AnonymousUser()
+            r.user=SimpleNamespace(is_authenticated=False,is_active=False,pk=None)
             if cookie:r.COOKIES[COOKIE_NAME]=cookie
             return r
         with (patch("django.contrib.auth.get_user_model",return_value=User),
