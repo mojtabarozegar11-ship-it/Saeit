@@ -18,6 +18,7 @@ ORDER = re.compile(r"F41-[a-z0-9-]{3,56}\Z")
 MAX_ORDERS = 64
 MAX_ACTIVE_PER_CYCLE = 4
 MAX_TX_PER_ORDER = 2
+MAX_RPC_PER_CYCLE = 8
 
 
 def _dir(path):
@@ -65,7 +66,7 @@ def scan(queue, outputs, assets, proofs, *, now=None, execute=False, issue=final
     eligible = []
     counters = {"scanned": len(entries), "reconciliation_orders": 0,
                 "pilot_skipped": 0, "output_pending": 0,
-                "cost_limited": 0, "proofs_created": 0,
+                "cost_limited": 0, "rpc_budget_deferred": 0, "proofs_created": 0,
                 "idempotent": 0, "verified_invoices": 0}
     for path in entries:
         if (path.is_symlink() or not path.is_file() or path.stat().st_size > 150000
@@ -96,9 +97,22 @@ def scan(queue, outputs, assets, proofs, *, now=None, execute=False, issue=final
     if eligible:
         shift = (int(now.timestamp()) // 900) % len(eligible)
         eligible = eligible[shift:] + eligible[:shift]
-    # Maximum eight RPCs at ten seconds each stays under the 130s cron window.
-    for path, spec in eligible[:MAX_ACTIVE_PER_CYCLE]:
+    # Maximum eight RPCs at ten seconds each: TRC20 consumes both body and receipt.
+    remaining_rpc = MAX_RPC_PER_CYCLE
+    selected = 0
+    for path, spec in eligible:
+        if selected >= MAX_ACTIVE_PER_CYCLE:
+            break
         target = proofs / (path.stem + "-" + cycle)
+        rpc_cost = sum(2 if inv["asset"] == "TRC20" else 1
+                       for obs in spec["data"]["observations"]
+                       for inv in spec["data"]["invoices"] if inv["id"] == obs["invoice_id"])
+        if rpc_cost > remaining_rpc and not target.exists():
+            counters["rpc_budget_deferred"] += 1
+            continue
+        if not target.exists():
+            remaining_rpc -= rpc_cost
+        selected += 1
         if target.is_symlink():
             raise ValueError("F41_AUTOSCAN_PROOF_SYMLINK")
         if target.exists():
@@ -113,7 +127,7 @@ def scan(queue, outputs, assets, proofs, *, now=None, execute=False, issue=final
             _proof_valid(target, spec)
             counters["proofs_created"] += 1
             counters["verified_invoices"] += result["verified_match_count"]
-    counters["deferred_due_to_cycle_cap"] = max(0, len(eligible) - MAX_ACTIVE_PER_CYCLE)
+    counters["deferred_due_to_cycle_cap"] = max(0, len(eligible) - selected)
     counters["financial_actions"] = 0
     counters["customer_delivery_enabled"] = False
     return counters

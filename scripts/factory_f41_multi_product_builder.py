@@ -128,8 +128,13 @@ def reconciliation(data):
         raise ValueError("F41_RECONCILIATION_SIZE")
     expected = {}
     for inv in invoices:
-        if type(inv) is not dict or set(inv) != {"id", "network", "asset", "recipient", "amount_base_units"}:
+        basic_fields = {"id", "network", "asset", "recipient", "amount_base_units"}
+        if type(inv) is not dict or set(inv) != (basic_fields | ({"token_contract"} if inv.get("asset") == "TRC20" else set())):
             raise ValueError("F41_INVOICE_FIELDS")
+        if inv["asset"] == "TRC20":
+            contract = inv["token_contract"]
+            if type(contract) is not str or not re.fullmatch(r"T[1-9A-HJ-NP-Za-km-z]{33}", contract):
+                raise ValueError("F41_TRC20_CONTRACT_REQUIRED")
         ident = inv["id"]
         if (type(ident) is not str or not SAFE.fullmatch(ident) or ident in expected
                 or inv["network"] != "shasta" or inv["asset"] not in ("TRX", "TRC20")

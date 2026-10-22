@@ -20,6 +20,9 @@ import factory_f41_multi_product_builder as builder
 
 SCHEMA = "saeit.factory.f41-shasta-finality.v1"
 NODE = "https://api.shasta.trongrid.io/walletsolidity/gettransactionbyid"
+NODE_INFO = "https://api.shasta.trongrid.io/walletsolidity/gettransactioninfobyid"
+TRANSFER_TOPIC = "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+TOPIC = re.compile(r"[0-9a-fA-F]{64}\Z")
 TX = re.compile(r"[a-fA-F0-9]{64}\Z")
 ADDRESS = re.compile(r"41[a-fA-F0-9]{40}\Z")
 B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
@@ -56,8 +59,10 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def solidity_lookup(txid):
-    """Only fixed Shasta SolidityNode; never makes a financial RPC."""
+def _solidity_query(txid, endpoint):
+    """Only two pinned read-only Shasta SolidityNode RPCs are permitted."""
+    if endpoint not in (NODE, NODE_INFO):
+        raise ValueError("F41_RPC_ENDPOINT_NOT_ALLOWLISTED")
     if type(txid) is not str or not TX.fullmatch(txid):
         raise ValueError("F41_TXID_INVALID")
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
@@ -67,7 +72,7 @@ def solidity_lookup(txid):
             raise ValueError("F41_RPC_KEY_INVALID")
         headers["TRON-PRO-API-KEY"] = key
     request = urllib.request.Request(
-        NODE, data=canonical({"value": txid.lower()}).strip(),
+        endpoint, data=canonical({"value": txid.lower()}).strip(),
         headers=headers, method="POST")
     opener = urllib.request.build_opener(NoRedirect())
     with opener.open(request, timeout=10) as response:
@@ -82,6 +87,99 @@ def solidity_lookup(txid):
     if type(result) is not dict:
         raise ValueError("F41_RPC_RESPONSE_NOT_OBJECT")
     return result
+
+
+def solidity_lookup(txid):
+    return _solidity_query(txid, NODE)
+
+
+def solidity_receipt_lookup(txid):
+    return _solidity_query(txid, NODE_INFO)
+
+
+def approved_token_contracts():
+    """Explicit Shasta-only operator approval, never derived from buyer input."""
+    raw = os.environ.get("F41_SHASTA_TRC20_ALLOWLIST", "")
+    if len(raw) > 512:
+        raise ValueError("F41_TRC20_ALLOWLIST_TOO_LARGE")
+    if not raw:
+        return set()
+    parts = raw.split(",")
+    if len(parts) > 8 or any(not p or p.strip() != p for p in parts):
+        raise ValueError("F41_TRC20_ALLOWLIST_INVALID")
+    decoded = {tron_hex(p) for p in parts}
+    if len(decoded) != len(parts):
+        raise ValueError("F41_TRC20_ALLOWLIST_DUPLICATES")
+    return decoded
+
+
+def check_trc20_body(obs, transaction):
+    if type(transaction) is not dict:
+        return "TRC20_BODY_INVALID"
+    if not transaction:
+        return "NOT_YET_VISIBLE_ON_SOLIDITY_NODE"
+    txid = transaction.get("txID")
+    if type(txid) is not str or not TX.fullmatch(txid) or txid.lower() != obs["txid"].lower():
+        return "TRC20_BODY_TXID_MISMATCH"
+    if transaction.get("visible") is True:
+        return "TRC20_BODY_VISIBLE_FORMAT_UNEXPECTED"
+    contracts = transaction.get("raw_data", {}).get("contract") if type(transaction.get("raw_data")) is dict else None
+    ret = transaction.get("ret")
+    if (type(contracts) is not list or len(contracts) != 1 or
+            type(contracts[0]) is not dict or contracts[0].get("type") != "TriggerSmartContract" or
+            type(ret) is not list or len(ret) != 1 or type(ret[0]) is not dict or
+            ret[0].get("contractRet") != "SUCCESS"):
+        return "TRC20_BODY_EXECUTION_OR_CONTRACT_INVALID"
+    return None
+
+
+def check_trc20_receipt(inv, obs, receipt, contract_hex):
+    """Require one exact Transfer log from an approved TRC20 contract, solidified."""
+    if type(receipt) is not dict or not receipt:
+        return "TRC20_FINAL_RECEIPT_NOT_AVAILABLE", False
+    txid = receipt.get("id")
+    if (type(txid) is not str or not TX.fullmatch(txid) or
+            txid.lower() != obs["txid"].lower()):
+        return "TRC20_RECEIPT_TXID_MISMATCH", False
+    if (receipt.get("result") == "FAILED" or
+            type(receipt.get("blockNumber")) is not int or receipt["blockNumber"] <= 0 or
+            type(receipt.get("receipt")) is not dict or
+            receipt["receipt"].get("result") != "SUCCESS"):
+        return "TRC20_RECEIPT_NOT_SUCCESSFUL", False
+    logs = receipt.get("log", [])
+    if type(logs) is not list or len(logs) > 256:
+        return "TRC20_LOG_INVENTORY_INVALID", False
+    recipient_hex = tron_hex(inv["recipient"])[2:]
+    contract_id = contract_hex[2:]
+    expected = builder.positive(inv["amount_base_units"])
+    matches = 0
+    for log in logs:
+        if type(log) is not dict:
+            return "TRC20_LOG_MALFORMED", False
+        address, topics, data = log.get("address"), log.get("topics"), log.get("data")
+        if type(address) is not str or not re.fullmatch(r"[0-9a-fA-F]{40}", address):
+            return "TRC20_LOG_ADDRESS_INVALID", False
+        if address.lower() != contract_id:
+            continue
+        if (type(topics) is not list or len(topics) != 3 or
+                any(type(t) is not str or not TOPIC.fullmatch(t) for t in topics)):
+            return "TRC20_APPROVED_CONTRACT_EVENT_INVALID", False
+        if topics[0].lower() != TRANSFER_TOPIC:
+            continue
+        if (not topics[1].startswith("0" * 24) or
+                not topics[2].startswith("0" * 24) or
+                type(data) is not str or not TOPIC.fullmatch(data)):
+            return "TRC20_TRANSFER_ENCODING_INVALID", False
+        if (int(topics[1][24:], 16) == 0 or
+                topics[2][24:].lower() != recipient_hex or
+                int(data, 16) != expected):
+            continue
+        matches += 1
+    if matches == 1:
+        return "FINALIZED_ALLOWLISTED_TRC20_TRANSFER_ON_SHASTA", True
+    if matches > 1:
+        return "TRC20_DUPLICATE_MATCHING_EVENTS", False
+    return "TRC20_APPROVED_TRANSFER_NOT_MATCHED", False
 
 
 def check_chain(inv, obs, transaction):
@@ -125,7 +223,7 @@ def check_chain(inv, obs, transaction):
     return "FINALIZED_TRX_MATCH_ON_SHASTA", True
 
 
-def evaluate(spec, lookup=solidity_lookup):
+def evaluate(spec, lookup=solidity_lookup, receipt_lookup=solidity_receipt_lookup):
     if (type(spec) is not dict or spec.get("kind") != "reconciliation"
             or spec.get("schema") != builder.SCHEMA
             or type(spec.get("data")) is not dict):
@@ -154,9 +252,23 @@ def evaluate(spec, lookup=solidity_lookup):
             txid = obs["txid"].lower()
             if any(obs[field] != inv[field] for field in ("network", "asset", "recipient", "amount_base_units")):
                 status = "OBSERVATION_INVOICE_MISMATCH"
-            elif inv["asset"] != "TRX":
-                # TRC20 requires allowlisted token contract, event logs, and receipt checks.
-                status = "TRC20_FINALITY_NOT_SUPPORTED"
+            elif inv["asset"] == "TRC20":
+                try:
+                    token = tron_hex(inv["token_contract"])
+                    allowlist = approved_token_contracts()
+                    if token not in allowlist:
+                        status = "TRC20_CONTRACT_NOT_APPROVED"
+                    else:
+                        body = lookup(txid)
+                        body_error = check_trc20_body(obs, body)
+                        if body_error is not None:
+                            status = body_error
+                        else:
+                            status, final = check_trc20_receipt(
+                                inv, obs, receipt_lookup(txid), token)
+                except (OSError, TimeoutError, ValueError, json.JSONDecodeError,
+                        urllib.error.URLError, UnicodeError, OverflowError):
+                    status = "TRC20_NODE_OR_CONTRACT_CONFIG_INVALID"
             else:
                 try:
                     response = lookup(txid)
@@ -170,13 +282,13 @@ def evaluate(spec, lookup=solidity_lookup):
             "delivery_authorized": False,
         })
     return {
-        "schema": SCHEMA, "network": "shasta", "asset_scope": "native_TRX_only",
+        "schema": SCHEMA, "network": "shasta", "asset_scope": "native_TRX_and_allowlisted_TRC20",
         "solidity_endpoint": NODE,
         "original_request_sha256": checksum(builder.enc(spec)),
         "records": records,
         "verified_match_count": sum(int(x["solidity_finality_verified"]) for x in records),
         "all_invoices_finalized": bool(records) and all(x["solidity_finality_verified"] for x in records),
-        "simulation_used": lookup is not solidity_lookup,
+        "simulation_used": lookup is not solidity_lookup or receipt_lookup is not solidity_receipt_lookup,
         "customer_delivery_enabled": False, "mainnet_enabled": False,
         "financial_actions": 0, "transaction_broadcasts": 0,
         "quality_1000_certified": False, "market_liquidity_proven": False,

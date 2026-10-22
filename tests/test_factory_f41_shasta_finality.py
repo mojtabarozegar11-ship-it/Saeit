@@ -2,6 +2,8 @@
 import copy
 import hashlib
 import json
+import os
+from unittest.mock import patch
 from pathlib import Path
 import sys
 import unittest
@@ -32,6 +34,38 @@ def response(txid, amount=17000000, recipient=None):
                 "amount": amount,
             }
         }}]},
+    }
+
+
+def trc20_sample():
+    spec = sample()
+    for inv in spec["data"]["invoices"]:
+        inv["asset"] = "TRC20"
+        inv["token_contract"] = RECIPIENT
+    for obs in spec["data"]["observations"]:
+        obs["asset"] = "TRC20"
+    return spec
+
+
+def contract_body(txid):
+    body = response(txid)
+    body["raw_data"]["contract"][0]["type"] = "TriggerSmartContract"
+    return body
+
+
+def event_receipt(txid, *, amount=None, recipient=None, contract=None, success=True):
+    if amount is None:
+        amount = 17000000 if txid == "a"*64 else 25000000
+    receiver = finality.tron_hex(recipient or RECIPIENT)[2:]
+    sender = "ab" * 20
+    contract_id = finality.tron_hex(contract or RECIPIENT)[2:]
+    return {
+        "id": txid, "blockNumber": 123,
+        "receipt": {"result": "SUCCESS" if success else "REVERT"},
+        "log": [{"address": contract_id, "topics": [
+            finality.TRANSFER_TOPIC,
+            "0"*24 + sender, "0"*24 + receiver],
+            "data": format(amount, "064x")}],
     }
 
 
@@ -130,12 +164,116 @@ class FinalityTests(unittest.TestCase):
         spec = sample()
         for inv in spec["data"]["invoices"]:
             inv["asset"] = "TRC20"
+            inv["token_contract"] = RECIPIENT
         for obs in spec["data"]["observations"]:
             obs["asset"] = "TRC20"
         def must_not_call(txid):
-            raise AssertionError("TRC20 must not be verified by native TRX rule")
-        report = finality.evaluate(spec, must_not_call)
-        self.assertTrue(all(x["status"] == "TRC20_FINALITY_NOT_SUPPORTED" for x in report["records"]))
+            raise AssertionError("Unapproved TRC20 must not query the chain")
+        with patch.dict(os.environ, {"F41_SHASTA_TRC20_ALLOWLIST": ""}):
+            report = finality.evaluate(spec, must_not_call)
+        self.assertTrue(all(x["status"] == "TRC20_CONTRACT_NOT_APPROVED" for x in report["records"]))
+
+    def test_trc20_allowlisted_receipt_solidified_and_exact(self):
+        with patch.dict(os.environ, {"F41_SHASTA_TRC20_ALLOWLIST": RECIPIENT}):
+            report = finality.evaluate(trc20_sample(), contract_body, event_receipt)
+        self.assertEqual(report["verified_match_count"], 2)
+        self.assertTrue(report["all_invoices_finalized"])
+        self.assertTrue(report["simulation_used"])
+        self.assertFalse(report["customer_delivery_enabled"])
+        self.assertFalse(report["mainnet_enabled"])
+
+    def test_trc20_missing_contract_rejected_in_builder(self):
+        spec = trc20_sample()
+        del spec["data"]["invoices"][0]["token_contract"]
+        with self.assertRaisesRegex(ValueError, "INVOICE_FIELDS"):
+            finality.evaluate(spec, contract_body, event_receipt)
+
+    def test_trc20_extra_contract_field_on_trx_rejected(self):
+        spec = sample()
+        spec["data"]["invoices"][0]["token_contract"] = RECIPIENT
+        with self.assertRaisesRegex(ValueError, "INVOICE_FIELDS"):
+            finality.evaluate(spec, contract_body, event_receipt)
+
+    def test_trc20_wrong_amount_never_finalizes(self):
+        with patch.dict(os.environ, {"F41_SHASTA_TRC20_ALLOWLIST": RECIPIENT}):
+            report = finality.evaluate(trc20_sample(), contract_body,
+                                      lambda txid: event_receipt(txid, amount=1))
+        self.assertEqual(report["verified_match_count"], 0)
+
+    def test_trc20_wrong_contract_event_never_finalizes(self):
+        def wrong_contract(txid):
+            receipt = event_receipt(txid)
+            receipt["log"][0]["address"] = "ab"*20
+            return receipt
+        with patch.dict(os.environ, {"F41_SHASTA_TRC20_ALLOWLIST": RECIPIENT}):
+            report = finality.evaluate(trc20_sample(), contract_body, wrong_contract)
+        self.assertEqual(report["verified_match_count"], 0)
+
+    def test_trc20_failed_execution_receipt_never_finalizes(self):
+        with patch.dict(os.environ, {"F41_SHASTA_TRC20_ALLOWLIST": RECIPIENT}):
+            report = finality.evaluate(trc20_sample(), contract_body,
+                                      lambda txid: event_receipt(txid, success=False))
+        self.assertEqual(report["verified_match_count"], 0)
+
+    def test_trc20_receipt_without_solidified_height_never_finalizes(self):
+        def no_block(txid):
+            receipt = event_receipt(txid)
+            receipt["blockNumber"] = 0
+            return receipt
+        with patch.dict(os.environ, {"F41_SHASTA_TRC20_ALLOWLIST": RECIPIENT}):
+            report = finality.evaluate(trc20_sample(), contract_body, no_block)
+        self.assertEqual(report["verified_match_count"], 0)
+
+    def test_trc20_duplicate_matching_events_never_finalize(self):
+        def repeated(txid):
+            receipt = event_receipt(txid)
+            receipt["log"].append(copy.deepcopy(receipt["log"][0]))
+            return receipt
+        with patch.dict(os.environ, {"F41_SHASTA_TRC20_ALLOWLIST": RECIPIENT}):
+            report = finality.evaluate(trc20_sample(), contract_body, repeated)
+        self.assertTrue(all(x["status"] == "TRC20_DUPLICATE_MATCHING_EVENTS" for x in report["records"]))
+        self.assertEqual(report["verified_match_count"], 0)
+
+    def test_trc20_non_trigger_body_stops_before_receipt_query(self):
+        def no_receipt(_):
+            self.fail("A plain TRX transfer must not trigger token receipt lookup")
+        with patch.dict(os.environ, {"F41_SHASTA_TRC20_ALLOWLIST": RECIPIENT}):
+            report = finality.evaluate(trc20_sample(),
+                                      lambda txid: response(txid), no_receipt)
+        self.assertEqual(report["verified_match_count"], 0)
+
+    def test_trc20_wrong_receipt_txid_never_finalizes(self):
+        def replay(txid):
+            receipt = event_receipt(txid)
+            receipt["id"] = "f"*64
+            return receipt
+        with patch.dict(os.environ, {"F41_SHASTA_TRC20_ALLOWLIST": RECIPIENT}):
+            report = finality.evaluate(trc20_sample(), contract_body, replay)
+        self.assertEqual(report["verified_match_count"], 0)
+
+    def test_trc20_wrong_event_signature_never_finalizes(self):
+        def bad_signature(txid):
+            receipt = event_receipt(txid)
+            receipt["log"][0]["topics"][0] = "f"*64
+            return receipt
+        with patch.dict(os.environ, {"F41_SHASTA_TRC20_ALLOWLIST": RECIPIENT}):
+            report = finality.evaluate(trc20_sample(), contract_body, bad_signature)
+        self.assertEqual(report["verified_match_count"], 0)
+
+    def test_trc20_malformed_sender_encoding_never_finalizes(self):
+        def bad_sender(txid):
+            receipt = event_receipt(txid)
+            receipt["log"][0]["topics"][1] = "f"*64
+            return receipt
+        with patch.dict(os.environ, {"F41_SHASTA_TRC20_ALLOWLIST": RECIPIENT}):
+            report = finality.evaluate(trc20_sample(), contract_body, bad_sender)
+        self.assertEqual(report["verified_match_count"], 0)
+
+    def test_trc20_untrusted_allowlist_fails_closed(self):
+        with patch.dict(os.environ, {"F41_SHASTA_TRC20_ALLOWLIST": "INVALID"}):
+            report = finality.evaluate(trc20_sample(), contract_body, event_receipt)
+        self.assertEqual(report["verified_match_count"], 0)
+        self.assertTrue(all("CONFIG_INVALID" in x["status"] for x in report["records"]))
 
     def test_network_failure_is_never_finalized(self):
         def fail(txid):
