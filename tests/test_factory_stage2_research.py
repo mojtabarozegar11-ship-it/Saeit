@@ -161,14 +161,14 @@ class StageTwoTests(unittest.TestCase):
         self.assertEqual(STAGE1.run(self.root, batch=250)["new_handoffs"], 200)
         amount = STAGE2.safe_catalog_seed(self.root,
             BASE / "docs/agri_p0_stage2_curated_research_sources_20261022.json")
-        self.assertEqual(amount, 3)
+        self.assertEqual(amount, 10)
         self.assertEqual(STAGE2.safe_catalog_seed(self.root,
             BASE / "docs/agri_p0_stage2_curated_research_sources_20261022.json"), 0)
         status = STAGE2.stage2_loop(self.root, batch=200)
-        self.assertEqual(status["newly_completed_research_dossiers"], 3)
-        self.assertEqual(status["newly_documented_missing_sources"], 197)
-        self.assertEqual(status["stage_3_handoffs_total"], 3)
-        self.assertEqual(status["stage_2_research_briefs_total"], 197)
+        self.assertEqual(status["newly_completed_research_dossiers"], 10)
+        self.assertEqual(status["newly_documented_missing_sources"], 190)
+        self.assertEqual(status["stage_3_handoffs_total"], 10)
+        self.assertEqual(status["stage_2_research_briefs_total"], 190)
 
 
 if __name__ == "__main__":
