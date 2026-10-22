@@ -22,6 +22,9 @@ from services.mpw_walletless_django_guest_claim import (
 from services.mpw_walletless_django_staging_web import (
     _start_order,_show_invoice,_invoice_status,_download_paid
 )
+from services.mpw_walletless_django_guest_handoff import (
+    create_wallet_handoff,redeem_wallet_handoff
+)
 
 def _authenticate_guest(request,*,create=False):
     from django.conf import settings
@@ -69,13 +72,44 @@ def guest_start_order(request,product_id):
 @require_GET
 def guest_show_invoice(request,invoice_id):
     _authenticate_guest(request)
-    return _show_invoice(request,invoice_id)
+    try:
+        path=create_wallet_handoff(invoice_id=invoice_id,buyer_id=request.user.pk)
+    except PaymentHold:
+        # Too many mobile launches: do NOT offer a dead link. QR still works.
+        path=None
+    return _show_invoice(
+        request,invoice_id,guest_checkout=True,wallet_handoff_path=path,
+    )
 
 @never_cache
 @require_GET
 def guest_invoice_status(request,invoice_id):
     _authenticate_guest(request)
     return _invoice_status(request,invoice_id)
+
+@never_cache
+@require_GET
+def guest_redeem_wallet_link(request,token):
+    """One-time wallet-browser bearer link, no existing cookie required."""
+    from django.conf import settings
+    from django.db import connection
+    from django.http import HttpResponseRedirect
+    try:_test_only_guard(settings,connection)
+    except PaymentHold as exc:
+        raise Http404("Wallet handoff is not available") from exc
+    host=request.get_host().lower().split(":")[0]
+    if not request.is_secure() or not host.endswith((".test",".invalid")):
+        raise Http404
+    try:
+        invoice_id,new_cookie=redeem_wallet_handoff(token)
+    except PaymentHold as exc:
+        raise Http404("Expired or already-used wallet link") from exc
+    result=HttpResponseRedirect(f"/commerce/trx-easy/invoice/{invoice_id}/")
+    install_guest_cookie(result,new_cookie)
+    result["Cache-Control"]="no-store, private, max-age=0"
+    result["Referrer-Policy"]="no-referrer"
+    result["X-Robots-Tag"]="noindex, nofollow"
+    return result
 
 @never_cache
 @require_GET
@@ -89,6 +123,7 @@ def guest_download_paid(request,invoice_id):
 STAGING_GUEST_URLPATTERNS=(
     ("commerce/trx-easy/start/<int:product_id>/",guest_start_order),
     ("commerce/trx-easy/invoice/<int:invoice_id>/",guest_show_invoice),
+    ("commerce/trx-easy/claim/<str:token>/",guest_redeem_wallet_link),
     ("commerce/trx-easy/status/<int:invoice_id>/",guest_invoice_status),
     ("commerce/trx-easy/download/<int:invoice_id>/",guest_download_paid),
 )
