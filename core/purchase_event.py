@@ -7,6 +7,7 @@ unverified factory shipment is permitted. A single payment intent creates
 at most one purchase-review receipt, even on duplicate provider callbacks.
 """
 import logging
+import re
 
 from django.db import transaction
 
@@ -32,25 +33,56 @@ def process_paid_purchase_review(payment_intent_id, *, provider, event_id):
             .filter(pk=payment_intent_id, provider=provider)
             .first()
         )
-        if not intent or intent.status != "succeeded" or intent.order.status != "paid":
+        if not intent or intent.order.status != "paid":
             return False
         event = PaymentWebhookEvent.objects.filter(
             provider=provider,
             event_id=event_id,
             payment_intent_id=intent.pk,
-            event_type="payment.succeeded",
             status="processed",
         ).first()
         if not event:
             return False
-        if not LedgerEntry.objects.filter(
-            order_id=intent.order_id,
-            payment_intent_id=intent.pk,
-            reference=f"payment:{provider}:{event_id}",
-            entry_type="payment",
-            amount=intent.amount,
-            currency=intent.currency,
-        ).exists():
+
+        if event.event_type == "payment.succeeded" and intent.status == "succeeded":
+            # The core webhook owns an authenticated success event and a
+            # matching internal ledger entry. This is NOT a chain proof.
+            proof_accepted = LedgerEntry.objects.filter(
+                order_id=intent.order_id,
+                payment_intent_id=intent.pk,
+                reference=f"payment:{provider}:{event_id}",
+                entry_type="payment",
+                amount=intent.amount,
+                currency=intent.currency,
+            ).exists()
+            proof_kind = "signed_provider_callback"
+        elif (event.event_type == "tron_finalized"
+              and provider == "mpw_walletless_trx_v1"
+              and intent.status == "paid"
+              and re.fullmatch(r"[0-9a-f]{64}", event_id)
+              and re.fullmatch(r"[0-9a-f]{64}", event.payload_hash or "")):
+            # Only the independently validated TRON settlement adapter may
+            # write this receipt. Recheck its ledger-to-evidence binding.
+            ledger = LedgerEntry.objects.filter(
+                order_id=intent.order_id,
+                payment_intent_id=intent.pk,
+                reference=f"walletless:tron-mainnet:{event_id}",
+                entry_type="credit",
+                amount=intent.amount,
+                currency=intent.currency,
+            ).first()
+            md = ledger.metadata if ledger and isinstance(ledger.metadata, dict) else {}
+            proof_accepted = bool(
+                ledger and md.get("payment_method") == provider
+                and md.get("network") == "tron-mainnet"
+                and md.get("tx_hash") == event_id
+                and md.get("evidence_digest") == event.payload_hash
+                and md.get("walletless_receipt_event_id") == event.pk
+            )
+            proof_kind = "dual_node_tron_settlement_receipt"
+        else:
+            return False
+        if not proof_accepted:
             return False
 
         if AuditLog.objects.filter(
@@ -70,7 +102,8 @@ def process_paid_purchase_review(payment_intent_id, *, provider, event_id):
             target_type="PaymentIntent",
             target_id=str(intent.pk),
             after_state={
-                "trigger": "committed_authenticated_payment.succeeded",
+                "trigger": "committed_paid_order",
+                "proof_kind": proof_kind,
                 "order_id": intent.order_id,
                 "event_id": event_id,
                 "provider": provider,
@@ -78,7 +111,7 @@ def process_paid_purchase_review(payment_intent_id, *, provider, event_id):
                 "decision": diagnosis["decision"],
                 "next_constraint": review["next_constraint"],
                 "data_scope": "local_django_only",
-                "independent_cash_reconciliation": "not_verified",
+                "independent_cash_reconciliation": "provider_or_chain_receipt_only_not_cash_reconciliation",
                 "factory_delivery": "not_connected",
             },
             trace_id=f"paid-purchase-review-{intent.pk}",

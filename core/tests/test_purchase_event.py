@@ -1,9 +1,10 @@
 """Paid orders trigger one bounded management review, without any scheduler."""
 import pytest
+import hashlib
 from django.test import override_settings
 from rest_framework.test import APIClient
 
-from core.models import AuditLog, LedgerEntry, Order, PaymentIntent
+from core.models import AuditLog, LedgerEntry, Order, PaymentIntent, PaymentWebhookEvent
 from core.purchase_event import process_paid_purchase_review
 from core.tests.test_payment_webhook import signed_post
 
@@ -117,3 +118,47 @@ def test_review_error_never_reverses_committed_payment(django_user_model, monkey
     order.refresh_from_db()
     assert order.status == "paid"
     assert LedgerEntry.objects.filter(order=order, entry_type="payment").count() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_dual_node_tron_receipt_can_trigger_only_with_ledger_evidence(django_user_model):
+    order, intent = fixture_intent(django_user_model, "tron")
+    order.status = "paid"
+    order.save(update_fields=["status"])
+    intent.provider = "mpw_walletless_trx_v1"
+    intent.status = "paid"
+    intent.save(update_fields=["provider", "status"])
+    tx = "a" * 64
+    digest = hashlib.sha256(b"independent-node-proof").hexdigest()
+    receipt = PaymentWebhookEvent.objects.create(
+        provider=intent.provider, event_id=tx, event_type="tron_finalized",
+        payment_intent=intent, payload_hash=digest, status="processed",
+    )
+    entry = LedgerEntry.objects.create(
+        order=order, payment_intent=intent, entry_type="credit",
+        amount=intent.amount, currency=intent.currency,
+        reference=f"walletless:tron-mainnet:{tx}",
+        metadata={
+            "payment_method": intent.provider,
+            "network": "tron-mainnet",
+            "tx_hash": tx,
+            "evidence_digest": "0" * 64,
+            "walletless_receipt_event_id": receipt.pk,
+        },
+    )
+    assert process_paid_purchase_review(
+        intent.pk, provider=intent.provider, event_id=tx
+    ) is False
+    assert not AuditLog.objects.filter(action="paid_purchase_operating_review").exists()
+    entry.metadata["evidence_digest"] = digest
+    entry.save(update_fields=["metadata"])
+    assert process_paid_purchase_review(
+        intent.pk, provider=intent.provider, event_id=tx
+    ) is True
+    assert process_paid_purchase_review(
+        intent.pk, provider=intent.provider, event_id=tx
+    ) is False
+    saved = AuditLog.objects.get(
+        action="paid_purchase_operating_review", target_id=str(intent.pk)
+    )
+    assert saved.after_state["proof_kind"] == "dual_node_tron_settlement_receipt"
