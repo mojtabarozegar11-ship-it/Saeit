@@ -2,6 +2,7 @@
 // Never sign, broadcast, distribute, mint or access the MojPlayWin payment database.
 import {TronWeb} from 'tronweb';
 import {readFile} from 'node:fs/promises';
+import {attestBytecode} from './bytecode-attestation.mjs';
 
 const manifest = JSON.parse(await readFile(new URL('../shasta-deployment.json', import.meta.url),'utf8'));
 if (manifest.network !== 'Shasta' || manifest.chain_scope !== 'TESTNET_ONLY' ||
@@ -48,9 +49,27 @@ const governor = contract('MojPilotGovernance',manifest.governance_contract);
 const token = contract('MojCoin',manifest.token_contract);
 const escrow = contract('MojGenesisDistributor',manifest.genesis_escrow);
 const nft = contract('MojAssets',manifest.nft_contract);
-for(const address of [manifest.governance_contract,manifest.token_contract,manifest.nft_contract]) {
-  const onChain = await readOnlyWithRetry(()=>tron.trx.getContract(address),'CODE_'+address);
-  if(!onChain?.bytecode) throw Error('SHASTA_CONTRACT_CODE_MISSING_'+address);
+// Require exact source-to-chain creation code and runtime code (with validated
+// immutable address slots). This also covers the constructor-created escrow.
+const bytecodeEvidence = [];
+const deployed = [
+  {name:'MojPilotGovernance', address:manifest.governance_contract,
+   constructorAddresses:manifest.test_governance_owners, immutableAddresses:[]},
+  {name:'MojCoin', address:manifest.token_contract,
+   constructorAddresses:[manifest.governance_contract], immutableAddresses:[manifest.genesis_escrow]},
+  {name:'MojGenesisDistributor', address:manifest.genesis_escrow,
+   constructorAddresses:[manifest.governance_contract],
+   immutableAddresses:[manifest.token_contract,manifest.governance_contract]},
+  {name:'MojAssets', address:manifest.nft_contract,
+   constructorAddresses:[manifest.governance_contract], immutableAddresses:[]}
+];
+for (const item of deployed) {
+  const info = await readOnlyWithRetry(
+    () => tron.trx.getContractInfo(item.address), 'CODE_'+item.name);
+  bytecodeEvidence.push(attestBytecode({
+    ...item, artifact:artifacts[item.name], chainInfo:info,
+    addressToHex:address => tron.address.toHex(address)
+  }));
 }
 for(let i=0;i<3;i++) requireSame(await view(governor,'owners',i),manifest.test_governance_owners[i],'GOVERNANCE_OWNER_'+i);
 requireEqual(await view(governor,'nonce'),0,'GOVERNANCE_NONCE');
@@ -83,6 +102,6 @@ console.log(JSON.stringify({
   mode:'MOJ1_SHASTA_PUBLIC_READ_ONLY',status:'PASS',token:manifest.token_contract,
   escrow:manifest.genesis_escrow,governance:manifest.governance_contract,
   nft:manifest.nft_contract,totalWholeTokens:manifest.total_supply_whole,
-  escrowFullyFunded:true,distributed:false,mainnet:false,privateKeyUsed:false,
+  escrowFullyFunded:true,distributed:false,bytecodeEvidence,mainnet:false,privateKeyUsed:false,
   paymentsModified:false
 },null,2));
