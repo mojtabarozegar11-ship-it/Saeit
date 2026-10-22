@@ -8,7 +8,9 @@ const specs = [
   {name: 'MojAssets', args: 1, functions: ['safeMint', 'tokenURI', 'owner', 'transferFrom']},
   {name: 'MojVestingVault', args: 6, functions: ['beneficiary', 'allocation', 'start', 'cliff', 'duration', 'released', 'vestedAt', 'fullyFunded', 'releasable', 'release']},
   {name: 'MojGenesisDistributor', args: 1, functions: ['governance', 'token', 'distributed', 'vaults', 'bucketAmount', 'distribute']},
-  {name: 'MojApprovalReserve', args: 4, functions: ['beneficiary', 'releaseController', 'allocation', 'trancheCap', 'scheduledAmount', 'releasedAmount', 'nextReleaseAt', 'trancheNonce', 'fullyFunded', 'scheduleRelease', 'cancelRelease', 'executeRelease']}
+  {name: 'MojApprovalReserve', args: 4, functions: ['beneficiary', 'releaseController', 'allocation', 'trancheCap', 'scheduledAmount', 'releasedAmount', 'nextReleaseAt', 'trancheNonce', 'fullyFunded', 'scheduleRelease', 'cancelRelease', 'executeRelease']},
+  {name: 'MojCoinGuarded', args: 1, functions: ['totalSupply', 'balanceOf', 'distributor']},
+  {name: 'MojGenesisFactoryGuarded', args: 1, functions: ['governance', 'token', 'distributed', 'vaults', 'bucketAmount', 'distribute']}
 ];
 
 const contractReports = [];
@@ -26,7 +28,7 @@ for (const {name, args, functions} of specs) {
   for (const functionName of functions) {
     if (!abiFunctions.has(functionName)) throw new Error(`${name}: missing ${functionName} function`);
   }
-  if (name === 'MojCoin' && [...abiFunctions].some(x => /^(mint|setMinter|freeze|upgradeTo)$/.test(x))) {
+  if ((name === 'MojCoin' || name === 'MojCoinGuarded') && [...abiFunctions].some(x => /^(mint|setMinter|freeze|upgradeTo)$/.test(x))) {
     throw new Error('Token has a prohibited supply/admin function');
   }
   if (name === 'MojVestingVault' && [...abiFunctions].some(x => /^(revoke|recover|setBeneficiary|upgradeTo)$/.test(x))) {

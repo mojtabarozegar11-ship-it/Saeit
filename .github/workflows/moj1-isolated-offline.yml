@@ -34,6 +34,9 @@ jobs:
       - name: Verify ABI, bytecode, and Shasta-only guard
         working-directory: experiments/moj1-pilot
         run: npm run preflight
+      - name: Assert Mainnet release remains blocked pending external approvals
+        working-directory: experiments/moj1-pilot
+        run: node scripts/release-readiness-offline.mjs --assert-blocked
       - name: Explicit no-chain safety receipt
         run: |
           echo 'MOJ1_CI_MODE=OFFLINE_ONLY'
