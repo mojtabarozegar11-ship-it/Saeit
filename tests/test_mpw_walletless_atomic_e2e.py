@@ -32,7 +32,7 @@ class AtomicPaymentTests(EphemeralMariaDBTests):
         self.c.commit()
 
     def first(self,o=21,c=42):
-        id_,amt,_=reserve_isolated(self.c,**args(order_id=o,customer_id=c))
+        id_,amt,_=reserve_isolated(self.c,**args(order_id=o,customer_id=c,random_below=lambda hi:o-21))
         return id_,amt
 
     def settle(self,invoice,amount,tx=TX1,**kwargs):
