@@ -38,7 +38,7 @@ def study(query,n):
     sentence=(
         "A systematic study of "+phrase+" identified measurable differences "
         "in substrate, growing conditions, and plant outcomes under "
-        "contrasting controlled agricultural treatments."
+        "contrasting controlled agricultural treatments"+str(n)+"."
     )
     abstract=(
         sentence+" We recorded environmental conditions and physiological "
@@ -107,6 +107,63 @@ class SourceScoutTests(unittest.TestCase):
         self.assertFalse(packet["quality1000_approved"])
         self.assertFalse(packet["public_distribution_allowed"])
 
+    def test_four_independent_papers_may_supply_five_distinct_real_claims(self):
+        title="Houseplant Rescue Guide"
+        papers=sample(title)[:4]
+        original=SCOUT.abstract_from_index(papers[0]["abstract_inverted_index"])
+        second=(
+            "Houseplant experiments also found significant differences in "
+            "growth responses across irrigation conditions in repeated "
+            "greenhouse observation cycles."
+        )
+        papers[0]["abstract_inverted_index"]=indexed(
+            original.replace(" We recorded", " "+second+" We recorded",1))
+        selected=SCOUT.select_papers(papers,SCOUT.keys(title),STAGE2)
+        result=SCOUT.evidence_from_papers(self.order(1),1,selected,STAGE2)
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result["sources"]),4)
+        self.assertEqual(len(result["claims"]),5)
+        self.assertEqual(len({item["statement"] for item in result["claims"]}),5)
+        self.assertIn(second,[item["statement"] for item in result["claims"]])
+        self.assertEqual(STAGE2.validate_evidence(result,self.order(1),1)[
+            "source_count"],4)
+        self.assertFalse(result["public_distribution_allowed"])
+        self.assertFalse(result["scientific_review_completed"])
+
+    def test_four_papers_without_genuine_fifth_passage_stay_blocked(self):
+        title="Houseplant Rescue Guide"
+        papers=SCOUT.select_papers(sample(title)[:4],SCOUT.keys(title),STAGE2)
+        self.assertIsNone(SCOUT.evidence_from_papers(
+            self.order(1),1,papers,STAGE2))
+        duplicates=SCOUT.select_papers(sample(title)[:5],
+                                       SCOUT.keys(title),STAGE2)
+        for paper in duplicates:
+            paper["support_sentence"]=duplicates[0]["support_sentence"]
+        self.assertIsNone(SCOUT.evidence_from_papers(
+            self.order(1),1,duplicates,STAGE2))
+
+    def test_existing_intact_v2_cache_promotes_without_api_call(self):
+        title="Houseplant Rescue Guide"
+        papers=SCOUT.select_papers(sample(title),SCOUT.keys(title),STAGE2)
+        order=self.order(1)
+        packet={
+            "schema":SCOUT.SCHEMA,
+            "source_product_id":"AGRI-001","order_id":order["id"],
+            "scout_algorithm_version":"v2-relevance-provenance",
+            "status":"indexed_references_found_require_additional_research",
+            "search_round":0,"checked_utc":SCOUT.utc(),
+            "indexed_abstract_candidates":papers,
+            "candidate_sha256":SCOUT.sha(papers)
+        }
+        STAGE2.atomic(self.area/"stage-02/literature-candidates/AGRI-001--r001.json",
+                      packet)
+        def no_network(_):
+            raise AssertionError("Cannot fetch when intact evidence is already enough")
+        result=SCOUT.sources_for_topic(self.root,STAGE2,order,
+                                       no_network,no_network)
+        self.assertEqual(result,"traceable_abstracts")
+        self.assertTrue((self.area/"stage-02/source-evidence/AGRI-001--r001.json").exists())
+
     def test_unrelated_papers_cannot_be_promoted(self):
         def unrelated(title):
             return sample("unrelated hydroelectric turbine mechanics")
@@ -138,12 +195,17 @@ class SourceScoutTests(unittest.TestCase):
         self.assertEqual(got["external_provider_unavailable"],1)
         self.assertFalse((self.area/"stage-02/source-evidence/AGRI-001--r001.json").exists())
 
-    def test_safety_sensitive_topic_remains_research_only(self):
+    def test_safety_sensitive_topic_documented_but_cannot_claim_review(self):
         order=self.order(1)
         order["subject"]="Mushroom pesticide toxicity research"
         papers=SCOUT.select_papers(sample("Houseplant Rescue Guide"),
                                   SCOUT.keys("Houseplant Rescue Guide"),STAGE2)
-        self.assertIsNone(SCOUT.evidence_from_papers(order,1,papers,STAGE2))
+        result=SCOUT.evidence_from_papers(order,1,papers,STAGE2)
+        self.assertIsNotNone(result)
+        self.assertTrue(result["safety_sensitive_review_hold"])
+        self.assertTrue(result["requires_independent_specialist_review"])
+        self.assertFalse(result["scientific_review_completed"])
+        self.assertFalse(result["public_distribution_allowed"])
 
 
     def test_http429_switches_on_short_shared_provider_circuit_breaker(self):
