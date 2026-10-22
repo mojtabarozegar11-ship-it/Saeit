@@ -62,12 +62,23 @@ def check():
     can_alter_table = any('ALL PRIVILEGES' in g or
         re.search(r'\bALTER\b', g.split(' ON ', 1)[0]) for g in relevant_grants)
     native_model_fields = {}
+    native_field_nullability = {}
+    native_has_records = {}
     for model_name in ('NativeInvoice', 'NativeChainTransfer', 'MerchantWalletProof'):
         try:
             native = apps.get_model('mpw_native_checkout', model_name)
             native_model_fields[model_name] = [f.name for f in native._meta.fields][:40]
+            native_has_records[model_name] = native.objects.exists()
+            native_field_nullability[model_name] = {
+                f.name: bool(f.null) for f in native._meta.fields
+                if f.name in ('verified_sender_address','wallet_challenge',
+                    'sender_signature_verified_at','merchant_ownership_verified_at',
+                    'invoice','tx_hash','amount_atomic')
+            }
         except LookupError:
             native_model_fields[model_name] = []
+            native_has_records[model_name] = False
+            native_field_nullability[model_name] = {}
 
     try:
         checkout = resolve('/store/product/72/checkout/')
@@ -107,6 +118,17 @@ def check():
         'existing_schema_create_table_grant_detected': bool(can_create_table),
         'existing_schema_alter_table_grant_detected': bool(can_alter_table),
         'native_checkout_model_fields': native_model_fields,
+        'native_checkout_field_nullable': native_field_nullability,
+        'native_checkout_has_existing_records': native_has_records,
+        'commerce_execution_flags': {flag: bool(getattr(settings, flag, False)) for flag in (
+            'MPW_COMMERCE_RELEASE_READY',
+            'MPW_COMMERCE_REAL_RPC_ENABLED',
+            'MPW_COMMERCE_AUTORECONCILE_ENABLED',
+            'MPW_COMMERCE_INVOICING_ENABLED',
+            'MPW_COMMERCE_SETTLEMENT_ENABLED',
+            'MPW_COMMERCE_DOWNLOADS_ENABLED',
+            'MPW_COMMERCE_BUYER_SIGNATURE_ENABLED',
+        )},
         'all_core_model_checks': all((
             {'customer', 'status', 'currency'} <= order_fields,
             {'invoice', 'network', 'tx_hash'} <= receipt_fields,
