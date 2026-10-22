@@ -147,9 +147,44 @@ except Exception as exc:
     raise SystemExit(1)
 PY
 }
+verify_active() {
+  # Inspect only Django's in-process signal registry; do not touch orders.
+  "$interpreter" -B - "$prod" <<'PY'
+import os,sys
+prod=sys.argv[1]
+sys.path.insert(0,prod)
+os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+try:
+    import django
+    django.setup()
+    if "core.purchase_signals" not in sys.modules:
+        print("PURCHASE_ACTIVE_SIGNAL_MODULE_NOT_LOADED")
+        raise SystemExit(1)
+    from django.db.models.signals import post_save
+    from core.models import Order, PaymentWebhookEvent
+    def subscribed(sender, name):
+        callbacks=post_save._live_receivers(sender)
+        if isinstance(callbacks,tuple):
+            callbacks=list(callbacks[0])+list(callbacks[1])
+        return any(getattr(fn,"__name__",None)==name and getattr(fn,"__module__",None)=="core.purchase_signals" for fn in callbacks)
+    if not subscribed(Order,"on_paid_order_saved"):
+        print("PURCHASE_ACTIVE_ORDER_SIGNAL_ABSENT")
+        raise SystemExit(1)
+    if not subscribed(PaymentWebhookEvent,"on_processed_payment_receipt"):
+        print("PURCHASE_ACTIVE_RECEIPT_SIGNAL_ABSENT")
+        raise SystemExit(1)
+    print("PURCHASE_ACTIVE_ORDER_AND_RECEIPT_SIGNALS_CONFIRMED")
+except Exception:
+    print("PURCHASE_ACTIVE_SIGNAL_CHECK_FAILED")
+    raise SystemExit(1)
+PY
+}
 case "${1:-}" in
   --probe)
     probe
+    ;;
+  --verify-active)
+    verify_active
     ;;
   --check-app-config)
     "$interpreter" -B "$stage/scripts/business_os_patch_app_config.py" --check "$prod/core/apps.py"
