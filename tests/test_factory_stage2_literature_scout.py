@@ -318,5 +318,63 @@ class SourceScoutTests(unittest.TestCase):
         self.assertFalse(packet["stage3_handoff"])
         self.assertFalse((self.area/"stage-02/source-evidence/AGRI-001--r001.json").exists())
 
+
+    def test_relevant_article_sentence_may_use_one_specific_topic_term(self):
+        # Title and full abstract retain multiple relevant keys, while a
+        # single true supporting sentence need not repeat the whole title.
+        p=study("Houseplant Rescue Guide",1)
+        sentence=("Houseplant experiments measured plant growth differences "
+                  "under multiple irrigation treatments and environmental "
+                  "conditions across consecutive observation periods.")
+        abstract=(sentence+" Indoor ornamental specimens were examined for "
+                  "physiological changes, relative water content and leaf "
+                  "characteristics during a controlled horticulture trial. "
+                  "Further evidence should be assessed for regional safety "
+                  "and commercial applicability before practical use.")
+        p["abstract_inverted_index"]=indexed(abstract)
+        keys=SCOUT.keys("Houseplant Rescue Guide")
+        hit=SCOUT.usable_paper(p,keys,STAGE2)
+        self.assertIsNotNone(hit)
+        self.assertEqual(hit["support_sentence"],sentence)
+
+    def test_accepted_indexed_location_recovers_article_specific_url(self):
+        p=study("Houseplant Rescue Guide",1)
+        p["primary_location"]["landing_page_url"]=p["doi"]
+        p["best_oa_location"]={"landing_page_url":p["doi"]}
+        p["locations"]=[
+            {"landing_page_url":"https://unreviewed.example.org/preprint",
+             "version":"submittedVersion"},
+            {"landing_page_url":"https://university.example.edu/record/123",
+             "version":"acceptedVersion"}]
+        hit=SCOUT.usable_paper(p,SCOUT.keys("Houseplant Rescue Guide"),STAGE2)
+        self.assertIsNotNone(hit)
+        self.assertEqual(hit["host"],"university.example.edu")
+        self.assertNotIn("unreviewed",hit["url"])
+
+    def test_old_research_packets_get_one_versioned_relevance_retry(self):
+        index=STAGE2.read(self.area/"owner-agri200-p0-index.json")
+        now=dt.datetime.now(dt.timezone.utc)
+        for n in range(1,201):
+            packet={
+                "schema":SCOUT.SCHEMA,
+                "source_product_id":"AGRI-%03d"%n,
+                "order_id":index["order_ids_ranked"][n-1],
+                "status":"indexed_references_found_require_additional_research",
+                "checked_utc":now.isoformat(),
+                "search_round":0,
+                "scout_algorithm_version":(
+                    None if n==1 else SCOUT.SCOUT_ALGO_VERSION)}
+            STAGE2.atomic(self.area/"stage-02/literature-candidates"/
+                          ("AGRI-%03d"%n+"--r001.json"),packet)
+        seen=[]
+        def fetch(title):
+            seen.append(title)
+            return sample("Houseplant Rescue Guide")
+        result=SCOUT.run(self.root,self.program,fetcher=fetch,
+                         backstop=lambda _:[],batch=1,workers=1)
+        self.assertEqual(result["attempted_this_run"],1)
+        self.assertEqual(len(seen),1)
+        self.assertTrue((self.area/"stage-02/source-evidence/AGRI-001--r001.json").is_file())
+
 if __name__=="__main__":
     unittest.main()
