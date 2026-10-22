@@ -1,0 +1,76 @@
+name: Android runtime proof for real F12 and F16 APKs
+on:
+  push:
+    branches: [feature/six-native-emulator-deep-qa-20261022]
+    paths:
+      - scripts/factory_android_emulator_playthrough.py
+      - scripts/factory_six_native_candidates.py
+      - .github/workflows/factory-six-android-emulator-proof-20261022.yml
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  emulated-real-android-interactive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 26
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: "17"}
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: "8.10.2"}
+      - name: Prepare original SHA-verified native source and compile both debug APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/private-six"
+          python3 -B scripts/factory_six_specialist_executors.py --factory-private "$RUNNER_TEMP/private-six" --all
+          for family in F12 F16; do
+            python3 -B scripts/factory_six_native_candidates.py --factory-private "$RUNNER_TEMP/private-six" --family "$family" --output "$RUNNER_TEMP/real-$family"
+            gradle --no-daemon -p "$RUNNER_TEMP/real-$family/android" :app:assembleDebug
+          done
+          test -s "$RUNNER_TEMP/real-F12/android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$RUNNER_TEMP/real-F16/android/app/build/outputs/apk/debug/app-debug.apk"
+          echo ANDROID_F12_F16_ORIGINAL_BUILD_HASHED=PASS
+      - name: Enable Android emulator virtualization
+        shell: bash
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Launch real Android API 35 emulator and run both original APK UI sessions
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          cores: 2
+          ram-size: 2048M
+          heap-size: 384M
+          disk-size: 4G
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -no-boot-anim -camera-back none -camera-front none
+          script: |
+            python3 -B scripts/factory_android_emulator_playthrough.py --apk-f12 "$RUNNER_TEMP/real-F12/android/app/build/outputs/apk/debug/app-debug.apk" --apk-f16 "$RUNNER_TEMP/real-F16/android/app/build/outputs/apk/debug/app-debug.apk" --out "$RUNNER_TEMP/android-real-interactive-proof.json"
+      - name: Independently verify that evidence proves emulation, never physical QA
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,hashlib
+          from pathlib import Path
+          d=json.loads((Path(os.environ['RUNNER_TEMP'])/'android-real-interactive-proof.json').read_text())
+          assert d['schema']=='saeit.factory.native-android-emulator-interactive.v1'
+          assert d['environment']=='actual_android_emulator'
+          assert d['native_emulator_install_ui_interaction_verified'] is True
+          assert {r['family'] for r in d['families']}=={'F12','F16'}
+          assert all(len(r['checks'])>=5 and len(r['apk_sha256'])==64 for r in d['families'])
+          assert d['physical_device_tested'] is False
+          assert d['independent_human_specialist_review'] is False
+          assert d['quality_1000_certified'] is False and d['public_release'] is False
+          for r in d['families']:
+              apk=Path(os.environ['RUNNER_TEMP'])/('real-'+r['family'])/'android/app/build/outputs/apk/debug/app-debug.apk'
+              assert hashlib.sha256(apk.read_bytes()).hexdigest()==r['apk_sha256']
+          print('F12_F16_ACTUAL_EMULATOR_RUNTIME_AND_INTERACTIVITY=PASS')
+          PY
