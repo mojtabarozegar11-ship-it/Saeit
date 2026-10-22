@@ -77,7 +77,8 @@ def contract(blob):
   req.user=SimpleNamespace(is_authenticated=True,is_active=True,pk=-83839)
   html=tpl.render(RequestContext(req,{'product':Product.objects.get(pk=pk),'price_usd':'0.03'}))
   resp=_apply_two_book_strict_csp(HttpResponse(html))
-  if resp.status_code!=200 or ('Content-Security-Policy' not in html and not resp.has_header('Content-Security-Policy')):
+  rendered=resp.content.decode('utf8','replace')
+  if resp.status_code!=200 or ('Content-Security-Policy' not in rendered and not resp.has_header('Content-Security-Policy')):
    fail('Strict CSP failed')
   if html.count('id="mpw-tronlink-open"')!=1 or 'value="TRX" selected' not in html:fail('One-tap link missing')
  print('MPW_TRX_ONE_TAP_DJANGO_CSP_4_PRODUCTS=PASS')
