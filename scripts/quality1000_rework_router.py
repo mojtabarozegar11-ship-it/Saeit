@@ -1,41 +1,181 @@
 #!/usr/bin/env python3
-"""Produce deterministic rework tasks from independent quality gate findings."""
-import argparse
-import json
-from pathlib import Path
-from quality1000_evidence_gate import validate
+"""Bind real 100x10 private factory workorders to bounded specialist rework queues.
 
-OWNERS = {
- "functionality":"functional-builder", "security":"security-reviewer",
- "performance":"performance-builder", "mobile":"mobile-builder",
- "originality":"originality-reviewer", "documentation":"documentation-builder",
- "reproducibility":"reproducibility-builder", "domain_expert":"qualified-domain-reviewer",
- "commercial_readiness":"commercial-reviewer", "delivery":"delivery-builder",
+Never modifies product sources, reviewer records, stores or commercial state.
+Persistent receipts are immutable and hash-bound to the actual QA assessment.
+"""
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import tempfile
+
+from quality1000_evidence_gate import inspect
+from factory_quality_1000_v2 import CRITERIA
+
+FAMILY = re.compile(r"^F(?:0[1-9]|[1-3][0-9]|40)$")
+RECIPE = re.compile(r"^[a-z][a-z0-9_]{1,65}$")
+DOMAIN_ADAPTERS = {
+    "global_comparative_advantage": "benchmark_research",
+    "originality_and_non_derivativeness": "ip_novelty_review",
+    "verified_innovation": "independent_innovation_test",
+    "technology_and_technical_excellence": "specialist_builder",
+    "domain_depth_and_accuracy": "domain_evidence_research",
+    "user_customer_value": "user_testing",
+    "real_world_performance_accessibility": "accessibility_device_qa",
+    "independent_adversarial_testing": "independent_regression_qa",
+    "security_ethics_regulatory_safety": "security_review",
+    "legal_rights_and_provenance": "rights_review",
+    "distribution_support_reliability": "delivery_reliability_qa",
+    "independent_expert_review": "authenticated_external_reviewer",
 }
-def plan(manifest, root):
-    failures = validate(manifest, root)
+SIX = {"F12", "F13", "F14", "F16", "F17", "F26"}
+
+def read_file(path, max_bytes=3_000_000):
+    if (path.is_symlink() or not path.is_file()
+            or not 0 < path.stat().st_size <= max_bytes):
+        raise ValueError("ROUTER_INVALID_OR_UNSAFE_INPUT")
+    raw = path.read_bytes()
+    value = json.loads(raw.decode("utf8"))
+    if not isinstance(value, dict):
+        raise ValueError("ROUTER_EXPECTED_JSON_OBJECT")
+    return raw, value
+
+def ticket(assessment, raw, order):
+    state = inspect(assessment, raw, order)
+    family = state["family_id"]
+    if not isinstance(family, str) or not FAMILY.fullmatch(family):
+        raise ValueError("ROUTER_UNKNOWN_FAMILY")
+    pending = set(state["missing_documentary_groups"])
+    order_rows = order.get("required_criterion_work")
+    if not isinstance(order_rows, list) or len(order_rows) != len(pending):
+        raise ValueError("ROUTER_WORKORDER_CRITERIA_MISMATCH")
+    found = set()
+    for item in order_rows:
+        if not isinstance(item, dict) or item.get("group_id") not in pending:
+            raise ValueError("ROUTER_WORKORDER_CRITERIA_INVALID")
+        found.add(item["group_id"])
+    if found != pending:
+        raise ValueError("ROUTER_WORKORDER_GROUPS_NOT_BOUND")
+    if sorted(order.get("unresolved_technical_or_domain_defects", [])) != state["unresolved_defects"]:
+        raise ValueError("ROUTER_WORKORDER_DEFECTS_MISMATCH")
     tasks = []
-    for failure in failures:
-        key = failure.split(":", 1)[0]
-        tasks.append({"criterion":key,"reason":failure,"owner":OWNERS.get(key,"quality-coordinator"),
-                      "action":"repair_and_retest" if key not in ("domain_expert","commercial_readiness") else "obtain_independent_review"})
-    return {"schema":"saeit.quality1000.rework.v1",
-            "quality1000":"BLOCKED" if failures else "PASS",
-            "tasks":tasks,"publication_allowed":not failures}
+    for code in sorted(pending):
+        policy = CRITERIA[code]
+        dimensions = policy["quality_dimensions"]
+        adapter = next((DOMAIN_ADAPTERS[x] for x in dimensions if x in DOMAIN_ADAPTERS), None)
+        if not adapter:
+            raise ValueError("ROUTER_NO_SPECIALIST_ROUTE")
+        tasks.append({
+            "criterion": code, "name": policy["name"], "adapter": adapter,
+            "action": "collect_real_evidence_repair_retest_and_independent_review",
+            "type": "documentary_evidence_missing",
+            "status": "OPEN",
+        })
+    for code in state["unresolved_defects"]:
+        tasks.append({"criterion": None, "name": code, "adapter": "specialist_builder",
+                      "action": "diagnose_source_fix_rebuild_and_retest",
+                      "type": "observed_quality_defect", "status": "OPEN"})
+    return {
+        "schema": "saeit.quality1000.specialist-route.v2",
+        "recipe": state["recipe"], "family_id": family,
+        "source_receipt_sha256": state["assessment_sha256"],
+        "artifact_sha256": state["artifact_sha256"],
+        "producer_module": ("factory_six_specialist_executors.py" if family in SIX
+                            else "factory_product_maker.py"),
+        "criteria_total": 100, "documentary_points": state["documentary_points"],
+        "task_count": len(tasks), "tasks": tasks,
+        "external_signed_review_required": True,
+        "master_task_dispatch_verified": False,
+        "certified_quality_points": None,
+        "quality_1000_certified": False,
+        "publication_allowed": False,
+        "payment_activation_allowed": False,
+        "disposition": ("REWORK_PENDING" if tasks else "INDEPENDENT_REVIEW_PENDING"),
+    }
+
+def atomic_json(path, value):
+    if path.is_symlink() or path.parent.is_symlink():
+        raise RuntimeError("ROUTER_OUTPUT_SYMLINK_REJECTED")
+    payload = (json.dumps(value, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode()
+    fd, tmp = tempfile.mkstemp(prefix=".route-", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+    return hashlib.sha256(payload).hexdigest()
+
+def route(root, limit=6):
+    root = Path(root)
+    if root.is_symlink() or not root.is_dir() or not 1 <= limit <= 40:
+        raise ValueError("ROUTER_UNSAFE_ROOT_OR_LIMIT")
+    base = root / "quality-excellence"
+    orders = base / "production-workorders"
+    assessments = base / "rework"
+    output = base / "specialist-routed-rework"
+    if any(x.is_symlink() or not x.is_dir() for x in (base, orders, assessments)):
+        raise ValueError("ROUTER_REAL_QA_SOURCE_REQUIRED")
+    if output.is_symlink():
+        raise ValueError("ROUTER_OUTPUT_DIRECTORY_UNSAFE")
+    output.mkdir(mode=0o700, exist_ok=True)
+    lock = output / ".router.lock"
+    if lock.is_symlink():
+        raise ValueError("ROUTER_LOCK_UNSAFE")
+    completed = []
+    rejected = []
+    with lock.open("a+b") as handle:
+        os.fchmod(handle.fileno(), 0o600)
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        count = 0
+        for folder in sorted(orders.iterdir()):
+            if count >= limit:
+                break
+            if folder.is_symlink() or not folder.is_dir() or not RECIPE.fullmatch(folder.name):
+                continue
+            count += 1
+            try:
+                raw, assessment = read_file(assessments / folder.name / "current.json")
+                _, order = read_file(folder / "current.json")
+                result = ticket(assessment, raw, order)
+                destination = output / folder.name
+                if destination.is_symlink():
+                    raise ValueError("ROUTER_RECIPE_TARGET_SYMLINK")
+                destination.mkdir(mode=0o700, exist_ok=True)
+                payload = (json.dumps(result, sort_keys=True, ensure_ascii=False, indent=2)+"\n").encode()
+                token = hashlib.sha256(payload).hexdigest()
+                receipt = destination / ("route-" + token[:24] + ".json")
+                if receipt.exists():
+                    if receipt.is_symlink() or receipt.read_bytes() != payload:
+                        raise ValueError("ROUTER_IMMUTABLE_RECEIPT_CHANGED")
+                else:
+                    atomic_json(receipt, result)
+                atomic_json(destination / "current.json", result)
+                completed.append({"recipe": folder.name, "tasks": result["task_count"],
+                                  "receipt_sha256": token})
+            except (ValueError, OSError, KeyError, TypeError, RuntimeError, json.JSONDecodeError) as error:
+                rejected.append({"recipe": folder.name, "failure_class": type(error).__name__})
+    return {"schema": "saeit.quality1000.specialist-route-summary.v2",
+            "routed_products": len(completed), "queued_issues": sum(i["tasks"] for i in completed),
+            "rejected_products": rejected, "receipts": completed,
+            "professional_quality_certifications": 0, "sites_modified": 0}
+
 def main():
-    ap=argparse.ArgumentParser()
-    ap.add_argument("manifest",type=Path)
-    ap.add_argument("--root",type=Path,required=True)
-    ap.add_argument("--output",type=Path)
-    args=ap.parse_args()
-    data=json.loads(args.manifest.read_text(encoding="utf-8"))
-    result=plan(data,args.root)
-    rendered=json.dumps(result,ensure_ascii=False,indent=2)+"\n"
-    if args.output:
-        args.output.parent.mkdir(parents=True,exist_ok=True)
-        args.output.write_text(rendered,encoding="utf-8")
-    else:
-        print(rendered,end="")
-    raise SystemExit(1 if result["tasks"] else 0)
-if __name__=="__main__":
+    p = argparse.ArgumentParser()
+    p.add_argument("--private-root", type=Path, required=True)
+    p.add_argument("--limit", type=int, default=6)
+    a = p.parse_args()
+    result = route(a.private_root, a.limit)
+    print("QUALITY1000_PRIVATE_REWORK=" + json.dumps(result, ensure_ascii=False, sort_keys=True))
+    raise SystemExit(2 if result["rejected_products"] else 0)
+
+if __name__ == "__main__":
     main()
