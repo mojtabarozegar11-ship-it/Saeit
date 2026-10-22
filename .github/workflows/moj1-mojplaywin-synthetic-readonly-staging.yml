@@ -50,10 +50,28 @@ jobs:
           echo 'MOJ1_MPW_SYNTHETIC_READONLY_STAGING=PASS'
           echo 'MOJPLAYWIN_LIVE_CHECKOUT=UNMODIFIED'
           echo 'TRON_MAINNET=NOT_ACCESSED'
-      - name: Archive staging-only proof receipt
+      - name: Render safe offline MOJ1 preview and release gates
+        working-directory: experiments/moj1-pilot
+        run: node staging/site/generate-preview.mjs
+      - name: Verify page isolation, hashes and localhost HTTP
+        working-directory: experiments/moj1-pilot
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/mojplaywin-staging-preview.test.mjs
+          (cd staging-preview && sha256sum -c SHA256SUMS)
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory staging-preview > "$RUNNER_TEMP/moj1_preview_server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          sleep 1
+          curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8765/ -o "$RUNNER_TEMP/moj1_preview_fetched.html"
+          cmp staging-preview/index.html "$RUNNER_TEMP/moj1_preview_fetched.html"
+          echo 'MOJ1_LOCALHOST_HTTP_PREVIEW=PASS'
+          echo 'MOJ1_STAGING_ARTIFACT=ISOLATED_REVIEW_ONLY'
+      - name: Archive offline staging page and evidence
         uses: actions/upload-artifact@v4
         with:
-          name: moj1-mpw-synthetic-readonly-receipt
-          path: experiments/moj1-pilot/staging-evidence.json
+          name: moj1-mpw-isolated-staging-preview
+          path: experiments/moj1-pilot/staging-preview/
           if-no-files-found: error
           retention-days: 14

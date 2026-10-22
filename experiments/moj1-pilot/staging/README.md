@@ -21,3 +21,15 @@ Artifact: moj1-mpw-synthetic-readonly-receipt (contains no customer data or keys
 Production gates remain independent security review, legal approval, mainnet
 key management and production financial E2E tests. This receipt is NOT evidence
 of a live MOJ1 payment integration or an authorized public token sale.
+
+## Non-public review page (same Shasta proof)
+
+The workflow now generates a responsive static MOJ1 information page and checks
+it over localhost HTTP before packaging it as an Actions artifact named
+moj1-mpw-isolated-staging-preview. It contains index.html, a sanitized synthetic
+receipt, release-gates.json and SHA256SUMS. This is not a deployed URL and cannot
+process a checkout. Keep this output in review until production gates are met.
+
+The release gates intentionally remain false for independent audit, legal
+approval, mainnet custody and authorized sale. No agent-generated proof may
+substitute for an independent assessor or applicable approval.
