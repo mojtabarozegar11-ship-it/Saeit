@@ -4,6 +4,7 @@ A browser save, a submitted TxID, and an unpaid order never grant a paid jet.
 Native settlement remains the sole writer. No schema migration is required.
 """
 from decimal import Decimal
+from urllib.parse import unquote
 
 from django.conf import settings
 from django.db.models import Sum
@@ -59,7 +60,10 @@ def _verified_checkout_route(product):
         path = reverse("crown_cosmetic_checkout", kwargs={"product_id": product.pk})
     except NoReverseMatch:
         return None
-    if not path.startswith("/store/") or path.startswith("//"):
+    normalized = unquote(path)
+    if (not normalized.startswith("/store/") or normalized.startswith("//")
+            or "\\" in normalized or "?" in normalized or "#" in normalized
+            or any(segment in (".", "..") for segment in normalized.split("/"))):
         return None
     return path
 
