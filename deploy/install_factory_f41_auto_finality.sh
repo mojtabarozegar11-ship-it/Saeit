@@ -70,6 +70,9 @@ mv -f -- "$new_runner" "$runner"
 test "$(sha256sum "$source" | awk '{print $1}')" = "$(sha256sum "$target/factory_f41_auto_finality_scan.py" | awk '{print $1}')"
 cmp -s "$runner" "$wrapper"
 test "$(crontab -l | grep -Fc SAEIT_MASTER_F41_PRIVATE_QUEUE_V1)" -eq 1
+# Verify the exact installed, authenticated master runner end-to-end now.
+/usr/bin/timeout 120s /bin/bash "$runner"
+echo F41_AUTOSCAN_AUTHENTIC_MASTER_CYCLE=PASS
 echo F41_AUTOSCAN_INSTALLED_ON_VPS=PASS
 echo F41_AUTOSCAN_MOJ1RO1_CRON_15MIN=ACTIVE
 echo F41_AUTOSCAN_MAINNET_AND_SITE_WRITES=0
