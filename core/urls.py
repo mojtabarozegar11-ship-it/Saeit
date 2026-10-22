@@ -36,3 +36,7 @@ urlpatterns = [
     path("bridge/dispatch/", bridge_dispatch, name="bridge-dispatch"),
     path("", include(router.urls)),
 ]
+
+# Crown Defender account ownership; no payment mutation is exposed here.
+from .crown_fleet import fleet as crown_fleet
+urlpatterns += [path("crown-defender/fleet/", crown_fleet, name="crown_fleet")]
