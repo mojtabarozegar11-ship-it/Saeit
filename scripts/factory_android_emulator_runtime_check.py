@@ -198,6 +198,9 @@ def deep_application_acceptance(family, package, pid):
         if created != {"saved": True, "visible": True}:
             raise RuntimeError("EMULATOR_F16_APK_STORAGE_NOT_WRITTEN")
 
+    # Let WebView commit its asynchronous localStorage journal before process death.
+    run("shell", "input", "keyevent", "3")  # HOME: normal activity pause
+    time.sleep(4)
     run("shell", "am", "force-stop", package)
     launch = run("shell", "am", "start", "-W", "-n",
                  package + "/.MainActivity", timeout=65)
@@ -208,14 +211,20 @@ def deep_application_acceptance(family, package, pid):
     if not new_pid:
         raise RuntimeError("EMULATOR_F16_REOPEN_NO_PROCESS")
     with DebugWebView(new_pid) as dev:
-        persisted = dev.evaluate("""(() => {
-          const name = """ + json.dumps(token) + """;
-          const rows = JSON.parse(localStorage.getItem('field_ledger_local_v1') || '[]');
-          return {saved: rows.some(x => x.name === name && x.quantity === 7),
-                  visible: document.getElementById('items').textContent.includes(name)};
-        })()""")
+        persisted = None
+        for _ in range(20):
+            persisted = dev.evaluate("""(() => {
+              const name = """ + json.dumps(token) + """;
+              const rows = JSON.parse(localStorage.getItem('field_ledger_local_v1') || '[]');
+              return {saved: rows.some(x => x.name === name && x.quantity === 7),
+                      visible: document.getElementById('items').textContent.includes(name)};
+            })()""")
+            if persisted == {"saved": True, "visible": True}:
+                break
+            time.sleep(0.5)
         if persisted != {"saved": True, "visible": True}:
-            raise RuntimeError("EMULATOR_F16_APK_STORAGE_NOT_PERSISTED")
+            raise RuntimeError("EMULATOR_F16_APK_STORAGE_NOT_PERSISTED:"
+                               + json.dumps(persisted, sort_keys=True))
     return {"webview_dom_runtime_verified": True,
             "inventory_entry_written_in_apk": True,
             "inventory_storage_persisted_after_relaunch": True}
