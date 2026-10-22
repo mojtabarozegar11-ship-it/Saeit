@@ -67,24 +67,45 @@ def produce_private_snapshot():
             raise RuntimeError("No existing read-only SQLite source")
     connections["default"].ensure_connection()
 
-    def safe_count(table, query):
+    def missing_source_reason(model, required_columns):
+        """Identify schema drift locally; never expose schema in CI logs."""
+        try:
+            with connections["default"].cursor() as cursor:
+                introspection = connections["default"].introspection
+                table = model._meta.db_table
+                if table not in introspection.table_names(cursor):
+                    return "expected_table_missing_in_connected_database"
+                present = {field.name for field in introspection.get_table_description(cursor, table)}
+                if not set(required_columns).issubset(present):
+                    return "expected_columns_missing_in_connected_table"
+                return "query_failed_despite_expected_schema"
+        except (DatabaseError, FieldError):
+            return "schema_introspection_unavailable"
+
+    def safe_count(model, table, required_columns, query):
         # A table not deployed to this database is UNKNOWN, not zero.
         # Continue checking the other independent sources.
         try:
             return observed(query(), table)
         except (DatabaseError, FieldError):
-            return module.unknown(f"{table} query unavailable in production database")
+            return module.unknown(
+                f"{table}: {missing_source_reason(model, required_columns)}"
+            )
 
     _phase = "queued_tasks_query"
-    queued_tasks = safe_count("AgentTask", lambda: AgentTask.objects.filter(status="queued").count())
+    queued_tasks = safe_count(AgentTask, "AgentTask", ("status",),
+                              lambda: AgentTask.objects.filter(status="queued").count())
     _phase = "blocked_tasks_query"
-    blocked_tasks = safe_count("AgentTask", lambda: AgentTask.objects.filter(status="blocked").count())
+    blocked_tasks = safe_count(AgentTask, "AgentTask", ("status",),
+                               lambda: AgentTask.objects.filter(status="blocked").count())
     _phase = "products_query"
-    active_products = safe_count("Product", lambda: Product.objects.filter(active=True).count())
+    active_products = safe_count(Product, "Product", ("active",),
+                                 lambda: Product.objects.filter(active=True).count())
     _phase = "orders_query"
-    orders = safe_count("Order", lambda: Order.objects.count())
+    orders = safe_count(Order, "Order", ("id",), lambda: Order.objects.count())
     _phase = "approvals_query"
-    pending_approvals = safe_count("ApprovalRequest", lambda: ApprovalRequest.objects.filter(status="pending").count())
+    pending_approvals = safe_count(ApprovalRequest, "ApprovalRequest", ("status",),
+                                   lambda: ApprovalRequest.objects.filter(status="pending").count())
     metrics = {
         "queued_tasks": queued_tasks,
         "blocked_tasks": blocked_tasks,
