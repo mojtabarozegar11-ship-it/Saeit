@@ -30,6 +30,7 @@ jobs:
           print('CROWN_PUBLIC_PRODUCTS='+str(len(items)))
           print('CROWN_PUBLIC_PAYABLE_ITEMS='+str(sum(row.get('available') is True for row in items)))
           print('CROWN_PUBLIC_PURCHASE_URLS='+str(sum(bool(row.get('checkout')) for row in items)))
+          assert all(row.get('available') is False and row.get('checkout') is None for row in items), 'UNEXPECTED_LIVE_CROWN_SALES'
           PY
       - name: Pinned existing GitHub to VPS to cPanel relay - read only
         shell: bash
@@ -109,4 +110,11 @@ jobs:
                           print('CROWN_'+label+'_'+alias+'_SHA256='+hashlib.sha256(path.read_bytes()).hexdigest())
               if (root/'config/urls.py').is_file():
                   print('CROWN_'+label+'_ROUTE_DECLARED='+str('crown_cosmetic_checkout' in (root/'config/urls.py').read_text('utf-8','replace')))
+          if not all((home/'Saeit-staging'/name).is_file()
+                     for name in ('core/crown_checkout.py','core/crown_fleet.py','core/crown_tron_receipts.py')):
+              raise SystemExit('CROWN_ACTIVE_DEPLOYMENT_MISSING_MODULES')
+          if 'crown_cosmetic_checkout' not in (home/'Saeit-staging/config/urls.py').read_text('utf-8','replace'):
+              raise SystemExit('CROWN_ACTIVE_DEPLOYMENT_MISSING_ROUTE')
+          print('CROWN_ACTIVE_CHECKOUT_ROUTE_INSTALLED=YES')
+          print('CROWN_PUBLIC_PAID_SALES_REMAIN_DISABLED=YES')
           PY
