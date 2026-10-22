@@ -4,6 +4,10 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import datetime as dt
+import time
+import urllib.error
+from unittest import mock
 
 BASE=Path(__file__).resolve().parents[1]
 def module(name,file):
@@ -140,6 +144,83 @@ class SourceScoutTests(unittest.TestCase):
         papers=SCOUT.select_papers(sample("Houseplant Rescue Guide"),
                                   SCOUT.keys("Houseplant Rescue Guide"),STAGE2)
         self.assertIsNone(SCOUT.evidence_from_papers(order,1,papers,STAGE2))
+
+
+    def test_http429_switches_on_short_shared_provider_circuit_breaker(self):
+        endpoint=SCOUT.SAFE_KEYS["openalex"]
+        class BlockedOpener:
+            def open(self,request,timeout=None):
+                raise urllib.error.HTTPError(
+                    request.full_url,429,"rate limit",{"Retry-After":"120"},None)
+        SCOUT.PROVIDER_NEXT_ALLOWED.clear()
+        try:
+            with mock.patch.object(SCOUT.urllib.request,"build_opener",
+                                   return_value=BlockedOpener()):
+                with self.assertRaisesRegex(RuntimeError,"SCOUT_API_RATE_LIMITED_429"):
+                    SCOUT.request_json(endpoint,{"search":"houseplants"})
+            self.assertGreater(SCOUT.PROVIDER_NEXT_ALLOWED[endpoint],
+                               time.monotonic()+100)
+            with mock.patch.object(SCOUT.urllib.request,"build_opener",
+                                   side_effect=AssertionError("must not call provider")):
+                with self.assertRaises(SCOUT.ProviderCoolingDown):
+                    SCOUT.request_json(endpoint,{"search":"indoor foliage"})
+        finally:
+            SCOUT.PROVIDER_NEXT_ALLOWED.clear()
+
+    def test_provider_cooldown_does_not_create_false_scientific_gap(self):
+        def cooling(_):
+            raise SCOUT.ProviderCoolingDown("SCOUT_PROVIDER_COOLING_DOWN")
+        result=SCOUT.run(self.root,self.program,fetcher=cooling,
+                         backstop=lambda _:[],batch=1,workers=1)
+        self.assertEqual(result["requests_skipped_due_to_provider_cooldown"],1)
+        self.assertEqual(result["still_require_manual_or_external_research"],0)
+        self.assertFalse((self.area/"stage-02/literature-candidates/AGRI-001--r001.json").exists())
+
+    def test_rate_limited_attempt_retries_after_minutes_not_18_hours(self):
+        import datetime as dt
+        index=STAGE2.read(self.area/"owner-agri200-p0-index.json")
+        # Keep all other P0 inputs newly blocked with recent provider failures,
+        # so rank 1's 13-minute-old failure becomes the next eligible retry.
+        now=dt.datetime.now(dt.timezone.utc)
+        for n in range(1,201):
+            checked=(now-dt.timedelta(minutes=13) if n==1 else now)
+            candidate={
+                "schema":SCOUT.SCHEMA,"source_product_id":"AGRI-%03d"%n,
+                "order_id":index["order_ids_ranked"][n-1],
+                "status":"external_research_api_unavailable",
+                "checked_utc":checked.isoformat(),
+                "commercial_release":False
+            }
+            STAGE2.atomic(self.area/"stage-02/literature-candidates"/
+                          ("AGRI-%03d"%n+"--r001.json"),candidate)
+        queries=[]
+        def stub(title):
+            queries.append(title)
+            return sample(title)
+        result=SCOUT.run(self.root,self.program,fetcher=stub,
+                         backstop=lambda _:[],batch=1,workers=1)
+        self.assertEqual(result["source_evidence_automatically_documented"],1)
+        self.assertEqual(queries,["Houseplant Rescue Guide"])
+        self.assertTrue((self.area/"stage-02/source-evidence/AGRI-001--r001.json").exists())
+
+    def test_unsearched_ranked_work_is_not_starved_by_retried_errors(self):
+        # rank 1's error is old; rank 2 has never been searched.
+        old=dt.datetime.now(dt.timezone.utc)-dt.timedelta(hours=1)
+        index=STAGE2.read(self.area/"owner-agri200-p0-index.json")
+        STAGE2.atomic(self.area/"stage-02/literature-candidates/AGRI-001--r001.json",{
+            "schema":SCOUT.SCHEMA,"source_product_id":"AGRI-001",
+            "order_id":index["order_ids_ranked"][0],
+            "status":"external_research_api_unavailable",
+            "checked_utc":old.isoformat(),
+            "commercial_release":False
+        })
+        requested=[]
+        def stub(title):
+            requested.append(title)
+            return []
+        SCOUT.run(self.root,self.program,fetcher=stub,
+                  backstop=lambda _:[],batch=1,workers=1)
+        self.assertEqual(requested,["Diagnose Yellow Plant Leaves"])
 
     def test_idempotent_provider_cache_keeps_original_sources(self):
         got=SCOUT.run(self.root,self.program,fetcher=sample,
