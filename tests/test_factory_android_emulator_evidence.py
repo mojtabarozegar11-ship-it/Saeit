@@ -42,7 +42,11 @@ class RealAndroidReceiptTests(unittest.TestCase):
             "apk_sha256":hashlib.sha256(self.apk).hexdigest(),
             "screenshot_sha256":hashlib.sha256(self.screen).hexdigest(),
             "emulator_screen_size_bytes":len(self.screen),
-            "distinct_screen_colors":28
+            "distinct_screen_colors":28,
+            "webview_dom_runtime_verified":True,
+            "actual_48_levels_loaded":True,
+            "next_level_transition_verified":True,
+            "keyboard_player_movement_verified":True
         }
 
     def members(self):
@@ -76,6 +80,29 @@ class RealAndroidReceiptTests(unittest.TestCase):
         members["emulator-screen.png"]=self.screen+b"tampered"
         with self.assertRaisesRegex(RuntimeError,"MISMATCHED_EMULATOR"):
             module.actual_format_integrity("F12",members)
+
+    def test_fails_without_real_apk_application_specific_state(self):
+        for field in ("webview_dom_runtime_verified",
+                      "actual_48_levels_loaded",
+                      "next_level_transition_verified",
+                      "keyboard_player_movement_verified"):
+            with self.subTest(field=field):
+                self.payload[field]=False
+                with self.assertRaisesRegex(RuntimeError,"ANDROID_DEEP_APK_BEHAVIOR_UNVERIFIED"):
+                    module.actual_format_integrity("F12",self.members())
+                self.payload[field]=True
+
+    def test_f16_must_prove_storage_survives_restart(self):
+        self.payload.update({
+            "family":"F16",
+            "package":"com.zomorodmelal.factory.f16",
+            "inventory_entry_written_in_apk":True,
+            "inventory_storage_persisted_after_relaunch":True
+        })
+        self.assertTrue(module.actual_format_integrity("F16",self.members()))
+        self.payload["inventory_storage_persisted_after_relaunch"]=False
+        with self.assertRaisesRegex(RuntimeError,"ANDROID_DEEP_APK_BEHAVIOR_UNVERIFIED"):
+            module.actual_format_integrity("F16",self.members())
 
     def test_missing_half_of_evidence_fails(self):
         members=self.members()
