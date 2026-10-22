@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""Private read-only mainnet SOLIDITY head reachability, no payment and no secrets.
+
+Compare TronGrid and Nodit (separately named infrastructure operators);
+this DOES NOT attest two providers as fully production ready.
+Never print the URL, key, wallet address or any RPC response body.
+"""
+import json,os,pwd,urllib.request,urllib.error,socket,time
+from datetime import datetime,timezone
+from pathlib import Path
+
+APP=Path('/home/zomorod2/Saeit-staging')
+SITE=Path('/home/zomorod2/mojplaywin.com')
+if pwd.getpwuid(os.getuid()).pw_name!='zomorod2' or APP.is_symlink() or SITE.is_symlink():
+ raise RuntimeError('Not the approved cPanel tenant')
+if "APP='/home/zomorod2/Saeit-staging'" not in (SITE/'passenger_wsgi.py').read_text('utf8','replace'):
+ raise RuntimeError('Passenger routing mismatch')
+pairs=[
+ ('TronGrid','https://api.trongrid.io/walletsolidity/getnowblock'),
+ ('Nodit','https://tron-mainnet.nodit.io/walletsolidity/getnowblock')
+]
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+ def redirect_request(self,*a,**kw):
+  return None
+
+opener=urllib.request.build_opener(NoRedirect())
+results=[]
+for label,url in pairs:
+ result={'provider':label,'reachable':False,'solidified_block':False,
+         'fresh_under_10min':False,'auth_required_or_error':False}
+ try:
+  headers={'Accept':'application/json'}
+  if label=='Nodit':headers['X-API-KEY']='nodit-demo'  # documented public demo credential; never use for production
+  req=urllib.request.Request(url,method='GET',headers=headers)
+  with opener.open(req,timeout=12) as response:
+   if response.status!=200:raise RuntimeError('not 200')
+   raw=response.read(120001)
+   if len(raw)>120000:raise RuntimeError('response too large')
+   payload=json.loads(raw)
+   header=payload.get('block_header',{}).get('raw_data',{})
+   number=header.get('number')
+   millis=header.get('timestamp')
+   if type(number) is not int or number<1000000 or type(millis) is not int:
+    raise RuntimeError('solidified block metadata missing')
+   age=abs(time.time()-millis/1000)
+   result.update(reachable=True,solidified_block=True,fresh_under_10min=age<600)
+ except (urllib.error.HTTPError,urllib.error.URLError,RuntimeError,ValueError,KeyError,TimeoutError,OSError) as exc:
+  result['auth_required_or_error']=True
+  result['error_class']=type(exc).__name__
+  if isinstance(exc,urllib.error.HTTPError): result['http_status']=exc.code
+ results.append(result)
+print('MPW_WALLETLESS_TRON_REAL_PROVIDERS='+json.dumps({
+ 'sources':results,
+ 'real_provider_count_reachable':sum(1 for x in results if x['reachable'] and x['fresh_under_10min']),
+ 'source_operators_separately_named':True,
+ 'operator_security_review_completed':False,
+ 'native_transfer_dual_receipt_roundtrip_proven':False,
+ 'finance_mutations':0,
+ 'public_activation':False},sort_keys=True))
+
+
+# Existing MojPlayWin RPC implementation: inspect function contract without values.
+import inspect,sys
+sys.path.insert(0,str(APP))
+try:
+ from scripts import mojplaywin_native_rpc_clients as existing_rpc
+ fn=getattr(existing_rpc,"tron_solidity_rpc",None)
+ if callable(fn):
+  sig=inspect.signature(fn)
+  print('MPW_TRON_EXISTING_RPC_FUNCTION='+json.dumps({
+    'present':True,'parameter_names_only':list(sig.parameters),
+    'callable_module':'scripts.mojplaywin_native_rpc_clients',
+    'already_proven_as_second_independent_provider':False,
+    'secret_values_printed':False
+  },sort_keys=True))
+ else:
+  print('MPW_TRON_EXISTING_RPC_FUNCTION='+json.dumps({'present':False}))
+except Exception as exc:
+ print('MPW_TRON_EXISTING_RPC_FUNCTION='+json.dumps({'present':False,'error_type':type(exc).__name__}))
+
+
+# Reuse the site's EXISTING read-only solidity RPC wrapper, no new credentials.
+# Only /walletsolidity/getnowblock is queried, never a write or wallet address.
+try:
+ if callable(fn):
+  for pth in ("/walletsolidity/getnowblock","walletsolidity/getnowblock"):
+   try:
+    raw=fn(pth,{})
+    block=raw.get("block_header",{}).get("raw_data",{}) if isinstance(raw,dict) else {}
+    height=block.get("number")
+    age=abs(time.time()-block.get("timestamp",0)/1000) if type(block.get("timestamp")) is int else None
+    success=type(height) is int and height>1000000 and age is not None and age<600
+    print("MPW_TRON_EXISTING_RPC_READONLY="+json.dumps({
+      "path_variant": "absolute" if pth.startswith("/") else "relative",
+      "valid_solidified_block":success,
+      "secret_values_printed":False,
+      "is_second_independent_provider":False
+    }))
+    if success:break
+   except Exception as e:
+    print("MPW_TRON_EXISTING_RPC_READONLY="+json.dumps({
+      "path_variant":"absolute" if pth.startswith("/") else "relative",
+      "valid_solidified_block":False,"error_type":type(e).__name__,
+      "secret_values_printed":False
+    }))
+except Exception as e:
+ print("MPW_TRON_EXISTING_RPC_READONLY="+json.dumps({"error_type":type(e).__name__}))
+
+
+# Diagnose allowlisted operations in existing read-only RPC adapter without any URL,
+# credential or merchant transaction data (all literal strings are censored).
+try:
+ if callable(fn):
+  import ast
+  code=inspect.getsource(fn)
+  tree=ast.parse(code)
+  class MaskLiterals(ast.NodeTransformer):
+   def visit_Constant(self,node):
+    if isinstance(node.value,str):
+     node.value="[MASKED]"
+    return self.generic_visit(node)
+  masked=ast.unparse(MaskLiterals().visit(tree))
+  print("MPW_TRON_RPC_SAFE_AST="+json.dumps({
+    "masked_algorithm":masked[:4500],
+    "strings_masked":True,
+    "source_contains_api_credentials_in_log":False
+  }))
+except Exception as exc:
+ print("MPW_TRON_RPC_SAFE_AST="+json.dumps({"error_type":type(exc).__name__}))
+
+
+# Probe the explicitly allowlisted live source with a PUBLIC example tx id
+# from official TRON documentation. A missing historical tx is NOT a node
+# failure. Print only response validity and method, NEVER transaction details.
+try:
+ paths=getattr(existing_rpc,"TRX_PATHS",frozenset())
+ allowed=[v for v in paths if type(v) is str and v.startswith("/walletsolidity/")]
+ print("MPW_TRON_RPC_ALLOWED_PATHS="+json.dumps({"paths":sorted(allowed),"all_readonly":all(x.startswith("/walletsolidity/") for x in allowed)}))
+ example_tx="c558bd35978267d8999baf6148703cbc94786f3f2e22893637588ca05437d7f0"
+ if callable(fn):
+  for method in sorted(allowed):
+   out=None
+   error=None
+   for key in ("value","txid"):
+    try:
+     data=fn(method,{key:example_tx})
+     out={
+       "method":method,
+       "response_object":type(data) is dict,
+       "has_solidified_tx_reference":bool(isinstance(data,dict) and (data.get("txID")==example_tx or data.get("id")==example_tx)),
+       "transaction_data_redacted":True,
+       "sample_is_verified_mainnet":False
+     }
+     break
+    except Exception as exc:
+     error=type(exc).__name__
+   print("MPW_TRON_RPC_DOC_EXAMPLE_READONLY="+json.dumps(out if out is not None else {"method":method,"error_type":error,"no_transaction_content_logged":True}))
+except Exception as exc:
+ print("MPW_TRON_RPC_DOC_EXAMPLE_READONLY="+json.dumps({"error_type":type(exc).__name__}))

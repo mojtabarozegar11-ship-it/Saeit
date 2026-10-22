@@ -1,0 +1,52 @@
+name: MojPlayWin real Django ORM walletless TRX isolated MariaDB E2E
+on:
+  push:
+    branches: [feature/mpw-walletless-trx-e2e-20261022]
+    paths:
+      - services/mpw_walletless_django_test_bridge.py
+      - services/mpw_walletless_django_test_invoice.py
+      - services/mpw_walletless_django_staging_web.py
+      - services/mpw_walletless_django_guest_claim.py
+      - services/mpw_walletless_django_guest_staging_web.py
+      - services/mpw_walletless_django_guest_handoff.py
+      - services/mpw_trx_walletless_one_tap_ui.py
+      - services/sql/mpw_walletless_trx_isolated_v1.sql
+      - tests/test_mpw_walletless_real_django_orm_e2e.py
+      - .github/workflows/mpw-walletless-real-django-orm-20261022.yml
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  isolated-real-django:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_DATABASE: test_walletless_ci
+          MARIADB_USER: walletless
+          MARIADB_PASSWORD: local-only-no-money
+          MARIADB_ROOT_PASSWORD: local-root-ci-only
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install isolated Django, MariaDB and Python drivers
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check 'Django>=5.2,<6' 'mysqlclient>=2.2,<3' 'PyMySQL==1.1.2' 'segno==1.6.6'
+      - name: Compile production-write guards and Django test fixture
+        run: |
+          set -euo pipefail
+          python3 -m py_compile services/mpw_walletless_django_test_bridge.py services/mpw_walletless_django_test_invoice.py services/mpw_walletless_django_staging_web.py services/mpw_walletless_django_guest_claim.py services/mpw_walletless_django_guest_staging_web.py services/mpw_walletless_django_guest_handoff.py services/mpw_trx_walletless_one_tap_ui.py tests/test_mpw_walletless_real_django_orm_e2e.py
+      - name: Verify actual Django ORM atomic receipt ledger and digital delivery
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mpw_walletless_real_django_orm_e2e.py' -v
+          echo 'MPW_WALLETLESS_REAL_DJANGO_MARIADB_TEST_DB=PASS; PRODUCTION_WRITES=0'

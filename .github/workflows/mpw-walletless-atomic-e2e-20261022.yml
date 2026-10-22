@@ -1,0 +1,49 @@
+name: MojPlayWin walletless TRX complete isolated atomic E2E
+on:
+  push:
+    branches: [feature/mpw-walletless-trx-e2e-20261022]
+    paths:
+      - services/mpw_trx_walletless_core.py
+      - services/mpw_trx_walletless_reservation.py
+      - services/mpw_trx_walletless_finalize.py
+      - services/mpw_trx_walletless_reconcile.py
+      - services/sql/mpw_walletless_trx_isolated_v1.sql
+      - tests/test_mpw_walletless_atomic_e2e.py
+      - tests/test_mpw_walletless_reconciler_e2e.py
+      - .github/workflows/mpw-walletless-atomic-e2e-20261022.yml
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  real-mariadb-isolated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_DATABASE: walletless_ci
+          MARIADB_USER: walletless
+          MARIADB_PASSWORD: local-only-no-money
+          MARIADB_ROOT_PASSWORD: local-root-ci-only
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install ephemeral MariaDB client
+        run: python3 -m pip install --disable-pip-version-check 'PyMySQL==1.1.2'
+      - name: Compile financial core and test contracts
+        run: |
+          set -euo pipefail
+          python3 -m py_compile services/mpw_trx_walletless_core.py services/mpw_trx_walletless_reservation.py services/mpw_trx_walletless_finalize.py tests/test_mpw_walletless_atomic_e2e.py tests/test_mpw_walletless_reconciler_e2e.py services/mpw_trx_walletless_reconcile.py
+      - name: Prove atomic invoice receipt ledger and buyer-only grant
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mpw_walletless_atomic_e2e.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_walletless_reconciler_e2e.py' -v
+          echo "MPW_WALLETLESS_FULL_ATOMIC_MARIADB_CI=PASS; LIVE_PAYMENTS=0"
