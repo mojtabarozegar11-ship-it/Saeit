@@ -2,22 +2,28 @@
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<meta name="theme-color" content="#10231d"><meta name="description" content="شوتر اول‌شخص فارسی؛ ۳۰ قهرمان، شلیک، موشک هدایت‌شونده و پشتیبانی پهپادی در شش مرحلهٔ داستانی خیالی.">
-<title>جنگ رمضان | شوتر اول‌شخص فارسی</title>
-<link rel="stylesheet" href="./game.css">
+<meta name="theme-color" content="#08191e"><meta name="description" content="نسخهٔ وب بازی موبایل جنگ رمضان؛ شوتر اول‌شخص آفلاین فارسی با ۳۰ قهرمان، کارزار شش‌مرحله‌ای، مسلسل، موشک، پهپاد و حالت بقا.">
+<title>جنگ رمضان | نسخهٔ وب بازی موبایل</title><link rel="stylesheet" href="./game.css">
 </head>
 <body>
-<!-- ZM-RAMADAN-WAR-WEB-CARD-20261022 -->
-<main id="game" aria-label="بازی جنگ رمضان">
- <canvas id="view" aria-label="میدان بازی؛ برای چرخش انگشت را روی صفحه بکشید"></canvas>
+<main id="game" aria-label="جنگ رمضان">
+ <canvas id="view" aria-label="میدان نبرد اول‌شخص"></canvas>
  <div id="hud" class="hidden">
-  <div class="top"><div class="brand"><b>جنگ رمضان</b><small>شوتر اول‌شخص · کارزار خیالی</small></div><div class="stats"><div>جان: <strong id="hpText">۱۰۰</strong> / ۱۰۰</div><div class="bar"><i id="hpBar"></i></div><div>مرحله <strong id="stageText">۱</strong> · حریف‌ها <strong id="enemyText">۰</strong></div><div>موشک <strong id="rocketText">۳</strong> · پهپاد <strong id="droneText">۱</strong></div></div></div>
-  <div class="mission"><b id="stageName">تهران</b> · پاکسازی: <strong id="progress">۰ / ۵</strong></div>
+  <header class="hud-top"><div class="hud-brand"><b>جنگ رمضان</b><small id="missionName">دفاع از پایتخت</small></div><div class="vitals"><div class="vital-line"><span>جان</span><b id="hpText">۱۰۰</b><span>×</span><b id="lifeText">۱۰۰</b></div><div class="bar"><i id="hpBar"></i></div><div class="vital-line secondary"><span>مرحله</span><b id="stageText">۱</b><span>پاکسازی</span><b id="progress">۰ / ۹</b></div></div></header>
+  <div class="arsenal"><span>🚀 <b id="rocketText">۱۲</b></span><span>🛸 <b id="droneText">۳</b></span><span>امتیاز <b id="pointText">۰</b></span></div>
   <div id="toast" class="toast"></div>
-  <div id="controls"><div class="cluster"><div id="stick" aria-label="حرکت"><i id="knob"></i></div></div><div class="cluster"><button id="rocket" class="ctrl rocket"><span>🚀</span><small>موشک</small></button><button id="drone" class="ctrl drone"><span>🛸</span><small>پهپاد</small></button><button id="fire" class="ctrl fire"><span>●</span><small>شلیک</small></button></div></div>
+  <div id="controls"><div class="move-zone"><div id="stick" aria-label="جوی‌استیک حرکت"><i id="knob"></i></div><small>حرکت</small></div><div class="action-zone"><button id="fire" class="button fire" aria-label="شلیک مسلسل"><b>شلیک</b><small>مسلسل</small></button><div class="aux-actions"><button id="rocket" class="button rocket" aria-label="شلیک موشک">🚀<small>موشک</small></button><button id="drone" class="button drone" aria-label="حمله پهپاد">🛸<small>پهپاد</small></button></div></div></div>
+  <button id="special" class="button special" aria-label="توانایی ویژه">✦ <small>ویژه</small></button><button id="pause" class="button pause">Ⅱ</button>
  </div>
- <section id="menu" class="panel"><div class="mark">✦</div><h1>جنگ رمضان</h1><p>شوتر اول‌شخص فارسی؛ شش مرحلهٔ داستانی و پس از آن نبرد بقا. حرکت کن، هدف بگیر و با مسلسل، موشک و پشتیبانی پهپادی پیش برو.</p><p>قهرمان: <span id="heroName" class="hero-name">سید علی خامنه‌ای</span> <span id="heroCount">(۱ از ۳۰)</span></p><div class="row"><button id="prevHero" aria-label="قهرمان قبلی">قهرمان قبلی</button><button id="nextHero" aria-label="قهرمان بعدی">قهرمان بعدی</button></div><div class="row"><button id="start" class="primary">شروع کارزار</button><button id="survival" class="hidden">حالت بقا</button></div><p class="desktop-help">موبایل: جوی‌استیک حرکت، کشیدن صفحه برای هدف‌گیری، نگه‌داشتن شلیک. رایانه: WASD و ماوس.</p><p class="legal">همهٔ صحنه‌ها و درگیری‌ها تخیلی‌اند؛ هیچ غیرنظامی در بازی حضور ندارد.</p></section>
- <section id="result" class="panel hidden"><div class="mark">🏁</div><h2 id="resultTitle">مرحله پاکسازی شد</h2><p id="resultText"></p><div class="row"><button id="continue" class="primary">ادامهٔ کارزار</button><button id="retry" class="hidden">شروع دوباره</button><button id="menuBtn">بازگشت به منو</button></div></section>
-</main>
-<script src="./game.js" defer></script>
-</body></html>
+ <section id="home" class="panel">
+  <div class="eyebrow">MOJPLAYWIN · نسخهٔ وب بازی موبایل</div><div class="emblem">✦</div><h1>جنگ رمضان</h1><p>همان شوتر اول‌شخص آفلاین نسخهٔ اندروید؛ حالا در مرورگر. حرکت و نشانه‌گیری لمسی، مسلسل، موشک رهگیر، حمله پهپادی و کارزار شش‌مرحله‌ای.</p>
+  <div class="hero-preview"><div class="portrait" id="portrait">۱</div><div><small>قهرمان انتخاب‌شده</small><b id="heroName">سید علی خامنه‌ای</b><span id="skillName">سپر انرژی</span></div><button id="prevHero" aria-label="قهرمان قبلی">‹</button><button id="nextHero" aria-label="قهرمان بعدی">›</button><button id="chooseHero">انتخاب قهرمان</button></div>
+  <div class="menu-actions"><button id="start" class="primary">شروع نبرد</button><button id="newGame">بازی تازه</button><button id="survival" class="hidden">حالت بقا</button></div>
+  <div class="instructions"><b>کنترل موبایل</b><span>جوی‌استیک پایین چپ برای حرکت؛ کشیدن وسط میدان برای نشانه‌گیری؛ نگه‌داشتن شلیک برای رگبار.</span><b>کنترل رایانه</b><span>WASD حرکت · ماوس نشانه‌گیری · کلیک شلیک · Q موشک · E پهپاد · F توانایی ویژه · Esc توقف</span></div>
+  <p class="legal">روایت و صحنه‌های جنگی بازی تخیلی‌اند؛ شخصیت‌ها نمادین‌اند و توانایی‌ها ساختگی هستند.</p>
+ </section>
+ <section id="heroes" class="panel hidden"><div class="eyebrow">۳۰ شخصیت قابل انتخاب</div><h2>قهرمانت را انتخاب کن</h2><div id="heroGrid" class="hero-grid"></div><div class="menu-actions"><button id="heroBack" class="primary">بازگشت به بازی</button></div></section>
+ <section id="pausePanel" class="panel hidden"><div class="emblem">Ⅱ</div><h2>نبرد متوقف شد</h2><p>پیشرفت همین مرحله ذخیره شده است.</p><div class="menu-actions"><button id="resume" class="primary">ادامه نبرد</button><button id="openUpgrades">کارگاه ارتقا · <span id="upgradePoints">۰</span></button><button id="goHome">خانه</button></div></section>
+ <section id="upgradePanel" class="panel hidden"><h2>کارگاه ارتقا</h2><p>امتیاز آماده: <b id="upgradePoints2">۰</b></p><div class="upgrade-grid"><button data-up="0">قدرت شلیک</button><button data-up="1">زره و ترمیم</button><button data-up="2">موشک بیشتر</button><button data-up="3">پشتیبانی پهپادی</button></div><button id="upgradeBack" class="primary">بازگشت به نبرد</button></section>
+ <section id="result" class="panel hidden"><div class="emblem" id="resultMark">✦</div><h2 id="resultTitle"></h2><p id="resultText"></p><div class="menu-actions"><button id="continue" class="primary">مرحله بعد</button><button id="retry">کارزار تازه</button><button id="resultHome">خانه</button></div></section>
+</main><script src="./game.js" defer></script></body></html>
