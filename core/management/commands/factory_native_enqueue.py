@@ -1,8 +1,8 @@
 """Bind the private six-native rework queue to the actual Django master AgentTask runtime.
 
 A real running AgentTask is claimed by TaskRuntime and audited by ToolGateway.
-The logical requested label moj_1ro_1 remains DISTINCT from the persisted
-agent code economic-master-agent. This command never impersonates an owner,
+The factory tasks are actually owned by the registered moj_1ro_1 agent.
+The financial economic-master-agent remains separate. Never impersonates an owner,
 a professional reviewer, or a physical-device tester.
 """
 import os
@@ -45,7 +45,7 @@ class Command(BaseCommand):
             "review_sha256":whole,
             "family_receipt_sha256":digest(review_folder/(family+".json")),
             "requested_logical_orchestrator":"moj_1ro_1",
-            "verified_task_runtime":"economic-master-agent",
+            "verified_task_runtime":"moj_1ro_1",
         } for family in FAMILIES]
         # Fail *before* touching the master database if any original native
         # archive, policy flag, or external QA evidence was forged or tampered.
@@ -62,9 +62,11 @@ class Command(BaseCommand):
             return
         with transaction.atomic():
             master=Agent.objects.select_for_update().filter(
-                code="economic-master-agent",active=True).first()
+                code="moj_1ro_1",active=True).first()
             if not master:
-                raise CommandError("BRIDGE_VERIFIED_DJANGO_MASTER_INACTIVE")
+                raise CommandError("BRIDGE_VERIFIED_DJANGO_MOJ1RO1_INACTIVE")
+            if set(master.capabilities.filter(active=True).values_list("code",flat=True))!={ACTION}:
+                raise CommandError("BRIDGE_FACTORY_AGENT_UNEXPECTED_PRIVILEGES")
             capability=master.capabilities.filter(code=ACTION,active=True).first()
             if not capability or capability.risk_level!="low":
                 raise CommandError("BRIDGE_REGISTERED_ALLOWLIST_CAPABILITY_MISSING")
