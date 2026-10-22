@@ -27,6 +27,7 @@ jobs:
           test -s games/ramadan-war/game.css
           test -s games/ramadan-war/engine3d.js
           test -s games/ramadan-war/three.module.js
+          test -s games/ramadan-war/three.core.min.js
           test -s games/ramadan-war/THREE-LICENSE.txt
           python3 -m py_compile games/ramadan-war/deploy.py
           node --check games/ramadan-war/site-smoke.cjs
@@ -44,6 +45,7 @@ jobs:
           assert 'RamadanWarDebug' in gamejs and "from './engine3d.js'" in gamejs and not any(line.startswith('+') for line in gamejs.splitlines())
           engine=Path('games/ramadan-war/engine3d.js').read_text(encoding='utf-8')
           assert "from './three.module.js'" in engine and 'WebGLRenderer' in engine
+          assert 'three.core.min.js' in Path('games/ramadan-war/three.module.js').read_text(encoding='utf-8')
           PY
           node --check games/ramadan-war/game.js
           node --check games/ramadan-war/engine3d.js
@@ -107,6 +109,7 @@ jobs:
           timeout 50s scp -q -F "$d/config" games/ramadan-war/game.css "host:$stage/incoming/game.css"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/engine3d.js "host:$stage/incoming/engine3d.js"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/three.module.js "host:$stage/incoming/three.module.js"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/three.core.min.js "host:$stage/incoming/three.core.min.js"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/THREE-LICENSE.txt "host:$stage/incoming/THREE-LICENSE.txt"
           timeout 45s ssh -T -F "$d/config" host "python3 '$stage/incoming/deploy.py' prepare '$GITHUB_RUN_ID'"
       - name: Replace only game client files and preserve the second card
@@ -138,7 +141,7 @@ jobs:
           assert b'canvas' in game and b'./game.js' in game and b'./game.css' in game
           with urlopen(Request(root+'/ramadan-war/game.js?asset='+str(time.time_ns()),headers={'Cache-Control':'no-cache,no-store'}),timeout=35) as r:js=r.read(250000)
           assert b'RamadanWarDebug' in js and b'engine3d.js' in js
-          for asset,needle in [('engine3d.js',b'three.module.js'),('three.module.js',b'WebGLRenderer')]:
+          for asset,needle in [('engine3d.js',b'three.module.js'),('three.module.js',b'WebGLRenderer'),('three.core.min.js',b'WebGLRenderer')]:
            with urlopen(Request(root+'/ramadan-war/'+asset+'?asset='+str(time.time_ns()),headers={'Cache-Control':'no-cache,no-store'}),timeout=35) as r:
             assert r.status==200;asset_body=r.read(1200000)
            assert needle in asset_body,asset

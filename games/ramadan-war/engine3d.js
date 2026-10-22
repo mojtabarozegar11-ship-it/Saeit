@@ -14,12 +14,14 @@ export function createEngine(canvas) {
     trim: new THREE.MeshStandardMaterial({ color: 0xb5a88e, roughness: .82 }),
     metal: new THREE.MeshStandardMaterial({ color: 0x293534, metalness: .68, roughness: .38 }),
     black: new THREE.MeshStandardMaterial({ color: 0x182321, roughness: .92 }),
+    armor: new THREE.MeshStandardMaterial({ color: 0x303a33, metalness: .18, roughness: .78 }),
+    gear: new THREE.MeshStandardMaterial({ color: 0x716044, roughness: .92 }),
     uniform: [0x536454, 0x74674d, 0x4b5e60].map(color => new THREE.MeshStandardMaterial({ color, roughness: .9 })),
     skin: new THREE.MeshStandardMaterial({ color: 0x9b8067, roughness: .88 }),
     crate: new THREE.MeshStandardMaterial({ color: 0x6e593c, roughness: .9 }),
     rock: new THREE.MeshStandardMaterial({ color: 0x716b60, roughness: 1 }),
   };
-  const scene = new THREE.Scene();
+  let scene = new THREE.Scene();
   const enemies = new Map(), missiles = new Map();
   let world = null, pitch = 0, time = 0, baseFov = 68, scoped = false;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -61,7 +63,7 @@ export function createEngine(canvas) {
     box(g,new THREE.BoxGeometry(.16,.12,.17),glove,[.06,-.27,-.68]);
     box(g,new THREE.BoxGeometry(.24,.25,.28),new THREE.MeshStandardMaterial({color:0x596455,roughness:1}),[.4,-.48,-.37]);
     const flash=new THREE.PointLight(0xffb34e,0,3);flash.position.set(.22,-.145,-1.2);g.add(flash);
-    g.visible=false;return {g,flash};
+    g.position.set(.12,-.52,-.7);g.visible=false;return {g,flash};
   }
 
   let weapon=makeWeapon();
@@ -94,16 +96,21 @@ export function createEngine(canvas) {
   function enemy(e) {
     const g=new THREE.Group(),uniform=mats.uniform[e.type%3];
     const torso=new THREE.Mesh(new THREE.CapsuleGeometry(.24,.42,4,8),uniform);torso.position.y=1.08;torso.scale.set(.9,1,.62);g.add(torso);
+    const vest=box(g,new THREE.BoxGeometry(.4,.48,.2),mats.armor,[0,1.08,-.13]);vest.rotation.x=-.05;
+    for(const x of [-.16,0,.16]){box(g,new THREE.BoxGeometry(.105,.12,.075),mats.gear,[x,.88,-.252]);box(g,new THREE.BoxGeometry(.095,.09,.045),mats.black,[x,.89,-.295]);}
+    for(const side of [-1,1]){const pad=new THREE.Mesh(new THREE.SphereGeometry(.13,10,8),mats.armor);pad.position.set(side*.29,1.28,-.03);pad.scale.set(1,.72,1);g.add(pad);box(g,new THREE.BoxGeometry(.19,.13,.16),mats.armor,[side*.12,.46,-.09]);box(g,new THREE.BoxGeometry(.19,.14,.27),mats.black,[side*.12,.08,-.04]);}
     const head=new THREE.Mesh(new THREE.SphereGeometry(.18,12,10),mats.skin);head.position.y=1.54;g.add(head);
     const helmet=new THREE.Mesh(new THREE.SphereGeometry(.195,12,8,0,Math.PI*2,0,Math.PI*.56),e.type===2?mats.metal:mats.black);helmet.position.y=1.61;g.add(helmet);
-    for(const side of [-1,1]){box(g,new THREE.BoxGeometry(.16,.48,.2),mats.black,[side*.12,.34,0]);const arm=box(g,new THREE.BoxGeometry(.12,.42,.14),uniform,[side*.27,1.08,-.06]);arm.rotation.z=side*.15;}
+    box(g,new THREE.BoxGeometry(.28,.12,.07),mats.black,[0,1.45,-.16]);
+    const eyeMat=new THREE.MeshStandardMaterial({color:0x111715,roughness:.34});for(const side of [-1,1]){const eye=new THREE.Mesh(new THREE.SphereGeometry(.026,8,6),eyeMat);eye.position.set(side*.07,1.56,-.164);g.add(eye);box(g,new THREE.BoxGeometry(.16,.48,.2),mats.black,[side*.12,.34,0]);const arm=box(g,new THREE.BoxGeometry(.12,.42,.14),uniform,[side*.27,1.08,-.06]);arm.rotation.z=side*.15;}
     const rifle=box(g,new THREE.BoxGeometry(.09,.09,.65),mats.metal,[.27,1.08,-.28]);rifle.rotation.y=-.12;box(g,new THREE.BoxGeometry(.055,.11,.12),mats.black,[.27,1.16,-.28]);
+    const barrel=new THREE.Mesh(new THREE.CylinderGeometry(.018,.022,.34,8),mats.black);barrel.rotation.x=Math.PI/2;barrel.position.set(.27,1.08,-.76);g.add(barrel);
     const bar=new THREE.Mesh(new THREE.PlaneGeometry(.56,.055),new THREE.MeshBasicMaterial({color:0x172927}));bar.position.set(0,1.95,0);g.add(bar);
     const fill=new THREE.Mesh(new THREE.PlaneGeometry(.54,.036),new THREE.MeshBasicMaterial({color:0xef7560}));fill.position.set(0,1.95,.002);fill.userData.hp=true;g.add(fill);
     scene.add(g);enemies.set(e,g);return g;
   }
 
-  function render(w,ts){if(w)world=w;if(!world)return;w=world;time=ts/1000;camera.position.set(w.x,1.62+Math.sin(time*8)*.012,w.y);camera.rotation.order='YXZ';camera.rotation.y=w.angle-Math.PI/2;camera.rotation.x=pitch;weapon.g.visible=true;weapon.g.position.x=.22+Math.sin(time*7)*.008;weapon.g.position.y=Math.sin(time*14)*.008-(w.muzzle>0?.025:0);weapon.g.rotation.z=Math.sin(time*7)*.008;weapon.flash.intensity=w.muzzle>0?14:0;
+  function render(w,ts){if(w)world=w;if(!world)return;w=world;time=ts/1000;camera.position.set(w.x,1.62+Math.sin(time*8)*.012,w.y);camera.rotation.order='YXZ';camera.rotation.y=w.angle-Math.PI/2;camera.rotation.x=pitch;weapon.g.visible=true;weapon.g.position.x=.12+Math.sin(time*7)*.008;weapon.g.position.y=-.52+Math.sin(time*14)*.008-(w.muzzle>0?.025:0);weapon.g.position.z=-.7;weapon.g.rotation.z=Math.sin(time*7)*.008;weapon.flash.intensity=w.muzzle>0?14:0;
     for(const [e,g]of [...enemies])if(!w.enemies.includes(e)){scene.remove(g);enemies.delete(e);}
     for(const e of w.enemies){const g=enemies.get(e)||enemy(e);g.position.set(e.x,0,e.y);g.rotation.y=Math.atan2(w.x-e.x,-(w.y-e.y));for(const o of g.children)if(o.userData.hp)o.scale.x=.06+clamp(e.hp/e.max,0,1);}
     for(const [m,o]of [...missiles])if(!w.missiles.includes(m)){scene.remove(o);missiles.delete(m);}

@@ -6,7 +6,7 @@ import hashlib, json, os, re, sys
 ROOT=Path('/home/zomorod2/public_html')
 ROW='ZM-R25'; GAME_ID='ZM-R25-GAME-RAMADAN-WAR-20261022'; GAME=ROOT/'ramadan-war'
 MARK='ZM-RAMADAN-WAR-WEB-CARD-20261022'
-ASSETS=['index.html','game.js','game.css','engine3d.js','three.module.js','THREE-LICENSE.txt']
+ASSETS=['index.html','game.js','game.css','engine3d.js','three.module.js','three.core.min.js','THREE-LICENSE.txt']
 
 def digest(data): return hashlib.sha256(data).hexdigest()
 def atomic(path,data,run):
@@ -41,7 +41,7 @@ def prepare(stage):
     new={name:inputs[name].read_bytes() for name in ASSETS}
     assert len(new['index.html'])>1000 and MARK.encode() in new['index.html']
     assert b'RamadanWarDebug' in new['game.js'] and b'createEngine' in new['game.js'] and b'./game.js' in new['index.html'] and b'./game.css' in new['index.html']
-    assert b'./engine3d.js' in new['game.js'] and b'./three.module.js' in new['engine3d.js'] and len(new['three.module.js'])>300000
+    assert b'./engine3d.js' in new['game.js'] and b'./three.module.js' in new['engine3d.js'] and b'./three.core.min.js' in new['three.module.js'] and len(new['three.module.js'])>300000 and len(new['three.core.min.js'])>300000
     assert b'The MIT License' in new['THREE-LICENSE.txt']
     assert (GAME/'.htaccess').is_file() and (GAME/'.htaccess').read_bytes()==inputs['.htaccess'].read_bytes()
     old={name:(GAME/name).read_bytes() for name in ['index.html','game.js','game.css']}
@@ -67,7 +67,7 @@ def publish(stage,run):
     for name in m['new']:
         data=(stage/f'incoming/{name}').read_bytes();assert digest(data)==m['new'][name]
     try:
-        for name in ['game.css','game.js','index.html']:
+        for name in [asset for asset in ASSETS if asset!='index.html']+['index.html']:
             atomic(GAME/name,(stage/f'incoming/{name}').read_bytes(),run)
             assert digest((GAME/name).read_bytes())==m['new'][name]
         m['phase']='published';store(stage,m)
