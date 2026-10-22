@@ -69,16 +69,21 @@ def _trusted_status(conn,invoice_id,buyer_id):
         return result
     with conn.cursor() as cur:
         cur.execute(
-         """SELECT tx_hash,recipient,amount_sun
+         """SELECT evidence_sha256
             FROM mpw_walletless_trx_receipt_v1
             WHERE invoice_id=%s AND network=%s AND tx_hash=%s LIMIT 1""",
             [invoice_id,network,tx_hash])
         receipt=cur.fetchone()
-    if not receipt or receipt[1]!=recipient or int(receipt[2])!=int(sun):
+    if not receipt or not receipt[0]:
         return result
     ref="walletless:"+network+":"+tx_hash
-    real_ledger=LedgerEntry.objects.filter(order=order,reference=ref,
-      entry_type="credit",currency="USD",amount=Decimal(str(usd))).exists()
+    ledger=LedgerEntry.objects.filter(order=order,reference=ref,
+      entry_type="credit",currency="USD",amount=Decimal(str(usd))).first()
+    real_ledger=bool(ledger and isinstance(ledger.metadata,dict)
+        and ledger.metadata.get("evidence_digest")==receipt[0]
+        and ledger.metadata.get("invoice_id")==invoice_id
+        and ledger.metadata.get("network")==network
+        and ledger.metadata.get("tx_hash")==tx_hash)
     items=list(OrderItem.objects.filter(order=order)[:2])
     if len(items)!=1:
         return result
