@@ -1,0 +1,96 @@
+name: Owner P0 agriculture 200 private factory orders
+on:
+  pull_request:
+    paths:
+      - docs/agri200_p0_catalog.tsv
+      - scripts/factory_agri200_p0_intake.py
+      - scripts/factory_continuous_production_orders.py
+      - tests/test_factory_agri200_p0_intake.py
+      - .github/workflows/vps-factory-agri200-p0-20261022.yml
+  push:
+    branches: [main]
+    paths:
+      - docs/agri200_p0_catalog.tsv
+      - scripts/factory_agri200_p0_intake.py
+      - scripts/factory_continuous_production_orders.py
+      - tests/test_factory_agri200_p0_intake.py
+      - .github/workflows/vps-factory-agri200-p0-20261022.yml
+permissions:
+  contents: read
+concurrency:
+  group: owner-agri200-p0-factory
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Check 200 bilingual P0 orders and no effect on existing lanes
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_agri200_p0_intake.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_continuous_production_orders.py -v
+          python3 -B -c 'import ast; from pathlib import Path; ast.parse(Path("scripts/factory_agri200_p0_intake.py").read_text())'
+  private-vps-install:
+    needs: validate
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-factory-agri200-p0-20261022]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Register 200 owner P0 requests on existing private VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          local_stage="$RUNNER_TEMP/factory-agri-p0"
+          install -d -m 700 "$local_stage"
+          trap 'rm -rf -- "$local_stage"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$local_stage/key"
+          chmod 600 "$local_stage/key"
+          ssh-keygen -y -P "" -f "$local_stage/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$local_stage/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$local_stage/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh_vps() {
+            ssh -i "$local_stage/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$local_stage/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          ssh_vps 'test "$(id -un)" = githubops && test "$(id -u)" -ne 0 && test -d "$HOME/factory-runtime/private/autonomous-product-cycle" && test -f "$HOME/factory-runtime/operations/production-instructions/generate-orders.py" && echo FACTORY_AGRI200_PREFLIGHT=PASS'
+          remote_stage="/home/githubops/factory-runtime/operations/.owner-agri-p0-$GITHUB_RUN_ID"
+          ssh_vps "umask 077; test ! -e '$remote_stage'; mkdir -m 700 '$remote_stage'"
+          for src in docs/agri200_p0_catalog.tsv scripts/factory_agri200_p0_intake.py scripts/factory_continuous_production_orders.py deploy/install_factory_continuous_orders.sh; do
+            file="$(basename "$src")"
+            cat "$src" | ssh_vps "umask 077; test ! -e '$remote_stage/$file'; cat > '$remote_stage/$file'; chmod 600 '$remote_stage/$file'"
+            digest="$(sha256sum "$src" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$remote_stage/$file' | awk '{print \$1}')\" = '$digest'"
+          done
+          # Update the generator first so P0 work never consumes the ordinary manufacturing quota.
+          ssh_vps "bash -n '$remote_stage/install_factory_continuous_orders.sh' && bash '$remote_stage/install_factory_continuous_orders.sh' '$remote_stage/factory_continuous_production_orders.py'"
+          # Idempotent install uses the exact same private queue lock as the minute worker.
+          ssh_vps "timeout 90s /home/githubops/factory-runtime/.venv/bin/python -B '$remote_stage/factory_agri200_p0_intake.py' --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --catalog '$remote_stage/agri200_p0_catalog.tsv'"
+          ssh_vps 'python3 -' <<'PY'
+          import json
+          from pathlib import Path
+          home=Path.home()/"factory-runtime"
+          p=home/"private/autonomous-product-cycle/production-instructions"
+          i=json.loads((p/"owner-agri200-p0-index.json").read_text())
+          assert i["topic_count"]==200 and i["edition_goal_count"]==400
+          assert i["commercial_release"] is False and i["site_deployments"]==0
+          assert i["qa1000_certified"] is False
+          assert len(set(i["order_ids_ranked"]))==200
+          for rank,ident in enumerate(i["order_ids_ranked"],1):
+              o=json.loads((p/"orders"/(ident+".json")).read_text())
+              assert o["source_product_id"]==f"AGRI-{rank:03d}"
+              assert o["priority"]=="P0" and o["priority_rank"]==rank
+              assert {e["locale"] for e in o["editions"]}=={"fa-IR","en-US"}
+              assert o["public_distribution_allowed"] is False
+          print("FACTORY_AGRI200_P0_ORDERS_VERIFIED=200")
+          print("FACTORY_AGRI200_P0_LANGUAGE_EDITION_GOAL=400")
+          print("FACTORY_AGRI200_P0_QA1000_CERTIFIED=0")
+          print("FACTORY_AGRI200_P0_SITE_PUBLISHING=DISABLED")
+          PY
