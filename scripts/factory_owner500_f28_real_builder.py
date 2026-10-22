@@ -207,7 +207,12 @@ def produce(root, catalog_file, scripts_dir, limit=3):
                        "sites_modified": 0}
             # immutable per product+artifact; never rewrite old revision or claim sale
             filename = "%s-%s.json" % (item_id, checked["artifact_sha256"][:24])
-            save_once(area / filename, receipt)
+            permanent = dict(receipt)
+            # Creation/rebuild booleans are *run measurements*, not immutable
+            # product properties: preserve original artifact receipt on replay.
+            permanent.pop("design_created_this_run")
+            permanent.pop("archive_rebuilt_this_run")
+            save_once(area / filename, permanent)
             outcomes.append(receipt)
     return {"schema": SCHEMA,
             "owner_backlog_total": 500,
