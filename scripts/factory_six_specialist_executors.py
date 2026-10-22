@@ -293,7 +293,7 @@ def run(root, all_six=False):
             # A concurrent cron --tick must NEVER erase evidence of the
             # six-family activation batch. Keep a separately addressable
             # complete result plus an immutable hash-named private receipt.
-            raw = (json.dumps(summary, sort_keys=True, separators=(",", ":")) + "\\n").encode()
+            raw = json.dumps(summary, sort_keys=True, separators=(",", ":")).encode() + bytes([10])
             proof_dir = ops / "complete-six-proofs"
             if proof_dir.is_symlink():
                 raise RuntimeError("SIX_COMPLETE_PROOF_ROOT_UNSAFE")
