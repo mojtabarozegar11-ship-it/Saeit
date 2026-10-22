@@ -27,6 +27,53 @@ HEX = re.compile(r"^[0-9a-f]{64}$")
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
+def actual_format_integrity(family, members):
+    """Reject suffix-only pretenders; all checks use bytes in the real archive."""
+    native = {name:bytes_ for name,bytes_ in members.items()
+              if Path(name).suffix.lower() in ARTIFACTS[family]}
+    if family in ("F12","F16"):
+        apk = next(v for k,v in native.items() if k.endswith(".apk"))
+        aab = next(v for k,v in native.items() if k.endswith(".aab"))
+        with zipfile.ZipFile(__import__("io").BytesIO(apk)) as z:
+            names = set(z.namelist())
+            if not {"AndroidManifest.xml","classes.dex","assets/index.html"}.issubset(names):
+                raise RuntimeError("NATIVE_BUNDLE_FAKE_ANDROID_APK")
+        with zipfile.ZipFile(__import__("io").BytesIO(aab)) as z:
+            names = set(z.namelist())
+            if not {"base/manifest/AndroidManifest.xml","base/dex/classes.dex",
+                    "base/assets/index.html"}.issubset(names):
+                raise RuntimeError("NATIVE_BUNDLE_FAKE_ANDROID_AAB")
+    elif family in ("F13","F17"):
+        data = next(iter(native.values()))
+        if (len(data) < 30_000 or data[:2] != b"MZ" or len(data) < 64):
+            raise RuntimeError("NATIVE_BUNDLE_FAKE_WINDOWS_EXE")
+        offset = int.from_bytes(data[0x3c:0x40],"little")
+        if offset < 64 or offset+4 > len(data) or data[offset:offset+4] != b"PE\x00\x00":
+            raise RuntimeError("NATIVE_BUNDLE_FAKE_WINDOWS_PE_HEADER")
+    elif family == "F14":
+        data = json.loads(members["browser-proof.json"].decode("utf8"))
+        if (data.get("actual_chromium_executed") is not True
+                or data.get("real_interactive_movement_tested") is not True
+                or data.get("keyboard_and_restart_tested") is not True
+                or set(data.get("responsive_viewports_tested",[]))!={"desktop","mobile"}
+                or data.get("uncaught_js_errors")!=0
+                or data.get("external_network_requests")!=0
+                or any(hashlib.sha256(members[k]).hexdigest()!=data["source_sha256"][k]
+                       for k in ("mini_game.html","game.js"))):
+            raise RuntimeError("NATIVE_BUNDLE_F14_REAL_BROWSER_PROOF_FAILED")
+    elif family == "F26":
+        proof = json.loads(members["native-proof.json"].decode("utf8"))
+        if (proof.get("actual_onnxruntime_models_checked")!=48
+                or proof.get("holdout_predictions_checked")!=192
+                or proof.get("independent_quality_1000_certified") is not False):
+            raise RuntimeError("NATIVE_BUNDLE_F26_ONNX_RUNTIME_PROOF_MISSING")
+        actual = {name:hashlib.sha256(raw).hexdigest() for name,raw in native.items()}
+        declared = {i["file"]:i["sha256"] for i in proof.get("models",[])}
+        if actual!=declared or len(actual)!=48:
+            raise RuntimeError("NATIVE_BUNDLE_F26_ONNX_BYTES_NOT_CHECKED")
+    return True
+
+
 def pack(family, sources, result, checks):
     if family not in FAMILIES:
         raise RuntimeError("NATIVE_BUNDLE_INVALID_FAMILY")
@@ -51,6 +98,7 @@ def pack(family, sources, result, checks):
         raise RuntimeError("NATIVE_BUNDLE_NATIVE_OUTPUT_COUNT_MISMATCH")
     if family == "F26" and len({p.name for p in native}) != 48:
         raise RuntimeError("NATIVE_BUNDLE_F26_MODEL_COUNT_INVALID")
+    actual_format_integrity(family,{p.name:p.read_bytes() for p in sources})
     result.mkdir(mode=0o700, parents=True)
     archive = result / "technical-native-candidate.zip"
     hashes = {}
@@ -110,9 +158,12 @@ def verify(folder, expected_family):
     if not isinstance(files,dict) or any(not HEX.fullmatch(v)
                                            for v in files.values()):
         raise RuntimeError("NATIVE_RECEIPT_INVALID_MEMBER_HASHES")
+    if archive.stat().st_size > 220_000_000:
+        raise RuntimeError("NATIVE_RECEIPT_ARCHIVE_TOO_LARGE")
     with zipfile.ZipFile(archive) as z:
         info=z.infolist()
-        if (len(info)!=len(files) or set(z.namelist())!=set(files)
+        if (len(info)!=len(files) or sum(i.file_size for i in info)>300_000_000
+                or set(z.namelist())!=set(files)
                 or z.testzip() is not None
                 or any(i.is_dir() or i.flag_bits & 1 or i.file_size > 95_000_000 or
                        ((i.external_attr >> 16)&0o170000)==0o120000 for i in info)):
@@ -122,6 +173,8 @@ def verify(folder, expected_family):
                 raise RuntimeError("NATIVE_RECEIPT_UNSAFE_FILENAME")
             if hashlib.sha256(z.read(name)).hexdigest()!=value:
                 raise RuntimeError("NATIVE_RECEIPT_MEMBER_MISMATCH")
+    with zipfile.ZipFile(archive) as z:
+        actual_format_integrity(expected_family,{name:z.read(name) for name in files})
     actual=[name for name in files if Path(name).suffix.lower() in ARTIFACTS[expected_family]]
     expected={"F12":2,"F13":1,"F14":2,"F16":2,"F17":1,"F26":48}[expected_family]
     if len(actual)!=expected or receipt.get("format_candidate_count")!=expected:
