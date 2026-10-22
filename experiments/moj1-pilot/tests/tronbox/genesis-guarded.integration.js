@@ -67,18 +67,18 @@ contract('MOJ1 genesis destination forgery: exploit demonstration and guarded V2
     let sum = 0n;
     for (let i = 0; i < 6; ++i) {
       const address = fromHex(await escrow.vaults(i));
-      assert.notEqual(address, recipients[i], 'recipient is not the vault');
+      assert.notEqual(tronWeb.address.toHex(address), tronWeb.address.toHex(recipients[i]), 'recipient is not the vault');
       assert.equal((await coin.balanceOf(address)).toString(), amounts[i]);
       if (i === 2 || i === 5) {
         const reserve = await Reserve.at(address);
-        assert.equal(fromHex(await reserve.beneficiary()), recipients[i]);
-        assert.equal(fromHex(await reserve.releaseController()), accounts[0]);
+        assert.equal(tronWeb.address.toHex(await reserve.beneficiary()), tronWeb.address.toHex(recipients[i]));
+        assert.equal(tronWeb.address.toHex(await reserve.releaseController()), tronWeb.address.toHex(accounts[0]));
         assert.equal((await reserve.trancheCap()).toString(),
           (i === 2 ? 1n * billion * unit : 250_000_000n * unit).toString());
         await expectRevert(reserve.executeRelease({from: accounts[8]}));
       } else {
         const vault = await Vesting.at(address);
-        assert.equal(fromHex(await vault.beneficiary()), recipients[i]);
+        assert.equal(tronWeb.address.toHex(await vault.beneficiary()), tronWeb.address.toHex(recipients[i]));
         assert.equal((await vault.start()).toString(), String(start));
         assert.equal((await vault.cliff()).toString(), String(i === 3 ? 365 * day : 0));
         assert.equal(await vault.fullyFunded(), true);
