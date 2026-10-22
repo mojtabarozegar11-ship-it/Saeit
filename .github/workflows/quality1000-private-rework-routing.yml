@@ -1,0 +1,77 @@
+name: Quality 1000 verified rework routing (private only)
+on:
+  push:
+    branches: [fix/quality1000-evidence-gate-20261022]
+    paths:
+      - scripts/quality1000_evidence_gate.py
+      - scripts/quality1000_rework_router.py
+      - tests/test_quality1000_rework_router.py
+      - .github/workflows/quality1000-private-rework-routing.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factory-quality1000-safe-route
+  cancel-in-progress: false
+jobs:
+  validate-100-criteria:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate actual 100 x 10 scorecard and specialist router
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/quality1000_evidence_gate.py scripts/quality1000_rework_router.py
+          PYTHONPATH=scripts python3 -B -m unittest discover -s tests -p 'test_quality1000_rework_router.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_factory_quality_100_criteria.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_factory_quality_production_workorders_v1.py' -v
+          echo QUALITY1000_REAL_100_GROUP_ROUTER_REGRESSION=PASS
+  stage-private-rework-receipts:
+    needs: validate-100-criteria
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/fix/quality1000-evidence-gate-20261022'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Pin VPS SSH and route six real source-bound workorders without site mutations
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d)"
+          chmod 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" > /dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          host=githubops@178.239.147.150
+          stage="/home/githubops/factory-runtime/operations/.quality-1000-route-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh -T "${opts[@]}" "$host" "set -eu; test \"\$(id -un)\" = githubops; test ! -e '$stage'; install -d -m 700 '$stage'"
+          scp -q "${opts[@]}" scripts/quality1000_evidence_gate.py "$host:$stage/quality1000_evidence_gate.py"
+          scp -q "${opts[@]}" scripts/quality1000_rework_router.py "$host:$stage/quality1000_rework_router.py"
+          scp -q "${opts[@]}" scripts/factory_quality_1000_v2.py "$host:$stage/factory_quality_1000_v2.py"
+          scp -q "${opts[@]}" factory_config/quality_100_criteria.json "$host:$stage/quality_100_criteria.json"
+          for f in quality1000_evidence_gate.py quality1000_rework_router.py factory_quality_1000_v2.py; do
+            test "$(sha256sum "scripts/$f" | cut -d' ' -f1)" = "$(ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$f' | cut -d' ' -f1")"
+          done
+          test "$(sha256sum factory_config/quality_100_criteria.json | cut -d' ' -f1)" = "$(ssh -T "${opts[@]}" "$host" "sha256sum '$stage/quality_100_criteria.json' | cut -d' ' -f1")"
+          echo QUALITY1000_PRIVATE_SOURCE_PINNING=PASS
+          timeout 125s ssh -T "${opts[@]}" "$host"             "python3 -B '$stage/quality1000_rework_router.py' --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle --limit 6"
+          echo QUALITY1000_VPS_PRIVATE_REWORK_ROUTING=COMPLETED
+          echo QUALITY1000_PUBLICATION=NONE
+          ssh -T "${opts[@]}" "$host" "rm -f -- '$stage/quality1000_evidence_gate.py' '$stage/quality1000_rework_router.py' '$stage/factory_quality_1000_v2.py' '$stage/quality_100_criteria.json'; rmdir -- '$stage'"
