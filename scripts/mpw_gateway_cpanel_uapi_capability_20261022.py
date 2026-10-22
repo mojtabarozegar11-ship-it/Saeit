@@ -51,7 +51,7 @@ def check():
         if task.returncode:
             # Errors may contain private installation details. Report only a
             # fixed category, never stderr/stdout, usernames, paths or tokens.
-            diagnostic = (task.stderr + task.stdout[:2000]).lower()
+            diagnostic = ((task.stderr or b'') + (task.stdout or b'')[:2000]).lower()
             markers = (
                 (b'permission denied', 'os_permission'),
                 (b'not authorized', 'authorization'),
