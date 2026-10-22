@@ -47,6 +47,12 @@ from django.db import models,connection
 
 class User(models.Model):
     name=models.CharField(max_length=40,default='Test Buyer')
+    username=models.CharField(max_length=100,unique=True,null=True)
+    password=models.CharField(max_length=128,default="!")
+    is_active=models.BooleanField(default=True)
+    USERNAME_FIELD="username"
+    def set_unusable_password(self):
+        self.password="!guest-account-cannot-login"
     class Meta:app_label="test_core";db_table="test_mpw_core_user"
 
 class Product(models.Model):
@@ -184,7 +190,8 @@ class RealDjangoWalletlessTests(unittest.TestCase):
     def setUp(self):
         c=raw_conn()
         with c.cursor() as cur:
-            for table in ("mpw_walletless_trx_entitlement_v1","mpw_walletless_trx_ledger_v1",
+            for table in ("mpw_walletless_trx_guest_claim_v1","mpw_walletless_trx_guest_rate_v1",
+                          "mpw_walletless_trx_entitlement_v1","mpw_walletless_trx_ledger_v1",
                           "mpw_walletless_trx_receipt_v1","mpw_walletless_trx_reservation_v1",
                           "mpw_walletless_trx_allocator_v1"):
                 cur.execute("DELETE FROM "+table)
@@ -360,6 +367,71 @@ class RealDjangoWalletlessTests(unittest.TestCase):
             self.assertIn(b'QR contains the address only',page.content)
             self.assertFalse(LedgerEntry.objects.filter(
                 order__customer_id=42,metadata__payment_method="walletless_trx").exists())
+
+    def test_anonymous_one_click_checkout_claim_status_paid_download(self):
+        from django.test import RequestFactory
+        from django.contrib.auth.models import AnonymousUser
+        from django.http import Http404
+        from services.mpw_walletless_django_guest_claim import COOKIE_NAME,read_guest_buyer
+        from services.mpw_walletless_django_guest_staging_web import (
+            guest_start_order,guest_show_invoice,guest_invoice_status,guest_download_paid)
+        from django.utils import timezone as tz
+        factory=RequestFactory()
+        def req(method,path,cookie=None):
+            r=getattr(factory,method)(path,secure=True,HTTP_HOST="isolated.test")
+            r._dont_enforce_csrf_checks=True
+            r.user=AnonymousUser()
+            if cookie:r.COOKIES[COOKIE_NAME]=cookie
+            return r
+        with (patch("django.contrib.auth.get_user_model",return_value=User),
+              patch("services.mpw_walletless_django_staging_web._rate_provider",
+                    side_effect=lambda:(Decimal("0.30"),tz.now())),
+              patch("services.mpw_walletless_django_staging_web._configured_receiver",
+                    return_value=RECIPIENT)):
+            start=guest_start_order(req("post","/commerce/trx-easy/start/779/"),779)
+            self.assertEqual(start.status_code,302)
+            self.assertIn(COOKIE_NAME,start.cookies)
+            token=start.cookies[COOKIE_NAME].value
+            self.assertEqual(start.cookies[COOKIE_NAME]["httponly"],True)
+            self.assertEqual(start.cookies[COOKIE_NAME]["secure"],True)
+            buyer=read_guest_buyer(token)
+            self.assertIsInstance(buyer,int)
+            self.assertNotEqual(buyer,42)
+            self.assertTrue(User.objects.get(pk=buyer).password.startswith("!"))
+            self.assertEqual(User.objects.filter(username__startswith="mpwguest_").count(),1)
+            invoice_id=int(start["Location"].strip("/").split("/")[-1])
+            page=guest_show_invoice(req("get",start["Location"],token),invoice_id)
+            self.assertEqual(page.status_code,200)
+            self.assertIn(b'Pay TRX in my wallet',page.content)
+            self.assertIn(b'QR contains the address only',page.content)
+            repeat=guest_start_order(req("post","/commerce/trx-easy/start/779/",token),779)
+            self.assertEqual(repeat["Location"],start["Location"])
+            self.assertEqual(User.objects.filter(username__startswith="mpwguest_").count(),1)
+            status=guest_invoice_status(req("get","/commerce/trx-easy/status/"+str(invoice_id)+"/",token),invoice_id)
+            self.assertEqual(status.json() if hasattr(status,"json") else __import__("json").loads(status.content),{"status":"awaiting","can_download":False})
+            with self.assertRaises(Http404):
+                guest_download_paid(req("get","/commerce/trx-easy/download/"+str(invoice_id)+"/",token),invoice_id)
+            with self.assertRaises(Http404):
+                guest_invoice_status(req("get","/commerce/trx-easy/status/"+str(invoice_id)+"/",None),invoice_id)
+            with self.assertRaises(Http404):
+                guest_invoice_status(req("get","/commerce/trx-easy/status/"+str(invoice_id)+"/",token+"tampered"),invoice_id)
+            from services.mpw_walletless_django_staging_web import _trusted_status
+            self.assertFalse(_trusted_status(connection,invoice_id,buyer)["can_download"])
+
+    def test_guest_rate_limit_five_per_hour(self):
+        from services.mpw_walletless_django_guest_claim import create_guest_buyer
+        with patch("django.contrib.auth.get_user_model",return_value=User):
+            for index in range(5):
+                buyer,token=create_guest_buyer(remote_ip="203.0.113.101")
+                self.assertIsInstance(buyer,int)
+                self.assertTrue(token)
+            with self.assertRaises(PaymentHold):
+                create_guest_buyer(remote_ip="203.0.113.101")
+            with self.assertRaises(PaymentHold):
+                create_guest_buyer(remote_ip="untrusted")
+            with connection.cursor() as c:
+                c.execute("SELECT COUNT(*) FROM mpw_walletless_trx_guest_claim_v1")
+                self.assertEqual(c.fetchone()[0],5)
 
     def test_missing_private_file_cannot_grant(self):
         global ARTIFACT
