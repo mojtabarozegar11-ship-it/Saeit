@@ -1,0 +1,270 @@
+"""No-DDL TRX checkout against existing Django PaymentIntent/LedgerEntry tables.
+
+PREPRODUCTION / TEST DATABASE ONLY. No public URLs import this module.
+This investigates a real no-migration path while keeping signed legacy
+CommerceInvoice rows and the production ledger untouched. Release requires
+independent mainnet evidence, integration review, rollback and a paid download
+test. A payment claim is never accepted from a browser or wallet callback.
+"""
+from __future__ import annotations
+
+from datetime import datetime, timezone, timedelta
+from decimal import Decimal
+from contextlib import contextmanager
+import hashlib
+import json
+import secrets
+
+from services.mpw_trx_walletless_core import (
+    ADDRESS, NETWORK, INVOICE_TTL, InvoiceIntent, PaymentHold, issue_intent,
+)
+from services.mpw_walletless_django_test_bridge import (
+    TrustedNodePair, _test_only_guard,
+)
+
+PROVIDER = "mpw_walletless_trx_v1"
+WAITING = "awaiting_chain"
+LOCK = "mpw-walletless-trx-amount-v1"
+
+
+def _key(address: str, amount_sun: int) -> str:
+    """Existing unique PaymentIntent.idempotency_key is an exact amount claim."""
+    if not isinstance(address, str) or not ADDRESS.fullmatch(address):
+        raise PaymentHold("Invalid merchant recipient")
+    if type(amount_sun) is not int or not 0 < amount_sun < 10**18:
+        raise PaymentHold("Invalid TRX atomic amount")
+    # Hash the full address; the network is fixed by this provider.
+    return "wltrx1:" + hashlib.sha256(address.encode("ascii")).hexdigest() + ":" + str(amount_sun)
+
+
+def _encode(invoice: InvoiceIntent) -> str:
+    if not isinstance(invoice, InvoiceIntent) or invoice.network != NETWORK:
+        raise PaymentHold("Invalid invoice intent")
+    doc = {"v": 1, "to": invoice.recipient, "sun": invoice.amount_sun,
+           "rate": str(invoice.quote_usd_per_trx),
+           "at": invoice.issued_at.astimezone(timezone.utc).isoformat()}
+    encoded = json.dumps(doc, separators=(",", ":"), sort_keys=True)
+    if len(encoded) > 200 or _key(invoice.recipient, invoice.amount_sun) == "":
+        raise PaymentHold("Existing provider_reference column too short")
+    return encoded
+
+
+def _decode(intent) -> InvoiceIntent:
+    """Rehydrate from one immutable row, never from client-submitted data."""
+    try:
+        if intent.provider != PROVIDER:
+            raise PaymentHold("Wrong gateway provider")
+        doc = json.loads(intent.provider_reference)
+        if type(doc) is not dict or set(doc) != {"v", "to", "sun", "rate", "at"}:
+            raise PaymentHold("Unrecognized invoice envelope")
+        if type(doc["v"]) is not int or doc["v"] != 1:
+            raise PaymentHold("Unsupported invoice version")
+        at = datetime.fromisoformat(doc["at"])
+        rate = Decimal(doc["rate"])
+        sun = doc["sun"]
+        if at.tzinfo is None or at.utcoffset() is None or not rate.is_finite() or rate <= 0:
+            raise PaymentHold("Untrusted quote data")
+        if intent.idempotency_key != _key(doc["to"], sun):
+            raise PaymentHold("Invoice atomic amount key mismatch")
+        if intent.currency != "USD" or Decimal(intent.amount) <= 0:
+            raise PaymentHold("Invalid intent price")
+        return InvoiceIntent(
+            order_id=int(intent.order_id), customer_id=int(intent.order.customer_id),
+            network=NETWORK, recipient=doc["to"], amount_sun=sun,
+            usd_total=Decimal(intent.amount), quote_usd_per_trx=rate,
+            issued_at=at, expires_at=at + INVOICE_TTL,
+        )
+    except PaymentHold:
+        raise
+    except (TypeError, ValueError, KeyError, OverflowError, ArithmeticError, AttributeError) as exc:
+        raise PaymentHold("Corrupt persisted walletless invoice") from exc
+
+
+def _ready_order(order, *, buyer_id: int):
+    from mpw_commerce.settlement import order_snapshot
+    from mpw_commerce.fulfillment import _private_file
+
+    if (order.customer_id != buyer_id or order.status != "pending"
+            or order.currency != "USD"):
+        raise PaymentHold("Order ownership/currency/state invalid")
+    try:
+        total, items = order_snapshot(order)
+    except Exception as exc:
+        raise PaymentHold("Order snapshot cannot be verified") from exc
+    if len(items) != 1 or items[0][1] != "digital":
+        raise PaymentHold("Pilot requires one downloadable digital product")
+    item = items[0][0]
+    source = _private_file(item)
+    if source.is_symlink() or not source.is_file():
+        raise PaymentHold("Digital product not safely available")
+    if Decimal(total) != Decimal(order.total) or Decimal(total) <= 0:
+        raise PaymentHold("Order price mismatch")
+    return Decimal(total), item
+
+
+def _test_db(settings, db):
+    _test_only_guard(settings, db)
+    if db.alias != "default":
+        raise PaymentHold("Expected the same isolated Django database")
+
+
+def _named_lock(db):
+    """MySQL lock must be held until after the atomic amount reservation."""
+    cur = db.cursor()
+    cur.execute("SELECT GET_LOCK(%s, 3)", [LOCK])
+    if cur.fetchone() != (1,):
+        cur.close()
+        raise PaymentHold("Cannot safely allocate a unique amount")
+    return cur
+
+
+@contextmanager
+def _allocation_lock(db):
+    cur = _named_lock(db)
+    try:
+        yield
+    finally:
+        try:
+            cur.execute("SELECT RELEASE_LOCK(%s)", [LOCK])
+        finally:
+            cur.close()
+
+
+def reserve_existing_test_intent(order_id: int, buyer_id: int, *, rate_provider,
+                                  configured_receiver, now=None,
+                                  random_below=secrets.randbelow,
+                                  db=None, settings=None):
+    """Issue once using existing PaymentIntent uniqueness, never alter schema."""
+    if type(order_id) is not int or order_id <= 0 or type(buyer_id) is not int or buyer_id <= 0:
+        raise PaymentHold("Valid buyer and order required")
+    from django.conf import settings as django_settings
+    from django.db import connection, transaction
+    from django.utils import timezone as django_timezone
+    from core.models import Order, PaymentIntent
+    from mpw_commerce.models import CommerceInvoice
+
+    db = db or connection
+    settings = settings or django_settings
+    _test_db(settings, db)
+    if not callable(rate_provider) or not callable(configured_receiver):
+        raise PaymentHold("Trusted quote and merchant address are missing")
+    recipient = configured_receiver()
+    from scripts.mojplaywin_native_chain_verify import tron_address_to_hex
+    try:
+        tron_address_to_hex(recipient)  # validates Base58Check, not merely shape
+    except (TypeError, ValueError) as exc:
+        raise PaymentHold("Invalid merchant-owned TRON address") from exc
+    current = now or django_timezone.now()
+
+    # Other payment rails are disabled in this controlled test. This check
+    # also avoids ambiguous reuse of CommerceInvoice's signed invoice table.
+    # Acquire before the transaction; release only after its COMMIT/ROLLBACK.
+    with _allocation_lock(db), transaction.atomic(using=db.alias):
+            order = Order.objects.select_for_update().get(pk=order_id)
+            total, _ = _ready_order(order, buyer_id=buyer_id)
+            existing = PaymentIntent.objects.select_for_update().filter(order=order).first()
+            if existing is not None:
+                if existing.provider != PROVIDER or existing.status != WAITING:
+                    raise PaymentHold("Order already belongs to another payment flow")
+                invoice = _decode(existing)
+                if invoice.recipient != recipient or invoice.usd_total != total:
+                    raise PaymentHold("Merchant or amount changed")
+                return existing.pk, invoice, False
+            if (CommerceInvoice.objects.filter(order=order).exists()
+                    or CommerceInvoice.objects.filter(status=CommerceInvoice.Status.AWAITING).exists()):
+                raise PaymentHold("In-flight signed invoice must be resolved")
+            quote = rate_provider()
+            if not isinstance(quote, (tuple, list)) or len(quote) != 2:
+                raise PaymentHold("Rate source did not return an observed quote")
+
+            def used(sun):
+                return (PaymentIntent.objects.filter(idempotency_key=_key(recipient, sun)).exists()
+                        or CommerceInvoice.objects.filter(
+                            network=NETWORK, recipient=recipient, amount_atomic=str(sun)
+                        ).exists())
+
+            invoice = issue_intent(
+                order_id=order_id, customer_id=buyer_id, recipient=recipient,
+                usd_total=total, usd_per_trx=Decimal(str(quote[0])),
+                quote_observed_at=quote[1], now=current,
+                is_amount_reserved=used, random_below=random_below,
+            )
+            created = PaymentIntent.objects.create(
+                order=order, amount=total, currency="USD", status=WAITING,
+                provider=PROVIDER, idempotency_key=_key(recipient, invoice.amount_sun),
+                provider_reference=_encode(invoice),
+            )
+            return created.pk, invoice, True
+
+
+def settle_existing_test_intent(intent_id: int, tx_hash: str,
+                                pair: TrustedNodePair, *, db=None, settings=None):
+    """Atomic independent-chain evidence -> webhook receipt/ledger/grant.
+
+    No CommerceReceipt is synthesized: its FK is to signed CommerceInvoice.
+    Instead the EXISTING unique PaymentWebhookEvent event and unique LedgerEntry
+    reference own the walletless proof, with one-time Order/PaymentIntent locks.
+    """
+    if type(intent_id) is not int or intent_id <= 0 or not isinstance(pair, TrustedNodePair):
+        raise PaymentHold("Invalid payment intent or proof verifiers")
+    from django.conf import settings as django_settings
+    from django.db import connection, transaction
+    from core.models import Order, PaymentIntent, LedgerEntry, PaymentWebhookEvent
+    from mpw_commerce.models import CommerceInvoice, CommerceReceipt, CommerceFulfillment
+
+    db = db or connection
+    settings = settings or django_settings
+    _test_db(settings, db)
+    with transaction.atomic(using=db.alias):
+        intent = PaymentIntent.objects.select_for_update().select_related("order").get(pk=intent_id)
+        if intent.status != WAITING:
+            raise PaymentHold("Intent is no longer awaiting payment")
+        invoice = _decode(intent)
+        order = Order.objects.select_for_update().get(pk=intent.order_id)
+        total, item = _ready_order(order, buyer_id=invoice.customer_id)
+        if total != invoice.usd_total:
+            raise PaymentHold("Order price changed after quote")
+        if (CommerceInvoice.objects.filter(order=order).exists()
+                or CommerceInvoice.objects.filter(status=CommerceInvoice.Status.AWAITING).exists()):
+            raise PaymentHold("Cannot mix new settlement with signed invoices")
+
+        def already_used(network, normalized):
+            if CommerceReceipt.objects.filter(tx_hash=normalized).exists():
+                return True
+            try:
+                from django.apps import apps
+                native = apps.get_model("mpw_native_checkout", "NativeChainTransfer")
+            except LookupError:
+                native = None
+            if native is not None and native.objects.filter(tx_hash=normalized).exists():
+                return True
+            if PaymentWebhookEvent.objects.filter(provider=PROVIDER,event_id=normalized).exists():
+                return True
+            return LedgerEntry.objects.filter(reference="walletless:"+network+":"+normalized).exists()
+
+        tx, sender = pair.verify(invoice, tx_hash, already_used)
+        digest = hashlib.sha256(json.dumps({
+            "intent_id":intent_id, "tx_hash":tx,"network":NETWORK,
+            "recipient":invoice.recipient,"sender":sender,"sun":invoice.amount_sun,
+            "source_a":pair.identifier_a,"source_b":pair.identifier_b,
+        },sort_keys=True,separators=(",", ":")).encode()).hexdigest()
+        event = PaymentWebhookEvent.objects.create(
+            provider=PROVIDER, event_id=tx, event_type="tron_finalized",
+            payment_intent=intent, payload_hash=digest, status="processed",
+        )
+        reference = "walletless:"+NETWORK+":"+tx
+        LedgerEntry.objects.create(
+            order=order, payment_intent=intent, entry_type="credit",
+            amount=total, currency="USD", reference=reference,
+            metadata={"payment_method":PROVIDER,"network":NETWORK,
+                      "tx_hash":tx,"sender":sender,"evidence_digest":digest,
+                      "walletless_receipt_event_id":event.pk},
+        )
+        CommerceFulfillment.objects.create(
+            item=item, kind="digital", status=CommerceFulfillment.Status.READY,
+        )
+        intent.status="paid"
+        intent.save(update_fields=["status", "updated_at"])
+        order.status="paid"
+        order.save(update_fields=["status", "updated_at"])
+    return "paid"
