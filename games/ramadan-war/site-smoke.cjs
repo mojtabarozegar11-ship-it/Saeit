@@ -8,6 +8,7 @@ const assert=require('node:assert/strict');
    const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
    const response=await page.goto(process.env.GAME_URL,{waitUntil:'domcontentloaded',timeout:45000});assert.equal(response.status(),200);
    await page.locator('#menu h1').waitFor();
+   await page.waitForFunction(()=>window.RamadanWarDebug&&Array.isArray(window.RamadanWarDebug.heroes),null,{timeout:12000});
    assert.equal(await page.evaluate(()=>window.RamadanWarDebug.heroes.length),30);
    assert.match(await page.locator('#menu').innerText(),/۳۰/);
    await page.evaluate(()=>window.RamadanWarDebug.selectHero(1));
