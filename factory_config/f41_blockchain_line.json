@@ -1,0 +1,35 @@
+{
+  "schema": "saeit.factory.f41-blockchain-line.v1",
+  "id": "F41",
+  "slug": "blockchain_crypto_tokens",
+  "product_families": [
+    "blockchain_protocol_research",
+    "trc20_fixed_supply_tokens",
+    "smart_contract_toolkits",
+    "tokenomics_test_models",
+    "wallet_integration_test_harnesses"
+  ],
+  "isolated_extension_of": "factory_config/forty_families.json",
+  "registry_mode": "separate_nonbreaking_sidecar",
+  "coordinator": "moj_1ro_1",
+  "coordinator_binding": "pending_authenticated_qa_capability",
+  "network_allowlist": [
+    "shasta"
+  ],
+  "default_standard": "TRC-20",
+  "target_generation": 100,
+  "verified_generation": 0,
+  "generation_100_certified": false,
+  "quality_1000_required": 1000,
+  "quality_1000_certified": false,
+  "requires_independent_smart_contract_audit": true,
+  "requires_independent_legal_review": true,
+  "requires_owner_mainnet_approval": true,
+  "private_candidate_generator": "scripts/factory_f41_token_builder.py",
+  "production_state": "private_source_candidate_only",
+  "auto_deploy": false,
+  "mainnet_enabled": false,
+  "public_sale_enabled": false,
+  "real_funds_enabled": false,
+  "background_worker_enabled": false
+}
