@@ -87,3 +87,19 @@ Do NOT fill legacy sender-signature fields with forged values or disable the tes
 3. Run walletless buyer authentication, protected order and invoice endpoints and owner-scoped download in actual staging.
 4. Validate atomic ledger and fulfillment against the real site's backed-up isolated staging MariaDB.
 5. Restore from a verified backup and perform a small owner-approved real transaction before live enablement.
+
+
+## Follow-on: authenticated Django test invoice issuance, 22 Oct
+
+- Added services/mpw_walletless_django_test_invoice.py: the real Django Order
+  and permanent walletless SUN reservation now share one isolated MariaDB
+  SQL transaction and SELECT FOR UPDATE locks. The existing signed-invoice
+  order path and unresolved signed invoice are rejected, not bypassed.
+- The server-side recipient is Base58Check checked in the real module;
+  no wallet proof or sender signature is falsely fabricated.
+- Test-only switch, default-off public route and database name test_
+  restrictions remain mandatory.
+- Seven genuine Django ORM MariaDB checks passed: Actions 39718611605,
+  including no-signature invoice issuance, idempotency and rejection of
+  conflicting signed invoices, real test ledger settlement and delivery.
+- No production deployment, wallet transfer, or actual Mainnet confirmation.
