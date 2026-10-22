@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/moj1-vps-shasta-watch-install.yml'
       - 'experiments/moj1-pilot/scripts/watch_shasta.py'
+      - 'experiments/moj1-pilot/worker-message.json'
   workflow_dispatch:
 permissions:
   contents: read
@@ -46,14 +47,18 @@ jobs:
           destination='githubops@178.239.147.150'
           root='.local/share/moj1-shasta-test-20261021'
           src='experiments/moj1-pilot/scripts/watch_shasta.py'
+          message_src='experiments/moj1-pilot/worker-message.json'
           expected_sha="$(sha256sum "$src" | cut -d' ' -f1)"
+          message_sha="$(sha256sum "$message_src" | cut -d' ' -f1)"
           [[ "$expected_sha" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$message_sha" =~ ^[a-f0-9]{64}$ ]]
           [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]]
           # Do not create a wallet or alter existing keys. Require the secured wallet root.
           timeout 40s ssh "${ssh_opts[@]}" "$destination" \
             'set -eu; umask 077; root="$HOME/.local/share/moj1-shasta-test-20261021"; test -d "$root"; test ! -L "$root"; test "$(stat -c %a "$root")" = 700; command -v crontab >/dev/null; if command -v systemctl >/dev/null && systemctl is-active --quiet cron; then :; elif pgrep -x cron >/dev/null || pgrep -x crond >/dev/null; then :; else echo "MOJ1_CRON_DAEMON=INACTIVE"; exit 1; fi; install -d -m 700 "$root/monitor"; test ! -L "$root/monitor"; test "$(stat -c %a "$root/monitor")" = 700'
           timeout 40s scp "${ssh_opts[@]}" "$src" "$destination:$root/monitor/watch_shasta.py.stage-$GITHUB_RUN_ID"
-          timeout 110s ssh "${ssh_opts[@]}" "$destination" "bash -s -- '$expected_sha' '$GITHUB_RUN_ID'" <<'REMOTE'
+          timeout 40s scp "${ssh_opts[@]}" "$message_src" "$destination:$root/monitor/inbox.json.stage-$GITHUB_RUN_ID"
+          timeout 110s ssh "${ssh_opts[@]}" "$destination" "bash -s -- '$expected_sha' '$message_sha' '$GITHUB_RUN_ID'" <<'REMOTE'
           set -euo pipefail
           umask 077
           python3 - "$1" "$2" <<'PY_INSTALL'
@@ -65,13 +70,16 @@ jobs:
           import subprocess
           import sys
 
-          digest, run_id = sys.argv[1:]
+          digest, msg_digest, run_id = sys.argv[1:]
           assert len(digest) == 64 and all(c in '0123456789abcdef' for c in digest)
+          assert len(msg_digest) == 64 and all(c in '0123456789abcdef' for c in msg_digest)
           assert run_id.isdigit()
           root = Path.home() / '.local/share/moj1-shasta-test-20261021'
           monitor = root / 'monitor'
           stage = monitor / ('watch_shasta.py.stage-' + run_id)
           final = monitor / 'watch_shasta.py'
+          message_stage = monitor / ('inbox.json.stage-' + run_id)
+          message_final = monitor / 'inbox.json'
           for directory in (root, monitor):
               s = directory.lstat()
               if not stat.S_ISDIR(s.st_mode) or stat.S_IMODE(s.st_mode) != 0o700 or s.st_uid != os.getuid():
@@ -81,7 +89,13 @@ jobs:
               raise RuntimeError('STAGE_NOT_REGULAR')
           if hashlib.sha256(stage.read_bytes()).hexdigest() != digest:
               raise RuntimeError('TRANSFER_CHECKSUM_MISMATCH')
+          msg_info = message_stage.lstat()
+          if not stat.S_ISREG(msg_info.st_mode) or msg_info.st_uid != os.getuid():
+              raise RuntimeError('MESSAGE_STAGE_NOT_REGULAR')
+          if hashlib.sha256(message_stage.read_bytes()).hexdigest() != msg_digest:
+              raise RuntimeError('MESSAGE_TRANSFER_CHECKSUM_MISMATCH')
           stage.chmod(0o600)
+          message_stage.chmod(0o600)
           tested = subprocess.run([sys.executable, str(stage), '--self-test'], text=True,
                                   capture_output=True, timeout=12)
           if tested.returncode or 'SELF_TEST=PASS' not in tested.stdout:
@@ -90,7 +104,12 @@ jobs:
               old = final.lstat()
               if not stat.S_ISREG(old.st_mode) or old.st_uid != os.getuid() or stat.S_IMODE(old.st_mode) != 0o600:
                   raise RuntimeError('EXISTING_WATCHER_UNSAFE')
+          if message_final.exists() or message_final.is_symlink():
+              msg_old = message_final.lstat()
+              if not stat.S_ISREG(msg_old.st_mode) or msg_old.st_uid != os.getuid() or stat.S_IMODE(msg_old.st_mode) != 0o600:
+                  raise RuntimeError('EXISTING_MESSAGE_UNSAFE')
           stage.replace(final)
+          message_stage.replace(message_final)
           python = shutil.which('python3')
           if not python or not Path(python).is_absolute():
               raise RuntimeError('PYTHON_UNAVAILABLE')
@@ -116,6 +135,7 @@ jobs:
           if checked.returncode or checked.stdout.splitlines().count(line) != 1:
               raise RuntimeError('CRONTAB_VERIFY_FAILED')
           print('MOJ1_WATCH_INSTALLED=YES')
+          print('MOJ1_WORKER_MESSAGE_DELIVERED=YES')
           print('MOJ1_WATCH_SCHEDULE=EVERY_10_MINUTES')
           print('MOJ1_WATCH_SCRIPT_SHA256=' + digest)
           print('MOJ1_WATCH_CRON_OTHER_ENTRIES_PRESERVED=YES')
@@ -129,5 +149,11 @@ jobs:
           if immediate.returncode:
               print('MOJ1_WATCH_INITIAL_ERROR=' + immediate.stderr.strip()[-300:])
               raise RuntimeError('INITIAL_MONITOR_UNVERIFIED')
+          import json
+          receipt = json.loads(immediate.stdout)
+          if (receipt.get('worker_message_id') != 'moj1-worker-instruction-20261022-01'
+                  or receipt.get('worker_message_acknowledged') is not True):
+              raise RuntimeError('WORKER_MESSAGE_NOT_ACKNOWLEDGED')
+          print('MOJ1_WORKER_MESSAGE_ACKNOWLEDGED=YES')
           PY_INSTALL
           REMOTE
