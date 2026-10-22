@@ -334,7 +334,10 @@ class SourceScoutTests(unittest.TestCase):
         p["abstract_inverted_index"]=indexed(abstract)
         keys=SCOUT.keys("Houseplant Rescue Guide")
         hit=SCOUT.usable_paper(p,keys,STAGE2)
-        self.assertIsNotNone(hit)
+        self.assertIsNotNone(hit, msg={"keys":keys,
+                "abstract_len":len(SCOUT.abstract_from_index(p["abstract_inverted_index"])),
+                "citation":SCOUT.citation_sentence(
+                    SCOUT.abstract_from_index(p["abstract_inverted_index"]),keys)})
         self.assertEqual(hit["support_sentence"],sentence)
 
     def test_accepted_indexed_location_recovers_article_specific_url(self):
