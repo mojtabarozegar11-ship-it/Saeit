@@ -44,7 +44,49 @@ def read_file(path, max_bytes=3_000_000):
         raise ValueError("ROUTER_EXPECTED_JSON_OBJECT")
     return raw, value
 
+def quarantine_ticket(assessment, raw, order):
+    """Preserve audit-error records as explicit repair, never 100-group proof."""
+    name = assessment.get("recipe")
+    defects = assessment.get("defects")
+    if (assessment.get("schema") != "saeit.factory.quality-rework.v2"
+            or assessment.get("quality_status") != "QUARANTINE_AUDIT_ERROR"
+            or not isinstance(name, str) or not RECIPE.fullmatch(name)
+            or order.get("schema") != "saeit.factory.production-rework-order.v1"
+            or order.get("recipe") != name
+            or order.get("source_quality_receipt_sha256") != hashlib.sha256(raw).hexdigest()
+            or order.get("commercial_publish_allowed") is not False
+            or order.get("owner_release_approval_required") is not True
+            or order.get("signed_external_quality_approval_required") is not True
+            or assessment.get("commercial_release_allowed") is not False
+            or assessment.get("premium_quality_approved") is not False
+            or assessment.get("quality_points_verified") is not None
+            or not isinstance(defects, list)
+            or not defects
+            or not all(isinstance(c, str) and c.startswith("P0_AUDIT_ERROR_")
+                       for c in defects)
+            or sorted(order.get("unresolved_technical_or_domain_defects", []))
+                != sorted(defects)):
+        raise ValueError("ROUTER_QUARANTINE_SOURCE_NOT_BOUND")
+    jobs = [{"criterion": None, "name": "recover_original_sources_and_rerun_triage",
+             "adapter": "specialist_builder",
+             "action": "restore_authentic_build_and_complete_quality_scorecard",
+             "type": "source_integrity_quarantine", "status": "OPEN"}]
+    return {
+        "schema": "saeit.quality1000.specialist-route.v2",
+        "recipe": name, "family_id": assessment.get("family_id"),
+        "source_receipt_sha256": hashlib.sha256(raw).hexdigest(),
+        "artifact_sha256": None, "producer_module": "factory_product_maker.py",
+        "criteria_total": 100, "documentary_points": None,
+        "task_count": len(jobs), "tasks": jobs,
+        "external_signed_review_required": True,
+        "master_task_dispatch_verified": False, "certified_quality_points": None,
+        "quality_1000_certified": False, "publication_allowed": False,
+        "payment_activation_allowed": False, "disposition": "QUARANTINED_NEEDS_ORIGINAL_SOURCE",
+    }
+
 def ticket(assessment, raw, order):
+    if assessment.get("quality_status") == "QUARANTINE_AUDIT_ERROR":
+        return quarantine_ticket(assessment, raw, order)
     state = inspect(assessment, raw, order)
     family = state["family_id"]
     if not isinstance(family, str) or not FAMILY.fullmatch(family):
@@ -162,7 +204,10 @@ def route(root, limit=6):
                 completed.append({"recipe": folder.name, "tasks": result["task_count"],
                                   "receipt_sha256": token})
             except (ValueError, OSError, KeyError, TypeError, RuntimeError, json.JSONDecodeError) as error:
-                rejected.append({"recipe": folder.name, "failure_class": type(error).__name__})
+                reason = str(error)
+                if not (reason.startswith("QUALITY1000_") or reason.startswith("ROUTER_")):
+                    reason = type(error).__name__
+                rejected.append({"recipe": folder.name, "failure_code": reason[:100]})
     return {"schema": "saeit.quality1000.specialist-route-summary.v2",
             "routed_products": len(completed), "queued_issues": sum(i["tasks"] for i in completed),
             "rejected_products": rejected, "receipts": completed,
