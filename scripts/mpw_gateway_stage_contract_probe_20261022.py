@@ -95,7 +95,7 @@ def check():
                     'sender_signature_verified_at','verified_sender_address',
                     'payment_intent','recipient','amount_atomic','invoice',
                     'tx_hash','reference','metadata','provider_reference')},
-            'status_values': list(dict(model._meta.get_field('status').choices).keys())
+            'status_values': list(dict(model._meta.get_field('status').choices or []).keys())
                 if any(f.name=='status' for f in model._meta.fields) else [],
         }
 
