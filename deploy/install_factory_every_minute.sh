@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Replace two HOURLY production/warehouse cron entries with one coordinated
-# EVERY-MINUTE cron. Manufacture -> QA -> warehouse; never site transfer.
+# Replace two HOURLY production/warehouse cron entries, or safely restore an
+# absent scheduler, with one coordinated EVERY-MINUTE cron. Never site transfer.
 set -euo pipefail
 umask 077
 test "$(id -un)" = githubops
@@ -49,19 +49,25 @@ from pathlib import Path
 import sys
 p,maker,ware,runner,mfg,stock,newmark=sys.argv[1:]
 lines=Path(p).read_text().splitlines()
-factory=[line for line in lines if mfg in line and not line.lstrip().startswith("#")]
-warehouse=[line for line in lines if stock in line and not line.lstrip().startswith("#")]
-if len(factory)!=1 or len(warehouse)!=1:
-    raise SystemExit("FACTORY_MINUTE_EXPECTED_EXACT_ONE_FACTORY_AND_WAREHOUSE_CRON")
+active=[line for line in lines if line.strip() and not line.lstrip().startswith("#")]
+factory=[line for line in active if mfg in line]
+warehouse=[line for line in active if stock in line]
 expected_new="* * * * * /bin/bash "+runner+" # "+mfg+" "+stock+" "+newmark
 old_mfg="23 * * * * /bin/bash "+maker+" # "+mfg
 old_wh="31 * * * * /bin/bash "+ware+" # "+stock
-if factory[0]==expected_new and warehouse[0]==expected_new:
+if factory==[expected_new] and warehouse==[expected_new]:
     print("FACTORY_MINUTE_SCHEDULE_ALREADY_CORRECT")
-elif factory[0]==old_mfg and warehouse[0]==old_wh:
+elif factory==[old_mfg] and warehouse==[old_wh]:
     print("FACTORY_MINUTE_OLD_SCHEDULE_VALIDATED")
+elif not factory and not warehouse:
+    # The live owner500 canary identified a VPS with no original minute marker.
+    # Never add a second driver if an unmarked or differently named cron calls
+    # any of these executables; preserve all unrelated specialist schedules.
+    if any(any(token in line for token in (maker,ware,runner,newmark)) for line in active):
+        raise SystemExit("FACTORY_MINUTE_UNMARKED_COMPETING_SCHEDULE")
+    print("FACTORY_MINUTE_ABSENT_SCHEDULE_VERIFIED_FOR_RESTORE")
 else:
-    raise SystemExit("FACTORY_MINUTE_UNEXPECTED_CRON_CHANGE")
+    raise SystemExit("FACTORY_MINUTE_UNEXPECTED_OR_DUPLICATE_CRON")
 PY
 
 if test -L "$runner"; then

@@ -35,6 +35,39 @@ class FactoryMinuteCadenceTests(unittest.TestCase):
         self.assertIn('grep -q SAEIT_FACTORY_EVERY_MINUTE_V1',w)
         self.assertIn('VPS_LOCAL_EVERY_MINUTE_PRESERVED',s)
         self.assertIn('VPS_LOCAL_EVERY_MINUTE_PRESERVED',w)
+    def test_missing_scheduler_can_be_restored_without_duplicate_drivers(self):
+        content=SCRIPT.read_text()
+        match=re.search(r'python3 - "\$backup/previous\.cron"[^\n]*<<\x27PY\x27\n([\s\S]*?)\nPY\n',content)
+        self.assertIsNotNone(match)
+        preflight=match.group(1)
+        maker='/factory/operations/autonomous-product-runtime/run-local-cycle.sh'
+        ware='/factory/operations/production-warehouse/run-warehouse.sh'
+        runner='/factory/operations/production-warehouse/run-minute-cycle.sh'
+        mfg='SAEIT_AUTONOMOUS_PRODUCTS_V2'
+        stock='SAEIT_PRODUCTION_WAREHOUSE_V1'
+        marker='SAEIT_FACTORY_EVERY_MINUTE_V1'
+        desired=f'* * * * * /bin/bash {runner} # {mfg} {stock} {marker}'
+        original=(f'23 * * * * /bin/bash {maker} # {mfg}\n'
+                  f'31 * * * * /bin/bash {ware} # {stock}\n')
+        unrelated='*/5 * * * * /bin/bash /factory/owner500/runner.sh # SAEIT_OWNER500_AUTONOMOUS_F28_V1\n'
+        cases=(
+            (unrelated,True,'ABSENT_SCHEDULE_VERIFIED_FOR_RESTORE'),
+            (original,True,'OLD_SCHEDULE_VALIDATED'),
+            (desired+'\n',True,'SCHEDULE_ALREADY_CORRECT'),
+            (unrelated+f'*/2 * * * * /bin/bash {runner}\n',False,'UNMARKED_COMPETING_SCHEDULE'),
+            (desired+'\n'+desired+'\n',False,'UNEXPECTED_OR_DUPLICATE_CRON'),
+            (f'23 * * * * /bin/bash {maker} # {mfg}\n',False,'UNEXPECTED_OR_DUPLICATE_CRON'),
+        )
+        with tempfile.TemporaryDirectory() as td:
+            cron=Path(td)/'prior.cron'
+            for rows,success,expected in cases:
+                with self.subTest(cron=rows):
+                    cron.write_text(rows)
+                    result=subprocess.run(
+                        ['python3','-',str(cron),maker,ware,runner,mfg,stock,marker],
+                        input=preflight,text=True,capture_output=True,timeout=5)
+                    self.assertEqual(result.returncode==0,success,result.stderr)
+                    self.assertIn(expected,result.stdout+result.stderr)
     def test_actual_runner_execution_order_no_website_activity(self):
         content=SCRIPT.read_text()
         match=re.search(r'cat > "\$temp" <<\x27SH\x27\n([\s\S]*?)\nSH\n',content)
