@@ -115,7 +115,43 @@ PY
   touch "$backup/applied"
   echo "PURCHASE_RELEASE_APPLIED_DJANGO_CHECK_OK"
 }
+probe() {
+  # Rehearse AppConfig.ready and staged imports in memory, leaving live files untouched.
+  "$interpreter" -B - "$stage" "$prod" <<'PY'
+import os, sys, pathlib, re, traceback
+stage, prod = (pathlib.Path(x) for x in sys.argv[1:])
+sys.path.insert(0, str(prod))
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+try:
+    import django
+    import core
+    core.__path__.insert(0, str(stage / "core"))
+    from core.apps import CoreConfig
+    def purchase_ready(self):
+        from core import purchase_signals
+    CoreConfig.ready = purchase_ready
+    django.setup()
+    from django.core.management import call_command
+    call_command("check", verbosity=0, stdout=open(os.devnull, "w"))
+    print("PURCHASE_PROBE_DJANGO_READY_AND_CHECK_OK")
+except Exception as exc:
+    frames = traceback.extract_tb(exc.__traceback__)
+    last = frames[-1] if frames else None
+    kind = type(exc).__name__
+    component = pathlib.Path(last.filename).name if last else "unknown"
+    print("PURCHASE_PROBE_ERROR_CLASS_" + re.sub(r"[^A-Za-z]", "", kind))
+    print("PURCHASE_PROBE_ERROR_FILE_" + re.sub(r"[^A-Za-z0-9_.]", "", component))
+    # Only a Python identifier from an import/attribute exception is disclosed.
+    symbol = re.search(r"(?:cannot import name |has no attribute )['\"]([A-Za-z_][A-Za-z_0-9]*)['\"]", str(exc))
+    if symbol:
+        print("PURCHASE_PROBE_ERROR_SYMBOL_" + symbol.group(1))
+    raise SystemExit(1)
+PY
+}
 case "${1:-}" in
+  --probe)
+    probe
+    ;;
   --apply)
     if ! apply; then rollback; exit 1; fi
     ;;

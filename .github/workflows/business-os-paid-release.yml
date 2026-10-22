@@ -108,6 +108,8 @@ jobs:
           timeout 45s ssh -F "$stage_root/config" business-os-cpanel \
             "cd '$stage_host' && tar -tzf bundle.tgz > /dev/null && ! tar -tzf bundle.tgz | grep -Eq '(^/|(^|/)\.\.(/|$))' && tar -xzf bundle.tgz && bash -n scripts/business_os_purchase_cpanel_release.sh"
           echo PURCHASE_RELEASE_PRIVATE_STAGE_CHECKSUM_VERIFIED
+          timeout 90s ssh -F "$stage_root/config" business-os-cpanel \
+            "cd '$stage_host' && bash scripts/business_os_purchase_cpanel_release.sh --probe"
           if ! timeout 120s ssh -F "$stage_root/config" business-os-cpanel \
             "cd '$stage_host' && bash scripts/business_os_purchase_cpanel_release.sh --apply"; then
             echo PURCHASE_RELEASE_PRODUCTION_PREFLIGHT_OR_CHECK_FAILED
