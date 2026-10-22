@@ -423,11 +423,12 @@ class RealDjangoWalletlessTests(unittest.TestCase):
                 cursor.execute(
                     "SELECT amount_sun FROM mpw_walletless_trx_reservation_v1 WHERE id=%s",[invoice_id])
                 exact_sun=int(cursor.fetchone()[0])
+            proof_time=datetime.now(timezone.utc)
             def proof_guest(source):
                 return SolidifiedTransfer(
                     source_id=source,tx_hash="d"*64,network="tron-mainnet",
                     recipient=RECIPIENT,sender=SENDER,amount_sun=exact_sun,
-                    block_time=datetime.now(timezone.utc),solidified=True,
+                    block_time=proof_time,solidified=True,
                     transfer_contract=True,execution_success=True)
             pair=TrustedNodePair("guest-node-a","guest-node-b",
                   prove_a=lambda tx:proof_guest("guest-node-a"),
