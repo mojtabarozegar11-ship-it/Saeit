@@ -94,12 +94,12 @@ def inspect_zip(archive, prefix, expected):
         names = [i.filename for i in entries]
         if (not names or len(names) != len(set(names)) or len(names) > 80
                 or z.testzip() is not None
-                or set(names) != {prefix + "/" + n for n in expected}
+                or set(names) != {(prefix + "/" if prefix else "") + n for n in expected}
                 or any(i.is_dir() or i.flag_bits & 1 or i.file_size > 4_000_000
                        or ((i.external_attr >> 16) & 0o170000) == 0o120000
                        for i in entries)):
             raise RuntimeError("SIX_ARCHIVE_INTEGRITY_FAILED")
-        return {n: hashlib.sha256(z.read(prefix + "/" + n)).hexdigest() for n in expected}
+        return {n: hashlib.sha256(z.read((prefix + "/" if prefix else "") + n)).hexdigest() for n in expected}
 
 def verify_five(root, family, reply):
     if family not in NAMES or reply.get("family_id") != family:
@@ -190,7 +190,7 @@ def build_browser(root):
         if not all((stage / n).is_file() and not (stage / n).is_symlink() for n in names):
             raise RuntimeError("SIX_BROWSER_DELIVERABLES_MISSING")
         syntax_checked = verify_browser(stage)
-        nested = inspect_zip(stage / "browser_game.zip", "browser_game", {"mini_game.html", "game.js"})
+        nested = inspect_zip(stage / "browser_game.zip", "", {"mini_game.html", "game.js"})
         if any(nested[n] != sha(stage / n) for n in ("mini_game.html", "game.js")):
             raise RuntimeError("SIX_BROWSER_BUNDLE_MISMATCH")
         hashes = {n: sha(stage / n) for n in sorted(names)}
