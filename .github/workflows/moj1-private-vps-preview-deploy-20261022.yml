@@ -1,0 +1,96 @@
+name: MOJ1 private VPS review installation (Shasta only)
+on:
+  push:
+    branches: ['moj1/shasta-pilot-20261021']
+    paths: ['.github/workflows/moj1-private-vps-preview-deploy-20261022.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj1-private-vps-preview-install
+  cancel-in-progress: false
+jobs:
+  private-install:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/moj1/shasta-pilot-20261021'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Test installer against valid and traversal archives
+        working-directory: experiments/moj1-pilot
+        run: |
+          node --test tests/mojplaywin-staging-bridge.test.mjs tests/mojplaywin-staging-preview.test.mjs
+          python3 staging/vps_install_preview.py self-test
+      - name: Verify real Shasta code and build offline testnet page
+        working-directory: experiments/moj1-pilot
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(printenv TRON_PRIVATE_KEY || true)"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run compile
+          npm run preflight
+          node scripts/verify-shasta-readonly.mjs > "$RUNNER_TEMP/moj1_vps_shasta_proof.json"
+          node staging/run-mojplaywin-staging.mjs "$RUNNER_TEMP/moj1_vps_shasta_proof.json" > staging-evidence.json
+          node staging/site/generate-preview.mjs
+          (cd staging-preview && sha256sum -c SHA256SUMS)
+          tar -cf "$RUNNER_TEMP/moj1_preview.tar" -C staging-preview index.html synthetic-receipt.json release-gates.json SHA256SUMS
+      - name: Install isolated, versioned preview into VPS private storage
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_SSH_PRIVATE_KEY" || { echo 'MOJ1_VPS_SSH=UNAVAILABLE'; exit 1; }
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]{8,16}$ ]]
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
+          umask 077
+          private_key="$RUNNER_TEMP/moj1_private_review_key"
+          known_hosts="$RUNNER_TEMP/moj1_private_review_known_hosts"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$private_key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null > "$known_hosts"
+          fingerprint="$(ssh-keygen -lf "$known_hosts" -E sha256 | awk '{print $2}' | sort -u)"
+          test "$fingerprint" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          installer='experiments/moj1-pilot/staging/vps_install_preview.py'
+          script_sha="$(sha256sum "$installer" | awk '{print $1}')"
+          page_sha="$(sha256sum experiments/moj1-pilot/staging-preview/index.html | awk '{print $1}')"
+          destination='githubops@178.239.147.150'
+          timeout 45s ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known_hosts" -o IdentitiesOnly=yes -o ForwardAgent=no -i "$private_key" "$destination" "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE_PREPARE'
+          set -euo pipefail
+          umask 077
+          run_id="$1"
+          [[ "$run_id" =~ ^[0-9]{8,16}$ ]]
+          test -d "$HOME/.local/share"
+          root="$HOME/.local/share/moj1-mpw-private-preview-20261022"
+          test ! -L "$root"
+          install -d -m 700 "$root"
+          test "$(stat -c %a "$root")" = 700
+          test "$(stat -c %u "$root")" = "$(id -u)"
+          test ! -L "$root/inbox"
+          install -d -m 700 "$root/inbox"
+          test ! -e "$root/inbox/$run_id"
+          install -d -m 700 "$root/inbox/$run_id"
+          test "$(stat -c %a "$root/inbox/$run_id")" = 700
+          echo 'MOJ1_PRIVATE_UPLOAD_SPACE=READY'
+          REMOTE_PREPARE
+          timeout 55s scp -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known_hosts" -o IdentitiesOnly=yes -o ForwardAgent=no -i "$private_key" "$RUNNER_TEMP/moj1_preview.tar" "$installer" "$destination:.local/share/moj1-mpw-private-preview-20261022/inbox/$GITHUB_RUN_ID/"
+          timeout 90s ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known_hosts" -o IdentitiesOnly=yes -o ForwardAgent=no -i "$private_key" "$destination" "bash -s -- '$GITHUB_RUN_ID' '$GITHUB_SHA' '$script_sha' '$page_sha'" <<'REMOTE_INSTALL'
+          set -euo pipefail
+          run_id="$1"; commit="$2"; script_sha="$3"; page_sha="$4"
+          root="$HOME/.local/share/moj1-mpw-private-preview-20261022"
+          installer="$root/inbox/$run_id/vps_install_preview.py"
+          test "$(sha256sum "$installer" | awk '{print $1}')" = "$script_sha"
+          python3 "$installer" install "$run_id" "$commit"
+          test "$(sha256sum "$root/releases/$commit/index.html" | awk '{print $1}')" = "$page_sha"
+          test "$(cat "$root/CURRENT")" = "$commit"
+          echo 'MOJ1_PRIVATE_INSTALL_HASH_READBACK=PASS'
+          echo 'MOJ1_PUBLICATION_SCOPE=OWNER_PRIVATE_VPS_ONLY'
+          REMOTE_INSTALL
+      - name: Publish safe release-gate summary
+        run: |
+          echo 'MOJ1_SHASTA_PRIVATE_REVIEW_VPS=PASS'
+          echo 'MOJ1_MAINNET_RELEASE=BLOCKED_PENDING_INDEPENDENT_AUDIT_LEGAL_AND_CUSTODY'
+          echo 'MOJPLAYWIN_REAL_PAYMENTS=NOT_TOUCHED'

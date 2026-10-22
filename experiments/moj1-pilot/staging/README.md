@@ -33,3 +33,25 @@ process a checkout. Keep this output in review until production gates are met.
 The release gates intentionally remain false for independent audit, legal
 approval, mainnet custody and authorized sale. No agent-generated proof may
 substitute for an independent assessor or applicable approval.
+
+## Owner-private VPS installation (no website route)
+
+A separate branch-pinned workflow installs the freshly verified Shasta preview
+to the githubops account only, in a new private directory:
+.local/share/moj1-mpw-private-preview-20261022
+
+The installer checks a fixed four-file tar allowlist, SHA-256 receipts, disabled
+payment/sale flags, directory ownership and mode 0700, and reads the page back
+over a temporary VPS localhost-only HTTP listener. It versions each release by
+the source commit SHA, keeps previous revisions, and writes a small CURRENT
+pointer. It never starts a persistent web server, publishes a public URL, uses
+wallet keys, deploys smart contracts or edits the live MojPlayWin site.
+
+Workflow: .github/workflows/moj1-private-vps-preview-deploy-20261022.yml
+Installer: staging/vps_install_preview.py
+
+Operator note: the private files are for review by the VPS owner; no access URL
+exists until a separately approved, authenticated review endpoint is built.
+For a rollback, validate an older release and update CURRENT deliberately.
+Actual public launch remains blocked by the recorded independent audit,
+custody, and legal release requirements.
