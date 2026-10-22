@@ -96,9 +96,11 @@ def merge(root, catalog_path):
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
         before_bytes = b""
         old_rows = []
+        prior_metadata = {}
         if file.exists() or file.is_symlink():
             before_bytes, before = read(file)
             old_rows = validate(before)
+            prior_metadata = {k:v for k,v in before.items() if k not in ("items",)}
         lookup = {x["id"]: x for x in old_rows}
         appended = []
         matching = 0
@@ -114,9 +116,10 @@ def merge(root, catalog_path):
         merged = old_rows + appended
         if len(merged) > MAX_ITEMS:
             raise ValueError("DEMAND_FACTORY_SNAPSHOT_CAPACITY_1000")
-        new_doc = {"schema": SCHEMA, "items": merged,
-                   "market_demand_verified": False,
-                   "owner_demand_snapshot_source_sha256": sha(source_bytes)}
+        new_doc = dict(prior_metadata)
+        new_doc.update({"schema": SCHEMA, "items": merged,
+                        "market_demand_verified": False,
+                        "owner_demand_snapshot_source_sha256": sha(source_bytes)})
         encoded = (json.dumps(new_doc, ensure_ascii=False, sort_keys=True,
                               indent=2) + "\n").encode("utf8")
         if len(encoded) > MAX_BYTES:
