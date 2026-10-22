@@ -6,6 +6,7 @@ import hashlib, json, os, re, sys
 ROOT=Path('/home/zomorod2/public_html')
 ROW='ZM-R25'; GAME_ID='ZM-R25-GAME-RAMADAN-WAR-20261022'; GAME=ROOT/'ramadan-war'
 MARK='ZM-RAMADAN-WAR-WEB-CARD-20261022'
+ASSETS=['index.html','game.js','game.css','engine3d.js','three.module.js','THREE-LICENSE.txt']
 
 def digest(data): return hashlib.sha256(data).hexdigest()
 def atomic(path,data,run):
@@ -34,14 +35,18 @@ def live_card_check():
 def prepare(stage):
     assert ROOT.is_dir() and not ROOT.is_symlink() and GAME.is_dir() and not GAME.is_symlink()
     home=live_card_check()
-    inputs={name:(stage/f'incoming/{name}') for name in ['index.html','game.js','game.css','.htaccess']}
+    inputs={name:(stage/f'incoming/{name}') for name in ASSETS+['.htaccess']}
     assert all(p.is_file() and not p.is_symlink() for p in inputs.values())
     assert inputs['.htaccess'].read_text('utf-8')=='PassengerEnabled off\nDirectoryIndex index.html\n'
-    new={name:inputs[name].read_bytes() for name in ['index.html','game.js','game.css']}
+    new={name:inputs[name].read_bytes() for name in ASSETS}
     assert len(new['index.html'])>1000 and MARK.encode() in new['index.html']
-    assert b'RamadanWarDebug' in new['game.js'] and b'./game.js' in new['index.html'] and b'./game.css' in new['index.html']
+    assert b'RamadanWarDebug' in new['game.js'] and b'createEngine' in new['game.js'] and b'./game.js' in new['index.html'] and b'./game.css' in new['index.html']
+    assert b'./engine3d.js' in new['game.js'] and b'./three.module.js' in new['engine3d.js'] and len(new['three.module.js'])>300000
+    assert b'The MIT License' in new['THREE-LICENSE.txt']
     assert (GAME/'.htaccess').is_file() and (GAME/'.htaccess').read_bytes()==inputs['.htaccess'].read_bytes()
-    old={name:(GAME/name).read_bytes() for name in new}
+    old={name:(GAME/name).read_bytes() for name in ['index.html','game.js','game.css']}
+    for name in set(new)-set(old):
+        assert not (GAME/name).exists() and not (GAME/name).is_symlink(),f'new asset already exists: {name}'
     assert MARK.encode() in old['index.html'] and b'RamadanWarDebug' in old['game.js']
     assert all((GAME/name).is_file() and not (GAME/name).is_symlink() for name in new)
     protected={}
@@ -57,6 +62,7 @@ def prepare(stage):
 def publish(stage,run):
     m=metadata(stage);assert m['phase']=='prepared';live_card_check()
     for name,h in m['old'].items():assert digest((GAME/name).read_bytes())==h,'game file changed concurrently: '+name
+    for name in set(m['new'])-set(m['old']):assert not (GAME/name).exists() and not (GAME/name).is_symlink(),'new asset appeared concurrently: '+name
     assert digest((GAME/'.htaccess').read_bytes())==m['route'],'game route config changed concurrently'
     for name in m['new']:
         data=(stage/f'incoming/{name}').read_bytes();assert digest(data)==m['new'][name]
@@ -80,8 +86,10 @@ def verify(stage):
 def rollback_files(stage,m,run):
     for name,h in m['new'].items():
         p=GAME/name
-        if p.is_file() and not p.is_symlink() and digest(p.read_bytes())==h:
+        if name in m['old'] and p.is_file() and not p.is_symlink() and digest(p.read_bytes())==h:
             atomic(p,(stage/f'old-{name}').read_bytes(),run);print('RESTORED_OLD_GAME_FILE='+name)
+        elif name not in m['old'] and p.is_file() and not p.is_symlink() and digest(p.read_bytes())==h:
+            p.unlink();print('REMOVED_NEW_GAME_ASSET='+name)
         else:print('ROLLBACK_SKIPPED_UNEXPECTED_GAME_FILE='+name)
 
 def rollback(stage,run):

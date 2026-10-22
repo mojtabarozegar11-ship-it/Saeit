@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 (async()=>{
- const browser=await chromium.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+ const browser=await chromium.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--enable-webgl','--enable-unsafe-swiftshader','--use-gl=angle','--use-angle=swiftshader']});
  try{
   for(const v of [{name:'desktop',width:1365,height:900,mobile:false},{name:'mobile',width:390,height:844,mobile:true}]){
    const context=await browser.newContext({viewport:{width:v.width,height:v.height},isMobile:v.mobile,hasTouch:v.mobile});
@@ -16,10 +16,13 @@ const assert=require('node:assert/strict');
    await page.evaluate(()=>window.RamadanWarDebug.selectHero(0));
    await page.evaluate(()=>window.RamadanWarDebug.start());
    await page.locator('#hud:not(.hidden)').waitFor();
+   await page.locator('#scope').click();assert.equal(await page.locator('#game').evaluate(el=>el.classList.contains('scope-mode')),true);
+   await page.locator('#scope').click();assert.equal(await page.locator('#game').evaluate(el=>el.classList.contains('scope-mode')),false);
+   await page.waitForFunction(()=>document.querySelector('#view').getContext('webgl2')||document.querySelector('#view').getContext('webgl'),null,{timeout:10000});
    await page.evaluate(()=>{for(let i=0;i<30;i++)window.RamadanWarDebug.tick(.04)});
    let state=await page.evaluate(()=>window.RamadanWarDebug.getState());
    assert.equal(state.hp,100);assert.equal(state.lives,100);assert.equal(state.stage,0);assert.equal(state.mode,'game');
-   assert.equal(state.rockets,12);assert.equal(state.drones,3);assert(state.enemies>0,'mission enemy spawn');
+   assert.equal(state.rockets,12);assert.equal(state.drones,3);assert.equal(state.renderer,'webgl-threejs');assert(state.enemies>0,'mission enemy spawn');
    await page.evaluate(()=>window.RamadanWarDebug.spawnTestEnemy());
    await page.evaluate(()=>{window.RamadanWarDebug.fire();window.RamadanWarDebug.rocket();window.RamadanWarDebug.drone()});
    state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.shots,1);assert.equal(state.rockets,11);assert.equal(state.drones,2);

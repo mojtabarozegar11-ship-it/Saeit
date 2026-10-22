@@ -19,12 +19,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Check the release marker, Android-parity client and scoped updater
+      - name: Check the release marker, 3D client, vendored engine and scoped updater
         run: |
           set -euo pipefail
           test -s games/ramadan-war/index.html
           test -s games/ramadan-war/game.js
           test -s games/ramadan-war/game.css
+          test -s games/ramadan-war/engine3d.js
+          test -s games/ramadan-war/three.module.js
+          test -s games/ramadan-war/THREE-LICENSE.txt
           python3 -m py_compile games/ramadan-war/deploy.py
           node --check games/ramadan-war/site-smoke.cjs
           python3 - <<'PY'
@@ -36,11 +39,14 @@ jobs:
           assert Path('games/ramadan-war/route.htaccess').read_text(encoding='utf-8') == 'PassengerEnabled off\nDirectoryIndex index.html\n'
           Check().feed(html)
           assert html.count('ZM-RAMADAN-WAR-WEB-CARD-20261022') == 1
-          assert '<script src="./game.js" defer></script>' in html and '<link rel="stylesheet" href="./game.css">' in html
+          assert '<script type="module" src="./game.js"></script>' in html and '<link rel="stylesheet" href="./game.css">' in html
           gamejs=Path('games/ramadan-war/game.js').read_text(encoding='utf-8')
-          assert 'RamadanWarDebug' in gamejs and not any(line.startswith('+') for line in gamejs.splitlines())
+          assert 'RamadanWarDebug' in gamejs and "from './engine3d.js'" in gamejs and not any(line.startswith('+') for line in gamejs.splitlines())
+          engine=Path('games/ramadan-war/engine3d.js').read_text(encoding='utf-8')
+          assert "from './three.module.js'" in engine and 'WebGLRenderer' in engine
           PY
           node --check games/ramadan-war/game.js
+          node --check games/ramadan-war/engine3d.js
       - name: Test timed firing, special weapons and save resume before deployment
         run: |
           set -euo pipefail
@@ -99,6 +105,9 @@ jobs:
           timeout 50s scp -q -F "$d/config" games/ramadan-war/route.htaccess "host:$stage/incoming/.htaccess"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/game.js "host:$stage/incoming/game.js"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/game.css "host:$stage/incoming/game.css"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/engine3d.js "host:$stage/incoming/engine3d.js"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/three.module.js "host:$stage/incoming/three.module.js"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/THREE-LICENSE.txt "host:$stage/incoming/THREE-LICENSE.txt"
           timeout 45s ssh -T -F "$d/config" host "python3 '$stage/incoming/deploy.py' prepare '$GITHUB_RUN_ID'"
       - name: Replace only game client files and preserve the second card
         id: publish
@@ -128,7 +137,11 @@ jobs:
           assert game,'new public route is still unavailable after ten fresh requests'
           assert b'canvas' in game and b'./game.js' in game and b'./game.css' in game
           with urlopen(Request(root+'/ramadan-war/game.js?asset='+str(time.time_ns()),headers={'Cache-Control':'no-cache,no-store'}),timeout=35) as r:js=r.read(250000)
-          assert b'RamadanWarDebug' in js
+          assert b'RamadanWarDebug' in js and b'engine3d.js' in js
+          for asset,needle in [('engine3d.js',b'three.module.js'),('three.module.js',b'WebGLRenderer')]:
+           with urlopen(Request(root+'/ramadan-war/'+asset+'?asset='+str(time.time_ns()),headers={'Cache-Control':'no-cache,no-store'}),timeout=35) as r:
+            assert r.status==200;asset_body=r.read(1200000)
+           assert needle in asset_body,asset
           with urlopen(Request(root+'/?ramadan_card='+str(time.time_ns()),headers={'Cache-Control':'no-cache,no-store'}),timeout=40) as r:
            data=r.read(2600000)
           d=json.loads(re.search(rb'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',data,re.S).group(1))
@@ -137,7 +150,7 @@ jobs:
           assert row['cards'][1]['canonicalUrl']=='/ramadan-war/' and row['cards'][2]['slug']=='website-design'
           print('LIVE_CARD_TWO_AND_GAME_ROUTE=PASS')
           PY
-      - name: Test campaign controls on desktop and mobile browsers
+      - name: Test 3D rendering and campaign controls on desktop and mobile browsers
         run: |
           GAME_URL=https://zomorodmelal.ir/ramadan-war/ NODE_PATH=/tmp/ramadan-playwright/node_modules node games/ramadan-war/site-smoke.cjs
       - name: Restore the previous game client files after any deployment or browser failure
