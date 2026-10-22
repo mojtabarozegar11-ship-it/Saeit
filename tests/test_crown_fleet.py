@@ -1,5 +1,6 @@
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 from django.contrib.auth.models import AnonymousUser
@@ -56,12 +57,27 @@ def test_browser_or_incomplete_settlement_does_not_unlock(purchase, failure):
 @pytest.mark.django_db
 @override_settings(CROWN_STORE_ENABLED=True)
 def test_catalogue_requires_checkout_verification_and_unambiguous_sku(purchase):
-    assert catalogue()[0]["available"] is True
-    purchase.p.metadata["crown_checkout_verified"] = False; purchase.p.save()
+    # An approved product still cannot expose a dead or guessed payment link.
     assert catalogue()[0]["available"] is False
-    purchase.p.metadata["crown_checkout_verified"] = True; purchase.p.save()
-    Product.objects.create(title="duplicate", product_type="game_cosmetic", active=True, price="4.00", currency="USD", metadata=purchase.p.metadata)
-    assert catalogue()[0]["available"] is False
+    assert catalogue()[0]["checkout"] is None
+    with patch("core.crown_fleet.reverse", return_value=f"/store/crown/{purchase.p.pk}/checkout/"):
+        item = catalogue()[0]
+        assert item["available"] is True
+        assert item["checkout"] == f"/store/crown/{purchase.p.pk}/checkout/"
+        purchase.p.metadata["crown_checkout_verified"] = False; purchase.p.save()
+        assert catalogue()[0]["available"] is False
+        purchase.p.metadata["crown_checkout_verified"] = True; purchase.p.save()
+        Product.objects.create(title="duplicate", product_type="game_cosmetic", active=True, price="4.00", currency="USD", metadata=purchase.p.metadata)
+        assert catalogue()[0]["available"] is False
+
+@pytest.mark.django_db
+@override_settings(CROWN_STORE_ENABLED=True)
+def test_checkout_must_be_local_store_route(purchase):
+    for invalid in ("https://other.example/checkout/", "//other.example/store/", "/admin/", "/store/../admin/"):
+        with patch("core.crown_fleet.reverse", return_value=invalid):
+            assert catalogue()[0]["available"] is False
+            assert catalogue()[0]["checkout"] is None
+
 
 
 @pytest.mark.django_db
