@@ -46,7 +46,7 @@ jobs:
           for phrase in ["داوری‌شده","محدودیت","بازتولیدپذیری","آزمایش کم‌هزینه","مجتبی روزگار","مدیرعامل شرکت کشت‌وصنعت زمرد ملل"]:
               assert phrase in s,phrase
           assert len(s)>9000
-          assert s.count("https://doi.org/")==3
+          assert s.count('href="https://doi.org/')==3
           print("HTML_SEO_DOI_EVIDENCE_AND_AUTHORSHIP=verified")
           PY
   publish:
@@ -125,13 +125,15 @@ jobs:
           sha="$1";web="$HOME/public_html";route="$web/research/updates/20261022"
           stage="$HOME/.backups/zomorod-research-watch/$sha/staging/index.html"
           test -s "$stage" && test ! -e "$route" && test ! -L "$web/research/updates"
-          grep -Fq 'ZM-RESEARCH-WATCH-20261022' "$stage" && exit 3 || true
           mkdir -p "$route"
           install -m 644 "$stage" "$route/.index.$sha"
           mv "$route/.index.$sha" "$route/index.html"
+          rollback() { rc=$?; trap - EXIT; if test "$rc" -ne 0 && grep -Fq 'ZM-RESEARCH-WATCH-20261022' "$route/index.html" 2>/dev/null; then rm -f "$route/index.html"; rmdir "$route" 2>/dev/null || true; fi; exit "$rc"; }
+          trap rollback EXIT
           code="$(curl -sSL --max-time 30 -o "$stage.public" -w '%{http_code}' "https://zomorodmelal.ir/research/updates/20261022/?release=$sha" || true)"
           test "$code" = 200
           grep -Fq 'سه پژوهش تازه با کاربرد عملی برای تحقیق‌وتوسعه کشاورزی' "$stage.public"
           grep -Fq '10.3389/fsufs.2026.1959282' "$stage.public"
           echo "LIVE_REPORT_PAGE=verified URL=/research/updates/20261022/"
+          trap - EXIT
           REMOTE
