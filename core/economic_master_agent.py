@@ -17,7 +17,7 @@ MISSION = (
 
 AUTONOMOUS_ACTIONS = frozenset({
     "research", "classify", "analyze", "scenario", "fact_check", "report",
-    "inspect_project", "repair_project", "implement_feature", "test",
+    "inspect_project", "repair_project", "factory_native_review", "implement_feature", "test",
     "build_product", "improve_product", "quality_check", "price_product",
     "prepare_listing", "publish_nonbinding_listing", "generate_lead",
     "qualify_lead", "prepare_proposal", "customer_support", "reconcile",
