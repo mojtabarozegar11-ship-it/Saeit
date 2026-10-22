@@ -218,3 +218,41 @@ def test_indexer_fake_candidate_does_not_grant_jet(
     assert client.get(url).status_code == 200
     assert owned_skus(buyer) == []
     assert not LedgerEntry.objects.exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_actual_mariadb_named_lock_atomic_settlement(
+    django_user_model, monkeypatch,
+):
+    """Only the isolated CI MariaDB, never live wallet funds or real nodes."""
+    from django.db import connection
+    if connection.vendor != "mysql":
+        pytest.skip("Runs exclusively in the MariaDB service CI job")
+    a = SimpleNamespace(source_id="node-a")
+    b = SimpleNamespace(source_id="node-b")
+    monkeypatch.setattr(shop, "_configuration", lambda: (RECEIVER, (a, b)))
+    monkeypatch.setattr(shop, "query_solidified_head", lambda _: 1234)
+    monkeypatch.setattr(
+        shop, "_quote",
+        lambda: (Decimal("0.25"), datetime.now(timezone.utc)),
+    )
+    buyer = django_user_model.objects.create_user(username="mariadb-buyer")
+    product = Product.objects.create(
+        title="Spectre", product_type="game_cosmetic", price="4.99",
+        currency="USD", active=True,
+        metadata={"crown_sku": "cd-spectre", "rights_cleared": True,
+                  "crown_checkout_verified": True},
+    )
+    path = shop.start_crown_checkout(buyer_id=buyer.pk, product_id=product.pk)
+    assert path.endswith("/")
+    # Exercise actual SELECT GET_LOCK / RELEASE_LOCK and transaction.atomic.
+    assert shop.start_crown_checkout(buyer_id=buyer.pk, product_id=product.pk) == path
+    _mock_chain(monkeypatch)
+    intent = PaymentIntent.objects.get()
+    assert shop._settle(intent.pk, buyer.pk, TX) is True
+    assert owned_skus(buyer) == ["cd-spectre"]
+    assert Order.objects.filter(status="paid").count() == 1
+    assert LedgerEntry.objects.count() == 1
+    with pytest.raises(PaymentHold):
+        shop._settle(intent.pk, buyer.pk, TX)
+    assert LedgerEntry.objects.count() == 1
