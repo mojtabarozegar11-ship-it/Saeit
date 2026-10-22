@@ -493,6 +493,50 @@ class SourceScoutTests(unittest.TestCase):
         self.assertTrue((self.area/"stage-02/source-evidence/AGRI-001--r001.json").is_file())
 
 
+    def test_selection_reserves_independent_publishers_beyond_top_twenty(self):
+        title="Houseplant Rescue Guide"
+        articles=[study(title,n) for n in range(1,26)]
+        for article in articles:
+            article["publication_year"]=2025
+        for article in articles[:22]:
+            article["primary_location"]["landing_page_url"]=(
+                "https://monopoly.publisher.org/article")
+            article["primary_location"]["source"]["host_organization_name"]=(
+                "Single Aggregated Publisher")
+        selected=SCOUT.select_papers(articles,SCOUT.keys(title),STAGE2)
+        self.assertEqual(len(selected),20)
+        self.assertGreaterEqual(len({
+            SCOUT.registrable_host(p["host"]) for p in selected}),4)
+        self.assertEqual(len({
+            p["publisher"].casefold() for p in selected}),4)
+        self.assertIsNotNone(SCOUT.evidence_from_papers(
+            self.order(1),1,selected,STAGE2))
+
+    def test_evidence_gap_reports_actual_unmet_gate(self):
+        title="Houseplant Rescue Guide"
+        order=self.order(1)
+        key=SCOUT.keys(title)
+        too_few=SCOUT.select_papers(sample(title)[:2],key,STAGE2)
+        self.assertEqual(
+            SCOUT.evidence_gap_reason(order,too_few),
+            "under_four_topic_relevant_article_abstracts")
+        single_publisher=sample(title)[:5]
+        for item in single_publisher:
+            item["primary_location"]["landing_page_url"]=(
+                "https://single.publisher.org/articles")
+            item["primary_location"]["source"]["host_organization_name"]=(
+                "Single Scientific Publisher")
+        same_source=SCOUT.select_papers(single_publisher,key,STAGE2)
+        self.assertEqual(
+            SCOUT.evidence_gap_reason(order,same_source),
+            "insufficient_independent_publishers_or_domains")
+        without_fifth=SCOUT.select_papers(sample(title)[:4],key,STAGE2)
+        for item in without_fifth:
+            item["support_sentences"]=[item["support_sentence"]]
+        self.assertEqual(
+            SCOUT.evidence_gap_reason(order,without_fifth),
+            "fifth_distinct_verbatim_claim_unavailable")
+
     def test_scout_cycle_promotes_new_evidence_without_manual_redeploy(self):
         installer=(BASE/"deploy/install_factory_stage2_literature_scout.sh").read_text()
         self.assertIn("&& /usr/bin/timeout 120s",installer)
