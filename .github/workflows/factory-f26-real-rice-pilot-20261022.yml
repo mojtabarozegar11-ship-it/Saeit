@@ -6,6 +6,8 @@ on:
       - scripts/factory_f26_real_rice_research_pilot.py
       - scripts/factory_f26_real_rice_cli.py
       - scripts/factory_f26_rice_onnx_portable.py
+      - deploy/factory_f26_portable_private_relay.sh
+      - deploy/factory_f26_portable_private_install.py
       - tests/test_factory_f26_real_rice_cli.py
       - tests/test_factory_f26_real_rice_research_pilot.py
       - tests/test_factory_f26_real_rice_private_install.py
@@ -41,6 +43,8 @@ jobs:
           python3 -B -m unittest discover -s tests -p test_factory_f26_real_rice_private_install.py -v
           bash -n deploy/factory_f26_real_rice_private_relay.sh
           python3 -B -m py_compile scripts/factory_f26_real_rice_research_pilot.py
+          python3 -B -m py_compile scripts/factory_f26_real_rice_cli.py scripts/factory_f26_rice_onnx_portable.py deploy/factory_f26_portable_private_install.py
+          bash -n deploy/factory_f26_portable_private_relay.sh
       - name: Fetch explicitly licensed UCI rice morphology dataset over HTTPS
         shell: bash
         run: |
@@ -126,3 +130,12 @@ jobs:
           bash -n deploy/factory_f26_real_rice_private_relay.sh
           python3 -B -m py_compile deploy/factory_f26_real_rice_private_install.py
           bash deploy/factory_f26_real_rice_private_relay.sh "$RUNNER_TEMP/f26-real-rice"
+      - name: Admit and execute portable pure-Python predictor on private VPS
+        if: github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash deploy/factory_f26_portable_private_relay.sh "$RUNNER_TEMP/rice-portable-spec.json" "$RUNNER_TEMP/rice-inference.csv"
+          echo F26_PORTABLE_PRIVATE_VPS_NATIVELY_EXECUTED=PASS
