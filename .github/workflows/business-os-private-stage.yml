@@ -170,6 +170,39 @@ jobs:
           fi
           echo "BUSINESS_OS_VPS_MARKED_CRON_ABSENT"
           echo "BUSINESS_OS_DIAGNOSTICS_ON_DEMAND_ONLY"
+          # Read-only release preflight: inspect only fixed code-presence markers.
+          # No customer rows, environment variables, credentials or file bodies
+          # are returned by either server.
+          if timeout 25s ssh -F "$stage_root/config" business-os-cpanel \
+            "test -f /home/zomorod2/Saeit/core/api.py"; then
+            echo "BUSINESS_OS_LIVE_DJANGO_API_PRESENT"
+          else
+            echo "BUSINESS_OS_LIVE_DJANGO_API_NOT_OBSERVED"
+          fi
+          if timeout 25s ssh -F "$stage_root/config" business-os-cpanel \
+            "grep -Fq 'schedule_paid_purchase_review' /home/zomorod2/Saeit/core/api.py"; then
+            echo "BUSINESS_OS_LIVE_PAID_PURCHASE_HOOK_PRESENT"
+          else
+            echo "BUSINESS_OS_LIVE_PAID_PURCHASE_HOOK_ABSENT"
+          fi
+          if timeout 25s ssh -F "$stage_root/config" business-os-cpanel \
+            "test -f /home/zomorod2/Saeit/core/business_scientist.py"; then
+            echo "BUSINESS_OS_LIVE_ECONOMIST_MODULE_PRESENT"
+          else
+            echo "BUSINESS_OS_LIVE_ECONOMIST_MODULE_ABSENT"
+          fi
+          if timeout 25s ssh -F "$stage_root/config" business-os-cpanel \
+            "test -f /home/zomorod2/Saeit/services/mpw_walletless_existing_intent_pilot.py"; then
+            echo "BUSINESS_OS_LIVE_TRON_PILOT_FILE_PRESENT"
+          else
+            echo "BUSINESS_OS_LIVE_TRON_PILOT_FILE_ABSENT"
+          fi
+          if timeout 25s ssh -F "$stage_root/config" business-os-vps \
+            "test -f /home/githubops/factory-runtime/django-app/core/purchase_event.py"; then
+            echo "BUSINESS_OS_VPS_PURCHASE_RECEIVER_MODULE_PRESENT"
+          else
+            echo "BUSINESS_OS_VPS_PURCHASE_RECEIVER_MODULE_ABSENT"
+          fi
           echo "PRIVATE_RELEASE=$stage_name"
           echo "No website app code, database schema, transaction, service, or public route modified."
 
