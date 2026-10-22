@@ -370,7 +370,11 @@ def reconcile(root):
             order_file=root/'production-instructions/orders'/(order_id+'.json')
             try:
                 order=read(order_file)
-                if (order.get('id')!=order_id or order.get('status')=='completed_verified'
+                if (order.get('schema')!='saeit.factory.production-instructions.v1'
+                        or order.get('instruction_kind')!='private_factory_work_order'
+                        or not re.fullmatch(r'[a-f0-9]{64}',str(order.get('fingerprint','')))
+                        or order.get('id')!=order_id
+                        or order.get('status') not in ('issued','in_engineering','blocked_rework')
                         or order.get('public_distribution_allowed') is not False
                         or digest(order)!=row.get('source_revision_sha256')):continue
                 ticket_key=digest({'origin':row.get('origin'),'id':order_id,'record':order})
