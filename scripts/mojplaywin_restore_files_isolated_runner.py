@@ -143,11 +143,44 @@ def recover(stream, directory):
     return result
 
 
+def safe_failure_code(exc):
+    """Expose only a fixed failure category; never archive paths or user data."""
+    expected = {
+        "unsafe absolute path": "absolute_member",
+        "unsafe relative archive path": "unsafe_member",
+        "too many tar members": "member_limit",
+        "archive duplicate path": "duplicate_member",
+        "symlinked directory forbidden": "symlinked_parent",
+        "archive parent is not directory": "non_directory_parent",
+        "symlink target collision": "link_collision",
+        "insufficient isolated capacity": "capacity",
+        "missing regular member bytes": "missing_member_bytes",
+        "incomplete restored regular file": "short_member",
+        "special file member not permitted in sandbox": "special_member",
+        "absolute archive link cannot be restored into sandbox": "absolute_link",
+        "nested archive links not restored": "nested_link",
+        "link collision": "link_collision",
+        "hardlink target missing": "hardlink_target",
+        "source roots missing from recovered archive": "missing_root",
+        "restore root must be private": "private_root",
+        "missing private restore directory": "missing_root_dir",
+        "expected one isolated temporary directory": "invalid_usage",
+    }
+    if isinstance(exc, ValueError):
+        return expected.get(str(exc), "invalid_tar_member")
+    if isinstance(exc, tarfile.TarError):
+        return "tar_integrity"
+    if isinstance(exc, OSError):
+        return "isolated_io"
+    return "unknown_isolated_failure"
+
+
 if __name__=="__main__":
     try:
         if len(sys.argv)!=2:
             raise ValueError("expected one isolated temporary directory")
         print(json.dumps(recover(sys.stdin.buffer,sys.argv[1]),sort_keys=True))
-    except Exception:
-        print("SANDBOX_FILE_RECOVERY_FAILED_NO_RELEASE",file=sys.stderr)
+    except Exception as exc:
+        print("SANDBOX_FILE_RECOVERY_FAILED_NO_RELEASE category="
+              + safe_failure_code(exc), file=sys.stderr)
         raise SystemExit(1)
