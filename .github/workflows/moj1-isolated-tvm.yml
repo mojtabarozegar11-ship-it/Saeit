@@ -51,6 +51,7 @@ jobs:
         working-directory: experiments/moj1-pilot
         env:
           LOCAL_PRIVATE_KEY: '0000000000000000000000000000000000000000000000000000000000000001'
+          MOJ1_LOCAL_TVM_ENERGY_EVIDENCE: 'artifacts/moj1-v2-local-energy.json'
         run: |
           npm run test:onchain:local
           echo 'MOJ1_LOCAL_TVM_BEHAVIOR=PASS'
@@ -69,6 +70,16 @@ jobs:
           LOCAL_PRIVATE_KEY: '0000000000000000000000000000000000000000000000000000000000000001'
           MOJ1_LOCAL_TVM_ONLY: '1'
         run: node scripts/rehearse-recovery-local.mjs
+      - name: Build keyless, hash-locked independent auditor input packet
+        working-directory: experiments/moj1-pilot
+        run: node scripts/build-audit-bundle.mjs
+      - name: Upload auditor source, bytecode and local TVM Energy evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: moj1-v2-unsigned-auditor-input-${{ github.run_id }}
+          path: experiments/moj1-pilot/artifacts/audit-bundle/
+          if-no-files-found: error
+          retention-days: 14
       - name: Destroy disposable TVM container
         if: always()
         run: docker rm -f moj1-tre-${{ github.run_id }} >/dev/null 2>&1 || true

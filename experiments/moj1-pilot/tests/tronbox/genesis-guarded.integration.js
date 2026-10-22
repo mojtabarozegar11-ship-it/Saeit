@@ -6,6 +6,9 @@ const V2Escrow = artifacts.require('MojGenesisFactoryGuarded');
 const Vesting = artifacts.require('MojVestingVault');
 const Reserve = artifacts.require('MojApprovalReserve');
 const Lookalike = artifacts.require('MojVestingLookalike');
+const Governance = artifacts.require('MojPilotGovernance');
+const fs = require('node:fs');
+const pathUtil = require('node:path');
 
 contract('MOJ1 genesis destination forgery: exploit demonstration and guarded V2', accounts => {
   const unit = 10n ** 18n;
@@ -15,6 +18,32 @@ contract('MOJ1 genesis destination forgery: exploit demonstration and guarded V2
   const t0 = () => Math.floor(Date.now() / 1000) + 7200;
   const fromHex = value => tronWeb.address.fromHex(value);
   const total = (100n * billion * unit).toString();
+
+  function recordLocalEnergy(label, txid) {
+    return tronWeb.trx.getTransactionInfo(txid).then(info => {
+      const energy = info?.receipt?.energy_usage_total ?? info?.receipt?.energy_usage ?? null;
+      const measured = energy === null ? null : Number(energy);
+      const entry = {
+        label, network:'DISPOSABLE_LOCAL_TVM_ONLY',
+        receiptResult:info?.receipt?.result ?? null,
+        energyUsageTotal:measured, trxCostQuote:null, mainnet:false, shasta:false
+      };
+      assert.equal(entry.receiptResult,'SUCCESS','TVM receipt must indicate success');
+      assert.ok(measured === null || (Number.isSafeInteger(measured) && measured > 0));
+      console.log('MOJ1_V2_LOCAL_ENERGY_EVIDENCE='+JSON.stringify(entry));
+      const rel=process.env.MOJ1_LOCAL_TVM_ENERGY_EVIDENCE;
+      if (rel) {
+        if (pathUtil.isAbsolute(rel) || rel.split(/[\\/]/).includes('..')) throw Error('UNSAFE_EVIDENCE_PATH');
+        const dest=pathUtil.resolve(process.cwd(),rel);
+        fs.mkdirSync(pathUtil.dirname(dest),{recursive:true});
+        let entries=[];
+        if (fs.existsSync(dest)) entries=JSON.parse(fs.readFileSync(dest,'utf8'));
+        entries.push(entry);
+        fs.writeFileSync(dest,JSON.stringify(entries,null,2)+'\n',{mode:0o600});
+      }
+      return entry;
+    });
+  }
 
   async function expectRevert(promise) {
     const id = await promise;
@@ -60,7 +89,8 @@ contract('MOJ1 genesis destination forgery: exploit demonstration and guarded V2
     await expectRevert(escrow.distribute(invalid, start, {from: accounts[0]}));
     assert.equal((await coin.balanceOf(escrow.address)).toString(), total);
 
-    await escrow.distribute(recipients, start, {from: accounts[0]});
+    const distributionTx = await escrow.distribute(recipients, start, {from: accounts[0]});
+    await recordLocalEnergy('GUARDED_DIRECT_ATOMIC_SIX_VAULTS',distributionTx);
     assert.equal(await escrow.distributed(), true);
     assert.equal((await coin.balanceOf(escrow.address)).toString(), '0');
 
@@ -90,4 +120,35 @@ contract('MOJ1 genesis destination forgery: exploit demonstration and guarded V2
     await expectRevert(escrow.distribute(recipients, start, {from: accounts[0]}));
     assert.equal((await coin.totalSupply()).toString(), total);
   });
+
+  it('V2 genesis distributes only after 2-of-3 governance approvals and blocks replay', async () => {
+    const gov=await Governance.new([accounts[0],accounts[1],accounts[2]]);
+    const coin=await V2Coin.new(gov.address);
+    const escrow=await V2Escrow.at(fromHex(await coin.distributor()));
+    const recipients=accounts.slice(3,9);
+    const start=t0();
+    const data='0x'+tronWeb.sha3('distribute(address[6],uint256)').slice(2,10)+
+      recipients.map(a=>tronWeb.address.toHex(a).slice(2).padStart(64,'0')).join('')+
+      BigInt(start).toString(16).padStart(64,'0');
+    await expectRevert(gov.execute(escrow.address,data,0,{from:accounts[0]}));
+    await expectRevert(gov.approve(escrow.address,data,0,{from:accounts[8]}));
+    await gov.approve(escrow.address,data,0,{from:accounts[0]});
+    await expectRevert(gov.execute(escrow.address,data,0,{from:accounts[2]}));
+    await gov.approve(escrow.address,data,0,{from:accounts[1]});
+    const governedTx=await gov.execute(escrow.address,data,0,{from:accounts[2]});
+    await recordLocalEnergy('GUARDED_2_OF_3_SIX_VAULTS',governedTx);
+    assert.equal((await gov.nonce()).toString(),'1');
+    assert.equal(await escrow.distributed(),true);
+    assert.equal((await coin.balanceOf(escrow.address)).toString(),'0');
+    let sum=0n;
+    for(let i=0;i<6;++i) {
+      const address=fromHex(await escrow.vaults(i));
+      const vault=i===2||i===5?await Reserve.at(address):await Vesting.at(address);
+      assert.equal(tronWeb.address.toHex(await vault.beneficiary()),tronWeb.address.toHex(recipients[i]));
+      sum+=BigInt((await coin.balanceOf(address)).toString());
+    }
+    assert.equal(sum.toString(),total);
+    await expectRevert(gov.execute(escrow.address,data,0,{from:accounts[0]}));
+  });
+
 });
