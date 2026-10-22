@@ -47,19 +47,33 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          test -n "$VPS_KEY"
+          test -n "$VPS_KEY" || { echo "::error::F41_VPS_KEY_SECRET_MISSING"; exit 1; }
+          echo "F41_RELAY_SECRET_PRESENT=YES"
           work="$(mktemp -d)"
           chmod 700 "$work"
           trap 'rm -rf -- "$work"' EXIT
           printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$work/key"
           chmod 600 "$work/key"
-          ssh-keygen -y -P '' -f "$work/key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
-          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null || { echo "::error::F41_SSH_KEY_PARSE_FAILED"; exit 1; }
+          echo "F41_RELAY_PRIVATE_KEY_PARSE=PASS"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null || { echo "::error::F41_RELAY_HOST_SCAN_FAILED"; exit 1; }
+          echo "F41_RELAY_SSH_HOST_SCAN=PASS"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" || { echo "::error::F41_RELAY_HOST_FINGERPRINT_CHANGED"; exit 1; }
+          echo "F41_RELAY_HOST_KEY_PIN=PASS"
           opts=(-i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15)
           host=githubops@178.239.147.150
           stage="/home/githubops/factory-runtime/operations/.f41-finality-stage-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          for attempt in 1 2 3; do
+            if ssh -T "${opts[@]}" "$host" "test -d /home/githubops/factory-runtime/operations && echo F41_RELAY_REMOTE=PASS"; then
+              break
+            fi
+            echo "::warning::F41_RELAY_SSH_PREFLIGHT_ATTEMPT_${attempt}_FAILED"
+            test "$attempt" -lt 3 || { echo "::error::F41_RELAY_CONNECTION_UNAVAILABLE"; exit 1; }
+            sleep 4
+          done
           ssh -T "${opts[@]}" "$host" "umask 077; mkdir -m 700 '$stage'"
+          echo "F41_RELAY_STAGE_CREATED=PASS"
           scp "${opts[@]}" scripts/factory_f41_shasta_finality.py "$host:$stage/factory_f41_shasta_finality.py"
           scp "${opts[@]}" deploy/install_factory_f41_shasta_finality.sh "$host:$stage/install.sh"
           ssh -T "${opts[@]}" "$host" "bash -n '$stage/install.sh' && bash '$stage/install.sh' '$stage' '$GITHUB_RUN_ID'"
+          echo "F41_RELAY_REMOTE_INSTALL=PASS"
