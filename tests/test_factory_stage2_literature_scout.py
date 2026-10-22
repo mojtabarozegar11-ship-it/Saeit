@@ -326,11 +326,10 @@ class SourceScoutTests(unittest.TestCase):
         sentence=("Houseplant experiments measured plant growth differences "
                   "under multiple irrigation treatments and environmental "
                   "conditions across consecutive observation periods.")
-        abstract=(sentence+" Indoor ornamental specimens were examined for "
-                  "physiological changes, relative water content and leaf "
-                  "characteristics during a controlled horticulture trial. "
+        abstract=(sentence+" Indoor ornamental specimens were examined. "
                   "Further evidence should be assessed for regional safety "
-                  "and commercial applicability before practical use.")
+                  "and commercial applicability before practical use in "
+                  "controlled commercial production and educational training.")
         p["abstract_inverted_index"]=indexed(abstract)
         keys=SCOUT.keys("Houseplant Rescue Guide")
         hit=SCOUT.usable_paper(p,keys,STAGE2)
