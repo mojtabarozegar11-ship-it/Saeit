@@ -8,6 +8,8 @@ import os
 import sys
 import types
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 import tempfile
 from pathlib import Path
 from datetime import timedelta, timezone
@@ -106,7 +108,7 @@ def order_snapshot(order):
 
 sys.modules["core"]=types.ModuleType("core")
 fake_core=types.ModuleType("core.models")
-fake_core.Order=Order;fake_core.LedgerEntry=LedgerEntry
+fake_core.Order=Order;fake_core.LedgerEntry=LedgerEntry;fake_core.OrderItem=OrderItem
 sys.modules["core.models"]=fake_core
 sys.modules["mpw_commerce"]=types.ModuleType("mpw_commerce")
 fake_models=types.ModuleType("mpw_commerce.models")
@@ -250,6 +252,68 @@ class RealDjangoWalletlessTests(unittest.TestCase):
                 rate_provider=lambda:(Decimal("0.30"),NOW),
                 configured_receiver=lambda:RECIPIENT,now=NOW)
         self.assertFalse(LedgerEntry.objects.filter(order_id=self.order_id).exists())
+
+    def test_walletless_web_status_stays_unpaid_without_receipt(self):
+        from services.mpw_walletless_django_staging_web import _trusted_status
+        state=_trusted_status(connection,self.invoice_id,42)
+        self.assertEqual(state['status'],'awaiting')
+        self.assertFalse(state['can_download'])
+        with self.assertRaises(Exception):
+            _trusted_status(connection,self.invoice_id,43)
+
+    def test_walletless_web_auto_status_only_after_real_test_ledger(self):
+        from services.mpw_walletless_django_staging_web import _trusted_status
+        self.assertEqual(self.settle(),'paid')
+        state=_trusted_status(connection,self.invoice_id,42)
+        self.assertEqual(state['status'],'paid')
+        self.assertTrue(state['can_download'])
+        self.assertEqual(state['download_path'],f'/commerce/trx-easy/download/{self.invoice_id}/')
+        with self.assertRaises(Exception):
+            _trusted_status(connection,self.invoice_id,43)
+        LedgerEntry.objects.filter(order_id=self.order_id).delete()
+        self.assertFalse(_trusted_status(connection,self.invoice_id,42)['can_download'])
+
+    def test_walletless_web_mobile_invoice_page_has_qr_and_strict_csp(self):
+        from django.test import RequestFactory
+        from services.mpw_walletless_django_staging_web import _show_invoice
+        with connection.cursor() as cur:
+            cur.execute(
+              """UPDATE mpw_walletless_trx_reservation_v1
+                 SET issued_at=UTC_TIMESTAMP(6),
+                     expires_at=DATE_ADD(UTC_TIMESTAMP(6), INTERVAL 10 MINUTE)
+                 WHERE id=%s""",[self.invoice_id])
+        request=RequestFactory().get(f'/commerce/trx-easy/invoice/{self.invoice_id}/',
+           secure=True,HTTP_HOST='stage.test')
+        request.user=SimpleNamespace(pk=42,is_authenticated=True,is_active=True)
+        with patch('services.mpw_walletless_django_staging_web._ensure_test',return_value=connection):
+            result=_show_invoice(request,self.invoice_id)
+        html=result.content.decode('utf8')
+        self.assertEqual(result.status_code,200)
+        self.assertIn('Pay TRX in my wallet',html)
+        self.assertIn('id="mpw-open-wallet"',html)
+        self.assertIn('QR contains the address only',html)
+        self.assertEqual(html.count('<script>'),2)
+        self.assertIn("frame-ancestors 'none'",result['Content-Security-Policy'])
+        self.assertEqual(result['Cache-Control'],'no-store, private, max-age=0')
+
+    def test_walletless_web_paid_download_only_for_owner(self):
+        from django.test import RequestFactory
+        from django.http import Http404
+        from services.mpw_walletless_django_staging_web import _download_paid
+        def request(user):
+            req=RequestFactory().get(f'/commerce/trx-easy/download/{self.invoice_id}/',
+                    secure=True,HTTP_HOST='stage.test')
+            req.user=SimpleNamespace(pk=user,is_authenticated=True,is_active=True)
+            return req
+        with patch('services.mpw_walletless_django_staging_web._ensure_test',return_value=connection):
+            with self.assertRaises(Http404): _download_paid(request(42),self.invoice_id)
+            self.settle()
+            with self.assertRaises(Http404): _download_paid(request(999),self.invoice_id)
+            response=_download_paid(request(42),self.invoice_id)
+            self.assertEqual(response.status_code,200)
+            self.assertIn('attachment',response['Content-Disposition'])
+            self.assertEqual(response['Cache-Control'],'no-store, private, max-age=0')
+            response.close()
 
     def test_missing_private_file_cannot_grant(self):
         global ARTIFACT
