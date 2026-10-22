@@ -51,6 +51,11 @@ def check(source, outfile):
                     page.wait_for_function("x === 200 && score === 0", timeout=5000)
                     if not page.locator("#board").is_visible():
                         raise RuntimeError("F14_CANVAS_NOT_RENDERED")
+                    if (not page.locator("#board").get_attribute("aria-label") or
+                            page.locator("#board").get_attribute("role") != "img" or
+                            page.locator("#score").get_attribute("role") != "status" or
+                            page.locator("#score").get_attribute("aria-live") != "polite"):
+                        raise RuntimeError("F14_ACCESSIBILITY_REGRESSION")
                     if errors or external:
                         raise RuntimeError("F14_BROWSER_ERRORS_OR_EXTERNAL_NETWORK")
                     tested.append(label)
