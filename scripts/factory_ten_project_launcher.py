@@ -92,7 +92,7 @@ def stage3_seed(area, order, receipt_name):
     return {
         "schema": SCHEMA, "project_id": order["source_product_id"],
         "work_order_id": order["id"], "stage": 3,
-        "status": "design_and_original_manuscript_authoring_started",
+        "status": "source_linked_design_seed_created",
         "research_sha256": s2.sha(research),
         "research_claims_for_author_review": research["claims"],
         "bibliography_for_author_review": research["sources"],
@@ -134,8 +134,16 @@ def run(root, activate=False):
             orders.append(order)
 
         if activate:
-            for order in orders:
-                s1.forward(root, order)  # real, independently verified stage-1 handoff
+            # Coordinate with the independent stage-1 minute worker: two first
+            # writers must not produce different timestamped handoff receipts.
+            order_lock = area / ".orders.lock"
+            if order_lock.is_symlink():
+                raise RuntimeError("TEN_PROJECT_UNSAFE_STAGE1_LOCK")
+            with order_lock.open("a+b") as order_handle:
+                os.fchmod(order_handle.fileno(), 0o600)
+                fcntl.flock(order_handle.fileno(), fcntl.LOCK_EX)
+                for order in orders:
+                    s1.forward(root, order)
             s2.stage2_loop(root, batch=40)  # only researched items advance
 
         projects = []
