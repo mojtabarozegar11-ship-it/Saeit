@@ -24,6 +24,7 @@ def digest(path,limit=1_000_000):
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 def document(p, limit=150_000):
+    p=Path(p)
     if p.is_symlink() or not p.is_file() or p.stat().st_size>limit:
         raise RuntimeError("F26_GUARD_VPS_UNSAFE_JSON")
     v=json.loads(p.read_text("utf8"))
