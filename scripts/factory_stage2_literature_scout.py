@@ -27,6 +27,7 @@ import urllib.parse
 import urllib.request
 
 SCHEMA="saeit.factory.stage2-literature-scout.v1"
+SCOUT_ALGO_VERSION="v2-relevance-provenance"
 EVIDENCE_SCHEMA="saeit.factory.stage2-source-evidence.v1"
 TOPIC_ID=re.compile(r"AGRI-[0-9]{3}\Z")
 WORD_RE=re.compile(r"[a-z]{3,}")
@@ -235,7 +236,10 @@ def citation_sentence(abstract, topic_keys):
         normalized={normalize(w) for w in WORD_RE.findall(sentence)}
         matched=[k for k in topic_keys if k in normalized or any(
                  w.startswith(k) and len(k)>4 for w in normalized)]
-        if not matched or len(matched)<min(2,len(topic_keys)):
+        # Paper-level title AND abstract relevance is already enforced.
+        # Requiring every individual sentence to repeat two title concepts
+        # wrongly rejects a meaningful single-topic finding.
+        if not matched:
             continue
         if any(x in sentence.lower() for x in
                ("http://","https://","copyright","all rights reserved")):
@@ -298,6 +302,21 @@ def usable_paper(work,topic_keys,worker):
             if alternative_host:
                 url=candidate
                 host=alternative_host
+    if not host:
+        # The main location is usually a DOI resolver; a verified indexed
+        # accepted/published copy can instead supply an actual article URL.
+        locations=work.get("locations")
+        if isinstance(locations,list):
+            for location in locations[:30]:
+                if (not isinstance(location,dict) or
+                        location.get("version") not in
+                        ("publishedVersion","acceptedVersion")):
+                    continue
+                candidate=location.get("landing_page_url")
+                candidate_host=reliable_url(candidate,worker)
+                if candidate_host:
+                    url,host=candidate,candidate_host
+                    break
     if not host:
         return None
     abstract=abstract_from_index(work.get("abstract_inverted_index"))
@@ -526,8 +545,8 @@ def fetch_openalex(title):
     subject=" ".join(keys(title)[:3]) or title
     data=request_json(SAFE_KEYS["openalex"],{
         "search":subject,
-        "per_page":40,
-        "select":"id,display_name,doi,publication_year,type,is_retracted,abstract_inverted_index,primary_location,best_oa_location,cited_by_count"
+        "per_page":80,
+        "select":"id,display_name,doi,publication_year,type,is_retracted,abstract_inverted_index,primary_location,best_oa_location,locations,cited_by_count"
     },timeout=12)
     value=data.get("results")
     if not isinstance(value,list):
@@ -629,6 +648,7 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
         packet={
             "schema":SCHEMA,"source_product_id":ident,"order_id":order_id,
             "source_search_query":query,"search_round":round_no,
+            "scout_algorithm_version":SCOUT_ALGO_VERSION,
             "status":"external_research_api_unavailable",
             "last_error":type(exc).__name__+":"+str(exc)[:160],
             "research_completed":False,"source_verified_count":0,
@@ -656,7 +676,7 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
     candidate={
         "schema":SCHEMA,"source_product_id":ident,"order_id":order_id,
         "source_search_query":query,"search_keywords":terms,
-        "search_round":round_no,
+        "search_round":round_no,"scout_algorithm_version":SCOUT_ALGO_VERSION,
         "status":"indexed_references_found_require_additional_research",
         "indexed_abstract_candidates":papers[:20],
         "candidate_sha256":sha(papers[:20]),
@@ -746,7 +766,10 @@ def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
             # evidence gap. Retain a small cooldown to respect provider quotas.
             is_provider_error=old.get("status")=="external_research_api_unavailable"
             minimum=dt.timedelta(minutes=12) if is_provider_error else dt.timedelta(hours=8)
-            if now-checked>=minimum:
+            # Historical zero-hit packets were produced by an over-restrictive
+            # search filter; let each get one bounded, evidence-safe retry now.
+            upgraded=old.get("scout_algorithm_version")!=SCOUT_ALGO_VERSION
+            if upgraded or now-checked>=minimum:
                 retries.append((checked,rank,order))
         retries.sort(key=lambda x:(x[0],x[1]))
         selected=(unsearched+[v[2] for v in retries])[:batch]
