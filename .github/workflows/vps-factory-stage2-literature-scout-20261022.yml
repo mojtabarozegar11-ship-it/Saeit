@@ -1,0 +1,88 @@
+name: VPS P0 stage-two autonomous source research
+on:
+  pull_request:
+    paths:
+      - scripts/factory_stage2_literature_scout.py
+      - tests/test_factory_stage2_literature_scout.py
+      - deploy/install_factory_stage2_literature_scout.sh
+      - .github/workflows/vps-factory-stage2-literature-scout-20261022.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_stage2_literature_scout.py
+      - tests/test_factory_stage2_literature_scout.py
+      - deploy/install_factory_stage2_literature_scout.sh
+      - .github/workflows/vps-factory-stage2-literature-scout-20261022.yml
+permissions:
+  contents: read
+concurrency:
+  group: factory-stage2-autonomous-literature-scout
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify real abstract match, source diversity and fail-closed stage-two contracts
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_stage2_literature_scout.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_stage2_research.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_stage1_handoff.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_agri200_p0_intake.py -v
+          bash -n deploy/install_factory_stage2_literature_scout.sh
+          python3 -B -m py_compile scripts/factory_stage2_literature_scout.py
+  private-vps-install:
+    needs: validate
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-stage2-literature-scout-20261022]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Perform stage-two discovery on private VPS and verify source-claim dossiers
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          stage="$RUNNER_TEMP/stage2-research-scout"
+          install -d -m 700 "$stage"
+          trap 'rm -rf -- "$stage"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$stage/key"
+          chmod 600 "$stage/key"
+          ssh-keygen -y -P "" -f "$stage/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$stage/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$stage/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh_vps() {
+            ssh -i "$stage/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$stage/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          ssh_vps 'test "$(id -un)" = githubops && test "$(id -u)" -ne 0 && test -f "$HOME/factory-runtime/operations/production-instructions/stage2-research.py" && echo FACTORY_STAGE2_SCOUT_PREFLIGHT=PASS'
+          remote_stage="/home/githubops/factory-runtime/operations/.stage2-scout-$GITHUB_RUN_ID"
+          ssh_vps "umask 077; test ! -e '$remote_stage'; mkdir -m 700 '$remote_stage'"
+          for src in scripts/factory_stage2_literature_scout.py deploy/install_factory_stage2_literature_scout.sh; do
+            file="$(basename "$src")"
+            cat "$src" | ssh_vps "umask 077; test ! -e '$remote_stage/$file'; cat > '$remote_stage/$file'; chmod 600 '$remote_stage/$file'"
+            digest="$(sha256sum "$src" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$remote_stage/$file' | awk '{print \$1}')\" = '$digest'"
+          done
+          ssh_vps "bash -n '$remote_stage/install_factory_stage2_literature_scout.sh' && bash '$remote_stage/install_factory_stage2_literature_scout.sh' '$remote_stage/factory_stage2_literature_scout.py'"
+          ssh_vps 'python3 -' <<'PY'
+          import json
+          from pathlib import Path
+          area=Path.home()/"factory-runtime/private/autonomous-product-cycle/production-instructions"
+          idx=json.loads((area/"owner-agri200-p0-index.json").read_text())
+          assert len(idx["order_ids_ranked"])==200
+          status=json.loads((area/"stage-02/literature-scout-status.json").read_text())
+          assert status["sites_changed"] is False and status["human_specialist_reviews_completed"]==0
+          print("FACTORY_STAGE2_SOURCE_DISCOVERY_WORKER_INSTALLED=true")
+          print("FACTORY_STAGE2_AUTOMATED_ATTEMPTED="+str(status["attempted_this_run"]))
+          print("FACTORY_STAGE2_AUTOMATED_DOCS="+str(status["source_evidence_automatically_documented"]))
+          print("FACTORY_STAGE2_AUTO_SOURCE_GAPS="+str(status["still_require_manual_or_external_research"]))
+          print("FACTORY_STAGE2_REVIEWER_SIGNATURES_CREATED=0")
+          print("FACTORY_WEBSITES_UNCHANGED=true")
+          PY
