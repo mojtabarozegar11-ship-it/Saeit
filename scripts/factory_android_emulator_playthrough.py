@@ -22,7 +22,8 @@ def adb(*args, timeout=40, expect_success=True):
                      stderr=subprocess.PIPE,timeout=timeout,check=False)
     if expect_success and p.returncode:
         raise RuntimeError("ANDROID_EMULATOR_ADB_FAILED "+ " ".join(args) +
-                           ": "+p.stderr[-300:])
+                           ": rc="+str(p.returncode)+" stderr="+p.stderr[-250:]+
+                           " stdout="+p.stdout[-250:])
     return p.stdout
 
 def find_ui(*phrases, timeout=45):
@@ -42,7 +43,7 @@ def find_ui(*phrases, timeout=45):
             latest=" | ".join((v.get("text") or v.get("content-desc") or "")
                             for v in root.iter("node") if
                             v.get("text") or v.get("content-desc"))[:350]
-        except (ValueError, ET.ParseError, subprocess.SubprocessError) as error:
+        except (ValueError, ET.ParseError, RuntimeError, subprocess.SubprocessError) as error:
             latest=str(error)[:250]
         time.sleep(1.4)
     raise RuntimeError("ANDROID_EMULATOR_UI_NOT_FOUND "+repr(phrases)+": "+latest)
