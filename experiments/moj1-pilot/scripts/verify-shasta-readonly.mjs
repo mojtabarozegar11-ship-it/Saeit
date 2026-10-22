@@ -11,6 +11,10 @@ if (manifest.network !== 'Shasta' || manifest.chain_scope !== 'TESTNET_ONLY' ||
   throw Error('Shasta-only no-sale staging manifest required');
 }
 const tron = new TronWeb({fullHost:'https://api.shasta.trongrid.io'});
+// Constant eth_call on TRON needs a public owner_address, even for unsigned reads.
+// setAddress never imports a key or signs a transaction.
+if (!tron.isAddress(manifest.deployer_public_wallet)) throw Error('PUBLIC_CALLER_INVALID');
+tron.setAddress(manifest.deployer_public_wallet);
 const artifacts = {};
 for (const contract of ['MojPilotGovernance','MojCoin','MojGenesisDistributor','MojAssets']) {
   const a = JSON.parse(await readFile(new URL('../build/contracts/'+contract+'.json',import.meta.url),'utf8'));
