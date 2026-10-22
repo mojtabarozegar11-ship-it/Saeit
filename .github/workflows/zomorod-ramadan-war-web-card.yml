@@ -2,7 +2,7 @@ name: Port Android Ramadan War to the existing web game route
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/zomorod-ramadan-war-web-card.yml']
+    paths: ['.github/workflows/zomorod-ramadan-war-web-card.yml', 'games/ramadan-war/deploy.py']
 permissions:
   contents: read
 concurrency:

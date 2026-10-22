@@ -48,7 +48,7 @@ def prepare(stage):
     for name in set(new)-set(old):
         assert not (GAME/name).exists() and not (GAME/name).is_symlink(),f'new asset already exists: {name}'
     assert MARK.encode() in old['index.html'] and b'RamadanWarDebug' in old['game.js']
-    assert all((GAME/name).is_file() and not (GAME/name).is_symlink() for name in new)
+    assert all((GAME/name).is_file() and not (GAME/name).is_symlink() for name in old)
     protected={}
     for rel in ['.htaccess','agriculture/index.html','research/index.html','store/index.html']:
         p=ROOT/rel
