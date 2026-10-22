@@ -1,0 +1,271 @@
+{
+  "schema": "saeit.factory.stage2-source-evidence.v1",
+  "compiled_date": "2026-10-22",
+  "method": "Publicly checked independent RHS and university extension documents; source claims are concise paraphrases, not unlicensed copied text.",
+  "bundles": [
+    {
+      "schema": "saeit.factory.stage2-source-evidence.v1",
+      "source_product_id": "AGRI-001",
+      "revision": 1,
+      "locale_scopes": {
+        "fa-IR": "For Iranian urban households: adapt houseplant rescue observations to apartment light, local potting substrates and seasonal heating; no pesticide or localized safety approvals are implied.",
+        "en-US": "For United States and global indoor gardeners: adapt symptoms to home microclimate, drainage, window orientation, seasonal shifts and each species' care labels; avoid automatic treatment."
+      },
+      "sources": [
+        {
+          "id": "rhs",
+          "publisher": "Royal Horticultural Society",
+          "title": "How to Help a Poorly Houseplant — RHS Advice",
+          "url": "https://www.rhs.org.uk/plants/types/houseplants/how-to-help-a-poorly-houseplant",
+          "checked_date": "2026-10-22",
+          "evidence_note": "RHS explains environmental checks for low light, excess and insufficient irrigation, root symptoms, nutrient problems and avoiding rigid watering intervals; diagnoses are conditional."
+        },
+        {
+          "id": "umd",
+          "publisher": "University of Maryland Extension",
+          "title": "Diagnose Indoor Plant Problems — University of Maryland Extension",
+          "url": "https://extension.umd.edu/resource/diagnose-indoor-plant-problems",
+          "checked_date": "2026-10-22",
+          "evidence_note": "The Maryland Extension symptom table differentiates wilting from overwatering, drought and root disease; recommends testing root firmness and maintaining drainage."
+        },
+        {
+          "id": "illinois",
+          "publisher": "University of Illinois Extension",
+          "title": "Keep Houseplants Happy with Simple Solutions — Illinois Extension",
+          "url": "https://extension.illinois.edu/news-releases/keep-houseplants-happy-simple-solutions",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Illinois Extension describes leaf-yellowing after relocation, conditional adjustment of watering, and root examination to distinguish a wet root system from a dry one."
+        },
+        {
+          "id": "umn",
+          "publisher": "University of Minnesota Extension",
+          "title": "Spring into Action: Easy Tips for Thriving Houseplants — UMN Extension",
+          "url": "https://extension.umn.edu/news/spring-action-easy-tips-thriving-houseplants",
+          "checked_date": "2026-10-22",
+          "evidence_note": "UMN Extension explains soil moisture checks, drainage, seasonal adjustment of light and watering, gentle repotting and monitoring insects as part of practical houseplant care."
+        }
+      ],
+      "claims": [
+        {
+          "id": "claim1",
+          "statement": "Common leaf yellowing and wilting have multiple possible environmental causes, so evaluate light, soil moisture, temperature and roots before deciding on treatment.",
+          "source_ids": [
+            "rhs",
+            "umd"
+          ]
+        },
+        {
+          "id": "claim2",
+          "statement": "When a houseplant wilts despite wet media, root disease or waterlogging may be involved; healthy roots are generally firm, whereas diseased roots may become soft.",
+          "source_ids": [
+            "umd",
+            "rhs"
+          ]
+        },
+        {
+          "id": "claim3",
+          "statement": "Seasonal variation can change watering needs; test the potting medium rather than automatically watering on the same day every week.",
+          "source_ids": [
+            "rhs",
+            "umn"
+          ]
+        },
+        {
+          "id": "claim4",
+          "statement": "Newly relocated indoor plants may yellow or drop leaves during acclimation, and decisions should consider changes in light and irrigation conditions.",
+          "source_ids": [
+            "illinois",
+            "rhs"
+          ]
+        },
+        {
+          "id": "claim5",
+          "statement": "Check leaf undersides, plant vigor and visible pests as part of diagnosis; deficiencies, pests and growing conditions can all contribute to declining appearance.",
+          "source_ids": [
+            "umn",
+            "umd"
+          ]
+        }
+      ],
+      "scientific_review_completed": false,
+      "public_distribution_allowed": false,
+      "editorial_note": "Desk research compiled from independently opened institutional guidance webpages on 2026-10-22; the automated worker will only perform structure/provenance checks. Independent expert verification, regional chemical legality and manuscript editing remain separate downstream gates."
+    },
+    {
+      "schema": "saeit.factory.stage2-source-evidence.v1",
+      "source_product_id": "AGRI-002",
+      "revision": 1,
+      "locale_scopes": {
+        "fa-IR": "For Persian readers in Iran: explain yellow foliage as a symptom, not a single diagnosis; include checks for moisture, lighting, root condition and recovery after repotting.",
+        "en-US": "For North American houseplant owners: guide differential diagnosis of yellow indoor foliage across different species, window conditions, soil moisture and repotting histories."
+      },
+      "sources": [
+        {
+          "id": "rhs",
+          "publisher": "Royal Horticultural Society",
+          "title": "How to Help a Poorly Houseplant — RHS Advice",
+          "url": "https://www.rhs.org.uk/plants/types/houseplants/how-to-help-a-poorly-houseplant",
+          "checked_date": "2026-10-22",
+          "evidence_note": "RHS explains environmental checks for low light, excess and insufficient irrigation, root symptoms, nutrient problems and avoiding rigid watering intervals; diagnoses are conditional."
+        },
+        {
+          "id": "umd",
+          "publisher": "University of Maryland Extension",
+          "title": "Diagnose Indoor Plant Problems — University of Maryland Extension",
+          "url": "https://extension.umd.edu/resource/diagnose-indoor-plant-problems",
+          "checked_date": "2026-10-22",
+          "evidence_note": "The Maryland Extension symptom table differentiates wilting from overwatering, drought and root disease; recommends testing root firmness and maintaining drainage."
+        },
+        {
+          "id": "illinois",
+          "publisher": "University of Illinois Extension",
+          "title": "Keep Houseplants Happy with Simple Solutions — Illinois Extension",
+          "url": "https://extension.illinois.edu/news-releases/keep-houseplants-happy-simple-solutions",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Illinois Extension describes leaf-yellowing after relocation, conditional adjustment of watering, and root examination to distinguish a wet root system from a dry one."
+        },
+        {
+          "id": "umn",
+          "publisher": "University of Minnesota Extension",
+          "title": "Spring into Action: Easy Tips for Thriving Houseplants — UMN Extension",
+          "url": "https://extension.umn.edu/news/spring-action-easy-tips-thriving-houseplants",
+          "checked_date": "2026-10-22",
+          "evidence_note": "UMN Extension explains soil moisture checks, drainage, seasonal adjustment of light and watering, gentle repotting and monitoring insects as part of practical houseplant care."
+        }
+      ],
+      "claims": [
+        {
+          "id": "claim1",
+          "statement": "A few aging lower leaves may yellow naturally, but widespread or sudden yellowing requires checking several distinct growing conditions before intervention.",
+          "source_ids": [
+            "rhs",
+            "illinois"
+          ]
+        },
+        {
+          "id": "claim2",
+          "statement": "Waterlogged roots may become damaged and fail to support foliage, and wet-root stress can resemble drought because both can cause wilting.",
+          "source_ids": [
+            "umd",
+            "rhs"
+          ]
+        },
+        {
+          "id": "claim3",
+          "statement": "Recently moved indoor plants may show yellow or fallen leaves as they adapt to light and humidity changes.",
+          "source_ids": [
+            "illinois",
+            "umn"
+          ]
+        },
+        {
+          "id": "claim4",
+          "statement": "Low light may lead to pale or yellow lower leaves and weak growth, while excessive direct sun can damage and bleach exposed foliage.",
+          "source_ids": [
+            "rhs",
+            "umn"
+          ]
+        },
+        {
+          "id": "claim5",
+          "statement": "Houseplant symptom diagnosis should examine roots and substrate drainage in addition to the leaf surface, because watering extremes can affect plant appearance.",
+          "source_ids": [
+            "umd",
+            "illinois"
+          ]
+        }
+      ],
+      "scientific_review_completed": false,
+      "public_distribution_allowed": false,
+      "editorial_note": "Desk research compiled from independently opened institutional guidance webpages on 2026-10-22; the automated worker will only perform structure/provenance checks. Independent expert verification, regional chemical legality and manuscript editing remain separate downstream gates."
+    },
+    {
+      "schema": "saeit.factory.stage2-source-evidence.v1",
+      "source_product_id": "AGRI-003",
+      "revision": 1,
+      "locale_scopes": {
+        "fa-IR": "For households in Iran: research a moisture-check calendar instead of prescribing an unsafe fixed weekly water volume; adapt to local indoor heat, pot size and species.",
+        "en-US": "For indoor plant owners in the USA: develop a conditional watering worksheet using medium moisture, drainage, seasonal light and plant species instead of an inflexible schedule."
+      },
+      "sources": [
+        {
+          "id": "rhs",
+          "publisher": "Royal Horticultural Society",
+          "title": "How to Help a Poorly Houseplant — RHS Advice",
+          "url": "https://www.rhs.org.uk/plants/types/houseplants/how-to-help-a-poorly-houseplant",
+          "checked_date": "2026-10-22",
+          "evidence_note": "RHS explains environmental checks for low light, excess and insufficient irrigation, root symptoms, nutrient problems and avoiding rigid watering intervals; diagnoses are conditional."
+        },
+        {
+          "id": "umd",
+          "publisher": "University of Maryland Extension",
+          "title": "Diagnose Indoor Plant Problems — University of Maryland Extension",
+          "url": "https://extension.umd.edu/resource/diagnose-indoor-plant-problems",
+          "checked_date": "2026-10-22",
+          "evidence_note": "The Maryland Extension symptom table differentiates wilting from overwatering, drought and root disease; recommends testing root firmness and maintaining drainage."
+        },
+        {
+          "id": "illinois",
+          "publisher": "University of Illinois Extension",
+          "title": "Keep Houseplants Happy with Simple Solutions — Illinois Extension",
+          "url": "https://extension.illinois.edu/news-releases/keep-houseplants-happy-simple-solutions",
+          "checked_date": "2026-10-22",
+          "evidence_note": "Illinois Extension describes leaf-yellowing after relocation, conditional adjustment of watering, and root examination to distinguish a wet root system from a dry one."
+        },
+        {
+          "id": "umn",
+          "publisher": "University of Minnesota Extension",
+          "title": "Spring into Action: Easy Tips for Thriving Houseplants — UMN Extension",
+          "url": "https://extension.umn.edu/news/spring-action-easy-tips-thriving-houseplants",
+          "checked_date": "2026-10-22",
+          "evidence_note": "UMN Extension explains soil moisture checks, drainage, seasonal adjustment of light and watering, gentle repotting and monitoring insects as part of practical houseplant care."
+        }
+      ],
+      "claims": [
+        {
+          "id": "claim1",
+          "statement": "Testing medium moisture with a finger gives more actionable information about houseplant irrigation than automatically following a fixed date-based schedule.",
+          "source_ids": [
+            "rhs",
+            "umn"
+          ]
+        },
+        {
+          "id": "claim2",
+          "statement": "Overwatering can cause root rot and wilting that may superficially resemble symptoms from underwatering; inspect root health and drainage when needed.",
+          "source_ids": [
+            "umd",
+            "rhs"
+          ]
+        },
+        {
+          "id": "claim3",
+          "statement": "A potting container should drain excess water, because persistently wet media can damage houseplant roots.",
+          "source_ids": [
+            "umd",
+            "umn"
+          ]
+        },
+        {
+          "id": "claim4",
+          "statement": "Water demand can change when spring light and growth increase relative to slower winter growth, so a planner should allow seasonal adjustments.",
+          "source_ids": [
+            "umn",
+            "rhs"
+          ]
+        },
+        {
+          "id": "claim5",
+          "statement": "Relocation shock and light differences can influence leaf yellowing and require moisture checks before changing a watering routine.",
+          "source_ids": [
+            "illinois",
+            "rhs"
+          ]
+        }
+      ],
+      "scientific_review_completed": false,
+      "public_distribution_allowed": false,
+      "editorial_note": "Desk research compiled from independently opened institutional guidance webpages on 2026-10-22; the automated worker will only perform structure/provenance checks. Independent expert verification, regional chemical legality and manuscript editing remain separate downstream gates."
+    }
+  ]
+}
