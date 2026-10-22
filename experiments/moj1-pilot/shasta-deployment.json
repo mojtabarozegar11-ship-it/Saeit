@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "project": "MOJ1",
+  "network": "Shasta",
+  "chain_scope": "TESTNET_ONLY",
+  "rpc": "https://api.shasta.trongrid.io",
+  "name": "Moj 1",
+  "symbol": "MOJ1",
+  "decimals": 18,
+  "total_supply_whole": "100000000000",
+  "governance_contract": "TPvMW5cSHKfCuttghjWqmUEScH33vaA1Yy",
+  "token_contract": "TKg1oVb91qHzeLC74djmeeAnMMmb9PYJ6F",
+  "nft_contract": "TM1V6UqsfcpySZWKYze3i5PKPdk9Cxh4N8",
+  "genesis_escrow": "TDYGu1oTf9bhAU3S6qMZE7BRC3HDZJ6QVP",
+  "deployer_public_wallet": "TWTBsKZPVuQgaGNbyJWJm9XR28g4wVBCNQ",
+  "test_governance_owners": [
+    "TCkMrjjmMpVKtVwwq1YLCcDTSJbL8KJvsv",
+    "TRVEzzhEDemmQ7dGPcyhwGYs5jaQtVpqCn",
+    "TKkjbywCkENTBhndJCkU8EmYnJC54xrVLt"
+  ],
+  "allocation_distributed": false,
+  "mainnet_deployed": false,
+  "public_sale_enabled": false,
+  "real_payment_enabled": false,
+  "mojplaywin_integration_mode": "READ_ONLY_STAGING",
+  "deployment_evidence": {
+    "governance_actions_run": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39723682179",
+    "token_and_nft_actions_run": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39724423296"
+  },
+  "notes": "Test contracts only. No funds were distributed. Independent audit, source verification, production custody, release schedules and legal approval remain separate Mainnet gates."
+}
