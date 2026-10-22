@@ -64,3 +64,26 @@ No workflow in this branch mutates the live system.
 No private key, recovery phrase, card secret, money transfer, paid entitlement,
 or production DNS/site mutation may be introduced by a test-only workflow.
 A live launch requires independent real evidence, not a green CI badge.
+
+
+## 22 Oct addendum — Django MariaDB integration progress
+
+- Live read-only Django/Passenger and MariaDB model audit: GitHub Actions 39716945449 (success).
+- New Django Order, LedgerEntry, CommerceFulfillment test-only bridge, guarded against production database writes.
+- Five genuine Django ORM + disposable MariaDB financial tests passed: Actions 39717903431.
+- Six production write-guard and owner-only download checks passed: Actions 39717522544.
+- Existing TRON solidity-RPC implementation found on cPanel; two independently governed RPC sources have NOT been established: Actions 39718128732.
+
+### Public launch remains OFF
+
+The above is a staging/test code achievement only; it is not actual paid TRX delivery.
+The new code is not installed in public Passenger routes and no live QR has been issued.
+Do NOT fill legacy sender-signature fields with forged values or disable the test_ database safety gate.
+
+### Still required before public mainnet
+
+1. Configure, externally verify and independently pin two real TRON finality providers.
+2. Bridge unique invoice allocation and tx replay protection with the legacy real CommerceInvoice writer without races.
+3. Run walletless buyer authentication, protected order and invoice endpoints and owner-scoped download in actual staging.
+4. Validate atomic ledger and fulfillment against the real site's backed-up isolated staging MariaDB.
+5. Restore from a verified backup and perform a small owner-approved real transaction before live enablement.
