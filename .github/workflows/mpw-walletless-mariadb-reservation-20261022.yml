@@ -1,0 +1,45 @@
+name: MojPlayWin walletless TRX isolated MariaDB reservation tests
+on:
+  push:
+    branches: [fix/mpw-native-gateway-20261022]
+    paths:
+      - services/mpw_trx_walletless_core.py
+      - services/mpw_trx_walletless_reservation.py
+      - services/sql/mpw_walletless_trx_isolated_v1.sql
+      - tests/test_mpw_walletless_mariadb_reservation.py
+      - .github/workflows/mpw-walletless-mariadb-reservation-20261022.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-mariadb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_DATABASE: walletless_ci
+          MARIADB_USER: walletless
+          MARIADB_PASSWORD: local-only-no-money
+          MARIADB_ROOT_PASSWORD: local-root-ci-only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install isolated ephemeral test driver
+        run: python3 -m pip install --disable-pip-version-check 'PyMySQL==1.1.2'
+      - name: Compile exact-amount and MariaDB reservation code
+        run: python3 -m py_compile services/mpw_trx_walletless_core.py services/mpw_trx_walletless_reservation.py tests/test_mpw_walletless_mariadb_reservation.py
+      - name: Validate atomic reservation concurrency and uniqueness on real MariaDB
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mpw_walletless_mariadb_reservation.py' -v
+          echo "MPW_WALLETLESS_EPHEMERAL_MARIADB_RESERVATIONS=PASS"
