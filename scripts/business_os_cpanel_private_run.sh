@@ -31,9 +31,21 @@ for interpreter in \
   if "$interpreter" -B scripts/business_os_cpanel_private_metrics.py > /dev/null 2>&1; then
     echo 'BUSINESS_OS_PRIVATE_REPORT_CREATED_ON_CPANEL'
     exit 0
+  else
+    code=$?
+    case "$code" in
+      71) echo 'BUSINESS_OS_PRIVATE_PATH_CHECK_FAILED';;
+      72) echo 'BUSINESS_OS_PRIVATE_DJANGO_IMPORT_FAILED';;
+      73) echo 'BUSINESS_OS_PRIVATE_DJANGO_SETUP_FAILED';;
+      74) echo 'BUSINESS_OS_PRIVATE_MODEL_IMPORT_FAILED';;
+      75) echo 'BUSINESS_OS_PRIVATE_REVIEW_LOAD_FAILED';;
+      76) echo 'BUSINESS_OS_PRIVATE_QUERY_FAILED';;
+      77) echo 'BUSINESS_OS_PRIVATE_REVIEW_FAILED';;
+      78) echo 'BUSINESS_OS_PRIVATE_REPORT_WRITE_FAILED';;
+      *) echo 'BUSINESS_OS_PRIVATE_UNCLASSIFIED_FAILURE';;
+    esac
+    exit 1
   fi
-  echo 'BUSINESS_OS_PRIVATE_DJANGO_READ_FAILED'
-  exit 1
 done
 echo 'BUSINESS_OS_PRIVATE_DJANGO_RUNTIME_UNAVAILABLE'
 exit 1
