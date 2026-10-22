@@ -37,7 +37,7 @@ jobs:
           node staging/run-mojplaywin-staging.mjs "$RUNNER_TEMP/moj1_vps_shasta_proof.json" > staging-evidence.json
           node staging/site/generate-preview.mjs
           (cd staging-preview && sha256sum -c SHA256SUMS)
-          tar -cf "$RUNNER_TEMP/moj1_preview.tar" -C staging-preview index.html synthetic-receipt.json release-gates.json SHA256SUMS
+          tar -cf "$RUNNER_TEMP/preview.tar" -C staging-preview index.html synthetic-receipt.json release-gates.json SHA256SUMS
       - name: Install isolated, versioned preview into VPS private storage
         env:
           VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -76,7 +76,7 @@ jobs:
           test "$(stat -c %a "$root/inbox/$run_id")" = 700
           echo 'MOJ1_PRIVATE_UPLOAD_SPACE=READY'
           REMOTE_PREPARE
-          timeout 55s scp -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known_hosts" -o IdentitiesOnly=yes -o ForwardAgent=no -i "$private_key" "$RUNNER_TEMP/moj1_preview.tar" "$installer" "$destination:.local/share/moj1-mpw-private-preview-20261022/inbox/$GITHUB_RUN_ID/"
+          timeout 55s scp -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known_hosts" -o IdentitiesOnly=yes -o ForwardAgent=no -i "$private_key" "$RUNNER_TEMP/preview.tar" "$installer" "$destination:.local/share/moj1-mpw-private-preview-20261022/inbox/$GITHUB_RUN_ID/"
           timeout 90s ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known_hosts" -o IdentitiesOnly=yes -o ForwardAgent=no -i "$private_key" "$destination" "bash -s -- '$GITHUB_RUN_ID' '$GITHUB_SHA' '$script_sha' '$page_sha'" <<'REMOTE_INSTALL'
           set -euo pipefail
           run_id="$1"; commit="$2"; script_sha="$3"; page_sha="$4"
