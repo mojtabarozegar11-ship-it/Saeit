@@ -55,6 +55,17 @@ class VPSProductInstallerTests(unittest.TestCase):
         self.assertIn("[approved-factory-unlimited-builds-20261019]", wf)
         self.assertIn("product_recipes/**", wf)
 
+    def test_customer_acceptance_module_is_in_real_vps_test_archive(self):
+        """Avoid a green hosted CI but 19 failed runtime tests on the VPS."""
+        source=Path(__file__).resolve().parents[1]
+        wf=(source/".github/workflows/vps-autonomous-product-install.yml").read_text(encoding="utf8")
+        runtime=(source/"scripts/factory_vps_product_cycle.py").read_text(encoding="utf8")
+        dependency="factory_verified_customer_cycle_20261021.py"
+        self.assertIn('SCRIPTS / "'+dependency+'"',runtime)
+        self.assertTrue((source/"scripts"/dependency).is_file())
+        self.assertIn('scripts/'+dependency+' scripts/factory_personal_owner_passport_policy_20261020.py',wf)
+        self.assertIn('VPS_FACTORY_REQUIRED_CUSTOMER_MODULE_STAGED=PASS',wf)
+
 
 if __name__ == "__main__":
     unittest.main()
