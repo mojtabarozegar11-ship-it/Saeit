@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS mpw_walletless_trx_guest_rate_v1 (
   PRIMARY KEY(rate_key)
 ) ENGINE=InnoDB;
 
--- 120-second single-use wallet-browser handoff; raw token is never stored.
+-- 120-second single-use wallet-browser handoff - raw token is never stored.
 -- A separately signed guest cookie is issued only AFTER ticket redemption.
 CREATE TABLE IF NOT EXISTS mpw_walletless_trx_guest_handoff_v1 (
   ticket_sha256 CHAR(64) NOT NULL,
