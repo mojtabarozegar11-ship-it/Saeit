@@ -1,7 +1,7 @@
 name: Real native candidates for six blocked factory lines
 on:
   push:
-    branches: [feature/six-native-candidate-builds-20261022, feature/factory-six-independent-rework-20261022, feature/six-device-and-independent-qa-evidence-20261022, feature/six-windows-acceptance-safe-main-20261022, feature/six-android-deep-apk-proof-20261022, main]
+    branches: [feature/six-native-candidate-builds-20261022, feature/factory-six-independent-rework-20261022, feature/six-device-and-independent-qa-evidence-20261022, feature/six-windows-acceptance-safe-main-20261022, feature/six-android-deep-apk-proof-20261022, feature/f16-webview-compositor-touch-20261022, main]
     paths:
       - scripts/factory_six_native_candidates.py
       - scripts/factory_f14_browser_real_smoke.py
