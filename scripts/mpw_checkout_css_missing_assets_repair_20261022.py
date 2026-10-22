@@ -23,6 +23,7 @@ STAGING = Path('/home/zomorod2/Saeit-staging')
 BACKUPS = Path('/home/zomorod2/.private_mojplaywin_main_agents')
 ORIGINAL_HOME = ROOT / 'design-preview-20261017/production-home-20261017.html'
 ASSET_DIR = ROOT / 'mpw-editorial/revenue/assets'
+PUBLIC_PARENTS = (ROOT / 'mpw-editorial', ROOT / 'mpw-editorial/revenue', ASSET_DIR)
 ASSET_HOME = ASSET_DIR / 'home-shared-v1.css'
 ASSET_FINTECH = ASSET_DIR / 'mpw-fintech-checkout-v2.css'
 FINTECH_SHA = '2eaa44985afddd5b840f60d0f1c04a48ab76126f632e167e255592b86847ed47'
@@ -49,9 +50,12 @@ def locations(run: str) -> tuple[Path, Path]:
 def guard() -> None:
     if pwd.getpwuid(os.getuid()).pw_name != OWNER:
         fail('Wrong cPanel identity')
-    for directory in (ROOT, STAGING, BACKUPS, ASSET_DIR):
+    for directory in (ROOT, STAGING, BACKUPS):
         if not directory.is_dir() or directory.is_symlink():
             fail('Missing/unsafe expected directory')
+    for directory in PUBLIC_PARENTS:
+        if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
+            fail('Unsafe static asset parent path')
     if stat.S_IMODE(BACKUPS.stat().st_mode) & 0o077:
         fail('Private backup directory permissions are too broad')
     if not (ROOT / '.htaccess').is_file():
@@ -141,10 +145,12 @@ def preview(run: str) -> None:
 def publish(run: str) -> None:
     home, fintech = preflight(run)
     folder, _ = locations(run)
+    missing_folders = [p for p in PUBLIC_PARENTS if not p.exists()]
     folder.mkdir(mode=0o700)
     manifest = {'run': run, 'files': {
         'home-shared-v1.css': sha(home),
         'mpw-fintech-checkout-v2.css': sha(fintech)},
+        'created_folders': [str(p.relative_to(ROOT)) for p in missing_folders],
         'previous_files': 'absent', 'payment_changed': False}
     file = folder / 'manifest.json'
     with file.open('x', encoding='utf8') as handle:
@@ -153,7 +159,13 @@ def publish(run: str) -> None:
         handle.flush()
         os.fsync(handle.fileno())
     written = []
+    created = []
     try:
+        for directory in missing_folders:
+            if directory.exists() or directory.is_symlink():
+                fail('Concurrent public directory creation detected')
+            directory.mkdir(mode=0o755)
+            created.append(directory)
         for path, payload in ((ASSET_HOME, home), (ASSET_FINTECH, fintech)):
             atomic_new(path, payload)
             written.append((path, sha(payload)))
@@ -163,8 +175,13 @@ def publish(run: str) -> None:
         for path, expected in reversed(written):
             if path.is_file() and not path.is_symlink() and sha(path.read_bytes()) == expected:
                 path.unlink()
+        for directory in reversed(created):
+            if directory.is_dir() and not directory.is_symlink():
+                try:directory.rmdir()
+                except OSError:pass  # Preserve any concurrent content.
         raise
     print('MPW_CSS_INSTALLED=' + json.dumps({'assets_created': 2,
+        'new_empty_parents_created': len(missing_folders),
         'run': run, 'backup_manifest': True, 'payment_changed': False}))
 
 
@@ -201,8 +218,22 @@ def rollback(run: str) -> None:
         p = ASSET_DIR / name
         if not p.is_file() or p.is_symlink() or sha(p.read_bytes()) != expected:
             fail('Concurrent change blocks safe rollback')
+    # Pre-check that directory removal cannot affect any unrelated files.
+    all_expected = {ASSET_HOME, ASSET_FINTECH}
+    expected_dirs = set()
+    for rel in m.get('created_folders', []):
+        p = ROOT / rel
+        if p not in PUBLIC_PARENTS or not p.is_dir() or p.is_symlink():
+            fail('Unexpected rollback directory')
+        expected_dirs.add(p)
+    for directory in expected_dirs:
+        if any(child not in all_expected and child not in expected_dirs for child in directory.iterdir()):
+            fail('Other content was added; refuse to remove directory')
     for name in m['files']:
         (ASSET_DIR / name).unlink()
+    for directory in reversed(PUBLIC_PARENTS):
+        if directory in expected_dirs:
+            directory.rmdir()
     print('MPW_CSS_ROLLBACK=PASS')
 
 
