@@ -103,6 +103,7 @@ class RpcProvider:
     operator_id: str
     endpoint: str
     api_key: str = ""
+    api_key_header: str = "TRON-PRO-API-KEY"
 
     def validate(self):
         if not self.source_id or not self.operator_id:
@@ -121,6 +122,21 @@ class RpcProvider:
             raise PaymentHold("IP-literal RPC hosts forbidden")
         if type(self.api_key) is not str or len(self.api_key)>512:
             raise PaymentHold("Untrusted RPC authentication material")
+        if self.api_key_header not in ("TRON-PRO-API-KEY", "X-API-KEY"):
+            raise PaymentHold("Unsupported RPC authentication header")
+        # TronGrid and Nodit use different credential headers. Their production
+        # gateways must never be probed with a hardcoded demo credential.
+        if hostname == "api.trongrid.io" and (not self.api_key or self.api_key_header != "TRON-PRO-API-KEY"):
+            raise PaymentHold("Authenticated TronGrid configuration required")
+        if hostname == "tron-mainnet.nodit.io" and (not self.api_key or self.api_key_header != "X-API-KEY"):
+            raise PaymentHold("Authenticated Nodit configuration required")
+
+    def request_headers(self) -> dict[str,str]:
+        self.validate()
+        headers={"Content-Type":"application/json","Accept":"application/json"}
+        if self.api_key:
+            headers[self.api_key_header]=self.api_key
+        return headers
 
 
 def verify_distinct_provider_config(first: RpcProvider, second: RpcProvider) -> None:
@@ -142,16 +158,21 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 def _post(provider: RpcProvider, path: str, txid: str,
           transport:Callable|None=None) -> dict:
     if path not in ("/walletsolidity/gettransactionbyid",
-                    "/walletsolidity/gettransactioninfobyid"):
+                    "/walletsolidity/gettransactioninfobyid",
+                    "/walletsolidity/getnowblock"):
         raise PaymentHold("Only read-only solidity methods allowed")
     if transport is not None:
         response=transport(provider,path,txid)
     else:
         url=provider.endpoint.rstrip("/")+path
-        payload=json.dumps({"value":txid,"visible":False},separators=(",",":")).encode("utf8")
-        headers={"Content-Type":"application/json","Accept":"application/json"}
-        if provider.api_key:headers["TRON-PRO-API-KEY"]=provider.api_key
-        request=urllib.request.Request(url,data=payload,headers=headers,method="POST")
+        head_request=path.endswith("getnowblock")
+        params={"value":txid,"visible":False}
+        payload=None if head_request else json.dumps(params,separators=(",",":")).encode("utf8")
+        headers=provider.request_headers()
+        # SolidityNode's GetNowBlock uses GET (including Nodit and TRON's
+        # official reference). Transaction body/receipt methods use POST.
+        request=urllib.request.Request(url,data=payload,headers=headers,
+                                       method="GET" if head_request else "POST")
         opener=urllib.request.build_opener(_NoRedirect())
         try:
             with opener.open(request,timeout=8) as resp:
@@ -177,6 +198,32 @@ def query_solidified_transfer(provider:RpcProvider,txid:str,*,transport:Callable
     body=_post(provider,"/walletsolidity/gettransactionbyid",txid,transport)
     info=_post(provider,"/walletsolidity/gettransactioninfobyid",txid,transport)
     return parse_solidified_native_trx(txid,body,info,source_id=provider.source_id)
+
+
+def query_solidified_head(provider:RpcProvider,*,transport:Callable|None=None,
+                          now:datetime|None=None) -> int:
+    """Read the newest solidified block without inspecting merchant payments.
+
+    A healthy head is necessary, but is never sufficient, for live settlement.
+    """
+    provider.validate()
+    observation=now or datetime.now(timezone.utc)
+    if observation.tzinfo is None or observation.utcoffset() is None:
+        raise PaymentHold("Untrusted observation time")
+    result=_post(provider,"/walletsolidity/getnowblock","",transport)
+    raw=result.get("block_header",{}).get("raw_data",{})
+    height=raw.get("number")
+    millis=raw.get("timestamp")
+    if type(height) is not int or height<=0 or type(millis) is not int or millis<=0:
+        raise PaymentHold("Invalid solidified head")
+    try:
+        block_time=datetime.fromtimestamp(millis/1000,timezone.utc)
+    except (OverflowError,ValueError,OSError) as exc:
+        raise PaymentHold("Invalid solidity head timestamp") from exc
+    age=(observation.astimezone(timezone.utc)-block_time).total_seconds()
+    if age < -60 or age > 600:
+        raise PaymentHold("Stale or future TRON solidity head")
+    return height
 
 
 def verified_live_pair(first:RpcProvider,second:RpcProvider,*,trusted_operator_attestation:bool,
