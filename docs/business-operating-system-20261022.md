@@ -26,6 +26,8 @@ It does not publish, deploy, spend, trade, issue tokens, or bypass approvals.
 3. `python manage.py business_operating_review --record`: optional audit receipt;
    no external side effects. Do **not** schedule every 10 seconds before
    setting cost, retention and freshness limits.
+   Staff can also read the non-cached JSON view at
+   `/staff/command-center/api/business-operating/` (after an authorized deployment).
 4. Blocked economic tasks are distinct from queued/running tasks. A blocked
    permission gate emits `BRAIN_PENDING_APPROVAL` and is not duplicated or
    counted as a work item that can proceed automatically.
