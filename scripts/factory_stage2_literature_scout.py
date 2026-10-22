@@ -393,30 +393,7 @@ def select_papers(results,topic_keys,worker):
         seen_ids.add(item["openalex_id"])
         seen_doi.add(item["doi"].lower())
         distinct.append(item)
-    # A single large publisher can occupy the top 20 scoring records even
-    # though credible independent indexed papers exist below that cutoff.
-    # Reserve slots for distinct institutional publisher+domain sources
-    # before filling the remaining cache with highest-scoring papers.
-    selected=[]
-    domains=set()
-    publishers=set()
-    for item in distinct:
-        domain=registrable_host(item["host"])
-        publisher=item["publisher"].casefold().strip()
-        if domain not in domains and publisher not in publishers:
-            selected.append(item)
-            domains.add(domain)
-            publishers.add(publisher)
-            if len(selected)==10:
-                break
-    selected_ids={item["openalex_id"] for item in selected}
-    for item in distinct:
-        if len(selected)==20:
-            break
-        if item["openalex_id"] not in selected_ids:
-            selected.append(item)
-            selected_ids.add(item["openalex_id"])
-    return selected
+    return reserve_diverse_papers(distinct)
 
 
 def registrable_host(host):
@@ -428,6 +405,33 @@ def registrable_host(host):
     if len(parts)>2 and tuple(parts[-2:]) in suffix3:
         return ".".join(parts[-3:])
     return ".".join(parts[-2:])
+
+
+
+def reserve_diverse_papers(candidates):
+    """Reserve genuinely independent domains before enforcing the cache cap."""
+    ordered=sorted(candidates,key=lambda x:(
+        -x["relevance_score"],-x["publication_year"],x["openalex_id"]))
+    selected=[]
+    domains=set()
+    publishers=set()
+    for item in ordered:
+        domain=registrable_host(item["host"])
+        publisher=item["publisher"].casefold().strip()
+        if domain not in domains and publisher not in publishers:
+            selected.append(item)
+            domains.add(domain)
+            publishers.add(publisher)
+            if len(selected)==10:
+                break
+    selected_ids={item["openalex_id"] for item in selected}
+    for item in ordered:
+        if len(selected)==20:
+            break
+        if item["openalex_id"] not in selected_ids:
+            selected.append(item)
+            selected_ids.add(item["openalex_id"])
+    return selected
 
 
 def diverse_four_or_five(papers):
@@ -779,8 +783,8 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
                                      str(paper.get("openalex_id",""))) and
                         reliable_url(paper.get("url"),worker)==paper.get("host")):
                     by_doi.setdefault(paper["doi"].lower(),paper)
-            papers=sorted(by_doi.values(),key=lambda x:(
-                -x["relevance_score"],-x["publication_year"],x["doi"]))[:20]
+            # Preserve independent sources discovered in later query rounds.
+            papers=reserve_diverse_papers(list(by_doi.values()))
     except ProviderCoolingDown:
         return "provider_cooldown"
     except Exception as exc:
