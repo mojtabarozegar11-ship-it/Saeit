@@ -1,0 +1,169 @@
+name: Crown Defender canonical HTML SHA-pinned scoped deploy
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - games/crown-defender/index.html
+      - scripts/mpw_crown_canonical_safe_publish.py
+      - tests/test_crown_canonical_safe_publish.py
+      - .github/workflows/mpw-crown-canonical-safe-publish.yml
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-crown-canonical-safe-publish.yml
+      - scripts/mpw_crown_canonical_safe_publish.py
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-crown-canonical-static-prod
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Exact game mutation check
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_crown_canonical_safe_publish.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          old=subprocess.check_output(['git','cat-file','blob','70ed0871223e3992e201a41f3ca3cf354ce736e5'])
+          new=Path('games/crown-defender/index.html').read_bytes()
+          assert old.count(b'/^\\/store\\/product\\/[1-9]\\d*\\/checkout\\/$/')==1
+          assert new.count(b'/^\\/store\\/crown\\/[1-9]\\d*\\/checkout\\/$/')==1
+          assert new==old.replace(b'/^\\/store\\/product\\/[1-9]\\d*\\/checkout\\/$/',
+                                  b'/^\\/store\\/crown\\/[1-9]\\d*\\/checkout\\/$/')
+          print('CROWN_CANONICAL_ONLY_CHECKOUT_REGEX_CHANGED=PASS')
+          PY
+
+  publish:
+    needs: validate
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-mpw-crown-canonical-20261022]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Pin both historical and approved SHA-256 values
+        id: digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          old=$(git cat-file blob 70ed0871223e3992e201a41f3ca3cf354ce736e5 | sha256sum | awk '{print $1}')
+          new=$(sha256sum games/crown-defender/index.html | awk '{print $1}')
+          test "$old" != "$new"
+          echo "old=$old" >> "$GITHUB_OUTPUT"
+          echo "new=$new" >> "$GITHUB_OUTPUT"
+      - name: Preflight five public pages and existing free game
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          for path in ('/','/games/','/studio/','/store/','/games/crown-defender/'):
+              with urlopen(Request('https://mojplaywin.com'+path,headers={'Cache-Control':'no-cache'}),timeout=25) as r:
+                  assert r.status==200
+                  if path.endswith('crown-defender/'):
+                      source=r.read(150000)
+                      assert b'Air Supremacy' in source and b'100 / 100' in source
+          print('CROWN_CANONICAL_BASELINE=PASS')
+          PY
+      - name: Pinned GitHub SSH to VPS to cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-crown-canonical-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo 'CROWN_CANONICAL_PINNED_RELAY=PASS'
+      - name: Upload new game HTML to a private staging directory only
+        id: stage
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-crown-canonical-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "mkdir -m 700 /home/zomorod2/.mpw-crown-canonical-stage-$GITHUB_RUN_ID"
+          timeout 45s scp -q -F "$d/config" games/crown-defender/index.html "saeit-cpanel:/home/zomorod2/.mpw-crown-canonical-stage-$GITHUB_RUN_ID/index.html"
+      - name: Atomically replace only canonical game HTML, retain private original
+        id: install
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-crown-canonical-ssh"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel "python3 - install '$GITHUB_RUN_ID' '${{ steps.digests.outputs.old }}' '${{ steps.digests.outputs.new }}'" < scripts/mpw_crown_canonical_safe_publish.py
+      - name: Verify changed checkout regex and all protected public pages
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          import time
+          root='https://mojplaywin.com'
+          for trial in range(6):
+              url=root+'/games/crown-defender/?release_probe='+str(trial)
+              with urlopen(Request(url,headers={'Cache-Control':'no-cache'}),timeout=25) as r:
+                  source=r.read(150000)
+              if b'/^\\/store\\/crown\\/[1-9]\\d*\\/checkout\\/$/' in source:
+                  break
+              time.sleep(2)
+          else:
+              raise AssertionError('Canonical game is still serving the prior checkout route')
+          assert b'Air Supremacy' in source and b'100 / 100' in source
+          for path in ('/','/games/','/studio/','/store/','/api/crown-defender/fleet/'):
+              with urlopen(Request(root+path,headers={'Cache-Control':'no-cache'}),timeout=25) as r:
+                  assert r.status == 200
+          print('CROWN_CANONICAL_PUBLIC_AND_PROTECTED_PAGES=PASS')
+          PY
+          d="$RUNNER_TEMP/mpw-crown-canonical-ssh"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel "python3 - status '$GITHUB_RUN_ID' '${{ steps.digests.outputs.old }}' '${{ steps.digests.outputs.new }}'" < scripts/mpw_crown_canonical_safe_publish.py
+      - name: Restore exact original on deployment or smoke failure
+        if: failure() && steps.install.outcome != 'skipped'
+        run: |
+          d="$RUNNER_TEMP/mpw-crown-canonical-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID' '${{ steps.digests.outputs.old }}' '${{ steps.digests.outputs.new }}'" < scripts/mpw_crown_canonical_safe_publish.py
