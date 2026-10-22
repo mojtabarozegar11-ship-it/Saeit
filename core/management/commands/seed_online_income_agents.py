@@ -5,6 +5,7 @@ from core.models import Agent, AgentCapability
 
 
 CAPABILITIES = [
+    ("factory_native_review", "Factory native evidence review", "Reopen independently reviewed private native build receipts and queue verified specialist/device gaps. No commercial release.", "low"),
     ("income_market_research", "Income market research", "Research legal online markets, demand, competitors and payment feasibility.", "low"),
     ("income_opportunity_score", "Income opportunity scoring", "Score opportunities by startup cost, time-to-revenue, margin, scalability, risk and automation potential.", "low"),
     ("income_offer_design", "Offer design", "Design measurable online service, digital product, SaaS, education, content, affiliate or commerce offers.", "medium"),

@@ -1,0 +1,95 @@
+name: Authenticated master ↔ six native specialist QA tasks
+on:
+  push:
+    branches: [feature/master-six-native-task-bridge-20261022, main]
+    paths:
+      - core/factory_native_review_gateway.py
+      - core/economic_tool_pack.py
+      - core/economic_master_agent.py
+      - core/management/commands/factory_native_enqueue.py
+      - core/management/commands/seed_online_income_agents.py
+      - core/tests/test_factory_native_master_bridge.py
+      - deploy/install_factory_native_master_bridge.sh
+      - .github/workflows/factory-master-native-bridge-20261022.yml
+permissions: {contents: read}
+concurrency:
+  group: saeit-authenticated-native-master-bridge
+  cancel-in-progress: false
+jobs:
+  verify-real-agent-work:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "only-test-master-native-bridge-not-production"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Install tested Django application and audit dependencies
+        run: python3 -m pip install -r requirements.txt
+      - name: Test real six-task authenticated master and evidence fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_native_master_bridge.sh
+          python3 -B -m py_compile core/factory_native_review_gateway.py core/economic_tool_pack.py core/economic_master_agent.py core/management/commands/factory_native_enqueue.py
+          python3 manage.py check
+          python3 -B -m pytest -q core/tests/test_factory_native_master_bridge.py
+          python3 -B -m pytest -q core/tests/test_worker_runner.py
+          echo MASTER_NATIVE_EVIDENCE_BOUND_SIX_AGENT_TESTS=PASS
+  deploy-private-master-bridge:
+    needs: verify-real-agent-work
+    if: github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Pin SSH and install six real authenticated AgentTask routes on the existing factory master
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          work="$(mktemp -d)"
+          chmod 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.buffer.read().decode("utf8");s=s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n";sys.stdout.buffer.write(s.encode())' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P "" -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          opts=(-i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15)
+          files=(core/factory_native_review_gateway.py core/economic_tool_pack.py core/economic_master_agent.py core/management/commands/seed_online_income_agents.py core/management/commands/factory_native_enqueue.py deploy/install_factory_native_master_bridge.sh)
+          tar -cf "$work/source.tar" "${files[@]}"
+          expected="$(sha256sum "$work/source.tar" | cut -d' ' -f1)"
+          stage="/home/githubops/factory-runtime/operations/.native-master-bridge-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          host="githubops@178.239.147.150"
+          ssh -T "${opts[@]}" "$host" "set -eu; test \"\$(id -un)\" = githubops; test ! -e '$stage'; install -d -m 700 '$stage'"
+          scp -q "${opts[@]}" "$work/source.tar" "$host:$stage/source.tar"
+          ssh -T "${opts[@]}" "$host" "python3 - '$stage' '$expected' <<'PY'
+          import hashlib,sys,tarfile
+          from pathlib import Path
+          root=Path(sys.argv[1]);expected=sys.argv[2]
+          archive=root/'source.tar'
+          assert hashlib.sha256(archive.read_bytes()).hexdigest()==expected
+          allowed={'core/factory_native_review_gateway.py','core/economic_tool_pack.py','core/economic_master_agent.py','core/management/commands/seed_online_income_agents.py','core/management/commands/factory_native_enqueue.py','deploy/install_factory_native_master_bridge.sh'}
+          with tarfile.open(archive,'r:') as tar:
+              members=tar.getmembers()
+              assert {m.name for m in members}==allowed
+              assert all(m.isfile() and not m.issym() and not m.islnk() and m.size < 50000 for m in members)
+              for member in members:
+                  dest=root/member.name
+                  dest.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+                  dest.write_bytes(tar.extractfile(member).read())
+                  dest.chmod(0o700 if member.name.endswith('.sh') else 0o600)
+          print('MASTER_NATIVE_PINNED_FILES_SHA256=PASS')
+          PY"
+          timeout 500s ssh -T "${opts[@]}" "$host" "bash '$stage/deploy/install_factory_native_master_bridge.sh' '$stage'"
+          echo MASTER_NATIVE_NEW_SITE_DEPLOYS=0
+          echo MASTER_NATIVE_APPROVED_QUALITY_1000=0
