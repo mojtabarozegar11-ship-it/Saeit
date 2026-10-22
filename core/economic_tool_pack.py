@@ -3,7 +3,11 @@
 These handlers perform bounded, auditable internal work. External writes and
 financial commitments remain behind the existing approval boundary.
 """
+import os
+from pathlib import Path
+
 from django.utils import timezone
+from .factory_native_review_gateway import inspect_family
 
 from .models import AgentTask, Product
 from .production_gate import ProductionGate
@@ -154,8 +158,19 @@ def profit_optimize(payload):
         "next_action": "income_market_research",
     }
 
+
+def factory_native_review(payload):
+    # This executor is intentionally *private VPS-only*. Never accept a
+    # caller-supplied root, production website path, or output destination.
+    if os.getenv("MOJ_FACTORY_LOCAL_MODE") != "1":
+        raise ValueError("NATIVE_MASTER_PRIVATE_VPS_ONLY")
+    root = Path.home() / "factory-runtime" / "private" / "autonomous-product-cycle"
+    return inspect_family(root, payload)
+
+
 def build_economic_gateway():
     return ToolGateway([
+        ToolSpec(code="factory_native_review",handler=factory_native_review,risk="low"),
         ToolSpec(code="income_market_research", handler=market_research, risk="medium"),
         ToolSpec(code="income_opportunity_score", handler=opportunity_score, risk="medium"),
         ToolSpec(code="income_offer_design", handler=offer_design, risk="medium"),
