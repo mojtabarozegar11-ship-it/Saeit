@@ -1,0 +1,37 @@
+name: Zomorod final public legal finance trust acceptance 20261022
+on:
+  push:
+    branches: [zomorod/trust-validation-20261022]
+    paths: [.github/workflows/zomorod-trust-final-acceptance-20261022.yml]
+permissions:
+  contents: read
+jobs:
+  verify_live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Validate published disclosure content from the public site
+        shell: bash
+        run: |
+          set -euo pipefail
+          url=https://zomorodmelal.ir/contact/
+          curl -fsSL --max-time 30 -H 'Cache-Control: no-cache' "$url" -o "$RUNNER_TEMP/contact-public.html"
+          for marker in 'zm-public-trust-sections-20261022' 'zm-trust-legal' 'zm-trust-financial' 'zm-trust-privacy' 'zm-trust-terms' '14008746024' '3110' 'شرایط استفاده و همکاری' 'zm-v7-header' 'zm-v7-footer'; do
+            grep -Fq "$marker" "$RUNNER_TEMP/contact-public.html"
+          done
+          echo "PUBLIC_TRUST_SECTIONS=4_validated"
+          echo "CONTACT_ORIGINAL_HEADER_FOOTER=present"
+      - name: Validate unaffected critical routes and HTTPS headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          for route in / /contact/ /company/ /about/ /store/ /admin/login/; do
+            status="$(curl -sSL --max-time 25 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route")"
+            test "$status" = "200"
+            echo "UNCHANGED_ROUTE_200=$route"
+          done
+          curl -fsSI --max-time 25 https://zomorodmelal.ir/contact/ -o "$RUNNER_TEMP/headers.txt"
+          grep -iq '^strict-transport-security:' "$RUNNER_TEMP/headers.txt"
+          grep -iq '^x-content-type-options: nosniff' "$RUNNER_TEMP/headers.txt"
+          echo "BASIC_RESPONSE_SECURITY_HEADERS=present"
+          echo "TRUST_PUBLIC_ACCEPTANCE=success"
