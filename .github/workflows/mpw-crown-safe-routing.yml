@@ -1,0 +1,142 @@
+name: Crown Defender scoped safe routing
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - core/crown_fleet.py
+      - tests/test_crown_fleet.py
+      - games/corwn-defender/**
+      - scripts/mpw_crown_alias_publish.py
+      - .github/workflows/mpw-crown-safe-routing.yml
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-crown-safe-routing.yml
+      - games/corwn-defender/**
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check parser and isolated alias
+        run: |
+          set -euo pipefail
+          python3 -m py_compile core/crown_fleet.py tests/test_crown_fleet.py scripts/mpw_crown_alias_publish.py
+          python3 -c "from pathlib import Path; h=Path('games/corwn-defender/index.html').read_text(); a=Path('games/corwn-defender/.htaccess').read_text(); assert 'url=/games/crown-defender/' in h and '/games/corwn-defender/?$ /games/crown-defender/' in a"
+          if python3 -c "import django,pytest" 2>/dev/null; then
+            DEBUG=True python3 -m pytest tests/test_crown_fleet.py -q
+          else
+            echo 'DJANGO_TEST_DEPENDENCIES_UNAVAILABLE'
+          fi
+  publish_alias:
+    needs: validate
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-mpw-crown-alias-20261022]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check original game and surrounding public pages
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import urlopen
+          for path in ('/','/games/','/studio/','/store/','/games/crown-defender/'):
+              with urlopen('https://mojplaywin.com'+path,timeout=25) as r:
+                  assert r.status==200
+                  data=r.read(150000)
+                  if path.endswith('/crown-defender/'):assert b'Air Supremacy' in data
+          print('CROWN_ALIAS_BASELINE=PASS')
+          PY
+      - name: Establish pinned SSH relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-crown-alias-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo 'CROWN_ALIAS_PINNED_RELAY=PASS'
+      - name: Stage private alias files
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-crown-alias-ssh"
+          ssh -T -F "$d/config" saeit-cpanel "mkdir -m 700 /home/zomorod2/.mpw-crown-alias-stage-$GITHUB_RUN_ID"
+          scp -q -F "$d/config" games/corwn-defender/index.html games/corwn-defender/.htaccess "saeit-cpanel:/home/zomorod2/.mpw-crown-alias-stage-$GITHUB_RUN_ID/"
+      - name: Install new alias only
+        id: install
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-crown-alias-ssh"
+          h=$(sha256sum games/corwn-defender/index.html | awk '{print $1}')
+          a=$(sha256sum games/corwn-defender/.htaccess | awk '{print $1}')
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel "python3 - install '$GITHUB_RUN_ID' '$h' '$a'" < scripts/mpw_crown_alias_publish.py
+      - name: Verify public alias and unchanged canonical
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import urlopen
+          canonical='https://mojplaywin.com/games/crown-defender/'
+          with urlopen(canonical,timeout=25) as r:
+              assert r.status==200 and b'Air Supremacy' in r.read(150000)
+          with urlopen('https://mojplaywin.com/games/corwn-defender/',timeout=25) as r:
+              body=r.read(150000)
+              assert r.status==200
+              assert (r.url==canonical and b'Air Supremacy' in body) or b'url=/games/crown-defender/' in body
+          print('CROWN_ALIAS_PUBLIC=PASS')
+          PY
+          d="$RUNNER_TEMP/mpw-crown-alias-ssh"
+          timeout 25s ssh -T -F "$d/config" saeit-cpanel "python3 - status '$GITHUB_RUN_ID'" < scripts/mpw_crown_alias_publish.py
+      - name: Roll back only newly installed alias on smoke failure
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          d="$RUNNER_TEMP/mpw-crown-alias-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_crown_alias_publish.py

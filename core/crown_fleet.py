@@ -4,10 +4,12 @@ A browser save, a submitted TxID, and an unpaid order never grant a paid jet.
 Native settlement remains the sole writer. No schema migration is required.
 """
 from decimal import Decimal
+from urllib.parse import unquote
 
 from django.conf import settings
 from django.db.models import Sum
 from django.http import Http404, JsonResponse
+from django.urls import NoReverseMatch, reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 
@@ -48,6 +50,24 @@ def owned_skus(user):
     return sorted(owned)
 
 
+def _verified_checkout_route(product):
+    """A sale cannot open without a Django-owned, named checkout route.
+
+    Do not guess URLs: the former /store/product/<id>/checkout/ URL has no
+    matching route in the application's URL configuration.
+    """
+    try:
+        path = reverse("crown_cosmetic_checkout", kwargs={"product_id": product.pk})
+    except NoReverseMatch:
+        return None
+    normalized = unquote(path)
+    if (not normalized.startswith("/store/") or normalized.startswith("//")
+            or "\\" in normalized or "?" in normalized or "#" in normalized
+            or any(segment in (".", "..") for segment in normalized.split("/"))):
+        return None
+    return path
+
+
 def catalogue():
     products = {}
     duplicates = set()
@@ -62,17 +82,18 @@ def catalogue():
     items = []
     for sku in SKUS:
         p = products.get(sku)
-        md = p.metadata if p else {}
+        md = p.metadata if p and isinstance(p.metadata, dict) else {}
+        checkout = _verified_checkout_route(p) if p else None
         available = bool(
             getattr(settings, "CROWN_STORE_ENABLED", False) is True
-            and p and sku not in duplicates and p.currency == "USD" and p.price >= Decimal("4.00")
+            and p and checkout and sku not in duplicates and p.currency == "USD" and p.price >= Decimal("4.00")
             and md.get("crown_checkout_verified") is True
             and md.get("rights_cleared") is True
         )
         items.append({
             "sku": sku, "price": format(p.price, ".2f") if p else "0.00",
             "currency": "USD", "available": available,
-            "checkout": f"/store/product/{p.pk}/checkout/" if available else None,
+            "checkout": checkout if available else None,
         })
     return items
 
