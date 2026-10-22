@@ -36,7 +36,9 @@ def produce_private_snapshot():
     _phase = "django_setup"
     django.setup()
     _phase = "model_import"
+    from django.conf import settings
     from django.utils import timezone
+    from django.db import connections
     from core.models import AgentTask, ApprovalRequest, Order, Product
 
     # Load reviewed, version-pinned analysis only from the staged release.
@@ -55,13 +57,30 @@ def produce_private_snapshot():
     def observed(value, table):
         return module.observed(value, f"cpanel_local_django:{table}", captured_at)
 
-    _phase = "metrics_read"
+    _phase = "db_connect"
+    default_db = settings.DATABASES["default"]
+    if default_db.get("ENGINE", "").endswith("sqlite3"):
+        sqlite_path = Path(str(default_db.get("NAME", "")))
+        # SQLite creates a missing DB on connect; prevent even that write.
+        if not sqlite_path.is_file():
+            raise RuntimeError("No existing read-only SQLite source")
+    connections["default"].ensure_connection()
+    _phase = "queued_tasks_query"
+    queued_tasks = AgentTask.objects.filter(status="queued").count()
+    _phase = "blocked_tasks_query"
+    blocked_tasks = AgentTask.objects.filter(status="blocked").count()
+    _phase = "products_query"
+    active_products = Product.objects.filter(active=True).count()
+    _phase = "orders_query"
+    orders = Order.objects.count()
+    _phase = "approvals_query"
+    pending_approvals = ApprovalRequest.objects.filter(status="pending").count()
     metrics = {
-        "queued_tasks": observed(AgentTask.objects.filter(status="queued").count(), "AgentTask"),
-        "blocked_tasks": observed(AgentTask.objects.filter(status="blocked").count(), "AgentTask"),
-        "active_products": observed(Product.objects.filter(active=True).count(), "Product"),
-        "orders": observed(Order.objects.count(), "Order"),
-        "pending_approvals": observed(ApprovalRequest.objects.filter(status="pending").count(), "ApprovalRequest"),
+        "queued_tasks": observed(queued_tasks, "AgentTask"),
+        "blocked_tasks": observed(blocked_tasks, "AgentTask"),
+        "active_products": observed(active_products, "Product"),
+        "orders": observed(orders, "Order"),
+        "pending_approvals": observed(pending_approvals, "ApprovalRequest"),
         "independently_validated_market": module.unknown("Independent buyer-demand evidence not attached"),
         "verified_collected_cash": module.unknown("No payment-provider/ledger reconciliation"),
         "accepted_factory_products": module.unknown("VPS production and QA evidence not connected"),
@@ -103,7 +122,10 @@ if __name__ == "__main__":
         # Fixed exit codes expose only the technical phase, no exception details.
         raise SystemExit({
             "paths": 71, "django_import": 72, "django_setup": 73,
-            "model_import": 74, "review_load": 75, "metrics_read": 76,
+            "model_import": 74, "review_load": 75,
             "review_compute": 77, "private_write": 78,
+            "db_connect": 80, "queued_tasks_query": 81,
+            "blocked_tasks_query": 82, "products_query": 83,
+            "orders_query": 84, "approvals_query": 85,
         }.get(_phase, 79))
     print("BUSINESS_OS_PRIVATE_REPORT_CREATED")
