@@ -45,6 +45,34 @@ jobs:
           d="$RUNNER_TEMP/company-mail-inspect"
           timeout 35s ssh -T -F "$d/config" company 'uapi --output=json Email list_pops' | python3 -c 'import sys,json; j=json.load(sys.stdin); result=j.get("result",{}) if isinstance(j,dict) else {}; data=result.get("data") or []; addresses=sorted({str(x.get("email","")).lower() for x in data if isinstance(x,dict) and str(x.get("email","")).lower().endswith("@zomorodmelal.ir")}); print("MAILBOX_QUERY_STATUS="+str(result.get("status","unknown"))); print("COMPANY_MAILBOX_COUNT="+str(len(addresses))); [print("COMPANY_MAILBOX="+a) for a in addresses]; print("MAILBOX_QUERY_ERRORS="+str(bool(result.get("errors"))))'
           timeout 30s ssh -T -F "$d/config" company 'sh -c '\''if command -v sendmail >/dev/null 2>&1; then echo SENDMAIL_BINARY=present; else echo SENDMAIL_BINARY=absent; fi; if test -r /etc/localdomains && grep -qix "zomorodmelal.ir" /etc/localdomains; then echo COMPANY_MAIL_LOCAL_ROUTE=yes; else echo COMPANY_MAIL_LOCAL_ROUTE=unknown_or_remote; fi; if command -v exim >/dev/null 2>&1; then echo EXIM_BINARY=present; fi'\'''
+      - name: Submit single company mail test to owner
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/company-mail-inspect"
+          timeout 45s ssh -T -F "$d/config" company python3 - <<'PY'
+          import json,subprocess
+          from email.message import EmailMessage
+          from email.utils import formatdate,make_msgid
+          sender='moj_1ro_1@zomorodmelal.ir'
+          recipient='mojtaba.rozegar11@gmail.com'
+          check=subprocess.run(['uapi','--output=json','Email','list_pops'],capture_output=True,text=True,timeout=20,check=True)
+          entries=json.loads(check.stdout).get('result',{}).get('data',[])
+          if sender.lower() not in {str(item.get('email','')).lower() for item in entries if isinstance(item,dict)}:
+              raise SystemExit('SENDER_MAILBOX_NOT_VERIFIED')
+          msg=EmailMessage()
+          msg['From']='Zomorod Melal Company <'+sender+'>'
+          msg['To']=recipient
+          msg['Subject']='Zomorod Melal corporate mailbox delivery test 2026-10-22'
+          msg['Date']=formatdate(localtime=False,usegmt=True)
+          msg['Message-ID']=make_msgid(domain='zomorodmelal.ir')
+          msg.set_content('One-time corporate email delivery verification. No product order or financial commitment. Please disregard this test message.')
+          r=subprocess.run(['/usr/sbin/sendmail','-t','-i','-f',sender],input=msg.as_bytes(),capture_output=True,timeout=25)
+          print('TEST_SENDMAIL_EXIT='+str(r.returncode))
+          if r.returncode: print('TEST_SENDMAIL_ERROR_CLASS=mail_submission_failed'); raise SystemExit(1)
+          print('TEST_ENVELOPE_SENDER='+sender)
+          print('TEST_MESSAGE_ID='+str(msg['Message-ID']))
+          PY
       - name: Do not persist mail credentials
         if: always()
         run: |
