@@ -99,6 +99,16 @@ async function deployOnce(name) {
     return tronWeb.address.fromHex(normalizedTronAddress(prior, tronWeb));
   }
 
+  // This is Shasta TEST money only. Never emit a deployment transaction when
+  // the test wallet cannot cover its maximum configured fee limit.
+  // In particular, a successful token deployment must not accidentally drain
+  // the wallet before the separate NFT deployment.
+  const availableSun = BigInt(await tronWeb.trx.getBalance(tronWeb.defaultAddress.base58));
+  if (availableSun < 1_000_000_000n) {
+    throw new Error('SHASTA_DEPLOYMENT_BUDGET_BELOW_1000_TRX_FOR_' + name +
+      ': no transaction created or broadcast; replenish test TRX first');
+  }
+
   // Build, sign and obtain the deterministic txID and contract address BEFORE
   // writing the intent. No network broadcast occurs in these two steps.
   const constructorABI = artifacts[name].abi.find(item => item.type === 'constructor');
