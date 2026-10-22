@@ -7,8 +7,22 @@ import subprocess
 
 
 def check():
-    exe = shutil.which('uapi')
-    allowed = exe and os.path.realpath(exe).startswith('/usr/local/cpanel/')
+    # In a restricted Passenger/SSH login shell the cPanel binary directory
+    # is often absent from PATH even when the supported CLI is installed.
+    # Accept only cPanel-owned absolute locations, never an untrusted PATH
+    # shadow executable.  All operations below are strictly read-only.
+    trusted_paths = (
+        '/usr/local/cpanel/bin/uapi',
+        '/usr/local/cpanel/bin/uapi.pl',
+        '/usr/local/cpanel/3rdparty/bin/uapi',
+    )
+    discovered = shutil.which('uapi')
+    if discovered:
+        trusted_paths = (*trusted_paths, discovered)
+    exe = next((p for p in trusted_paths
+                if os.path.realpath(p).startswith('/usr/local/cpanel/')
+                and os.path.isfile(p) and os.access(p, os.X_OK)), None)
+    allowed = bool(exe)
     result = {
         'probe': 'MPW_CPANEL_UAPI_READONLY',
         'uapi_available': bool(allowed),
