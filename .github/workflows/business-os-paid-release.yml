@@ -115,7 +115,8 @@ jobs:
             "if test -f '$prior_log'; then
                echo PURCHASE_DIAG_PRIVATE_LOG_PRESENT
                wc -c < '$prior_log' | awk '{print \"PURCHASE_DIAG_LOG_BYTES_\",\$1}'
-               grep -Eo '(ModuleNotFoundError|ImportError|AttributeError|TypeError|ValueError|RuntimeError|SystemCheckError|ImproperlyConfigured|SyntaxError|OperationalError|PermissionError|FileNotFoundError|NameError|AssertionError|CommandError|Traceback|Unknown command|No such file or directory|Permission denied)' '$prior_log' | sort -u || true
+               tail -n 8 '$prior_log' | sed -E 's/[0-9]+/N/g; s@/[^[:space:]]+@PATH@g; s/(\x27[^\x27]*\x27|\"[^\"]*\")/QUOTED/g' | cut -c 1-110 | sed -E 's/[^A-Za-z .:_-]/_/g' | sed 's/^/PURCHASE_DIAG_TAIL_/'
+               grep -Eo '([A-Za-z_.]+[EW][0-9]{3}|[A-Z]{3,}:|[A-Za-z_]+(Error|Exception|Warning)|Traceback|System check identified|Unknown command|No such file|Permission denied|ModuleNotFoundError|ImportError|AttributeError|TypeError|ValueError|RuntimeError|SystemCheckError|ImproperlyConfigured|SyntaxError|OperationalError|PermissionError|FileNotFoundError|NameError|AssertionError|CommandError)' '$prior_log' | sort -u || true
              else
                echo PURCHASE_DIAG_PREVIOUS_LOG_ABSENT
              fi"
