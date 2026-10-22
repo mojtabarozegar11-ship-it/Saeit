@@ -12,6 +12,9 @@ from services.mpw_trx_walletless_core import PaymentHold,SolidifiedTransfer
 from services.mpw_trx_walletless_finalize import (
     settle_isolated,candidates_for_auto_reconcile
 )
+from services.mpw_trx_walletless_smart_policy import (
+    decide_candidate_next_step,advise_recheck,
+)
 
 TX_HASH=re.compile(r"^[a-f0-9]{64}$")
 
@@ -41,7 +44,12 @@ def reconcile_queued_invoices(
         raise PaymentHold("No approved two-source verification")
     rows=candidates_for_auto_reconcile(conn,max_items=max_items)
     stats={"pending":len(rows),"confirmed":0,"unmatched":0,"ambiguous":0,"held":0}
-    if not rows:return stats
+    if not rows:
+        followup=advise_recheck(stats)
+        stats["safe_next_action"]=followup.code
+        stats["suggested_scan_after_seconds"]=followup.retry_after_seconds
+        stats["requires_review"]=followup.requires_review
+        return stats
     all_candidates=lookup_tx_candidates()
     if not isinstance(all_candidates,(list,tuple)) or len(all_candidates)>1000:
         raise PaymentHold("Unbounded indexer response")
@@ -60,21 +68,19 @@ def reconcile_queued_invoices(
     for invoice_id,network,recipient,sun,issued,expires in rows:
         start=issued.replace(tzinfo=timezone.utc)
         end=expires.replace(tzinfo=timezone.utc)
-        matching=[e for e in candidates if
-            e["recipient"]==recipient and e["amount_sun"]==int(sun)
-            and start<=e["block_time"].astimezone(timezone.utc)<=end]
-        if not matching:
+        next_step=decide_candidate_next_step(
+            recipient=recipient,amount_sun=int(sun),issued_at=start,expires_at=end,
+            candidates=candidates,already_used=used_ids)
+        if next_step.code=="await_exact_transfer":
             stats["unmatched"]+=1
             continue
-        # Ambiguous exact-amount transfers require human exception review.
-        txset={e["tx_hash"] for e in matching}
-        if len(txset)!=1:
+        if next_step.code=="ambiguous_transfer_hold":
             stats["ambiguous"]+=1
             continue
-        tx=next(iter(txset))
-        if tx in used_ids:
+        if next_step.code!="verify_dual_solidified_proof" or not next_step.txid:
             stats["held"]+=1
             continue
+        tx=next_step.txid
         try:
             a=independent_solidity_a(tx)
             b=independent_solidity_b(tx)
@@ -88,4 +94,8 @@ def reconcile_queued_invoices(
         except Exception:
             # A failed proof cannot create partial grants; settlement rolls back.
             stats["held"]+=1
+    followup=advise_recheck(stats)
+    stats["safe_next_action"]=followup.code
+    stats["suggested_scan_after_seconds"]=followup.retry_after_seconds
+    stats["requires_review"]=followup.requires_review
     return stats
