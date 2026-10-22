@@ -33,11 +33,10 @@ jobs:
           assert Path('games/ramadan-war/route.htaccess').read_text(encoding='utf-8') == 'PassengerEnabled off\nDirectoryIndex index.html\n'
           Check().feed(html)
           assert html.count('ZM-RAMADAN-WAR-WEB-CARD-20261022') == 1
-          script=re.findall(r'<script>([\s\S]*?)</script>',html)
-          assert len(script)==1 and 'RamadanWarDebug' in script[0]
-          Path('/tmp/ramadan-game-inline.js').write_text(script[0],encoding='utf-8')
+          assert '<script src="./game.js" defer></script>' in html and '<link rel="stylesheet" href="./game.css">' in html
+          assert 'RamadanWarDebug' in Path('games/ramadan-war/game.js').read_text(encoding='utf-8')
           PY
-          node --check /tmp/ramadan-game-inline.js
+          node --check games/ramadan-war/game.js
       - name: Confirm the target card and nearby production routes before editing
         run: |
           python3 - <<'PY'
@@ -73,6 +72,8 @@ jobs:
           timeout 50s scp -q -F "$d/config" games/ramadan-war/deploy.py "host:$stage/incoming/deploy.py"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/index.html "host:$stage/incoming/index.html"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/route.htaccess "host:$stage/incoming/.htaccess"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/game.js "host:$stage/incoming/game.js"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/game.css "host:$stage/incoming/game.css"
           timeout 45s ssh -T -F "$d/config" host "python3 '$stage/incoming/deploy.py' prepare '$GITHUB_RUN_ID'"
       - name: Publish game route then insert it at exactly position two
         id: publish
@@ -100,7 +101,9 @@ jobs:
            if game and b'ZM-RAMADAN-WAR-WEB-CARD-20261022' in game:break
            game=None;time.sleep(1)
           assert game,'new public route is still unavailable after ten fresh requests'
-          assert b'canvas' in game and b'RamadanWarDebug' in game
+          assert b'canvas' in game and b'./game.js' in game and b'./game.css' in game
+          with urlopen(Request(root+'/ramadan-war/game.js?asset='+str(time.time_ns()),headers={'Cache-Control':'no-cache,no-store'}),timeout=35) as r:js=r.read(250000)
+          assert b'RamadanWarDebug' in js
           with urlopen(Request(root+'/?ramadan_card='+str(time.time_ns()),headers={'Cache-Control':'no-cache,no-store'}),timeout=40) as r:
            data=r.read(2600000)
           d=json.loads(re.search(rb'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',data,re.S).group(1))
