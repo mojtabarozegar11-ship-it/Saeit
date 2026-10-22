@@ -50,5 +50,7 @@ jobs:
           export SHASTA_TRANSFER_CONFIRM=ONE_TEST_TRANSFER_100000_SUN
           unset TRON_PRIVATE_KEY TRON_FULL_HOST TRON_NETWORK || true
           flock -n "$private/mpw-shasta-bounded-transfer.lock" "$private/moj1-node" "$private/runtime-token/moj1-pilot/scripts/mpw_shasta_bounded_transfer_v1.mjs"
+          # Replay proof: same existing journal, READ-ONLY; it must not send again.
+          flock -n "$private/mpw-shasta-bounded-transfer.lock" "$private/moj1-node" "$private/runtime-token/moj1-pilot/scripts/mpw_shasta_bounded_transfer_v1.mjs"
           REMOTE
           echo 'TESTNET_ONLY=PASS; MAINNET_BROADCAST=NONE; LIVE_MERCHANT_CREDIT=NONE'
