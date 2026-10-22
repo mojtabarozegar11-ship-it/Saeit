@@ -2,6 +2,11 @@ name: Six specialist evidence packet preflight
 on:
   push:
     branches: [feature/six-specialist-evidence-handoff-20261022, main]
+    paths:
+      - scripts/factory_six_specialist_evidence_handoff.py
+      - scripts/factory_f26_real_rice_readonly_vps_proof.py
+      - tests/test_factory_six_specialist_evidence_handoff.py
+      - .github/workflows/factory-six-expert-handoff-20261022.yml
   workflow_dispatch:
 permissions: {contents: read}
 jobs:
