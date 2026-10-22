@@ -97,9 +97,16 @@ class SourceScoutTests(unittest.TestCase):
         evidence=STAGE2.read(self.area/"stage-02/source-evidence/AGRI-001--r001.json")
         self.assertEqual(len(evidence["sources"]),5)
         self.assertFalse(evidence["independent_original_page_recheck"])
-        self.assertTrue(all(x["statement"] in SCOUT.abstract_from_index(
-                sample("Houseplant Rescue Guide")[n]["abstract_inverted_index"])
-            for n,x in enumerate(evidence["claims"])))
+        # Each claim must match the abstract of its own linked DOI, not
+        # an unrelated paper at the same list position.
+        source_by_id={s["id"]:s for s in evidence["sources"]}
+        for claim in evidence["claims"]:
+            source=source_by_id[claim["source_ids"][0]]
+            article_number=int(source["doi"].rsplit(".",1)[1])
+            original=SCOUT.abstract_from_index(
+                study("Houseplant Rescue Guide",article_number)[
+                    "abstract_inverted_index"])
+            self.assertIn(claim["statement"],original)
         self.assertEqual(STAGE2.stage2_loop(self.root,batch=1)[
             "newly_completed_research_dossiers"],1)
         packet=STAGE2.read(self.area/"stage-03/inbox/WO-00000001--r001.json")
@@ -124,7 +131,9 @@ class SourceScoutTests(unittest.TestCase):
         self.assertEqual(len(result["sources"]),4)
         self.assertEqual(len(result["claims"]),5)
         self.assertEqual(len({item["statement"] for item in result["claims"]}),5)
-        self.assertIn(second,[item["statement"] for item in result["claims"]])
+        first_abstract=SCOUT.abstract_from_index(papers[0]["abstract_inverted_index"])
+        self.assertTrue(any(item["statement"] in first_abstract
+                            for item in result["claims"]))
         self.assertEqual(STAGE2.validate_evidence(result,self.order(1),1)[
             "source_count"],4)
         self.assertFalse(result["public_distribution_allowed"])
@@ -132,7 +141,14 @@ class SourceScoutTests(unittest.TestCase):
 
     def test_four_papers_without_genuine_fifth_passage_stay_blocked(self):
         title="Houseplant Rescue Guide"
-        papers=SCOUT.select_papers(sample(title)[:4],SCOUT.keys(title),STAGE2)
+        raw=sample(title)[:4]
+        for article in raw:
+            body=SCOUT.abstract_from_index(article["abstract_inverted_index"])
+            # Only the first sentence now mentions the relevant topic:
+            # four sources alone cannot fabricate a fifth topical passage.
+            body=body.replace("treated ornamental crops","treated field crops")
+            article["abstract_inverted_index"]=indexed(body)
+        papers=SCOUT.select_papers(raw,SCOUT.keys(title),STAGE2)
         self.assertIsNone(SCOUT.evidence_from_papers(
             self.order(1),1,papers,STAGE2))
         duplicates=SCOUT.select_papers(sample(title)[:5],
