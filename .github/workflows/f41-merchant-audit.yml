@@ -5,6 +5,8 @@ on:
     paths:
       - scripts/f41_merchant_audit_cli.py
       - scripts/f41_tron_mainnet_check.py
+      - scripts/f41_private_worker.py
+      - tests/test_f41_private_worker.py
       - tests/test_f41_merchant_audit_cli.py
       - tests/test_f41_tron_mainnet_check.py
       - docs/f41_merchant_audit.md
@@ -41,12 +43,15 @@ jobs:
           bash -n deploy/f41_merchant_audit_private_install.sh
           python3 -B -m unittest discover -s tests -p test_f41_merchant_audit_cli.py -v
           python3 -B -m unittest discover -s tests -p test_f41_tron_mainnet_check.py -v
-          python3 -B -m py_compile scripts/f41_merchant_audit_cli.py scripts/f41_tron_mainnet_check.py
+          python3 -B -m unittest discover -s tests -p test_f41_private_worker.py -v
+          python3 -B -m py_compile scripts/f41_merchant_audit_cli.py scripts/f41_tron_mainnet_check.py scripts/f41_private_worker.py
           pack="$RUNNER_TEMP/f41-buyer-package"
           mkdir -m 700 "$pack"
           cp scripts/f41_merchant_audit_cli.py "$pack/f41_merchant_audit_cli.py"
           cp scripts/f41_tron_mainnet_check.py "$pack/verifier.py"
+          cp scripts/f41_private_worker.py "$pack/worker.py"
           python3 -B "$pack/verifier.py" --help >/dev/null
+          python3 -B "$pack/worker.py" --help >/dev/null
           echo F41_MERCHANT_BUYER_PACKAGING_IMPORT=PASS
           out="$RUNNER_TEMP/f41-merchant-audit-demo"
           python3 -B scripts/f41_merchant_audit_cli.py --invoices examples/f41-merchant-audit/invoices.csv --payments examples/f41-merchant-audit/payments.csv --out "$out"
@@ -92,8 +97,10 @@ jobs:
           ssh -F "$work/config" -T f41-vps "umask 077; mkdir -m 700 '$stage'"
           scp -F "$work/config" scripts/f41_merchant_audit_cli.py "f41-vps:$stage/f41_merchant_audit_cli.py"
           scp -F "$work/config" scripts/f41_tron_mainnet_check.py "f41-vps:$stage/verifier.py"
+          scp -F "$work/config" scripts/f41_private_worker.py "f41-vps:$stage/worker.py"
           scp -F "$work/config" tests/test_f41_merchant_audit_cli.py "f41-vps:$stage/tests.py"
           scp -F "$work/config" tests/test_f41_tron_mainnet_check.py "f41-vps:$stage/tests_verifier.py"
+          scp -F "$work/config" tests/test_f41_private_worker.py "f41-vps:$stage/tests_worker.py"
           scp -F "$work/config" docs/f41_merchant_audit.md "f41-vps:$stage/README.md"
           scp -F "$work/config" examples/f41-merchant-audit/LICENSE.txt "f41-vps:$stage/LICENSE.txt"
           scp -F "$work/config" examples/f41-merchant-audit/invoices.csv "f41-vps:$stage/invoices.csv"

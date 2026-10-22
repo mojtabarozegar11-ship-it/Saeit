@@ -76,3 +76,28 @@ Use it only with real, permissioned merchant exports containing real mainnet tra
 - Passing mainnet checks still NEVER authorizes order fulfillment, customer delivery, escrow settlement, exchange listing, or sale. A separate reviewed production gate is required.
 
 References: official TRON Developer Hub SolidityNode GetTransactionById and GetTransactionInfoById API documentation.
+
+## Private autonomous intake (F41 only)
+
+The private VPS install registers a once-per-minute user cron entry marked
+F41_PRIVATE_INTAKE. The scheduler processes **at most three** sealed input
+folders per invocation under the private runtime
+operations/f41-merchant-audit/inbox/. It does not read the production database,
+connect to MojPlayWin, execute a wallet, publish a listing, or deliver a product.
+
+To submit a permitted export, create an owner-only directory named
+job-<unique-id> with mode 0700, put invoices.csv and payments.csv inside
+with mode 0600, then create a zero-byte READY file (mode 0600) **last**.
+Never modify a READY job; submit corrections with a NEW job ID. Outputs are
+written to the correspondingly named directory under outbox/ and a private
+status.json distinguishes COMPLETE_READONLY from REQUIRES_REPAIR.
+A job is idempotent: it will not be overwritten or silently re-run.
+
+The worker performs offline reconciliation and—when its private runner enables
+the option—read-only TRON SolidityNode queries for eligible mainnet payment
+matches. It never authorizes payment settlement, file delivery, refunds,
+sales, or legal attestations. A matching node response is NOT independent
+commercial QC and is NOT a second-node confirmation.
+If no READY jobs exist, heartbeat.json truthfully reports WAITING_FOR_INPUT.
+The inbox is not connected to the site's invoice feeds; merchant-verified
+exports must be supplied using this contract.
