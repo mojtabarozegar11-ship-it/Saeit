@@ -1,0 +1,236 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#080b18">
+<title>Ten Free Digital Studio Products | MojPlayWin</title><meta name="description" content="Download ten original free beta tools for indie game launch planning, level design, accessibility, playtesting, narrative, privacy, localization, budgeting and release QA.">
+<link rel="canonical" href="https://mojplaywin.com/products/20261022/"><meta name="robots" content="index,follow"><meta property="og:type" content="website"><meta property="og:site_name" content="MojPlayWin"><meta property="og:title" content="Ten Free Digital Studio Products | MojPlayWin"><meta property="og:description" content="Ten practical downloadable planning kits and worksheets. Free beta; no checkout required.">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"Ten Free MojPlayWin Digital Studio Products","numberOfItems":10,"inLanguage":"en-US"}</script>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#080b18;color:#f1f5ff;font:16px/1.65 system-ui,Segoe UI,Arial,sans-serif}a{color:#50e0d0}header,main,footer{max-width:1160px;margin:auto;padding:24px clamp(16px,4vw,38px)}h1{font-size:clamp(30px,5vw,52px);line-height:1.15}.lead,.muted{color:#a9b6cc}.notice{background:#231e13;border:1px solid #786337;padding:12px 15px;border-radius:12px;color:#ffe8b7}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:14px}.card{background:#121a2b;border:1px solid #293851;border-radius:16px;padding:18px;display:flex;flex-direction:column}.card h2{font-size:20px;margin:0 0 8px}.card p{color:#a9b6cc;flex:1}.tag{color:#50e0d0;font-size:12px;letter-spacing:.09em;text-transform:uppercase}button{font:inherit;color:#fff;background:#135b63;border:1px solid #3e8990;border-radius:10px;padding:10px 14px;cursor:pointer}button:hover{background:#167781}button:focus-visible{outline:3px solid #ffd06c;outline-offset:2px}footer{border-top:1px solid #293851;color:#a9b6cc;font-size:13px}
+</style></head><body>
+<header><p class="tag">MOJPLAYWIN · DIGITAL PRODUCTS · BETA</p><h1>Ten useful tools for small game teams.</h1><p class="lead">Each item downloads a practical, editable file. Start with the blank template, adapt it to your project, and keep the assumptions visible. The downloads are created in your browser and are not sent to a server.</p><p class="notice"><strong>Free beta collection.</strong> These ten files have no checkout or paid purchase button. MojPlayWin's active paid products remain separate; a checkout is enabled only after a product's final file, rights, price, payment mapping and delivery are verified.</p></header>
+<main><section id="catalog" class="grid" aria-label="Ten digital products"></section></main>
+<footer><p><a href="/products/">MojPlayWin products</a> · <a href="/store/">Digital store</a> · <a href="/games/">Games</a> · <a href="/terms/">Terms</a> · <a href="/privacy/">Privacy</a></p><p>Version 1.0 · October 22, 2026 · Free beta, no account required.</p></footer>
+<script>
+"use strict";
+const products=[
+{slug:"indie-launch-kit",name:"Indie Game Launch Kit",format:"Markdown checklist",description:"Turn an unfinished release plan into a clear scope, QA, rights and launch checklist.",file:"indie-game-launch-kit.md",body:`# Indie Game Launch Kit
+Version: 1.0
+Project: [name]
+Owner: [name]
+Target release window: [date range]
+Status: Draft / In progress / Ready
+
+## 1. Release promise
+- Player audience:
+- One-sentence player promise:
+- Supported platforms and minimum versions:
+- Languages:
+- Session length:
+- What is intentionally out of scope:
+
+## 2. Build and ownership
+- Build identifier and commit:
+- Third-party code and license register:
+- Art, music, fonts and sound source/permission:
+- Open-source notices included:
+- Data collected (write "none" when none):
+- Account, analytics, ads or payments (list exact providers):
+
+## 3. Quality gates
+- [ ] Clean install and launch on each supported device
+- [ ] Tutorial can be completed without developer help
+- [ ] Keyboard and touch controls work
+- [ ] Save, restart, pause and resume behave as stated
+- [ ] Offline behavior is documented
+- [ ] No test keys, private URLs or debug controls in the release
+- [ ] Crash and error recovery reviewed
+- [ ] Text, contrast, motion and audio options checked
+- [ ] Performance checked on the lowest supported device
+
+## 4. Release checklist
+- Store title, description, feature list and screenshots verified
+- Age/content rating questionnaire answered from actual content
+- Privacy and support links open
+- Price, region, tax and refund terms approved by owner
+- Rollback build and customer support path ready
+- Release notes describe tested changes only
+
+## 5. Sign-off record
+Role | Name | Date | Evidence or remaining issue
+Product owner | | |
+QA | | |
+Rights review | | |
+Release operator | | |
+
+Do not mark a gate complete without a reproducible test result or a recorded reason why it does not apply.
+`},
+{slug:"browser-game-starter",name:"Browser Game Starter",format:"HTML/JS project checklist",description:"A small plain-web scaffold checklist covering controls, state, offline behavior and release safety.",file:"browser-game-starter.md",body:`# Browser Game Starter
+A practical implementation brief for a small HTML/CSS/JavaScript game.
+
+## Files
+- index.html: semantic page, viewport metadata, accessible controls
+- game.js: state transitions and input handling
+- style.css: responsive layout and reduced-motion support
+- tests/: deterministic mechanic tests and manual device matrix
+- README.md: run, controls, known limits and version
+
+## Core loop
+1. State the player goal in one sentence.
+2. Define one repeatable action and its consequence.
+3. Add a visible state change after every valid action.
+4. Provide a reset that returns all state to a known baseline.
+5. Test losing, winning, pause and restart paths.
+
+## Browser checks
+- [ ] No external dependency required for first play
+- [ ] Button and keyboard users can complete the core loop
+- [ ] Focus stays visible
+- [ ] Touch targets are comfortably sized
+- [ ] Reduced motion is honored
+- [ ] No personal data is collected by default
+- [ ] Invalid input cannot corrupt game state
+- [ ] Slow or disabled network does not block local play
+
+## Test record
+Browser/device:
+Build/commit:
+Steps:
+Expected:
+Observed:
+Pass/fail:
+`},
+{slug:"level-design-workbook",name:"Level Design Workbook",format:"CSV worksheet",description:"Map player goals, mechanics, prerequisites, difficulty and completion evidence.",file:"level-design-workbook.csv",body:`level_id,title,player_goal,mechanic,introduced_at,prerequisite,expected_minutes,success_signal,observed_completion,notes
+L01,First signal,Reach the exit,Move,Teach in L01,None,2,Player reaches exit,,, 
+L02,Switch bridge,Open route,Switch,Teach in L02,L01,3,Player activates switch,,, 
+L03,Two-step route,Plan a path,Switch plus move,Combine in L03,L02,4,Player completes without hint,,, 
+L04,Your level,,,,,,,, 
+`},
+{slug:"game-accessibility-checklist",name:"Game Accessibility Checklist",format:"Markdown checklist",description:"Review input, text, color, motion, audio and difficulty options before a public beta.",file:"game-accessibility-checklist.md",body:`# Game Accessibility Review
+Game/build:
+Reviewer:
+Device/browser:
+Date:
+
+## Input and navigation
+- [ ] Core actions can be performed without a mouse
+- [ ] Remappable or alternative input is documented where relevant
+- [ ] Focus order follows the visible interface
+- [ ] Focus indicator is always visible
+- [ ] Repeated actions do not require impossible timing
+
+## Text and visual design
+- [ ] Text can be enlarged without clipping
+- [ ] Important information is not conveyed by color alone
+- [ ] Contrast checked for text and controls
+- [ ] Flashing content is absent or safely limited
+- [ ] Captions or equivalent text exist for meaningful audio cues
+
+## Motion, sound and difficulty
+- [ ] Reduced-motion option changes nonessential animation
+- [ ] Volume can be adjusted independently
+- [ ] Timed sections offer a suitable alternative where possible
+- [ ] Difficulty and hint options are explained
+- [ ] Pause and restart are available
+
+## Record
+Issue | Severity | Reproduction steps | Proposed fix | Retest result
+`},
+{slug:"playtest-fieldbook",name:"Playtest Fieldbook",format:"Markdown session sheet",description:"Run short consent-aware tests and record what players do without collecting unnecessary personal data.",file:"playtest-fieldbook.md",body:`# Playtest Fieldbook
+Build:
+Test date:
+Facilitator:
+Participant code (avoid names):
+Consent confirmed: yes / no
+Recording: none / notes / audio / video (obtain separate permission)
+
+## Session goal
+Question this session should answer:
+Task given to player:
+Success signal:
+Known confounds:
+
+## Observation log
+Time | Player action | Interface response | Player comment (verbatim only with permission) | Facilitator note
+ | | | |
+ | | | |
+
+## Debrief
+Where did the player hesitate?
+What wording or action was misunderstood?
+Did the player reach the expected outcome?
+What should change before the next test?
+One change to test:
+One result that would disconfirm the hypothesis:
+
+Do not infer user attributes from play behavior. Store notes only as long as needed and delete them under the team's retention policy.
+`},
+{slug:"narrative-branch-planner",name:"Narrative Branch Planner",format:"CSV state table",description:"Track choices, prerequisites, state changes and return paths in a branching story.",file:"narrative-branch-planner.csv",body:`node_id,scene,entry_condition,choice_id,choice_text,state_before,state_change,next_node,return_path,test_case
+N01,Briefing,Always,C01,Ask for the source,trust=0,trust+1,N02,N05,player can reach ending
+N01,Briefing,Always,C02,Publish immediately,trust=0,trust-1,N03,N05,choice has visible consequence
+N02,Source check,trust>=1,C03,Verify the second record,verified=false,verified=true,N04,N05,unverified claim is not stated as fact
+N03,Deadline,Always,C04,Delay and investigate,deadline=soon,deadline=missed,N04,N05,state transition is explicit
+N04,Decision,Always,C05,Publish with caveat,verified=true,report=qualified,N05,Return path listed
+`},
+{slug:"game-metrics-starter",name:"Game Metrics Starter",format:"CSV event dictionary",description:"Define minimum privacy-aware events before adding analytics; works as an offline planning sheet.",file:"game-event-dictionary.csv",body:`event_name,when_fired,required_fields,fields_to_avoid,purpose,retention_days,consent_or_notice
+tutorial_started,Player starts tutorial,build_id|tutorial_id,full_name|email|precise_location,Measure tutorial entry,30,Explain in privacy notice
+tutorial_completed,Player finishes tutorial,build_id|tutorial_id,full_name|email|precise_location,Measure completion,30,Explain in privacy notice
+level_finished,Level ends,build_id|level_id|outcome,chat_text|device identifiers,Find level friction,30,Use aggregate reporting
+crash_reported,Crash occurs,build_id|error_code,authentication secrets|private keys,Fix stability,30,Disclose crash diagnostics
+`},
+{slug:"localization-ready-kit",name:"Localization-Ready Kit",format:"CSV string sheet",description:"Prepare user-facing strings for translation and catch overflow, missing variables and untranslated labels.",file:"localization-string-sheet.csv",body:`string_id,context,source_en,translator_note,variable_names,max_length,fa_translation,review_status
+menu.play,Main menu,Play,Primary action button,,18,,Needs review
+level.complete,Result,Level complete,Shown after winning,,48,,Needs review
+score.label,HUD,Score: {score},Keep variable name unchanged,score,24,,Needs review
+error.offline,Network panel,You are offline,Shown when an online-only feature cannot load,,60,,Needs review
+`},
+{slug:"small-studio-budget-kit",name:"Small Studio Budget Kit",format:"CSV budget worksheet",description:"Plan one project's costs, contingency and runway with editable assumptions.",file:"small-studio-budget.csv",body:`category,item,quantity,unit_cost,currency,period,subtotal,assumption,quote_source
+People,Design,1,0,USD,month,=C2*D2,Enter approved rate,
+People,Engineering,1,0,USD,month,=C3*D3,Enter approved rate,
+Tools,Software licenses,1,0,USD,month,=C4*D4,Verify renewal terms,
+Services,QA/device testing,1,0,USD,once,=C5*D5,Use a real quote,
+Launch,Store assets and localization,1,0,USD,once,=C6*D6,Scope before purchase,
+Risk,Contingency reserve,1,0,USD,once,=C7*D7,Set percentage explicitly,
+TOTAL,,,,,,=SUM(G2:G7),Estimate only; not an accounting record,
+`},
+{slug:"release-manifest",name:"Release Manifest & QA",format:"JSON template",description:"Record a build's version, files, checksums, test evidence, known issues and rollback reference.",file:"release-manifest.json",body:`{
+  "product": "REPLACE_WITH_PRODUCT_ID",
+  "version": "1.0.0",
+  "build_date_utc": "YYYY-MM-DD",
+  "source_commit": "REPLACE_WITH_COMMIT",
+  "files": [
+    {"path": "index.html", "sha256": "REPLACE_WITH_64_HEX_SHA256"}
+  ],
+  "tests": [
+    {"name": "fresh install and launch", "result": "not_run", "evidence": ""}
+  ],
+  "known_issues": [],
+  "rollback_version": "",
+  "release_owner": ""
+}
+`},
+{slug:"store-listing-worksheet",name:"Store Listing Worksheet",format:"Markdown worksheet",description:"Write a precise game listing with a truthful hook, audience, controls, accessibility and platform facts.",file:"store-listing-worksheet.md",body:`# Store Listing Worksheet
+Working title:
+One-line hook (describe actual play):
+Player audience:
+Platform(s) verified:
+Languages verified:
+Typical session length (measured):
+Controls:
+Offline/online requirements:
+Accessibility options tested:
+Age/content notes:
+What is included:
+What is not included:
+Known limitations:
+Privacy and support links:
+Screenshot checklist:
+- [ ] Captured from the released build
+- [ ] No fake player counts, ratings or performance claims
+- [ ] Text is legible on a phone
+- [ ] Captions describe the real gameplay
+Final reviewer:
+Date:
+`}
+];
+const $=s=>document.querySelector(s),catalog=$("#catalog");
+for(const p of products){const card=document.createElement("article");card.className="card";const tag=document.createElement("span");tag.className="tag";tag.textContent="FREE BETA · "+p.format;const h=document.createElement("h2");h.textContent=p.name;const d=document.createElement("p");d.textContent=p.description;const b=document.createElement("button");b.type="button";b.textContent="Download "+p.format;b.setAttribute("aria-label","Download "+p.name);b.addEventListener("click",()=>download(p));card.append(tag,h,d,b);catalog.append(card);}
+function download(p){const blob=new Blob([p.body],{type:p.file.endsWith(".json")?"application/json;charset=utf-8":"text/plain;charset=utf-8"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=p.file;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+</script></body></html>
