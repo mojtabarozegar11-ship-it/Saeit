@@ -1,0 +1,19 @@
+{
+  "schema": "saeit.factory.f41-product-request.v1",
+  "kind": "chain_analytics",
+  "product_id": "f41_chain_analytics_demo",
+  "data": {
+    "transfers": [
+      {
+        "source": "merchant",
+        "destination": "buyer",
+        "amount_base_units": "1000"
+      },
+      {
+        "source": "buyer",
+        "destination": "merchant",
+        "amount_base_units": "200"
+      }
+    ]
+  }
+}

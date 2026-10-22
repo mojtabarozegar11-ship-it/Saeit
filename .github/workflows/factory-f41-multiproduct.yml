@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - scripts/factory_f41_multi_product_builder.py
+      - scripts/factory_f41_extension_builders.py
+      - tests/test_factory_f41_extensions.py
       - scripts/factory_f41_token_builder_v2.py
       - tests/test_factory_f41_multiproduct.py
       - tests/test_factory_f41_token_manifest_security.py
@@ -15,6 +17,8 @@ on:
     branches: [main, feature/f41-multiproduct-value-engine-20261022]
     paths:
       - scripts/factory_f41_multi_product_builder.py
+      - scripts/factory_f41_extension_builders.py
+      - tests/test_factory_f41_extensions.py
       - scripts/factory_f41_token_builder_v2.py
       - tests/test_factory_f41_multiproduct.py
       - tests/test_factory_f41_token_manifest_security.py
@@ -36,12 +40,12 @@ jobs:
         with: {persist-credentials: false}
       - uses: actions/setup-python@v5
         with: {python-version: "3.11"}
-      - name: Test four real functional products and full receipt security
+      - name: Test nineteen functional offline utilities and receipt integrity
         run: |
           set -euo pipefail
           bash -n deploy/install_factory_f41_multiproduct.sh
           python3 -B -m unittest discover -s tests -p 'test_factory_f41_*.py' -v
-          for kind in vesting reconciliation provenance nft_metadata; do
+          for kind in vesting reconciliation provenance nft_metadata trc721_collection trc1155_inventory staking_simulator dao_vote escrow_milestones watch_wallet_sdk onchain_indexer chain_analytics royalty_accounting certificate_verifier_api rights_marketplace bridge_risk contract_fuzz security_monitor rwa_eligibility; do
             python3 -B scripts/factory_f41_multi_product_builder.py \
               --spec "factory_config/f41_samples/$kind.json" \
               --out "$RUNNER_TEMP/f41-$kind" --assets factory_assets/f41_demo_assets
@@ -67,7 +71,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
-      - name: Install four isolated utilities with authenticated SSH relay
+      - name: Install nineteen isolated offline utilities via pinned SSH relay
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
         run: |
@@ -84,12 +88,13 @@ jobs:
           test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           opts=(-i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15)
           host=githubops@178.239.147.150
-          stage="/home/githubops/factory-runtime/operations/.f41-multi-stage-$GITHUB_RUN_ID"
+          stage="/home/githubops/factory-runtime/operations/.f41-multi-stage-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           ssh -T "${opts[@]}" "$host" "umask 077; mkdir -m 700 '$stage'"
           scp "${opts[@]}" scripts/factory_f41_multi_product_builder.py "$host:$stage/factory_f41_multi_product_builder.py"
+          scp "${opts[@]}" scripts/factory_f41_extension_builders.py "$host:$stage/factory_f41_extension_builders.py"
           scp "${opts[@]}" scripts/factory_f41_token_builder_v2.py "$host:$stage/factory_f41_token_builder.py"
           scp "${opts[@]}" factory_config/f41_product_catalog.json "$host:$stage/catalog.json"
-          for kind in vesting reconciliation provenance nft_metadata; do
+          for kind in vesting reconciliation provenance nft_metadata trc721_collection trc1155_inventory staking_simulator dao_vote escrow_milestones watch_wallet_sdk onchain_indexer chain_analytics royalty_accounting certificate_verifier_api rights_marketplace bridge_risk contract_fuzz security_monitor rwa_eligibility; do
             scp "${opts[@]}" "factory_config/f41_samples/$kind.json" "$host:$stage/$kind.json"
           done
           scp "${opts[@]}" factory_assets/f41_demo_assets/demo_art.svg "$host:$stage/demo_art.svg"

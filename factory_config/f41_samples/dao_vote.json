@@ -1,0 +1,29 @@
+{
+  "schema": "saeit.factory.f41-product-request.v1",
+  "kind": "dao_vote",
+  "product_id": "f41_dao_vote_demo",
+  "data": {
+    "proposal_id": "proposal_01",
+    "quorum_base_units": "60",
+    "snapshot": [
+      {
+        "voter": "member_01",
+        "weight": "60"
+      },
+      {
+        "voter": "member_02",
+        "weight": "40"
+      }
+    ],
+    "votes": [
+      {
+        "voter": "member_01",
+        "choice": "yes"
+      },
+      {
+        "voter": "member_02",
+        "choice": "no"
+      }
+    ]
+  }
+}

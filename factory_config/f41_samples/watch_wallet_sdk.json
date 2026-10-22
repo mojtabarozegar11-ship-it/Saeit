@@ -1,0 +1,10 @@
+{
+  "schema": "saeit.factory.f41-product-request.v1",
+  "kind": "watch_wallet_sdk",
+  "product_id": "f41_watch_wallet_sdk_demo",
+  "data": {
+    "addresses": [
+      "TWTBsKZPVuQgaGNbyJWJm9XR28g4wVBCNQ"
+    ]
+  }
+}

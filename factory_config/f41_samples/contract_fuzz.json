@@ -1,0 +1,9 @@
+{
+  "schema": "saeit.factory.f41-product-request.v1",
+  "kind": "contract_fuzz",
+  "product_id": "f41_contract_fuzz_demo",
+  "data": {
+    "seed": 41,
+    "rounds": 1000
+  }
+}

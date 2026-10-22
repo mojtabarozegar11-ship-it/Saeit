@@ -1,0 +1,15 @@
+{
+  "schema": "saeit.factory.f41-product-request.v1",
+  "kind": "staking_simulator",
+  "product_id": "f41_staking_simulator_demo",
+  "data": {
+    "apr_basis_points": 500,
+    "days": 90,
+    "positions": [
+      {
+        "account": "tester_01",
+        "principal_base_units": "1000000"
+      }
+    ]
+  }
+}

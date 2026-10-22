@@ -1,0 +1,16 @@
+{
+  "schema": "saeit.factory.f41-product-request.v1",
+  "kind": "bridge_risk",
+  "product_id": "f41_bridge_risk_demo",
+  "data": {
+    "messages": [
+      {
+        "source_chain": "tron",
+        "destination_chain": "ethereum",
+        "nonce": 1,
+        "message_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "proof_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    ]
+  }
+}

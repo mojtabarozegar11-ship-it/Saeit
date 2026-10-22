@@ -4,6 +4,7 @@ import argparse
 import csv
 import hashlib
 import io
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -17,7 +18,22 @@ TYPES = {
     "vesting": "Deterministic tokenomics and treasury vesting schedule",
     "reconciliation": "Fail-closed merchant crypto payment reconciliation",
     "provenance": "Digital-asset SHA256 integrity and provenance inventory",
-    "nft_metadata": "NFT collection metadata with media byte integrity"
+    "nft_metadata": "NFT collection metadata with media byte integrity",
+    "trc721_collection": "Private offline deterministic trc721 collection utility candidate",
+    "trc1155_inventory": "Private offline deterministic trc1155 inventory utility candidate",
+    "staking_simulator": "Private offline deterministic staking simulator utility candidate",
+    "dao_vote": "Private offline deterministic dao vote utility candidate",
+    "escrow_milestones": "Private offline deterministic escrow milestones utility candidate",
+    "watch_wallet_sdk": "Private offline deterministic watch wallet sdk utility candidate",
+    "onchain_indexer": "Private offline deterministic onchain indexer utility candidate",
+    "chain_analytics": "Private offline deterministic chain analytics utility candidate",
+    "royalty_accounting": "Private offline deterministic royalty accounting utility candidate",
+    "certificate_verifier_api": "Private offline deterministic certificate verifier api utility candidate",
+    "rights_marketplace": "Private offline deterministic rights marketplace utility candidate",
+    "bridge_risk": "Private offline deterministic bridge risk utility candidate",
+    "contract_fuzz": "Private offline deterministic contract fuzz utility candidate",
+    "security_monitor": "Private offline deterministic security monitor utility candidate",
+    "rwa_eligibility": "Private offline deterministic rwa eligibility utility candidate"
 }
 SAFE = re.compile(r"[A-Za-z][A-Za-z0-9_.-]{1,63}\Z")
 HEX = re.compile(r"[0-9a-f]{64}\Z")
@@ -235,7 +251,17 @@ def payload(spec, asset_root):
         return reconciliation(data)
     if mode == "provenance":
         return provenance(data, asset_root)
-    return nft_metadata(data, asset_root)
+    if mode == "nft_metadata":
+        return nft_metadata(data, asset_root)
+    plugin = Path(__file__).resolve().parent / "factory_f41_extension_builders.py"
+    if plugin.is_symlink() or not plugin.is_file() or plugin.stat().st_size > 100000:
+        raise ValueError("F41_EXTENSION_MODULE_UNTRUSTED")
+    module_spec = importlib.util.spec_from_file_location("f41_extension_builders", str(plugin))
+    if module_spec is None or module_spec.loader is None:
+        raise ValueError("F41_EXTENSION_MODULE_MISSING")
+    module = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(module)
+    return module.render(mode, data, asset_root, read_asset)
 
 
 def manifest(spec, files):

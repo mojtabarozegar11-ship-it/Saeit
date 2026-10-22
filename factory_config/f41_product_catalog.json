@@ -1,5 +1,5 @@
 {
-  "schema": "saeit.factory.f41-product-catalog.v2",
+  "schema": "saeit.factory.f41-product-catalog.v3",
   "line_id": "F41",
   "name": "Zomorod Blockchain Commerce & Digital Asset Factory",
   "architecture": "pluggable_products",
@@ -8,7 +8,7 @@
   "quality_1000_certified": false,
   "remote_deployment": false,
   "coordinator": "moj_1ro_1",
-  "authenticated_workorder_binding": "pending",
+  "authenticated_workorder_binding": "four existing orders active; advanced private registration pending",
   "production_mode": "private_measured_candidates",
   "financial_operations_allowed": false,
   "active_builders": [
@@ -51,24 +51,150 @@
       "delivery": "Solidity source and locked specification",
       "model": "engineering service after audits",
       "commercially_validated": false
+    },
+    {
+      "kind": "trc721_collection",
+      "buyer": "digital collectible studios",
+      "value": "Executable bounded offline trc721 collection candidate; acceptance tests required",
+      "delivery": "deterministic private files plus SHA-256 receipt",
+      "model": "paid engineering customization after real customer validation",
+      "commercially_validated": false,
+      "release_grade": false
+    },
+    {
+      "kind": "trc1155_inventory",
+      "buyer": "game studios",
+      "value": "Executable bounded offline trc1155 inventory candidate; acceptance tests required",
+      "delivery": "deterministic private files plus SHA-256 receipt",
+      "model": "paid engineering customization after real customer validation",
+      "commercially_validated": false,
+      "release_grade": false
+    },
+    {
+      "kind": "staking_simulator",
+      "buyer": "token treasury teams",
+      "value": "Executable bounded offline staking simulator candidate; acceptance tests required",
+      "delivery": "deterministic private files plus SHA-256 receipt",
+      "model": "paid engineering customization after real customer validation",
+      "commercially_validated": false,
+      "release_grade": false
+    },
+    {
+      "kind": "dao_vote",
+      "buyer": "DAO organizers",
+      "value": "Executable bounded offline dao vote candidate; acceptance tests required",
+      "delivery": "deterministic private files plus SHA-256 receipt",
+      "model": "paid engineering customization after real customer validation",
+      "commercially_validated": false,
+      "release_grade": false
+    },
+    {
+      "kind": "escrow_milestones",
+      "buyer": "milestone contractors",
+      "value": "Executable bounded offline escrow milestones candidate; acceptance tests required",
+      "delivery": "deterministic private files plus SHA-256 receipt",
+      "model": "paid engineering customization after real customer validation",
+      "commercially_validated": false,
+      "release_grade": false
+    },
+    {
+      "kind": "watch_wallet_sdk",
+      "buyer": "read-only wallet integration teams",
+      "value": "Executable bounded offline watch wallet sdk candidate; acceptance tests required",
+      "delivery": "deterministic private files plus SHA-256 receipt",
+      "model": "paid engineering customization after real customer validation",
+      "commercially_validated": false,
+      "release_grade": false
+    },
+    {
+      "kind": "onchain_indexer",
+      "buyer": "transaction analytics teams",
+      "value": "Executable bounded offline onchain indexer candidate; acceptance tests required",
+      "delivery": "deterministic private files plus SHA-256 receipt",
+      "model": "paid engineering customization after real customer validation",
+      "commercially_validated": false,
+      "release_grade": false
+    },
+    {
+      "kind": "chain_analytics",
+      "buyer": "accounting and risk analysts",
+      "value": "Executable bounded offline chain analytics candidate; acceptance tests required",
+      "delivery": "deterministic private files plus SHA-256 receipt",
+      "model": "paid engineering customization after real customer validation",
+      "commercially_validated": false,
+      "release_grade": false
+    },
+    {
+      "kind": "royalty_accounting",
+      "buyer": "creators and revenue-share studios",
+      "value": "Executable bounded offline royalty accounting candidate; acceptance tests required",
+      "delivery": "deterministic private files plus SHA-256 receipt",
+      "model": "paid engineering customization after real customer validation",
+      "commercially_validated": false,
+      "release_grade": false
+    },
+    {
+      "kind": "certificate_verifier_api",
+      "buyer": "digital proof providers",
+      "value": "Executable bounded offline certificate verifier api candidate; acceptance tests required",
+      "delivery": "deterministic private files plus SHA-256 receipt",
+      "model": "paid engineering customization after real customer validation",
+      "commercially_validated": false,
+      "release_grade": false
+    },
+    {
+      "kind": "rights_marketplace",
+      "buyer": "licensed digital asset sellers",
+      "value": "Executable bounded offline rights marketplace candidate; acceptance tests required",
+      "delivery": "deterministic private files plus SHA-256 receipt",
+      "model": "paid engineering customization after real customer validation",
+      "commercially_validated": false,
+      "release_grade": false
+    },
+    {
+      "kind": "bridge_risk",
+      "buyer": "cross-chain security reviewers",
+      "value": "Executable bounded offline bridge risk candidate; acceptance tests required",
+      "delivery": "deterministic private files plus SHA-256 receipt",
+      "model": "paid engineering customization after real customer validation",
+      "commercially_validated": false,
+      "release_grade": false
+    },
+    {
+      "kind": "contract_fuzz",
+      "buyer": "smart-contract QA teams",
+      "value": "Executable bounded offline contract fuzz candidate; acceptance tests required",
+      "delivery": "deterministic private files plus SHA-256 receipt",
+      "model": "paid engineering customization after real customer validation",
+      "commercially_validated": false,
+      "release_grade": false
+    },
+    {
+      "kind": "security_monitor",
+      "buyer": "finance operations",
+      "value": "Executable bounded offline security monitor candidate; acceptance tests required",
+      "delivery": "deterministic private files plus SHA-256 receipt",
+      "model": "paid engineering customization after real customer validation",
+      "commercially_validated": false,
+      "release_grade": false
+    },
+    {
+      "kind": "rwa_eligibility",
+      "buyer": "asset onboarding compliance teams",
+      "value": "Executable bounded offline rwa eligibility candidate; acceptance tests required",
+      "delivery": "deterministic private files plus SHA-256 receipt",
+      "model": "paid engineering customization after real customer validation",
+      "commercially_validated": false,
+      "release_grade": false
     }
   ],
   "extensions_not_yet_built": [
-    "TRC721 full contract generation",
-    "TRC1155",
-    "staking and vesting smart contracts",
-    "DAO governance",
-    "audited escrow",
-    "wallet SDK",
-    "onchain indexing",
-    "chain analytics",
-    "royalty accounting",
-    "certificate verification API",
-    "digital rights marketplace",
-    "bridge security testing",
-    "smart contract fuzzing",
-    "multi-chain security monitors",
-    "real-world asset compliance tooling"
+    "independently audited and deployed TRC-721 / TRC-1155 financial contracts",
+    "production staking / DAO / escrow chain execution",
+    "live authenticated multichain indexer and wallet custody",
+    "verified secondary liquidity, trading counterparties and real sales",
+    "full independent commercial, legal and security approvals",
+    "new sovereign L1 blockchain with consensus, validator clients and mobile mining"
   ],
   "cash_conversion_gate": {
     "customer_interviews_required": 15,
@@ -89,5 +215,6 @@
     "independent_legal_review_done": false,
     "owner_sale_approval_recorded": false,
     "site_deployment": false
-  }
+  },
+  "prototype_categories_added": 15
 }

@@ -1,0 +1,17 @@
+{
+  "schema": "saeit.factory.f41-product-request.v1",
+  "kind": "onchain_indexer",
+  "product_id": "f41_onchain_indexer_demo",
+  "data": {
+    "network": "shasta",
+    "events": [
+      {
+        "txid": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "log_index": 0,
+        "block_height": 1,
+        "event": "Transfer",
+        "block_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  }
+}

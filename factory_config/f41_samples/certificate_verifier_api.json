@@ -1,0 +1,9 @@
+{
+  "schema": "saeit.factory.f41-product-request.v1",
+  "kind": "certificate_verifier_api",
+  "product_id": "f41_certificate_verifier_api_demo",
+  "data": {
+    "expected_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "document_name": "demo_certificate"
+  }
+}
