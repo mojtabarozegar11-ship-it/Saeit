@@ -152,17 +152,22 @@ jobs:
             "cd '$stage_vps' && bash -n scripts/business_os_private_cron.sh && bash scripts/business_os_private_cron.sh --run vps" > /dev/null 2>&1
           timeout 90s ssh -F "$stage_root/config" business-os-cpanel \
             "cd '$stage_host' && bash -n scripts/business_os_private_cron.sh && bash scripts/business_os_private_cron.sh --run cpanel" > /dev/null 2>&1
-          # The only persistent host mutation is a uniquely marked, reversible,
-          # fifteen-minute PRIVATE diagnostic cron on each server.
+          # Preserve only fixed status markers and numeric exit codes in CI.
+          timeout 30s ssh -F "$stage_root/config" business-os-vps \
+            "command -v crontab >/dev/null && crontab -l >/dev/null 2>&1" > /dev/null 2>&1 && echo "VPS_CRON_READABLE" || echo "VPS_CRON_READ_NOT_CONFIRMED"
           timeout 40s ssh -F "$stage_root/config" business-os-cpanel \
             "cd '$stage_host' && bash scripts/business_os_private_cron.sh --install cpanel" > /dev/null 2>&1
-          if timeout 40s ssh -F "$stage_root/config" business-os-vps \
-            "cd '$stage_vps' && bash scripts/business_os_private_cron.sh --install vps" > /dev/null 2>&1; then
+          vps_code=0
+          timeout 40s ssh -F "$stage_root/config" business-os-vps \
+            "cd '$stage_vps' && bash scripts/business_os_private_cron.sh --install vps" > /dev/null 2>&1 || vps_code=$?
+          if test "$vps_code" -eq 0; then
             echo "BUSINESS_OS_PRIVATE_15MIN_VPS_AND_CPANEL_CRON_ACTIVE"
           else
+            echo "BUSINESS_OS_VPS_CRON_INSTALL_EXIT=$vps_code"
+            rollback_code=0
             timeout 40s ssh -F "$stage_root/config" business-os-cpanel \
-              "cd '$stage_host' && bash scripts/business_os_private_cron.sh --uninstall cpanel" > /dev/null 2>&1 || :
-            echo "BUSINESS_OS_PRIVATE_SCHEDULE_ROLLED_BACK"
+              "cd '$stage_host' && bash scripts/business_os_private_cron.sh --uninstall cpanel" > /dev/null 2>&1 || rollback_code=$?
+            echo "BUSINESS_OS_CPANEL_ROLLBACK_EXIT=$rollback_code"
             exit 1
           fi
           echo "PRIVATE_RELEASE=$stage_name"

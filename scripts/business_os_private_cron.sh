@@ -34,7 +34,7 @@ if test "$mode" = --run; then
   fi
   exit 0
 fi
-command -v crontab >/dev/null
+command -v crontab >/dev/null || exit 71
 marker=SAEIT_BUSINESS_OS_PRIVATE_V1
 back="$root/private/cron-before-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 error="$root/private/.cron-list-error-$$"
@@ -42,7 +42,7 @@ if ! crontab -l > "$back" 2> "$error"; then
   if ! grep -qi 'no crontab for' "$error"; then
     rm -f "$back" "$error"
     echo PRIVATE_CRON_SOURCE_UNAVAILABLE >&2
-    exit 1
+    exit 72
   fi
 fi
 rm -f "$error"
@@ -52,8 +52,8 @@ grep -Fv "# $marker" "$back" > "$next" || :
 if test "$mode" = --install; then
   flock_bin="$(command -v flock)"
   timeout_bin="$(command -v timeout)"
-  test "$flock_bin" = /usr/bin/flock || test "$flock_bin" = /bin/flock
-  test "$timeout_bin" = /usr/bin/timeout || test "$timeout_bin" = /bin/timeout
+  { test "$flock_bin" = /usr/bin/flock || test "$flock_bin" = /bin/flock; } || exit 76
+  { test "$timeout_bin" = /usr/bin/timeout || test "$timeout_bin" = /bin/timeout; } || exit 76
   printf '*/15 * * * * %s -n %s/private/cycle.lock %s 110s /bin/bash %s/scripts/business_os_private_cron.sh --run %s >/dev/null 2>&1 # %s\n' \
     "$flock_bin" "$root" "$timeout_bin" "$root" "$node" "$marker" >> "$next"
 fi
@@ -64,7 +64,7 @@ crontab -l > "$current" 2>/dev/null || :
 if ! cmp -s "$back" "$current"; then
   rm -f "$next" "$current"
   echo PRIVATE_CRON_CHANGED_CONCURRENTLY >&2
-  exit 1
+  exit 73
 fi
 rm -f "$current"
 rollback() {
@@ -73,11 +73,11 @@ rollback() {
   fi
 }
 trap rollback EXIT
-crontab "$next"
+crontab "$next" || exit 74
 installed=1
 count="$(crontab -l | grep -Fc "# $marker" || :)"
-if test "$mode" = --install; then test "$count" = 1
-else test "$count" = 0
+if test "$mode" = --install; then test "$count" = 1 || exit 75
+else test "$count" = 0 || exit 75
 fi
 installed=0
 trap - EXIT
