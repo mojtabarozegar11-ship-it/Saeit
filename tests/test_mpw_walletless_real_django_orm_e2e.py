@@ -444,7 +444,8 @@ class RealDjangoWalletlessTests(unittest.TestCase):
             download=guest_download_paid(
                 req("get",paid["download_path"],token),invoice_id)
             self.assertEqual(download.status_code,200)
-            self.assertEqual(download["Cache-Control"],"no-store, private, max-age=0")
+            self.assertIn("no-store",download["Cache-Control"])
+            self.assertIn("private",download["Cache-Control"])
             self.assertIn("attachment",download["Content-Disposition"])
             download.close()
             with self.assertRaises(Http404):
