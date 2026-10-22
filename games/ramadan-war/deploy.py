@@ -6,7 +6,7 @@ import hashlib, json, os, re, sys
 ROOT=Path('/home/zomorod2/public_html')
 ROW='ZM-R25'; GAME_ID='ZM-R25-GAME-RAMADAN-WAR-20261022'; GAME=ROOT/'ramadan-war'
 MARK='ZM-RAMADAN-WAR-WEB-CARD-20261022'
-ASSETS=['index.html','game.js','game.css','engine3d.js','three.module.js','three.core.min.js','THREE-LICENSE.txt','weapon-overlay.webp','soldier-enemy.webp','stone-wall.webp']
+ASSETS=['index.html','game.js','game.css','engine3d.js','three.module.js','three.core.min.js','THREE-LICENSE.txt','weapon-overlay.webp','soldier-enemy.webp','stone-wall.webp','scene-desert.webp','scene-night.webp','scene-airbase.webp']
 
 def digest(data): return hashlib.sha256(data).hexdigest()
 def atomic(path,data,run):
@@ -43,8 +43,8 @@ def prepare(stage):
     assert b'RamadanWarDebug' in new['game.js'] and b'createEngine' in new['game.js'] and b'./game.js' in new['index.html'] and b'./game.css' in new['index.html']
     assert b'./engine3d.js' in new['game.js'] and b'./three.module.js' in new['engine3d.js'] and b'./three.core.min.js' in new['three.module.js'] and len(new['three.module.js'])>300000 and len(new['three.core.min.js'])>300000
     assert b'The MIT License' in new['THREE-LICENSE.txt']
-    assert all(len(new[n])>50000 for n in ['weapon-overlay.webp','soldier-enemy.webp','stone-wall.webp'])
-    assert b'weapon-overlay.webp' in new['index.html'] and b'soldier-enemy.webp' in new['engine3d.js'] and b'stone-wall.webp' in new['engine3d.js']
+    assert all(len(new[n])>50000 for n in ['weapon-overlay.webp','soldier-enemy.webp','stone-wall.webp','scene-desert.webp','scene-night.webp','scene-airbase.webp'])
+    assert b'weapon-overlay.webp' in new['index.html'] and b'soldier-enemy.webp' in new['engine3d.js'] and b'missionBackdrop' in new['index.html'] and b'scene-desert.webp' in new['game.js'] and b'alpha:true' in new['engine3d.js']
     assert (GAME/'.htaccess').is_file() and (GAME/'.htaccess').read_bytes()==inputs['.htaccess'].read_bytes()
     old={name:(GAME/name).read_bytes() for name in ASSETS if (GAME/name).is_file() and not (GAME/name).is_symlink()}
     assert all(name in old for name in ['index.html','game.js','game.css','engine3d.js','three.module.js','three.core.min.js','THREE-LICENSE.txt'])

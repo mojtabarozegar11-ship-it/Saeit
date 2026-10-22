@@ -1,8 +1,9 @@
 import * as THREE from './three.module.js';
 
 export function createEngine(canvas) {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha:true, powerPreference: 'high-performance' });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.setClearColor(0x000000,0);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.12;
   renderer.shadowMap.enabled = true;
@@ -76,24 +77,9 @@ export function createEngine(canvas) {
   function build(w, tileFn) {
     world=w;pitch=0;enemies.clear();missiles.clear();
     if(weapon?.g)camera.remove(weapon.g);
-    scene=new THREE.Scene();scene.background=new THREE.Color(0x91a7ae);scene.fog=new THREE.FogExp2(0x9aa7a3,.008);scene.add(camera);
+    scene=new THREE.Scene();scene.background=null;scene.fog=null;scene.add(camera);
     baseFov=w.hero%6===1?48:68;scoped=false;camera.fov=baseFov;camera.updateProjectionMatrix();weapon=makeWeapon();
-    scene.add(new THREE.HemisphereLight(0xe0efff,0x75614c,1.45));
-    const sun=new THREE.DirectionalLight(0xffe3bd,3.2);sun.position.set(-8,15,4);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-19;sun.shadow.camera.right=19;sun.shadow.camera.top=19;sun.shadow.camera.bottom=-19;sun.shadow.bias=-.00025;scene.add(sun);
-    const fill=new THREE.DirectionalLight(0x8eb6d0,1.1);fill.position.set(8,6,-12);scene.add(fill);
-    const groundMat=new THREE.MeshStandardMaterial({map:texture('sand'),roughness:.97});
-    const ground=new THREE.Mesh(new THREE.PlaneGeometry(100,100),groundMat);ground.rotation.x=-Math.PI/2;ground.position.set(8,-.055,8);ground.receiveShadow=true;scene.add(ground);
-    const wallMat=mats.stone;wallMat.map=new THREE.TextureLoader().load('./stone-wall.webp');wallMat.map.colorSpace=THREE.SRGBColorSpace;wallMat.map.wrapS=wallMat.map.wrapT=THREE.RepeatWrapping;wallMat.map.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());wallMat.map.repeat.set(1,1);
-    const cells=[];for(let z=0;z<16;z++)for(let x=0;x<16;x++)if(tileFn(x,z)!==0)cells.push([x+.5,1.62,z+.5]);
-    const stones=new THREE.InstancedMesh(new THREE.BoxGeometry(1,3.25,1),wallMat,cells.length);stones.castShadow=stones.receiveShadow=true;const d=new THREE.Object3D();
-    cells.forEach((p,i)=>{d.position.set(...p);d.updateMatrix();stones.setMatrixAt(i,d.matrix);});scene.add(stones);
-    const trimGeo=new THREE.BoxGeometry(1.08,.12,1.08);for(const [x,y,z]of cells){const cap=box(scene,trimGeo,mats.trim,[x,3.2,z]);cap.castShadow=false;}
-    for(const [x,z]of [[1,1],[14,1],[1,14],[14,14]]){const t=new THREE.Mesh(new THREE.CylinderGeometry(1.05,1.25,4,10),mats.stone);t.position.set(x,2,z);t.castShadow=true;t.receiveShadow=true;scene.add(t);const top=new THREE.Mesh(new THREE.ConeGeometry(1.18,.65,10),mats.trim);top.position.set(x,4.3,z);top.castShadow=true;scene.add(top);}
-    for(const [x,z]of [[3.1,3.1],[12.5,3.4],[3.5,11.8],[12,12],[5.5,7.5],[10.5,6.8]]){box(scene,new THREE.BoxGeometry(.85,.7,.85),mats.crate,[x,.35,z]);for(let k=-1;k<=1;k++)box(scene,new THREE.BoxGeometry(.055,.72,.88),mats.trim,[x+k*.27,.35,z]);}
-    for(let i=0;i<48;i++){const a=Math.random()*Math.PI*2,r=8.5+Math.random()*16,x=8+Math.cos(a)*r,z=8+Math.sin(a)*r,rock=new THREE.Mesh(new THREE.DodecahedronGeometry(.35+Math.random()*1.15,0),mats.rock);rock.position.set(x,-.08+Math.random()*.15,z);rock.scale.y=.35+Math.random()*.55;rock.rotation.set(Math.random(),Math.random(),Math.random());rock.castShadow=true;scene.add(rock);}
-    const hills=new THREE.MeshStandardMaterial({color:0x66736f,roughness:1});for(let i=0;i<18;i++){const a=i/18*Math.PI*2,r=30+Math.random()*8,h=7+Math.random()*15,m=new THREE.Mesh(new THREE.ConeGeometry(6+Math.random()*8,h,7),hills);m.position.set(8+Math.cos(a)*r,h/2-1,8+Math.sin(a)*r);m.rotation.y=Math.random();scene.add(m);}
-    const sunDisc=new THREE.Mesh(new THREE.SphereGeometry(1.15,16,12),new THREE.MeshBasicMaterial({color:0xffdfa5}));sunDisc.position.set(-28,20,-52);scene.add(sunDisc);
-    camera.position.set(w.x,1.62,w.y);camera.rotation.order='YXZ';camera.rotation.y=w.angle-Math.PI/2;camera.rotation.x=0;weapon.g.visible=true;
+    camera.position.set(w.x,1.62,w.y);camera.rotation.order='YXZ';camera.rotation.y=w.angle-Math.PI/2;camera.rotation.x=0;weapon.g.visible=false;
   }
 
   function enemy(e) {
