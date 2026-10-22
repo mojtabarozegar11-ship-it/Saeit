@@ -33,7 +33,7 @@ jobs:
           import hashlib,importlib.util
           s=Path('games/crown-defender/index.html').read_bytes()
           sha=hashlib.sha256(s).hexdigest()
-          assert sha=='997f2711f7d2c006d87c2c9f727b3ce21e007e8d3b39dc46226726559eadb3cb'
+          assert sha=='6f4ba27c68a2bb5f414d94a52883c12e916762c69bc1cd8a418b1ea188fc5232'
           spec=importlib.util.spec_from_file_location('v100','scripts/mpw_crown_v100_publish_20261019.py')
           m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
           assert m.verify_payload(s)==sha
