@@ -5,6 +5,7 @@ on:
     branches: [feature/evidence-led-business-os-20261022]
     paths:
       - '.github/workflows/business-os-paid-release.yml'
+      - 'scripts/business_os_purchase_cpanel_release.sh'
   workflow_dispatch:
 
 permissions:

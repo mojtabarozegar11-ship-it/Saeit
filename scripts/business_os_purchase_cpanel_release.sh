@@ -95,8 +95,9 @@ apply() {
   done
   touch "$backup/armed"
   for rel in "${files[@]}"; do
-    install -m 0644 "$stage/$rel" "$prod/$rel" || return 1
+    install -m 0644 "$stage/$rel" "$prod/$rel" || { echo "PURCHASE_RELEASE_MODULE_INSTALL_FAILED"; return 1; }
   done
+  echo "PURCHASE_RELEASE_MODULES_INSTALLED"
   "$interpreter" -B - "$prod/core/apps.py" <<'PY'
 from pathlib import Path
 import os,sys
@@ -108,8 +109,9 @@ temp.write_text(s,encoding="utf-8")
 os.chmod(temp,p.stat().st_mode & 0o777)
 os.replace(temp,p)
 PY
-  (cd "$prod" && "$interpreter" -B manage.py check) > /dev/null 2>&1 || return 1
-  restart || return 1
+  echo "PURCHASE_RELEASE_APPCONFIG_PATCHED"
+  (cd "$prod" && "$interpreter" -B manage.py check) > /dev/null 2>&1 || { echo "PURCHASE_RELEASE_DJANGO_CHECK_FAILED"; return 1; }
+  restart || { echo "PURCHASE_RELEASE_PASSENGER_RESTART_FAILED"; return 1; }
   touch "$backup/applied"
   echo "PURCHASE_RELEASE_APPLIED_DJANGO_CHECK_OK"
 }
