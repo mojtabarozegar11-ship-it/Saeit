@@ -137,3 +137,22 @@ low-value staging purchase, real Django ledger and buyer-only delivery tests.
 
 The operator test does not access funds or production orders, and
 the public payment flag remains OFF. No API secrets are placed in git or logs.
+
+
+### Corrected cPanel legacy-RPC diagnosis (Actions 39720309499, 39720447962)
+
+The active existing `tron_solidity_rpc(path,request)` is limited to exactly
+`/walletsolidity/gettransactionbyid` and
+`/walletsolidity/gettransactioninfobyid`. Therefore
+`getnowblock` returning NativeRpcUnavailable is an expected method
+allowlist rejection, not evidence of a fully offline TRON provider.
+
+A read-only attempt with a historical PUBLIC documentation txid returned
+JSON dictionaries for both permitted methods but DID NOT yield matching
+canonical txID/id values. That sample is not validated to be a Mainnet
+transaction; this is NOT a successful native-payment proof.
+
+Public external tests continued to show unconfirmed TronGrid health
+and Nodit 403 without dedicated valid API credentials.
+Production dual-provider readiness remains BLOCKED. No customer funds,
+buyer orders or production database rows were changed.
