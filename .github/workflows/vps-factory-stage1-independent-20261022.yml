@@ -1,0 +1,97 @@
+name: Independent stage-one intake and stage-two handoff
+on:
+  pull_request:
+    paths:
+      - scripts/factory_stage1_handoff.py
+      - scripts/factory_continuous_production_orders.py
+      - deploy/install_factory_stage1_handoff.sh
+      - tests/test_factory_stage1_handoff.py
+      - .github/workflows/vps-factory-stage1-independent-20261022.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_stage1_handoff.py
+      - scripts/factory_continuous_production_orders.py
+      - deploy/install_factory_stage1_handoff.sh
+      - tests/test_factory_stage1_handoff.py
+      - .github/workflows/vps-factory-stage1-independent-20261022.yml
+permissions:
+  contents: read
+concurrency:
+  group: stage1-independent-vps
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Independent stage 1, returned orders, no fabricated quality
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_stage1_handoff.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_continuous_production_orders.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_agri200_p0_intake.py -v
+          bash -n deploy/install_factory_stage1_handoff.sh
+          python3 -B -m py_compile scripts/factory_stage1_handoff.py scripts/factory_continuous_production_orders.py
+  private-vps-install:
+    needs: validate
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-stage1-independent-20261022]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Deploy stage-one worker only; leave websites and downstream processing unchanged
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          local_stage="$RUNNER_TEMP/factory-stage1"
+          install -d -m 700 "$local_stage"
+          trap 'rm -rf -- "$local_stage"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$local_stage/key"
+          chmod 600 "$local_stage/key"
+          ssh-keygen -y -P "" -f "$local_stage/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$local_stage/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$local_stage/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh_vps() {
+            ssh -i "$local_stage/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$local_stage/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          ssh_vps 'test "$(id -un)" = githubops && test "$(id -u)" -ne 0 && test -d "$HOME/factory-runtime/private/autonomous-product-cycle" && echo FACTORY_STAGE1_PREFLIGHT=PASS'
+          remote_stage="/home/githubops/factory-runtime/operations/.stage1-independent-$GITHUB_RUN_ID"
+          ssh_vps "umask 077; test ! -e '$remote_stage'; mkdir -m 700 '$remote_stage'"
+          for src in scripts/factory_stage1_handoff.py scripts/factory_continuous_production_orders.py deploy/install_factory_stage1_handoff.sh deploy/install_factory_continuous_orders.sh; do
+            file="$(basename "$src")"
+            cat "$src" | ssh_vps "umask 077; test ! -e '$remote_stage/$file'; cat > '$remote_stage/$file'; chmod 600 '$remote_stage/$file'"
+            digest="$(sha256sum "$src" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$remote_stage/$file' | awk '{print \$1}')\" = '$digest'"
+          done
+          # Update the stage-1-only capacity measurement, preserving historic orders.
+          ssh_vps "bash -n '$remote_stage/install_factory_continuous_orders.sh' && bash '$remote_stage/install_factory_continuous_orders.sh' '$remote_stage/factory_continuous_production_orders.py'"
+          # Install independent stage one worker and real private handoff receipts.
+          ssh_vps "bash -n '$remote_stage/install_factory_stage1_handoff.sh' && bash '$remote_stage/install_factory_stage1_handoff.sh' '$remote_stage/factory_stage1_handoff.py'"
+          ssh_vps '/home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/generate-orders.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle'
+          ssh_vps 'python3 -' <<'PY'
+          import json
+          from pathlib import Path
+          p=Path.home()/"factory-runtime/private/autonomous-product-cycle/production-instructions"
+          s=json.loads((p/"order-status.json").read_text())
+          i=json.loads((p/"owner-agri200-p0-index.json").read_text())
+          assert s["stage1_capacity_independent_of_stage2"] is True
+          assert s["pending_owner_agri_p0_instructions"]==0
+          for order_id in i["order_ids_ranked"]:
+              a=json.loads((p/"stage-01/receipts"/(order_id+"--r001.json")).read_text())
+              b=json.loads((p/"stage-02/inbox"/(order_id+"--r001.json")).read_text())
+              assert a["stage_1_completed"] is True
+              assert a["stage_2_packet_sha256"] and b["stage_2_status"]=="received_pending_processing"
+              assert b["quality1000_approved"] is False and b["public_distribution_allowed"] is False
+          print("FACTORY_STAGE1_P0_HANDOFFS_VERIFIED=200")
+          print("FACTORY_STAGE1_OTHER_PENDING="+str(s["pending_research_instructions"]+s["pending_manufacturing_instructions"]))
+          print("FACTORY_STAGE2_RESEARCH_STARTED=NOT_VERIFIED")
+          print("FACTORY_WEBSITES_UNCHANGED=true")
+          PY
