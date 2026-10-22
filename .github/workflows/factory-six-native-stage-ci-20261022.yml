@@ -6,6 +6,7 @@ on:
       - scripts/factory_six_native_candidates.py
       - scripts/factory_f14_browser_real_smoke.py
       - scripts/factory_windows_native_playthrough.py
+      - scripts/factory_android_emulator_playthrough.py
       - scripts/factory_six_native_candidate_bundle.py
       - scripts/factory_specialist_formats.py
       - scripts/factory_six_native_independent_rework.py
@@ -162,7 +163,7 @@ jobs:
           bash deploy/factory_six_native_private_relay.sh F17 "$RUNNER_TEMP/bundle-F17"
   f12-f16-real-android-apk:
     runs-on: ubuntu-24.04
-    timeout-minutes: 19
+    timeout-minutes: 27
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
@@ -207,6 +208,21 @@ jobs:
             echo "ANDROID_NATIVE_DEBUG_APK_AAB_VERIFIED=$family"
           done
           echo F12_F16_NATIVE_ANDROID_BINARY_BUILDS=PASS
+      - name: Enable Android emulator KVM
+        run: sudo chmod 666 /dev/kvm
+      - name: Exercise both APKs in the real Android 35 emulator
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          cores: 2
+          ram-size: 2048M
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -no-boot-anim
+          script: |
+            python3 -B scripts/factory_android_emulator_playthrough.py --apk-f12 "$RUNNER_TEMP/real-F12/android/app/build/outputs/apk/debug/app-debug.apk" --apk-f16 "$RUNNER_TEMP/real-F16/android/app/build/outputs/apk/debug/app-debug.apk" --out "$RUNNER_TEMP/android-real-interactive-proof.json"
       - name: Package and independently verify Android debug binaries
         run: |
           set -euo pipefail
@@ -214,7 +230,7 @@ jobs:
             family="F$id"
             root="$RUNNER_TEMP/real-f$id"
             project="$root/android"
-            python3 -B scripts/factory_six_native_candidate_bundle.py --family "$family" --out "$RUNNER_TEMP/bundle-$family" --checks "real Gradle debug APK AAB signed APK and asset integrity" --file "$project/app/build/outputs/apk/debug/app-debug.apk" --file "$project/app/build/outputs/bundle/debug/app-debug.aab" --file "$root/preparation-receipt.json"
+            python3 -B scripts/factory_six_native_candidate_bundle.py --family "$family" --out "$RUNNER_TEMP/bundle-$family" --checks "real Gradle debug APK AAB signed APK and asset integrity" --file "$project/app/build/outputs/apk/debug/app-debug.apk" --file "$project/app/build/outputs/bundle/debug/app-debug.aab" --file "$root/preparation-receipt.json" --file "$RUNNER_TEMP/android-real-interactive-proof.json"
             python3 -B scripts/factory_six_native_candidate_bundle.py --family "$family" --out "$RUNNER_TEMP/bundle-$family" --verify
           done
       - name: Privately stage two Android debug builds on pinned VPS
