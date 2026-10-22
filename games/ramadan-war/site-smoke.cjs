@@ -16,6 +16,8 @@ const assert=require('node:assert/strict');
    await page.evaluate(()=>window.RamadanWarDebug.selectHero(0));
    await page.evaluate(()=>window.RamadanWarDebug.start());
    await page.locator('#hud:not(.hidden)').waitFor();
+   await page.waitForFunction(()=>document.querySelector('#weaponArt').complete&&document.querySelector('#weaponArt').naturalWidth>0);
+   assert.equal(await page.locator('#game').evaluate(el=>el.classList.contains('playing')),true);
    await page.evaluate(()=>{for(let i=0;i<30;i++)window.RamadanWarDebug.tick(.04)});
    const controls=await page.evaluate(()=>({stick:document.querySelector('#stick').getBoundingClientRect().x,fire:document.querySelector('#fire').getBoundingClientRect().x}));assert(controls.stick<controls.fire,'movement pad should be on the left of fire controls');
    await page.locator('#scope').click();assert.equal(await page.locator('#game').evaluate(el=>el.classList.contains('scope-mode')),true);

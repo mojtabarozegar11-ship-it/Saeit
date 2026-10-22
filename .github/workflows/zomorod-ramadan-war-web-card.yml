@@ -2,7 +2,7 @@ name: Port Android Ramadan War to the existing web game route
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/zomorod-ramadan-war-web-card.yml', 'games/ramadan-war/deploy.py']
+    paths: ['.github/workflows/zomorod-ramadan-war-web-card.yml', 'games/ramadan-war/**']
 permissions:
   contents: read
 concurrency:
@@ -29,6 +29,9 @@ jobs:
           test -s games/ramadan-war/three.module.js
           test -s games/ramadan-war/three.core.min.js
           test -s games/ramadan-war/THREE-LICENSE.txt
+          test -s games/ramadan-war/weapon-overlay.webp
+          test -s games/ramadan-war/soldier-enemy.webp
+          test -s games/ramadan-war/stone-wall.webp
           python3 -m py_compile games/ramadan-war/deploy.py
           node --check games/ramadan-war/site-smoke.cjs
           python3 - <<'PY'
@@ -111,6 +114,9 @@ jobs:
           timeout 50s scp -q -F "$d/config" games/ramadan-war/three.module.js "host:$stage/incoming/three.module.js"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/three.core.min.js "host:$stage/incoming/three.core.min.js"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/THREE-LICENSE.txt "host:$stage/incoming/THREE-LICENSE.txt"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/weapon-overlay.webp "host:$stage/incoming/weapon-overlay.webp"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/soldier-enemy.webp "host:$stage/incoming/soldier-enemy.webp"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/stone-wall.webp "host:$stage/incoming/stone-wall.webp"
           timeout 45s ssh -T -F "$d/config" host "python3 '$stage/incoming/deploy.py' prepare '$GITHUB_RUN_ID'"
       - name: Replace only game client files and preserve the second card
         id: publish
@@ -151,6 +157,9 @@ jobs:
           row=next(x for x in d['rows'] if x.get('id')=='ZM-R25')
           assert row['cards'][1]['id']=='ZM-R25-GAME-RAMADAN-WAR-20261022'
           assert row['cards'][1]['canonicalUrl']=='/ramadan-war/' and row['cards'][2]['slug']=='website-design'
+          for asset in ['weapon-overlay.webp','soldier-enemy.webp','stone-wall.webp']:
+           with urlopen(Request(root+'/ramadan-war/'+asset+'?asset='+str(time.time_ns()),headers={'Cache-Control':'no-cache,no-store'}),timeout=35) as r:
+            assert r.status==200 and len(r.read())>50000,asset
           print('LIVE_CARD_TWO_AND_GAME_ROUTE=PASS')
           PY
       - name: Test 3D rendering and campaign controls on desktop and mobile browsers
