@@ -83,7 +83,7 @@ def render(family, folder):
 canvas{width:min(90vw,420px);background:#233e4d;border:2px solid #e7b65a}
 button{padding:12px;margin:7px;background:#e7b65a;border:0;border-radius:8px}</style>
 <h1>Orbit Collect</h1><p>Collect the gold sparks; avoid red hazards.</p>
-<canvas id="board" width="400" height="400"></canvas><p id="score">Score: 0</p>
+<canvas id="board" width="400" height="400" role="img" aria-label="Orbit Collect game field. Use Left and Right buttons or arrow keys to collect gold sparks and avoid red hazards."></canvas><p id="score" role="status" aria-live="polite" aria-atomic="true">Score: 0</p>
 <button data-d="-1">Left</button><button data-d="1">Right</button>
 <button id="restart">Restart</button><script src="game.js"></script></html>""",encoding="utf-8")
         (folder/"game.js").write_text("""'use strict';
@@ -99,7 +99,7 @@ if(!over&&tick%26===0)items.push({x:22+Math.random()*356,y:0,bad:Math.random()<.
 items.forEach(o=>{if(!over)o.y+=2.4+score*.06;ctx.beginPath();ctx.arc(o.x,o.y,10,0,Math.PI*2);
 ctx.fillStyle=o.bad?'#f15f67':'#ffd46c';ctx.fill();if(Math.abs(o.x-x)<22&&o.y>352&&o.y<392){
 if(o.bad)over=true;else score+=1;o.y=999;}});items=items.filter(o=>o.y<410);
-ctx.fillStyle='#91e1ce';ctx.fillRect(x-17,365,34,26);document.getElementById('score').textContent=(over?'Game over — ':'')+'Score: '+score;
+ctx.fillStyle='#91e1ce';ctx.fillRect(x-17,365,34,26);const status=document.getElementById('score');const next=(over?'Game over — ':'')+'Score: '+score;if(status.textContent!==next)status.textContent=next;
 requestAnimationFrame(frame);}reset();requestAnimationFrame(frame);""",encoding="utf-8")
         package(folder, "browser_game.zip", ["mini_game.html","game.js"])
     elif family == "F19":
