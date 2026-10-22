@@ -1,10 +1,12 @@
 name: Real native candidates for six blocked factory lines
 on:
   push:
-    branches: [feature/six-native-candidate-builds-20261022]
+    branches: [feature/six-native-candidate-builds-20261022, main]
     paths:
       - scripts/factory_six_native_candidates.py
       - scripts/factory_f14_browser_real_smoke.py
+      - scripts/factory_six_native_candidate_bundle.py
+      - deploy/factory_six_native_private_relay.sh
       - .github/workflows/factory-six-native-stage-ci-20261022.yml
   workflow_dispatch:
 permissions: {contents: read}
@@ -41,6 +43,18 @@ jobs:
           assert not d["independent_quality_1000_certified"] and not d["commercial_release"]
           print("F26_REAL_ONNX_FORMAT_AND_INFERENCE=PASS")
           PY
+      - name: Package and hash-check 48 executable ONNX model artifacts
+        run: |
+          set -euo pipefail
+          files=()
+          for f in "$RUNNER_TEMP/real-f26/native/"*.onnx; do files+=(--file "$f"); done
+          python3 -B scripts/factory_six_native_candidate_bundle.py --family F26 --out "$RUNNER_TEMP/bundle-F26" --checks "48 CPU ONNXRuntime sessions 192 holdout predictions" --file "$RUNNER_TEMP/real-f26/native-proof.json" --file "$RUNNER_TEMP/real-f26/preparation-receipt.json" "${files[@]}"
+          python3 -B scripts/factory_six_native_candidate_bundle.py --family F26 --out "$RUNNER_TEMP/bundle-F26" --verify
+      - name: Privately stage F26 ONNX candidate evidence on VPS
+        if: github.ref == 'refs/heads/main'
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: bash deploy/factory_six_native_private_relay.sh F26 "$RUNNER_TEMP/bundle-F26"
   f14-real-chromium:
     runs-on: ubuntu-24.04
     timeout-minutes: 13
@@ -62,6 +76,15 @@ jobs:
         run: |
           python3 -B scripts/factory_f14_browser_real_smoke.py --source "$RUNNER_TEMP/real-f14/source" --proof "$RUNNER_TEMP/real-f14/browser-proof.json"
           echo F14_REAL_INTERACTIVE_BROWSER_QA=PASS
+      - name: Make SHA-bound private F14 browser candidate and verify integrity
+        run: |
+          python3 -B scripts/factory_six_native_candidate_bundle.py --family F14 --out "$RUNNER_TEMP/bundle-F14" --checks "Chromium actual keyboard tap mobile desktop restart" --file "$RUNNER_TEMP/real-f14/source/mini_game.html" --file "$RUNNER_TEMP/real-f14/source/game.js" --file "$RUNNER_TEMP/real-f14/browser-proof.json" --file "$RUNNER_TEMP/real-f14/preparation-receipt.json"
+          python3 -B scripts/factory_six_native_candidate_bundle.py --family F14 --out "$RUNNER_TEMP/bundle-F14" --verify
+      - name: Keep only privately stored native candidates on VPS
+        if: github.ref == 'refs/heads/main'
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: bash deploy/factory_six_native_private_relay.sh F14 "$RUNNER_TEMP/bundle-F14"
   f13-f17-real-windows-exe:
     runs-on: windows-2022
     timeout-minutes: 18
@@ -100,6 +123,24 @@ jobs:
             Write-Host ("WINDOWS_REAL_PE_SHA256=" + (Get-FileHash $f -Algorithm SHA256).Hash)
           }
           Write-Host "F13_F17_NATIVE_WINDOWS_EXE_EXECUTION=PASS"
+      - name: Package and validate two private native Windows candidates
+        run: |
+          python scripts/factory_six_native_candidate_bundle.py --family F13 --out "$env:RUNNER_TEMP/bundle-F13" --checks "Real Windows PE and 48-level executable self-test" --file "$env:RUNNER_TEMP/native-f13/GemRoutePilot.exe" --file "$env:RUNNER_TEMP/real-f13/preparation-receipt.json"
+          if ($LASTEXITCODE -ne 0) { throw "F13_BUNDLE_FAILED" }
+          python scripts/factory_six_native_candidate_bundle.py --family F17 --out "$env:RUNNER_TEMP/bundle-F17" --checks "Real Windows PE executable CSV and invalid-input self-tests" --file "$env:RUNNER_TEMP/native-f17/FieldLedgerPilot.exe" --file "$env:RUNNER_TEMP/real-f17/preparation-receipt.json"
+          if ($LASTEXITCODE -ne 0) { throw "F17_BUNDLE_FAILED" }
+          python scripts/factory_six_native_candidate_bundle.py --family F13 --out "$env:RUNNER_TEMP/bundle-F13" --verify
+          if ($LASTEXITCODE -ne 0) { throw "F13_BUNDLE_VERIFICATION_FAILED" }
+          python scripts/factory_six_native_candidate_bundle.py --family F17 --out "$env:RUNNER_TEMP/bundle-F17" --verify
+          if ($LASTEXITCODE -ne 0) { throw "F17_BUNDLE_VERIFICATION_FAILED" }
+      - name: Privately stage Windows binaries on existing pinned VPS
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          bash deploy/factory_six_native_private_relay.sh F13 "$RUNNER_TEMP/bundle-F13"
+          bash deploy/factory_six_native_private_relay.sh F17 "$RUNNER_TEMP/bundle-F17"
   f12-f16-real-android-apk:
     runs-on: ubuntu-24.04
     timeout-minutes: 19
@@ -147,3 +188,20 @@ jobs:
             echo "ANDROID_NATIVE_DEBUG_APK_AAB_VERIFIED=$family"
           done
           echo F12_F16_NATIVE_ANDROID_BINARY_BUILDS=PASS
+      - name: Package and independently verify Android debug binaries
+        run: |
+          set -euo pipefail
+          for id in 12 16; do
+            family="F$id"
+            root="$RUNNER_TEMP/real-f$id"
+            project="$root/android"
+            python3 -B scripts/factory_six_native_candidate_bundle.py --family "$family" --out "$RUNNER_TEMP/bundle-$family" --checks "real Gradle debug APK AAB signed APK and asset integrity" --file "$project/app/build/outputs/apk/debug/app-debug.apk" --file "$project/app/build/outputs/bundle/debug/app-debug.aab" --file "$root/preparation-receipt.json"
+            python3 -B scripts/factory_six_native_candidate_bundle.py --family "$family" --out "$RUNNER_TEMP/bundle-$family" --verify
+          done
+      - name: Privately stage two Android debug builds on pinned VPS
+        if: github.ref == 'refs/heads/main'
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          bash deploy/factory_six_native_private_relay.sh F12 "$RUNNER_TEMP/bundle-F12"
+          bash deploy/factory_six_native_private_relay.sh F16 "$RUNNER_TEMP/bundle-F16"
