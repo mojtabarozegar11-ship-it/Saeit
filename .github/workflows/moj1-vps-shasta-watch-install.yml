@@ -1,0 +1,133 @@
+name: MOJ1 Shasta keyless 10-minute VPS monitor install
+on:
+  push:
+    branches: ['moj1/shasta-pilot-20261021']
+    paths:
+      - '.github/workflows/moj1-vps-shasta-watch-install.yml'
+      - 'experiments/moj1-pilot/scripts/watch_shasta.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj1-shasta-keyless-vps-monitor-install
+  cancel-in-progress: false
+jobs:
+  install-shasta-readonly-monitor:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/moj1/shasta-pilot-20261021'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out only this experimental branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Offline code checks (no signing keys)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile experiments/moj1-pilot/scripts/watch_shasta.py
+          python3 experiments/moj1-pilot/scripts/watch_shasta.py --self-test
+      - name: Install keyless monitor and private cron on dedicated VPS
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_SSH_PRIVATE_KEY" || { echo 'MOJ1_VPS_SSH=UNAVAILABLE'; exit 1; }
+          umask 077
+          private_key="$RUNNER_TEMP/moj1_readonly_watch_ssh"
+          known_hosts="$RUNNER_TEMP/moj1_readonly_watch_known_hosts"
+          trap 'rm -f "$private_key" "$known_hosts"' EXIT
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$private_key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null > "$known_hosts"
+          expected_host='SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh-keygen -lf "$known_hosts" -E sha256 | grep -Fq "$expected_host"
+          ssh_opts=(-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known_hosts" -i "$private_key")
+          destination='githubops@178.239.147.150'
+          root='.local/share/moj1-shasta-test-20261021'
+          src='experiments/moj1-pilot/scripts/watch_shasta.py'
+          expected_sha="$(sha256sum "$src" | cut -d' ' -f1)"
+          [[ "$expected_sha" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]]
+          # Do not create a wallet or alter existing keys. Require the secured wallet root.
+          timeout 40s ssh "${ssh_opts[@]}" "$destination" \
+            'set -eu; umask 077; root="$HOME/.local/share/moj1-shasta-test-20261021"; test -d "$root"; test ! -L "$root"; test "$(stat -c %a "$root")" = 700; command -v crontab >/dev/null; if command -v systemctl >/dev/null && systemctl is-active --quiet cron; then :; elif pgrep -x cron >/dev/null || pgrep -x crond >/dev/null; then :; else echo "MOJ1_CRON_DAEMON=INACTIVE"; exit 1; fi; install -d -m 700 "$root/monitor"; test ! -L "$root/monitor"; test "$(stat -c %a "$root/monitor")" = 700'
+          timeout 40s scp "${ssh_opts[@]}" "$src" "$destination:$root/monitor/watch_shasta.py.stage-$GITHUB_RUN_ID"
+          timeout 110s ssh "${ssh_opts[@]}" "$destination" "bash -s -- '$expected_sha' '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          python3 - "$1" "$2" <<'PY_INSTALL'
+          import hashlib
+          import os
+          from pathlib import Path
+          import shutil
+          import stat
+          import subprocess
+          import sys
+
+          digest, run_id = sys.argv[1:]
+          assert len(digest) == 64 and all(c in '0123456789abcdef' for c in digest)
+          assert run_id.isdigit()
+          root = Path.home() / '.local/share/moj1-shasta-test-20261021'
+          monitor = root / 'monitor'
+          stage = monitor / ('watch_shasta.py.stage-' + run_id)
+          final = monitor / 'watch_shasta.py'
+          for directory in (root, monitor):
+              s = directory.lstat()
+              if not stat.S_ISDIR(s.st_mode) or stat.S_IMODE(s.st_mode) != 0o700 or s.st_uid != os.getuid():
+                  raise RuntimeError('PRIVATE_DIRECTORY_UNSAFE')
+          info = stage.lstat()
+          if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
+              raise RuntimeError('STAGE_NOT_REGULAR')
+          if hashlib.sha256(stage.read_bytes()).hexdigest() != digest:
+              raise RuntimeError('TRANSFER_CHECKSUM_MISMATCH')
+          stage.chmod(0o600)
+          tested = subprocess.run([sys.executable, str(stage), '--self-test'], text=True,
+                                  capture_output=True, timeout=12)
+          if tested.returncode or 'SELF_TEST=PASS' not in tested.stdout:
+              raise RuntimeError('OFFLINE_SELF_TEST_FAILED')
+          if final.exists() or final.is_symlink():
+              old = final.lstat()
+              if not stat.S_ISREG(old.st_mode) or old.st_uid != os.getuid() or stat.S_IMODE(old.st_mode) != 0o600:
+                  raise RuntimeError('EXISTING_WATCHER_UNSAFE')
+          stage.replace(final)
+          python = shutil.which('python3')
+          if not python or not Path(python).is_absolute():
+              raise RuntimeError('PYTHON_UNAVAILABLE')
+          marker = 'MOJ1_SHASTA_TEST_READONLY_WATCH_10M'
+          line = f'*/10 * * * * {python} {final} >/dev/null 2>&1 # {marker}'
+          existing = subprocess.run(['crontab', '-l'], text=True, capture_output=True, timeout=10)
+          if existing.returncode == 0:
+              old_lines = existing.stdout.splitlines()
+          elif existing.returncode == 1 and 'no crontab for' in existing.stderr.lower():
+              old_lines = []
+          else:
+              raise RuntimeError('CRONTAB_READ_FAILED')
+          tagged = [s for s in old_lines if marker in s]
+          if tagged and (len(tagged) != 1 or tagged[0] != line):
+              raise RuntimeError('EXISTING_MOJ1_CRON_CONFLICT')
+          if not tagged:
+              new_content = '\n'.join(old_lines + [line]) + '\n'
+              written = subprocess.run(['crontab', '-'], input=new_content,
+                                       text=True, capture_output=True, timeout=12)
+              if written.returncode:
+                  raise RuntimeError('CRONTAB_WRITE_FAILED:' + written.stderr[:100])
+          checked = subprocess.run(['crontab', '-l'], text=True, capture_output=True, timeout=10)
+          if checked.returncode or checked.stdout.splitlines().count(line) != 1:
+              raise RuntimeError('CRONTAB_VERIFY_FAILED')
+          print('MOJ1_WATCH_INSTALLED=YES')
+          print('MOJ1_WATCH_SCHEDULE=EVERY_10_MINUTES')
+          print('MOJ1_WATCH_SCRIPT_SHA256=' + digest)
+          print('MOJ1_WATCH_CRON_OTHER_ENTRIES_PRESERVED=YES')
+          print('MOJ1_WATCH_KEY_CONTENT_READ=NO')
+          print('MOJ1_WATCH_MAINNET=NEVER')
+          print('MOJ1_WATCH_BROADCAST=NEVER')
+          immediate = subprocess.run([sys.executable, str(final)], capture_output=True,
+                                     text=True, timeout=55)
+          print('MOJ1_WATCH_INITIAL_EXIT=' + str(immediate.returncode))
+          print('MOJ1_WATCH_INITIAL_RECEIPT=' + immediate.stdout.strip()[-1600:])
+          if immediate.returncode:
+              print('MOJ1_WATCH_INITIAL_ERROR=' + immediate.stderr.strip()[-300:])
+              raise RuntimeError('INITIAL_MONITOR_UNVERIFIED')
+          PY_INSTALL
+          REMOTE
