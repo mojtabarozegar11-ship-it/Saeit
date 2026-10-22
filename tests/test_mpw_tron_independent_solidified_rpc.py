@@ -52,6 +52,15 @@ class ReadOnlyTronVerifierTests(unittest.TestCase):
         self.assertEqual(rec.block_time,datetime.fromtimestamp(MS/1000,timezone.utc))
         self.assertTrue(rec.solidified and rec.execution_success and rec.transfer_contract)
 
+    def test_shasta_evidence_is_explicitly_tagged_and_refused_by_mainnet(self):
+        shasta=parse_solidified_native_trx(TX,self.body,self.info,source_id="shasta-probe",network="tron-shasta")
+        self.assertEqual(shasta.network,"tron-shasta")
+        with self.assertRaises(PaymentHold):
+            parse_solidified_native_trx(TX,self.body,self.info,source_id="probe",network="tron-nile")
+        for host in ("api.shasta.trongrid.io","nile.trongrid.io","api.nileex.io","proxy-shasta.example.com"):
+            with self.subTest(host=host),self.assertRaises(PaymentHold):
+                RpcProvider("shasta","testnet",f"https://{host}").validate()
+
     def test_malformed_or_foreign_hash_rejected(self):
         for value in ("a"*63,"b"*64,"a"*64+"f"):
             with self.subTest(value=value),self.assertRaises(PaymentHold):
