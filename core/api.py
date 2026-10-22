@@ -5,6 +5,7 @@ from rest_framework.response import Response
 
 from .approval import ApprovalService
 from .task_runtime import TaskExecutionError, TaskRuntime
+from .purchase_event import schedule_paid_purchase_review
 
 
 from .orchestrator import MasterAgent
@@ -391,6 +392,14 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
                 provider=provider, event_id=event_id
             ).first()
             if existing:
+                # Retry any missing management receipt on an authenticated duplicate.
+                # The paid-order review is locked and idempotent by payment intent.
+                if (existing.status == "processed"
+                        and existing.event_type == "payment.succeeded"
+                        and existing.payment_intent_id):
+                    schedule_paid_purchase_review(
+                        existing.payment_intent_id, provider=provider, event_id=event_id
+                    )
                 return Response(
                     {"status": existing.status, "event_id": event_id},
                     status=status.HTTP_200_OK,
@@ -467,6 +476,10 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
                 after_state={"event_id": event_id, "event_type": event_type, "status": event.status},
                 trace_id=f"payment-webhook-{provider}-{event_id}",
             )
+            if event_type == "payment.succeeded" and event.status == "processed":
+                # Trigger the decision immediately after the committed payment.
+                # No cron, polling, or unverified cart/order event is involved.
+                schedule_paid_purchase_review(intent.pk, provider=provider, event_id=event_id)
 
         return Response({"status": event.status, "event_id": event_id}, status=status.HTTP_200_OK)
 
