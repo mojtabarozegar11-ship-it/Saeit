@@ -12,6 +12,7 @@ The owner rated the previous release 10/100. This release does not claim a 100/1
 - Pointer steering uses a relative drag anchor, preventing the aircraft from jumping to the initial finger position. The player stays above the ability controls.
 - Simulation uses bounded 1/60-second substeps, with a maximum 100 ms catch-up, to keep movement consistent during short frame hitches.
 - Wave completion no longer forces the hangar open every three waves. Earned upgrades remain available through manual hangar access.
+- An EMP that finishes a wave safely stops reading enemies cleared by wave advancement. A regression test reproduces the former undefined-enemy error.
 - Boss contact no longer removes a living boss from the encounter. The existing 100 starting lives, progression, account ownership API and payment gates are preserved.
 
 ## Verification and limits

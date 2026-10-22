@@ -272,7 +272,7 @@ function spawnFormation(){const current=Math.min(4,2+Math.floor(sector/4));const
 function useEMP(){if(state!=='playing'||empCooldown>0||empCharge<75)return false;
  empCharge-=75;empCooldown=Math.max(4,11-upgrades.reactor*1.05);empBursts++;
  let stopped=enemyBullets.length;empBlocked+=stopped;enemyBullets=[];shockRings.push({x:ship.x,y:ship.y,r:10,life:.7,max:.7});
- for(let i=enemies.length-1;i>=0;i--){const e=enemies[i];const damage=e.boss?10+upgrades.reactor*3:6+upgrades.reactor*2;
+ for(let i=enemies.length-1;i>=0;i--){const e=enemies[i];if(!e)continue;const damage=e.boss?10+upgrades.reactor*3:6+upgrades.reactor*2;
  e.hp-=damage;e.fire+=1.3;if(e.hp<=0)destroyEnemy(e,i);}
  if(empBlocked>=40)unlock('EMP_MASTER');burst(ship.x,ship.y,'#86fff3',45,390);announce('✹ EMP DISCHARGED · '+stopped+' PROJECTILES DISARMED');sound(205,.35,'sawtooth',.05);setHud();return true;
 }
