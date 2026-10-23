@@ -44,7 +44,7 @@ for pk in (72,225,879):
  for k,v in list(safe.items()):
   if isinstance(v,str): safe[k]=v[:1600]
  print("PUBLIC_SEO_METADATA="+json.dumps({"id":pk,"fields":safe},ensure_ascii=False,sort_keys=True))
-for rel in ["core/templates/brands/mojplaywin/product.html"]:
+for rel in ["core/templates/brands/mojplaywin/product.html","core/templates/brands/mojplaywin/base.html"]:
  path=root/rel
  if path.is_file():
   print("PRODUCT_TEMPLATE="+rel)
