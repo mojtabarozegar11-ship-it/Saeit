@@ -49,7 +49,7 @@ export function createEngine(canvas) {
     if(weapon?.g) installWeaponModel(weapon);
     document.querySelector('#game')?.classList.add('model-weapon-loaded');
   }, undefined, err => console.warn('Sniper model unavailable; using fallback', err));
-  let world = null, pitch = 0, time = 0, baseFov = 68, scoped = false;
+  let world = null, pitch = 0, time = 0, baseFov = 68, scoped = false, missionMarker=null;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const hitColor=new THREE.Color(0xff4939);
   function disposeEnemy(g){if(!g)return;for(const x of g.userData.materials||[])x.material.dispose();for(const child of g.children){if(child===g.userData.model)continue;child.geometry?.dispose();if(child.material&&child.material!==soldierMaterial)child.material.dispose()}}
@@ -120,6 +120,16 @@ export function createEngine(canvas) {
     for(const child of [...scene.children])if(child!==camera){scene.remove(child);disposeBranch(child)}
     enemies.clear();missiles.clear();hostileShots.clear();impacts.clear();pickups.clear();
     scene=new THREE.Scene();
+    // In-world objective beacon provides a real navigational target in the 3D arena.
+    missionMarker=new THREE.Group();
+    const beaconMat=new THREE.MeshBasicMaterial({color:0x68ffd0,transparent:true,opacity:.48,depthWrite:false,toneMapped:false});
+    const beaconColumn=new THREE.Mesh(new THREE.CylinderGeometry(.10,.28,2.7,12,1,true),beaconMat);
+    beaconColumn.position.y=1.48;missionMarker.add(beaconColumn);
+    const beaconRing=new THREE.Mesh(new THREE.TorusGeometry(.66,.05,8,36),new THREE.MeshBasicMaterial({color:0xfce19e,toneMapped:false}));
+    beaconRing.rotation.x=Math.PI/2;beaconRing.position.y=.18;missionMarker.add(beaconRing);
+    const tip=new THREE.Mesh(new THREE.OctahedronGeometry(.24),new THREE.MeshBasicMaterial({color:0x92fff0,toneMapped:false}));
+    tip.position.y=3.12;missionMarker.add(tip);
+    missionMarker.visible=false;scene.add(missionMarker);
     const horizonColor=new THREE.Color(w.mission%3===1?0x788590:0xa89b84);
     scene.background=null;scene.fog=new THREE.Fog(horizonColor,36,68);scene.add(camera);
     const hemi=new THREE.HemisphereLight(0xdce6eb,0x514638,2.05);scene.add(hemi);
@@ -178,6 +188,7 @@ export function createEngine(canvas) {
 
   let lastRenderTime=0,lastDrawTime=0;
   function render(w,ts){if(w)world=w;if(!world)return;w=world;time=ts/1000;if(softwareRenderer&&ts-lastDrawTime<32)return;lastDrawTime=ts;const dt=Math.min(.05,Math.max(0,time-lastRenderTime));lastRenderTime=time;camera.position.set(w.x,1.62+Math.sin(time*8)*.012,w.y);camera.rotation.order='YXZ';camera.rotation.y=w.angle-Math.PI/2;camera.rotation.x=pitch;weapon.g.visible=true;weapon.g.position.x=.12+Math.sin(time*7)*.008;weapon.g.position.y=-.52+Math.sin(time*14)*.008-(w.recoil>0?.035:0);weapon.g.position.z=-.7+(w.recoil>0?.12:0);weapon.g.rotation.z=Math.sin(time*7)*.008;weapon.flash.intensity=w.muzzle>0?16:0;if(scoped&&weapon.model)weapon.model.visible=false;else if(weapon.model)weapon.model.visible=true;
+    if(missionMarker){missionMarker.visible=!!w.marker;if(w.marker){missionMarker.position.set(w.marker.x,0,w.marker.y);missionMarker.children[1].rotation.z=time*.6;missionMarker.children[2].position.y=3.12+Math.sin(time*3)*.22;}}
     for(const [e,g]of [...enemies])if(!w.enemies.includes(e)){scene.remove(g);disposeEnemy(g);enemies.delete(e);}
     for(const e of w.enemies){const g=enemies.get(e)||enemy(e);g.position.set(e.x,0,e.y);g.rotation.y=Math.atan2(w.x-e.x,-(w.y-e.y));if(g.userData.mixer){const actions=g.userData.actions,desired=e.moving&&actions.walk?actions.walk:actions.idle;if(desired!==actions.current){desired.reset();desired.crossFadeFrom(actions.current,.24,false);desired.play();actions.current=desired}g.userData.mixer.update(dt)}const flash=Math.max(0,Math.min(1,(e.hit||0)/.18));for(const entry of g.userData.materials||[])if(entry.material.emissive)entry.material.emissive.copy(entry.base).lerp(hitColor,flash);for(const o of g.children)if(o.userData.hp)o.scale.x=.06+clamp(e.hp/e.max,0,1);}
     for(const [m,o]of [...missiles])if(!w.missiles.includes(m)){scene.remove(o);disposeBranch(o);missiles.delete(m);}
