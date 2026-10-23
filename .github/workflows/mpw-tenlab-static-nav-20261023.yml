@@ -1,0 +1,102 @@
+name: MojPlayWin ten new game/tool links on existing static hubs
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/mpw_tenlab_additive_nav_20261023.py
+      - .github/workflows/mpw-tenlab-static-nav-20261023.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/mpw_tenlab_additive_nav_20261023.py
+      - .github/workflows/mpw-tenlab-static-nav-20261023.yml
+permissions:
+  contents: read
+concurrency:
+  group: mpw-tenlab-discovery-20261023
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_tenlab_additive_nav_20261023.py
+          python3 scripts/mpw_tenlab_additive_nav_20261023.py selftest
+  publish:
+    needs: validate
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-mpw-tenlab-nav-20261023]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Confirm new content and older two navigational hubs are public
+        run: |
+          python3 - <<'PY'
+          from urllib.request import urlopen
+          root='https://mojplaywin.com'
+          for p in ('/game-releases/20261023/index.html','/game-releases/20261021/index.html','/mpw-editorial/index.html'):
+           with urlopen(root+p,timeout=23) as r: assert r.status==200
+           print('NAV_NEW_AND_OLD_SOURCE_PUBLIC',p)
+          PY
+      - name: Establish audited host-pinned SSH relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Stage and prepare append-only static discovery cards
+        id: prep
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.mpw-tenlab-nav-$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$d/config" host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 45s scp -q -F "$d/config" scripts/mpw_tenlab_additive_nav_20261023.py "host:$stage/nav.py"
+          timeout 55s ssh -T -F "$d/config" host "python3 '$stage/nav.py' prepare '$GITHUB_RUN_ID'"
+      - name: Apply only exact two static page additive link sections
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.mpw-tenlab-nav-$GITHUB_RUN_ID"
+          timeout 55s ssh -T -F "$d/config" host "python3 '$stage/nav.py' install '$GITHUB_RUN_ID' && python3 '$stage/nav.py' verify '$GITHUB_RUN_ID'"
+      - name: Publicly verify all ten new game and tool links on both hubs
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.parse import quote
+          import time
+          root='https://mojplaywin.com'
+          slugs=('windward-regatta','lexicon-sprint','grid-dominion','metro-vault','cargo-switchyard','invoice-craft','csv-workbench','image-slimmer','schema-builder','contrast-studio')
+          for page in ('/game-releases/20261021/index.html','/mpw-editorial/index.html'):
+           with urlopen(Request(root+page+'?nav='+str(time.time_ns()),headers={'Cache-Control':'no-cache'}),timeout=24) as r:
+            html=r.read(500000).decode('utf8')
+           assert html.count('id="mpw-ten-distinct-20261023-navigation"')==1,page
+           for slug in slugs: assert html.count('/game-releases/20261023/'+slug+'/index.html')==1,(page,slug)
+           print('TENLAB_DISCOVERY_ALL_TEN_CARDS_PUBLIC',page)
+          for page in ('/','/games/','/store/','/air-supremacy/'):
+           with urlopen(root+page,timeout=24) as r:assert r.status==200
+          print('TENLAB_NEW_CARD_LINKS_ALL_TEN=PASS; ORIGINAL_SITE_ROUTES=PASS')
+          PY
+      - name: Rollback only two owned appended sections if any smoke check fails
+        if: failure() && steps.prep.outcome == 'success'
+        run: |
+          set +e
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.mpw-tenlab-nav-$GITHUB_RUN_ID"
+          timeout 75s ssh -T -F "$d/config" host "test -f '$stage/nav.py' && python3 '$stage/nav.py' rollback '$GITHUB_RUN_ID'"
+      - name: Delete temporary runner SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
