@@ -6,6 +6,7 @@ from pathlib import Path
 
 ROOT = Path('/home/zomorod2/Saeit-staging')
 VIEW = ROOT / 'core/brand_views.py'
+TEMPLATE = ROOT / 'core/templates/brands/mojplaywin/product.html'
 HOME = Path('/home/zomorod2')
 EXPECTED = {
     72: ('The Science and Practice of Chess Improvement', '7.50'),
@@ -48,6 +49,8 @@ NEW_SCHEMA = '''    schema = {"@context":"https://schema.org", "@type":"Product"
                        "availability":"https://schema.org/InStock",
                        "url":f"https://mojplaywin.com/store/product/{product.pk}/"}}
 '''
+OLD_META = '''{% block meta_description %}{{ product.metadata.summary|default:"Explore this digital product in the MojPlayWin catalog, including details, pricing and available delivery information."|striptags|truncatechars:155 }}{% endblock %}'''
+NEW_META = '''{% block meta_description %}{{ product.metadata.seo_description|default:product.metadata.summary|default:"Explore this digital product in the MojPlayWin catalog, including details, pricing and available delivery information."|striptags|truncatechars:155 }}{% endblock %}'''
 
 def fail(msg):
     raise RuntimeError(msg)
@@ -87,8 +90,12 @@ def schema_patch(source):
         fail('Product schema source changed; refusing broad edit')
     return source.replace(OLD_SCHEMA, NEW_SCHEMA, 1)
 
+def template_patch(source):
+    if source.count(OLD_META) != 1: fail('Product template meta description changed; refusing broad edit')
+    return source.replace(OLD_META, NEW_META, 1)
+
 def run_release(run):
-    if ROOT.is_symlink() or not ROOT.is_dir() or VIEW.is_symlink() or not VIEW.is_file():
+    if ROOT.is_symlink() or not ROOT.is_dir() or VIEW.is_symlink() or not VIEW.is_file() or TEMPLATE.is_symlink() or not TEMPLATE.is_file():
         fail('Unexpected Django checkout or view file')
     sys.path.insert(0, str(ROOT))
     os.chdir(ROOT)
@@ -101,6 +108,8 @@ def run_release(run):
 
     old_view = VIEW.read_bytes()
     new_view = schema_patch(old_view.decode('utf-8')).encode('utf-8')
+    old_template = TEMPLATE.read_bytes()
+    new_template = template_patch(old_template.decode('utf-8')).encode('utf-8')
     original_metadata = {}
     d = backup_dir(run)
     if d.exists() or d.is_symlink(): fail('Release backup already exists')
@@ -110,11 +119,12 @@ def run_release(run):
         for pk, p in rows.items(): original_metadata[str(pk)] = p.metadata
 
     d.mkdir(mode=0o700)
-    for name, raw in [('brand_views.py.bak', old_view),
+    for name, raw in [('brand_views.py.bak', old_view), ('product.html.bak', old_template),
                       ('metadata.json.bak', json.dumps(original_metadata, ensure_ascii=False, sort_keys=True).encode('utf-8'))]:
         with (d / name).open('xb') as f:
             os.fchmod(f.fileno(), 0o600); f.write(raw); f.flush(); os.fsync(f.fileno())
-    manifest = {'run': run, 'view_before': digest(old_view), 'view_after': digest(new_view), 'products': list(EXPECTED)}
+    manifest = {'run': run, 'view_before': digest(old_view), 'view_after': digest(new_view),
+                'template_before': digest(old_template), 'template_after': digest(new_template), 'products': list(EXPECTED)}
     with (d / 'manifest.json').open('x') as f:
         os.fchmod(f.fileno(), 0o600); json.dump(manifest, f, sort_keys=True); f.flush(); os.fsync(f.fileno())
 
@@ -127,7 +137,9 @@ def run_release(run):
                 p.metadata = updated
                 p.save(update_fields=['metadata'])
         if digest(VIEW.read_bytes()) != manifest['view_before']: fail('Concurrent view edit detected')
+        if digest(TEMPLATE.read_bytes()) != manifest['template_before']: fail('Concurrent template edit detected')
         atomic(VIEW, new_view)
+        atomic(TEMPLATE, new_template)
         import py_compile
         py_compile.compile(str(VIEW), doraise=True)
         client = Client(HTTP_HOST='mojplaywin.com')
@@ -152,12 +164,15 @@ def run_release(run):
                 p = Product.objects.select_for_update().get(pk=int(pk)); p.metadata = meta; p.save(update_fields=['metadata'])
         if VIEW.exists() and digest(VIEW.read_bytes()) == manifest['view_after']:
             atomic(VIEW, old_view)
+        if TEMPLATE.exists() and digest(TEMPLATE.read_bytes()) == manifest['template_after']:
+            atomic(TEMPLATE, old_template)
         raise
 
 def selftest():
     assert all(len(x['seo_description']) <= 160 for x in CONTENT.values())
     patched = schema_patch(OLD_SCHEMA)
     assert OLD_SCHEMA not in patched and '"offers"' in patched
+    assert template_patch(OLD_META).count(NEW_META) == 1
     print('MPW_PRODUCT_SEO_SELFTEST=PASS')
 
 if __name__ == '__main__':
