@@ -123,6 +123,50 @@ jobs:
             headers="$(curl -sS --connect-timeout 6 --max-time 12 -H 'Cache-Control: no-cache' -D - -o /dev/null -w 'CODE:%{http_code}' "$target" 2>/dev/null || true)"
             printf '%s\n' "$headers" | grep -Eai '^(HTTP/|server:|retry-after:|via:|content-type:|CODE:)' | head -n 12 || true
           done
+
+      - name: Pinpoint public 503 response source and domain-host IP mapping read only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          for node in host vps; do
+            echo "DOMAIN_ROUTING_NODE=$node"
+            timeout 80s ssh -T -F "$d/config" "$node" 'python3 -' <<'PY'
+          import socket,subprocess,re,hashlib
+          from pathlib import Path
+          a="zomorodmelal.ir"
+          for label,name in (("domain",a),("cpanel_hostname","zohal.pws-dns.net")):
+              try:
+                  x={z[4][0] for z in socket.getaddrinfo(name,443,type=socket.SOCK_STREAM)}
+                  print("DNS_SET",label,"ipv4_count",len([i for i in x if ":" not in i]),"ipv6_count",len([i for i in x if ":" in i]))
+                  if label=="domain":domainips=x
+                  if label=="cpanel_hostname":hostips=x
+              except Exception as e:print("DNS_ERROR",label,type(e).__name__)
+          try:print("DOMAIN_AND_CPANEL_DNS_INTERSECT",bool(domainips&hostips))
+          except NameError:pass
+          probes=[
+              ("public_default",["https://"+a+"/"]),
+              ("public_html_file",["https://"+a+"/games/seed-guardian/"]),
+              ("origin_local",["--resolve",a+":443:127.0.0.1","https://"+a+"/"]),
+          ]
+          if 'hostips' in locals():
+              for ip in sorted(hostips):
+                  if ":" not in ip:probes.append(("hostname_resolved_as_origin",["--resolve",a+":443:"+ip,"https://"+a+"/"]))
+          for label,extra in probes:
+              args=["curl","-k","-sS","-L","--connect-timeout","5","--max-time","10","-H","Cache-Control: no-cache",
+                    "-D","-","-w","\nRESULT_STATUS=%{http_code}\n"]
+              p=subprocess.run(args+extra,capture_output=True,text=True,timeout=13)
+              data=p.stdout
+              status=re.search(r"RESULT_STATUS=(\d+)",data)
+              body=data.split("\r\n\r\n")[-1].split("\nRESULT_STATUS=")[0]
+              body=re.sub(r"<[^>]*>"," ",body)
+              body=re.sub(r"\s+"," ",body)[:220]
+              body=re.sub(r"(?i)([a-z0-9._%-]+@[a-z0-9.-]+\.[a-z]{2,})","[email-redacted]",body)
+              print("RESPONSE_SIGNATURE",label,"code",status.group(1) if status else "NA",
+                 "curl_rc",p.returncode,"body_hint",body[:180],
+                 "server_mention",bool(re.search(r"(?i)cloudflare|litespeed|imunify|resource limit|maintenance|proxy|server unavailable",data)))
+          PY
+          done
       - name: Remove temporary pinned relay credentials
         if: always()
         shell: bash
