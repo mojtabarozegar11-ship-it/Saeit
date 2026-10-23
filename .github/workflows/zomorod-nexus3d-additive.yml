@@ -1,4 +1,4 @@
-name: Zomorod Arrow Nexus 3D — one-shot additive release
+name: Zomorod Arrow Nexus 2.0 — guarded major cinematic release
 
 on:
   push:
@@ -16,7 +16,7 @@ jobs:
   publish:
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
-      contains(github.event.head_commit.message, '[approved-zm-nexus3d-live-20261023]')
+      contains(github.event.head_commit.message, '[approved-zm-nexus3d-major-20261023]')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -31,16 +31,18 @@ jobs:
           node --check games/arrow-escape/nexus.js
           node --check games/arrow-escape/nexus-core.js
           node --check games/arrow-escape/nexus-fallback.js
+          node --check games/arrow-escape/nexus-experience.js
+          node games/arrow-escape/nexus-experience.test.cjs
           node games/arrow-escape/nexus-core.test.cjs
           python3 games/arrow-escape/nexus-upgrade.test.py
           python3 - <<'PY'
           from pathlib import Path
           p=Path('games/arrow-escape')
-          for n in ('nexus.html','nexus.css','nexus.js','nexus-core.js','nexus-fallback.js','three.module.js','three.core.min.js','nexus-upgrade.py'):
+          for n in ('nexus.html','nexus.css','nexus.js','nexus-core.js','nexus-fallback.js','nexus-experience.js','three.module.js','three.core.min.js','nexus-upgrade.py'):
               assert (p/n).is_file() and (p/n).stat().st_size>100,n
           assert 'three.core.min.js' in (p/'three.module.js').read_text('utf-8')
           assert 'href="./nexus.html"' in (p/'nexus-upgrade.py').read_text('utf-8')
-          assert 'nexus.css?v=css3d-r2-20261023' in (p/'nexus.html').read_text('utf-8')
+          assert 'nexus.css?v=major-1-20261023' in (p/'nexus.html').read_text('utf-8')
           assert '--half:clamp(' in (p/'nexus.css').read_text('utf-8')
           assert 'filter:drop-shadow' not in (p/'nexus.css').read_text('utf-8')
           print('NEXUS_RELEASE_CONTENT=PASS')
@@ -71,7 +73,7 @@ jobs:
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: bash games/farm-wars-v3/scripts/ssh_relay.sh
 
-      - name: Stage only the seven Nexus assets and a recoverable backup
+      - name: Stage only the eight Nexus assets and a recoverable backup
         id: stage
         shell: bash
         run: |
@@ -86,7 +88,7 @@ jobs:
           test ! -e "$stage" && test ! -L "$stage"
           install -d -m 700 "$stage/incoming"
           REMOTE
-          for name in nexus.html nexus.css nexus.js nexus-core.js nexus-fallback.js three.module.js three.core.min.js nexus-upgrade.py; do
+          for name in nexus.html nexus.css nexus.js nexus-core.js nexus-fallback.js nexus-experience.js three.module.js three.core.min.js nexus-upgrade.py; do
             timeout 50s scp -q -F "$d/config" "games/arrow-escape/$name" "host:$stage/incoming/$name"
           done
           timeout 45s ssh -T -F "$d/config" host \
@@ -113,7 +115,7 @@ jobs:
           from urllib.request import Request,urlopen
           import hashlib,os,time
           base='https://zomorodmelal.ir/arrow-escape/'
-          files=('nexus.html','nexus.css','nexus.js','nexus-core.js','nexus-fallback.js','three.module.js','three.core.min.js')
+          files=('nexus.html','nexus.css','nexus.js','nexus-core.js','nexus-fallback.js','nexus-experience.js','three.module.js','three.core.min.js')
           for name in files+('index.html',):
               correct=False
               for trial in range(1,8):
