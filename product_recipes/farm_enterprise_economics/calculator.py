@@ -56,6 +56,18 @@ def enterprise(entry):
     break_even = None
     if contribution_unit > 0:
         break_even = int((fixed / contribution_unit).to_integral_value(rounding=ROUND_CEILING))
+    # These are planning thresholds, not predictions. A fee of 100% makes a
+    # positive break-even unit price impossible at the selected sales volume.
+    price_denominator = Decimal(1) - fee_rate
+    break_even_unit_price = None
+    if quantity > 0 and price_denominator > 0:
+        required = (variable + fixed / quantity) / price_denominator
+        break_even_unit_price = str(required.quantize(Decimal("0.01"), rounding=ROUND_CEILING))
+    safety_units = quantity - Decimal(break_even) if break_even is not None else None
+    safety_percent = (
+        (safety_units * 100 / quantity).quantize(Decimal("0.01"))
+        if safety_units is not None and quantity > 0 else None
+    )
     return {
         "name": name,
         "units_sold": str(quantity),
@@ -72,6 +84,9 @@ def enterprise(entry):
         "operating_profit": money(operating_profit),
         "break_even_units": break_even,
         "break_even_reachable": contribution_unit > 0,
+        "break_even_unit_price_at_planned_volume": break_even_unit_price,
+        "margin_of_safety_units": str(safety_units) if safety_units is not None else None,
+        "margin_of_safety_percent": str(safety_percent) if safety_percent is not None else None,
     }
 
 
@@ -114,7 +129,7 @@ def evaluate(data):
                     "modeled_operating_profit": money(profit),
                 })
     return {
-        "version": "1.0",
+        "version": "1.1",
         "currency": currency,
         "assumptions": [
             "All prices, quantities and costs must be entered by the user.",
