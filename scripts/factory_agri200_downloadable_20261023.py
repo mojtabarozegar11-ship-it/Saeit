@@ -227,6 +227,22 @@ def package_one(area, name, lib, stage5):
     return lib.once(area/"stage-05/downloadable-receipts"/name,receipt)
 
 
+def fair_selection(names, state, batch):
+    """Persist a cursor so orders after the first batch cannot be starved."""
+    if state is None:
+        state={"schema":"saeit.factory.agri200.navigator-cursor.v1","next_index":0}
+    if (state.get("schema")!="saeit.factory.agri200.navigator-cursor.v1"
+            or type(state.get("next_index")) is not int
+            or state["next_index"]<0):
+        raise RuntimeError("CANDIDATE_CURSOR_INVALID")
+    total=len(names)
+    start=state["next_index"]%total if total else 0
+    count=min(batch,total)
+    selected=[names[(start+i)%total] for i in range(count)]
+    return selected,{"schema":"saeit.factory.agri200.navigator-cursor.v1",
+                     "next_index":(start+count)%total if total else 0}
+
+
 def execute(root, lib, stage5, batch=250):
     area=Path(root).resolve()/"production-instructions"
     inbox=area/"stage-05/completed-drafts"
@@ -242,8 +258,13 @@ def execute(root, lib, stage5, batch=250):
         fcntl.flock(handle.fileno(),fcntl.LOCK_EX)
         names=sorted(p.name for p in inbox.iterdir()
                      if p.is_file() and not p.is_symlink() and NAME.fullmatch(p.name))
+        cursor_path=area/"stage-05/downloadable-cursor.json"
+        if cursor_path.is_symlink():
+            raise RuntimeError("CANDIDATE_CURSOR_SYMLINK")
+        state=lib.read(cursor_path) if cursor_path.exists() else None
+        selected,new_state=fair_selection(names,state,batch)
         made=blocked=0
-        for name in names[:batch]:
+        for name in selected:
             try:
                 made+=int(package_one(area,name,lib,stage5))
             except (KeyError,RuntimeError,ValueError,TypeError,OSError,zipfile.BadZipFile) as e:
@@ -251,10 +272,11 @@ def execute(root, lib, stage5, batch=250):
                 lib.atomic(area/"stage-05/downloadable-blocked"/name,{
                     "order_file":name,"reason":type(e).__name__+":"+str(e)[:180],
                     "scientific_quality_certified":False,"public_distribution_allowed":False})
+        lib.atomic(cursor_path,new_state)
         result={"private_downloadable_candidate_zips":len(list(
                   (area/"stage-05/downloadable-receipts").glob("WO-*.json"))),
                 "new_packages_this_tick":made,"blocked_this_tick":blocked,
-                "inspected_this_tick":min(len(names),batch),
+                "inspected_this_tick":len(selected),
                 "scientific_approvals_created":0,"paid_publications_created":0,
                 "sites_modified":False}
         lib.atomic(area/"stage-05/downloadable-candidate-status.json",result)
