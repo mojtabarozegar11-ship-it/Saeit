@@ -1,4 +1,4 @@
-name: QC only - read-only empirical audit of actual private product archives
+name: QC only - full read-only empirical audit of private product archives
 on:
   push:
     branches: [main]
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
-      - name: SSH pinned - three actual private archives, read-only
+      - name: SSH pinned - all private archives, read-only
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
         shell: bash
@@ -27,7 +27,7 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           opts=(-T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2)
-          ssh "${opts[@]}" githubops@178.239.147.150 'timeout 70s /home/githubops/factory-runtime/.venv/bin/python -B -' <<'PY'
+          ssh "${opts[@]}" githubops@178.239.147.150 'timeout 180s /home/githubops/factory-runtime/.venv/bin/python -B -' <<'PY'
           import hashlib, json, re, zipfile
           from pathlib import Path
           
@@ -35,7 +35,7 @@ jobs:
           receipt_root = area / "stage-05/downloadable-receipts"
           names = sorted(p.name for p in receipt_root.iterdir() if p.is_file() and not p.is_symlink() and re.fullmatch(r"WO-\d{8}--r\d{3}\.json", p.name))
           assert len(names) >= 1, "NO_REAL_PRODUCT_CANDIDATE"
-          samples = list(dict.fromkeys((names[0], names[len(names)//2], names[-1])))
+          samples = names
           def hashbytes(raw):
               return hashlib.sha256(raw).hexdigest()
           def inspect(name):
@@ -95,11 +95,8 @@ jobs:
               test("bibliography_entries_are_records", isinstance(sources,list) and all(isinstance(x,dict) for x in sources))
               html = payload["index.html"].decode("utf-8")
               test("offline_navigator_code_present","<html" in html.casefold() and "function render()" in html)
-              test("original_subject_specific_product",man.get("draft_kind")!="original_bilingual_evidence_method_workbook" and bool(man.get("draft_kind")))
-              # These are NON-passing human-only checks, never infer scholarship from tokens.
-              test("scientific_claim_sources_independently_verified",False)
-              test("domain_expert_human_review_verified",False)
-              test("field_protocol_reproduced_and_signed",False)
+              test("manifest_not_methods_only",man.get("draft_kind")!="original_bilingual_evidence_method_workbook" and bool(man.get("draft_kind")))
+              # These three expert controls were NOT executed; never count them as mechanical cases.
               return {"product_id": name, "actual_archive_sha256":digest,
                       "manifest_kind":str(man.get("draft_kind","UNKNOWN"))[:80],
                       "executed_mechanical_checks":len(checks),
@@ -107,6 +104,7 @@ jobs:
                       "failed_checks":[x["case"] for x in checks if not x["observed_pass"]],
                       "text_metrics":stats,
                       "bibliography_count":len(sources) if isinstance(sources,list) else None,
+                      "unexecuted_independent_gates":["scientific_fulltext_claim_review", "human_phd_domain_review", "empirical_field_replication"],
                       "scientifically_certified":False, "quality1000_approved":False,
                       "checked_directly_on_private_vps_archive":True}
           
@@ -119,5 +117,20 @@ jobs:
               except Exception as exc:
                   result["samples"].append({"product_id":name,"audit_error":type(exc).__name__+":"+str(exc)[:100],
                                             "scientifically_certified":False})
-          print("REAL_PRIVATE_PRODUCT_QC_PROBE="+json.dumps(result,ensure_ascii=False,sort_keys=True),flush=True)
+          from collections import Counter
+          failures = Counter(c for item in result["samples"] for c in item.get("failed_checks",[]))
+          good = [item for item in result["samples"] if "audit_error" not in item]
+          frac = sorted(x["text_metrics"][loc]["duplicate_fraction"] for x in good for loc in ("fa-IR","en-US"))
+          final = {"total_candidate_artifacts":len(names),"read_only_artifacts_inspected":len(good),
+                   "inspection_execution_errors":len(result["samples"])-len(good),
+                   "mechanical_checks_really_executed":sum(x["executed_mechanical_checks"] for x in good),
+                   "mechanical_checks_passed":sum(x["passed_mechanical_checks"] for x in good),
+                   "mechanical_failure_counts":dict(failures),
+                   "methods_only_artifacts":sum(x["manifest_kind"]=="original_bilingual_evidence_method_workbook" for x in good),
+                   "duplicate_fraction_range":[frac[0],frac[-1]] if frac else None,
+                   "independent_scientific_expert_gates_executed":0,"qc1000_approvals":0,
+                   "examples":[result["samples"][i] for i in dict.fromkeys((0,len(samples)//2,len(samples)-1))],
+                   "inspection_errors":[{"product_id":x["product_id"],"error":x["audit_error"]} for x in result["samples"] if "audit_error" in x][:8],
+                   "archive_probe_only_not_scientific_certification":True}
+          print("REAL_ALL_PRIVATE_PRODUCT_QC_PROBE="+json.dumps(final,ensure_ascii=False,sort_keys=True),flush=True)
           PY
