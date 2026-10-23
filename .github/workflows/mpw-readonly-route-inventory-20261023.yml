@@ -2,7 +2,7 @@ name: MojPlayWin read-only protected route inventory
 on:
   push:
     branches: [main]
-    paths: [.github/workflows/mpw-readonly-route-inventory-20261023.yml]
+    paths: [.github/workflows/mpw-readonly-route-inventory-20261023.yml, scripts/mpw_route_ownership_probe_20261023.py]
 permissions:
   contents: read
 jobs:
@@ -56,3 +56,10 @@ jobs:
                   stack.extend(x.values())
               elif isinstance(x,list):stack.extend(x)
           print("PASSENGER_MATCHES",found)'
+      - name: Identify actual Python/Passenger route ownership without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f scripts/mpw_route_ownership_probe_20261023.py
+          python3 -m py_compile scripts/mpw_route_ownership_probe_20261023.py
+          ssh -T -F "$RUNNER_TEMP/mpw-ro/config" saeit-cpanel 'python3 -' < scripts/mpw_route_ownership_probe_20261023.py
