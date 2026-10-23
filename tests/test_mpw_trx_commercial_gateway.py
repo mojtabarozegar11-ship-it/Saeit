@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from services.mpw_trx_walletless_core import InvoiceIntent,PaymentHold
 from services.mpw_walletless_commercial_intent import _commercial_db
+from services.mpw_trx_commercial_web import _nocache
 from services.mpw_trx_commercial_chain import read_only_independent_pair,PINNED
 from services.mpw_tron_independent_solidified_rpc import hex_to_tron_address
 from tests.test_mpw_tron_independent_solidified_rpc import (
@@ -15,6 +16,12 @@ from tests.test_mpw_tron_independent_solidified_rpc import (
 )
 
 class ProductionCheckoutReleaseTests(unittest.TestCase):
+    def test_private_checkout_allows_same_origin_csrf_referer_without_leaking_cross_origin(self):
+        from django.http import HttpResponse
+        response=_nocache(HttpResponse("form"))
+        self.assertEqual(response["Referrer-Policy"],"same-origin")
+        self.assertEqual(response["Cache-Control"],"private, no-store, max-age=0")
+
     def test_explicit_public_launch_does_not_claim_a_merchant_test_payment(self):
         config=SimpleNamespace(DEBUG=False, MPW_COMMERCE_RELEASE_READY=True,
             MPW_COMMERCE_DOWNLOADS_ENABLED=True, MPW_WALLETLESS_TRX_PUBLIC_ENABLED=True,
