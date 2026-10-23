@@ -4,6 +4,8 @@ on:
     branches: [fix/mpw-tron-provider-auth-20261022]
     paths:
       - .github/workflows/mpw-tron-verifier-private-stage-20261022.yml
+      - scripts/mpw_tron_public_dual_probe_readonly_20261023.py
+      - services/mpw_tron_independent_solidified_rpc.py
   workflow_dispatch:
 permissions: {contents: read}
 jobs:
@@ -17,7 +19,7 @@ jobs:
       - name: Validate module sources without executing payment actions
         run: |
           set -euo pipefail
-          python3 -B -m py_compile services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py scripts/mpw_tron_dual_provider_auth_readonly_20261022.py
+          python3 -B -m py_compile services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py scripts/mpw_tron_dual_provider_auth_readonly_20261022.py scripts/mpw_tron_public_dual_probe_readonly_20261023.py
       - name: Authenticate pinned GitHub-to-VPS-to-cPanel relay
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -53,6 +55,11 @@ jobs:
           set -euo pipefail
           timeout 70s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'PYTHONPATH=/home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/mpw_tron_dual_provider_auth_readonly_20261022.py
           echo "READ_ONLY_MAINNET_PROBE=COMPLETE; PAYMENT_BROADCAST=0; CUSTOMER_DATA_WRITES=0; PUBLIC_PAYMENT_ACTIVATION=0"
+      - name: Read-only public operator cross-check of actual mainnet native transfer
+        run: |
+          set -euo pipefail
+          timeout 135s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'PYTHONPATH=/home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/mpw_tron_public_dual_probe_readonly_20261023.py
+          echo "PUBLIC_CANARY_DIAGNOSTIC_ONLY=TRUE; PRODUCTION_FINANCIAL_WRITES=0; LIVE_CHECKOUT_UNCHANGED=TRUE"
       - name: Report only presence of TRON RPC credentials (no secret values)
         run: |
           set -euo pipefail
