@@ -116,6 +116,36 @@ jobs:
               print('CPANEL_PROCESSES',len(names),'python',sum('python' in n.lower() for n in names),'lsphp',sum('lsphp' in n.lower() for n in names))
           except Exception as e:print('CPANEL_PS_UNAVAILABLE',type(e).__name__)
           PY
+      - name: Read domain error headers and sanitized rewrite directives
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-public-health-relay"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          from urllib.request import urlopen,Request
+          from urllib.error import HTTPError
+          import re
+          for route in ('/','/about/','/robots.txt'):
+              try:
+                  with urlopen(Request('https://zomorodmelal.ir'+route),timeout=15) as r: code=r.status;h=r.headers;b=r.read(200)
+              except HTTPError as e:code=e.code;h=e.headers;b=e.read(200)
+              except Exception as e:print('ROUTE_ERROR',route,type(e).__name__);continue
+              print('ROUTE',route,code,'SERVER',h.get('Server'),'TYPE',h.get('Content-Type'))
+              if code>=500: print('BODY_PREFIX',re.sub(r'\\s+',' ',re.sub(r'<[^>]+>',' ',b.decode(errors='replace')))[:150])
+          p=Path.home()/'public_html/.htaccess'
+          for n,line in enumerate(p.read_text(errors='replace').splitlines(),1):
+              x=line.strip()
+              if not x or x.startswith('#'):continue
+              d=x.split()[0]
+              if d.startswith('Passenger'): print('REWRITE',n,d,'[configured]')
+              if d in ('RewriteRule','RewriteCond','DirectoryIndex','ErrorDocument','SetHandler'):
+                  print('REWRITE',n,d,'[target_redacted]')
+          for p in (Path.home()/'logs',Path.home()/'public_html',Path.home()):
+              try:found=[q.name for q in p.iterdir() if q.is_file() and ('error' in q.name.lower() or 'passenger' in q.name.lower())]
+              except Exception:found=[]
+              print('LOG_CANDIDATES',p.name,found[:8])
+          PY
       - name: Remove runner key files
         if: always()
         shell: bash
