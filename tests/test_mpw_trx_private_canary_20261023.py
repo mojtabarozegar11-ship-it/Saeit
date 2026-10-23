@@ -80,11 +80,16 @@ class PrivateCanaryIsolationTests(unittest.TestCase):
                 self.assertEqual(canary._expected_sender(), "T" + "A" * 33)
 
     def test_unique_merchant_staff_can_be_discovered_without_disclosing_id(self):
+        import sys
+        from types import ModuleType
         from unittest.mock import MagicMock
         manager = MagicMock()
         manager.filter.return_value.values_list.return_value.__getitem__.return_value = [17]
-        with patch("django.contrib.auth.get_user_model",
-                   return_value=SimpleNamespace(objects=manager)):
+        auth = ModuleType("django.contrib.auth")
+        auth.get_user_model = lambda: SimpleNamespace(objects=manager)
+        with patch.dict(sys.modules, {"django": ModuleType("django"),
+                                      "django.contrib": ModuleType("django.contrib"),
+                                      "django.contrib.auth": auth}):
             with patch.dict("os.environ", {"MPW_TRX_CANARY_BUYER_ID": "auto",
                                            "MPW_TRX_CANARY_PRODUCT_ID": "779"}):
                 self.assertEqual(canary._configured_ids(), (17, 779))
