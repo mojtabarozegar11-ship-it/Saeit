@@ -1,0 +1,186 @@
+name: MojPlayWin About section 07 official portrait and identity SEO
+
+on:
+  pull_request:
+    paths:
+      - scripts/mpw_about_leadership_portrait_seo_20261023.py
+      - tests/test_mpw_about_leadership_portrait_seo_20261023.py
+      - .github/workflows/mojplaywin-about-leadership-portrait-seo-20261023.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/mpw_about_leadership_portrait_seo_20261023.py
+      - .github/workflows/mojplaywin-about-leadership-portrait-seo-20261023.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate precise one-page patch without external packages
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_about_leadership_portrait_seo_20261023.py
+          python3 -m unittest discover -s tests -p 'test_mpw_about_leadership_portrait_seo_20261023.py' -v
+
+  publish:
+    needs: validate
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[approved-mpw-about-leadership-portrait-20261023]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify the exact live page and baseline protected routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,re,time,urllib.request
+          root='https://mojplaywin.com'
+          paths=['/','/about/','/company/','/mojtaba.roozegar/','/about/mojtaba-rozegar/','/store/']
+          baseline={}
+          def fetch(path):
+              req=urllib.request.Request(root+path,headers={'Cache-Control':'no-cache','User-Agent':'MPWLeadershipReadiness/1.0'})
+              with urllib.request.urlopen(req,timeout=22) as response:
+                  return response.status,response.read(250000)
+          for path in paths:
+              for attempt in range(3):
+                  try:
+                      status,body=fetch(path)
+                      break
+                  except Exception:
+                      if attempt==2:raise
+                      time.sleep(2)
+              baseline[path]=status
+              if status!=200:raise SystemExit('A protected route is not healthy: '+path)
+          about=fetch('/about/?leadership_preflight=20261023')[1].decode('utf-8','replace')
+          if not all(x in about for x in ('id="leadership"','07 / FOUNDER &amp; LEADERSHIP',
+               'id="leadership-title"','MPW_ABOUT_COMPANY_SEMANTIC_20261019_V2')):
+              raise SystemExit('Unexpected live About page, refusing mutation')
+          if 'MPW_ABOUT_LEADERSHIP_PORTRAIT_SEO_20261023_V1' in about:
+              raise SystemExit('The repair is already published')
+          photo='/mojtaba.roozegar/assets/personal_site/official_profile_20261016/portrait.2935ce8cb70d.webp'
+          image_status,image=fetch(photo)
+          if image_status!=200 or len(image)<20000:raise SystemExit('Official photo unavailable')
+          direct=fetch('/design-preview-20261017/mpw-ten-editorials-20261018/pages/about.html')[1]
+          if direct!=about.encode('utf-8'):
+              # Cache-busting is used only on the route; it should serve the exact same static file.
+              direct_decoded=direct.decode('utf-8','replace')
+              if direct_decoded!=about:raise SystemExit('About route does not match pinned static file')
+          with open(os.environ['RUNNER_TEMP']+'/mpw-leadership-baseline.json','w') as file:
+              json.dump(baseline,file)
+          print('ABOUT_EXACT_ROUTE_AND_PORTRAIT_PREFLIGHT=PASS')
+          PY
+      - name: Create host-key-pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-leadership-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Publish only the exact About HTML with a hash-verified backup
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-leadership-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID'" < scripts/mpw_about_leadership_portrait_seo_20261023.py
+      - name: Re-fetch the live section and independently verify SEO
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,re,time,urllib.request
+          root='https://mojplaywin.com'
+          rid=os.environ['GITHUB_RUN_ID']
+          baseline=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-leadership-baseline.json'))
+          def fetch(path):
+              request=urllib.request.Request(root+path,headers={'Cache-Control':'no-cache','Pragma':'no-cache','User-Agent':'MPWLeadershipPostPublish/1.0'})
+              with urllib.request.urlopen(request,timeout=22) as result:
+                  return result.status,result.read(250000).decode('utf-8','replace')
+          passed=False
+          for attempt in range(5):
+              try:
+                  status,body=fetch('/about/?mpw_leadership_verify='+rid+'-'+str(attempt))
+                  section=re.search(r'<section\b[^>]*id="leadership"[\s\S]*?</section>',body)
+                  scripts=re.findall(r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>',body,re.S|re.I)
+                  about=[json.loads(x) for x in scripts if json.loads(x).get('@type')=='AboutPage']
+                  person=about[0]['mainEntity']['founder'] if len(about)==1 else {}
+                  passed=(status==200 and section is not None and
+                      section.group().index('id="mpw-leadership-official-photo-20261023"')<section.group().index('id="leadership-title"') and
+                      'MPW_ABOUT_LEADERSHIP_PORTRAIT_SEO_20261023_V1' in body and
+                      'مجتبی روزگار' in person.get('alternateName',[]) and
+                      'Dr.mojtaba.rozegar' in person.get('alternateName',[]) and
+                      person.get('image','').endswith('portrait.2935ce8cb70d.webp') and
+                      body.count('rel="canonical" href="https://mojplaywin.com/about/"')==1)
+                  if passed:break
+              except Exception as exc:
+                  print('LIVE_RECHECK_RETRY',attempt,type(exc).__name__)
+              time.sleep(3)
+          if not passed:raise SystemExit('About leadership live verification failed')
+          for path,expected in baseline.items():
+              status,_=fetch(path)
+              if status!=expected:raise SystemExit('Protected route changed '+path)
+          print('ONE_PAGE_LIVE_PHOTO_AND_SEO_VERIFIED=PASS')
+          PY
+      - name: Roll back this exact file if publication verification fails
+        if: failure() && steps.publish.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-leadership-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_about_leadership_portrait_seo_20261023.py
