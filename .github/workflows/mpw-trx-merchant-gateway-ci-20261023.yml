@@ -1,0 +1,30 @@
+name: MojPlayWin native TRX commercial gateway guarded CI
+on:
+  push:
+    branches: [fix/mpw-tron-provider-auth-20261022]
+    paths:
+      - services/mpw_walletless_commercial_intent.py
+      - services/mpw_trx_commercial_chain.py
+      - services/mpw_trx_commercial_web.py
+      - tests/test_mpw_trx_commercial_gateway.py
+      - .github/workflows/mpw-trx-merchant-gateway-ci-20261023.yml
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  gateway-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install Django test dependencies
+        run: python3 -m pip install --disable-pip-version-check 'Django>=5.2,<6' 'segno==1.6.6'
+      - name: Compile production gateway and its test suite
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile services/mpw_walletless_commercial_intent.py services/mpw_trx_commercial_chain.py services/mpw_trx_commercial_web.py tests/test_mpw_trx_commercial_gateway.py
+      - name: Check failclosed release gates and solidified evidence contracts
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest tests.test_mpw_trx_commercial_gateway tests.test_mpw_tron_independent_solidified_rpc tests.test_mpw_tron_readonly_deposit_candidates -v
+          echo 'TRX_GATEWAY_GUARD=TESTED; PRIVATE_DELIVERY=SERVER_ONLY; NO_FINANCIAL_WRITES=TRUE'
