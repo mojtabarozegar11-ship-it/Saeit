@@ -21,6 +21,107 @@ def load(path):
     assert spec is not None and spec.loader is not None
     mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
     return mod
+EXTERNAL_SIGNATURE_ROLES = (
+    "domain_specialist", "independent_quality_auditor", "rights_reviewer"
+)
+EXTERNAL_ONLY_DEFECTS = {"P0_INDEPENDENT_ATTESTATION_NOT_AUTHENTICATED"}
+
+
+def write_private_lane(base, lane, product, document, run_id):
+    """Durable private queues, never an electronic expert or owner signature."""
+    parent = base / "quality-excellence" / lane
+    if parent.is_symlink():
+        raise RuntimeError("UNSAFE_QUALITY_LANE_PARENT")
+    parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+    target = parent / product
+    if target.is_symlink():
+        raise RuntimeError("UNSAFE_QUALITY_LANE_TARGET")
+    target.mkdir(mode=0o700, exist_ok=True)
+    body = (json.dumps(document, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode("utf8")
+    digest = hashlib.sha256(body).hexdigest()
+    receipt = target / ("order-" + digest[:24] + ".json")
+    if receipt.is_symlink():
+        raise RuntimeError("UNSAFE_QUALITY_LANE_RECEIPT")
+    if receipt.exists():
+        if receipt.read_bytes() != body:
+            raise RuntimeError("QUALITY_LANE_RECEIPT_COLLISION")
+    else:
+        with receipt.open("xb") as stream:
+            stream.write(body)
+            stream.flush()
+        receipt.chmod(0o600)
+    current = target / "current.json"
+    if current.is_symlink():
+        raise RuntimeError("UNSAFE_QUALITY_LANE_CURRENT")
+    tmp = target / (".next-" + re.sub(r"[^0-9A-Za-z]", "", str(run_id))[:20])
+    if tmp.is_symlink():
+        raise RuntimeError("UNSAFE_QUALITY_LANE_TEMP")
+    with tmp.open("wb") as stream:
+        stream.write(body)
+        stream.flush()
+    tmp.chmod(0o600)
+    tmp.replace(current)
+    if current.read_bytes() != body:
+        raise RuntimeError("QUALITY_LANE_READBACK_FAILED")
+    return digest
+
+
+def separate_lanes(snapshot, findings, defects, source_receipt_sha256):
+    """Human certification must not globally block private technical work."""
+    external_pending = sorted(set(snapshot.get("external_audit_pending") or []))
+    engineering_defects = sorted(set(defects) - EXTERNAL_ONLY_DEFECTS)
+    technical_precheck = (
+        snapshot.get("technical_qa_status") == "passed"
+        and snapshot.get("verified_artifact_integrity") is True
+        and snapshot.get("source_provenance_hash_present") is True
+    )
+    engineering_status = (
+        "TECHNICAL_REPAIR_REQUIRED"
+        if engineering_defects or not technical_precheck
+        else "PRIVATE_TECHNICAL_PRECHECK_PASSED"
+    )
+    shared = {
+        "recipe": snapshot.get("recipe"),
+        "source_quality_receipt_sha256": source_receipt_sha256,
+        "artifact_sha256": snapshot.get("artifact_sha256"),
+        "human_signature_forged": False,
+        "quality_1000_certified": False,
+        "commercial_release_allowed": False,
+    }
+    engineering = {
+        **shared,
+        "schema": "saeit.factory.engineering-quality-lane.v1",
+        "status": engineering_status,
+        "mechanical_precheck_verified": technical_precheck,
+        "unresolved_engineering_defects": engineering_defects,
+        "technical_evidence_work_pending": findings,
+        "technical_evidence_gap_count": len(findings),
+        "next_action": (
+            "RUN_SOURCE_BACKED_REPAIR_AND_RETEST"
+            if engineering_status == "TECHNICAL_REPAIR_REQUIRED"
+            else "CONTINUE_MEASURABLE_ENGINEERING_IMPROVEMENTS"
+        ),
+        "independent_specialist_signature_required_to_continue_engineering": False,
+        "independent_expert_certification_obtained": False,
+    }
+    certification = {
+        **shared,
+        "schema": "saeit.factory.independent-certification-lane.v1",
+        "status": "AWAITING_VERIFIED_EXTERNAL_SPECIALISTS",
+        "pending_roles": list(EXTERNAL_SIGNATURE_ROLES),
+        "pending_external_audit_findings": external_pending,
+        "quality_criteria_requiring_independent_validation": [
+            entry["group_id"] for entry in findings
+        ],
+        "verified_external_signatures": 0,
+        "independent_certification_claimed": False,
+        "blocks_private_engineering": False,
+        "blocks_professional_1000_certification": True,
+        "blocks_new_commercial_release": True,
+    }
+    return engineering, certification
+
+
 def work_orders(root,quality_file,catalog_file,run_id,limit=300):
     base=Path(root)
     source=base/"quality-excellence"/"rework"
@@ -88,14 +189,31 @@ def work_orders(root,quality_file,catalog_file,run_id,limit=300):
         tmp=dest/(".stage-"+re.sub(r"[^0-9A-Za-z]","",str(run_id))[:20])
         with tmp.open("wb") as out:out.write(bytes_)
         tmp.chmod(0o600);tmp.replace(current_order)
+        engineering, certification = separate_lanes(snapshot, findings, rest, sha(current))
+        engineering["recipe"] = folder.name
+        certification["recipe"] = folder.name
+        engineering_digest = write_private_lane(
+            base, "engineering-workorders", folder.name, engineering, run_id)
+        certification_digest = write_private_lane(
+            base, "independent-certification-queue", folder.name, certification, run_id)
         jobs.append({"recipe":folder.name,"groups_pending":len(findings),
                      "unresolved_defect_count":len(rest),
+                     "engineering_lane_status":engineering["status"],
+                     "external_certification_status":certification["status"],
+                     "engineering_order_sha256":engineering_digest,
+                     "certification_order_sha256":certification_digest,
                      "source_receipt_sha256":sha(current),
                      "workorder_sha256":key})
     overview={"schema":"saeit.factory.workorder-index.v1",
               "products":len(jobs),"pending_groups_total":sum(x["groups_pending"] for x in jobs),
               "workorder_count":len(jobs),
-              "commercially_approved":0,"generated_by":"measured_evidence_intake_only",
+              "commercially_approved":0,
+               "private_engineering_prechecks_passed":sum(
+                   item["engineering_lane_status"]=="PRIVATE_TECHNICAL_PRECHECK_PASSED"
+                   for item in jobs),
+               "external_certifications":0,
+               "independent_certification_pending":len(jobs),
+               "generated_by":"measured_evidence_intake_only",
               "items":jobs}
     manifest=output/("index-"+re.sub(r"[^0-9A-Za-z]","",str(run_id))[:40]+".json")
     if manifest.exists():assert json.loads(manifest.read_text())==overview
