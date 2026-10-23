@@ -1,0 +1,202 @@
+name: Publish existing Zomorod reviewed guides and digital lab
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-publish-unreleased-reviewed-20261023.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-agriculture-static
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 23
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Render 4 researched pages and validate math and 21 catalog modes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_unreleased_reviewed_release_20261023.py
+          python3 scripts/zomorod_unreleased_reviewed_release_20261023.py render "$RUNNER_TEMP/zm-release-stage"
+          python3 - "$RUNNER_TEMP/zm-release-stage" <<'PY'
+          import hashlib,json,re,sys
+          from pathlib import Path
+          stage=Path(sys.argv[1])
+          manifest=json.loads((stage/"source-manifest.json").read_text())
+          assert len(manifest)==4
+          for rel,meta in manifest.items():
+              data=(stage/rel).read_bytes()
+              assert len(data)==meta["bytes"] and hashlib.sha256(data).hexdigest()==meta["sha256"]
+              assert b"ZM-EXISTING-REVIEWED-SOURCES-20261023-V1" in data
+              assert b'<html lang="fa" dir="rtl">' in data
+          assert abs((.30-.16)*.40*1000-56)<1e-9
+          assert 56*.5/4==7 and 6*1.2*10==72 and 72/.8==90
+          assert (115-100)/100*100==15 and 12+4-1==15
+          assert 2.5*3600*4/1000==36 and 36/(.6*10)==6
+          assert abs((27+30+34)/3-30.3333333)<1e-5
+          lab=(stage/"agriculture/digital-lab/index.html").read_text()
+          m=re.search(r'<script id="catalog" type="application/json">([\s\S]*?)</script>',lab)
+          assert m
+          c=json.loads(m.group(1))
+          assert len(c)==21 and len(set(x["slug"] for x in c))==21
+          assert lab.count('href="/agriculture/digital-lab/?tool=')==21
+          script=re.findall(r'<script>([\s\S]*?)</script>',lab)
+          assert len(script)==1
+          (stage/"browser-app.js").write_text(script[0])
+          (stage/"slugs.txt").write_text("\n".join(x["slug"] for x in c)+"\n")
+          test='''<script>
+          setTimeout(function(){
+            try {
+              document.querySelector("#form").requestSubmit();
+              setTimeout(function(){
+                var msg=document.getElementById("result").textContent||"";
+                var ok=msg.length>15&&!/NaN|Infinity|undefined/.test(msg);
+                document.body.setAttribute("data-qa",ok?"pass":"fail");
+              },20);
+            }catch(e){document.body.setAttribute("data-qa","error");}
+          },20);
+          </script>'''
+          (stage/"browser-qa.html").write_text(lab.replace("</body>",test+"</body>"))
+          print("FOUR_SOURCE_HASHES_21_MODES_AND_SCIENTIFIC_MATH_PASS")
+          PY
+          node --check "$RUNNER_TEMP/zm-release-stage/browser-app.js"
+      - name: Exercise all 21 laboratory modes in real headless Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          if test -z "$browser"; then
+            echo CHROME_BROWSER_REQUIRED_FOR_SAFE_RELEASE >&2
+            exit 1
+          fi
+          echo "BROWSER_AVAILABLE=$(basename "$browser")"
+          count=0
+          while IFS= read -r slug; do
+            test -n "$slug" || continue
+            dump="$RUNNER_TEMP/zm-lab-$slug.html"
+            profile="$RUNNER_TEMP/zm-chrome-$slug"
+            timeout 38s "$browser" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
+              --no-first-run --disable-background-networking --virtual-time-budget=1500 \
+              --user-data-dir="$profile" --dump-dom \
+              "file://$RUNNER_TEMP/zm-release-stage/browser-qa.html?tool=$slug" \
+              > "$dump" 2> "$RUNNER_TEMP/zm-chrome-err-$slug.txt"
+            if ! grep -Fq 'data-qa="pass"' "$dump"; then
+              echo "BROWSER_CALCULATOR_FAILED=$slug"
+              tail -n 8 "$RUNNER_TEMP/zm-chrome-err-$slug.txt" || true
+              exit 1
+            fi
+            count=$((count+1))
+          done < "$RUNNER_TEMP/zm-release-stage/slugs.txt"
+          test "$count" -eq 21
+          echo "BROWSER_ALL_21_EXISTING_DIGITAL_TOOL_MODES=PASS"
+      - name: Connect pinned VPS relay to cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Save versioned backup and prove no existing public files overwritten
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          dest="/home/zomorod2/.zm-reviewed-release-$GITHUB_RUN_ID.py"
+          timeout 65s scp -q -F "$d/config" scripts/zomorod_unreleased_reviewed_release_20261023.py "host:$dest"
+          timeout 80s ssh -T -F "$d/config" host "python3 -m py_compile '$dest' && python3 '$dest' prepare '$GITHUB_RUN_ID'"
+      - name: Transfer approved candidates only into isolated private cPanel staging
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          base="/home/zomorod2/.backups/zomorod-unreleased-reviewed-20261023/$GITHUB_RUN_ID"
+          tar -cf - -C "$RUNNER_TEMP/zm-release-stage" agriculture source-manifest.json |
+            timeout 110s ssh -T -F "$d/config" host "tar -xf - -C '$base/stage'"
+          timeout 50s ssh -T -F "$d/config" host "test -s '$base/stage/source-manifest.json' && test -s '$base/stage/agriculture/digital-lab/index.html'"
+      - name: Install only four new pages and three strictly scoped additive links
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          dest="/home/zomorod2/.zm-reviewed-release-$GITHUB_RUN_ID.py"
+          timeout 110s ssh -T -F "$d/config" host "python3 '$dest' apply '$GITHUB_RUN_ID'"
+      - name: Validate original server and independent runner HTTPS hashes and links
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          dest="/home/zomorod2/.zm-reviewed-release-$GITHUB_RUN_ID.py"
+          timeout 250s ssh -T -F "$d/config" host "python3 '$dest' verify '$GITHUB_RUN_ID'"
+          python3 - "$RUNNER_TEMP/zm-release-stage" "$GITHUB_RUN_ID" <<'PY'
+          import hashlib,json,sys,urllib.request
+          from pathlib import Path
+          stage=Path(sys.argv[1]);run=sys.argv[2]
+          manifest=json.loads((stage/"source-manifest.json").read_text())
+          for rel,meta in manifest.items():
+              uri="https://zomorodmelal.ir/"+rel.removesuffix("index.html")+"?independent="+run
+              req=urllib.request.Request(uri,headers={"Cache-Control":"no-cache","User-Agent":"ZomorodExternalRunnerQA/1"})
+              with urllib.request.urlopen(req,timeout=25) as resp:
+                  assert resp.status==200,(uri,resp.status)
+                  data=resp.read(180000)
+              assert hashlib.sha256(data).hexdigest()==meta["sha256"],uri
+              print("EXTERNAL_PUBLIC_200_HASH_PASS",uri)
+          for page,needles in {
+              "agriculture/water-soil/":["field-notes-09-10/","field-notes-11-14/"],
+              "agriculture/greenhouse/":["temperature-uniformity/"],
+              "agriculture/":["digital-lab/"],
+          }.items():
+              uri="https://zomorodmelal.ir/"+page+"?independent="+run
+              with urllib.request.urlopen(urllib.request.Request(uri,headers={"Cache-Control":"no-cache"}),timeout=25) as resp:
+                  assert resp.status==200
+                  content=resp.read(200000).decode("utf-8")
+              for needle in needles:assert needle in content,(page,needle)
+              print("EXTERNAL_PUBLIC_NAV_PASS",page)
+          for page in ["","games/","games/water-path/","games/air-supremacy/",
+              "research/updates/20261022/","agriculture/water-soil/irrigation-planner/",
+              "agriculture/greenhouse/ventilation-estimator/"]:
+              uri="https://zomorodmelal.ir/"+page+"?health="+run
+              with urllib.request.urlopen(urllib.request.Request(uri,headers={"Cache-Control":"no-cache"}),timeout=25) as resp:
+                  assert resp.status==200,uri
+              print("PROTECTED_PUBLIC_HEALTH_PASS",page or "/")
+          print("FOUR_NEW_PAGES_LIVE_AND_SITE_SMOKE=PASS")
+          PY
+      - name: Finalize verified release and unlock cPanel
+        id: finalize
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          dest="/home/zomorod2/.zm-reviewed-release-$GITHUB_RUN_ID.py"
+          timeout 75s ssh -T -F "$d/config" host "python3 '$dest' finalize '$GITHUB_RUN_ID'"
+      - name: Roll back only newly installed paths if deployment or public checks fail
+        if: failure() && steps.prepare.outcome == 'success' && steps.finalize.outcome != 'success'
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          dest="/home/zomorod2/.zm-reviewed-release-$GITHUB_RUN_ID.py"
+          if test -f "$d/config"; then
+            timeout 130s ssh -T -F "$d/config" host "python3 '$dest' rollback '$GITHUB_RUN_ID'"
+          fi
+      - name: Clean relay keys and installer, retain private evidence
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          dest="/home/zomorod2/.zm-reviewed-release-$GITHUB_RUN_ID.py"
+          if test -f "$d/config"; then
+            timeout 40s ssh -T -F "$d/config" host "rm -f -- '$dest'" || true
+          fi
+          rm -rf "$d" "$RUNNER_TEMP/zm-release-stage"
