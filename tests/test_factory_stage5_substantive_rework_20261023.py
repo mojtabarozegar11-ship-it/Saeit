@@ -50,7 +50,7 @@ class SubstantiveRework(unittest.TestCase):
             target = self.area / "stage-05/substantive-revisions" / self.name[:-5] / "v002" / (loc + ".md")
             self.assertTrue(target.is_file())
             self.assertEqual(rework.sha(target.read_bytes()), manifest["manuscript_sha256"][loc])
-            self.assertIn("claim", target.read_text())
+            self.assertIn("Indexed research excerpt", target.read_text())
             self.assertIn("Genuine bibliographic test source", target.read_text())
         self.assertFalse((self.area / "stage-07").exists())
 
