@@ -27,9 +27,15 @@ from django.db import connection
 from django.urls import resolve
 from django.apps import apps
 from core.models import Product,PaymentIntent,OrderItem
-from mpw_commerce.fulfillment import _private_file
-from mpw_commerce.buyer_orders import _eligible
 from types import SimpleNamespace
+try:
+    from mpw_commerce.fulfillment import _private_file
+except ImportError:
+    _private_file=None
+try:
+    from mpw_commerce.buyer_orders import _eligible
+except ImportError:
+    _eligible=None
 
 data={"scope":"read-only-production-commerce-readiness","financial_writes":0,"public_checkout_changed":False,
       "db_backend":connection.vendor, "catalog":{}, "handler":{}, "models":{}, "configuration":{}}
@@ -41,10 +47,10 @@ for product_id in (72,73):
     entry={"exists":True,"active":bool(prod.active),"currency_usd":str(prod.currency)=="USD",
            "product_type":str(prod.product_type)[:50],"positive_price":bool(prod.price>0)}
     try:
-        entry["eligible"]=bool(_eligible(prod))
+        entry["eligible"]=bool(_eligible(prod)) if _eligible else None
         item=SimpleNamespace(product=prod)
-        path=_private_file(item)
-        entry["private_file_exists"]=bool(path.is_file() and not path.is_symlink())
+        path=_private_file(item) if _private_file else None
+        entry["private_file_exists"]=bool(path and path.is_file() and not path.is_symlink())
     except Exception as exc:
         entry["private_file_exists"]=False
         entry["file_check_error_type"]=type(exc).__name__
