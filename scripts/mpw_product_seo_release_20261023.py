@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path('/home/zomorod2/Saeit-staging')
 VIEW = ROOT / 'core/brand_views.py'
 TEMPLATE = ROOT / 'core/templates/brands/mojplaywin/product.html'
+SITEMAP_VIEW = ROOT / 'core/brand_seo_views.py'
 HOME = Path('/home/zomorod2')
 EXPECTED = {
     72: ('The Science and Practice of Chess Improvement', '7.50'),
@@ -52,6 +53,20 @@ NEW_SCHEMA = '''    schema = {"@context":"https://schema.org", "@type":"Product"
 '''
 OLD_META = '''{% block meta_description %}{{ product.metadata.summary|default:"Explore this digital product in the MojPlayWin catalog, including details, pricing and available delivery information."|striptags|truncatechars:155 }}{% endblock %}'''
 NEW_META = '''{% block meta_description %}{{ product.metadata.seo_description|default:product.metadata.summary|default:"Explore this digital product in the MojPlayWin catalog, including details, pricing and available delivery information."|striptags|truncatechars:155 }}{% endblock %}'''
+OLD_SITEMAP = '''        # Only products marked active are included; inactive drafts remain unlisted.
+        product_ids = Product.objects.filter(active=True).order_by('pk').values_list('pk', flat=True).iterator(chunk_size=500)
+        paths.extend(f"store/product/{pk}/" for pk in product_ids)
+'''
+NEW_SITEMAP = '''        # MPW_PUBLIC_PRODUCT_SITEMAP_ELIGIBLE_ONLY_20261023
+        from mpw_commerce.buyer_orders import _eligible
+        import os
+        canary_ids = {779}
+        configured_canary = os.getenv("MPW_TRX_CANARY_PRODUCT_ID", "")
+        if configured_canary.isdigit(): canary_ids.add(int(configured_canary))
+        for product in Product.objects.filter(active=True).order_by("pk").iterator(chunk_size=500):
+            if product.pk not in canary_ids and _eligible(product):
+                paths.append(f"store/product/{product.pk}/")
+'''
 
 def fail(msg):
     raise RuntimeError(msg)
@@ -99,8 +114,13 @@ def template_patch(source):
     if source.count(OLD_META) != 1: fail('Product template meta description changed; refusing broad edit')
     return source.replace(OLD_META, NEW_META, 1)
 
+def sitemap_patch(source):
+    if source.count(NEW_SITEMAP) == 1 and OLD_SITEMAP not in source: return source
+    if source.count(OLD_SITEMAP) != 1: fail('Product sitemap source changed; refusing broad edit')
+    return source.replace(OLD_SITEMAP, NEW_SITEMAP, 1)
+
 def run_release(run):
-    if ROOT.is_symlink() or not ROOT.is_dir() or VIEW.is_symlink() or not VIEW.is_file() or TEMPLATE.is_symlink() or not TEMPLATE.is_file():
+    if ROOT.is_symlink() or not ROOT.is_dir() or VIEW.is_symlink() or not VIEW.is_file() or TEMPLATE.is_symlink() or not TEMPLATE.is_file() or SITEMAP_VIEW.is_symlink() or not SITEMAP_VIEW.is_file():
         fail('Unexpected Django checkout or view file')
     sys.path.insert(0, str(ROOT))
     os.chdir(ROOT)
@@ -115,6 +135,8 @@ def run_release(run):
     new_view = schema_patch(old_view.decode('utf-8')).encode('utf-8')
     old_template = TEMPLATE.read_bytes()
     new_template = template_patch(old_template.decode('utf-8')).encode('utf-8')
+    old_sitemap = SITEMAP_VIEW.read_bytes()
+    new_sitemap = sitemap_patch(old_sitemap.decode('utf-8')).encode('utf-8')
     original_metadata = {}
     d = backup_dir(run)
     if d.exists() or d.is_symlink(): fail('Release backup already exists')
@@ -124,12 +146,13 @@ def run_release(run):
         for pk, p in rows.items(): original_metadata[str(pk)] = p.metadata
 
     d.mkdir(mode=0o700)
-    for name, raw in [('brand_views.py.bak', old_view), ('product.html.bak', old_template),
+    for name, raw in [('brand_views.py.bak', old_view), ('product.html.bak', old_template), ('brand_seo_views.py.bak', old_sitemap),
                       ('metadata.json.bak', json.dumps(original_metadata, ensure_ascii=False, sort_keys=True).encode('utf-8'))]:
         with (d / name).open('xb') as f:
             os.fchmod(f.fileno(), 0o600); f.write(raw); f.flush(); os.fsync(f.fileno())
     manifest = {'run': run, 'view_before': digest(old_view), 'view_after': digest(new_view),
-                'template_before': digest(old_template), 'template_after': digest(new_template), 'products': list(EXPECTED)}
+                'template_before': digest(old_template), 'template_after': digest(new_template),
+                'sitemap_before': digest(old_sitemap), 'sitemap_after': digest(new_sitemap), 'products': list(EXPECTED)}
     with (d / 'manifest.json').open('x') as f:
         os.fchmod(f.fileno(), 0o600); json.dump(manifest, f, sort_keys=True); f.flush(); os.fsync(f.fileno())
 
@@ -143,10 +166,13 @@ def run_release(run):
                 p.save(update_fields=['metadata'])
         if digest(VIEW.read_bytes()) != manifest['view_before']: fail('Concurrent view edit detected')
         if digest(TEMPLATE.read_bytes()) != manifest['template_before']: fail('Concurrent template edit detected')
+        if digest(SITEMAP_VIEW.read_bytes()) != manifest['sitemap_before']: fail('Concurrent sitemap view edit detected')
         atomic(VIEW, new_view)
         atomic(TEMPLATE, new_template)
+        atomic(SITEMAP_VIEW, new_sitemap)
         import py_compile
         py_compile.compile(str(VIEW), doraise=True)
+        py_compile.compile(str(SITEMAP_VIEW), doraise=True)
         client = Client(HTTP_HOST='mojplaywin.com')
         checks = []
         for pk, (title, price) in EXPECTED.items():
@@ -165,7 +191,15 @@ def run_release(run):
             if schema.get('@type') != 'Product' or not numeric_price_ok or offer.get('priceCurrency') != 'USD':
                 fail(f'Product JSON-LD offer check failed for {pk}')
             checks.append({'id': pk, 'status': resp.status_code, 'price': offer['price'], 'schema': 'Product+Offer'})
-        print('MPW_PRODUCT_SEO_RELEASE=' + json.dumps({'run':run,'checks':checks,'metadata_only_product_rows':list(EXPECTED)}, ensure_ascii=False, sort_keys=True))
+        sitemap_resp = client.get('/sitemap.xml', HTTP_HOST='mojplaywin.com', follow=True)
+        import xml.etree.ElementTree as ET
+        locations = [node.text for node in ET.fromstring(sitemap_resp.content).iter() if node.tag.endswith('loc')]
+        expected_urls = {f'https://mojplaywin.com/store/product/{pk}/' for pk in EXPECTED}
+        if sitemap_resp.status_code != 200 or not expected_urls.issubset(set(locations)):
+            fail('Eligible product URLs missing from sitemap')
+        if any(f'https://mojplaywin.com/store/product/{pk}/' in locations for pk in (779, 968, 969, 970, 971, 972)):
+            fail('Canary or ineligible product URL remains in sitemap')
+        print('MPW_PRODUCT_SEO_RELEASE=' + json.dumps({'run':run,'checks':checks,'sitemap_eligible_products':len(expected_urls),'test_or_ineligible_ids_removed':[779,968,969,970,971,972]}, ensure_ascii=False, sort_keys=True))
     except BaseException:
         with transaction.atomic():
             for pk, meta in original_metadata.items():
@@ -174,6 +208,8 @@ def run_release(run):
             atomic(VIEW, old_view)
         if TEMPLATE.exists() and digest(TEMPLATE.read_bytes()) == manifest['template_after']:
             atomic(TEMPLATE, old_template)
+        if SITEMAP_VIEW.exists() and digest(SITEMAP_VIEW.read_bytes()) == manifest['sitemap_after']:
+            atomic(SITEMAP_VIEW, old_sitemap)
         raise
 
 def selftest():
@@ -181,6 +217,7 @@ def selftest():
     patched = schema_patch(OLD_SCHEMA)
     assert OLD_SCHEMA not in patched and '"offers"' in patched
     assert template_patch(OLD_META).count(NEW_META) == 1
+    assert OLD_SITEMAP not in sitemap_patch(OLD_SITEMAP) and 'MPW_PUBLIC_PRODUCT_SITEMAP_ELIGIBLE_ONLY_20261023' in sitemap_patch(OLD_SITEMAP)
     print('MPW_PRODUCT_SEO_SELFTEST=PASS')
 
 if __name__ == '__main__':
