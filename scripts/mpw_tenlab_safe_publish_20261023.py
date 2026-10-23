@@ -44,7 +44,7 @@ def prepare(run,commit):
     p,hashes=payload_files(run)
     if meta(run).exists():raise RuntimeError('release id already used')
     protected={}
-    for rel in ['index.html','.htaccess','games/index.html','store/index.html']:
+    for rel in ['passenger_wsgi.py','.htaccess','game-releases/20261021/index.html','mpw-editorial/index.html']:
         f=ROOT/rel
         if f.is_symlink():raise RuntimeError('protected symlink')
         if f.is_file():protected[rel]=digest(f)
