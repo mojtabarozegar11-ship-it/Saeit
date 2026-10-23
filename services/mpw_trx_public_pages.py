@@ -7,6 +7,20 @@ from services.mpw_trx_commercial_web import _ensure_live, _nocache
 from services.mpw_trx_walletless_core import PaymentHold
 
 
+def _checkout_csrf_referrer(response):
+    """Permit HTTPS same-origin Referer while suppressing cross-origin referrers."""
+    import re
+    content,count=re.subn(
+        rb'<meta\s+name=["\']referrer["\']\s+content=["\']no-referrer["\']\s*/?>',
+        b'<meta name="referrer" content="same-origin">',
+        response.content,count=1,flags=re.I)
+    if count!=1:
+        raise Http404("Secure checkout referrer policy is missing or ambiguous")
+    response.content=content
+    response["Referrer-Policy"]="same-origin"
+    return response
+
+
 def _page(title, content):
     html='''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'''+escape(title)+''' | MojPlayWin</title><style>body{margin:0;background:#101520;color:#f7f7f7;font:17px/1.65 system-ui}main{max-width:850px;margin:auto;padding:28px 18px}a{color:#83e5d4}article{border:1px solid #475368;border-radius:16px;padding:22px;margin:18px 0;background:#182234}.button{display:inline-block;background:#83e5d4;color:#102326;padding:10px 18px;border-radius:9px;text-decoration:none;font-weight:700}h1{line-height:1.2}small{color:#c4cbd8}</style><main><nav><a href="/">Home</a> · <a href="/store/">Products</a> · <a href="/commerce/trx-easy/purchases/">My TRX purchases</a></nav><h1>'''+escape(title)+'''</h1>'''+content+'''<p><a href="/support/">Purchase support</a> · <a href="/terms/">Terms</a> · <a href="/privacy/">Privacy</a></p></main></html>'''
     response=_nocache(HttpResponse(html))
@@ -57,6 +71,7 @@ def product_checkout(request, product_id):
     response=_nocache(render(request,'mpw_commerce/product_checkout.html',{
         'product':product,'price_usd':format(product.price,'.2f'),
         'mpw_trx_easy_enabled':True}))
+    response=_checkout_csrf_referrer(response)
     response['Content-Security-Policy']="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     return response
 
