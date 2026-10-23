@@ -109,6 +109,13 @@ class PrivateCanaryIsolationTests(unittest.TestCase):
         self.assertFalse(instructions["public_enabled"])
         self.assertEqual(instructions["broadcasts"], 0)
 
+    def test_merchant_canary_rejects_transfer_to_same_trust_wallet(self):
+        wallet = "THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73"
+        with self.assertRaises(PaymentHold):
+            canary.require_independent_sender(wallet, wallet)
+        self.assertIsNone(canary.require_independent_sender(
+            "TWTBsKZPVuQgaGNbyJWJm9XR28g4wVBCNQ", wallet))
+
     def test_private_receipt_is_atomic_owner_private_and_tamper_checked(self):
         with tempfile.TemporaryDirectory() as d, patch.object(canary, "RECEIPTS", Path(d) / "receipts"):
             record = {"network": "tron-mainnet", "invoice_id": 412, "amount_sun": 123456}
