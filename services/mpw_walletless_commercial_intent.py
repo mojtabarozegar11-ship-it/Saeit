@@ -99,13 +99,19 @@ def _ready_order(order, *, buyer_id: int):
     return Decimal(total), item
 
 
-def _commercial_db(settings, db):
+def _paid_read_db(settings, db):
+    """Previously confirmed buyers retain downloads if new payment is paused."""
     if (getattr(settings,"DEBUG",True) is not False
         or getattr(settings,"MPW_COMMERCE_RELEASE_READY",False) is not True
         or getattr(settings,"MPW_COMMERCE_DOWNLOADS_ENABLED",False) is not True
-        or getattr(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False) is not True
-        or getattr(settings,"MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED",False) is not True
         or getattr(db,"vendor","") != "mysql" or db.alias != "default"):
+        raise PaymentHold("Secure paid entitlement backend unavailable")
+
+
+def _commercial_db(settings, db):
+    _paid_read_db(settings,db)
+    if (getattr(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False) is not True
+        or getattr(settings,"MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED",False) is not True):
         raise PaymentHold("Public merchant TRX payment activation has not passed release gate")
 
 
@@ -339,7 +345,7 @@ def commercial_buyer_status(intent_id: int, buyer_id: int, *, db=None,
 
     db = db or connection
     settings = settings or django_settings
-    _commercial_db(settings, db)
+    _paid_read_db(settings, db)
     intent = PaymentIntent.objects.select_related("order").filter(
         pk=intent_id, order__customer_id=buyer_id, provider=PROVIDER,
     ).first()
