@@ -67,17 +67,20 @@ jobs:
       - name: Verify public customer catalog and all three checkouts
         run: |
           set -euo pipefail
-          body="$(curl --fail --silent --show-error --max-time 30 -H 'Cache-Control: no-cache' "https://mojplaywin.com/store/?__mpw_three_product_audit=$GITHUB_RUN_ID")"
+          body="$(curl --location --retry 2 --retry-delay 2 --fail --silent --show-error --max-time 30 -H 'Cache-Control: no-cache' "https://mojplaywin.com/store/?__mpw_three_product_audit=$GITHUB_RUN_ID")"
           test "$(grep -o 'Buy securely with TRX' <<<"$body" | wc -l | tr -d ' ')" = 2
-          ! grep -q 'ETH / TRX\|mpw-crypto-buy\|/commerce/book/72/\|/commerce/book/225/' <<<"$body"
+          test "$(grep -o 'Buy website kit securely with TRX' <<<"$body" | wc -l | tr -d ' ')" = 1
+          ! grep -q 'ETH / TRX\|ETH/TRX\|mpw-crypto-buy\|/commerce/book/72/\|/commerce/book/225/' <<<"$body"
+          echo 'PUBLIC_STORE_COPY_AND_THREE_PRIMARY_CTAS=PASS'
           for id in 72 225 879; do
             grep -q "store/product/$id/checkout/" <<<"$body"
-            page="$(curl --fail --silent --show-error --max-time 30 -H 'Cache-Control: no-cache' "https://mojplaywin.com/store/product/$id/checkout/?__mpw_three_product_audit=$GITHUB_RUN_ID")"
+            page="$(curl --location --retry 2 --retry-delay 2 --fail --silent --show-error --max-time 30 -H 'Cache-Control: no-cache' "https://mojplaywin.com/store/product/$id/checkout/?__mpw_three_product_audit=$GITHUB_RUN_ID")"
             grep -q 'Create invoice and pay with TRX' <<<"$page"
+            echo "PUBLIC_TRX_CHECKOUT_$id=PASS"
           done
           grep -q 'TRX checkout available · account required' <<<"$body"
           grep -q 'Each book has a secure TRX invoice checkout' <<<"$body"
-          kit="$(curl --fail --silent --show-error --max-time 30 -H 'Cache-Control: no-cache' "https://mojplaywin.com/store/product/879/?__mpw_three_product_audit=$GITHUB_RUN_ID")"
+          kit="$(curl --location --retry 2 --retry-delay 2 --fail --silent --show-error --max-time 30 -H 'Cache-Control: no-cache' "https://mojplaywin.com/store/product/879/?__mpw_three_product_audit=$GITHUB_RUN_ID")"
           ! grep -q 'ETH/TRX' <<<"$kit"
           echo 'THREE_PUBLIC_PRODUCTS_SINGLE_TRX_CTA_FILES_READY_AND_CHECKOUT_ROUTES_VERIFIED'
       - name: Remove relay credentials
