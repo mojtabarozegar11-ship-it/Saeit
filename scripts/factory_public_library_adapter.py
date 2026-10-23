@@ -197,6 +197,14 @@ def publish(home, site_id):
     }
     atomic_write(dest / MARKER, (json.dumps({"schema": OWNER, "site_id": site_id},
                                            sort_keys=True) + "\n").encode(), mode=0o600)
+    # The deployment shell uses umask 077. mkdir(mode=0755) would
+    # otherwise create mode 0700, preventing LiteSpeed/Apache from
+    # traversing the directory even when index.html itself is 0644.
+    # This directory has either just been created, or its exact private
+    # ownership marker was verified above. Never chmod shared ancestors.
+    os.chmod(dest, 0o755)
+    if (dest.stat().st_mode & 0o777) != 0o755:
+        raise RuntimeError("FACTORY_LIBRARY_DIRECTORY_NOT_PUBLICLY_TRAVERSABLE")
     atomic_write(dest / "catalog.json", (json.dumps(output, sort_keys=True, indent=2) + "\n").encode())
     # The parent sites use Passenger for dynamic routes. This directive is
     # confined to our new dedicated directory; it does not edit any shared
