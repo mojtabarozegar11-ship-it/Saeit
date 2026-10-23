@@ -32,7 +32,7 @@ def assert_release_state():
         raise RuntimeError('Public checkout flag is not active')
 
 def verify_runtime():
-    code='''from django.http import HttpResponse\nfrom services.mpw_trx_commercial_web import _nocache\nr=_nocache(HttpResponse("ok"))\nassert r["Referrer-Policy"]=="same-origin"\nassert r["Cache-Control"]=="private, no-store, max-age=0"\nprint("PUBLIC_TRX_CSRF_SAME_ORIGIN_REFERRER=PASS")\n'''
+    code='''import os\nos.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")\nimport django;django.setup()\nfrom django.http import HttpResponse\nfrom services.mpw_trx_commercial_web import _nocache\nr=_nocache(HttpResponse("ok"))\nassert r["Referrer-Policy"]=="same-origin"\nassert r["Cache-Control"]=="private, no-store, max-age=0"\nprint("PUBLIC_TRX_CSRF_SAME_ORIGIN_REFERRER=PASS")\n'''
     p=subprocess_run([str(APP.parent/'virtualenv'/'Saeit-staging'/'3.11'/'bin'/'python'),'-B','-c',code],cwd=APP)
     if p.returncode or 'PUBLIC_TRX_CSRF_SAME_ORIGIN_REFERRER=PASS' not in p.stdout:
         raise RuntimeError('Live Django response header verification failed: '+p.stderr[-1000:])
