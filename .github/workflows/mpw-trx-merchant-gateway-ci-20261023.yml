@@ -6,7 +6,8 @@ on:
       - services/mpw_walletless_commercial_intent.py
       - services/mpw_trx_commercial_chain.py
       - services/mpw_trx_commercial_web.py
-      - tests/test_mpw_trx_commercial_gateway.py
+      - tests/test_mpw_trx_commercial_gateway.py tests/test_mpw_trx_commercial_ui_contract.py
+      - tests/test_mpw_trx_commercial_ui_contract.py
       - .github/workflows/mpw-trx-merchant-gateway-ci-20261023.yml
   workflow_dispatch:
 permissions: {contents: read}
@@ -26,5 +27,5 @@ jobs:
       - name: Check failclosed release gates and solidified evidence contracts
         run: |
           set -euo pipefail
-          python3 -B -m unittest tests.test_mpw_trx_commercial_gateway tests.test_mpw_tron_independent_solidified_rpc tests.test_mpw_tron_readonly_deposit_candidates -v
+          python3 -B -m unittest tests.test_mpw_trx_commercial_gateway tests.test_mpw_trx_commercial_ui_contract tests.test_mpw_tron_independent_solidified_rpc tests.test_mpw_tron_readonly_deposit_candidates -v
           echo 'TRX_GATEWAY_GUARD=TESTED; PRIVATE_DELIVERY=SERVER_ONLY; NO_FINANCIAL_WRITES=TRUE'
