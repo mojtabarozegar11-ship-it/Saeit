@@ -33,14 +33,6 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/mpw_air_supremacy_standalone_publish.py scripts/mpw_air_supremacy_exact_route.py
           python3 - <<'PY'
-          import importlib.util
-          spec=importlib.util.spec_from_file_location('alias','scripts/mpw_air_supremacy_exact_route.py')
-          mod=importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(mod)
-          for nl in (b'\n',b'\r\n'):
-            before=nl.join([
-              b'RewriteEngine On',
-              b'RewriteCond %{REQUEST_METHOD} ^GET          python3 - <<'PY'
           from pathlib import Path
           import hashlib
           raw=Path('games/air-supremacy/index.html').read_bytes()
