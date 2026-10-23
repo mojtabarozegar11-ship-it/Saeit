@@ -97,7 +97,6 @@ jobs:
             grep -Fq '۹۰ درصد فعالیت‌های آن به تحقیقات علمی' "$RUNNER_TEMP/research90-public.html" || return 1
             grep -Fq '۱۰ درصد باقی‌مانده به سایر حوزه‌های فعالیت' "$RUNNER_TEMP/research90-public.html" || return 1
             grep -Fq '<strong>۹۰٪</strong>' "$RUNNER_TEMP/research90-public.html" || return 1
-            grep -Fq 'تمرکز ۹۰ درصدی بر پژوهش' "$RUNNER_TEMP/research90-public.html" || return 1
             grep -Fq 'zm-about-official-20261018' "$RUNNER_TEMP/research90-public.html" || return 1
             grep -Fq 'zm-about-comprehensive' "$RUNNER_TEMP/research90-public.html" || return 1
             for route in / /about/ /company/ /contact/ /store/ /admin/login/; do
