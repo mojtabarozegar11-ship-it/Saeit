@@ -1,0 +1,49 @@
+name: Air Supremacy real Chrome graphics and mobile signoff
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - games/air-supremacy/index.html
+      - tests/game/air-supremacy-visual.cjs
+      - .github/workflows/air-supremacy-visual-signoff.yml
+permissions:
+  contents: read
+jobs:
+  interactive-webgl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install isolated Chromium QA dependencies
+        run: |
+          set -euo pipefail
+          npm install --prefix /tmp/air-qa --no-audit --no-fund playwright-core@1.56.0
+          google-chrome --version
+      - name: Start read-only local web origin
+        run: |
+          set -euo pipefail
+          nohup python3 -m http.server 8765 --bind 127.0.0.1 --directory games > /tmp/air-qa-server.log 2>&1 &
+          echo $! > /tmp/air-qa-server.pid
+          sleep 2
+          curl --fail --silent --show-error http://127.0.0.1:8765/air-supremacy/index.html -o /dev/null
+      - name: Run true WebGL mobile and desktop gameplay with screenshot evidence
+        env:
+          NODE_PATH: /tmp/air-qa/node_modules
+        run: |
+          set -euo pipefail
+          node tests/game/air-supremacy-campaign.cjs
+          timeout 85s node tests/game/air-supremacy-visual.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: air-supremacy-v3-real-rendered-evidence
+          path: |
+            ${{ runner.temp }}/air-redesign-*.png
+            /tmp/air-qa-server.log
+          if-no-files-found: ignore
+          retention-days: 7
