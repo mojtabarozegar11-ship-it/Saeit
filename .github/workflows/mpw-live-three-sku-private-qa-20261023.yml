@@ -102,7 +102,7 @@ jobs:
         run: |
           for id in 72 225 879; do
             status="$(curl -sSL --max-time 15 -o /dev/null -w '%{http_code}' "https://mojplaywin.com/store/product/$id/")" || status=000
-            echo "MPW_STORE_PRODUCT_@@id@@_HTTPS=$status"
+            echo "MPW_STORE_PRODUCT_${id}_HTTPS=$status"
           done
       - name: Remove only this run's transient SSH identity
         if: always()
