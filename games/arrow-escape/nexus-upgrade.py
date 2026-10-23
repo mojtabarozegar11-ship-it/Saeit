@@ -16,7 +16,7 @@ GAME = ROOT / 'arrow-escape'
 INDEX = GAME / 'index.html'
 MARK = 'NEXUS-3D-ENTRY-20261023'
 SOURCE_MARK = 'ZM-ARROW-ESCAPE-THIRD-CARD-20261022'
-FILES = ('nexus.html', 'nexus.css', 'nexus.js', 'nexus-core.js', 'nexus-fallback.js',
+FILES = ('nexus.html', 'nexus.css', 'nexus.js', 'nexus-core.js', 'nexus-fallback.js', 'nexus-experience.js',
          'three.module.js', 'three.core.min.js')
 CTA = ('\n      <!-- ' + MARK + ' -->\n'
        '      <a href="./nexus.html" '
@@ -104,6 +104,8 @@ def prepare(stage):
     assert b'ArrowNexusDebug' in read(stage / 'incoming' / 'nexus.js')
     assert b'nexus-fallback.js' in read(stage / 'incoming' / 'nexus.js')
     assert b'nexus-css3d' in read(stage / 'incoming' / 'nexus-fallback.js')
+    assert b'NexusExperience' in read(stage / 'incoming' / 'nexus-experience.js')
+    assert b'nexus-experience.js' in read(stage / 'incoming' / 'nexus.html')
     assert b'./three.core.min.js' in read(stage / 'incoming' / 'three.module.js')
     for name in ('engine.js', 'app.js', 'style.css', 'cube-engine.js', 'cover.svg'):
         path = GAME / name

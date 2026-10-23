@@ -18,6 +18,16 @@ for (let level = 1; level <= 240; level++) {
     assert.equal(puzzle.pieces[1].gate, 'link');
     assert.equal(core.canExit(1, core.initialState(puzzle)), false);
   }
+  if (level >= 8) {
+    assert.equal(puzzle.pieces[3].gate, 'relay');
+    assert.deepEqual(puzzle.pieces[3].sources, [0, 1]);
+    assert.equal(core.canExit(3, core.initialState(puzzle)), false);
+  }
+  if (level >= 12) {
+    assert.equal(puzzle.pieces[4].gate, 'charge');
+    assert.equal(core.canExit(4, core.initialState(puzzle)), false);
+    assert.ok(puzzle.pieces.length <= 12);
+  }
   if (level >= 4) {
     twistStages++;
     assert.equal(puzzle.pieces[2].gate, 'phase');

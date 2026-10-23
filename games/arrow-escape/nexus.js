@@ -2,12 +2,13 @@
 import * as THREE from './three.module.js';
 
 const Core = window.ArrowNexusCore;
+const Experience = window.NexusExperience;
 const $ = id => document.getElementById(id);
 const FA = n => new Intl.NumberFormat('fa-IR').format(n);
 const SAVE_KEY = 'zm-arrow-nexus-v1';
 const canvas = $('nexusCanvas');
 const viewport = $('viewport');
-const colors = { free: 0x5ce7cd, blocked: 0x8aa9b4, phase: 0xf5c87b, link: 0xd879ef, source: 0x6fb4fd };
+const colors = { free: 0x5ce7cd, blocked: 0x8aa9b4, phase: 0xf5c87b, link: 0xd879ef, source: 0x6fb4fd, relay: 0x619ef5, charge: 0xffa06e };
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 let level = 1;
 let best = 1;
@@ -30,6 +31,10 @@ let initialPointer = null;
 let longPressTimer;
 let previewTimer;
 let frameId;
+let orbitVelocityX = 0;
+let orbitVelocityY = 0;
+let atmosphere;
+let accentLight;
 
 function message(text) { $('message').textContent = text; }
 function validateSavedLog(raw) {
@@ -63,6 +68,7 @@ function ui() {
   $('twistLeft').disabled = $('twistRight').disabled = busy || state.twistsLeft === 0;
   $('undo').disabled = busy || moveLog.length === 0;
   $('hint').disabled = busy || state.removed.length === puzzle.pieces.length;
+  Experience.update(level, puzzle, moveLog);
 }
 function vector(values) { return new THREE.Vector3(...values); }
 function surfacePoint(piece, offset = 1.62) {
@@ -116,7 +122,7 @@ function makeArrow(piece) {
   const active = Core.canExit(piece.id, state);
   const blocked = !active && Core.blockers(piece, state).length > 0;
   const name = active ? (piece.id === 0 && puzzle.level >= 2 ? 'source' : 'free') :
-    blocked ? 'blocked' : piece.gate === 'phase' ? 'phase' : piece.gate === 'link' ? 'link' : 'blocked';
+    blocked ? 'blocked' : piece.gate === 'phase' ? 'phase' : piece.gate === 'link' ? 'link' : piece.gate === 'relay' ? 'relay' : piece.gate === 'charge' ? 'charge' : 'blocked';
   const color = colors[name];
   const shape = new THREE.Mesh(arrowGeometry, new THREE.MeshPhysicalMaterial({
     color, emissive: color, emissiveIntensity: active ? .55 : .17,
@@ -172,6 +178,8 @@ function preview(pieceId, persistent = false) {
   message(result ? 'پیش‌نمایش: این پیکان می‌تواند خارج شود.' :
     piece.gate === 'link' && !state.removed.includes(piece.source) ? 'ابتدا پیکان آبی پیوندی را آزاد کن.' :
     piece.gate === 'phase' && state.phase !== piece.targetPhase ? 'دروازه طلایی به پیچش حلقه میانی نیاز دارد.' :
+    piece.gate === 'relay' ? 'مدار دوگانه را فعال کن: ابتدا هر دو پیکان منبع را خارج کن.' :
+    piece.gate === 'charge' ? 'میدان رزونانس: دست‌کم سه پیکان دیگر را آزاد کن.' :
     'یک پیکان در مسیر خروج قرار دارد.');
   if (!persistent) previewTimer = setTimeout(clearPreview, 2000);
 }
@@ -187,6 +195,14 @@ function rebuild() {
   }
   for (const piece of state.pieces) if (!state.removed.includes(piece.id)) makeArrow(piece);
   ui();
+  const world = Experience.worldFor(level).id;
+  const palettes = { abyss: [0x143b49, 0x3f8891, 0x40bde9],
+    ember: [0x59362f, 0xa77855, 0xff935a], cosmos: [0x302f62, 0x8d79d6, 0x9876ff],
+    aurora: [0x144945, 0x57bca9, 0x6bffce] };
+  const palette = palettes[world];
+  cubeMaterial.color.setHex(palette[0]);
+  edgeMaterial.color.setHex(palette[1]);
+  if (accentLight) accentLight.color.setHex(palette[2]);
 }
 function cameraPosition() {
   camera.position.set(zoom * Math.cos(elevation) * Math.sin(azimuth),
@@ -215,6 +231,34 @@ function initialize() {
   fixedGroup = new THREE.Group();
   ringGroup = new THREE.Group();
   scene.add(fixedGroup, ringGroup);
+  accentLight = new THREE.PointLight(0x4ff8e6, 10, 15);
+  accentLight.position.set(-3, 3, 4);
+  scene.add(accentLight);
+  atmosphere = new THREE.Group();
+  const orbits = [
+    [3.12, 0x6ffbe2, .24, Math.PI / 2],
+    [3.36, 0xf4c57c, .14, Math.PI / 3],
+    [3.68, 0x8b9cf5, .13, -.43]
+  ];
+  for (const [radius, tone, opacity, tilt] of orbits) {
+    const circle = new THREE.Mesh(new THREE.TorusGeometry(radius, .012, 6, 128),
+      new THREE.MeshBasicMaterial({ color: tone, transparent: true, opacity, depthWrite: false }));
+    circle.rotation.x = tilt;
+    atmosphere.add(circle);
+  }
+  const stars = [];
+  let seed = 0x9e3779b9;
+  const random = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 4294967296; };
+  for (let i = 0; i < 175; i++) {
+    const radius = 4.3 + random() * 4.2, theta = random() * Math.PI * 2, phi = Math.acos(random() * 2 - 1);
+    stars.push(radius * Math.sin(phi) * Math.cos(theta), radius * Math.cos(phi), radius * Math.sin(phi) * Math.sin(theta));
+  }
+  const starGeometry = new THREE.BufferGeometry();
+  starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(stars, 3));
+  atmosphere.add(new THREE.Points(starGeometry, new THREE.PointsMaterial({
+    color: 0xa4fff3, size: .055, transparent: true, opacity: .6, sizeAttenuation: true
+  })));
+  scene.add(atmosphere);
   const ring = new THREE.Mesh(new THREE.TorusGeometry(2.7, .018, 6, 150),
     new THREE.MeshBasicMaterial({ color: 0x4ac7c7, transparent: true, opacity: .13 }));
   ring.rotation.x = Math.PI / 2;
@@ -222,7 +266,18 @@ function initialize() {
   cameraPosition();
   resize();
   rebuild();
-  const animate = () => { frameId = requestAnimationFrame(animate); renderer.render(scene, camera); };
+  const animate = () => {
+    frameId = requestAnimationFrame(animate);
+    if (atmosphere && !reducedMotion) atmosphere.rotation.y += .0012;
+    if (!initialPointer && (Math.abs(orbitVelocityX) + Math.abs(orbitVelocityY)) > .0001) {
+      azimuth += orbitVelocityX;
+      elevation = Math.max(-1.16, Math.min(1.16, elevation + orbitVelocityY));
+      orbitVelocityX *= .91;
+      orbitVelocityY *= .91;
+      cameraPosition();
+    }
+    renderer.render(scene, camera);
+  };
   animate();
 }
 function record(action, next) {
@@ -236,12 +291,15 @@ function celebrateIfWon() {
   save();
   $('victory').classList.remove('hidden');
   $('next').focus({ preventScroll: true });
+  const badge = Experience.complete(level, puzzle, moveLog);
+  $('victoryDetail').textContent = 'امتیاز ' + FA(badge.score) + ' · ' + '★'.repeat(badge.stars) +
+    '☆'.repeat(3 - badge.stars) + ' · مسیر مرجع ' + FA(badge.reference) + ' حرکت';
   message('تمام پیکان‌ها آزاد شدند؛ فوق‌العاده بود!');
   return true;
 }
 function playRemove(id) {
   if (busy || !Core.canExit(id, state)) {
-    if (!busy) preview(id);
+    if (!busy) { preview(id); Experience.action('locked', level, puzzle, moveLog); }
     return;
   }
   const next = Core.transition(state, { type: 'remove', id });
@@ -262,7 +320,10 @@ function playRemove(id) {
     record({ type: 'remove', id }, next);
     busy = false;
     rebuild();
-    if (!celebrateIfWon()) message('مسیر باز شد! حالا قفل‌ها و پیکان‌های دیگر را بررسی کن.');
+    const bonus = Experience.action('remove', level, puzzle, moveLog);
+    if (!celebrateIfWon()) message(bonus.chain >= 3
+      ? 'رزونانس ' + FA(bonus.chain) + ' برابری! پیکان‌های بعدی امتیاز بیشتری دارند.'
+      : 'مسیر باز شد! حالا قفل‌ها و پیکان‌های دیگر را بررسی کن.');
   }
   requestAnimationFrame(animate);
 }
@@ -282,6 +343,7 @@ function playTwist(step) {
     record({ type: 'twist', step }, next);
     busy = false;
     rebuild();
+    Experience.action('twist', level, puzzle, moveLog);
     message(state.phase === 1 ? 'حلقه هم‌راستا شد؛ دروازه طلایی را بررسی کن!' : 'چیدمان مکعب تغییر کرد. راه تازه را پیدا کن.');
   }
   requestAnimationFrame(animate);
@@ -344,6 +406,7 @@ function listen() {
     if (busy || !$('victory').classList.contains('hidden')) return;
     initialPointer = { id: event.pointerId, x: event.clientX, y: event.clientY,
       startX: event.clientX, startY: event.clientY, moved: false, long: false };
+    Experience.primeAudio();
     canvas.setPointerCapture(event.pointerId);
     clearHold();
     longPressTimer = setTimeout(() => {
@@ -363,6 +426,8 @@ function listen() {
     if (initialPointer.moved) {
       azimuth += dx * .009;
       elevation = Math.max(-1.16, Math.min(1.16, elevation + dy * .008));
+      orbitVelocityX = dx * .0024;
+      orbitVelocityY = dy * .002;
       cameraPosition();
     }
     initialPointer.x = event.clientX;
@@ -401,6 +466,7 @@ function listen() {
   new ResizeObserver(resize).observe(viewport);
 }
 load();
+Experience.boot();
 try {
   initialize();
   listen();
