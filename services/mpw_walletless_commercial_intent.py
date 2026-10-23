@@ -177,6 +177,11 @@ def reserve_commercial_intent(order_id: int, buyer_id: int, *, rate_provider,
             if CommerceInvoice.objects.filter(order=order).exists():
                 raise PaymentHold("In-flight signed invoice must be resolved")
             quote = rate_provider()
+            # The quote may be observed milliseconds after the transaction starts.
+            # Re-read the trusted clock AFTER fetching it (unless a test supplied now).
+            # Otherwise fresh merchant quotes incorrectly fail as future-dated.
+            if now is None:
+                current = django_timezone.now()
             if not isinstance(quote, (tuple, list)) or len(quote) != 2:
                 raise PaymentHold("Rate source did not return an observed quote")
 
