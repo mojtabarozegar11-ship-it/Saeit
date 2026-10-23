@@ -17,6 +17,11 @@ class WalletlessCheckoutFrontendTests(unittest.TestCase):
             with self.subTest(first_lines=text[:30]):
                 self.assertEqual(result.returncode,0,result.stderr[:1200])
 
+    def test_reconcile_timeout_cannot_abort_independent_status_read(self):
+        self.assertIn("proofController.signal",SCRIPT)
+        self.assertIn("statusController.signal",SCRIPT)
+        self.assertNotIn("signal:controller.signal",SCRIPT)
+
     def test_render_invoice_wallet_app_fallback_and_no_browser_proof(self):
         t=datetime.now(timezone.utc)
         invoice=InvoiceIntent(
@@ -33,6 +38,7 @@ class WalletlessCheckoutFrontendTests(unittest.TestCase):
         page=html.decode("utf8")
         self.assertIn('action="',page) if False else None
         self.assertIn("TRON MAINNET",page)
+        self.assertIn('name="referrer" content="same-origin"',page)
         self.assertIn("Open in Trust Wallet",page)
         self.assertIn('id="mpw-easy-pay"',page)
         self.assertIn("Checking TRON",page)

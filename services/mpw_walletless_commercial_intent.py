@@ -1,7 +1,7 @@
 """MojPlayWin native TRX payment adapter using existing MariaDB tables.
 
 No public route imports this before release, and every write is gated on
-independently verified merchant canary and two-provider solidified proof.
+explicit public release authorization and two-provider solidified proof.
 """
 from __future__ import annotations
 
@@ -108,10 +108,20 @@ def _paid_read_db(settings, db):
         raise PaymentHold("Secure paid entitlement backend unavailable")
 
 
+def public_release_authorized(settings):
+    """Release authorization is distinct from evidence of a real test payment.
+
+    Public invoices accept any sender; every transfer still needs independent
+    finalized proof before accounting or delivery. Never fabricate canary proof.
+    """
+    return (getattr(settings, "MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED", False) is True
+            or getattr(settings, "MPW_WALLETLESS_TRX_PUBLIC_RELEASE_AUTHORIZED", False) is True)
+
+
 def _commercial_db(settings, db):
     _paid_read_db(settings,db)
     if (getattr(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False) is not True
-        or getattr(settings,"MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED",False) is not True):
+        or not public_release_authorized(settings)):
         raise PaymentHold("Public merchant TRX payment activation has not passed release gate")
 
 

@@ -37,6 +37,18 @@ from services.mpw_trx_commercial_web import (
 )
 
 class CommercialMariaDBTest(unittest.TestCase):
+    def test_authorized_public_purchase_needs_no_registered_sender_or_canary(self):
+        with patch.object(settings,"MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED",False), patch.object(settings,"MPW_WALLETLESS_TRX_PUBLIC_RELEASE_AUTHORIZED",True,create=True):
+            pk,invoice,created=self.reserve()
+            self.assertTrue(created)
+            with self.assertRaises(PaymentHold):
+                open_commercial_paid_file(pk,42)
+            self.assertEqual(settle_commercial_intent(pk,fixture.TX_HASH,self.pair()),"paid")
+            self.assertTrue(commercial_buyer_status(pk,42)["can_download"])
+            self.assertFalse(settings.MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED)
+            with self.assertRaises(PaymentHold):
+                open_commercial_paid_file(pk,43)
+
     @classmethod
     def setUpClass(cls):
         Base.setUpClass()

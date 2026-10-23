@@ -1,0 +1,114 @@
+name: MojPlayWin three product SEO release
+on:
+  push:
+    branches: [release/mpw-public-trx-20261023]
+    paths: [.github/workflows/mpw-product-seo-release.yml, scripts/mpw_product_seo_release_20261023.py]
+permissions: {contents: read}
+concurrency:
+  group: mpw-product-seo-release
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Check bounded release script
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/mpw_product_seo_release_20261023.py
+          python3 -B scripts/mpw_product_seo_release_20261023.py selftest
+      - name: Authenticate pinned GitHub-to-VPS-to-cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-seo-ssh"
+          install -d -m 700 "$d"
+          test -n "$VPS_KEY"
+          test -n "$HOST_KEY"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf 'Host saeit-vps\n HostName 178.239.147.150\n User githubops\n Port 22\n IdentityFile %s/vps.key\n UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n HostName zohal.pws-dns.net\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/host.known\n ProxyJump saeit-vps\nHost *\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 3\n ForwardAgent no\n RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          timeout 50s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+      - name: Publish checksum-verified product poster assets
+        run: |
+          set -euo pipefail
+          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-seo-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          root=Path('/home/zomorod2/Saeit-staging/staticfiles')
+          target=root/'site'/'mojplaywin-products'
+          if root.is_symlink() or not root.is_dir(): raise RuntimeError('Unexpected MojPlayWin STATIC_ROOT')
+          for folder in (root/'site', target):
+              if folder.is_symlink(): raise RuntimeError('Unsafe static asset directory')
+              if folder.exists() and not folder.is_dir(): raise RuntimeError('Static asset path is not a directory')
+              folder.mkdir(exist_ok=True)
+          print('MPW_POSTER_STATIC_TARGET_READY='+str(target))
+          PY
+          timeout 90s scp -F "$RUNNER_TEMP/mpw-seo-ssh/config" \
+            core/static/site/mojplaywin/products/chess-improvement.webp \
+            core/static/site/mojplaywin/products/taniya-baker-worms.webp \
+            core/static/site/mojplaywin/products/atelier-interior-kit.webp \
+            saeit-cpanel:/home/zomorod2/Saeit-staging/staticfiles/site/mojplaywin-products/
+      - name: Publish descriptions and verified Product offers
+        run: |
+          set -euo pipefail
+          timeout 240s ssh -T -F "$RUNNER_TEMP/mpw-seo-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - publish $GITHUB_RUN_ID" < scripts/mpw_product_seo_release_20261023.py
+      - name: Reload the verified Passenger app process
+        run: |
+          set -euo pipefail
+          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-seo-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          site=Path('/home/zomorod2/mojplaywin.com')
+          if site.is_symlink() or not site.is_dir(): raise RuntimeError('Unexpected MojPlayWin document root')
+          wsgi=site/'passenger_wsgi.py'
+          if wsgi.is_symlink() or "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'): raise RuntimeError('Unexpected Passenger app mapping')
+          folder=site/'tmp'
+          if folder.is_symlink(): raise RuntimeError('Unsafe Passenger restart directory')
+          folder.mkdir(exist_ok=True)
+          (folder/'restart.txt').touch()
+          print('MOJPLAYWIN_PASSENGER_RELOAD_REQUESTED_FOR_PRODUCT_SCHEMA=TRUE')
+          PY
+      - name: Verify public product pages
+        run: |
+          set -euo pipefail
+          for spec in 72:7.50 225:4.00 879:6.80; do
+            id="${spec%%:*}"; price="${spec#*:}"
+            body="$(curl --fail --silent --show-error --max-time 30 -H 'Cache-Control: no-cache' "https://mojplaywin.com/store/product/$id/?__mpw_seo_audit=$GITHUB_RUN_ID")"
+            grep -q 'application/ld+json' <<<"$body"
+            grep -q '"offers"' <<<"$body"
+            grep -q "\"price\": \"$price\"" <<<"$body"
+            grep -q '"image": \[' <<<"$body"
+            grep -q '/static/site/mojplaywin-products/' <<<"$body"
+            grep -q 'property="og:image"' <<<"$body"
+            case "$id" in
+              72) grep -q 'An 84-day chess improvement guide' <<<"$body" ;;
+              225) grep -q 'Taniya and the Little Baker Worms' <<<"$body" ;;
+              879) grep -q 'Atelier Interior' <<<"$body" ;;
+            esac
+          done
+          for file in chess-improvement.webp taniya-baker-worms.webp atelier-interior-kit.webp; do
+            headers="$(curl --fail --silent --show-error --max-time 30 -I "https://mojplaywin.com/static/site/mojplaywin-products/$file?poster_audit=$GITHUB_RUN_ID")"
+            grep -qi 'content-type: image/webp' <<<"$headers"
+          done
+          sitemap="$(curl --fail --silent --show-error --max-time 30 -H 'Cache-Control: no-cache' "https://mojplaywin.com/sitemap.xml?__mpw_seo_audit=$GITHUB_RUN_ID")"
+          for id in 72 225 879; do grep -q "store/product/$id/" <<<"$sitemap"; done
+          if grep -Eq 'store/product/(779|968|969|970|971|972)/' <<<"$sitemap"; then echo 'INELIGIBLE_PRODUCT_STILL_IN_SITEMAP'; exit 1; fi
+          for id in 779 968 969 970 971 972; do
+            status="$(curl --silent --show-error --max-time 30 -o /dev/null -w '%{http_code}' -H 'Cache-Control: no-cache' "https://mojplaywin.com/store/product/$id/?__mpw_seo_audit=$GITHUB_RUN_ID")"
+            test "$status" = 404 || { echo "INELIGIBLE_PRODUCT_ROUTE_$id_RETURNED_$status"; exit 1; }
+          done
+          echo 'PUBLIC_SEO_METADATA_PRODUCT_OFFERS_ELIGIBLE_SITEMAP_INELIGIBLE_404_AND_PASSENGER_RELOAD_VERIFIED'
+      - name: Cleanup credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-seo-ssh"

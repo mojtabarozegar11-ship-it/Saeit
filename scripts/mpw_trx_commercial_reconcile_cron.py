@@ -24,7 +24,7 @@ def run_once():
     from services.mpw_trx_reconcile_cursor import (read_cursor,write_cursor,pick_pending_page)
     from services.mpw_trx_walletless_core import PaymentHold
     from services.mpw_walletless_commercial_intent import (
-        PROVIDER,WAITING,_paid_read_db,reconcile_commercial_intent_from_candidates,
+        PROVIDER,WAITING,_paid_read_db,reconcile_commercial_intent_from_candidates,public_release_authorized,
     )
     from services.mpw_tron_readonly_deposit_candidates import find_candidate_hashes
     from services.mpw_trx_commercial_chain import read_only_independent_pair
@@ -39,7 +39,7 @@ def run_once():
         return result
     result["public_checkout_activated"]=bool(
         getattr(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False) and
-        getattr(settings,"MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED",False)
+        public_release_authorized(settings)
     )
     # All unpaid invoices must remain eligible after service downtime.
     # A rotating checkpoint prevents six old unresolved invoices from
