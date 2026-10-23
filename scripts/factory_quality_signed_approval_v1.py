@@ -83,6 +83,7 @@ def validate_key_registry(config):
             or hashlib.sha256(root_pub.encode("utf-8")).hexdigest()!=pinned
             or not verify_sig(root_pub,canonical({"schema":KEY_SCHEMA,"reviewers":entries}),root_sig)):
         raise ValueError("UNVERIFIED_OR_UNPINNED_TRUST_REGISTRY")
+    seen_signing_keys=set()
     for name,entry in entries.items():
         if (not re.fullmatch(r"[a-zA-Z0-9_.-]{4,64}",name)
             or not isinstance(entry,dict) or entry.get("role") not in TRUST_ROLES
@@ -92,6 +93,10 @@ def validate_key_registry(config):
             or not HEX.fullmatch(entry["identity_verification_evidence_sha256"])
             or entry.get("active") is not True):
             raise ValueError("UNTRUSTED_REVIEWER_IDENTITY")
+        key_fingerprint=hashlib.sha256(entry["public_key_pem"].encode()).hexdigest()
+        if key_fingerprint in seen_signing_keys or key_fingerprint==pinned:
+            raise ValueError("NON_INDEPENDENT_REVIEWER_SIGNING_KEY")
+        seen_signing_keys.add(key_fingerprint)
         if entry["role"]==DELEGATE_ROLE:
             if (entry.get("externally_identity_verified") is not False
                     or entry.get("agent_identity_verified") is not True
