@@ -50,3 +50,6 @@ for rel in ["core/templates/brands/mojplaywin/product.html"]:
   print("PRODUCT_TEMPLATE="+rel)
   for line in path.read_text()[:30000].splitlines():
    if any(token in line.lower() for token in ("description","og:","json-ld","product_schema_json","product.title","product.metadata")): print("PRODUCT_TEMPLATE_LINE="+line[:2000])
+match=resolve("/sitemap.xml")
+print("PUBLIC_SITEMAP_ROUTE="+json.dumps({"view_module":match.func.__module__,"view_name":match.func.__name__,"source_file":inspect.getsourcefile(match.func)},sort_keys=True))
+print("PUBLIC_SITEMAP_VIEW_SOURCE="+inspect.getsource(match.func)[:30000])
