@@ -99,10 +99,18 @@ jobs:
               if isinstance(value,(str,int,float,bool)):
                   print(f"PASSENGER_APP_{key.upper()}={value}")
           PY
-          python_path="$(awk '$1 == "PassengerPython" { gsub(/"/, "", $2); print $2; exit }' "$htaccess")"
-          printf 'PASSENGER_PYTHON_RESOLVED=%s\n' "${python_path:-missing}"
-          case "$python_path" in "$HOME"/virtualenv/*) ;; *) echo "PASSENGER_PYTHON_PATH=not_verified" >&2; exit 1 ;; esac
-          test -x "$python_path"
+          # PassengerPython may point at CloudLinux's lswsgi entrypoint, not a
+          # callable Python interpreter. Never execute that value as Python.
+          # The live Django application has a separate, app-owned virtualenv.
+          passenger_entry="$(awk '$1 == "PassengerPython" { gsub(/"/, "", $2); print $2; exit }' "$htaccess")"
+          printf 'PASSENGER_ENTRYPOINT_PRESENT=%s\n' "$([ -n "$passenger_entry" ] && echo yes || echo no)"
+          python_path="$app/.venv/bin/python"
+          if ! test -f "$app/.venv/pyvenv.cfg" || ! test -x "$python_path"; then
+            echo "SITE_AGENT_VENV_INTERPRETER=missing" >&2
+            exit 1
+          fi
+          "$python_path" -c 'import pathlib,sys; expected=pathlib.Path("/home/zomorod2/Saeit/.venv").resolve(); assert pathlib.Path(sys.prefix).resolve()==expected, "wrong interpreter"'
+          echo "SITE_AGENT_VENV_INTERPRETER=verified"
           "$python_path" -c 'import django, environ, rest_framework, whitenoise'
           cd "$app"
           "$python_path" manage.py check
@@ -141,9 +149,10 @@ jobs:
           ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
           set -euo pipefail
           app=/home/zomorod2/Saeit
-          htaccess=/home/zomorod2/public_html/.htaccess
-          python_path="$(awk '$1 == "PassengerPython" { gsub(/"/, "", $2); print $2; exit }' "$htaccess")"
-          printf 'PASSENGER_PYTHON_RESOLVED_FOR_RUN=%s\n' "${python_path:-missing}"
+          python_path="$app/.venv/bin/python"
+          test -f "$app/.venv/pyvenv.cfg" && test -x "$python_path"
+          "$python_path" -c 'import pathlib,sys; expected=pathlib.Path("/home/zomorod2/Saeit/.venv").resolve(); assert pathlib.Path(sys.prefix).resolve()==expected, "wrong interpreter"'
+          echo "SITE_AGENT_RUN_INTERPRETER=verified"
           cd "$app"
           "$python_path" manage.py company_activity_agent_cycle
           "$python_path" manage.py knowledge_agent_cycle
