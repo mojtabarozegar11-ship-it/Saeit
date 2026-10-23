@@ -50,7 +50,7 @@ def get(provider: tuple[str, str], operation: str, txid: str = "") -> dict:
     ).encode("utf8")
     request = urllib.request.Request(
         url, data=data,
-        headers={"Accept": "application/json", "Content-Type": "application/json"},
+        headers={"Accept": "application/json", "Content-Type": "application/json", "User-Agent": "MojPlayWin-Readonly-Diagnostic/1.0"},
         method="GET" if operation == "head" else "POST",
     )
     with urllib.request.build_opener(NoRedirect()).open(request, timeout=15) as response:
