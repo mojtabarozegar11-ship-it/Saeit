@@ -1,0 +1,27 @@
+name: MojPlayWin intelligent fail-closed TRX reconciliation
+on:
+  push:
+    branches: [fix/mpw-tron-provider-auth-20261022, feature/mpw-walletless-trx-e2e-20261022]
+    paths:
+      - services/mpw_trx_walletless_reconcile.py
+      - services/mpw_trx_walletless_smart_policy.py
+      - tests/test_mpw_trx_walletless_smart_policy.py
+      - .github/workflows/mpw-tron-smart-reconciliation-20261022.yml
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  no-real-money-smart-triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Compile pure payment decision logic
+        run: |
+          set -euo pipefail
+          python3 -m py_compile services/mpw_trx_walletless_reconcile.py services/mpw_trx_walletless_smart_policy.py tests/test_mpw_trx_walletless_smart_policy.py
+      - name: Verify no duplicated settlement, false underpayment attribution or wallet-only grants
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mpw_trx_walletless_smart_policy.py' -v
+          echo 'MPW_TRON_INTELLIGENT_TRIAGE=PASS; PUBLIC_GATEWAY_NOT_ACTIVATED=TRUE'

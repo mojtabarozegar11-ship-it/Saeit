@@ -1,0 +1,110 @@
+name: MojPlayWin private read-only TRON verifier staging (no live checkout)
+on:
+  push:
+    branches: [fix/mpw-tron-provider-auth-20261022]
+    paths:
+      - .github/workflows/mpw-tron-verifier-private-stage-20261022.yml
+      - scripts/mpw_tron_public_dual_probe_readonly_20261023.py
+      - services/mpw_tron_independent_solidified_rpc.py
+      - services/mpw_tron_readonly_deposit_candidates.py
+      - scripts/mpw_shasta_gateway_chain_canary_20261022.py
+      - scripts/mpw_gateway_stage_contract_probe_20261022.py
+      - scripts/mpw_tron_origin_connectivity_readonly_20261023.py
+      - tests/test_mpw_tron_independent_solidified_rpc.py
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  stage-private-verifier:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/fix/mpw-tron-provider-auth-20261022'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate module sources without executing payment actions
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py services/mpw_tron_readonly_deposit_candidates.py services/mpw_tron_readonly_deposit_candidates.py scripts/mpw_tron_dual_provider_auth_readonly_20261022.py scripts/mpw_tron_public_dual_probe_readonly_20261023.py
+      - name: Run mainnet verifier contract tests offline
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest tests.test_mpw_tron_independent_solidified_rpc tests.test_mpw_shasta_gateway_chain_canary -q
+      - name: Verify independently observed public TRX on GitHub runner (read only)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          timeout 110s python3 -B scripts/mpw_tron_public_dual_probe_readonly_20261023.py
+      - name: Verify historical Shasta test TRX and test wallet on official chain (read only)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          timeout 90s python3 -B scripts/mpw_shasta_gateway_chain_canary_20261022.py
+      - name: Authenticate pinned GitHub-to-VPS-to-cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-gateway-contract-ssh"
+          install -d -m 700 "$d"
+          test -n "$VPS_KEY"
+          test -n "$HOST_KEY"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf 'Host saeit-vps\n HostName 178.239.147.150\n User githubops\n Port 22\n IdentityFile %s/vps.key\n UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n HostName zohal.pws-dns.net\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/host.known\n ProxyJump saeit-vps\nHost *\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 3\n ForwardAgent no\n RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          timeout 50s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+      - name: Test network access from the actual VPS without touching live payment
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          remote='mktemp -d /tmp/mpw-tron-readonly-XXXXXXXX'
+          scratch="$(timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-vps "$remote")"
+          case "$scratch" in /tmp/mpw-tron-readonly-*) ;; *) exit 3;; esac
+          trap 'ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-vps "rm -rf -- $scratch" >/dev/null 2>&1 || true' EXIT
+          tar -cf - services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py services/mpw_tron_readonly_deposit_candidates.py scripts/mpw_tron_public_dual_probe_readonly_20261023.py scripts/mpw_shasta_gateway_chain_canary_20261022.py | timeout 55s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-vps "umask 077; tar -xf - -C $scratch --no-same-owner --no-same-permissions"
+          timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-vps "cd $scratch && PYTHONPATH=. python3 -B scripts/mpw_tron_public_dual_probe_readonly_20261023.py"
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-vps "cd $scratch && PYTHONPATH=. python3 -B scripts/mpw_shasta_gateway_chain_canary_20261022.py"
+      - name: Install verifier in isolated private directory only
+        run: |
+          set -euo pipefail
+          tar -cf - services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py services/mpw_tron_readonly_deposit_candidates.py | timeout 65s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'umask 077; mkdir -p /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022/services; tar -xf - -C /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022 --no-same-owner --no-same-permissions; chmod 700 /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022 /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022/services; chmod 600 /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022/services/*.py'
+          local_hash="$(sha256sum services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py services/mpw_tron_readonly_deposit_candidates.py | sha256sum | cut -d ' ' -f 1)"
+          remote_hash="$(timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'cd /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022 && sha256sum services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py services/mpw_tron_readonly_deposit_candidates.py | sha256sum | cut -d " " -f 1')"
+          test "$local_hash" = "$remote_hash"
+          echo "PRIVATE_TRON_VERIFIER_SHA256_MATCH=TRUE; CHECKOUT_CONFIG_UNCHANGED=TRUE"
+      - name: Observe actual commercial checkout route and model readiness without modifying data
+        run: |
+          set -euo pipefail
+          timeout 105s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/mpw_gateway_stage_contract_probe_20261022.py
+      - name: Probe production providers without sending funds or changing database
+        run: |
+          set -euo pipefail
+          timeout 70s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'PYTHONPATH=/home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/mpw_tron_dual_provider_auth_readonly_20261022.py
+          echo "READ_ONLY_MAINNET_PROBE=COMPLETE; PAYMENT_BROADCAST=0; CUSTOMER_DATA_WRITES=0; PUBLIC_PAYMENT_ACTIVATION=0"
+      - name: Identify usable official TRON endpoint origins independently on runner VPS and cPanel
+        run: |
+          set -euo pipefail
+          python3 -B scripts/mpw_tron_origin_connectivity_readonly_20261023.py
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-vps 'python3 -' < scripts/mpw_tron_origin_connectivity_readonly_20261023.py
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/mpw_tron_origin_connectivity_readonly_20261023.py
+      - name: Read-only public operator cross-check of actual mainnet native transfer
+        run: |
+          set -euo pipefail
+          timeout 135s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'PYTHONPATH=/home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/mpw_tron_public_dual_probe_readonly_20261023.py
+          echo "PUBLIC_CANARY_DIAGNOSTIC_ONLY=TRUE; PRODUCTION_FINANCIAL_WRITES=0; LIVE_CHECKOUT_UNCHANGED=TRUE"
+      - name: Report only presence of TRON RPC credentials (no secret values)
+        run: |
+          set -euo pipefail
+          timeout 35s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel "python3 -c 'import os,json; names=(\"MPW_TRON_RPC_A_API_KEY\",\"MPW_TRON_RPC_B_API_KEY\",\"MPW_TRON_RPC_A_ENDPOINT\",\"MPW_TRON_RPC_B_ENDPOINT\",\"MPW_TRON_RPC_INDEPENDENCE_REVIEWED\",\"MPW_TRON_RPC_CANARY_TXID\"); print(\"TRON_RPC_INPUT_PRESENCE=\"+json.dumps({k:bool(os.getenv(k)) for k in names},sort_keys=True))'"
+      - name: Clean ephemeral SSH material
+        if: always()
+        run: |
+          rm -rf -- "$RUNNER_TEMP/mpw-gateway-contract-ssh"
