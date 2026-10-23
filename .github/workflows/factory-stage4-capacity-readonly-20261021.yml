@@ -439,6 +439,7 @@ jobs:
           import django
           django.setup()
           from django.apps import apps
+          from django.db.models import Count
           from django.utils import timezone
           Product=apps.get_model("core","Product")
           Run=apps.get_model("core","FactoryRun")
@@ -509,6 +510,67 @@ jobs:
               print("STAGE4_MASTER_CONTROL:"+str(i+1)+"="+line)
           print("STAGE4_MASTER_CONTROL_LINES="+str(len(show)))
           PY
+      - name: Probe decisions and in-flight tasks for due products without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/stage4-readonly"
+          timeout 115s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/factory-runtime/django-app"
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+          "$HOME/factory-runtime/.venv/bin/python" -B - <<'PY'
+          import collections,json,os
+          from django.utils.dateparse import parse_datetime
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.apps import apps
+          from django.utils import timezone
+          from core.autonomous_brain import AutonomousBrain
+          Product=apps.get_model("core","Product")
+          Run=apps.get_model("core","FactoryRun")
+          brain=AutonomousBrain()
+          decisions=collections.Counter()
+          errors=collections.Counter()
+          tasks=collections.Counter()
+          eligible=0
+          for pk,metadata in Product.objects.values_list("pk","metadata").iterator(chunk_size=100):
+              if not isinstance(metadata,dict):
+                  continue
+              validation=metadata.get("validation")
+              if not isinstance(validation,dict):
+                  continue
+              progress=validation.get("stage4_research") or {}
+              if not isinstance(progress,dict) or progress.get("status")=="capacity_exhausted":
+                  continue
+              stamp=progress.get("next_retry_at")
+              due=parse_datetime(stamp) if isinstance(stamp,str) else None
+              if not due or timezone.is_naive(due) or due>timezone.now():
+                  continue
+              run=Run.objects.filter(product_id=pk).order_by("-created_at","-pk").first()
+              if not run or run.status!="active":
+                  continue
+              eligible+=1
+              for status,n in run.tasks.values("status").annotate(n=Count("pk")).values_list("status","n"):
+                  tasks[str(status)[:40]]+=n
+              try:
+                  choice=brain.decide_product_factory_step(product_id=pk,run_id=run.run_id)
+                  decisions[str(choice.get("action","unknown"))[:60]]+=1
+              except Exception as exc:
+                  errors[type(exc).__name__]+=1
+              if eligible>=100:
+                  break
+          print("STAGE4_MASTER_DUE_DECISION_PROBE="+json.dumps({
+              "schema":"saeit.factory.stage4-master-decisions-readonly.v1",
+              "read_only":True,"due_active_checked":eligible,
+              "decisions":dict(sorted(decisions.items())),
+              "task_statuses":dict(sorted(tasks.items())),
+              "errors_by_type":dict(sorted(errors.items())),
+              "new_tasks_created":0,"budgets_modified":False,
+              "releases_modified":False},sort_keys=True))
+          PY
+          REMOTE
       - name: Destroy runner SSH key material
         if: always()
         shell: bash
