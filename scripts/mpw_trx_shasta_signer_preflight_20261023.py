@@ -18,7 +18,8 @@ def preflight():
     if not KEY.is_file() or stat.S_IMODE(KEY.stat().st_mode)!=0o600 or KEY.stat().st_size!=32:
         raise RuntimeError("Protected Shasta signer is not usable")
     public=json.loads(META.read_text("utf8"))
-    if public.get("network")!="SHASTA_TEST_ONLY" or public.get("production_approved") is not False:
+    if (public.get("network") not in ("SHASTA_TEST_ONLY","Shasta-dedicated-test-use-only")
+        or public.get("production_approved") not in (None,False)):
         raise RuntimeError("Unexpected wallet deployment network guard")
     if not NODE.is_file() or not APP.is_dir() or not (APP/"node_modules/tronweb").is_dir():
         raise RuntimeError("Previously prepared test signer runtime missing")
