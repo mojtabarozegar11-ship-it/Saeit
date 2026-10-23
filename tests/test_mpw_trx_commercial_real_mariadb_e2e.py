@@ -46,6 +46,7 @@ class CommercialMariaDBTest(unittest.TestCase):
     def setUp(self):
         Base.setUp(self)
         self.stack=contextlib.ExitStack()
+        self.stack.enter_context(patch.object(settings,"ALLOWED_HOSTS",["mojplaywin.com","testserver","staging.test","isolated.test"],create=True))
         for name,value in (
             ("DEBUG",False),("MPW_COMMERCE_RELEASE_READY",True),
             ("MPW_COMMERCE_DOWNLOADS_ENABLED",True),
