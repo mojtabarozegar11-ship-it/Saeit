@@ -27,7 +27,7 @@ import urllib.parse
 import urllib.request
 
 SCHEMA="saeit.factory.stage2-literature-scout.v1"
-SCOUT_ALGO_VERSION="v8-bounded-progressive-search"
+SCOUT_ALGO_VERSION="v9-paged-source-diversity"
 EVIDENCE_SCHEMA="saeit.factory.stage2-source-evidence.v1"
 TOPIC_ID=re.compile(r"AGRI-[0-9]{3}\Z")
 WORD_RE=re.compile(r"[a-z]{3,}")
@@ -664,16 +664,19 @@ def request_json(endpoint,parameters,timeout=10):
         raise RuntimeError("SCOUT_PROVIDER_HTTP_"+str(exc.code)) from None
 
 
-def fetch_openalex(title):
+def fetch_openalex(title, page=1):
     # The caller selects a deterministic query variant on successive retries.
     # Even broad results must pass strict paper and provenance validation.
     # Search actual complete natural-language terms. Internal normalized
     # stems are only for validating hits, not OpenAlex whole-word retrieval.
     subject=" ".join(str(title).split())[:200]
+    if type(page) is not int or not 1 <= page <= 4:
+        raise ValueError("SCOUT_BAD_BOUNDED_RESULTS_PAGE")
     if not subject:
         raise ValueError("SCOUT_EMPTY_SCHOLARLY_QUERY")
     data=request_json(SAFE_KEYS["openalex"],{
         "search":subject,
+        "page":page,
         "filter":"has_abstract:true,has_doi:true",
         "per_page":100,
         "select":"id,display_name,doi,publication_year,type,is_retracted,abstract_inverted_index,primary_location,best_oa_location,locations,cited_by_count"
@@ -749,7 +752,8 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
              "v4-normalized-scientific-synonyms",
              "v5-publisher-diversity-gap-diagnostics",
               "v6-evidence-first-fullword-query",
-              "v7-multiphase-topic-specific-query",SCOUT_ALGO_VERSION)
+              "v7-multiphase-topic-specific-query",
+              "v8-bounded-progressive-search",SCOUT_ALGO_VERSION)
             and isinstance(cached,list) and 4<=len(cached)<=20
             and previous.get("candidate_sha256")==sha(cached)):
         valid=[]
@@ -785,8 +789,11 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
         raise RuntimeError("SCOUT_INVALID_SEARCH_ROUND")
     queries=query_variants(title)
     query=queries[round_no%len(queries)]
+    page=1 + round_no % 4
     try:
-        raw=fetcher(query)
+        # Explore different scholarly result pages before repeated queries
+        # keep returning the same publisher. Mocks/custom fetchers remain compatible.
+        raw=fetcher(query,page=page) if fetcher is fetch_openalex else fetcher(query)
         papers=select_papers(raw,terms,worker)
         # Preserve previously verified abstract candidates across query
         # variants; a mismatching digest discards stale/tampered cache.
@@ -815,7 +822,8 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
     except Exception as exc:
         packet={
             "schema":SCHEMA,"source_product_id":ident,"order_id":order_id,
-            "source_search_query":query,"search_round":round_no,
+            "source_search_query":query,"source_search_page":page,
+            "search_round":round_no,
             "scout_algorithm_version":SCOUT_ALGO_VERSION,
             "status":"external_research_api_unavailable",
             "last_error":type(exc).__name__+":"+str(exc)[:160],
@@ -843,7 +851,8 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
             pass
     candidate={
         "schema":SCHEMA,"source_product_id":ident,"order_id":order_id,
-        "source_search_query":query,"search_keywords":terms,
+        "source_search_query":query,"source_search_page":page,
+        "search_keywords":terms,
         "search_round":round_no,"scout_algorithm_version":SCOUT_ALGO_VERSION,
         "status":"indexed_references_found_require_additional_research",
         "indexed_abstract_candidates":papers[:20],
