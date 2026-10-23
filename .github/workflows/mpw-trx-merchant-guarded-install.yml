@@ -19,6 +19,7 @@ jobs:
           set -euo pipefail
           python3 -B -m py_compile scripts/mpw_trx_install_canary_gated_20261023.py services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py services/mpw_tron_readonly_deposit_candidates.py services/mpw_trx_walletless_checkout_ui.py services/mpw_trx_walletless_one_tap_ui.py services/mpw_walletless_django_test_bridge.py services/mpw_walletless_commercial_intent.py services/mpw_trx_commercial_chain.py services/mpw_trx_commercial_web.py scripts/mpw_tron_public_dual_probe_readonly_20261023.py scripts/mpw_trx_commercial_reconcile_cron.py
           python3 -B -m unittest tests.test_mpw_trx_commercial_gateway tests.test_mpw_tron_readonly_deposit_candidates -q
+          python3 -B -m py_compile scripts/mpw_trx_install_gated_checkout_button.py services/mpw_trx_commercial_context.py
       - name: Authenticate pinned GitHub-to-VPS-to-cPanel relay
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -49,6 +50,14 @@ jobs:
           trap 'ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel "rm -rf -- $remote" >/dev/null 2>&1 || true' EXIT
           tar -cf - services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py services/mpw_tron_readonly_deposit_candidates.py services/mpw_trx_walletless_checkout_ui.py services/mpw_trx_walletless_one_tap_ui.py services/mpw_walletless_django_test_bridge.py services/mpw_walletless_commercial_intent.py services/mpw_trx_commercial_chain.py services/mpw_trx_commercial_web.py scripts/mpw_tron_public_dual_probe_readonly_20261023.py scripts/mpw_trx_commercial_reconcile_cron.py | timeout 65s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel "umask 077; tar -xf - -C $remote --no-same-owner --no-same-permissions"
           timeout 135s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - $remote" < scripts/mpw_trx_install_canary_gated_20261023.py
+      - name: Add hidden-until-approved TRX purchase control to the verified real product template
+        run: |
+          set -euo pipefail
+          remote="$(timeout 40s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'mktemp -d /home/zomorod2/.local/share/mpw-trx-button-XXXXXXXX')"
+          case "$remote" in /home/zomorod2/.local/share/mpw-trx-button-*) ;; *) exit 5;; esac
+          tar -cf - services/mpw_trx_commercial_context.py | timeout 55s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel "umask 077; tar -xf - -C $remote --no-same-owner --no-same-permissions"
+          timeout 130s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - $remote/services/mpw_trx_commercial_context.py" < scripts/mpw_trx_install_gated_checkout_button.py
+          ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel "rm -rf -- $remote"
       - name: Cleanup relay key material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-gateway-contract-ssh"
