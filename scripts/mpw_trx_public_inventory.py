@@ -4,6 +4,7 @@ root=Path('/home/zomorod2/Saeit-staging')
 os.chdir(root);sys.path.insert(0,str(root));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
 import django;django.setup()
 from django.conf import settings
+print('STATIC_SETTINGS='+json.dumps({'static_url':settings.STATIC_URL,'static_root':str(settings.STATIC_ROOT),'base_dir':str(settings.BASE_DIR)}))
 from core.models import Product
 from mpw_commerce.buyer_orders import _eligible
 from mpw_commerce.downloads import _private_file
