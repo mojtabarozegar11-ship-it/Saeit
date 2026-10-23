@@ -4,11 +4,15 @@ on:
     branches: [main]
     paths:
       - public/authors/mojtaba-rozegar/index.html
+      - scripts/zomorod_author_profile_route_release_20261023.py
+      - tests/test_zomorod_author_identity_seo.py
       - .github/workflows/zomorod-persian-author-static-safe-20261021.yml
   pull_request:
     branches: [main]
     paths:
       - public/authors/mojtaba-rozegar/index.html
+      - scripts/zomorod_author_profile_route_release_20261023.py
+      - tests/test_zomorod_author_identity_seo.py
       - .github/workflows/zomorod-persian-author-static-safe-20261021.yml
 permissions: {contents: read}
 concurrency:
@@ -36,6 +40,7 @@ jobs:
           assert raw.count('</html>')==1 and 'ceo-mojtaba-rozegar.webp' in raw
           print("ZM_AUTHOR_STATIC_SOURCE_QA=PASS")
           PY
+          python3 -m unittest discover -s tests -p 'test_zomorod_author_identity_seo.py' -v
   deploy:
     needs: source-qa
     if: github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name != 'pull_request'
@@ -94,97 +99,51 @@ jobs:
           stage="/home/zomorod2/.private-zm-author-route/$GITHUB_RUN_ID"
           timeout 45s ssh -T -F "$d/config" cpanel "umask 077; test ! -e '$stage' && mkdir -p '$stage' && chmod 700 '$stage'"
           timeout 45s scp -q -F "$d/config" public/authors/mojtaba-rozegar/index.html "cpanel:$stage/source.html"
+          timeout 45s scp -q -F "$d/config" scripts/zomorod_author_profile_route_release_20261023.py "cpanel:$stage/release.py"
           expected="$(sha256sum public/authors/mojtaba-rozegar/index.html | cut -d' ' -f1)"
           actual="$(timeout 45s ssh -T -F "$d/config" cpanel "sha256sum '$stage/source.html' | cut -d' ' -f1")"
           test "$actual" = "$expected"
+          timeout 45s ssh -T -F "$d/config" cpanel "test -s '$stage/release.py' && test ! -L '$stage/release.py'"
           echo ZM_AUTHOR_STAGING_SHA256=PASS
-      - name: Install new static route without touching site root or existing paths
+      - name: Atomically install updated Persian profile and remove only its obsolete redirect
         id: install
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/author-ssh"
           expected="$(sha256sum public/authors/mojtaba-rozegar/index.html | cut -d' ' -f1)"
-          timeout 70s ssh -T -F "$d/config" cpanel python3 - "$GITHUB_RUN_ID" "$expected" <<'PY'
-          from pathlib import Path
-          import hashlib,os,sys
-          run,want=sys.argv[1:]
-          assert run.isdigit() and len(want)==64
-          home=Path("/home/zomorod2")
-          assert Path.home()==home
-          web=home/"public_html"
-          stage=home/".private-zm-author-route"/run
-          root=web/"index.html"
-          htaccess=web/".htaccess"
-          parent=web/"authors"
-          folder=parent/"mojtaba-rozegar"
-          dest=folder/"index.html"
-          source=stage/"source.html"
-          for path in (web,stage,source,root,htaccess,parent,folder,dest):
-              assert not path.is_symlink(), "AUTHOR_SYMLINK_BLOCKED"
-          assert all(x.is_file() for x in (source,root,htaccess)) and web.is_dir()
-          blob=source.read_bytes()
-          assert hashlib.sha256(blob).hexdigest()==want
-          if dest.exists():
-              assert dest.is_file() and hashlib.sha256(dest.read_bytes()).hexdigest()==want, "EXISTING_PROFILE_CONFLICT"
-              print("ZM_AUTHOR_ALREADY_PUBLISHED_SAME_BYTES=PASS")
-              sys.exit(0)
-          if folder.exists():
-              assert folder.is_dir() and not any(folder.iterdir()), "UNEXPECTED_AUTHOR_DIRECTORY_CONTENT"
-          parent.mkdir(mode=0o755,exist_ok=True)
-          folder.mkdir(mode=0o755,exist_ok=True)
-          (stage/"protected-root.sha256").write_text(
-              hashlib.sha256(root.read_bytes()).hexdigest()+"\n"+
-              hashlib.sha256(htaccess.read_bytes()).hexdigest()+"\n",encoding="ascii")
-          tmp=folder/(".profile-"+run+".partial")
-          assert not tmp.exists()
-          with tmp.open("xb") as f:
-              f.write(blob);f.flush();os.fsync(f.fileno())
-          tmp.chmod(0o644)
-          tmp.replace(dest)
-          assert dest.is_file() and hashlib.sha256(dest.read_bytes()).hexdigest()==want
-          (stage/"installed.sha256").write_text(want+"\n",encoding="ascii")
-          print("ZM_AUTHOR_STATIC_INSTALL_SHA256=PASS")
-          PY
+          stage="/home/zomorod2/.private-zm-author-route/$GITHUB_RUN_ID"
+          timeout 70s ssh -T -F "$d/config" cpanel "python3 '$stage/release.py' install '$GITHUB_RUN_ID' '$expected'"
       - name: Verify live Persian author route and unrelated URLs
         run: |
           set -euo pipefail
           url="https://zomorodmelal.ir/authors/mojtaba-rozegar/"
           status=000
           for i in 1 2 3 4 5; do
-            status="$(curl -sSL --max-time 18 -o "$RUNNER_TEMP/author-public.html" -w '%{http_code}' "$url?verify=$GITHUB_RUN_ID-$i")"
+            status="$(curl -sS --max-time 18 -o "$RUNNER_TEMP/author-public.html" -w '%{http_code}' "$url?verify=$GITHUB_RUN_ID-$i")"
             test "$status" = 200 && break
             sleep 3
           done
           test "$status" = 200
           grep -Fq 'id="profile-name"' "$RUNNER_TEMP/author-public.html"
+          grep -Fq 'دکتر مجتبی روزگار' "$RUNNER_TEMP/author-public.html"
           grep -Fq 'https://zomorodmelal.ir/authors/mojtaba-rozegar/' "$RUNNER_TEMP/author-public.html"
+          image_code="$(curl -sS --max-time 18 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/static/site/zomorod-about/ceo-mojtaba-rozegar.webp")"
+          test "$image_code" = 200
+          sitemap_code="$(curl -sS --max-time 20 -o "$RUNNER_TEMP/author-sitemap.xml" -w '%{http_code}' "https://zomorodmelal.ir/sitemap.xml")"
+          test "$sitemap_code" = 200
+          grep -Fq 'https://zomorodmelal.ir/authors/mojtaba-rozegar/' "$RUNNER_TEMP/author-sitemap.xml"
           for path in / /about/ /en/authors/mojtaba-rozegar/; do
             status="$(curl -sSL --max-time 18 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path")"
             test "$status" = 200
           done
           echo ZM_AUTHOR_LIVE_PROFILE_AND_SIBLINGS=PASS
-      - name: Roll back newly created exact-hash page on a failed live gate
+      - name: Restore both original profile and redirect if live verification fails
         if: failure() && steps.install.outcome == 'success'
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/author-ssh"
-          timeout 50s ssh -T -F "$d/config" cpanel python3 - "$GITHUB_RUN_ID" <<'PY'
-          import hashlib,sys
-          from pathlib import Path
-          run=sys.argv[1]
-          assert run.isdigit()
-          stage=Path("/home/zomorod2/.private-zm-author-route")/run
-          proof=stage/"installed.sha256"
-          dest=Path("/home/zomorod2/public_html/authors/mojtaba-rozegar/index.html")
-          if not proof.is_file() or proof.is_symlink():
-              print("ZM_AUTHOR_NOTHING_TO_ROLLBACK")
-              sys.exit(0)
-          expected=proof.read_text().strip()
-          assert dest.is_file() and not dest.is_symlink()
-          assert hashlib.sha256(dest.read_bytes()).hexdigest()==expected
-          dest.unlink()
-          print("ZM_AUTHOR_SCOPED_ROLLBACK=PASS")
-          PY
+          stage="/home/zomorod2/.private-zm-author-route/$GITHUB_RUN_ID"
+          timeout 50s ssh -T -F "$d/config" cpanel "python3 '$stage/release.py' rollback '$GITHUB_RUN_ID'"
       - name: Delete temporary SSH keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/author-ssh"
