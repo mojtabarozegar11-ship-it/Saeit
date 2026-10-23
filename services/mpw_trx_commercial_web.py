@@ -15,18 +15,18 @@ from services.mpw_walletless_commercial_intent import (
     PROVIDER, WAITING, _decode, reserve_commercial_intent,
     commercial_buyer_status, open_commercial_paid_file,
 )
-def _ensure_live(request):
+def _ensure_live(request, *, for_paid_read=False):
     from django.conf import settings
     from django.db import connection
     from django.http import Http404
-    from services.mpw_walletless_commercial_intent import _commercial_db
+    from services.mpw_walletless_commercial_intent import _commercial_db,_paid_read_db
     host=request.get_host().split(":")[0].lower()
     if (host not in ("mojplaywin.com","www.mojplaywin.com")
         or not request.is_secure() or not request.user.is_authenticated
         or not request.user.is_active):
         raise Http404("Secure purchaser session required")
     try:
-        _commercial_db(settings,connection)
+        (_paid_read_db if for_paid_read else _commercial_db)(settings,connection)
     except PaymentHold as exc:
         raise Http404("TRX checkout is not released") from exc
     return connection
@@ -152,7 +152,7 @@ def _show_invoice(request, invoice_id):
 
 def _invoice_status(request, invoice_id):
     from django.http import JsonResponse
-    _ensure_live(request)
+    _ensure_live(request,for_paid_read=True)
     _get_owner_invoice(request,invoice_id)
     state=commercial_buyer_status(invoice_id,request.user.pk)
     return _nocache(JsonResponse(state))
@@ -182,7 +182,7 @@ def _download_paid(request, invoice_id):
     from django.http import FileResponse,Http404
     from core.models import OrderItem
     from mpw_commerce.downloads import _private_file
-    _ensure_live(request)
+    _ensure_live(request,for_paid_read=True)
     intent=_get_owner_invoice(request,invoice_id)
     try:
         filename=_private_file(OrderItem.objects.get(order=intent.order)).name
