@@ -147,7 +147,8 @@ class RpcProvider:
 
     def request_headers(self) -> dict[str,str]:
         self.validate()
-        headers={"Content-Type":"application/json","Accept":"application/json"}
+        headers={"Content-Type":"application/json","Accept":"application/json",
+                 "User-Agent":"MojPlayWin-TRX-Gateway/1.0"}
         if self.api_key:
             headers[self.api_key_header]=self.api_key
         return headers
