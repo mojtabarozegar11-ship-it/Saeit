@@ -8,6 +8,7 @@ on:
       - services/mpw_tron_independent_solidified_rpc.py
       - scripts/mpw_shasta_gateway_chain_canary_20261022.py
       - scripts/mpw_gateway_stage_contract_probe_20261022.py
+      - scripts/mpw_tron_origin_connectivity_readonly_20261023.py
       - tests/test_mpw_tron_independent_solidified_rpc.py
   workflow_dispatch:
 permissions: {contents: read}
@@ -87,6 +88,12 @@ jobs:
           set -euo pipefail
           timeout 70s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'PYTHONPATH=/home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/mpw_tron_dual_provider_auth_readonly_20261022.py
           echo "READ_ONLY_MAINNET_PROBE=COMPLETE; PAYMENT_BROADCAST=0; CUSTOMER_DATA_WRITES=0; PUBLIC_PAYMENT_ACTIVATION=0"
+      - name: Identify usable official TRON endpoint origins independently on runner VPS and cPanel
+        run: |
+          set -euo pipefail
+          python3 -B scripts/mpw_tron_origin_connectivity_readonly_20261023.py
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-vps 'python3 -' < scripts/mpw_tron_origin_connectivity_readonly_20261023.py
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/mpw_tron_origin_connectivity_readonly_20261023.py
       - name: Read-only public operator cross-check of actual mainnet native transfer
         run: |
           set -euo pipefail
