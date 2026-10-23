@@ -71,7 +71,12 @@ def prepare(stage):
         p=ROOT/rel
         if p.is_file() and not p.is_symlink():protected[rel]=digest(p.read_bytes())
     assert len(protected)>=2,'insufficient protected-page baseline'
-    for name,data in old.items():(stage/f'old-{name}').write_bytes(data)
+    for name,data in old.items():
+        backup=stage/f'old-{name}'
+        assert backup.is_relative_to(stage) and not backup.is_symlink()
+        backup.parent.mkdir(parents=True,exist_ok=True)
+        backup.write_bytes(data)
+        assert digest(backup.read_bytes())==digest(data)
     (stage/'old-home-hash.txt').write_text(digest(home.read_bytes()),encoding='ascii')
     store(stage,{'phase':'prepared','old':{k:digest(v) for k,v in old.items()},'new':{k:digest(v) for k,v in new.items()},'route':digest(inputs['.htaccess'].read_bytes()),'protected':protected})
     print('RAMADAN_WEB_PREPARE=PASS current-card-two-confirmed; old-client-backed-up')
