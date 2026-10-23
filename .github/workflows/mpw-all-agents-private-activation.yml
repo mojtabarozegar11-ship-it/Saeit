@@ -287,7 +287,14 @@ jobs:
                          "agent_runtime_watch"}
           assert queue["tenant"]=="mojplaywin-main"
           assert queue["automated_approval"] is False
-          assert queue["published"] is False and len(queue["items"])==2
+          # The private review backlog grows and shrinks; it is not always 2.
+          # Keep the bounded queue and no-automatic-approval invariants.
+          assert queue["published"] is False
+          assert isinstance(queue["items"],list) and 1<=len(queue["items"])<=8
+          assert all(item.get("can_auto_approve") is False
+                     and item.get("required_checks")==[
+                       "source_fact_check","copyright","duplicate_live_content","editorial_clarity"]
+                     for item in queue["items"])
           t=datetime.fromisoformat(report["observed_utc"].replace("Z","+00:00"))
           assert 0<=(datetime.now(timezone.utc)-t).total_seconds()<600
           cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,check=True,timeout=15).stdout
