@@ -33,5 +33,25 @@ h1{font-size:clamp(26px,4.7vw,44px);letter-spacing:-.7px;margin:12px 0;line-heig
 footer{text-align:center;color:#718f98;font-size:11px;padding:20px 0 40px}
 .victory{position:absolute;z-index:7;inset:0;display:grid;place-items:center;background:#041922cc;backdrop-filter:blur(12px)}.victory.hidden{display:none}
 .victory-card{background:linear-gradient(140deg,#163945,#0c2331);border:1px solid #528d86;box-shadow:0 20px 90px #0009;border-radius:22px;text-align:center;width:min(340px,88%);padding:33px 24px}.victory-card h2{margin:6px 0 12px;color:#fff;font-size:27px}.victory-card p{color:#b4d0cc;line-height:2;font-size:12px;margin:0 0 23px}.victory-spark{display:block;color:#f5c87b;font-size:58px;text-shadow:0 0 30px #f5c87b}
+.viewport canvas[hidden]{display:none}
+.nexus-css3d{position:absolute;inset:0;z-index:1;display:grid;place-items:center;perspective:900px;touch-action:none;cursor:grab;user-select:none}
+.nexus-css3d:active{cursor:grabbing}
+.nexus-css3d-cube{--cube:clamp(162px,39vw,230px);--half:calc(var(--cube)/2);position:relative;width:var(--cube);height:var(--cube);transform-style:preserve-3d;transition:transform .08s ease-out;filter:drop-shadow(0 0 45px #37c8be77)}
+.nexus-css3d-face{position:absolute;inset:0;transform-style:preserve-3d;backface-visibility:hidden;overflow:visible;background:linear-gradient(145deg,#1c5867,#0d2938 75%);border:3px solid #55969a;border-radius:16px;box-shadow:inset 0 0 26px #0009,0 0 30px #42c3ad18}
+.nexus-css3d-face::after{content:"";position:absolute;inset:7px;border:1px solid #75d6c755;border-radius:9px;pointer-events:none}
+.nexus-css3d-face.face-front{transform:translateZ(var(--half))}
+.nexus-css3d-face.face-back{transform:rotateY(180deg) translateZ(var(--half))}
+.nexus-css3d-face.face-right{transform:rotateY(90deg) translateZ(var(--half))}
+.nexus-css3d-face.face-left{transform:rotateY(-90deg) translateZ(var(--half))}
+.nexus-css3d-face.face-top{transform:rotateX(90deg) translateZ(var(--half))}
+.nexus-css3d-face.face-bottom{transform:rotateX(-90deg) translateZ(var(--half))}
+.nexus-css3d-grid{position:absolute;inset:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));padding:5px;gap:3px}
+.nexus-css3d-tile{border-radius:6px;background:linear-gradient(130deg,#32899977,#092c39);border:1px solid #58c0ba66;box-shadow:inset 0 2px 7px #8affde11}
+.nexus-css3d-arrow{position:absolute;z-index:2;display:grid;place-items:center;width:25%;height:25%;padding:0;transform:translate(-50%,-50%);color:#a8c8c7;border:1px solid #758f96;border-radius:12px;background:#0b2f3ce8;box-shadow:0 4px 12px #0009;font-size:clamp(24px,6vw,36px);font-weight:bold;line-height:1;cursor:pointer}
+.nexus-css3d-arrow .arrow-icon{display:inline-block;transform:rotate(var(--direction));direction:ltr}
+.nexus-css3d-arrow.ready{color:#73ffe0;background:#115b58;box-shadow:0 0 24px #32ecc477, inset 0 0 12px #2ec5a144;border-color:#8af5d6}
+.nexus-css3d-arrow.phase{color:#ffdc91;border-color:#a4804a;background:#584426e8}
+.nexus-css3d-arrow.link{color:#efb5ff;border-color:#9a6caf;background:#462a55ec}
+.nexus-css3d-arrow:focus-visible{outline:3px solid white;outline-offset:2px}
 @media(max-width:600px){.shell{padding:0 11px}.header{min-height:70px}.brand{font-size:15px}.brand-mark{width:35px;height:35px;border-radius:10px}.tag{font-size:9px;padding:8px}.hero{padding:24px 4px 18px}.hero p{font-size:11px}.game{padding:8px;border-radius:17px}.stats{gap:5px;margin-bottom:8px}.stats>div{min-height:55px;padding:6px 3px;border-radius:9px}.stats small{font-size:9px}.stats strong{font-size:18px}.viewport{height:90vw;min-height:300px;max-height:430px}.ambient-label{font-size:8px}.ambient-label.top{left:11px;top:11px}.ambient-label.bottom{right:11px;bottom:12px}.toast{font-size:10px;bottom:32px;padding:7px 12px;max-width:94%}.controls{padding-top:9px;gap:8px;display:grid}.control-set{width:100%;gap:7px}.button{font-size:11px;min-height:46px;padding:9px 10px}.control-set.secondary .button{flex:1}.legend{gap:12px;font-size:10px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important}}
