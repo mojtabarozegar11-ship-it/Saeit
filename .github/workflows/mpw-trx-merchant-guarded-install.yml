@@ -5,6 +5,10 @@ on:
     paths:
       - .github/workflows/mpw-trx-merchant-guarded-install.yml
       - scripts/mpw_trx_install_canary_gated_20261023.py
+      - scripts/mpw_trx_commercial_reconcile_cron.py
+      - services/mpw_trx_reconcile_cursor.py
+      - services/mpw_walletless_commercial_intent.py
+      - services/mpw_tron_readonly_deposit_candidates.py
   workflow_dispatch:
 permissions: {contents: read}
 jobs:
