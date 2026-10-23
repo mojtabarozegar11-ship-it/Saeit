@@ -1,0 +1,42 @@
+name: MPW emergency public read-only baseline 20261023
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/mpw-public-baseline-readonly-20261023.yml']
+permissions:
+  contents: read
+concurrency:
+  group: mpw-public-baseline-readonly-20261023
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Independently probe live MojPlayWin without changing anything
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess,json,hashlib
+          from pathlib import Path
+          base='https://mojplaywin.com'
+          paths=['/','/games/','/products/','/mpw-editorial/field-guides/20261023/index.html','/mpw-editorial/field-guides/20261023/prism-relay/index.html','/mpw-editorial/field-guides/20261023/release.json']
+          ok=True
+          for i,path in enumerate(paths):
+              output=Path('/tmp/mpw-check-'+str(i))
+              cmd=['curl','-sS','-L','--max-time','20','--connect-timeout','8','-H','Cache-Control: no-cache','-o',str(output),'-w','%{http_code}',base+path+'?public_baseline=20261023']
+              p=subprocess.run(cmd,capture_output=True,text=True,timeout=26)
+              code=p.stdout.strip();body=output.read_bytes() if output.exists() else b''
+              listing=b'Index of /' in body[:5000]
+              print('MPW_PUBLIC',path,'HTTP',code,'CURL_RC',p.returncode,'BYTES',len(body),'SHA256',hashlib.sha256(body).hexdigest()[:16],'DIR_LISTING',listing,'ERROR_CLASS',('curl_failed' if p.returncode else 'none'),flush=True)
+              if p.returncode or code!='200' or listing:ok=False
+              if path.endswith('release.json') and code=='200':
+                  try:
+                      data=json.loads(body)
+                      print('MANIFEST_RELEASE_ID',data.get('release_id'),'FILES',len(data.get('files',[])) if isinstance(data.get('files'),list) else 'unknown')
+                  except Exception:
+                      print('MANIFEST_INVALID_JSON');ok=False
+          if not ok:raise SystemExit('MPW_PUBLIC_BASELINE_FAIL_CLOSED_NO_SITE_WRITES')
+          print('MPW_PUBLIC_BASELINE_ALL_ROUTES_OK')
+          PY
