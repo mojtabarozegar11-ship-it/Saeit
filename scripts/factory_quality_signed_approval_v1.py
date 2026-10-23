@@ -36,7 +36,7 @@ def digest(path):
             h.update(block)
     return h.hexdigest()
 
-def validate_agent_delegation(entry,root_pub,at=None):
+def validate_agent_delegation(entry,root_pub,at=None,require_current=True):
     """An owner-root signed, scoped, expiring grant; never a human identity."""
     grant=entry.get("owner_delegation")
     if not isinstance(grant,dict) or grant.get("schema")!=DELEGATION_SCHEMA:
@@ -60,7 +60,7 @@ def validate_agent_delegation(entry,root_pub,at=None):
             or end-start>timedelta(days=90)):
         raise ValueError("OWNER_DELEGATION_WINDOW_INVALID")
     now=at or datetime.now(timezone.utc)
-    if not start<=now<=end:
+    if require_current and not start<=now<=end:
         raise ValueError("OWNER_DELEGATION_NOT_CURRENT")
     return grant
 
@@ -102,7 +102,9 @@ def validate_key_registry(config):
                     or entry.get("agent_identity_verified") is not True
                     or entry.get("reviewer_id")!=name):
                 raise ValueError("OWNER_AGENT_MUST_NOT_IMPERSONATE_HUMAN")
-            validate_agent_delegation(entry,root_pub)
+            # The registry authenticates grants, but unused expired grants do
+            # not disable independent human reviewers or direct-owner decisions.
+            validate_agent_delegation(entry,root_pub,require_current=False)
         elif entry.get("externally_identity_verified") is not True:
             raise ValueError("INDEPENDENT_HUMAN_IDENTITY_UNVERIFIED")
     return entries
@@ -194,7 +196,12 @@ def inspect_approval(receipt, report, artifact_path, catalog_path, trust_config)
         if not verify_sig(keys[signer]["public_key_pem"],payload,s.get("signature_hex")):
             defect("INVALID_APPROVAL_SIGNATURE");continue
         if role==DELEGATE_ROLE:
-            grant=keys[signer]["owner_delegation"]
+            try:
+                grant=validate_agent_delegation(
+                    keys[signer],trust_config["trusted_root_public_key_pem"])
+            except ValueError:
+                defect("OWNER_AGENT_DELEGATION_NOT_CURRENT")
+                continue
             if data.get("family_id") not in grant["authorized_family_ids"]:
                 defect("OWNER_AGENT_DELEGATION_SCOPE_VIOLATION")
                 continue
