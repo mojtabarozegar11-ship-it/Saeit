@@ -254,5 +254,33 @@ class CommercialMariaDBTest(unittest.TestCase):
         with self.assertRaises(Http404):
             _download_paid(req(43),pk)
 
+    def test_private_canary_can_issue_one_mainnet_invoice_with_public_sales_off(self):
+        from scripts.mpw_trx_private_canary_20261023 import scoped_canary_settings
+        from services.mpw_walletless_commercial_intent import _commercial_db
+        with patch.object(settings, "MPW_WALLETLESS_TRX_PUBLIC_ENABLED", False), patch.object(
+            settings, "MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED", False
+        ):
+            with self.assertRaises(PaymentHold):
+                _commercial_db(settings, connection)
+            scoped = scoped_canary_settings(settings, connection)
+            intent_id, invoice, created = reserve_commercial_intent(
+                self.order_id, 42, rate_provider=lambda: (Decimal("0.30"), fixture.NOW),
+                configured_receiver=lambda: fixture.RECIPIENT,
+                now=fixture.NOW, settings=scoped,
+            )
+            self.assertTrue(created)
+            self.assertFalse(settings.MPW_WALLETLESS_TRX_PUBLIC_ENABLED)
+            self.assertFalse(settings.MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED)
+            with self.assertRaises(PaymentHold):
+                self.reserve()
+            self.assertEqual(settle_commercial_intent(
+                intent_id, fixture.TX_HASH, self.pair()), "paid")
+            self.assertTrue(commercial_buyer_status(intent_id, 42)["can_download"])
+            with open_commercial_paid_file(intent_id, 42) as f:
+                self.assertEqual(f.read(), b"PK\x03\x04minimal-test-only-artifact")
+            with self.assertRaises(PaymentHold):
+                open_commercial_paid_file(intent_id, 43)
+            self.assertFalse(settings.MPW_WALLETLESS_TRX_PUBLIC_ENABLED)
+
 if __name__=="__main__":
     unittest.main()
