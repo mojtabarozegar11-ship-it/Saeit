@@ -50,7 +50,7 @@ if grep -Fq "$marker" "$backup/crontab.before"; then
         echo FACTORY_OWNER_DELEGATE_CRON=UPDATED
     fi
 else
-    { grep -v '^$' "$backup/crontab.before"; printf '%s\n' "$cron"; } | crontab -
+    { cat "$backup/crontab.before"; printf '%s\n' "$cron"; } | crontab -
     echo FACTORY_OWNER_DELEGATE_CRON=INSTALLED
 fi
 test "$(crontab -l | grep -Fc "$marker")" -eq 1
