@@ -146,6 +146,47 @@ jobs:
               except Exception:found=[]
               print('LOG_CANDIDATES',p.name,found[:8])
           PY
+      - name: Inspect cPanel Passenger startup causes with redacted logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-public-health-relay"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import re,os,time,subprocess
+          home=Path.home()
+          ht=(home/'public_html/.htaccess').read_text(errors='replace')
+          config={}
+          for line in ht.splitlines():
+              line=line.strip()
+              if not line or line.startswith('#'):continue
+              words=line.split()
+              if words[0].startswith('Passenger') and len(words)>1:config[words[0]]=words[1]
+          root=Path(config.get('PassengerAppRoot',''))
+          if not root.is_absolute():root=(home/'public_html'/root).resolve()
+          startup=root/config.get('PassengerStartupFile','passenger_wsgi.py')
+          interpreter=Path(config.get('PassengerPython',''))
+          print('APPROOT_EXISTS',root.is_dir(),'STARTUP_EXISTS',startup.is_file(),'STARTUP_SIZE',startup.stat().st_size if startup.is_file() else 0)
+          print('PYTHON_INTERPRETER_EXISTS',interpreter.is_file(),'PYTHON_EXECUTABLE',os.access(interpreter,os.X_OK))
+          print('APPROOT_MT',round(root.stat().st_mtime) if root.exists() else 0)
+          if startup.is_file():
+              source=startup.read_text(errors='replace')
+              print('STARTUP_IMPORT_DJANGO', 'django' in source,'STARTUP_IMPORT_FLASK','flask' in source)
+              print('STARTUP_SYNTAX_BASIC',source.count('(')>=source.count(')'))
+          p=home/'error_log'
+          if p.is_file():
+              raw=p.read_bytes()[-300000:].decode('utf-8','replace')
+              lines=raw.splitlines()
+              match=[x for x in lines if re.search(r'error|passenger|traceback|module|import|python|spawn|exception|limit|resource',x,re.I)]
+              print('ROOT_ERROR_LOG_BYTES',p.stat().st_size,'MATCH_COUNT',len(match))
+              for x in match[-18:]:
+                  clean=re.sub(r'/home/[^/\s]+','<HOME>',x)
+                  clean=re.sub(r'(?:\d{1,3}\.){3}\d{1,3}','<IP>',clean)
+                  clean=re.sub(r'[\w.+-]+@[\w.-]+','<EMAIL>',clean)
+                  clean=re.sub(r'(?i)(password|token|secret|key)\s*[:=]\s*\S+',r'\1=[REDACTED]',clean)
+                  print('ERROR_LOG_MATCH',clean[:210])
+          else:print('NO_ROOT_ERROR_LOG')
+          PY
       - name: Remove runner key files
         if: always()
         shell: bash
