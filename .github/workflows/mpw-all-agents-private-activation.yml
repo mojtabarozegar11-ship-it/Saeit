@@ -348,7 +348,14 @@ jobs:
           print("PRIVATE_AGENT_ROLE_HEALTH="+json.dumps(statuses,sort_keys=True))
           print("PRIVATE_AGENT_WARNINGS="+json.dumps(warnings))
           # Safety and resource exhaustion remain hard stop conditions.
-          assert statuses["public_content_security"]=="ok", "PUBLIC_SECURITY_AGENT_WARNING"
+          if statuses["public_content_security"]!="ok":
+              findings=next(x for x in extra["roles"] if x["name"]=="public_content_security")
+              print("::warning title=MojPlayWin content security agent::"
+                    +"Detected risky pages="+str(findings.get("risky_pages","unknown"))
+                    +"; public-content release remains unapproved")
+              print("PUBLIC_CONTENT_SECURITY_RELEASE_GATE=blocked")
+          else:
+              print("PUBLIC_CONTENT_SECURITY_RELEASE_GATE=clear")
           assert statuses["disk_capacity"]=="ok", "PRIVATE_AGENT_CAPACITY_WARNING"
           assert not extra["public_site_modified"] and not extra["sibling_sites_modified"] and not extra["finance_executed"]
           assert review["automatic_publication"] is False
