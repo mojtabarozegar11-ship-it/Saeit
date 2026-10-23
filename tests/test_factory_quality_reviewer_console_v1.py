@@ -77,6 +77,54 @@ class RealReviewerService(unittest.TestCase):
             self.assertTrue(r["eligible"],r["blocking_reasons"])
             self.assertFalse(r["publication_executed"])
             self.assertFalse(r["payment_activated"])
+    def test_offline_owner_agent_enrollment_requires_root_signed_scoped_grant(self):
+        with tempfile.TemporaryDirectory() as d:
+            base=Path(d);workspace=base/"private-factory"
+            root_private,root_public=make_pair(base,"offline-root")
+            other_private,other_public=make_pair(base,"attacker-root")
+            agent_private,agent_public=make_pair(base,"master-agent")
+            self.assertTrue(agent_private.exists())
+            reviewer_id="agent_moj_1ro_1"
+            invitation=console.invite(workspace,reviewer_id,console.DELEGATE_ROLE)
+            response=base/"agent-key-response.json"
+            console.answer(invitation,agent_private,agent_public,response)
+            evidence=base/"agent-provenance.txt"
+            evidence.write_text("Synthetic agent identity proof: TEST ONLY.")
+            cert=base/"scoped-delegation.json"
+            console.make_delegation(root_private,root_public,agent_public,reviewer_id,"F14,F28",30,cert)
+            entry={"invitation":str(invitation),"response":str(response),
+                   "identity_verification_record":str(evidence),
+                   "owner_delegation_record":str(cert)}
+            with self.assertRaisesRegex(ValueError,"SIGNED_OWNER_AGENT_DELEGATION_REQUIRED"):
+                console.prepare_registry(workspace,[{k:v for k,v in entry.items()
+                                                    if k!="owner_delegation_record"}])
+            proposal=console.prepare_registry(workspace,[entry])
+            with self.assertRaisesRegex(ValueError,"OWNER_AGENT_DELEGATION_NOT_FROM_THIS_ROOT"):
+                console.sign_registry(proposal,other_private,other_public,base/"wrong-root.json")
+            signed=base/"owner-signed.json"
+            console.sign_registry(proposal,root_private,root_public,signed)
+            fingerprint=hashlib.sha256(root_public.read_bytes()).hexdigest()
+            installed=console.install_registry(workspace,signed,fingerprint)
+            doc=json.loads(installed.read_text())
+            self.assertFalse(doc["reviewers"][reviewer_id]["externally_identity_verified"])
+            self.assertTrue(doc["reviewers"][reviewer_id]["agent_identity_verified"])
+            with patch.dict(os.environ,{"FACTORY_QA_TRUST_ROOT_SHA256":fingerprint}):
+                self.assertEqual(len(checker.validate_key_registry(doc)),1)
+            self.assertFalse(console.summary(workspace)["all_four_roles_registered"])
+
+    def test_agent_signoff_needs_separate_operational_confirmation(self):
+        with tempfile.TemporaryDirectory() as d:
+            base=Path(d);priv,_=make_pair(base,"agent")
+            decision={"100_groups":{"Q%03d"%i:10 for i in range(1,101)},
+                      "unresolved_critical_defects":0}
+            source=base/"decision.json";source.write_text(json.dumps(decision))
+            out=base/"agent.sig.json"
+            with self.assertRaisesRegex(ValueError,"PERSONAL_REVIEW"):
+                console.sign_decision(source,priv,"owner_agent123",console.DELEGATE_ROLE,out,True)
+            console.sign_decision(source,priv,"owner_agent123",console.DELEGATE_ROLE,out,
+                                  False,operational_policy_checked=True)
+            self.assertTrue(out.is_file())
+
     def test_root_signature_cannot_be_installed_with_wrong_pin(self):
         with tempfile.TemporaryDirectory() as d:
             base=Path(d);priv,pub=make_pair(base,"root")
