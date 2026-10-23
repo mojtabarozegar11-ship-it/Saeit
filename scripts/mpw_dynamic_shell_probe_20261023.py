@@ -36,3 +36,5 @@ for needle in ("First Realm","Digital Products","__mpw_template_route","<main","
 
 for i in range(397,min(446,len(lines))):
     print("SHELL_TAIL",json.dumps({"line":i+1,"text":safe(lines[i])},ensure_ascii=False))
+
+# 2026-10-23 Field Studio protected-route source digest verification (read only)
