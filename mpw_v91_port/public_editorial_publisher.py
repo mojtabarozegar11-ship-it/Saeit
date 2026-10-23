@@ -23,8 +23,8 @@ except ImportError:
 
 DOCROOT = Path("/home/zomorod2/mojplaywin.com")
 PRIVATE_ROOT = Path("/home/zomorod2/.private_mojplaywin_main_agents/evolution_runtime_20261018")
-TARGET = DOCROOT / "mpw-editorial"
-OWNER = ".mpw-editorial-owner.json"
+TARGET = DOCROOT / "mpw-standalone-guides"
+OWNER = ".mpw-standalone-guides-owner.json"
 MAX_PUBLISHED = 8
 MAX_FILES = 35
 SECTIONS = {"agents": ("AI & Agent Systems", "/agents/"),
@@ -113,7 +113,7 @@ def _render_markdown(text: str):
 
 def _frame(title: str, body: str, canonical: str, description: str):
     esc=lambda x:html.escape(x,quote=True)
-    if not canonical.startswith("https://mojplaywin.com/mpw-editorial/"):
+    if not canonical.startswith("https://mojplaywin.com/mpw-standalone-guides/"):
         raise RuntimeError("untrusted_public_canonical_url")
     return ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -121,9 +121,9 @@ def _frame(title: str, body: str, canonical: str, description: str):
             '<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; '
             'style-src &#39;self&#39;; img-src &#39;self&#39;; base-uri &#39;none&#39;; form-action &#39;none&#39;">'
             '<title>'+esc(title)+' | MojPlayWin</title><meta name="description" content="'+esc(description[:155])+'">'
-            '<link rel="canonical" href="'+esc(canonical)+'"><link rel="stylesheet" href="/mpw-editorial/style.css">'
+            '<link rel="canonical" href="'+esc(canonical)+'"><link rel="stylesheet" href="/mpw-standalone-guides/style.css">'
             '</head><body><header><nav aria-label="MojPlayWin">'
-            '<a href="/">MojPlayWin</a><a href="/mpw-editorial/index.html">Knowledge & Insights</a>'
+            '<a href="/">MojPlayWin</a><a href="/mpw-standalone-guides/index.html">Knowledge & Insights</a>'
             '<a href="/agents/">AI</a><a href="/knowledge/">Knowledge</a>'
             '<a href="/studio/">Studio</a><a href="/research/">Research</a></nav></header>'
             '<main>'+body+'</main><footer><p>MojPlayWin · Independent educational guides.'
@@ -141,13 +141,13 @@ def make_files(records: list[dict]):
         for row in subset:
             slug=row["slug"]
             relative=f"{section}/{slug}/index.html"
-            public_url=f"https://mojplaywin.com/mpw-editorial/{section}/{slug}/index.html"
+            public_url=f"https://mojplaywin.com/mpw-standalone-guides/{section}/{slug}/index.html"
             article=(_render_markdown(row["body_markdown"])
                      + '<p class="note">Educational material: this is a guide, not '
                      'a verified claim that MojPlayWin has deployed these controls. '
                      'Check linked primary sources before applying the advice.</p>')
             files[relative]=_frame(row["title"],article,public_url,row["summary"]).encode("utf8")
-            link=f'<article><span class="label">{html.escape(label)}</span><h2><a href="/mpw-editorial/{section}/{slug}/index.html">{html.escape(row["title"])}</a></h2><p>{html.escape(row["summary"][:195])}</p></article>'
+            link=f'<article><span class="label">{html.escape(label)}</span><h2><a href="/mpw-standalone-guides/{section}/{slug}/index.html">{html.escape(row["title"])}</a></h2><p>{html.escape(row["summary"][:195])}</p></article>'
             cards.append(link);all_cards.append(link)
         body=(f'<span class="label">MojPlayWin / {html.escape(label)}</span>'
               f'<h1>{html.escape(label)} — Learning Guides</h1>'
@@ -155,17 +155,17 @@ def make_files(records: list[dict]):
               f'These articles are independent content, not product claims.</p>'
               '<div class="grid">'+"".join(cards or ['<p>New guides are being prepared.</p>'])+'</div>')
         files[f"{section}/index.html"]=_frame(label,body,
-             f"https://mojplaywin.com/mpw-editorial/{section}/index.html",
+             f"https://mojplaywin.com/mpw-standalone-guides/{section}/index.html",
              f"Educational guides about {label.lower()} from MojPlayWin.").encode("utf8")
     body=('<span class="label">MOJPLAYWIN / FREE EDUCATIONAL RESOURCES</span>'
           '<h1>Knowledge & Insights</h1><p>Independent guides for understanding '
           'AI evaluation, accessible learning, creative technology and research methods.</p>'
           '<div class="grid">'+"".join(all_cards or ['<p>Guides are being prepared.</p>'])+'</div>')
     files["index.html"]=_frame("Knowledge & Insights",body,
-             "https://mojplaywin.com/mpw-editorial/index.html",
+             "https://mojplaywin.com/mpw-standalone-guides/index.html",
              "Free practical educational guides on AI, learning, studio and research.").encode("utf8")
     files[OWNER]=json.dumps({"tenant":TENANT,"published_articles":len(records),
-              "scope":"mojplaywin-main-static-mpw-editorial-only",
+              "scope":"mojplaywin-main-static-standalone-guides-only",
               "content_fingerprints":{r["slug"]:r["content_sha256"] for r in records}},
               sort_keys=True).encode("utf8")
     if len(files)>MAX_FILES:
@@ -192,7 +192,7 @@ def render_to_staging(private_root: Path, stage_root: Path):
 
 def verify_public_target(docroot: Path, target: Path):
     if (docroot != DOCROOT or not docroot.is_dir() or docroot.is_symlink()
-        or target != docroot/"mpw-editorial"
+        or target != docroot/"mpw-standalone-guides"
         or (docroot/"passenger_wsgi.py").is_symlink()
         or not (docroot/"passenger_wsgi.py").is_file()
         or (docroot/".htaccess").is_symlink()
@@ -202,7 +202,37 @@ def verify_public_target(docroot: Path, target: Path):
         if target.is_symlink() or not target.is_dir():
             raise RuntimeError("public_editorial_target_not_owned")
         mark=_read_file(target/OWNER,6000)
-        if mark.get("scope")!="mojplaywin-main-static-mpw-editorial-only":
+        if mark.get("scope")!="mojplaywin-main-static-standalone-guides-only":
             raise RuntimeError("public_editorial_owner_invalid")
-        if len(list(target.iterdir()))>10:
+        allowed_top={OWNER,"index.html","style.css",*SECTIONS}
+        children=list(target.iterdir())
+        if (len(children)>len(allowed_top)
+            or any(child.name not in allowed_top or child.is_symlink()
+                   for child in children)):
             raise RuntimeError("public_editorial_unexpected_top_level")
+        for section in SECTIONS:
+            folder=target/section
+            if folder.exists() and (folder.is_symlink() or not folder.is_dir()):
+                raise RuntimeError("public_editorial_section_not_owned")
+        for name in ("index.html","style.css"):
+            file=target/name
+            if file.exists() and (file.is_symlink() or not file.is_file()):
+                raise RuntimeError("public_editorial_owned_file_not_regular")
+        fingerprints=mark.get("content_fingerprints")
+        if (not isinstance(fingerprints,dict)
+            or len(fingerprints)>MAX_PUBLISHED
+            or any(not isinstance(k,str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,80}",k)
+                   for k in fingerprints)):
+            raise RuntimeError("public_editorial_owned_fingerprints_invalid")
+        for section in SECTIONS:
+            folder=target/section
+            if folder.exists():
+                for entry in folder.iterdir():
+                    if entry.is_symlink() or (entry.name=="index.html" and not entry.is_file()):
+                        raise RuntimeError("public_editorial_unowned_section_entry")
+                    if entry.name!="index.html":
+                        if entry.name not in fingerprints or not entry.is_dir():
+                            raise RuntimeError("public_editorial_unowned_section_entry")
+                        contents=list(entry.iterdir())
+                        if len(contents)!=1 or contents[0].name!="index.html" or not contents[0].is_file() or contents[0].is_symlink():
+                            raise RuntimeError("public_editorial_unowned_article_entry")
