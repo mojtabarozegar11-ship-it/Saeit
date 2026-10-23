@@ -1,5 +1,7 @@
 name: VPS Activate and Repair Single Master Agent and Evolution
 on:
+  pull_request:
+    paths: [.github/workflows/vps-master-agent-activate.yml, scripts/vps_master_evolution_cycle.py, tests/test_vps_master_evolution_cycle.py]
   push:
     branches: [main]
     paths: [.github/workflows/vps-master-agent-activate.yml, scripts/vps_master_evolution_cycle.py, tests/test_vps_master_evolution_cycle.py]
@@ -10,7 +12,20 @@ concurrency:
   group: vps-single-master-activation
   cancel-in-progress: false
 jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Master adaptive policy regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_vps_master_evolution_cycle.py' -v
+          python3 -m py_compile scripts/vps_master_evolution_cycle.py
   activate:
+    needs: verify
+    if: github.event_name != 'pull_request' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
