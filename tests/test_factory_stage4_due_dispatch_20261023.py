@@ -45,6 +45,11 @@ class RetryEligibilityTests(unittest.TestCase):
             with self.subTest(metadata=metadata):
                 self.assertIsNone(module.due_retry(metadata, self.now))
 
+    def test_only_safe_database_error_codes_are_reported(self):
+        self.assertEqual(module.safe_error_code(Exception(1213, "private database info")), "1213")
+        self.assertEqual(module.safe_error_code(Exception("database is locked")), "sqlite_locked")
+        self.assertEqual(module.safe_error_code(Exception("password=secret in SQL")), "unspecified")
+
 
 if __name__ == "__main__":
     unittest.main()
