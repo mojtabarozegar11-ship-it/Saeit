@@ -38,12 +38,12 @@ chmod 600 "$dest"
 # Real outside-source retrieval; fail-closed source filtering and traceable
 # abstract claims. Up to 100 remaining P0 orders in this first run.
 timeout 650s "$py" -B "$dest" --factory-private "$root" \
-    --stage2-program "$main_agent" --batch 50 --workers 2
+    --stage2-program "$main_agent" --batch 50 --workers 2 --query-burst 3
 # Promote ONLY independently source-linked dossier work that passes stage 2's
 # normal gates, not raw bibliographic candidates.
 timeout 120s "$py" -B "$main_agent" --factory-private "$root" --batch 250
 
-cron='*/2 * * * * /usr/bin/flock -n /home/githubops/factory-runtime/operations/production-instructions/.stage2-scout-minute.lock /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --stage2-program /home/githubops/factory-runtime/operations/production-instructions/stage2-research.py --batch 12 --workers 1 >> /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.log 2>&1 && /usr/bin/timeout 120s /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/stage2-research.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --batch 250 >> /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.log 2>&1 # SAEIT_FACTORY_STAGE2_SOURCE_DISCOVERY_V1'
+cron='*/2 * * * * /usr/bin/flock -n /home/githubops/factory-runtime/operations/production-instructions/.stage2-scout-minute.lock /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --stage2-program /home/githubops/factory-runtime/operations/production-instructions/stage2-research.py --batch 12 --workers 1 --query-burst 2 >> /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.log 2>&1 && /usr/bin/timeout 120s /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/stage2-research.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --batch 250 >> /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.log 2>&1 # SAEIT_FACTORY_STAGE2_SOURCE_DISCOVERY_V1'
 if grep -Fq "$marker" "$back/crontab.before"; then
   test "$(grep -Fc "$marker" "$back/crontab.before")" -eq 1
   if grep -Fxq "$cron" "$back/crontab.before"; then
