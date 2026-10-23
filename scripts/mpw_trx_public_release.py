@@ -134,7 +134,8 @@ def main():
   with zipfile.ZipFile(wheel) as archive:
    for info in archive.infolist():
     if info.is_dir(): continue
-    if not info.filename.startswith('segno/') or '..' in Path(info.filename).parts or info.file_size>150000: raise RuntimeError('Unexpected QR package member')
+    if not info.filename.startswith('segno/'): continue  # Ignore pinned wheel metadata and its unused man page.
+    if '..' in Path(info.filename).parts or info.file_size>150000: raise RuntimeError('Unexpected QR package member')
     dest=qr_tmp/info.filename; dest.parent.mkdir(parents=True,exist_ok=True,mode=0o700); dest.write_bytes(archive.read(info))
   assert (qr_tmp/'segno/__init__.py').is_file(); os.replace(qr_tmp/'segno',APP/'segno'); shutil.rmtree(qr_tmp); qr_installed=True
   for rel in MODULES: put(APP/rel,(source/rel).read_bytes())
