@@ -86,7 +86,7 @@ def patch(s):
     anchor="\necho $rendered;"
     if s.count(anchor)!=1 or not s.rstrip().endswith("echo $rendered;"):
         raise RuntimeError("Unknown PHP output anchor")
-    for marker in ("MPW_ARCADE_MAIN_DISCOVERY_20261023_END","MPW_NEXTWAVE_MAIN_NAV_20261023_END","MPW_ASSETLAB_MAIN_NAV_20261023_END"):
+    for marker in ("MPW_ARCADE_MAIN_DISCOVERY_20261023_END","mpw-nextwave-main-discovery-20261023","MPW_ASSETLAB_MAIN_NAV_20261023_END"):
         if marker not in s:raise RuntimeError("Existing owner card absent: "+marker)
     out=s.replace(anchor,"\n"+PHP_PATCH.strip("\n")+"\n"+anchor,1)
     if out.count("// "+MARK+"_BEGIN")!=1:raise RuntimeError("Injection duplication")
@@ -162,7 +162,7 @@ def operate(mode,run,commit):
             print("FIELDSTUDIO_NAV_EXACT_ROLLBACK_PASS",run)
         else:raise RuntimeError("Unknown operation")
 def selftest():
-    fixture="<?php\n// MPW_ARCADE_MAIN_DISCOVERY_20261023_END\n// MPW_NEXTWAVE_MAIN_NAV_20261023_END\n// MPW_ASSETLAB_MAIN_NAV_20261023_END\n$slug='games';\n$rendered='<main><h1>Games</h1></main>';\necho $rendered;\n"
+    fixture="<?php\n// MPW_ARCADE_MAIN_DISCOVERY_20261023_END\n// mpw-nextwave-main-discovery-20261023\n// MPW_ASSETLAB_MAIN_NAV_20261023_END\n$slug='games';\n$rendered='<main><h1>Games</h1></main>';\necho $rendered;\n"
     new,yes=patch(fixture)
     assert yes and new.count("// "+MARK+"_BEGIN")==1
     second,no=patch(new)
