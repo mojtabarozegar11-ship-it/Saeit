@@ -260,7 +260,7 @@ def render(root:Path):
 
 def qa(root:Path):
     m=json.loads((root/"source-manifest.json").read_text())
-    assert len(PAPERS)==6 and len(m)==10,len(m)
+    assert len(PAPERS)==6 and len(m)==11,len(m)
     assert len(set(a["slug"] for a in PAPERS))==6
     assert len(set(a["title"] for a in PAPERS))==6
     for rel,meta in m.items():
