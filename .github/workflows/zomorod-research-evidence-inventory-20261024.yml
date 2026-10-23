@@ -1,0 +1,145 @@
+name: Zomorod research dossiers evidence inventory
+on:
+  push:
+    branches: [zomorod/research-evidence-inventory-20261024]
+    paths: [".github/workflows/zomorod-research-evidence-inventory-20261024.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-research-evidence-inventory-ro
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Read only counts of real project records and attached evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          cd "$HOME/Saeit"
+          "$HOME/virtualenv/Saeit/3.10/bin/python" - <<'PY'
+          import os, sqlite3, pathlib, urllib.parse, datetime, re
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.conf import settings
+          conn=settings.DATABASES["default"]
+          print("RESEARCH_DB_ENGINE="+str(conn["ENGINE"]))
+          if not conn["ENGINE"].endswith("sqlite3"):
+              # A safe zero-write audit uses the configured connection only for SELECTs.
+              from django.db import connection
+              with connection.cursor() as c:
+                  tables=set(connection.introspection.table_names(c))
+                  for t in sorted(x for x in tables if re.fullmatch(r"[a-z0-9_]+", x) and ("research" in x or x in ("core_evidence","core_finding","core_report"))):
+                      c.execute('SELECT COUNT(*) FROM "'+t+'"')
+                      print("RESEARCH_TABLE_COUNT="+t+" rows="+str(c.fetchone()[0]))
+              raise SystemExit(0)
+          p=pathlib.Path(str(conn["NAME"]))
+          if not p.is_absolute():p=pathlib.Path.cwd()/p
+          if not p.is_file():
+              print("RESEARCH_DB=missing")
+              raise SystemExit(0)
+          def audit(path,label):
+              uri="file:"+urllib.parse.quote(str(path))+"?mode=ro"
+              db=sqlite3.connect(uri,uri=True,timeout=2)
+              try:
+                  tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                  relevant=sorted(t for t in tables if re.fullmatch(r"[A-Za-z0-9_]+",t) and ("research" in t.lower() or t in ("core_evidence","core_finding","core_report")))
+                  print("RESEARCH_DB="+label+" research_related_tables="+str(len(relevant)))
+                  for t in relevant:
+                      try:
+                          c=db.execute('SELECT COUNT(*) FROM "'+t+'"').fetchone()[0]
+                          print("RESEARCH_TABLE_COUNT="+label+":"+t+" rows="+str(c))
+                          if t=="core_researchproject":
+                              for state,n in db.execute("SELECT status,COUNT(*) FROM core_researchproject GROUP BY status ORDER BY status"):
+                                  print("RESEARCH_PROJECT_STATUS="+label+" status="+str(state)[:50]+" count="+str(n))
+                      except Exception as e:
+                          print("RESEARCH_TABLE_ERROR="+label+":"+t+" type="+type(e).__name__)
+              finally:db.close()
+          audit(p,"active")
+          home=pathlib.Path.home()
+          backups=[
+              home/"Saeit"/"backups"/"pre_phase19_cleanup_20261004-124041"/"db.sqlite3",
+          ]
+          for b in backups:
+              if b.is_file():audit(b,"historic")
+          roots=[home/"Saeit",home/"Saeit-staging",home/".backups"/"zomorodmelal-app"]
+          matches=0
+          for root in roots:
+              if not root.is_dir():continue
+              scanned=0
+              for base,dirs,files in os.walk(root,followlinks=False):
+                  relative=pathlib.Path(base).relative_to(root)
+                  dirs[:]=[d for d in dirs if not d.startswith(".") and d not in ("node_modules",".git","venv","virtualenv","static","media","site-packages") and len(relative.parts)<4]
+                  for fname in files:
+                      scanned+=1
+                      if scanned>14000:break
+                      low=fname.lower()
+                      if not low.endswith((".csv",".xlsx",".xls",".ods",".tsv",".json",".sqlite3")):continue
+                      if any(x in low for x in ("research","project","پژوهش","تحقیق")):
+                          matches+=1
+                          if matches<=35:print("RESEARCH_FILE_CANDIDATE_EXT="+pathlib.Path(fname).suffix.lower()+" root="+root.name)
+                  if scanned>14000:break
+          print("RESEARCH_FILE_CANDIDATES="+str(matches))
+          print("RESEARCH_DB_AUDIT=read_only_complete")
+          PY
+          REMOTE
+      - name: Remove runner SSH relay keys
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          if test -d "$d"; then find "$d" -type f -maxdepth 1 -delete; rmdir "$d"; fi
