@@ -294,6 +294,35 @@ def issue():
         raise
 
 
+def _reconcile_private_invoice(invoice_id, buyer_id, invoice, expected_sender):
+    """Discover and settle a real payment before reading its entitlement."""
+    from services.mpw_tron_readonly_deposit_candidates import find_candidate_hashes
+    from services.mpw_trx_commercial_chain import read_only_independent_pair
+    from services.mpw_walletless_commercial_intent import reconcile_commercial_intent_from_candidates
+    from services.mpw_trx_walletless_core import TX_ID
+
+    candidates = find_candidate_hashes(invoice.recipient, invoice.amount_sun,
+                                       invoice.issued_at, invoice.expires_at)
+    if (not isinstance(candidates, (list, tuple)) or len(candidates) > 16
+            or any(not isinstance(tx, str) or TX_ID.fullmatch(tx) is None
+                   for tx in candidates)):
+        raise PaymentHold("Invalid private canary candidates")
+    unique = set(candidates)
+    if not unique:
+        return "awaiting"
+    if len(unique) != 1:
+        raise PaymentHold("Ambiguous private canary payment")
+    pair = read_only_independent_pair()
+    tx = next(iter(unique))
+    confirmed = pair.verify(invoice, tx, lambda *_: False)
+    if confirmed[0] != tx or confirmed[1] != expected_sender:
+        raise PaymentHold("Private canary payment is from a different sender")
+    # The settlement adapter re-verifies proof and replay protection under its
+    # database transaction. Never grant on this preliminary sender check alone.
+    return reconcile_commercial_intent_from_candidates(
+        invoice_id, buyer_id, server_lookup=lambda *_: [tx], pair=pair)
+
+
 def verify(invoice_id):
     from django.db import connection
     from core.models import PaymentIntent, PaymentWebhookEvent
@@ -317,6 +346,8 @@ def verify(invoice_id):
             or invoice.amount_sun != record.get("amount_sun")
             or str(invoice.usd_total) != record.get("usd_total")):
         raise PaymentHold("Private canary invoice immutable fields mismatch")
+    if intent.status == "awaiting_chain":
+        _reconcile_private_invoice(invoice_id, buyer_id, invoice, expected_sender)
     state = commercial_buyer_status(invoice_id, buyer_id)
     if state.get("can_download") is not True or state.get("status") != "paid":
         return {"status": "WAITING_FOR_REAL_MAINNET_SETTLEMENT",
