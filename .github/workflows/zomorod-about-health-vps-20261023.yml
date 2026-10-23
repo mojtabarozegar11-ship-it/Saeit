@@ -187,6 +187,34 @@ jobs:
                   print('ERROR_LOG_MATCH',clean[:210])
           else:print('NO_ROOT_ERROR_LOG')
           PY
+      - name: Confirm quoted Passenger paths and production document roots
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-public-health-relay"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import shlex,os,hashlib
+          home=Path.home()
+          directives={}
+          for raw in (home/'public_html/.htaccess').read_text().splitlines():
+              if not raw.strip() or raw.lstrip().startswith('#'):continue
+              try:t=shlex.split(raw)
+              except ValueError:continue
+              if len(t)>1 and t[0].startswith('Passenger'): directives[t[0]]=t[1]
+          for k in ('PassengerAppRoot','PassengerBaseURI','PassengerPython','PassengerAppType','PassengerStartupFile'):
+              print('PASSENGER_DIRECTIVE',k,'present',k in directives)
+          root=Path(directives.get('PassengerAppRoot',''))
+          if not root.is_absolute():root=(home/'public_html'/root).resolve()
+          pypath=Path(directives.get('PassengerPython',''))
+          sf=root/directives.get('PassengerStartupFile','passenger_wsgi.py')
+          print('ACTUAL_APPROOT_EXISTS',root.is_dir(),'ROOT_LEAF',root.name,'STARTUP',sf.name,'STARTUP_EXISTS',sf.is_file())
+          print('ACTUAL_PYTHON_EXISTS',pypath.is_file(),'PYTHON_LEAF',pypath.name,'EXECUTABLE',os.access(pypath,os.X_OK))
+          for rel in ('Saeit','Saeit/passenger_wsgi.py','Saeit/manage.py','Saeit-staging','public_html'):
+              p=home/rel
+              print('REFERENCE_PATH',rel,p.exists(),p.is_dir())
+          print('HTACCESS_SHA256',hashlib.sha256((home/'public_html/.htaccess').read_bytes()).hexdigest())
+          PY
       - name: Remove runner key files
         if: always()
         shell: bash
