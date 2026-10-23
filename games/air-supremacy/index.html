@@ -145,10 +145,52 @@ function awardCombat(e){
 function toast(text){$('status').textContent=text;$('status').classList.add('visible');toastT=2.6}
 function resize(){const dpr=Math.min(window.devicePixelRatio||1,innerWidth<800?1.5:1.85);canvas.width=Math.max(1,Math.round(innerWidth*dpr));canvas.height=Math.max(1,Math.round(innerHeight*dpr));if(gl)gl.viewport(0,0,canvas.width,canvas.height)}addEventListener('resize',resize);resize();if(gl){gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.clearColor(.29,.58,.69,1);}
 function spawnScenery(){world=[];for(let i=0;i<25;i++){let z=40-i*72;for(let side of [-1,1]){if(i%3===0||i%3===2)world.push({shape:'rock',x:side*rnd(140,285),y:-30,z:z-rnd(0,30),scale:rnd(.30,.85),rot:rnd(0,6.3)})}}world.push({shape:'carrier',x:-52,y:-27,z:-270,scale:1.6,rot:0});world.push({shape:'carrier',x:100,y:-27,z:-940,scale:1.1,rot:0})}
-function spawnEnemy(){const big=(mission>=3&&Math.random()<.17);enemies.push({x:rnd(-53,53),y:rnd(-2,19),z:-rnd(250,400),vx:rnd(-5,5),hp:big?12:3,kind:big?'carrier':'foe',speed:rnd(22,43)+mission*8,turn:rnd(0,6),shot:rnd(1.7,3.7),scale:big?1.5:rnd(.85,1.25),value:big?5:1});}
+function spawnEnemy(forceBoss=false){
+ const boss=forceBoss&&missionBossNeeded&&!bossSpawned;
+ const ace=!boss&&mission>=4&&Math.random()<.24;
+ const high=profile.difficulty==='ace';
+ const foe={x:rnd(-43,43),y:rnd(0,18),z:-rnd(220,330),vx:rnd(-5,5),
+   hp:boss?15+mission*1.3:ace?5+mission*.22:2.1+mission*.16,kind:boss?'carrier':'foe',
+   boss,speed:boss?12:rnd(25,45)+mission*(high?4.5:3),
+   turn:rnd(0,6),shot:rnd(2,4),scale:boss?1.8:ace?1.24:rnd(.85,1.14),
+   value:boss?8:ace?2:1};
+ if(boss){bossSpawned=true;foe.x=player.x+rnd(-10,10);foe.y=player.y+rnd(-5,5);toast('WARNING · CAPITAL SHIP INBOUND')}
+ enemies.push(foe);
+}
 function blast(x,y,z,count=13,scale=1){for(let i=0;i<count;i++){const a=rnd(0,Math.PI*2),b=rnd(-1,1),speed=rnd(5,28);sparks.push({x,y,z,vx:Math.cos(a)*speed,vy:b*speed,vz:Math.sin(a)*speed,life:rnd(.2,.85),scale:rnd(.2,1.3)*scale})}if(sparks.length>160)sparks.splice(0,sparks.length-160)}
-function begin(){player={x:0,y:3,z:0,vx:0,vy:0,roll:0,pitch:0,shield:100,hp:100,inv:2};targetX=0;targetY=3;camera=[0,13,32];enemies=[];missiles=[];sparks=[];score=0;kills=0;ammo=8;mission=1;missionT=0;spawnT=1;elapsed=0;run=true;paused=false;dashT=0;fireT=0;spawnScenery();$('menu').classList.add('hidden');$('gameover').classList.add('hidden');$('hud').classList.add('active');$('touch').classList.toggle('on',TOUCH);$('pauseBtn').classList.add('activePause');toast('MISSION 01 · COASTAL DEFENSE');updateHud()}
-function finish(won){run=false;$('hud').classList.remove('active');$('touch').classList.remove('on');$('pauseBtn').classList.remove('activePause');$('endLabel').textContent=won?'SORTIE COMPLETE':'AIRCRAFT LOST';$('endTitle').innerHTML=won?'SKIES<br>SECURED':'MISSION<br>FAILED';$('endText').textContent=`${kills} enemy units destroyed · ${score} points. ${won?'All three missions cleared.':'Upgrade the route and fly again.'}`;$('gameover').classList.remove('hidden')}
+function begin(){
+ const choice=Math.min(profile.unlocked,Math.max(1,Number($('missionSelect').value)||profile.unlocked));
+ player={x:0,y:3,z:0,vx:0,vy:0,roll:0,pitch:0,shield:100,hp:100,inv:2};
+ camera=[0,13,32];enemies=[];missiles=[];sparks=[];
+ score=0;kills=0;ammo=8;mission=choice;missionT=0;spawnT=.8;elapsed=0;
+ run=true;paused=false;dashT=0;fireT=0;combatStreak=0;streakTimer=0;creditsEarned=0;
+ bossCleared=true;bossSpawned=false;missionNotified=false;missionWon=false;
+ key.clear();firing=false;profile.sorties=Math.min(1000000,profile.sorties+1);
+ persistProfile();
+ $('menu').classList.add('hidden');$('gameover').classList.add('hidden');
+ $('pauseOverlay').classList.remove('on');$('pauseOverlay').setAttribute('aria-hidden','true');
+ $('hud').classList.add('active');$('touch').classList.toggle('on',TOUCH);
+ $('pauseBtn').classList.add('activePause');$('pauseBtn').textContent='Ⅱ PAUSE';
+ startMission(choice);
+}
+function finish(won){
+ if(!run)return;
+ run=false;paused=false;firing=false;key.clear();
+ $('pauseOverlay').classList.remove('on');$('pauseOverlay').setAttribute('aria-hidden','true');
+ $('hud').classList.remove('active');$('touch').classList.remove('on');
+ $('pauseBtn').classList.remove('activePause');
+ const payout=Math.max(0,Math.floor(creditsEarned*(won?1:.75)));
+ profile.credits=Math.min(1000000,profile.credits+payout);
+ profile.bestScore=Math.max(profile.bestScore,score);
+ if(won)profile.wins=Math.min(1000000,profile.wins+1);
+ persistProfile();refreshHangar();
+ $('endLabel').textContent=won?'CAMPAIGN CLEARED':'SORTIE DEBRIEF';
+ $('endTitle').innerHTML=won?'SKIES<br>SECURED':'RETURN<br>TO BASE';
+ $('endText').textContent=kills+' enemy aircraft defeated · '+score+
+   ' score · +'+payout+' credits · mission '+mission+' / '+MAX_MISSION+
+   (won?' · ALL TWELVE MISSIONS CLEARED':' · Progress and credits saved');
+ $('gameover').classList.remove('hidden');
+}
 function shoot(){if(!run||paused||fireT>0)return;fireT=.11;const hit=enemies.filter(e=>e.z<-20&&e.z>-245&&Math.abs(e.x-player.x)<(e.kind==='carrier'?16:10)&&Math.abs(e.y-player.y)<(e.kind==='carrier'?15:8)).sort((a,b)=>b.z-a.z)[0];missiles.push({x:player.x,y:player.y+.5,z:-6,speed:280,life:.6,kind:'bullet',target:hit});if(hit){hit.hp-=.36;blast(hit.x,hit.y,hit.z,2,.3);if(hit.hp<=0)kill(hit)} }
 function launchMissile(){if(!run||paused||ammo<=0)return;let e=acquire();if(!e){toast('NO TARGET IN LOCK WINDOW');return}ammo--;missiles.push({x:player.x,y:player.y-.3,z:-4,speed:170,life:4.8,kind:'guided',target:e});toast('FOX TWO · MISSILE AWAY')}
 function acquire(){return enemies.filter(e=>e.z< -26&&e.z> -340&&Math.abs(e.x-player.x)<35&&Math.abs(e.y-player.y)<22).sort((a,b)=>b.z-a.z)[0]||null}
