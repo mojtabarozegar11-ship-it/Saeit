@@ -89,7 +89,7 @@ def with_django_author_view_and_sitemap(raw: bytes) -> bytes:
     if source.count(OLD_SITEMAP_ITEM) != 1 or SEO_VIEW_MARKER in source:
         raise ValueError("PRODUCTION_DJANGO_SEO_SOURCE_DRIFT")
     result = source.replace(OLD_SITEMAP_ITEM, NEW_SITEMAP_ITEM, 1)
-    result = result.rstrip() + SEO_VIEW_APPEND + "\n"
+    result = result + SEO_VIEW_APPEND + "\n"
     compile(result, str(SEO), "exec")
     return result.encode("utf-8")
 
