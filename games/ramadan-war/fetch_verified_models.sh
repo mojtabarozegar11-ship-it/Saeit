@@ -28,7 +28,7 @@ assert len(doc.get("images", [])) >= min_images, "Expected embedded material tex
 offset = 20 + json_size
 assert offset + 8 <= len(data), "Missing BIN chunk"
 bin_size, bin_type = struct.unpack_from("<I4s", data, offset)
-assert bin_type == b"BIN\\x00", "Missing glTF binary geometry/data chunk"
+assert bin_type == bytes((66, 73, 78, 0)), "Missing glTF binary geometry/data chunk"
 assert offset + 8 + bin_size == len(data), "Malformed GLB chunk length"
 buffer_size = doc["buffers"][0]["byteLength"]
 assert buffer_size <= bin_size, "Declared buffer exceeds actual bytes"
