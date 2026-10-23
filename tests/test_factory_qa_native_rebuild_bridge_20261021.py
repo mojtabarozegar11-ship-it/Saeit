@@ -452,6 +452,74 @@ class RealPrivateDocumentEditionTests(unittest.TestCase):
                          repaired_receipt["new_artifact_sha256"])
         self.assertEqual(self.arch.read_bytes(),(self.stock/(self.recipe+"-internal-qa.zip")).read_bytes())
 
+    def test_orphaned_edition_receipt_classifies_without_destroying_private_stock(self):
+        self.bind({"bundle/guide.txt":b"authentic legacy document"})
+        self.assertEqual(m.reauthor_document_delivery(
+            self.root,self.recipe,self.order,self.maker),"private_document_edition_built")
+        code="edition_"+self.artifact_hash[:24]
+        receipts=self.root/"quality-excellence"/"document-edition-receipts"
+        receipt=receipts/(code+".json")
+        stock=self.root/"quality-excellence"/"document-edition-private-stock"/code
+        archive=stock/(code+"-internal-qa.zip")
+        before=archive.read_bytes()
+        proof=receipt.read_bytes()
+        receipt.unlink()
+        self.assertEqual(m.reauthor_document_delivery(
+            self.root,self.recipe,self.order,self.maker),
+            "existing_edition_receipt_missing_or_unsafe")
+        self.assertEqual(archive.read_bytes(),before)
+        receipt.write_bytes(b"not valid JSON")
+        self.assertEqual(m.reauthor_document_delivery(
+            self.root,self.recipe,self.order,self.maker),
+            "existing_edition_receipt_invalid")
+        self.assertEqual(archive.read_bytes(),before)
+        receipt.write_bytes(proof)
+        data=json.loads(proof)
+        data["source_customer_archive_sha256"]="0"*64
+        receipt.write_text(json.dumps(data))
+        self.assertEqual(m.reauthor_document_delivery(
+            self.root,self.recipe,self.order,self.maker),
+            "existing_edition_receipt_provenance_mismatch")
+        self.assertEqual(archive.read_bytes(),before)
+
+    def test_failed_private_edition_repair_restores_old_stock_and_receipt(self):
+        self.bind({"bundle/guide.txt":b"authenticated old customer document"})
+        self.assertEqual(m.reauthor_document_delivery(
+            self.root,self.recipe,self.order,self.maker),"private_document_edition_built")
+        code="edition_"+self.artifact_hash[:24]
+        stock=self.root/"quality-excellence"/"document-edition-private-stock"/code
+        archive=stock/(code+"-internal-qa.zip")
+        receipt=self.root/"quality-excellence"/"document-edition-receipts"/(code+".json")
+        archive.write_bytes(b"previous private damaged package - retain for forensic review")
+        before_stock=archive.read_bytes()
+        before_receipt=receipt.read_bytes()
+        with patch.object(self.maker,"manufacture",side_effect=RuntimeError("test forced failure")):
+            self.assertEqual(m.reauthor_document_delivery(
+                self.root,self.recipe,self.order,self.maker),
+                "private_edition_rebuild_failed")
+        self.assertEqual(archive.read_bytes(),before_stock)
+        self.assertEqual(receipt.read_bytes(),before_receipt)
+        self.assertFalse((receipt.parent/(code+".json.pending")).exists())
+
+    def test_successful_private_edition_repair_retains_forensic_backup(self):
+        self.bind({"bundle/guide.txt":b"authenticated old customer document"})
+        self.assertEqual(m.reauthor_document_delivery(
+            self.root,self.recipe,self.order,self.maker),"private_document_edition_built")
+        code="edition_"+self.artifact_hash[:24]
+        stock_parent=self.root/"quality-excellence"/"document-edition-private-stock"
+        archive=stock_parent/code/(code+"-internal-qa.zip")
+        archive.write_bytes(b"old corrupted private package")
+        self.assertEqual(m.reauthor_document_delivery(
+            self.root,self.recipe,self.order,self.maker),
+            "private_document_edition_repaired")
+        snapshots=list(stock_parent.glob(".edition-repair-"+code+"-*"))
+        self.assertEqual(len(snapshots),1)
+        self.assertEqual((snapshots[0]/"prior-stock"/(code+"-internal-qa.zip")).read_bytes(),
+                         b"old corrupted private package")
+        self.assertEqual(m.reauthor_document_delivery(
+            self.root,self.recipe,self.order,self.maker),
+            "already_issued_private_edition")
+
     def test_document_edition_120_original_assets_produces_full_new_private_zip(self):
         files={"bundle/guide.txt":b"Original legacy technical guide with a reversible offline procedure."}
         files.update({"bundle/support_%03d.png"%i:("original image bytes %03d"%i).encode()
