@@ -30,6 +30,23 @@ class Stage5Proof(unittest.TestCase):
     def read(self, location):
         return json.loads((self.area / location / self.name).read_text(encoding="utf-8"))
 
+    def test_round_robin_fairness_over_batch_limit(self):
+        names = ["order-a", "order-b", "order-c"]
+        seen = []
+        for _ in range(6):
+            selected, path, state = stage5.fair_batch(self.area, names, 1, stage34)
+            seen.extend(selected)
+            stage34.atomic(path, state)
+        self.assertEqual(seen, names + names)
+        self.assertEqual(stage34.read(path)["next_index"], 0)
+        self.assertEqual(stage5.fair_batch(self.area, names, 5, stage34)[0], names)
+
+    def test_corrupt_cursor_fails_closed(self):
+        cursor = self.area / "stage-05/round-robin-cursor.json"
+        stage34.atomic(cursor, {"schema": "saeit.factory.stage5.round-robin.v1", "next_index": -1})
+        with self.assertRaisesRegex(RuntimeError, "STAGE5_CURSOR_INVALID"):
+            stage5.fair_batch(self.area, ["order-a"], 1, stage34)
+
     def test_actual_draft_and_stage6_independent_review_queue(self):
         result = stage5.execute(self.root, stage34)
         self.assertEqual(result["stage5_created_this_tick"], 1)
