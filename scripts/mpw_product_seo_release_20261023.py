@@ -133,7 +133,7 @@ def run_release(run):
         client = Client(HTTP_HOST='mojplaywin.com')
         checks = []
         for pk, (title, price) in EXPECTED.items():
-            resp = client.get(f'/store/product/{pk}/', HTTP_HOST='mojplaywin.com')
+            resp = client.get(f'/store/product/{pk}/', HTTP_HOST='mojplaywin.com', follow=True)
             if resp.status_code != 200: fail(f'Product route {pk} returned {resp.status_code}')
             body = resp.content.decode('utf-8')
             if title not in body or CONTENT[pk]['seo_description'] not in body:
