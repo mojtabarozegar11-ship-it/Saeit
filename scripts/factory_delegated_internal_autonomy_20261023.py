@@ -102,7 +102,10 @@ def execute(root, operations, python, batch=200, timeout=150):
         raise RuntimeError("AUTONOMY_BOUNDED_RESOURCES_REQUIRED")
     root = Path(root).expanduser().resolve(strict=True)
     operations = Path(operations).expanduser().resolve(strict=True)
-    python = regular(python)
+    # Virtualenv's python executable is commonly a symlink to its interpreter.
+    python = Path(python).expanduser()
+    if not python.is_file() or not os.access(python, os.X_OK):
+        raise RuntimeError("AUTONOMY_PYTHON_NOT_EXECUTABLE")
     if not root.is_dir() or not operations.is_dir():
         raise RuntimeError("AUTONOMY_PRIVATE_FACTORY_MISSING")
     area = root / "production-instructions"
