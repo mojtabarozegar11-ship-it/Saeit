@@ -130,6 +130,11 @@ jobs:
               printf 'FACTORY_LOG_MTIME=%s\\n' "$(stat -c %y "$log")"
               echo FACTORY_RECENT_ACTIVITY
               tail -n 35 "$log" || true
+              # Read-only post-repair checks: bounded real loop evidence, not PID-only health.
+              printf 'FACTORY_AGENT_SEED_NO_WRITE_LAST_500=%s\n' "$(tail -n 500 "$log" | grep -c -F 'FACTORY_AGENT_SEED_HEALTHY_NO_WRITE' || true)"
+              printf 'FACTORY_AGENT_SEED_REFRESH_LAST_500=%s\n' "$(tail -n 500 "$log" | grep -c -F 'FACTORY_AGENT_SEED_REFRESHED' || true)"
+              printf 'FACTORY_SQLITE_LOCK_ERRORS_LAST_500=%s\n' "$(tail -n 500 "$log" | grep -c -F 'database is locked' || true)"
+              printf 'FACTORY_TICK_FAILURES_LAST_500=%s\n' "$(tail -n 500 "$log" | grep -c -F 'TICK_EXIT_FAILURE' || true)"
             else
               echo FACTORY_LOG_MISSING
             fi
