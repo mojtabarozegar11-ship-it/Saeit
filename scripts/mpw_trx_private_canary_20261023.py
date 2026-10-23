@@ -248,6 +248,10 @@ def issue():
                     break
             if existing is not None:
                 record = _read_receipt(existing.pk)
+                if (record.get("buyer_id") != buyer_id
+                        or record.get("product_id") != product_id
+                        or record.get("expected_sender") != expected_sender):
+                    raise PaymentHold("Existing private invoice belongs to a different sender or buyer")
                 return _payment_instructions(record, "EXISTING_PRIVATE_CANARY")
             product = Product.objects.select_for_update().get(
                 pk=product_id, active=True, currency="USD")
