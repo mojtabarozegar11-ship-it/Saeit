@@ -111,6 +111,28 @@ class RealReviewerService(unittest.TestCase):
             with patch.dict(os.environ,{"FACTORY_QA_TRUST_ROOT_SHA256":fingerprint}):
                 self.assertEqual(len(checker.validate_key_registry(doc)),1)
             self.assertFalse(console.summary(workspace)["all_four_roles_registered"])
+            # Additive trusted-roster rotation preserves the earlier signed agent
+            # and keeps an immutable private backup of the old trusted registry.
+            human_priv,human_pub=make_pair(base,"human_test_specialist")
+            self.assertTrue(human_priv.is_file())
+            amended={"schema":console.KEY_SCHEMA,"reviewers":dict(doc["reviewers"])}
+            amended["reviewers"]["human_test_specialist"]={
+                "role":"domain_specialist","public_key_pem":human_pub.read_text(),
+                "identity_verification_evidence_sha256":"f"*64,
+                "externally_identity_verified":True,"active":True}
+            proposal2=base/"amended-proposal.json"
+            proposal2.write_text(json.dumps(amended))
+            signed2=base/"amended-signed.json"
+            console.sign_registry(proposal2,root_private,root_public,signed2)
+            with self.assertRaisesRegex(ValueError,"REQUIRES_ADDITIVE_ROTATION"):
+                console.install_registry(workspace,signed2,fingerprint)
+            rotated=console.install_registry(workspace,signed2,fingerprint,
+                                             allow_additive_rotation=True)
+            self.assertEqual(console.summary(workspace)["trusted_reviewer_count"],2)
+            self.assertEqual(json.loads(rotated.read_text())["reviewers"][reviewer_id],
+                             doc["reviewers"][reviewer_id])
+            versions=list((workspace/"quality-trust"/"versioned-backups").glob("registry-*.json"))
+            self.assertEqual(len(versions),1)
 
     def test_agent_signoff_needs_separate_operational_confirmation(self):
         with tempfile.TemporaryDirectory() as d:
