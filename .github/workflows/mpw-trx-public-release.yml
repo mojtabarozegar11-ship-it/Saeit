@@ -2,7 +2,7 @@ name: MojPlayWin public TRX customer launch
 on:
   push:
     branches: [release/mpw-public-trx-20261023]
-    paths: [.github/workflows/mpw-trx-public-release.yml]
+    paths: [.github/workflows/mpw-trx-public-release.yml, scripts/mpw_trx_public_release.py, wheels/segno-1.6.6-py3-none-any.whl]
 permissions: {contents: read}
 concurrency:
   group: mpw-public-trx-release
