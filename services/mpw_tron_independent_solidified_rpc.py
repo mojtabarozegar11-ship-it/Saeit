@@ -29,6 +29,9 @@ _ALPHABET="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 _HEX_ADDR=re.compile(r"^41[0-9a-fA-F]{40}$")
 _VALID_HOST=re.compile(r"^[a-z0-9][a-z0-9.-]{2,250}$")
 _MAX_RESPONSE=150_000
+# Solidity getnowblock includes full transaction bodies and frequently exceeds
+# the small transaction-proof payload cap. Keep the larger head bounded too.
+_MAX_HEAD_RESPONSE=2_000_000
 
 
 def hex_to_tron_address(value: str) -> str:
@@ -189,8 +192,9 @@ def _post(provider: RpcProvider, path: str, txid: str,
             with opener.open(request,timeout=8) as resp:
                 if resp.status!=200 or resp.headers.get("Content-Type","").split(";")[0]!="application/json":
                     raise PaymentHold("RPC returned an invalid HTTP response")
-                raw=resp.read(_MAX_RESPONSE+1)
-                if len(raw)>_MAX_RESPONSE:
+                max_bytes=_MAX_HEAD_RESPONSE if head_request else _MAX_RESPONSE
+                raw=resp.read(max_bytes+1)
+                if len(raw)>max_bytes:
                     raise PaymentHold("Oversized TRON RPC response")
         except (TimeoutError,urllib.error.URLError,socket.timeout,OSError) as exc:
             raise PaymentHold("TRON RPC unavailable") from exc
