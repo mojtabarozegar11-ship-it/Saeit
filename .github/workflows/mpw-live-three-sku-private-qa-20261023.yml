@@ -1,0 +1,113 @@
+name: Private QA copies of three existing MojPlayWin store products
+on:
+  pull_request:
+    paths:
+      - scripts/mpw_live_three_sku_qa_copy_20261023.py
+      - tests/test_mpw_live_three_sku_qa_copy_20261023.py
+      - .github/workflows/mpw-live-three-sku-private-qa-20261023.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/mpw_live_three_sku_qa_copy_20261023.py
+      - tests/test_mpw_live_three_sku_qa_copy_20261023.py
+      - .github/workflows/mpw-live-three-sku-private-qa-20261023.yml
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: mpw-existing-three-private-factory-quality-copy
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify exact live SKU selection, hash receipts and no storefront replacement
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_mpw_live_three_sku_qa_copy_20261023.py -v
+          python3 -B -m py_compile scripts/mpw_live_three_sku_qa_copy_20261023.py
+
+  private-copy:
+    needs: tests
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish pinned no-agent-forwarding GitHub to VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-live-three-private-qa"
+          install -d -m 700 "$d"
+          for variable in VPS_KEY HOST_KEY; do
+            file="$d/$variable.key"
+            printf '%s' "${!variable}" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$file"
+            chmod 600 "$file"
+            ssh-keygen -y -P '' -f "$file" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Stream exactly three read-only live retail files into private factory QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-live-three-private-qa"
+          source="$(base64 -w0 scripts/mpw_live_three_sku_qa_copy_20261023.py)"
+          test -n "$source"
+          timeout 650s ssh -T -F "$d/config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'import base64;exec(base64.b64decode(\"$source\"))' site-export" \
+            | timeout 650s ssh -T -F "$d/config" saeit-vps \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-ingest"
+          echo 'MPW_THREE_EXISTING_STORE_PRODUCTS_PRIVATE_COPY_TRANSFER=PASS'
+          echo 'MPW_THREE_LIVE_STORE_PRODUCTS_MODIFIED=false'
+          echo 'MPW_THREE_STORE_PRICES_CHECKOUT_MODIFIED=false'
+      - name: Confirm public storefront routes remain reachable
+        shell: bash
+        run: |
+          for id in 72 225 879; do
+            status="$(curl -sSL --max-time 15 -o /dev/null -w '%{http_code}' "https://mojplaywin.com/store/product/$id/")" || status=000
+            echo "MPW_STORE_PRODUCT_@@id@@_HTTPS=$status"
+          done
+      - name: Remove only this run's transient SSH identity
+        if: always()
+        shell: bash
+        run: |
+          if test -d "$RUNNER_TEMP/mpw-live-three-private-qa"; then
+            rm -rf -- "$RUNNER_TEMP/mpw-live-three-private-qa"
+          fi
