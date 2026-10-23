@@ -27,7 +27,7 @@ import urllib.parse
 import urllib.request
 
 SCHEMA="saeit.factory.stage2-literature-scout.v1"
-SCOUT_ALGO_VERSION="v5-publisher-diversity-gap-diagnostics"
+SCOUT_ALGO_VERSION="v6-evidence-first-fullword-query"
 EVIDENCE_SCHEMA="saeit.factory.stage2-source-evidence.v1"
 TOPIC_ID=re.compile(r"AGRI-[0-9]{3}\Z")
 WORD_RE=re.compile(r"[a-z]{3,}")
@@ -104,39 +104,48 @@ def openalex_api_key():
 
 
 def query_variants(title):
-    """Rotate honest bibliographic search terms, without weakening evidence gates."""
-    base=" ".join(keys(title)[:4]) or title
-    # Title synonyms are search-only: accepted papers still need original
-    # subject-term overlap, real abstracts, and independent publishers.
-    replacements={
-        "houseplant":"indoor ornamental horticulture",
-        "watering":"irrigation water stress",
-        "water":"irrigation water stress",
-        "irrig":"irrigation water stress",
-        "yellow":"chlorosis",
-        "potting":"growing substrate",
-        "pott":"growing substrate",
-        "seedling":"seed germination transplant",
-        "seedl":"seed germination transplant",
-        "mushroom":"fungal cultivation",
-        "hydroponic":"soilless cultivation",
-        "greenhouse":"protected cultivation",
-        "cutting":"vegetative propagation",
-        "cutt":"vegetative propagation",
-        "propag":"vegetative propagation",
-        "germin":"seed germination",
-        "pest":"integrated pest management",
-        "soil":"soil fertility",
-        "compost":"organic matter compost",
-        "lighting":"photosynthesis light intensity",
-        "light":"photosynthesis light intensity",
-        "storage":"postharvest preservation",
+    """Rotate bounded scholarly searches; strict source acceptance is unchanged.
+
+    OpenAlex treats bare search words as AND and matches whole words. Feeding
+    our internal Porter-like partial stems ('irrig', 'germin') to its search
+    endpoint silently loses real irrigation and germination abstracts.
+    """
+    plain=[w for w in WORD_RE.findall(title.lower()) if w not in STOP]
+    search_noise={"care","diagnose","diagnosis","inventory","log","workbook",
+                  "checklist","calendar","planner","troubleshooting",
+                  "selection","identification","cost","budget"}
+    topical=[w for w in plain if w not in search_noise] or plain
+    if not topical:
+        topical=WORD_RE.findall(title.lower())[:3]
+    base=" ".join(topical[:2])
+    # Domain-specific scientific vocabulary, only for SEARCH. Original
+    # paper-level relevance, unique verbatim passages and publisher diversity
+    # are still required before a source packet can pass.
+    scientific={
+        "houseplant":("indoor","ornamental","horticulture"),
+        "watering":("irrigation","moisture","water"),
+        "water":("irrigation","moisture"),
+        "yellow":("chlorosis",),
+        "leaf":("foliar",),
+        "leaves":("foliar",),
+        "potting":("substrate",),
+        "seedling":("germination","transplant"),
+        "cutting":("propagation",),
+        "hydroponic":("soilless",),
+        "hydroponics":("soilless",),
+        "greenhouse":("protected","cultivation"),
+        "compost":("organic","matter"),
+        "lighting":("photosynthesis","irradiance"),
+        "light":("photosynthesis","irradiance"),
+        "storage":("postharvest","preservation"),
+        "mushroom":("fungal","cultivation"),
+        "pest":("integrated","pest","management"),
     }
-    changed=[]
-    for term in keys(title):
-        changed.extend(replacements.get(term,term).split())
-    enriched=" ".join(dict.fromkeys(changed[:9])).strip()
-    variants=[title,base,enriched]
+    equivalents=[]
+    for term in topical[:3]:
+        equivalents.extend(scientific.get(term,(term,)))
+    broadened=" OR ".join(dict.fromkeys(equivalents[:4]))
+    variants=[title,base,broadened,topical[0]]
     return list(dict.fromkeys(v for v in variants if v))
 
 
@@ -650,10 +659,15 @@ def request_json(endpoint,parameters,timeout=10):
 def fetch_openalex(title):
     # The caller selects a deterministic query variant on successive retries.
     # Even broad results must pass strict paper and provenance validation.
-    subject=" ".join(keys(title)[:3]) or title
+    # Search actual complete natural-language terms. Internal normalized
+    # stems are only for validating hits, not OpenAlex whole-word retrieval.
+    subject=" ".join(str(title).split())[:200]
+    if not subject:
+        raise ValueError("SCOUT_EMPTY_SCHOLARLY_QUERY")
     data=request_json(SAFE_KEYS["openalex"],{
         "search":subject,
-        "per_page":80,
+        "filter":"has_abstract:true,has_doi:true",
+        "per_page":100,
         "select":"id,display_name,doi,publication_year,type,is_retracted,abstract_inverted_index,primary_location,best_oa_location,locations,cited_by_count"
     },timeout=12)
     value=data.get("results")
@@ -724,7 +738,8 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
     if (previous.get("scout_algorithm_version") in
             ("v2-relevance-provenance",
              "v3-four-source-safety-desk-research",
-             "v4-normalized-scientific-synonyms",SCOUT_ALGO_VERSION)
+             "v4-normalized-scientific-synonyms",
+             "v5-publisher-diversity-gap-diagnostics",SCOUT_ALGO_VERSION)
             and isinstance(cached,list) and 4<=len(cached)<=20
             and previous.get("candidate_sha256")==sha(cached)):
         valid=[]
