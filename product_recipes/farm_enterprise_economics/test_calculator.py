@@ -35,6 +35,22 @@ class EconomicsTests(unittest.TestCase):
         self.assertEqual(row["break_even_units"], 546)
         self.assertEqual(len(result["scenario_results"]), 9)
 
+    def test_break_even_price_and_margin_of_safety(self):
+        row = evaluate(self.example)["results"][0]
+        self.assertEqual(row["break_even_unit_price_at_planned_volume"], "7.37")
+        self.assertEqual(row["margin_of_safety_units"], "454")
+        self.assertEqual(row["margin_of_safety_percent"], "45.40")
+        # The displayed break-even threshold is rounded *up*, never down.
+        from decimal import Decimal
+        self.assertGreaterEqual(Decimal(row["break_even_unit_price_at_planned_volume"]) * Decimal("0.95"),
+                                Decimal("4") + Decimal("3000") / Decimal("1000"))
+        zero = enterprise(dict(self.example["enterprises"][0], units_sold=0))
+        self.assertIsNone(zero["break_even_unit_price_at_planned_volume"])
+        self.assertIsNone(zero["margin_of_safety_percent"])
+        full_fee = enterprise(dict(self.example["enterprises"][0], selling_fee_percent=100))
+        self.assertIsNone(full_fee["break_even_unit_price_at_planned_volume"])
+        self.assertIsNone(full_fee["margin_of_safety_units"])
+
     def test_negative_contribution_has_no_break_even(self):
         row = enterprise({
             "name": "Loss-making", "units_sold": 50, "unit_price": 3,

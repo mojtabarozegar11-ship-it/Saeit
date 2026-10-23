@@ -151,8 +151,17 @@ def calculate(data):
     else:
         break_even_gross_yield = minimum_threshold(
             total_cost / gross_yield_revenue_factor, "0.001")
+    # Illustrative simultaneous downside, not a calibrated forecast. Resource
+    # mode additionally exposes the cost of a higher water tariff.
+    stress_revenue = saleable_yield * Decimal("0.90") * price * Decimal("0.90")
+    water_tariff_increment = (
+        granular["cost_breakdown"]["water"] * Decimal("0.20")
+        if granular is not None else None
+    )
+    stress_total_cost = total_cost + (water_tariff_increment or Decimal(0))
+    stress_margin = stress_revenue - stress_total_cost
     result = {
-        "version": "2.0" if granular else "1.0",
+        "version": "2.1" if granular else "1.1",
         "model_scope": "resource_explicit_uncalibrated" if granular else "legacy_aggregate_cost",
         "market_data_independently_validated": False,
         "currency": currency,
@@ -182,6 +191,17 @@ def calculate(data):
             "minimum_gross_yield_kg_per_m2_to_break_even": break_even_gross_yield,
             "minimum_gross_yield_reachable": break_even_gross_yield is not None,
             "break_even_reachable": saleable_yield > 0,
+            "downside_stress_test": {
+                "yield_multiplier": "0.90",
+                "price_multiplier": "0.90",
+                "water_tariff_multiplier": "1.20" if granular is not None else None,
+                "water_tariff_scenario_applicable": granular is not None,
+                "modeled_revenue": money(stress_revenue),
+                "modeled_total_cost": money(stress_total_cost),
+                "modeled_net_margin": money(stress_margin),
+                "modeled_loss": stress_margin < 0,
+                "market_probability_calibrated": False,
+            },
         },
     }
     if granular:

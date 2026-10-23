@@ -62,12 +62,15 @@ def evaluate(data):
     ordered = sorted(checked, key=lambda c: (-c["rank"], c["name"]))
     remaining = budget
     rows = []
+    unfilled_profitable = []
     for c in ordered:
         feasible = min(c["max_area"], remaining / c["water"])
         # Do not allocate scarce water to zero-margin crops.
         allocated = feasible if c["margin"] > 0 else ZERO
         consumed = allocated * c["water"]
         remaining -= consumed
+        if c["margin"] > 0 and allocated < c["max_area"]:
+            unfilled_profitable.append(c)
         rows.append({
             "crop": c["name"],
             "area_allocated_ha": string(allocated),
@@ -78,14 +81,22 @@ def evaluate(data):
             "margin_per_water_m3": string(c["rank"]),
             "estimated_gross_margin": string(allocated * c["margin"]),
         })
+    # Local shadow value of one additional m3 *only* for this fractional
+    # linear scenario; no real water-access or land-use entitlement is implied.
+    next_crop = unfilled_profitable[0] if unfilled_profitable else None
+    water_used = budget - remaining
+    total_margin = sum((Decimal(row["estimated_gross_margin"]) for row in rows), ZERO)
     return {
         "method": "fractional_greedy_gross_margin_per_water",
         "currency": currency,
         "water_budget_m3": string(budget),
         "water_used_m3": string(budget - remaining),
         "unused_water_m3": string(remaining),
-        "estimated_total_gross_margin": string(sum(
-            (Decimal(row["estimated_gross_margin"]) for row in rows), ZERO)),
+        "estimated_total_gross_margin": string(total_margin),
+        "estimated_margin_per_used_m3": string(total_margin / water_used) if water_used else None,
+        "next_unfilled_profitable_crop": next_crop["name"] if next_crop else None,
+        "marginal_gross_margin_per_additional_m3": string(next_crop["rank"] if next_crop else ZERO),
+        "water_budget_binding": bool(next_crop is not None and remaining == 0),
         "allocations": rows,
         "limitations": [
             "Continuous area allocation assumes crops can be planted in fractions of a hectare.",

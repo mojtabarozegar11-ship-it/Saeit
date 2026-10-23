@@ -28,6 +28,21 @@ class WaterBudgetTests(unittest.TestCase):
         self.assertEqual(Decimal(value["water_used_m3"]), Decimal("1000"))
         self.assertEqual(Decimal(value["allocations"][1]["area_allocated_ha"]), Decimal("0.5"))
 
+    def test_marginal_water_value_and_saturation(self):
+        used = evaluate(sample())
+        self.assertEqual(used["next_unfilled_profitable_crop"], "Crop A")
+        self.assertEqual(used["marginal_gross_margin_per_additional_m3"], "2.000000")
+        self.assertEqual(used["estimated_margin_per_used_m3"], "2.500000")
+        self.assertTrue(used["water_budget_binding"])
+        empty = evaluate(dict(sample(), water_available_m3=0))
+        self.assertEqual(empty["next_unfilled_profitable_crop"], "Crop B")
+        self.assertEqual(empty["marginal_gross_margin_per_additional_m3"], "3.000000")
+        self.assertIsNone(empty["estimated_margin_per_used_m3"])
+        saturated = evaluate(dict(sample(), water_available_m3=5000))
+        self.assertEqual(saturated["marginal_gross_margin_per_additional_m3"], "0.000000")
+        self.assertIsNone(saturated["next_unfilled_profitable_crop"])
+        self.assertFalse(saturated["water_budget_binding"])
+
     def test_respects_zero_water(self):
         data = sample()
         data["water_available_m3"] = 0
