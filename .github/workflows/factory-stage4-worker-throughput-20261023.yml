@@ -41,8 +41,13 @@ jobs:
           test -f "$base/private/factory-fresh-isolated.sqlite3"
           test -x "$script" && test ! -L "$script"
           test ! -L "$pidfile"
+          # The old launcher incorrectly passed FD 9 into the resident loop.
+          # Its launch lock is therefore held for the loop's full lifetime.
+          # Verify this precise legacy condition, serialize maintenance on a
+          # separate lock, and reacquire FD 9 after gracefully stopping it.
+          exec 8>"$ops/stage4-throughput-maintenance.lock"
+          flock -w 45 8
           exec 9>"$ops/vps-only-launch-v2.lock"
-          flock -w 45 9
           expected="368075ae83c152ae8eefe8370a8be909f067a5e7d72a5d4fe11f090f7829548b"
           test "$(sha256sum "$script" | cut -d' ' -f1)" = "$expected" || {
             echo FACTORY_LOOP_PIN_MISMATCH_NO_CHANGE
@@ -96,6 +101,10 @@ jobs:
             if kill -0 "$old" 2>/dev/null; then
               cmd="$(ps -p "$old" -o args= || true)"
               case "$cmd" in *vps-only-loop.sh*) :;; *) echo FACTORY_UNEXPECTED_PID_NO_CHANGE; exit 1;; esac
+              test "$(readlink "/proc/$old/fd/9" 2>/dev/null || true)" = "$ops/vps-only-launch-v2.lock" || {
+                echo FACTORY_LEGACY_LOCK_OWNERSHIP_UNPROVEN_NO_CHANGE
+                exit 1
+              }
               safe_window=0
               for i in $(seq 1 180); do
                 direct_child="$(ps --ppid "$old" -o comm= | tr '\n' ' ' || true)"
@@ -119,8 +128,12 @@ jobs:
               cp -p "$backup" "$script"
               echo FACTORY_WORKER_SCRIPT_ROLLED_BACK
               if ! test -s "$pidfile" || ! kill -0 "$(cat "$pidfile")" 2>/dev/null; then
-                nohup "$script" </dev/null >> "$ops/vps-only-launch.log" 2>&1 9>&- &
-                printf '%s\n' "$!" > "$pidfile"
+                if flock -n 9; then
+                  nohup "$script" </dev/null >> "$ops/vps-only-launch.log" 2>&1 8>&- 9>&- &
+                  printf '%s\n' "$!" > "$pidfile"
+                else
+                  echo FACTORY_ROLLBACK_LAUNCH_DEFERRED_TO_LOCK_OWNER
+                fi
               fi
             fi
           }
@@ -136,11 +149,16 @@ jobs:
               false
             }
           fi
-          nohup "$script" </dev/null >> "$ops/vps-only-launch.log" 2>&1 9>&- &
+          flock -w 20 9 || {
+            echo FACTORY_LAUNCH_LOCK_NOT_RELEASED_NO_DOUBLE_START
+            false
+          }
+          nohup "$script" </dev/null >> "$ops/vps-only-launch.log" 2>&1 8>&- 9>&- &
           new="$!"
           printf '%s\n' "$new" > "$pidfile"
           sleep 8
           kill -0 "$new"
+          test "$(readlink "/proc/$new/fd/9" 2>/dev/null || true)" != "$ops/vps-only-launch-v2.lock"
           test "$(sha256sum "$script" | cut -d' ' -f1)" != "$expected"
           restored=1
           trap - ERR
