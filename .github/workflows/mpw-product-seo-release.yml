@@ -75,7 +75,10 @@ jobs:
               879) grep -q 'Atelier Interior' <<<"$body" ;;
             esac
           done
-          echo 'PUBLIC_SEO_METADATA_PRODUCT_OFFERS_AND_PASSENGER_RELOAD_VERIFIED'
+          sitemap="$(curl --fail --silent --show-error --max-time 30 -H 'Cache-Control: no-cache' "https://mojplaywin.com/sitemap.xml?__mpw_seo_audit=$GITHUB_RUN_ID")"
+          for id in 72 225 879; do grep -q "store/product/$id/" <<<"$sitemap"; done
+          if grep -Eq 'store/product/(779|968|969|970|971|972)/' <<<"$sitemap"; then echo 'INELIGIBLE_PRODUCT_STILL_IN_SITEMAP'; exit 1; fi
+          echo 'PUBLIC_SEO_METADATA_PRODUCT_OFFERS_ELIGIBLE_SITEMAP_AND_PASSENGER_RELOAD_VERIFIED'
       - name: Cleanup credentials
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-seo-ssh"
