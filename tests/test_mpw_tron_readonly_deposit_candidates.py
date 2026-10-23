@@ -31,6 +31,7 @@ def lookup(rows,*,meta=None,receiver=RECEIVER,amount=1234567):
     def fake(url):
         assert url.startswith("https://api.trongrid.io/v1/accounts/"+receiver+"/transactions?")
         assert "only_confirmed=true" in url and "only_to=true" in url
+        assert "min_block_timestamp=" in url and "max_block_timestamp=" in url
         return {"success":True,"data":rows,"meta":meta or {}}
     return find_candidate_hashes(receiver,amount,ISSUED,ENDS,fetch=fake)
 
