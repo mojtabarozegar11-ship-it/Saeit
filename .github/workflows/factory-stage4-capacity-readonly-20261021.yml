@@ -526,6 +526,7 @@ jobs:
           import django
           django.setup()
           from django.apps import apps
+          from django.db.models import Count
           from django.utils import timezone
           from core.autonomous_brain import AutonomousBrain
           Product=apps.get_model("core","Product")
