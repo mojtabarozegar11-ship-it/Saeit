@@ -49,7 +49,7 @@ class ProductionCheckoutReleaseTests(unittest.TestCase):
         self.assertNotEqual(PINNED[0][1],PINNED[1][1])
         self.assertNotEqual(PINNED[0][0],PINNED[1][0])
         seen=[]
-        def transport(provider,op,tx):
+        def transport(provider,op,tx=""):
             seen.append((provider[0],op,tx))
             if op=="head":
                 return {"block_header":{"raw_data":{"number":70000000}}}
@@ -69,7 +69,7 @@ class ProductionCheckoutReleaseTests(unittest.TestCase):
             self.assertEqual(confirmed,(TX,hex_to_tron_address(HEX_FROM)))
             self.assertEqual(len(seen),6)
             self.assertEqual(seen[0][1:3],("head",""))
-            self.assertEqual(seen[3][1:3],("body",TX))
+            self.assertEqual(seen[2][1:3],("body",TX))
             with self.assertRaises(PaymentHold):
                 pair.verify(invoice,TX,lambda *_:True)
 
