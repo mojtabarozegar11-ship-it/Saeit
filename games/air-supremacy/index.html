@@ -130,7 +130,9 @@ function resolveMission(){
  if(missionNotified||!run||missionKills<missionGoal||!bossCleared)return;
  missionNotified=true;profile.unlocked=Math.max(profile.unlocked,Math.min(MAX_MISSION,mission+1));
  creditsEarned+=100+mission*35;
- persistProfile();audioFX('win');
+ // Bank mission rewards immediately: a tab close must never erase a completed mission.
+ profile.credits=Math.min(1000000,profile.credits+creditsEarned);
+ creditsEarned=0;persistProfile();audioFX('win');
  pendingMissionAdvance=true;
 }
 function awardCombat(e){
@@ -140,7 +142,8 @@ function awardCombat(e){
 }
 
 function toast(text){$('status').textContent=text;$('status').classList.add('visible');toastT=2.6}
-function resize(){const dpr=Math.min(window.devicePixelRatio||1,innerWidth<800?1.5:1.85);canvas.width=Math.max(1,Math.round(innerWidth*dpr));canvas.height=Math.max(1,Math.round(innerHeight*dpr));if(gl)gl.viewport(0,0,canvas.width,canvas.height)}addEventListener('resize',resize);resize();if(gl){gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.clearColor(.29,.58,.69,1);}
+let renderScale=1,slowFrames=0;
+function resize(){const dpr=Math.min(window.devicePixelRatio||1,innerWidth<800?1.5:1.85)*renderScale;canvas.width=Math.max(1,Math.round(innerWidth*dpr));canvas.height=Math.max(1,Math.round(innerHeight*dpr));if(gl)gl.viewport(0,0,canvas.width,canvas.height)}addEventListener('resize',resize);resize();if(gl){gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.clearColor(.29,.58,.69,1);}
 function spawnScenery(){world=[];for(let i=0;i<25;i++){let z=40-i*72;for(let side of [-1,1]){if(i%3===0||i%3===2)world.push({shape:'rock',x:side*rnd(140,285),y:-30,z:z-rnd(0,30),scale:rnd(.30,.85),rot:rnd(0,6.3)})}}world.push({shape:'carrier',x:-52,y:-27,z:-270,scale:1.6,rot:0});world.push({shape:'carrier',x:100,y:-27,z:-940,scale:1.1,rot:0})}
 function spawnEnemy(forceBoss=false){
  const boss=forceBoss&&missionBossNeeded&&!bossSpawned;
@@ -313,8 +316,8 @@ draw('water',model(),true);for(const item of world)draw(item.shape,model(item.x,
 // Player is modeled at a physically distinct forward combat position.
 if(player.inv===0||Math.floor(t*9)%2===0)draw('jet',model(player.x,player.y,0,player.pitch,0,player.roll,1.10));
 }
-let raf=0;function loop(ms){raf=requestAnimationFrame(loop);const dt=clamp((ms-last)/1000,0,.055);last=ms;sceneTime+=dt;if(run&&!paused)simulate(dt);render(sceneTime);fpsFrames++;fpsT+=dt;if(fpsT>1.2){frames=Math.round(fpsFrames/fpsT);fpsT=0;fpsFrames=0;$('perf').textContent=(gl?'WEBGL 3D':'CANVAS FALLBACK')+' · '+frames+' FPS'}}
-$('launch').onclick=begin;$('relaunch').onclick=begin;$('backMenu').onclick=()=>{$('gameover').classList.add('hidden');$('menu').classList.remove('hidden')};function togglePause(force){if(!run)return;paused=typeof force==='boolean'?force:!paused;$('pauseBtn').textContent=paused?'▶ RESUME':'Ⅱ PAUSE';$('pauseOverlay').classList.toggle('on',paused);$('pauseOverlay').setAttribute('aria-hidden',paused?'false':'true');key.clear();firing=false}
+let raf=0;function loop(ms){raf=requestAnimationFrame(loop);const dt=clamp((ms-last)/1000,0,.055);last=ms;sceneTime+=dt;if(run&&!paused)simulate(dt);render(sceneTime);fpsFrames++;fpsT+=dt;if(fpsT>1.2){frames=Math.round(fpsFrames/fpsT);fpsT=0;fpsFrames=0;if(frames<29&&gl){slowFrames++;if(slowFrames>=3&&renderScale>.68){renderScale=Math.max(.65,renderScale-.15);slowFrames=0;resize()}}else slowFrames=0;$('perf').textContent=(gl?'WEBGL 3D':'CANVAS FALLBACK')+' · '+frames+' FPS · '+Math.round(renderScale*100)+'% RES'}}
+$('launch').onclick=begin;$('relaunch').onclick=begin;$('backMenu').onclick=()=>{$('gameover').classList.add('hidden');$('menu').classList.remove('hidden')};function togglePause(force){if(!run)return;paused=typeof force==='boolean'?force:!paused;$('pauseBtn').textContent=paused?'▶ RESUME':'Ⅱ PAUSE';$('pauseOverlay').classList.toggle('on',paused);$('pauseOverlay').setAttribute('aria-hidden',paused?'false':'true');key.clear();firing=false;stick.x=0;stick.y=0;$('stickKnob').style.transform='translate(0,0)'}
 $('pauseBtn').onclick=()=>togglePause();$('resumeBtn').onclick=()=>togglePause(false);$('abandonBtn').onclick=()=>finish(false);
 addEventListener('keydown',e=>{if(!run)return;if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();key.add(e.code);if(e.repeat)return;if(e.code==='KeyM')launchMissile();if(e.code.startsWith('Shift'))evade();if(e.code==='KeyP'||e.code==='Escape')$('pauseBtn').click()});addEventListener('keyup',e=>key.delete(e.code));addEventListener('blur',()=>{key.clear();firing=false;if(run&&!paused)togglePause(true)});document.addEventListener('visibilitychange',()=>{if(document.hidden&&run&&!paused)togglePause(true)});canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();if(run)togglePause(true);$('support').textContent='Graphics context unavailable. Reload to restore 3D.'});
 const stickArea=$('stickArea'),knob=$('stickKnob');let pointerId=null;function drive(e){let r=stickArea.getBoundingClientRect(),cx=r.left+r.width*.23,cy=r.bottom-r.height*.21,dx=e.clientX-cx,dy=e.clientY-cy,d=Math.hypot(dx,dy),p=Math.min(1,d/63);stick.x=clamp(dx/63,-1,1)*p;stick.y=clamp(dy/63,-1,1)*p;knob.style.transform=`translate(${stick.x*29}px,${stick.y*29}px)`}stickArea.addEventListener('pointerdown',e=>{pointerId=e.pointerId;stickArea.setPointerCapture(e.pointerId);drive(e);e.preventDefault()});stickArea.addEventListener('pointermove',e=>{if(pointerId===e.pointerId)drive(e)});function resetStick(e){if(pointerId===e.pointerId){pointerId=null;stick.x=0;stick.y=0;knob.style.transform='translate(0,0)'}}for(const event of ['pointerup','pointercancel','lostpointercapture'])stickArea.addEventListener(event,resetStick);$('missileBtn').onclick=launchMissile;$('evade').onclick=evade;for(const ev of ['pointerdown'])$('gunBtn').addEventListener(ev,e=>{firing=true;e.preventDefault()});for(const ev of ['pointerup','pointercancel','lostpointercapture'])$('gunBtn').addEventListener(ev,()=>firing=false);
