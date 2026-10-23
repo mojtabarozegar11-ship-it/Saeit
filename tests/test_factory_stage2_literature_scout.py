@@ -513,6 +513,24 @@ class SourceScoutTests(unittest.TestCase):
             self.order(1),1,selected,STAGE2))
 
 
+    def test_openalex_query_finds_full_words_and_filters_for_real_abstracts(self):
+        with mock.patch.object(SCOUT,"request_json",
+                               return_value={"results":[]}) as request:
+            self.assertEqual(
+                SCOUT.fetch_openalex("irrigation water stress"),[])
+        args=request.call_args.args
+        self.assertEqual(args[0],SCOUT.SAFE_KEYS["openalex"])
+        self.assertEqual(args[1]["search"],"irrigation water stress")
+        self.assertEqual(args[1]["filter"],"has_abstract:true,has_doi:true")
+        self.assertEqual(args[1]["per_page"],100)
+        self.assertIn("abstract_inverted_index",args[1]["select"])
+        query_set=SCOUT.query_variants("Houseplant Watering Planner")
+        self.assertIn("houseplant watering",query_set)
+        self.assertIn("houseplant",query_set)
+        self.assertTrue(any(" OR " in q and "irrigation" in q
+                            for q in query_set))
+        self.assertFalse(any("irrig " in q for q in query_set))
+
     def test_cached_retry_does_not_discard_new_independent_publishers(self):
         title="Houseplant Rescue Guide"
         order=self.order(1)
