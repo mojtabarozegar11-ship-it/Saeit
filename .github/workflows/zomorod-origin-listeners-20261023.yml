@@ -167,6 +167,67 @@ jobs:
                  "server_mention",bool(re.search(r"(?i)cloudflare|litespeed|imunify|resource limit|maintenance|proxy|server unavailable",data)))
           PY
           done
+
+      - name: Verify DNS delegation and cPanel account domain mapping without any DNS edits
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          echo "DELEGATION_NAMESERVERS"
+          dig +time=4 +tries=1 +short NS zomorodmelal.ir | sed -E 's/[[:space:]]+$//' | sort | head -n 8
+          timeout 90s ssh -T -F "$d/config" host 'python3 -' <<'PY'
+          import hashlib,json,subprocess,socket
+          from pathlib import Path
+          userdom="zomorodmelal.ir"
+          try:
+              apex={z[4][0] for z in socket.getaddrinfo(userdom,443,type=socket.SOCK_STREAM)}
+              origin={z[4][0] for z in socket.getaddrinfo("zohal.pws-dns.net",443,type=socket.SOCK_STREAM)}
+          except Exception as e:print("DNS_MATCH_ERROR",type(e).__name__);apex=set();origin=set()
+          for args,name in [
+            (["uapi","--output=json","DomainInfo","list_domains"],"domain_info"),
+            (["uapi","--output=json","ZoneEdit","fetch_zone_records","domain="+userdom],"zone_record_inventory")]:
+              try:
+                  p=subprocess.run(args,capture_output=True,text=True,timeout=25)
+                  print("UAPI_COMMAND",name,"return_code",p.returncode)
+                  obj=json.loads(p.stdout)
+                  out=obj.get('result',{})
+                  data=out.get('data',{}) or {}
+                  if name=="domain_info":
+                      print("DOMAIN_INFO_SUCCESS",out.get('status') or out.get('metadata',{}).get('result'))
+                      if isinstance(data,dict):
+                          print("IS_MAIN_DOMAIN",data.get("main_domain")==userdom)
+                          print("IS_ADDON_DOMAIN",userdom in str(data.get("addon_domains",[])))
+                          print("IS_SUBDOMAIN",userdom in str(data.get("sub_domains",[])))
+                  else:
+                      if isinstance(data,dict):records=data.get('records',[]) or data.get('record',[]) or []
+                      elif isinstance(data,list):records=data
+                      else:records=[]
+                      print("ZONE_RECORDS",len(records))
+                      for rec in records:
+                          if not isinstance(rec,dict):continue
+                          nm=str(rec.get("name","")).rstrip(".")
+                          if nm not in (userdom,"www."+userdom):continue
+                          typ=str(rec.get("type") or rec.get("record_type") or "")
+                          if typ in ("A","AAAA","CNAME"):
+                              v=str(rec.get("address") or rec.get("cname") or rec.get("data") or rec.get("value") or "")
+                              print("ZONE_MATCH",nm,typ,
+                                    "matches_public_dns",v in apex,"matches_origin_hostname",v in origin,
+                                    "record_valid",bool(v))
+                      print("ZONE_RESULT_STATUS",out.get('status'))
+              except Exception as e:print("UAPI_EXCEPTION",name,type(e).__name__)
+          root=Path.home()/"public_html"/"index.html"
+          if root.is_file():
+              before=root.read_bytes()
+              print("DOCROOT_INDEX_BYTES",len(before),"SHA_PREFIX",hashlib.sha256(before).hexdigest()[:16])
+          else:before=None
+          try:
+              p=subprocess.run(["curl","-ksS","--max-time","10","--resolve",userdom+":443:127.0.0.1",
+                 "https://"+userdom+"/"],capture_output=True,timeout=13)
+              print("DIRECT_VHOST_RESPONSE_BYTES",len(p.stdout),"CURL_EXIT",p.returncode,
+                    "BODY_MATCHES_DOCROOT_INDEX",bool(before is not None and p.stdout==before),
+                    "HTML_HEAD_STARTS",p.stdout[:50].decode("utf-8","replace").replace("<"," ").replace(">"," "))
+          except Exception as e:print("VHOST_DIRECT_EXCEPTION",type(e).__name__)
+          PY
       - name: Remove temporary pinned relay credentials
         if: always()
         shell: bash
