@@ -60,7 +60,7 @@ def build(repo:Path,out:Path):
             if len(sentences)<2:raise RuntimeError("Separate validation sentence required "+slug)
             caution=" ".join(sentences[:-1]);verification=sentences[-1]
             if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*",slug):raise RuntimeError("Invalid slug")
-            if group.lower()!=category or not all(isinstance(x,str) and len(x)>25 for x in (context,method,example,caution,verification)):
+            if group.lower()!=category or not all(isinstance(x,str) and len(x)>45 for x in (context,method,example,caution)) or len(verification)<12:
                 raise RuntimeError("Insufficient unique article material "+slug)
             ref_ids=refs.split(",")
             if len(ref_ids)!=2 or any(r not in SOURCES for r in ref_ids):raise RuntimeError("Invalid source reference "+slug)
