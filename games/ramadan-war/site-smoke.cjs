@@ -40,6 +40,29 @@ const assert=require('node:assert/strict');
    assert.match(await page.locator('#start').innerText(),/ادامه/);
    await page.locator('#start').click();
    state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.stage,0);assert.equal(state.rockets,11);assert.equal(state.drones,2);assert.equal(state.mode,'game');
+
+   // Exercise the actual objective interactions on the local release candidate.
+   if(['127.0.0.1','localhost'].includes(new URL(process.env.GAME_URL).hostname)){
+    const checked=await page.evaluate(()=>{
+      const g=window.RamadanWarDebug;g.start();const a=[];
+      a.push(g.getState().objectiveKind==='activate' && g.interact()===false);
+      a.push(g.qaMove(8.5,3.5) && g.interact());
+      a.push(g.qaMove(11.5,11.5) && g.interact());
+      a.push(g.getState().objective.done===2);
+      a.push(g.qaMission(2));a.push(g.getState().objectiveKind==='recover');
+      for(const [x,y] of [[4.5,2.5],[12.5,4.5],[8.5,12.5]]){a.push(g.qaMove(x,y));g.tick(.04)}
+      a.push(g.getState().objective.done===3);
+      a.push(g.qaMission(1));a.push(g.qaMove(8.5,7.5));for(let i=0;i<30;i++)g.tick(.04);
+      a.push(g.getState().objective.hold>0.5);
+      a.push(g.qaMission(4));a.push(g.getState().objectiveKind==='extract');
+      a.push(g.qaMission(5));for(let i=0;i<24;i++)g.tick(.04);
+      a.push(g.getState().objectiveKind==='boss');
+      return a;
+    });
+    assert(checked.every(Boolean),'campaign objective interaction regression '+JSON.stringify(checked));
+    assert.equal(await page.locator('#missionObjective').isVisible(),true);
+    console.log('CAMPAIGN_OBJECTIVES_PASS activation=2 intel=3 defend=timer extract=check boss=spawn');
+   }
    assert.equal(errors.length,0,errors.join('\n'));
    await context.close();console.log('RAMADAN_WEB_'+v.name.toUpperCase()+'_PASS native_campaign=6 heroes=30 lives=100 weapons=rocket+drone save=resume pickups=collectible-ammo');
   }
