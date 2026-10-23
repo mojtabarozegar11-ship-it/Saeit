@@ -116,3 +116,70 @@ footer a{color:#587565}
  .game-toolbar .hearts{font-size:13px}
  .game-actions{flex-wrap:wrap}.assist-action{flex:1 0 100%;order:-1}
 }
+
+/* V3: a densely inked, genuine six-face arrow maze. Reference studied:
+ * the Play listing's white cube of winding paths. All graphics are original. */
+.cube-surround{
+ background:radial-gradient(ellipse at 46% 36%,#f5fbff 0%,#e4f0fc 42%,#cbddec 100%);
+ border-color:#c5d9eb;
+ box-shadow:inset 0 2px 36px #4077a91a
+}
+.cube-stage{perspective:1050px;perspective-origin:50% 43%}
+.orbit-glow{background:radial-gradient(ellipse at center,#fff 0%,#ffffffa1 38%,transparent 69%)}
+.cube-shadow{background:#3d587787;filter:blur(27px);top:80%}
+.cube-face,.cube-face.face-front,.cube-face.face-back,.cube-face.face-right,
+.cube-face.face-left,.cube-face.face-top,.cube-face.face-bottom{
+ border:1px solid #d7e1eb;
+ border-radius:1px;
+ box-shadow:inset 0 0 20px #9fb7c50d,0 0 1px #728aa560;
+}
+.cube-face.face-front{background:linear-gradient(125deg,#ffffff,#f5faff)}
+.cube-face.face-back{background:linear-gradient(125deg,#f9fcff,#eaf1fb)}
+.cube-face.face-right{background:linear-gradient(125deg,#f5faff,#e4eef8)}
+.cube-face.face-left{background:linear-gradient(125deg,#f6fbff,#e9f1fa)}
+.cube-face.face-top{background:linear-gradient(125deg,#ffffff,#f9fdff)}
+.cube-face.face-bottom{background:linear-gradient(125deg,#e8f0f9,#dae7f2)}
+.surface-grain{opacity:.18;background-image:radial-gradient(#9cbed445 .7px,transparent .8px);background-size:14px 14px}
+.face-arrows{inset:1.7%;width:96.6%;height:96.6%}
+.arrow-stroke{
+ stroke:#182029;stroke-width:.22;stroke-linecap:round;stroke-linejoin:round;
+ filter:drop-shadow(.025px .035px .025px #18202938)
+}
+.arrow-head{fill:#182029;stroke:none}
+.arrow-touch{stroke-width:.96}
+.cube-arrow:hover .arrow-stroke{stroke:#087ec4;stroke-width:.29}
+.cube-arrow:hover .arrow-head{fill:#087ec4}
+.cube-arrow.hinted .arrow-stroke,.cube-arrow.hinted:hover .arrow-stroke{
+ stroke:#039ef0;stroke-width:.35;filter:drop-shadow(0 0 .16px #39c8ff);
+ animation:hint-ink-pulse 1.2s ease-in-out infinite
+}
+.cube-arrow.hinted .arrow-head,.cube-arrow.hinted:hover .arrow-head{fill:#039ef0}
+.cube-arrow.blocked .arrow-stroke,.cube-arrow.blocked:hover .arrow-stroke{stroke:#e54848;fill:none}
+.cube-arrow.blocked .arrow-head,.cube-arrow.blocked:hover .arrow-head{fill:#e54848}
+.cube-arrow.blocked{animation:arrow-shake .32s ease-in-out}
+.face-corner{box-shadow:inset 0 0 0 1px #f9fcffe6}
+.drag-tip{background:#ffffffd9;color:#315c7b;border:1px solid #d4e8f5;box-shadow:0 5px 18px #234d801b}
+.view-controls button{border-color:#d1e4f1;color:#36769b;box-shadow:0 4px 13px #1b5d961a}
+.view-controls button:hover{background:#e1f5ff}
+.face-pips{display:flex;justify-content:center;gap:5px;direction:ltr;margin-top:8px}
+.face-pip{width:14px;height:4px;background:#dce7ef;border-radius:8px;transition:background .3s,width .3s}
+.face-pip.in-progress{background:#71c7ec}
+.face-pip.complete{background:#20b794;width:19px}
+.arrow-burst{position:absolute;z-index:3;pointer-events:none;width:0;height:0}
+.arrow-burst i{
+ position:absolute;display:block;width:6px;height:6px;left:-3px;top:-3px;
+ border-radius:50%;background:#20b7f2;box-shadow:0 0 10px #5fd3ff;
+ animation:particle-fly .7s cubic-bezier(.1,.5,.3,1) forwards
+}
+.arrow-burst i:nth-child(even){background:#e9b85c;box-shadow:0 0 10px #efcb88}
+@keyframes particle-fly{0%{opacity:1;transform:translate(0,0) scale(1.1)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.12)}}
+@keyframes arrow-shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-.18px)}75%{transform:translateX(.18px)}}
+@keyframes hint-ink-pulse{0%,100%{stroke-width:.32}50%{stroke-width:.42}}
+@media(max-width:640px){
+ .cube-stage{--cube-edge:clamp(244px,77vw,320px);height:clamp(385px,108vw,480px);perspective:850px}
+ .cube-rotator{top:calc(46% - var(--cube-edge) / 2)}
+ .cube-shadow{top:76%}
+ .drag-tip{font-size:10px;white-space:normal;text-align:center;max-width:75%;bottom:10px}
+ .face-pip{width:11px}
+}
+@media(prefers-reduced-motion:reduce){.cube-arrow.hinted .arrow-stroke,.arrow-burst i{animation:none!important}}

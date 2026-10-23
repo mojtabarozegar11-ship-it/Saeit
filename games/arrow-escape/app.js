@@ -7,7 +7,8 @@
   if (!Core || !Cube) return;
   const $ = id => document.getElementById(id);
   const FA = n => new Intl.NumberFormat('fa-IR').format(n);
-  const KEY = 'zm-arrow-cube-v2';
+  const KEY = 'zm-arrow-cube-v3';
+  const PREVIOUS_KEY = 'zm-arrow-cube-v2';
   const FACES = Cube.FACE_NAMES;
   const MAX_LIVES = 10;
   const initial = { x: -27, y: -34 };
@@ -38,22 +39,37 @@
 
   const clamp = (v, low, high) => Math.min(high, Math.max(low, v));
   const finite = (v, fallback) => Number.isFinite(Number(v)) ? Number(v) : fallback;
-  function readSave() {
-    try { return JSON.parse(localStorage.getItem(KEY) || 'null'); }
+  function readSave(key = KEY) {
+    try { return JSON.parse(localStorage.getItem(key) || 'null'); }
     catch (_) { return null; }
   }
   function save() {
     try {
       localStorage.setItem(KEY, JSON.stringify({
-        version: 2, level, removed: [...removed], failed: [...failed],
+        version: 3, level, removed: [...removed], failed: [...failed],
         hearts, score, baseScore, best, soundOn, won
       }));
     } catch (_) {}
   }
   function hydrate() {
     const s = readSave();
-    if (!s || s.version !== 2 || !Number.isSafeInteger(s.level) ||
-        s.level < 1 || s.level > 1000000) return;
+    if (!s || s.version !== 3) {
+      // Upgrade existing players without using their old, incompatible arrow
+      // IDs. Their score/level survive; the new winding cube starts fresh.
+      const old = readSave(PREVIOUS_KEY);
+      if (old && old.version === 2 && Number.isSafeInteger(old.level) &&
+          old.level > 0 && old.level <= 1000000) {
+        level = old.level;
+        puzzle = Cube.generate(level);
+        score = clamp(Math.floor(finite(old.score, 0)), 0, 1e9);
+        baseScore = score;
+        best = Math.max(level, Math.min(1e6, Math.floor(finite(old.best, level))));
+        soundOn = old.soundOn !== false;
+        save();
+      }
+      return;
+    }
+    if (!Number.isSafeInteger(s.level) || s.level < 1 || s.level > 1000000) return;
     level = s.level;
     puzzle = Cube.generate(level);
     const ids = new Set(puzzle.faces.flatMap(face => face.pieces.map(p => p.id)));
@@ -74,6 +90,13 @@
     $('heartCount').setAttribute('aria-label', FA(hearts) + ' جان باقی مانده');
     $('progressText').textContent = FA(removed.size) + ' / ' + FA(puzzle.total);
     $('progressFill').style.width = (100 * removed.size / Math.max(1, puzzle.total)) + '%';
+    $('facePips').innerHTML = puzzle.faces.map((face, index) => {
+      const left = face.pieces.filter(p => !removed.has(p.id)).length;
+      const cls = left === 0 ? 'complete' : left < face.pieces.length ? 'in-progress' : '';
+      return '<span class="face-pip ' + cls + '" title="وجه ' + (index + 1) +
+        ': ' + left + ' پیکان باقی مانده" aria-label="وجه ' +
+        (index + 1) + (left ? ': ' + FA(left) + ' باقی مانده' : ': کامل') + '"></span>';
+    }).join('');
     $('soundButton').textContent = soundOn ? '♫' : '♪̸';
     $('soundButton').setAttribute('aria-label', soundOn ? 'قطع صدا' : 'وصل صدا');
     $('soundButton').setAttribute('aria-pressed', String(soundOn));
@@ -94,7 +117,7 @@
     const end = path[path.length - 1];
     const tx = end.x + .5 + d[0] * .25, ty = end.y + .5 + d[1] * .25;
     const baseX = tx - d[0] * .34, baseY = ty - d[1] * .34;
-    const wing = .17;
+    const wing = .22;
     const shape = 'M ' + path.map(point).join(' L ') + ' L ' + tx + ' ' + ty;
     const tip = [
       [tx + d[0] * .11, ty + d[1] * .11],
@@ -126,6 +149,27 @@
     box.innerHTML = html;
     $('hintMoveButton').hidden = !hintId;
     paintAngle();
+  }
+  function celebrateArrow(element) {
+    if (!element || !element.isConnected) return;
+    const r = element.getBoundingClientRect();
+    const board = stage.getBoundingClientRect();
+    const x = r.left + r.width / 2 - board.left;
+    const y = r.top + r.height / 2 - board.top;
+    if (x < 0 || x > board.width || y < 0 || y > board.height) return;
+    const burst = document.createElement('div');
+    burst.className = 'arrow-burst';
+    burst.style.left = x + 'px';
+    burst.style.top = y + 'px';
+    for (let i = 0; i < 8; i++) {
+      const dot = document.createElement('i');
+      const a = Math.PI * 2 * i / 8;
+      dot.style.setProperty('--dx', (Math.cos(a) * (35 + i % 3 * 11)) + 'px');
+      dot.style.setProperty('--dy', (Math.sin(a) * (35 + i % 3 * 11)) + 'px');
+      burst.append(dot);
+    }
+    stage.append(burst);
+    window.setTimeout(() => burst.remove(), 750);
   }
   function beep(good) {
     if (!soundOn) return;
@@ -163,7 +207,7 @@
     score += 140 + 8 * level + 13 * hearts;
     best = Math.max(best, level + 1);
     updateUI(); save();
-    status('هر شش وجه آزاد شدند! مرحلهٔ بعد منتظر توست.', 'success');
+    status('تمام پیکان‌های شش وجه آزاد شدند! مرحلهٔ بعد آماده است.', 'success');
     overlay('مکعب پاک شد! ✨', 'مرحلهٔ ' + FA(level) +
       ' با موفقیت تمام شد. یک مکعب تازه در راه است.', '◆', 'مرحلهٔ بعد', nextLevel);
   }
@@ -189,6 +233,7 @@
       animating = true; combo++;
       beep(true);
       if (element) {
+        celebrateArrow(element);
         element.classList.add('flying');
         const dir = Core.DIRECTIONS[piece.dir];
         element.animate([
@@ -208,7 +253,14 @@
         renderFaces();
         if (removed.size === puzzle.total) win();
         else {
-          status('آفرین! ' + FA(puzzle.total - removed.size) + ' پیکان دیگر باقی مانده.', 'success');
+          const faceDone = !puzzle.faces[piece.face].pieces.some(p => !removed.has(p.id));
+          if (faceDone) {
+            const next = puzzle.faces.findIndex(f => f.pieces.some(p => !removed.has(p.id)));
+            if (next >= 0) focusFace(next);
+            status('یک وجه کامل پاک شد! مکعب را ادامه بده.', 'success');
+          } else {
+            status('عالی! ' + FA(puzzle.total - removed.size) + ' پیکان دیگر باقی مانده.', 'success');
+          }
           updateUI(); save();
         }
       }, 365);
@@ -219,7 +271,7 @@
         element.classList.add('blocked');
         window.setTimeout(() => element.classList.remove('blocked'), 360);
       }
-      status('این پیکان مسدود است؛ وجه دیگری را بررسی کن.', 'error');
+      status('راه این پیکان بسته است؛ اول پیکان جلویی را آزاد کن.', 'error');
       updateUI(); save();
       if (!hearts) lose();
     }
@@ -231,7 +283,7 @@
     hintId = ''; animating = false;
     missedTaps = 0;
     closeOverlay(); renderFaces(); updateUI(); save();
-    status('مکعب تازه شد؛ آن را بچرخان و مسیر باز پیدا کن.');
+    status('مکعب تازه شد؛ روی پیکان کنار لبه بزن یا راهنمایی بگیر.');
   }
   function nextLevel() {
     animationVersion++;
@@ -243,10 +295,13 @@
     missedTaps = 0;
     xAngle = initial.x; yAngle = initial.y; zoom = 1;
     closeOverlay(); renderFaces(); updateUI(); save();
-    status('مرحلهٔ ' + FA(level) + ' آماده است. شش وجه را بررسی کن.');
+    status('مرحلهٔ ' + FA(level) + ' آماده است. شش وجه را پاک کن.');
   }
   function focusFace(face) {
-    const pose = [[0, 0], [0, -90], [0, 180], [0, 90], [-90, 0], [90, 0]][face];
+    // Keep a clear 3D corner in view while guiding to a particular side.
+    // A face-on 0/90/180 pose looks like a FLAT square, not a cube.
+    const pose = [[-27, -34], [-27, -124], [-27, -214], [-27, 56],
+      [-67, -34], [65, -34]][face];
     xAngle = pose[0]; yAngle = pose[1];
     box.classList.add('turning');
     paintAngle();
@@ -260,7 +315,7 @@
     hintId = candidate.id;
     renderFaces(); focusFace(candidate.face);
     // Keep the hint visible until acted on; don't expire it while scrolling.
-    status('پیکان طلایی آزاد است؛ آن را لمس کن یا دکمهٔ «برداشتن پیکان طلایی» را بزن.', 'success');
+    status('پیکان آبی آزاد است؛ آن را لمس کن یا دکمهٔ «برداشتن پیکان» را بزن.', 'success');
     // An animated page scroll can move the target away during the next tap.
     stage.scrollIntoView({ behavior: 'instant', block: 'center' });
   }

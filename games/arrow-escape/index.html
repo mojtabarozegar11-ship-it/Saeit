@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#142d2a">
-  <meta name="description" content="مکعب پیکان‌ها؛ بازی فکری سه‌بعدی فارسی با چرخش ۳۶۰ درجه مکعب، پیکان‌های قابل آزادسازی و مراحل بی‌پایان.">
+  <meta name="description" content="مکعب پیکان‌ها؛ بازی فکری سه‌بعدی رایگان با مکعب شش‌وجهی پوشیده از مسیرهای مارپیچ و پیکان‌های قابل آزادسازی.">
   <meta name="robots" content="index,follow">
   <link rel="canonical" href="https://zomorodmelal.ir/arrow-escape/">
   <title>مکعب پیکان‌ها | بازی سه‌بعدی رایگان زمرد ملل</title>
-  <link rel="stylesheet" href="./style.css?v=cube3d-touchfix-20261023-1">
+  <link rel="stylesheet" href="./style.css?v=maze3d-v3-20261023">
 </head>
 <body>
 <!-- ZM-ARROW-ESCAPE-THIRD-CARD-20261022 -->
@@ -22,7 +22,7 @@
     <section class="intro" aria-labelledby="game-title">
       <div class="eyebrow"><span class="live-dot"></span> CUBE ESCAPE / 3D PUZZLE</div>
       <h1 id="game-title">مکعب <em>پیکان‌ها</em></h1>
-      <p>مکعب را بچرخان، پیکان‌های آزاد را پیدا کن و تمام وجه‌ها را پاک‌سازی کن.</p>
+      <p>مکعب واقعی را بچرخان؛ مسیرهای پیکانی پیچ‌درپیچ را به ترتیب آزاد کن.</p>
     </section>
 
     <section class="game-frame" aria-label="بازی سه‌بعدی مکعب پیکان‌ها">
@@ -31,6 +31,7 @@
         <div class="progress-group">
           <div class="progress-header"><span>پیکان‌های آزادشده</span><b id="progressText">۰ / ۱۲</b></div>
           <div class="track" aria-hidden="true"><span id="progressFill"></span></div>
+          <div class="face-pips" id="facePips" aria-label="وضعیت پاک‌سازی شش وجه"></div>
         </div>
         <div class="hearts" aria-live="polite" aria-label="جان‌های باقی‌مانده"><span id="heartCount">♥ × ۱۰</span></div>
       </div>
@@ -43,7 +44,7 @@
           <div class="cube-rotator" id="cubeRotator">
             <div class="cube" id="puzzleCube" aria-label="شش وجه مکعب بازی"></div>
           </div>
-          <div class="drag-tip" id="dragTip">↕ بکش و بچرخان · پیکان را لمس کن</div>
+          <div class="drag-tip" id="dragTip">↕ برای چرخاندن بکش · برای آزاد کردن لمس کن</div>
         </div>
         <div class="view-controls" aria-label="کنترل نمای مکعب">
           <button type="button" id="zoomIn" aria-label="بزرگ‌نمایی مکعب">＋</button>
@@ -59,10 +60,10 @@
           </div>
         </div>
       </div>
-      <div id="statusText" class="status-text" role="status" aria-live="polite">مکعب را بچرخان؛ پیکان‌های آزاد روی همهٔ شش وجه هستند.</div>
+      <div id="statusText" class="status-text" role="status" aria-live="polite">پیکانِ رو به لبهٔ آزاد را لمس کن. اگر گیر کردی «راهنمایی» بزن.</div>
       <div class="game-actions">
         <button type="button" class="action-button hint" id="hintButton"><span aria-hidden="true">✧</span> راهنمایی</button>
-        <button type="button" class="action-button hint assist-action" id="hintMoveButton" hidden>برداشتن پیکان طلایی ←</button>
+        <button type="button" class="action-button hint assist-action" id="hintMoveButton" hidden>آزاد کردن پیکان آبی ←</button>
         <button type="button" class="action-button" id="restartButton"><span aria-hidden="true">↻</span> شروع دوباره</button>
         <button type="button" class="action-button icon-button" id="soundButton" aria-label="قطع صدا" aria-pressed="true">♫</button>
       </div>
@@ -75,14 +76,14 @@
     </section>
     <details class="how-to">
       <summary>چطور بازی کنم؟ <span aria-hidden="true">＋</span></summary>
-      <p>با کشیدن انگشت مکعب را در همهٔ جهت‌ها بچرخان. روی یک پیکان بزن؛ اگر مسیرش در همان وجه تا لبه آزاد باشد، به بیرون پرواز می‌کند. اگر جلوی پیکان بسته باشد، تنها یک جان از دست می‌دهی. تمام شش وجه را پاک کن تا مرحلهٔ بعد آغاز شود. با دکمه‌های + و − اندازه و با ◎ زاویه دید را تغییر بده. بازی بدون محدودیت زمان و با ذخیرهٔ خودکار پیشرفت اجرا می‌شود.</p>
+      <p>این یک مکعب سه‌بعدی واقعی با شش سطحِ پُر از پیکان‌های مارپیچ است. با کشیدن انگشت آن را به هر جهت بچرخان. یک مسیر را لمس کن؛ اگر در جهت نوک پیکان تا لبه راه باز باشد، کل مسیر از مکعب خارج می‌شود. اول پیکان‌های بیرونی را بردار تا مسیرهای داخلی باز شوند. برای کمک، «راهنمایی» و سپس «آزاد کردن پیکان آبی» را بزن. ده جان داری؛ هر پیکانِ مسدود فقط یک‌بار جان کم می‌کند. بازی زمان ندارد و پیشرفتت ذخیره می‌شود.</p>
     </details>
   </main>
 
   <footer>© شرکت کشت و صنعت زمرد ملل · بازی مستقل و رایگان · <a href="/">صفحه اصلی</a></footer>
 </div>
-<script src="./engine.js?v=cube3d-touchfix-20261023-1" defer></script>
-<script src="./cube-engine.js?v=cube3d-touchfix-20261023-1" defer></script>
-<script src="./app.js?v=cube3d-touchfix-20261023-1" defer></script>
+<script src="./engine.js?v=maze3d-v3-20261023" defer></script>
+<script src="./cube-engine.js?v=maze3d-v3-20261023" defer></script>
+<script src="./app.js?v=maze3d-v3-20261023" defer></script>
 </body>
 </html>

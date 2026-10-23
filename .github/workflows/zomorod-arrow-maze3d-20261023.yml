@@ -1,0 +1,95 @@
+name: Zomorod Arrow Cube — winding 3D maze release
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/zomorod-arrow-maze3d-20261023.yml'
+      - 'games/arrow-escape/**'
+permissions:
+  contents: read
+concurrency:
+  group: zm-arrow-maze3d-20261023
+  cancel-in-progress: false
+jobs:
+  release:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-zm-arrow-maze3d-20261023]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test the dense six-sided puzzle and release safety
+        run: |
+          set -euo pipefail
+          python3 -m py_compile games/arrow-escape/deploy_maze3d.py
+          python3 games/arrow-escape/deploy_maze3d.test.py
+          node --check games/arrow-escape/app.js
+          node --check games/arrow-escape/cube-engine.js
+          node --test games/arrow-escape/engine.test.cjs games/arrow-escape/cube-engine.test.cjs
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path('games/arrow-escape')
+          html = (root / 'index.html').read_text('utf-8')
+          assert 'maze3d-v3-20261023' in html
+          assert 'id="facePips"' in html
+          assert 'id="cubeStage"' in html
+          assert 'id="hintMoveButton"' in html
+          assert 'mosaicPieces' in (root / 'cube-engine.js').read_text('utf-8')
+          PY
+      - name: Connect the existing SSH relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Snapshot production game and validate release guard
+        id: stage
+        run: |
+          set -euo pipefail
+          relay="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-arrow-maze3d-$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$relay/config" host "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage/incoming'"
+          for file in index.html app.js style.css cube-engine.js deploy_maze3d.py; do
+            timeout 60s scp -q -F "$relay/config" "games/arrow-escape/$file" "host:$stage/incoming/$file"
+          done
+          timeout 60s ssh -T -F "$relay/config" host "python3 '$stage/incoming/deploy_maze3d.py' prepare '$GITHUB_RUN_ID'"
+      - name: Update only this game with protected rollback
+        run: |
+          set -euo pipefail
+          relay="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-arrow-maze3d-$GITHUB_RUN_ID"
+          timeout 90s ssh -T -F "$relay/config" host "python3 '$stage/incoming/deploy_maze3d.py' publish '$GITHUB_RUN_ID'"
+          timeout 60s ssh -T -F "$relay/config" host "python3 '$stage/incoming/deploy_maze3d.py' verify '$GITHUB_RUN_ID'"
+      - name: Verify public HTML, scripts and stylesheet
+        run: |
+          python3 - <<'PY'
+          import time
+          from urllib.request import Request, urlopen
+          base='https://zomorodmelal.ir/arrow-escape/'
+          version='maze3d-v3-20261023'
+          def get(name):
+              with urlopen(Request(base+name,headers={'Cache-Control':'no-cache',
+                             'User-Agent':'ArrowCubeMaze3DQA/1'}),timeout=45) as r:
+                  assert r.status==200,name
+                  return r.read(3500000)
+          for attempt in range(12):
+              html=get('?maze3d='+str(time.time_ns()))
+              if version.encode() in html: break
+              time.sleep(2)
+          else: raise AssertionError('new public game HTML not visible')
+          assert b'id="facePips"' in html and b'id="hintMoveButton"' in html
+          assert b'mosaicPieces' in get('cube-engine.js?v='+version)
+          assert b'facePips' in get('app.js?v='+version)
+          assert b'face-pips' in get('style.css?v='+version)
+          assert b'DIRECTIONS' in get('engine.js?v='+version)
+          print('ARROW_MAZE3D_LIVE_ASSETS=PASS')
+          PY
+      - name: Roll back release on failure
+        if: failure() && steps.stage.outcome == 'success'
+        run: |
+          set -euo pipefail
+          relay="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-arrow-maze3d-$GITHUB_RUN_ID"
+          timeout 75s ssh -T -F "$relay/config" host "python3 '$stage/incoming/deploy_maze3d.py' rollback '$GITHUB_RUN_ID'"
