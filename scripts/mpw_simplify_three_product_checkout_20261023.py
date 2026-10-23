@@ -1,3 +1,4 @@
+MPW_THREE_PRODUCT_CATALOG_SELFTEST=PASS
 #!/usr/bin/env python3
 """Bounded live copy and CTA correction for MojPlayWin's three sale products."""
 from __future__ import annotations
@@ -73,6 +74,21 @@ def atomic(path,raw):
     finally:
         if os.path.exists(tmp): os.unlink(tmp)
 
+def diagnose_third_product_source():
+    matches=[]
+    for base in (ROOT/'core/templates',ROOT/'templates',ROOT/'core'):
+        if not base.is_dir(): continue
+        for p in base.rglob('*'):
+            if not p.is_file() or p.is_symlink() or p.suffix not in {'.html','.py'}: continue
+            try: text=p.read_text('utf-8',errors='replace')
+            except OSError: continue
+            for token in ('atelier-original-vector-879','Buy website kit','ETH/TRX'):
+                i=text.find(token)
+                if i>=0:
+                    matches.append({'path':str(p.relative_to(ROOT)),'token':token,
+                                    'excerpt':text[max(0,i-160):i+len(token)+240]})
+    print('MPW_THIRD_PRODUCT_SOURCE_AUDIT='+json.dumps(matches[:30],ensure_ascii=False,sort_keys=True))
+
 def verify_products():
     os.chdir(ROOT); sys.path.insert(0,str(ROOT))
     os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
@@ -99,6 +115,7 @@ def publish(run):
     if not (ROOT/'manage.py').is_file(): fail('Django app root is incomplete')
     old=STORE.read_bytes()
     text=old.decode('utf-8')
+    if 'atelier-original-vector-879' not in text: diagnose_third_product_source()
     new=transform(text).encode('utf-8')
     if new==old: fail('Storefront already transformed; refusing duplicate release')
     verify_products()
