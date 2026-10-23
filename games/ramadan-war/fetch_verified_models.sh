@@ -33,8 +33,9 @@ assert offset + 8 + bin_size == len(data), "Malformed GLB chunk length"
 buffer_size = doc["buffers"][0]["byteLength"]
 assert buffer_size <= bin_size, "Declared buffer exceeds actual bytes"
 for view in doc.get("bufferViews", []):
-    assert view.get("buffer", 0) == 0
-    assert view.get("byteOffset", 0) + view["byteLength"] <= buffer_size, "Out-of-range bufferView"
+    buffer_index = view.get("buffer", 0)
+    assert 0 <= buffer_index < len(doc["buffers"]), "Unknown buffer index"
+    assert view.get("byteOffset", 0) + view["byteLength"] <= doc["buffers"][buffer_index]["byteLength"], "Out-of-range bufferView"
 for item in doc.get("images", []):
     assert "bufferView" in item or item.get("uri"), "Image has no payload"
 print(f"GLB_COMPLETE=PASS {path.name} bytes={len(data)} meshes={len(doc['meshes'])} images={len(doc.get('images', []))}")
