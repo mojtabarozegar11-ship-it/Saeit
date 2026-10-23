@@ -15,6 +15,7 @@ import sys
 import tarfile
 import tempfile
 import zipfile
+import zlib
 
 IDS = (72, 225, 879)
 SCHEMA = "saeit.mpw.live-three-private-qa-copy.v1"
@@ -153,7 +154,7 @@ def technical_review(path):
                 if z.testzip() is not None:
                     raise ValueError("ZIP_CRC")
                 result["archive_crc_pass"] = True
-        except (ValueError, RuntimeError, OSError, zipfile.BadZipFile) as exc:
+        except (ValueError, RuntimeError, OSError, zipfile.BadZipFile, zlib.error) as exc:
             result["issues"].append("ZIP_INTEGRITY_" + type(exc).__name__)
     else:
         result["issues"].append("FILE_FORMAT_REQUIRES_MANUAL_REVIEW")
