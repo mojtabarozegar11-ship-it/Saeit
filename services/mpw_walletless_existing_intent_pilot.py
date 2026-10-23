@@ -172,8 +172,10 @@ def reserve_existing_test_intent(order_id: int, buyer_id: int, *, rate_provider,
                 if invoice.recipient != recipient or invoice.usd_total != total:
                     raise PaymentHold("Merchant or amount changed")
                 return existing.pk, invoice, False
-            if (CommerceInvoice.objects.filter(order=order).exists()
-                    or CommerceInvoice.objects.filter(status=CommerceInvoice.Status.AWAITING).exists()):
+            # Unrelated buyers' pending legacy invoices must not freeze checkout.
+            # Cross-order reuse is checked below by exact address+amount and
+            # again during atomic settlement by globally unique tx references.
+            if CommerceInvoice.objects.filter(order=order).exists():
                 raise PaymentHold("In-flight signed invoice must be resolved")
             quote = rate_provider()
             if not isinstance(quote, (tuple, list)) or len(quote) != 2:
@@ -226,8 +228,9 @@ def settle_existing_test_intent(intent_id: int, tx_hash: str,
         total, item = _ready_order(order, buyer_id=invoice.customer_id)
         if total != invoice.usd_total:
             raise PaymentHold("Order price changed after quote")
-        if (CommerceInvoice.objects.filter(order=order).exists()
-                or CommerceInvoice.objects.filter(status=CommerceInvoice.Status.AWAITING).exists()):
+        # Protect this order from competing legacy settlement, without
+        # rejecting unrelated customers' outstanding signed invoices.
+        if CommerceInvoice.objects.filter(order=order).exists():
             raise PaymentHold("Cannot mix new settlement with signed invoices")
 
         def already_used(network, normalized):
