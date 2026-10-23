@@ -18,7 +18,7 @@ import secrets
 import stat
 
 from services.mpw_trx_walletless_core import (
-    ADDRESS, NETWORK, INVOICE_TTL, InvoiceIntent, PaymentHold, issue_intent,
+    ADDRESS, NETWORK, TX_ID, INVOICE_TTL, InvoiceIntent, PaymentHold, issue_intent,
 )
 from services.mpw_walletless_django_test_bridge import (
     TrustedNodePair, _test_only_guard,
@@ -273,6 +273,53 @@ def settle_existing_test_intent(intent_id: int, tx_hash: str,
         order.status="paid"
         order.save(update_fields=["status", "updated_at"])
     return "paid"
+
+
+def reconcile_existing_test_intent_from_candidates(intent_id: int, buyer_id: int,
+                                                   *, server_lookup, pair,
+                                                   db=None, settings=None) -> str:
+    """Buyer status event -> independently proved settlement in TEST MariaDB.
+
+    The merchant-owned indexer returns transaction IDs only. Neither browser
+    callbacks nor wallet responses can supply a payment proof. Any ambiguity
+    is held for review; no background timer or public route is installed.
+    """
+    if (type(intent_id) is not int or intent_id<=0 or type(buyer_id) is not int
+            or buyer_id<=0 or not callable(server_lookup)
+            or not isinstance(pair,TrustedNodePair)
+            or pair.audited_as_independent is not True):
+        raise PaymentHold("Untrusted event-driven reconciliation adapter")
+    from django.conf import settings as django_settings
+    from django.db import connection
+    from core.models import PaymentIntent
+
+    db=db or connection
+    settings=settings or django_settings
+    _test_db(settings,db)
+    intent=PaymentIntent.objects.select_related("order").filter(
+        pk=intent_id,order__customer_id=buyer_id,provider=PROVIDER,
+    ).first()
+    if intent is None:
+        raise PaymentHold("Invoice does not belong to buyer")
+    if intent.status!=WAITING:
+        return "unchanged"
+    invoice=_decode(intent)
+    candidates=server_lookup(invoice.recipient,invoice.amount_sun,
+                             invoice.issued_at,invoice.expires_at)
+    if not isinstance(candidates,(list,tuple)) or len(candidates)>16:
+        raise PaymentHold("Unbounded or untrusted chain indexer response")
+    if any(not isinstance(tx,str) or TX_ID.fullmatch(tx) is None
+           for tx in candidates):
+        raise PaymentHold("Invalid candidate transaction identity")
+    unique=set(candidates)
+    if not unique:
+        return "awaiting"
+    if len(unique)!=1:
+        raise PaymentHold("Ambiguous invoice transfer; requires review")
+    # Full solidity body and receipt are re-read from both authenticated
+    # operators, and the receipt, ledger and fulfillment commit atomically.
+    return settle_existing_test_intent(intent_id,next(iter(unique)),pair,
+                                       db=db,settings=settings)
 
 
 def existing_test_buyer_status(intent_id: int, buyer_id: int, *, db=None,
