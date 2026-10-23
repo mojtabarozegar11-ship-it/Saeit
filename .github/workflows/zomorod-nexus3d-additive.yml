@@ -1,0 +1,150 @@
+name: Zomorod Arrow Nexus 3D — one-shot additive release
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/zomorod-nexus3d-additive.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zomorod-nexus3d-single-live-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-zm-nexus3d-live-20261023]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run deterministic puzzle and surgical-upgrade checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check games/arrow-escape/nexus.js
+          node --check games/arrow-escape/nexus-core.js
+          node games/arrow-escape/nexus-core.test.cjs
+          python3 games/arrow-escape/nexus-upgrade.test.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('games/arrow-escape')
+          for n in ('nexus.html','nexus.css','nexus.js','nexus-core.js','three.module.js','three.core.min.js','nexus-upgrade.py'):
+              assert (p/n).is_file() and (p/n).stat().st_size>100,n
+          assert 'three.core.min.js' in (p/'three.module.js').read_text('utf-8')
+          assert 'href="./nexus.html"' in (p/'nexus-upgrade.py').read_text('utf-8')
+          print('NEXUS_RELEASE_CONTENT=PASS')
+          PY
+
+      - name: Confirm the existing public game and homepage are healthy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          root='https://zomorodmelal.ir'
+          def get(path):
+              with urlopen(Request(root+path,headers={'Cache-Control':'no-cache','User-Agent':'ZM-Nexus-AdditiveRelease/1'}),timeout=25) as r:
+                  assert r.status==200,(path,r.status)
+                  return r.read(150000)
+          assert len(get('/'))>300
+          data=get('/arrow-escape/')
+          for mark in (b'ZM-ARROW-ESCAPE-THIRD-CARD-20261022', b'id="cubeStage"', b'cube-engine.js', b'./app.js', b'./engine.js'):
+              assert mark in data,mark
+          print('ORIGINAL_GAME_PUBLIC_BASELINE=PASS')
+          PY
+
+      - name: Connect through the existing verified GitHub to VPS to cPanel SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+
+      - name: Stage only the six new assets and a recoverable backup
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-nexus3d-$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$d/config" host bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          id="$1"
+          [[ "$id" =~ ^[0-9]{4,15}$ ]]
+          stage="/home/zomorod2/.zm-nexus3d-$id"
+          test ! -e "$stage" && test ! -L "$stage"
+          install -d -m 700 "$stage/incoming"
+          REMOTE
+          for name in nexus.html nexus.css nexus.js nexus-core.js three.module.js three.core.min.js nexus-upgrade.py; do
+            timeout 50s scp -q -F "$d/config" "games/arrow-escape/$name" "host:$stage/incoming/$name"
+          done
+          timeout 45s ssh -T -F "$d/config" host \
+            "python3 '$stage/incoming/nexus-upgrade.py' prepare '$GITHUB_RUN_ID'"
+
+      - name: Publish surgically and verify protected existing files
+        id: live
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-nexus3d-$GITHUB_RUN_ID"
+          timeout 65s ssh -T -F "$d/config" host \
+            "python3 '$stage/incoming/nexus-upgrade.py' publish '$GITHUB_RUN_ID'"
+          timeout 40s ssh -T -F "$d/config" host \
+            "python3 '$stage/incoming/nexus-upgrade.py' verify '$GITHUB_RUN_ID'"
+
+      - name: Verify exact live asset bytes plus the untouched original route
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          import hashlib,os,time
+          base='https://zomorodmelal.ir/arrow-escape/'
+          files=('nexus.html','nexus.css','nexus.js','nexus-core.js','three.module.js','three.core.min.js')
+          for name in files+('index.html',):
+              correct=False
+              for trial in range(1,8):
+                  try:
+                      url=base+('' if name=='index.html' else name)+'?nexus_release='+os.environ['GITHUB_RUN_ID']+'-'+str(trial)
+                      req=Request(url,headers={'Cache-Control':'no-cache,no-store','User-Agent':'ZM-Nexus-AdditiveRelease/1'})
+                      with urlopen(req,timeout=27) as resp:
+                          assert resp.status==200
+                          data=resp.read(1100000)
+                          if name=='index.html':
+                              correct=(data.count(b'NEXUS-3D-ENTRY-20261023')==1 and
+                                       b'id="cubeStage"' in data and b'cube-engine.js' in data and
+                                       b'./app.js' in data and b'href="./nexus.html"' in data)
+                          else:
+                              expected=(Path('games/arrow-escape')/name).read_bytes()
+                              correct=hashlib.sha256(data).digest()==hashlib.sha256(expected).digest()
+                      if correct:break
+                  except Exception as exc:
+                      print('NEXUS_PUBLIC_RETRY',name,type(exc).__name__,flush=True)
+                  time.sleep(3)
+              assert correct,'NEXUS_PUBLIC_MISMATCH '+name
+              print('NEXUS_PUBLIC_EXACT',name,'PASS',flush=True)
+          with urlopen(Request('https://zomorodmelal.ir/',headers={'Cache-Control':'no-cache'}),timeout=27) as resp:
+              assert resp.status==200
+          print('NEXUS_ADDITIVE_PUBLIC_RELEASE=PASS')
+          PY
+
+      - name: Roll back only this release if staging, publish, or verification fails
+        if: failure() && steps.stage.outcome != 'skipped'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-nexus3d-$GITHUB_RUN_ID"
+          if test -s "$d/config"; then
+            timeout 60s ssh -T -F "$d/config" host \
+              "test -f '$stage/incoming/nexus-upgrade.py' && python3 '$stage/incoming/nexus-upgrade.py' rollback '$GITHUB_RUN_ID'"
+          fi
