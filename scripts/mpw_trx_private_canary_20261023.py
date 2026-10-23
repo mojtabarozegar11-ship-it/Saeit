@@ -66,6 +66,19 @@ def _configured_ids():
     return exact_id("MPW_TRX_CANARY_BUYER_ID"), exact_id("MPW_TRX_CANARY_PRODUCT_ID")
 
 
+
+def _expected_sender():
+    from services.mpw_trx_walletless_core import ADDRESS
+    from scripts.mojplaywin_native_chain_verify import tron_address_to_hex
+    sender = os.environ.get("MPW_TRX_CANARY_EXPECTED_SENDER", "")
+    if not isinstance(sender, str) or ADDRESS.fullmatch(sender) is None:
+        raise PaymentHold("Expected independent Mainnet sender is not configured")
+    try:
+        tron_address_to_hex(sender)  # Base58Check, not just T-prefix
+    except (ValueError, TypeError) as exc:
+        raise PaymentHold("Invalid trusted merchant canary sender address") from exc
+    return sender
+
 def _private_receipt_dir():
     if RECEIPTS.is_symlink():
         raise PaymentHold("Unsafe private canary receipt directory")
@@ -162,6 +175,7 @@ def issue():
     if os.environ.get("MPW_TRX_CANARY_ISSUE_ACK", "") != ARMED:
         raise PaymentHold("Private merchant order issuance has not been explicitly armed")
     buyer_id, product_id = _configured_ids()
+    expected_sender = _expected_sender()
     secure = _preflight(nodes=True)
     from django.db import connection, transaction
     from django.contrib.auth import get_user_model
@@ -218,7 +232,8 @@ def issue():
             record = {
                 "v": 1, "network": "tron-mainnet", "invoice_id": invoice_id,
                 "order_id": order.pk, "buyer_id": buyer_id, "product_id": product_id,
-                "recipient": invoice.recipient, "amount_sun": invoice.amount_sun,
+                "recipient": invoice.recipient, "expected_sender": expected_sender,
+                "amount_sun": invoice.amount_sun,
                 "usd_total": str(invoice.usd_total),
                 "issued_at": invoice.issued_at.isoformat(),
                 "expires_at": invoice.expires_at.isoformat(),
@@ -245,6 +260,9 @@ def verify(invoice_id):
     _preflight(nodes=False)
     record = _read_receipt(invoice_id)
     buyer_id, product_id = _configured_ids()
+    expected_sender = _expected_sender()
+    if record.get("expected_sender") != expected_sender:
+        raise PaymentHold("Canary sender identity does not match the original invoice")
     if record.get("buyer_id") != buyer_id or record.get("product_id") != product_id:
         raise PaymentHold("Canary receipt not owned by the designated merchant buyer")
     intent = PaymentIntent.objects.select_related("order").get(pk=invoice_id, provider=PROVIDER)
@@ -265,8 +283,8 @@ def verify(invoice_id):
     # Reconfirm the historical tx directly against both live solidity nodes.
     confirmed = read_only_independent_pair().verify(
         invoice, receipt.event_id, lambda *_: False)
-    if confirmed[0] != receipt.event_id:
-        raise PaymentHold("Independent live solidity re-verification failed")
+    if confirmed[0] != receipt.event_id or confirmed[1] != expected_sender:
+        raise PaymentHold("Independent live transfer or designated sender does not match")
     digest = hashlib.sha256()
     total = 0
     with open_commercial_paid_file(invoice_id, buyer_id) as f:
