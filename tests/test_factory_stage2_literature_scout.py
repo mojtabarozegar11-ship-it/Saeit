@@ -94,15 +94,35 @@ class SourceScoutTests(unittest.TestCase):
             self.assertEqual("needs_more_research",
                              SCOUT.sources_for_topic(self.root,STAGE2,order,
                                                      SCOUT.fetch_openalex,lambda _:[]))
-        self.assertEqual([1,2],[x[1] for x in seen])
+        self.assertEqual([1,1],[x[1] for x in seen])
         evidence=self.area/"stage-02/source-evidence/AGRI-001--r001.json"
         self.assertFalse(evidence.exists())
         candidate=STAGE2.read(self.area/"stage-02/literature-candidates/AGRI-001--r001.json")
-        self.assertEqual(candidate["source_search_page"],2)
+        self.assertEqual(candidate["source_search_page"],1)
         self.assertEqual(candidate["evidence_gap_reason"],
                          "under_four_topic_relevant_article_abstracts")
         with self.assertRaisesRegex(ValueError,"SCOUT_BAD_BOUNDED_RESULTS_PAGE"):
             SCOUT.fetch_openalex("safe agricultural topic",page=7)
+
+    def test_full_query_page_grid_is_explored_before_long_cooldown(self):
+        order=self.order(1)
+        variants=SCOUT.query_variants("Houseplant Rescue Guide")
+        searches=[]
+        def indexed_empty(endpoint, params, timeout=10):
+            searches.append((params["search"],params["page"]))
+            return {"results":[]}
+        with mock.patch.object(SCOUT,"request_json",indexed_empty):
+            for _ in range(len(variants)+1):
+                self.assertEqual("needs_more_research",
+                                 SCOUT.sources_for_topic(
+                                     self.root,STAGE2,order,
+                                     SCOUT.fetch_openalex,lambda _:[]))
+        self.assertEqual(searches,[(q,1) for q in variants]+[(variants[0],2)])
+        candidate=STAGE2.read(
+            self.area/"stage-02/literature-candidates/AGRI-001--r001.json")
+        self.assertEqual(candidate["source_search_page"],2)
+        self.assertEqual(SCOUT.retry_delay(candidate,"Houseplant Rescue Guide"),
+                         dt.timedelta(minutes=15))
 
     def test_short_sentence_reconstructed_exactly_from_index(self):
         paper=study("Houseplant Rescue Guide",1)
@@ -257,6 +277,36 @@ class SourceScoutTests(unittest.TestCase):
         paper=study(title,7)
         paper["is_retracted"]=True
         self.assertIsNone(SCOUT.usable_paper(paper,SCOUT.keys(title),STAGE2))
+
+    def test_provider_failure_preserves_accumulated_verified_abstracts(self):
+        title="Houseplant Rescue Guide"
+        order=self.order(1)
+        cached=[study(title,n) for n in range(1,5)]
+        for paper in cached:
+            paper["primary_location"]["landing_page_url"]=(
+                "https://one.publisher.org/research")
+            paper["primary_location"]["source"]["host_organization_name"]=(
+                "Single Publisher")
+        self.assertEqual("needs_more_research",
+                         SCOUT.sources_for_topic(
+                             self.root,STAGE2,order,lambda _:cached,lambda _:[]))
+        path=self.area/"stage-02/literature-candidates/AGRI-001--r001.json"
+        before=STAGE2.read(path)
+        self.assertEqual(before["search_round"],0)
+        self.assertGreaterEqual(len(before["indexed_abstract_candidates"]),4)
+        def provider_down(_):
+            raise TimeoutError("temporary indexed search outage")
+        self.assertEqual("api_unavailable",
+                         SCOUT.sources_for_topic(
+                             self.root,STAGE2,order,provider_down,lambda _:[]))
+        after=STAGE2.read(path)
+        self.assertEqual(after["search_round"],0)
+        self.assertEqual(after["attempted_search_round"],1)
+        self.assertEqual(after["indexed_abstract_candidates"],
+                         before["indexed_abstract_candidates"])
+        self.assertEqual(after["candidate_sha256"],before["candidate_sha256"])
+        self.assertFalse((self.area/
+                         "stage-02/source-evidence/AGRI-001--r001.json").exists())
 
     def test_unavailable_provider_does_not_fake_source(self):
         def down(_):
@@ -648,7 +698,7 @@ class SourceScoutTests(unittest.TestCase):
                "scout_algorithm_version":SCOUT.SCOUT_ALGO_VERSION,
                "search_round":1}
         self.assertEqual(SCOUT.retry_delay(fresh,title),dt.timedelta(minutes=15))
-        full=dict(fresh,search_round=len(SCOUT.query_variants(title))-1)
+        full=dict(fresh,search_round=4*len(SCOUT.query_variants(title))-1)
         self.assertEqual(SCOUT.retry_delay(full,title),dt.timedelta(hours=8))
         denied=dict(fresh,status="external_research_api_unavailable")
         self.assertEqual(SCOUT.retry_delay(denied,title),dt.timedelta(minutes=12))
