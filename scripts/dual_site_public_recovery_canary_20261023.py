@@ -44,6 +44,8 @@ SITES = {
     },
 }
 MANIFEST_PATH = "/mpw-editorial/field-guides/20261023/release.json"
+# One verified permanent redirect; never trust arbitrary same-origin redirects.
+KNOWN_LEGACY_CANONICAL = {("mojplaywin.com", "/games/corwn-defender/"): "/games/crown-defender/"}
 MAX_BODY = 550_000
 MAX_REDIRECTS = 2
 
@@ -59,7 +61,7 @@ class RestrictedRedirect(urllib.request.HTTPRedirectHandler):
         target = urllib.parse.urlsplit(urllib.parse.urljoin(req.full_url, newurl))
         if (target.scheme != "https"
                 or target.hostname not in (self.host, "www." + self.host)
-                or target.path != self.path
+                or target.path not in (self.path, KNOWN_LEGACY_CANONICAL.get((self.host, self.path)))
                 or target.port not in (None, 443)
                 or target.username or target.password
                 or target.query or target.fragment):
@@ -75,7 +77,8 @@ def examine(host: str, path: str, code: int, data: bytes, final_url: str) -> str
     if host not in SITES or path not in SITES[host]:
         return "unapproved_route"
     final = urllib.parse.urlsplit(final_url)
-    if final.scheme != "https" or final.hostname not in (host, "www." + host) or final.path != path:
+    permitted_paths = (path, KNOWN_LEGACY_CANONICAL.get((host, path)))
+    if final.scheme != "https" or final.hostname not in (host, "www." + host) or final.path not in permitted_paths:
         return "wrong_origin_or_route"
     if code != 200:
         return "http_" + str(code)
