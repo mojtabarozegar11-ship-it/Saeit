@@ -338,7 +338,18 @@ jobs:
           gen=read("gen65_operational_report.json")
           modules=read("all_77_modules_last_run.json")
           assert old["robot_count"]==old["successful"]==5 and old["warnings"]==0
-          assert extra["robot_count"]==extra["healthy"]==6 and extra["warnings"]==0
+          # Agent activation and content quality are different dimensions.
+          # Surface real warnings; do not falsely claim every audit is healthy.
+          assert extra["robot_count"]==6
+          assert extra["healthy"]+extra["warnings"]==6
+          statuses={role["name"]:role["status"] for role in extra["roles"]}
+          assert len(statuses)==6 and all(v in ("ok","warning") for v in statuses.values())
+          warnings=sorted(name for name,status in statuses.items() if status=="warning")
+          print("PRIVATE_AGENT_ROLE_HEALTH="+json.dumps(statuses,sort_keys=True))
+          print("PRIVATE_AGENT_WARNINGS="+json.dumps(warnings))
+          # Safety and resource exhaustion remain hard stop conditions.
+          assert statuses["public_content_security"]=="ok", "PUBLIC_SECURITY_AGENT_WARNING"
+          assert statuses["disk_capacity"]=="ok", "PRIVATE_AGENT_CAPACITY_WARNING"
           assert not extra["public_site_modified"] and not extra["sibling_sites_modified"] and not extra["finance_executed"]
           assert review["automatic_publication"] is False
           assert gen["active_private_generation"]==65 and gen["status"]=="gen65_operational_private"
@@ -352,7 +363,9 @@ jobs:
               assert len(lines)==1,tag
           assert any(x.startswith("32 * * * * ") for x in cron.splitlines() if "MPW_MAIN_EXTENDED_ROBOTS_20261018" in x)
           print("ALL_11_MOJPLAYWIN_MAIN_ROBOTS_CONFIRMED=true")
-          print("ALL_11_ROBOTS_HEALTHY=true")
+          print("ALL_11_ROBOTS_EXECUTED=true")
+          print("ROBOT_HEALTHY_COUNT="+str(old["successful"]+extra["healthy"]))
+          print("ROBOT_WARNING_COUNT="+str(extra["warnings"]))
           print("ALL_8_PRIVATE_AGENT_AND_ROBOT_CRONS_PRESENT=true")
           print("GEN65_AND_77_SOURCE_MODULES_RUNNING_IN_PRIVATE=true")
           print("NO_CROSS_SITE_OR_FINANCIAL_MUTATIONS=true")
