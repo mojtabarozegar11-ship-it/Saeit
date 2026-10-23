@@ -25,6 +25,7 @@ ALLOWED=(
     "services/mpw_walletless_django_test_bridge.py",
     "services/mpw_walletless_commercial_intent.py",
     "services/mpw_trx_commercial_chain.py",
+    "services/mpw_trx_reconcile_cursor.py",
     "services/mpw_trx_commercial_web.py",
     "scripts/mpw_tron_public_dual_probe_readonly_20261023.py",
     "scripts/mpw_trx_commercial_reconcile_cron.py",
