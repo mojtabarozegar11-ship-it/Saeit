@@ -5,11 +5,13 @@ import { MeshoptDecoder } from './three-addons/libs/meshopt_decoder.module.js';
 
 export function createEngine(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha:true, powerPreference: 'high-performance' });
+  const glContext=renderer.getContext(),gpuName=String(glContext.getParameter(glContext.RENDERER)||'');
+  const softwareRenderer=/swiftshader|llvmpipe|softpipe/i.test(gpuName);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setClearColor(0x000000,0);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.12;
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = !softwareRenderer;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const camera = new THREE.PerspectiveCamera(68, 1, .08, 160);
@@ -110,7 +112,7 @@ export function createEngine(canvas) {
 
   let weapon=makeWeapon();
 
-  function setSize(w,h,dpr){renderer.setPixelRatio(dpr);renderer.setSize(w,h,false);camera.aspect=w/Math.max(h,1);camera.updateProjectionMatrix();}
+  function setSize(w,h,dpr){renderer.setPixelRatio(softwareRenderer?Math.min(dpr,.78):dpr);renderer.setSize(w,h,false);camera.aspect=w/Math.max(h,1);camera.updateProjectionMatrix();}
 
   function build(w, tileFn) {
     world=w;pitch=0;
@@ -174,14 +176,15 @@ export function createEngine(canvas) {
     if(idleClip){const mixer=new THREE.AnimationMixer(model),idle=mixer.clipAction(idleClip);idle.play();let walk=null;if(walkClip){walk=mixer.clipAction(walkClip);walk.play();walk.setEffectiveWeight(0)}g.userData.mixer=mixer;g.userData.actions={idle,walk,current:idle};}
   }
 
-  let lastRenderTime=0;
-  function render(w,ts){if(w)world=w;if(!world)return;w=world;time=ts/1000;const dt=Math.min(.05,Math.max(0,time-lastRenderTime));lastRenderTime=time;camera.position.set(w.x,1.62+Math.sin(time*8)*.012,w.y);camera.rotation.order='YXZ';camera.rotation.y=w.angle-Math.PI/2;camera.rotation.x=pitch;weapon.g.visible=true;weapon.g.position.x=.12+Math.sin(time*7)*.008;weapon.g.position.y=-.52+Math.sin(time*14)*.008-(w.recoil>0?.035:0);weapon.g.position.z=-.7+(w.recoil>0?.12:0);weapon.g.rotation.z=Math.sin(time*7)*.008;weapon.flash.intensity=w.muzzle>0?16:0;if(scoped&&weapon.model)weapon.model.visible=false;else if(weapon.model)weapon.model.visible=true;
+  let lastRenderTime=0,lastDrawTime=0;
+  function render(w,ts){if(w)world=w;if(!world)return;w=world;time=ts/1000;if(softwareRenderer&&ts-lastDrawTime<32)return;lastDrawTime=ts;const dt=Math.min(.05,Math.max(0,time-lastRenderTime));lastRenderTime=time;camera.position.set(w.x,1.62+Math.sin(time*8)*.012,w.y);camera.rotation.order='YXZ';camera.rotation.y=w.angle-Math.PI/2;camera.rotation.x=pitch;weapon.g.visible=true;weapon.g.position.x=.12+Math.sin(time*7)*.008;weapon.g.position.y=-.52+Math.sin(time*14)*.008-(w.recoil>0?.035:0);weapon.g.position.z=-.7+(w.recoil>0?.12:0);weapon.g.rotation.z=Math.sin(time*7)*.008;weapon.flash.intensity=w.muzzle>0?16:0;if(scoped&&weapon.model)weapon.model.visible=false;else if(weapon.model)weapon.model.visible=true;
     for(const [e,g]of [...enemies])if(!w.enemies.includes(e)){scene.remove(g);disposeEnemy(g);enemies.delete(e);}
     for(const e of w.enemies){const g=enemies.get(e)||enemy(e);g.position.set(e.x,0,e.y);g.rotation.y=Math.atan2(w.x-e.x,-(w.y-e.y));if(g.userData.mixer){const actions=g.userData.actions,desired=e.moving&&actions.walk?actions.walk:actions.idle;if(desired!==actions.current){desired.reset();desired.crossFadeFrom(actions.current,.24,false);desired.play();actions.current=desired}g.userData.mixer.update(dt)}const flash=Math.max(0,Math.min(1,(e.hit||0)/.18));for(const entry of g.userData.materials||[])if(entry.material.emissive)entry.material.emissive.copy(entry.base).lerp(hitColor,flash);for(const o of g.children)if(o.userData.hp)o.scale.x=.06+clamp(e.hp/e.max,0,1);}
     for(const [m,o]of [...missiles])if(!w.missiles.includes(m)){scene.remove(o);disposeBranch(o);missiles.delete(m);}
     for(const m of w.missiles){let o=missiles.get(m);if(!o){o=new THREE.Group();const body=new THREE.Mesh(new THREE.CylinderGeometry(.045,.09,.48,10),new THREE.MeshStandardMaterial({color:0xd3cfbd,metalness:.5,roughness:.38,emissive:0x31190c}));body.rotation.x=Math.PI/2;o.add(body);o.add(new THREE.PointLight(0xff7136,2,3));scene.add(o);missiles.set(m,o);}o.position.set(m.x,1.1,m.y);o.rotation.y=Math.atan2(m.vx,m.vy);}
-    for(const [b,o]of [...hostileShots])if(!w.hostile.includes(b)){scene.remove(o);disposeBranch(o);hostileShots.delete(b);}
-    for(const b of w.hostile){let o=hostileShots.get(b);if(!o){o=new THREE.Group();const tracer=new THREE.Mesh(tracerGeo,tracerMat);tracer.rotation.x=Math.PI/2;tracer.position.z=-.16;o.add(tracer);const core=new THREE.Mesh(tracerCoreGeo,tracerCoreMat);o.add(core);scene.add(o);hostileShots.set(b,o);}o.position.set(b.x,1.35,b.y);const dir=new THREE.Vector3(b.vx,0,b.vy).normalize();o.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir);}
+    const hostile=w.hostile||[];
+    for(const [b,o]of [...hostileShots])if(!hostile.includes(b)){scene.remove(o);disposeBranch(o);hostileShots.delete(b);}
+    for(const b of hostile){let o=hostileShots.get(b);if(!o){o=new THREE.Group();const tracer=new THREE.Mesh(tracerGeo,tracerMat);tracer.rotation.x=Math.PI/2;tracer.position.z=-.16;o.add(tracer);const core=new THREE.Mesh(tracerCoreGeo,tracerCoreMat);o.add(core);scene.add(o);hostileShots.set(b,o);}o.position.set(b.x,1.35,b.y);const dir=new THREE.Vector3(b.vx,0,b.vy).normalize();o.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir);}
     for(const i of (w.impacts||[])){let o=impacts.get(i);if(!o){o=new THREE.Group();const mat=new THREE.MeshBasicMaterial({color:i.type==='head'?0xffe7a5:0x8ce9ce,transparent:true,opacity:.95,toneMapped:false,depthWrite:false});const ring=new THREE.Mesh(impactRingGeo,mat);o.add(ring);const dot=new THREE.Mesh(impactDotGeo,mat);o.add(dot);scene.add(o);impacts.set(i,o);}o.position.set(i.x,i.height||1.1,i.y);o.scale.setScalar(1+(.25-Math.min(.25,i.life||0))*3);for(const child of o.children)child.material.opacity=Math.max(0,Math.min(1,(i.life||0)*5));}
     for(const [i,o]of [...impacts])if(!(w.impacts||[]).includes(i)){scene.remove(o);disposeBranch(o);impacts.delete(i);}
     for(const [p,o]of [...pickups])if(!(w.pickups||[]).includes(p)){scene.remove(o);disposeBranch(o);pickups.delete(p)}
