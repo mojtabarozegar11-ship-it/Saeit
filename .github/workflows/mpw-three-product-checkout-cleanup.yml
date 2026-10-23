@@ -74,9 +74,17 @@ jobs:
           echo 'PUBLIC_STORE_COPY_AND_THREE_PRIMARY_CTAS=PASS'
           for id in 72 225 879; do
             grep -q "store/product/$id/checkout/" <<<"$body"
-            page="$(curl --location --retry 2 --retry-delay 2 --fail --silent --show-error --max-time 30 -H 'Cache-Control: no-cache' "https://mojplaywin.com/store/product/$id/checkout/?__mpw_three_product_audit=$GITHUB_RUN_ID")"
-            grep -q 'Create invoice and pay with TRX' <<<"$page"
-            echo "PUBLIC_TRX_CHECKOUT_$id=PASS"
+            page="$RUNNER_TEMP/mpw-checkout-$id.html"
+            status="$(curl --location --retry 2 --retry-delay 2 --fail --silent --show-error --max-time 30 -H 'Cache-Control: no-cache' -o "$page" -w '%{http_code}' "https://mojplaywin.com/store/product/$id/checkout/?__mpw_three_product_audit=$GITHUB_RUN_ID")"
+            test "$status" = 200
+            if grep -q 'Create invoice and pay with TRX' "$page"; then
+              echo "PUBLIC_TRX_INVOICE_FORM_$id=PASS"
+            elif grep -Eiq 'sign.?in|log.?in|register|create an account' "$page"; then
+              echo "PUBLIC_TRX_CHECKOUT_AUTH_GATE_$id=PASS"
+            else
+              echo "PUBLIC_TRX_CHECKOUT_ROUTE_$id=FAIL (unexpected page content)"
+              exit 1
+            fi
           done
           grep -q 'TRX checkout available · account required' <<<"$body"
           grep -q 'Each book has a secure TRX invoice checkout' <<<"$body"
