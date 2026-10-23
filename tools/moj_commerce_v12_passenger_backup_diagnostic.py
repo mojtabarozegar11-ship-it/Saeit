@@ -86,10 +86,49 @@ def _parts(name):
     return parts
 
 
+def classify_absolute_link_target(target):
+    """Return an opaque safety class; do not print, follow or resolve target."""
+    if not isinstance(target, str) or not target.startswith('/'):
+        raise ValueError('not_an_absolute_target')
+    prefix = '/home/zomorod2/'
+    if target.startswith(prefix):
+        within = target[len(prefix):]
+        if _parts(within) is not None:
+            return 'within_archive_roots'
+    # Owned-but-unbacked paths must stay quarantined until separately recovered.
+    if target.startswith('/home/zomorod2/'):
+        return 'tenant_unbacked'
+    if target.startswith('/home/'):
+        return 'other_account_home'
+    # Deployment interpreter / system environment is NOT part of the archive.
+    if target.startswith(('/opt/alt/', '/usr/', '/bin/', '/lib/', '/lib64/')):
+        return 'runtime_dependency'
+    return 'external_other'
+
+
+def classify_tenant_link_family(target):
+    """Opaque category only, never raw target path."""
+    if target == '/home/zomorod2/Saeit' or target.startswith('/home/zomorod2/Saeit/'):
+        return 'production_source'
+    if target.startswith(('/home/zomorod2/virtualenv/',
+                          '/home/zomorod2/nodevenv/',
+                          '/home/zomorod2/.local/')):
+        return 'private_runtime'
+    if target.startswith(('/home/zomorod2/public_html/',
+                          '/home/zomorod2/www/')):
+        return 'public_assets'
+    return 'other_tenant'
+
+
 def classify_archive(stream):
     count = {'directories': 0, 'regular_files': 0, 'symlinks': 0,
              'hardlinks': 0, 'unsafe_member_paths': 0, 'duplicate_paths': 0,
-             'absolute_link_targets': 0, 'relative_link_escape': 0,
+             'absolute_link_targets': 0, 'absolute_within_archive_roots': 0,
+             'absolute_runtime_dependency': 0, 'absolute_external_other': 0,
+             'absolute_tenant_unbacked': 0, 'absolute_other_account_home': 0,
+             'tenant_production_source': 0, 'tenant_private_runtime': 0,
+             'tenant_public_assets': 0, 'tenant_other_tenant': 0,
+             'relative_link_escape': 0,
              'missing_hardlink_targets': 0, 'nested_link_targets': 0,
              'special_members': 0, 'file_bytes_total': 0,
              'too_many_entries': False, 'too_many_file_bytes': False}
@@ -137,6 +176,11 @@ def classify_archive(stream):
     for _, parts, target, sym in links:
         if not isinstance(target, str) or target.startswith('/'):
             count['absolute_link_targets'] += 1
+            bucket = (classify_absolute_link_target(target) if isinstance(target, str)
+                      and target.startswith('/') else 'external_other')
+            count['absolute_' + bucket] += 1
+            if bucket == 'tenant_unbacked':
+                count['tenant_' + classify_tenant_link_family(target)] += 1
             continue
         candidate = (posixpath.normpath(posixpath.join(*parts[:-1], target))
                      if sym else posixpath.normpath(target))
