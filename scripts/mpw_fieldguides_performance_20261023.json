@@ -1,0 +1,105 @@
+{
+  "category": "Performance",
+  "articles": [
+    [
+      "lcp-hero-images",
+      "Prioritize the actual largest image in a game launcher",
+      "Performance",
+      "On a game landing page, the visually dominant cover is often the LCP candidate. Measure which element actually wins before preloading anything, because a rotating hero and dynamic JS insertion can change the result.",
+      "Place the dominant <img> in the initial HTML, with intrinsic dimensions, and avoid lazy loading it. Use high fetch priority only when testing shows the image truly dominates LCP; defer decorative galleries.",
+      "For a 2.9-second LCP with a 1.1-second resource discovery delay, reducing the image file alone cannot recover the whole missed second. Compare network waterfalls before and after discoverability work.",
+      "Preloading several competing poster images can hurt the true hero. Verify cold and warm mobile visits, measure LCP at the 75th percentile and capture a screenshot of the LCP element.",
+      "LCP,CWV"
+    ],
+    [
+      "inp-instant-menu",
+      "Fix slow taps in a large game navigation menu",
+      "Performance",
+      "A game menu may appear fully loaded but remain sluggish while scripts sort hundreds of cards. INP distinguishes event input delay, callback processing and presentation delay.",
+      "Trace a representative tap in the browser performance panel, then remove synchronous sort work from the hot path. Filter an indexed list and update only changed cards; break optional work into smaller tasks.",
+      "If sorting requires 80 milliseconds and layout another 70 milliseconds, optimizing only event listener attachment does not address most of the interaction time. Report the separate phases.",
+      "A full-second debounce may hide computation but feels broken. Test rapid tap sequences on slow phones, preserving immediate confirmation and keyboard navigation.",
+      "INP,CWV"
+    ],
+    [
+      "cls-reserved-covers",
+      "Stop product card shifts while game covers load",
+      "Performance",
+      "Without reserved space, late-loading game artwork pushes buttons and titles down. The user can press the wrong card as a result, even if all images eventually display correctly.",
+      "Set width and height on img tags to establish an aspect ratio, then allow responsive CSS to scale them. Reserve badge and price rows instead of inserting them only after asynchronous data arrives.",
+      "For a 16:9 preview displayed 320 CSS pixels wide, reserve approximately 180 pixels vertically. Test with images blocked to ensure titles stay in their intended places.",
+      "Rigid card heights can clip translated labels. Compare layouts with 200% text zoom, disabled images, slow networks and real field CLS traces.",
+      "CLS,IMG"
+    ],
+    [
+      "frame-time-p95",
+      "Investigate stutter using frame-time percentiles",
+      "Performance",
+      "A game that averages 60 FPS may still pause briefly on particle spawns, decoding and memory collection. Averages conceal rare slow frames that players notice.",
+      "Record frame durations over repeated seeded gameplay. Compute the median, 95th and 99th percentiles; annotate changes during spawning and menu transitions.",
+      "If most frames take 10 ms while every twentieth frame takes 34 ms, the average frame rate alone overstates fluidity. Investigate that periodic 34 ms spike.",
+      "Desktop results do not predict thermal or memory constraints on cheap Android phones. Repeat under battery saver and verify interaction remains predictable.",
+      "CAN,CWV"
+    ],
+    [
+      "canvas-static-layers",
+      "Cache static background layers in Canvas games",
+      "Performance",
+      "A grid puzzle redraws the same tiles and star fields every frame even though only the beam moves. This burns CPU and creates unnecessary draw operations.",
+      "Pre-render stable geometry onto an offscreen surface, then composite it. Separate mutable effects from immutable décor and minimize repeated shadowBlur and canvas state changes.",
+      "A 7×7 board needs only a one-time draw of static tile borders, with each frame updating the moving laser and selection state. Measure render CPU time before caching.",
+      "Caching a huge full-screen backing surface can increase RAM and create GPU upload costs. Test low-memory devices and free caches when a scene changes.",
+      "CAN,INP"
+    ],
+    [
+      "dpr-render-cost",
+      "Cap rendering resolution on high-density phones",
+      "Performance",
+      "High device pixel ratios sharpen art but multiply backing-store pixels and memory use. A phone at DPR 3 does not necessarily justify full native-resolution particles.",
+      "Keep logical game coordinates separate from backing pixels. Measure DPR 1, 2 and 3; cap DPR only after a visual comparison, and reset transforms on resize.",
+      "An 800×500 logical canvas needs about 1.6 million pixels at DPR 2 but 3.6 million at DPR 3. Device cost grows with area, not CSS width alone.",
+      "Repeated scale calls after orientation changes compound transforms and misalign hit testing. Verify button-to-beam alignment after rotation.",
+      "CAN,PTR"
+    ],
+    [
+      "decode-memory",
+      "Budget decoded image memory, not only network transfer",
+      "Performance",
+      "A small compressed cover can decode to a very large RGBA bitmap. A catalog with many large natural dimensions can trigger memory pressure despite a modest transfer budget.",
+      "Track each candidate image's natural pixel dimensions and concurrent decoded count. Offer smaller variants and release unused canvas buffers and temporary object URLs promptly.",
+      "A 2000×2000 RGBA bitmap uses about 16 MB before implementation overhead. Five covers of that size approach 80 MB, excluding the application itself.",
+      "Lazy loading the critical above-the-fold image harms perceived loading. Test fast scrolling, return navigation and tab survival on a low-memory device.",
+      "IMG,CAN"
+    ],
+    [
+      "font-swap-scoreboards",
+      "Keep scoreboards stable while fonts download",
+      "Performance",
+      "Decorative fonts can make a neon UI distinctive but also move counters after loading and delay interaction on a weak device.",
+      "Prefer system fonts for small controls and number labels, or reserve tabular numeral widths. Load ornamental display families only where they improve the design.",
+      "A score changing from 99 to 100 must not shift neighboring Pause and Undo controls when the custom typeface becomes available.",
+      "Subsetting without testing can omit symbols and localized characters. Audit at different zoom settings and with a cold cache.",
+      "CLS,CWV"
+    ],
+    [
+      "script-evaluation-budget",
+      "Limit nonessential script evaluation at game startup",
+      "Performance",
+      "Analytics, advertising widgets and experimentation scripts share the main thread with game initialization. Their evaluation can block early taps after a page looks usable.",
+      "Inventory each external script by purpose, download size, parse and execute time; remove redundant dependencies and postpone nonessential listeners until after the first interaction-ready state.",
+      "Treat a 50 KB script with 110 milliseconds of evaluation as a higher responsiveness risk than its transfer bytes imply. Quantify using a performance trace.",
+      "An async attribute does not prevent execution from landing during a critical tap. Compare controlled builds with the integration enabled and disabled.",
+      "INP,CSP"
+    ],
+    [
+      "reproducible-device-qa",
+      "Make performance verification reproducible",
+      "Performance",
+      "A single successful Lighthouse result is insufficient evidence for a commercially usable game across mobile hardware and browser caches.",
+      "Keep a fixed scenario, device profile, network throttle, warm-up instructions, test data and commit SHA. Compare repeated cold and warm runs, and retain median and tail timings.",
+      "Record five cold navigations and five cached navigations to the same release, instead of quoting the fastest run as a promised customer outcome.",
+      "Browser upgrades and background tabs can change timings. Attach tool versions, failures and the exact public URL to the acceptance record.",
+      "CWV,INP"
+    ]
+  ]
+}
