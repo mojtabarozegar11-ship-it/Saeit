@@ -37,6 +37,21 @@ class GreenhouseCropMarginTests(unittest.TestCase):
         self.assertEqual(values["net_margin"], "7000.00")
         self.assertEqual(values["break_even_price_per_kg"], "1.86")
 
+    def test_downside_stress_is_calculated_not_just_described(self):
+        legacy = calculate(self.data)["results"]["downside_stress_test"]
+        self.assertEqual(legacy["modeled_revenue"], "21870.00")
+        self.assertEqual(legacy["modeled_total_cost"], "20000.00")
+        self.assertEqual(legacy["modeled_net_margin"], "1870.00")
+        self.assertIsNone(legacy["water_tariff_multiplier"])
+        resource = calculate(self.complete_resource_case())["results"]["downside_stress_test"]
+        self.assertEqual(resource["modeled_revenue"], "21870.00")
+        self.assertEqual(resource["modeled_total_cost"], "20200.00")
+        self.assertEqual(resource["modeled_net_margin"], "1670.00")
+        self.assertTrue(resource["water_tariff_scenario_applicable"])
+        self.assertFalse(resource["market_probability_calibrated"])
+        loss = calculate(dict(self.data, price_per_kg="0.5"))["results"]["downside_stress_test"]
+        self.assertTrue(loss["modeled_loss"])
+
     def test_break_even_thresholds_are_not_rounded_below_true_minimum(self):
         result = calculate(self.data)["results"]
         price = Decimal(result["break_even_price_per_kg"])
@@ -97,7 +112,7 @@ class GreenhouseCropMarginTests(unittest.TestCase):
 
     def test_explicit_cost_drivers_and_crop_season(self):
         result = calculate(self.complete_resource_case())
-        self.assertEqual(result["version"], "2.0")
+        self.assertEqual(result["version"], "2.1")
         self.assertEqual(result["model_scope"], "resource_explicit_uncalibrated")
         self.assertFalse(result["market_data_independently_validated"])
         self.assertEqual(result["inputs"]["crop"], "tomato")
