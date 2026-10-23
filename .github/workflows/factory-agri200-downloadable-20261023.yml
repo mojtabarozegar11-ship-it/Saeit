@@ -1,0 +1,117 @@
+name: Factory agricultural bilingual research-navigator artifact manufacturing
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - scripts/factory_agri200_downloadable_20261023.py
+      - tests/test_factory_agri200_downloadable_20261023.py
+      - .github/workflows/factory-agri200-downloadable-20261023.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_agri200_downloadable_20261023.py
+      - tests/test_factory_agri200_downloadable_20261023.py
+      - .github/workflows/factory-agri200-downloadable-20261023.yml
+permissions: {contents: read}
+concurrency:
+  group: saeit-factory-research-navigator-artifacts
+  cancel-in-progress: false
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify offline artifact integrity, interactive UI and no fake quality release
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_agri200_downloadable_20261023.py -v
+          python3 -B -m py_compile scripts/factory_agri200_downloadable_20261023.py
+  private-build:
+    needs: regression
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install private candidate manufacturer and prove output ZIPs on VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          dir="$RUNNER_TEMP/agri-candidate-id"
+          install -d -m 700 "$dir"
+          trap 'rm -rf -- "$dir"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$dir/key"
+          chmod 600 "$dir/key"
+          ssh-keygen -y -P '' -f "$dir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$dir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$dir/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$dir/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          ssh_vps 'test "$(id -un)" = githubops && test -x "$HOME/factory-runtime/.venv/bin/python" && test -f "$HOME/factory-runtime/operations/production-instructions/stage5-evidence-workbook.py"'
+          src=scripts/factory_agri200_downloadable_20261023.py
+          staging="/home/githubops/factory-runtime/operations/production-instructions/.research-navigator-$GITHUB_RUN_ID.py"
+          test -s "$src"
+          ssh_vps "test ! -e '$staging'"
+          ssh_vps "umask 077; cat > '$staging'; chmod 600 '$staging'" < "$src"
+          hash="$(sha256sum "$src" | awk '{print $1}')"
+          ssh_vps "test \"\$(sha256sum '$staging' | awk '{print \$1}')\" = '$hash'"
+          ssh_vps "python3 -c 'import ast;ast.parse(open(\"$staging\",encoding=\"utf-8\").read())'"
+          ssh_vps "bash -se -- '$staging'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          incoming="$1"
+          base="$HOME/factory-runtime"
+          ops="$base/operations/production-instructions"
+          py="$base/.venv/bin/python"
+          work="$base/private/autonomous-product-cycle"
+          test -f "$incoming" && test ! -L "$incoming"
+          test -f "$ops/stage34-autonomous-handoff.py"
+          test -f "$ops/stage5-evidence-workbook.py"
+          mkdir -p "$base/operations/backups"
+          backup="$base/operations/backups/research-navigator-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+          install -d -m 700 "$backup"
+          if test -e "$ops/research-navigator.py"; then
+            test -f "$ops/research-navigator.py" && test ! -L "$ops/research-navigator.py"
+            cp -p "$ops/research-navigator.py" "$backup/prior-worker.py"
+          fi
+          mv -f "$incoming" "$ops/research-navigator.py"
+          timeout 480s "$py" -B "$ops/research-navigator.py" --factory-private "$work" --stage34-worker "$ops/stage34-autonomous-handoff.py" --stage5-worker "$ops/stage5-evidence-workbook.py" --batch 250
+          cron='*/3 * * * * /usr/bin/flock -n /home/githubops/factory-runtime/operations/production-instructions/.research-navigator-minute.lock /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/research-navigator.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --stage34-worker /home/githubops/factory-runtime/operations/production-instructions/stage34-autonomous-handoff.py --stage5-worker /home/githubops/factory-runtime/operations/production-instructions/stage5-evidence-workbook.py --batch 250 >> /home/githubops/factory-runtime/operations/production-instructions/research-navigator.log 2>&1 # SAEIT_AGRI200_NAVIGATOR_PRIVATE_V1'
+          crontab -l > "$backup/crontab.before"
+          marker=SAEIT_AGRI200_NAVIGATOR_PRIVATE_V1
+          if grep -Fq "$marker" "$backup/crontab.before"; then
+            test "$(grep -Fc "$marker" "$backup/crontab.before")" -eq 1
+            awk -v marker="$marker" -v cron="$cron" 'index($0,marker){print cron;next}{print}' "$backup/crontab.before" | crontab -
+          else
+            { cat "$backup/crontab.before"; printf '%s\n' "$cron"; } | crontab -
+          fi
+          test "$(crontab -l | grep -Fc "$marker")" -eq 1
+          "$py" -B - "$work" <<'PY'
+          import json,pathlib,sys,zipfile,hashlib
+          area=pathlib.Path(sys.argv[1])/"production-instructions"
+          state=json.loads((area/"stage-05/downloadable-candidate-status.json").read_text())
+          receipts=sorted((area/"stage-05/downloadable-receipts").glob("WO-*.json"))
+          good=0
+          for r in receipts:
+              v=json.loads(r.read_text())
+              p=area/v["archive_relative_path"]
+              assert p.is_file() and not p.is_symlink()
+              assert hashlib.sha256(p.read_bytes()).hexdigest()==v["zip_sha256"]
+              with zipfile.ZipFile(p) as z:
+                  assert z.testzip() is None and len(z.namelist())>=6
+              assert v["ready_for_paid_store"] is False
+              good+=1
+          print("AGRI_NAVIGATOR_REAL_ZIPS_SHA256_AND_CRC_VERIFIED="+str(good))
+          print("AGRI_NAVIGATOR_NEW_THIS_RUN="+str(state["new_packages_this_tick"]))
+          print("AGRI_NAVIGATOR_BLOCKED_THIS_RUN="+str(state["blocked_this_tick"]))
+          print("AGRI_NAVIGATOR_SITES_CHANGED=false")
+          PY
+          REMOTE
