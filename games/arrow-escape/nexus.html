@@ -6,17 +6,17 @@
   <meta name="theme-color" content="#071522">
   <meta name="description" content="نکسوس سه‌بعدی زمرد ملل؛ معمای مکعب مکانیکی با پیچش واقعی لایه‌ها، فلش‌های مرتبط و مسیرهای قابل‌پیش‌بینی.">
   <title>نکسوس سه‌بعدی | زمرد ملل</title>
-  <link rel="stylesheet" href="./nexus.css?v=major-1-20261023">
+  <link rel="stylesheet" href="./nexus.css?v=worm-1-20261023">
 </head>
 <body>
   <main class="shell">
     <header class="header">
       <a class="brand" href="/arrow-escape/" aria-label="بازگشت به بازی هزارتوی پیکان‌ها"><span class="brand-mark">✦</span><span>زمرد ملل <small>NEXUS GAME LAB</small></span></a>
-      <div class="tag"><span class="indicator"></span> نسل سینمایی ۲٫۰</div>
+      <div class="tag"><span class="indicator"></span> نسل سوم · کرم‌فلش‌های درهم‌تنیده</div>
     </header>
     <section class="hero">
-      <span class="eyebrow">ARROW NEXUS 3D · LIVING CUBE</span>
-      <h1>مکعبی زنده در <em>چهار جهان اسرارآمیز</em></h1>
+      <span class="eyebrow">ARROW NEXUS 3D · WORM ENTANGLEMENT</span>
+      <h1>هزارتوی <em>فلش‌های مارپیچی درهم‌تنیده</em></h1>
       <p>پیکان‌ها را آزاد کن، مدارهای دوگانه را روشن کن، رزونانس بساز و با هر پنج مرحله وارد جهانی تازه شو.</p>
     </section>
     <section class="game" aria-label="مکعب معمایی سه‌بعدی">
@@ -41,9 +41,9 @@
       <div class="viewport" id="viewport">
         <div class="ambient-label top">DRAG TO ORBIT · TAP TO RELEASE</div>
         <div class="nexus-fx" id="nexusFx" aria-hidden="true"></div>
-        <canvas id="nexusCanvas" aria-label="مکعب سه‌بعدی؛ بکشید تا دوربین بچرخد و روی یک فلش لمس کنید" tabindex="0"></canvas>
+        <canvas id="nexusCanvas" aria-label="بدنهٔ مارپیچی فلش‌ها؛ برای یافتن راه خروج دوربین را بچرخانید و بدنهٔ فلش را لمس کنید" tabindex="0"></canvas>
         <div class="ambient-label bottom">◈ NEXUS ENGINE · SOLVER VERIFIED</div>
-        <div class="toast" role="status" aria-live="polite" id="message">برای چرخاندن دوربین، روی مکعب بکش؛ برای آزادکردن، فلش را لمس کن.</div>
+        <div class="toast" role="status" aria-live="polite" id="message">بدنهٔ فلش‌ها مثل کرم به هم پیچیده است؛ فلش‌هایی را آزاد کن که مسیر سرشان باز است.</div>
         <div id="victory" class="victory hidden" role="dialog" aria-modal="true" aria-labelledby="victoryHeading">
           <div class="victory-card">
             <span class="victory-spark">✦</span>
@@ -75,12 +75,12 @@
     </div>
     <details class="guide">
       <summary>قوانین نکسوس و امکانات تازه</summary>
-      <p>فلش‌ها روی شش وجه مکعب قرار دارند. چرخاندن دوربین فقط زاویه دید را عوض می‌کند؛ دکمه‌های چرخش، حلقه مرکزی مکعب را واقعاً می‌چرخانند. فلش‌های بنفش با حذف فلش پیوندی باز می‌شوند و فلش‌های طلایی پس از هم‌راستاشدن حلقه مجاز می‌شوند. لمس طولانی، پیش‌نمایش نتیجه است. از مرحله هشتم مدار دوگانه فقط با آزادسازی دو منبع فعال می‌شود و از مرحله دوازدهم میدان رزونانس با آزادسازی سه پیکان باز خواهد شد. هر پنج مرحله جهان و نورپردازی تغییر می‌کند؛ رهاسازی‌های پیاپی امتیاز زنجیره‌ای بیشتری می‌دهند. صدا پس از اولین لمس فعال می‌شود و با دکمه صدا قابل کنترل است. هر مرحله راه‌حل محاسبه‌شده دارد و پیشرفت روی همین دستگاه ذخیره می‌شود.</p>
+      <p>فلش‌ها به شکل کرم‌های بلند و چندخم روی وجوه مکعب در هم پیچیده‌اند. کل بدنهٔ فلش‌های دیگر می‌تواند مسیر خروج سر هر فلش را ببندد؛ ابتدا فلشی را پیدا کن که مسیرش خالی است. چرخاندن دوربین فقط زاویه دید را عوض می‌کند؛ دکمه‌های چرخش، حلقه مرکزی مکعب را واقعاً می‌چرخانند. از مرحله نهم فلش‌های بنفش با حذف فلش پیوندی باز می‌شوند و از مرحله دوازدهم فلش‌های طلایی پس از هم‌راستاشدن حلقه مجاز می‌شوند. لمس طولانی، پیش‌نمایش نتیجه است. از مرحله بیستم مدار دوگانه فقط با آزادسازی دو منبع فعال می‌شود و از مرحله بیست‌وچهارم میدان رزونانس با آزادسازی سه پیکان باز خواهد شد. هر پنج مرحله جهان و نورپردازی تغییر می‌کند؛ رهاسازی‌های پیاپی امتیاز زنجیره‌ای بیشتری می‌دهند. صدا پس از اولین لمس فعال می‌شود و با دکمه صدا قابل کنترل است. هر مرحله راه‌حل محاسبه‌شده دارد و پیشرفت روی همین دستگاه ذخیره می‌شود.</p>
     </details>
     <footer>© شرکت کشت و صنعت زمرد ملل · نمونه قابل‌بازی نکسوس سه‌بعدی</footer>
   </main>
-  <script src="./nexus-core.js"></script>
+  <script src="./nexus-core.js?v=worm-1-20261023"></script>
   <script src="./nexus-experience.js?v=major-1-20261023"></script>
-  <script type="module" src="./nexus.js?v=major-1-20261023"></script>
+  <script type="module" src="./nexus.js?v=worm-1-20261023"></script>
 </body>
 </html>
