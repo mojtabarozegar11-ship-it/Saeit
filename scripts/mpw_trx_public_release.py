@@ -1,7 +1,7 @@
 """Owner-authorized public TRX activation with transactional QA and file rollback.
 No transfer is broadcast. Canary evidence is neither set nor synthesized.
 """
-import os,sys,json,hashlib,shutil,tempfile,subprocess,time,urllib.request
+import os,sys,json,hashlib,shutil,tempfile,subprocess,time,urllib.request,zipfile
 from pathlib import Path
 APP=Path('/home/zomorod2/Saeit-staging')
 PUBLIC=Path('/home/zomorod2/mojplaywin.com')
@@ -12,6 +12,7 @@ EXPECTED={
  'scripts/mpw_trx_commercial_reconcile_cron.py':'cd5a7a60b2692c2cdb5da80ddb87e8f4a2fa2213cb667e8dfb9809b1f8179bec',
  'services/mpw_trx_commercial_web.py':'a4ccf0fae59672f13b025804d355bb9f2908dbfce409b3ad6ebac85240f9dd70',
 }
+QR_WHEEL_SHA256='28c7d081ed0cf935e0411293a465efd4d500704072cdb039778a2ab8736190c7'
 MODULES=[*EXPECTED,'services/mpw_trx_public_pages.py']
 TEMPLATE='mpw_commerce/templates/mpw_commerce/product_checkout.html'
 SETTINGS='config/settings.py'
@@ -114,17 +115,28 @@ def main():
  for rel,digest in EXPECTED.items():
   assert not (APP/rel).is_symlink() and hashlib.sha256((APP/rel).read_bytes()).hexdigest()==digest,rel+' changed independently'
  for rel in MODULES: compile((source/rel).read_text(),rel,'exec')
+ wheel=source/'wheels/segno-1.6.6-py3-none-any.whl'
+ assert wheel.is_file() and not wheel.is_symlink() and hashlib.sha256(wheel.read_bytes()).hexdigest()==QR_WHEEL_SHA256,'Pinned QR dependency missing or changed'
+ assert not (APP/'segno').exists() and not (APP/'segno').is_symlink(),'Unexpected existing app-local QR module'
  cron=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=20)
  assert cron.returncode==0 and 'mpw_trx_commercial_reconcile_cron.py' in cron.stdout
  template=(APP/TEMPLATE).read_text();assert template.count('<main>')==1 and template.count('</main>')==1 and 'MPW_WALLETLESS_TRX_BUTTON_V1' in template
  backup=Path(tempfile.mkdtemp(prefix='trx-public-',dir='/home/zomorod2/.local/share/mpw-trx-rollbacks'));os.chmod(backup,0o700)
  before={}
+ qr_installed=False
  for rel in [*MODULES,TEMPLATE,SETTINGS,URLS]:
   target=APP/rel;assert not target.is_symlink()
   before[rel]=target.read_bytes() if target.exists() else None
   if before[rel] is not None:
    saved=backup/rel;saved.parent.mkdir(parents=True,exist_ok=True);saved.write_bytes(before[rel]);os.chmod(saved,0o600)
  try:
+  qr_tmp=APP/'.segno-public-install-tmp'; assert not qr_tmp.exists() and not qr_tmp.is_symlink(); qr_tmp.mkdir(mode=0o700)
+  with zipfile.ZipFile(wheel) as archive:
+   for info in archive.infolist():
+    if info.is_dir(): continue
+    if not info.filename.startswith('segno/') or '..' in Path(info.filename).parts or info.file_size>150000: raise RuntimeError('Unexpected QR package member')
+    dest=qr_tmp/info.filename; dest.parent.mkdir(parents=True,exist_ok=True,mode=0o700); dest.write_bytes(archive.read(info))
+  assert (qr_tmp/'segno/__init__.py').is_file(); os.replace(qr_tmp/'segno',APP/'segno'); shutil.rmtree(qr_tmp); qr_installed=True
   for rel in MODULES: put(APP/rel,(source/rel).read_bytes())
   import re
   modified=template.replace('<main>','<main>'+NEW_MAIN,1).replace('</main>','{% endif %}</main>',1)
@@ -154,6 +166,8 @@ def main():
   result={'status':'PUBLIC_TRX_LIVE','sender_registration_required':False,'product_ids':[72,225,879],'automatic_reconciliation':True,'mainnet_payment_proved':False,'backup_id':backup.name}
   (backup/'release.json').write_text(json.dumps(result));print('PUBLIC_TRX_RELEASE='+json.dumps(result))
  except BaseException:
+  if qr_installed: shutil.rmtree(APP/'segno',ignore_errors=True)
+  shutil.rmtree(APP/'.segno-public-install-tmp',ignore_errors=True)
   for rel,data in before.items():
    if data is None:(APP/rel).unlink(missing_ok=True)
    else:put(APP/rel,data)
