@@ -1,5 +1,11 @@
 name: VPS Stage4 due validation dispatch and recurring native scheduler
 on:
+  pull_request:
+    paths:
+      - scripts/factory_stage4_due_dispatch_20261023.py
+      - tests/test_factory_stage4_due_dispatch_20261023.py
+      - deploy/install_factory_stage4_due_dispatch.sh
+      - .github/workflows/factory-stage4-due-dispatch-20261023.yml
   push:
     branches: [main]
     paths:
