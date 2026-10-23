@@ -37,6 +37,16 @@ def due_retry(metadata, now):
     return when
 
 
+def safe_error_code(error):
+    """Only emit database errno/known generic class, never SQL or credentials."""
+    first = error.args[0] if error.args else None
+    if type(first) is int and 0 <= first <= 99999:
+        return str(first)
+    if isinstance(first, str) and "database is locked" in first.lower():
+        return "sqlite_locked"
+    return "unspecified"
+
+
 def _locked_file(root):
     if not root.is_dir() or root.is_symlink():
         raise RuntimeError("STAGE4_DISPATCH_RUNTIME_DIRECTORY_UNSAFE")
@@ -74,7 +84,7 @@ def dispatch(*, root, apply, batch=12, scan_limit=500):
         import django
         django.setup()
         from django.apps import apps
-        from django.db import transaction
+        from django.db import OperationalError, transaction
         from django.utils import timezone
         from core.autonomous_brain import AutonomousBrain
 
@@ -84,13 +94,14 @@ def dispatch(*, root, apply, batch=12, scan_limit=500):
         counts = Counter()
         scanned = 0
         now = timezone.now()
-        # Iterate the product snapshots, but re-read and lock the live run
-        # before planning. No stale snapshot may authorize a mutation.
-        for product_pk, metadata in Product.objects.values_list("pk", "metadata").iterator(chunk_size=100):
+        # Materialize a bounded snapshot *before* writes. Keeping a streaming
+        # MariaDB cursor open while the planner creates tasks on the same
+        # connection can cause intermittent OperationalError and lost cycles.
+        # Every candidate is still re-read within its own locked transaction.
+        candidates = list(Product.objects.order_by("pk").values_list(
+            "pk", "metadata")[:scan_limit])
+        for product_pk, metadata in candidates:
             scanned += 1
-            if scanned > scan_limit:
-                counts["scan_limit_reached"] += 1
-                break
             if due_retry(metadata, now) is None:
                 continue
             counts["due_seen"] += 1
@@ -136,6 +147,8 @@ def dispatch(*, root, apply, batch=12, scan_limit=500):
                         counts["planner_returned_" + str(task.status)[:40]] += 1
             except Exception as error:
                 counts["planning_error_" + type(error).__name__] += 1
+                if isinstance(error, OperationalError):
+                    counts["db_error_code_" + safe_error_code(error)] += 1
         result = {
             "schema": "saeit.factory.stage4-due-dispatch.v1",
             "apply": apply, "scanned": scanned, "counts": dict(sorted(counts.items())),

@@ -69,6 +69,52 @@ jobs:
           expected_py="$(sha256sum scripts/factory_stage4_due_dispatch_20261023.py | awk '{print $1}')"
           opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
           timeout 200s ssh -T "${opts[@]}" githubops@178.239.147.150 "bash '$stage/install_factory_stage4_due_dispatch.sh' '$stage/factory_stage4_due_dispatch_20261023.py' '$expected_py'"
+      - name: Verify a real native cron tick and queue consumption
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 60
+          d="$RUNNER_TEMP/stage4-dispatch"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          timeout 65s ssh -T "${opts[@]}" githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/factory-runtime/django-app"
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+          "$HOME/factory-runtime/.venv/bin/python" -B - <<'PY'
+          import collections,datetime,json,os
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.apps import apps
+          from django.utils import timezone
+          root=Path.home()/"factory-runtime/operations"
+          log=root/"stage4-due-dispatch.log"
+          if log.is_symlink():
+              raise SystemExit("STAGE4_CRON_LOG_UNSAFE")
+          ticks=[]
+          if log.is_file():
+              with log.open("rb") as f:
+                  f.seek(max(0,log.stat().st_size-30000))
+                  for raw in f.read().decode("utf8","replace").splitlines():
+                      if raw.startswith("STAGE4_DUE_DISPATCH="):
+                          try: ticks.append(json.loads(raw.partition("=")[2]))
+                          except ValueError: pass
+          AgentTask=apps.get_model("core","AgentTask")
+          since=timezone.now()-datetime.timedelta(minutes=10)
+          recent=AgentTask.objects.filter(action_type="product_validation",created_at__gte=since)
+          statuses=collections.Counter(recent.values_list("status",flat=True))
+          result={"schema":"saeit.factory.stage4-dispatch-verification.v1",
+                  "read_only":True,"cron_ticks_seen_in_log":len(ticks),
+                  "last_tick_counts":ticks[-1].get("counts",{}) if ticks else {},
+                  "recent_validation_tasks":sum(statuses.values()),
+                  "recent_task_statuses":dict(sorted(statuses.items())),
+                  "site_mutations":0,"approvals_modified":False}
+          print("STAGE4_NATIVE_CRON_VERIFICATION="+json.dumps(result,sort_keys=True))
+          if not ticks:
+              raise SystemExit("STAGE4_NATIVE_CRON_TICK_NOT_OBSERVED")
+          PY
+          REMOTE
       - name: Remove runner SSH key
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/stage4-dispatch"
