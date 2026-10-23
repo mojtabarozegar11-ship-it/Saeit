@@ -191,12 +191,68 @@ function finish(won){
    (won?' · ALL TWELVE MISSIONS CLEARED':' · Progress and credits saved');
  $('gameover').classList.remove('hidden');
 }
-function shoot(){if(!run||paused||fireT>0)return;fireT=.11;const hit=enemies.filter(e=>e.z<-20&&e.z>-245&&Math.abs(e.x-player.x)<(e.kind==='carrier'?16:10)&&Math.abs(e.y-player.y)<(e.kind==='carrier'?15:8)).sort((a,b)=>b.z-a.z)[0];missiles.push({x:player.x,y:player.y+.5,z:-6,speed:280,life:.6,kind:'bullet',target:hit});if(hit){hit.hp-=.36;blast(hit.x,hit.y,hit.z,2,.3);if(hit.hp<=0)kill(hit)} }
-function launchMissile(){if(!run||paused||ammo<=0)return;let e=acquire();if(!e){toast('NO TARGET IN LOCK WINDOW');return}ammo--;missiles.push({x:player.x,y:player.y-.3,z:-4,speed:170,life:4.8,kind:'guided',target:e});toast('FOX TWO · MISSILE AWAY')}
-function acquire(){return enemies.filter(e=>e.z< -26&&e.z> -340&&Math.abs(e.x-player.x)<35&&Math.abs(e.y-player.y)<22).sort((a,b)=>b.z-a.z)[0]||null}
-function kill(e){const i=enemies.indexOf(e);if(i<0)return;enemies.splice(i,1);kills++;score+=100*e.value;blast(e.x,e.y,e.z,e.kind==='carrier'?42:22,e.kind==='carrier'?3.2:1.5);if(kills%5===0)toast('ACE COMBO · '+kills+' KILLS');if(kills%4===0&&ammo<12)ammo++;}
-function hit(){if(player.inv>0)return;player.inv=1.1;if(player.shield>0)player.shield=clamp(player.shield-18,0,100);else player.hp=clamp(player.hp-12,0,100);blast(player.x,player.y,-2,12,1.0);if(player.hp<=0)finish(false)}
-function evade(){if(!run||paused||dashT>0)return;dashT=2.7;player.inv=Math.max(player.inv,.85);player.x=clamp(player.x+(player.vx>=0?1:-1)*17,-63,63);blast(player.x,player.y,2,12,1);toast('BREAK TURN · EVASIVE MANEUVER')}
+function shoot(){
+ if(!run||paused||fireT>0)return;
+ fireT=.12;
+ const tolerance=profile.difficulty==='ace'?1:1.6;
+ const targets=enemies.filter(e=>e.z<-20&&e.z>-245
+   &&Math.abs(e.x-player.x)<(e.boss?16:9)*tolerance
+   &&Math.abs(e.y-player.y)<(e.boss?14:7.5)*tolerance)
+   .sort((a,b)=>b.z-a.z);
+ const target=targets[0];
+ missiles.push({x:player.x,y:player.y+.5,z:-6,speed:280,life:.6,kind:'bullet',target});
+ if(missiles.length>90)missiles.splice(0,missiles.length-90);
+ if(Math.random()<.10)audioFX('fire');
+ if(target){
+   target.hp-=.42*(1+profile.upgrades.cannon*.34);
+   blast(target.x,target.y,target.z,3,.30);
+   if(target.hp<=0)kill(target);
+ }
+}
+function launchMissile(){
+ if(!run||paused||ammo<=0)return;
+ const e=acquire();
+ if(!e){toast('CENTER THE TARGET TO LOCK');return}
+ ammo--;missiles.push({x:player.x,y:player.y-.3,z:-4,speed:190,life:4.8,kind:'guided',target:e});
+ audioFX('missile');toast('FOX TWO · MISSILE AWAY');
+}
+function acquire(){
+ const spread=profile.difficulty==='ace'?1:1.35;
+ return enemies.filter(e=>e.z<-26&&e.z>-350
+ &&Math.abs(e.x-player.x)<35*spread
+ &&Math.abs(e.y-player.y)<22*spread).sort((a,b)=>b.z-a.z)[0]||null;
+}
+function kill(e){
+ const i=enemies.indexOf(e);if(i<0)return;
+ enemies.splice(i,1);kills++;awardCombat(e);audioFX('kill');
+ blast(e.x,e.y,e.z,e.boss?46:22,e.boss?3:1.5);
+ if(e.boss){bossCleared=true;toast('CAPITAL SHIP DESTROYED')}
+ else{missionKills++;if(combatStreak>=5&&combatStreak%5===0)toast('ACE STREAK · '+combatStreak)}
+ if(kills%4===0)ammo=Math.min(18,ammo+1);
+ resolveMission();
+}
+function hit(){
+ if(!run||player.inv>0)return;
+ player.inv=1.15;
+ const base=profile.difficulty==='ace'?21:13;
+ const damage=Math.max(5,base-profile.upgrades.armor*2.3);
+ if(player.shield>0){
+   const spill=Math.max(0,damage-player.shield);
+   player.shield=Math.max(0,player.shield-damage);
+   if(spill)player.hp=Math.max(0,player.hp-spill);
+ }else player.hp=Math.max(0,player.hp-damage);
+ blast(player.x,player.y,-2,12,1);
+ audioFX('hit');
+ $('danger').classList.add('active');
+ setTimeout(()=>$('danger').classList.remove('active'),180);
+ if(player.hp<=0)finish(false);
+}
+function evade(){
+ if(!run||paused||dashT>0)return;
+ dashT=2.7;player.inv=Math.max(player.inv,.85);
+ player.x=clamp(player.x+(player.vx>=0?1:-1)*17,-63,63);
+ blast(player.x,player.y,2,12,1);toast('BREAK TURN · EVASIVE MANEUVER');
+}
 function simulate(dt){elapsed+=dt;missionT+=dt;fireT=Math.max(0,fireT-dt);player.inv=Math.max(0,player.inv-dt);dashT=Math.max(0,dashT-dt);let sx=(key.has('KeyD')||key.has('ArrowRight')?1:0)-(key.has('KeyA')||key.has('ArrowLeft')?1:0)+stick.x,sy=(key.has('KeyW')||key.has('ArrowUp')?1:0)-(key.has('KeyS')||key.has('ArrowDown')?1:0)-stick.y; sx=clamp(sx,-1,1);sy=clamp(sy,-1,1);player.vx=mix(player.vx,sx*37,clamp(dt*4.5,0,1));player.vy=mix(player.vy,sy*23,clamp(dt*4.5,0,1));player.x=clamp(player.x+player.vx*dt,-65,65);player.y=clamp(player.y+player.vy*dt,-10,24);player.roll=mix(player.roll,-sx*.40,clamp(dt*4,0,1));player.pitch=mix(player.pitch,sy*.16,clamp(dt*4,0,1));if(firing||key.has('Space'))shoot();
 let speed=94+mission*7;for(const w of world){w.z+=speed*dt;if(w.z>110){w.z-=1800;w.x=w.shape==='carrier'?rnd(-130,130):(Math.sign(w.x)||1)*rnd(140,285)}}
 spawnT-=dt;if(spawnT<=0&&enemies.length<12){spawnEnemy();spawnT=rnd(.9,1.6)*Math.max(.64,1-(mission-1)*.11)}
