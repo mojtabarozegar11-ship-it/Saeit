@@ -1,0 +1,147 @@
+name: Safely publish four pending Zomorod specialist tools
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-p0-backlog-release.yml"
+  pull_request:
+    paths:
+      - ".github/workflows/zomorod-p0-backlog-release.yml"
+      - "scripts/zomorod_p0_backlog_release.py"
+      - "content/zomorod-p0-backlog/**"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-agriculture-static
+  cancel-in-progress: false
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile publisher and run calculator tests without host access
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_p0_backlog_release.py
+          node content/zomorod-p0-backlog/test_tools.cjs
+          python3 - <<'PY'
+          from pathlib import Path
+          base=Path('content/zomorod-p0-backlog')
+          for slug in ['irrigation-need','seeding-rate','planting-planner','feed-dry-matter']:
+              html=(base/slug/'index.html').read_text(encoding='utf-8')
+              assert html.count('<details class="guide">')==50,(slug,'guides')
+              assert '<form' in html and 'dir="rtl"' in html
+              assert len(list((base/slug).glob('*.svg')))==1
+          print('P0_QUALITY_PRECHECK=PASS')
+          PY
+  release:
+    needs: quality-check
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name != 'pull_request' &&
+      (github.event_name == 'workflow_dispatch' ||
+       contains(github.event.head_commit.message, '[approved-zm-p0-release-20261023]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate exact four calculators, original references, images and source integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_p0_backlog_release.py
+          node content/zomorod-p0-backlog/test_tools.cjs
+          python3 - <<'PY'
+          from pathlib import Path
+          base=Path("content/zomorod-p0-backlog")
+          for part in ["irrigation-need","seeding-rate","planting-planner","feed-dry-matter"]:
+              data=(base/part/"index.html").read_text(encoding="utf-8")
+              assert data.count('<details class="guide">')==50,(part,"missing 50 guides")
+              assert '<html' in data and 'dir="rtl"' in data and '<form' in data
+              assert 'fao.org' in data or 'extension.' in data,(part,"scientific references missing")
+              assert len(data)>12000,(part,"suspiciously short")
+              assert len(list((base/part).glob("*.svg")))==1,(part,"illustration missing")
+          for f in [base/"planting-planner/app.js",base/"feed-dry-matter/app.js"]:
+              assert f.stat().st_size>500
+          print("P0_FOUR_SOURCE_GATES=PASS")
+          PY
+      - name: Establish existing fingerprint-pinned VPS relay to cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Prepare isolated release backup on cPanel before copying any source
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          id="$GITHUB_RUN_ID"
+          dest="/home/zomorod2/.zm-water-release-installer-$id.py"
+          timeout 55s scp -q -F "$d/config" scripts/zomorod_p0_backlog_release.py "host:$dest"
+          timeout 55s ssh -T -F "$d/config" host "python3 -m py_compile '$dest' && python3 '$dest' prepare '$id'"
+          echo "RELEASE_SAFETY_PREPARE=PASS"
+      - name: Transfer only the three existing approved release candidates to private staging
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          base="/home/zomorod2/.backups/zomorod-p0-backlog/$GITHUB_RUN_ID"
+          tar -cf - -C content/zomorod-p0-backlog irrigation-need seeding-rate planting-planner feed-dry-matter |
+            timeout 90s ssh -T -F "$d/config" host "tar -xf - -C '$base/stage'"
+          timeout 55s ssh -T -F "$d/config" host \
+            "test -s '$base/stage/irrigation-need/index.html' && test -s '$base/stage/seeding-rate/index.html' && test -s '$base/stage/planting-planner/index.html' && test -s '$base/stage/feed-dry-matter/index.html'"
+          echo "RELEASE_CANDIDATES_STAGED=PASS"
+      - name: Atomically install only the new tool and game routes and two scoped category cards
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          id="$GITHUB_RUN_ID"
+          dest="/home/zomorod2/.zm-water-release-installer-$id.py"
+          timeout 100s ssh -T -F "$d/config" host "python3 '$dest' apply '$id'"
+      - name: Verify live HTTP bodies, release markers and protected pages, or fail for rollback
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          id="$GITHUB_RUN_ID"
+          dest="/home/zomorod2/.zm-water-release-installer-$id.py"
+          timeout 420s ssh -T -F "$d/config" host "python3 '$dest' verify '$id'"
+          echo "PUBLIC_RELEASE_AND_PROTECTED_SMOKE=PASS"
+      - name: Roll back only touched file paths if any deployment stage fails
+        if: failure() && steps.prepare.outcome == 'success'
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          id="$GITHUB_RUN_ID"
+          dest="/home/zomorod2/.zm-water-release-installer-$id.py"
+          if test -f "$d/config"; then
+            timeout 130s ssh -T -F "$d/config" host "python3 '$dest' rollback '$id'"
+          fi
+      - name: Remove ephemeral SSH keys; keep private versioned backup and manifest for recovery
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          id="$GITHUB_RUN_ID"
+          dest="/home/zomorod2/.zm-water-release-installer-$id.py"
+          if test -f "$d/config"; then
+            timeout 45s ssh -T -F "$d/config" host "test -f '$dest' && rm -f -- '$dest'" || true
+          fi
+          rm -rf "$d"
