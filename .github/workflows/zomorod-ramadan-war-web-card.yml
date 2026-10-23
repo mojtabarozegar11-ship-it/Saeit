@@ -29,12 +29,22 @@ jobs:
           test -s games/ramadan-war/three.module.js
           test -s games/ramadan-war/three.core.min.js
           test -s games/ramadan-war/THREE-LICENSE.txt
+          test -s games/ramadan-war/ASSET-CREDITS.md
           test -s games/ramadan-war/weapon-overlay.webp
           test -s games/ramadan-war/soldier-enemy.webp
           test -s games/ramadan-war/stone-wall.webp
           test -s games/ramadan-war/scene-desert.webp
+          test -s games/ramadan-war/scene-sniper-desert-v2.webp
           test -s games/ramadan-war/scene-night.webp
           test -s games/ramadan-war/scene-airbase.webp
+          test -s games/ramadan-war/soldier-rigged-ccby.glb
+          test -s games/ramadan-war/m24-sniper-ccby.glb
+          test -s games/ramadan-war/arms_basecolor.webp
+          test -s games/ramadan-war/arms_normal.webp
+          test -s games/ramadan-war/three-addons/loaders/GLTFLoader.js
+          test -s games/ramadan-war/three-addons/utils/SkeletonUtils.js
+          test -s games/ramadan-war/three-addons/utils/BufferGeometryUtils.js
+          test -s games/ramadan-war/three-addons/libs/meshopt_decoder.module.js
           python3 -m py_compile games/ramadan-war/deploy.py
           node --check games/ramadan-war/site-smoke.cjs
           python3 - <<'PY'
@@ -55,6 +65,10 @@ jobs:
           PY
           node --check games/ramadan-war/game.js
           node --check games/ramadan-war/engine3d.js
+          node --check games/ramadan-war/three-addons/loaders/GLTFLoader.js
+          node --check games/ramadan-war/three-addons/utils/SkeletonUtils.js
+          node --check games/ramadan-war/three-addons/utils/BufferGeometryUtils.js
+          node --check games/ramadan-war/three-addons/libs/meshopt_decoder.module.js
       - name: Test timed firing, special weapons and save resume before deployment
         run: |
           set -euo pipefail
@@ -108,6 +122,7 @@ jobs:
           d="$RUNNER_TEMP/farm-v4-ssh"
           stage="/home/zomorod2/.zm-ramadan-war-$GITHUB_RUN_ID"
           timeout 45s ssh -T -F "$d/config" host "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage/incoming'"
+          timeout 45s ssh -T -F "$d/config" host "install -d -m 700 '$stage/incoming/three-addons/loaders' '$stage/incoming/three-addons/utils' '$stage/incoming/three-addons/libs'"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/deploy.py "host:$stage/incoming/deploy.py"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/index.html "host:$stage/incoming/index.html"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/route.htaccess "host:$stage/incoming/.htaccess"
@@ -117,12 +132,22 @@ jobs:
           timeout 50s scp -q -F "$d/config" games/ramadan-war/three.module.js "host:$stage/incoming/three.module.js"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/three.core.min.js "host:$stage/incoming/three.core.min.js"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/THREE-LICENSE.txt "host:$stage/incoming/THREE-LICENSE.txt"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/ASSET-CREDITS.md "host:$stage/incoming/ASSET-CREDITS.md"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/weapon-overlay.webp "host:$stage/incoming/weapon-overlay.webp"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/soldier-enemy.webp "host:$stage/incoming/soldier-enemy.webp"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/stone-wall.webp "host:$stage/incoming/stone-wall.webp"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/scene-desert.webp "host:$stage/incoming/scene-desert.webp"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/scene-sniper-desert-v2.webp "host:$stage/incoming/scene-sniper-desert-v2.webp"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/scene-night.webp "host:$stage/incoming/scene-night.webp"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/scene-airbase.webp "host:$stage/incoming/scene-airbase.webp"
+          timeout 55s scp -q -F "$d/config" games/ramadan-war/soldier-rigged-ccby.glb "host:$stage/incoming/soldier-rigged-ccby.glb"
+          timeout 55s scp -q -F "$d/config" games/ramadan-war/m24-sniper-ccby.glb "host:$stage/incoming/m24-sniper-ccby.glb"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/arms_basecolor.webp "host:$stage/incoming/arms_basecolor.webp"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/arms_normal.webp "host:$stage/incoming/arms_normal.webp"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/three-addons/loaders/GLTFLoader.js "host:$stage/incoming/three-addons/loaders/GLTFLoader.js"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/three-addons/utils/SkeletonUtils.js "host:$stage/incoming/three-addons/utils/SkeletonUtils.js"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/three-addons/utils/BufferGeometryUtils.js "host:$stage/incoming/three-addons/utils/BufferGeometryUtils.js"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/three-addons/libs/meshopt_decoder.module.js "host:$stage/incoming/three-addons/libs/meshopt_decoder.module.js"
           timeout 45s ssh -T -F "$d/config" host "python3 '$stage/incoming/deploy.py' prepare '$GITHUB_RUN_ID'"
       - name: Replace only game client files and preserve the second card
         id: publish
@@ -163,7 +188,7 @@ jobs:
           row=next(x for x in d['rows'] if x.get('id')=='ZM-R25')
           assert row['cards'][1]['id']=='ZM-R25-GAME-RAMADAN-WAR-20261022'
           assert row['cards'][1]['canonicalUrl']=='/ramadan-war/' and row['cards'][2]['slug']=='website-design'
-          for asset in ['weapon-overlay.webp','soldier-enemy.webp','stone-wall.webp','scene-desert.webp','scene-night.webp','scene-airbase.webp']:
+          for asset in ['weapon-overlay.webp','soldier-enemy.webp','stone-wall.webp','scene-desert.webp','scene-sniper-desert-v2.webp','scene-night.webp','scene-airbase.webp']:
            with urlopen(Request(root+'/ramadan-war/'+asset+'?asset='+str(time.time_ns()),headers={'Cache-Control':'no-cache,no-store'}),timeout=35) as r:
             assert r.status==200 and len(r.read())>50000,asset
           print('LIVE_CARD_TWO_AND_GAME_ROUTE=PASS')

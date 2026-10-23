@@ -1,0 +1,34 @@
+# انتساب دارایی‌های بازی «جنگ رمضان»
+
+این پروژه به‌صورت رایگان عرضه می‌شود. مدل‌های زیر با مجوز Creative Commons Attribution 4.0 (CC BY 4.0) استفاده شده‌اند؛ اندازه و جای‌گذاری آن‌ها برای نمای اول‌شخص بازی تغییر داده شده است.
+
+- سرباز متحرک: “FREE [Military Soldier] RIGGED” از BAMEN. منبع: https://sketchfab.com/3d-models/free-military-soldier-rigged-e9c56308a67d4a3db62e914fafa4d198
+- تفنگ M24: “M24 Bounty Hunter Sniper Rifle” از Naudaff3D. منبع: https://sketchfab.com/3d-models/m24-bounty-hunter-sniper-rifle-d40e74e2259549f5b025807163f1028c
+- دستکش‌ها و بازوهای نمای اول‌شخص: “Fps arms” از bumstrum (DJMaesen). منبع: https://sketchfab.com/3d-models/fps-arms-9452ce4cddde4110a4fd73e555a8e412
+- مجوز این دو مدل: https://creativecommons.org/licenses/by/4.0/
+- GLTFLoader و ابزارهای Three.js با مجوز MIT؛ متن مجوز در `THREE-LICENSE.txt`.
+- رمزگشای Meshopt از پروژهٔ meshoptimizer با مجوز MIT: https://github.com/zeux/meshoptimizer
+
+## مجوز Meshopt Decoder
+
+MIT License
+
+Copyright (c) 2016-2026 Arseny Kapoulkine
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
