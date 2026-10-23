@@ -136,6 +136,19 @@ def report_live_log(root: Path) -> None:
         print("FACTORY_POSTPATCH_LOOP_LOG_UNREADABLE", flush=True)
         return
     data = result.stdout
+    first_healthy = data.find("FACTORY_AGENT_SEED_HEALTHY_NO_WRITE")
+    if first_healthy >= 0:
+        since_healthy = data[first_healthy:]
+        print("FACTORY_AFTER_FIRST_HEALTHY_TICK_LOCK_ERRORS=" +
+              str(since_healthy.count("database is locked")), flush=True)
+        print("FACTORY_AFTER_FIRST_HEALTHY_TICK_FAILURES=" +
+              str(since_healthy.count("TICK_EXIT_FAILURE")), flush=True)
+        print("FACTORY_AFTER_FIRST_HEALTHY_TICK_OK=" +
+              str(since_healthy.count("FACTORY_TICK_OK")), flush=True)
+    else:
+        print("FACTORY_AFTER_FIRST_HEALTHY_TICK_NOT_OBSERVED", flush=True)
+    print("FACTORY_POSTPATCH_STAGE4_RETRY_BLOCKS_LAST_500=" +
+          str(data.count("Stage 4 retry window has not elapsed")), flush=True)
     print("FACTORY_POSTPATCH_NO_WRITE_EVENTS_LAST_500=" +
           str(data.count("FACTORY_AGENT_SEED_HEALTHY_NO_WRITE")), flush=True)
     print("FACTORY_POSTPATCH_REFRESH_EVENTS_LAST_500=" +
