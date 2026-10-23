@@ -108,7 +108,7 @@ class Stage34Tests(unittest.TestCase):
     def test_stage4_cannot_run_without_prior_receipt(self):
         self.put("stage-04/inbox", {"schema": mod.HANDOFF, "previous_stage": 3, "next_stage": 4})
         result = mod.execute(self.root)
-        self.assertEqual(result["stage3_new"], 1)
+        self.assertEqual(result["stage3_blocked_this_tick"], 1)
         self.assertEqual(result["stage4_blocked_this_tick"], 1)
         self.assertFalse((self.area / "stage-05/inbox" / self.name).exists())
 
