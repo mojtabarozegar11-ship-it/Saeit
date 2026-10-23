@@ -37,11 +37,11 @@ const OUT = process.env.RUNNER_TEMP || '/tmp';
       assert.ok(Number(speed)>600,'mobile afterburner must drive displayed speed, got '+speed);
       await page.locator('#boostBtn').dispatchEvent('pointerup');
     }else{
-      await page.keyboard.down('KeyE');
+      await page.keyboard.down('e');
       await page.waitForTimeout(160);
       const speed=await page.locator('#speedReading').innerText();
       assert.ok(Number(speed)>600,'desktop afterburner must drive displayed speed');
-      await page.keyboard.up('KeyE');
+      await page.keyboard.up('e');
       await page.keyboard.press('Space');
     }
     await page.screenshot({path:OUT+'/air-redesign-'+profile.kind+'-gameplay.png'});
@@ -55,6 +55,7 @@ const OUT = process.env.RUNNER_TEMP || '/tmp';
       return {webgl:q.webgl,fps:q.fps,width:c.width,height:c.height,mission:q.mission,gameTitle:document.title};
     });
     assert.ok(data.width>200&&data.height>200);
+    assert.equal(data.webgl,true,'A supported Chrome browser must render native 3D WebGL, not the 2D fallback');
     assert.equal(data.mission,1);
     assert.ok(thisErrors.length===0,'Browser errors: '+thisErrors.join('; ').slice(0,800));
     assert.ok(fs.statSync(OUT+'/air-redesign-'+profile.kind+'-gameplay.png').size>12000,
