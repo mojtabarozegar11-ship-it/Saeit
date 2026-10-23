@@ -9,7 +9,10 @@ from html.parser import HTMLParser
 from pathlib import Path
 import unittest
 from scripts.zomorod_author_profile_route_release_20261023 import (
-    REDIRECT, PERSIAN_URL, with_persian_sitemap_entry, without_exact_redirect,
+    REDIRECT, PERSIAN_URL, OLD_IMPORT, NEW_IMPORT, OLD_ROUTE, NEW_ROUTE,
+    OLD_SITEMAP_ITEM, NEW_SITEMAP_ITEM, SEO_VIEW_MARKER,
+    with_django_author_route, with_django_author_view_and_sitemap,
+    with_persian_sitemap_entry, without_exact_redirect,
 )
 
 
@@ -123,6 +126,25 @@ class PersianAuthorSeoTests(unittest.TestCase):
         self.assertEqual(with_persian_sitemap_entry(updated), updated)
         with self.assertRaises(ValueError):
             with_persian_sitemap_entry(b"<html/>")
+
+    def test_django_route_and_dynamic_sitemap_fix_match_repo_source(self):
+        root = PROFILE.parents[3]
+        urls = (root / "config/urls.py").read_text(encoding="utf-8")
+        seo = (root / "core/seo_views.py").read_text(encoding="utf-8")
+        self.assertIn(NEW_IMPORT, urls)
+        self.assertIn(NEW_ROUTE, urls)
+        self.assertNotIn(OLD_ROUTE, urls)
+        self.assertIn(NEW_SITEMAP_ITEM, seo)
+        self.assertIn(SEO_VIEW_MARKER, seo)
+        self.assertIn('content_type="text/html; charset=utf-8"', seo)
+        old_urls = urls.replace(NEW_IMPORT, OLD_IMPORT).replace(NEW_ROUTE, OLD_ROUTE)
+        self.assertEqual(with_django_author_route(old_urls.encode()).decode(), urls)
+        old_seo = (
+            'urls = [' + OLD_SITEMAP_ITEM + ']\n'
+        ).replace(']]', ']')  # small, syntactically valid standalone source
+        updated = with_django_author_view_and_sitemap(old_seo.encode()).decode()
+        self.assertIn(NEW_SITEMAP_ITEM, updated)
+        self.assertIn(SEO_VIEW_MARKER, updated)
 
 
 if __name__ == "__main__":
