@@ -120,7 +120,8 @@ jobs:
                   line=line.strip()
                   if (line.startswith(("RewriteRule ","RewriteCond ","PassengerEnabled ","DirectoryIndex "))
                        or "factory-releases" in line or "factory-products" in line):
-                      if re.fullmatch(r"[A-Za-z0-9_%{}!^$./*+?\\-\\[\\]=:|()# \\t]+",line) and len(line)<=180:
+                      if (len(line)<=180 and all(32<=ord(ch)<127 for ch in line)
+                            and not re.search(r"(?i)(token|secret|password|credential|authorization|api.?key)",line)):
                           print("FACTORY_ROUTE_RULE",name,n,line)
                       else:
                           print("FACTORY_ROUTE_RULE",name,n,"[redacted]")
