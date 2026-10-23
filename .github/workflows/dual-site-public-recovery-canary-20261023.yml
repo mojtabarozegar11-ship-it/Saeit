@@ -1,0 +1,46 @@
+name: P0 dual-domain live content and subsite integrity (read only)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/dual-site-public-recovery-canary-20261023.yml"
+      - "scripts/dual_site_public_recovery_canary_20261023.py"
+      - "tests/test_dual_site_public_recovery_canary_20261023.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/dual-site-public-recovery-canary-20261023.yml"
+      - "scripts/dual_site_public_recovery_canary_20261023.py"
+      - "tests/test_dual_site_public_recovery_canary_20261023.py"
+  schedule:
+    - cron: "37 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: p0-dual-domain-public-content-readonly
+  cancel-in-progress: false
+jobs:
+  dual-domain-public-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prove read-only operation and false-healthy detection without network
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_dual_site_public_recovery_canary_20261023.py -v
+          python3 -m py_compile scripts/dual_site_public_recovery_canary_20261023.py
+      - name: Independently verify 21 named public pages and original release identity
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/dual_site_public_recovery_canary_20261023.py
+          echo "Recovery sample passed: both root identities, named subsites, games, products and release manifest." >> "$GITHUB_STEP_SUMMARY"
+      - name: Explicitly preserve protected production resources
+        run: |
+          echo "READ_ONLY: no site SSH, secrets, filesystem changes, database, payments, publish, restart or rollback."
+          echo "A successful canary never authorizes a release or certifies unknown sites."
