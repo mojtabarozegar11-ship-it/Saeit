@@ -1,0 +1,79 @@
+name: VPS Three Verified Source Upgrades (Private Pilot)
+on:
+  push:
+    branches: [main]
+    paths:
+      - "product_recipes/farm_enterprise_economics/**"
+      - "product_recipes/greenhouse_crop_margin/**"
+      - "product_recipes/water_budget_economics/**"
+      - "scripts/factory_three_private_upgrade_pilot_20261023.py"
+      - "tests/test_factory_three_private_upgrade_pilot_20261023.py"
+      - ".github/workflows/vps-three-private-source-upgrades.yml"
+  pull_request:
+    paths:
+      - "product_recipes/farm_enterprise_economics/**"
+      - "product_recipes/greenhouse_crop_margin/**"
+      - "product_recipes/water_budget_economics/**"
+      - "scripts/factory_three_private_upgrade_pilot_20261023.py"
+      - "tests/test_factory_three_private_upgrade_pilot_20261023.py"
+      - ".github/workflows/vps-three-private-source-upgrades.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factory-three-private-source-upgrades
+  cancel-in-progress: false
+jobs:
+  verify-real-recipes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.8", "3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Run three authentic recipe regressions and fail-closed pilot tests
+        run: |
+          set -euo pipefail
+          python -B -m unittest discover -s product_recipes/farm_enterprise_economics -p 'test_calculator.py' -v
+          python -B -m unittest discover -s product_recipes/greenhouse_crop_margin -p 'test_calculator.py' -v
+          python -B -m unittest discover -s product_recipes/water_budget_economics -p 'test_calculator.py' -v
+          python -B -m unittest discover -s tests -p 'test_factory_three_private_upgrade_pilot_20261023.py' -v
+  build-three-on-vps:
+    needs: verify-real-recipes
+    if: github.event_name != 'pull_request' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage and verify three truly changed, private artifacts on VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-three-private"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh_options=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          tar -cf - \
+            scripts/factory_product_maker.py \
+            scripts/factory_personal_owner_passport_policy_20261020.py \
+            scripts/factory_three_private_upgrade_pilot_20261023.py \
+            product_recipes/farm_enterprise_economics \
+            product_recipes/greenhouse_crop_margin \
+            product_recipes/water_budget_economics \
+            | ssh "${ssh_options[@]}" githubops@178.239.147.150 \
+              'set -e; umask 077; install -d -m 700 "$HOME/factory-runtime/operations/source-upgrade-${{ github.sha }}"; tar -xf - -C "$HOME/factory-runtime/operations/source-upgrade-${{ github.sha }}"'
+          ssh "${ssh_options[@]}" githubops@178.239.147.150 \
+            '"$HOME/factory-runtime/.venv/bin/python" -B "$HOME/factory-runtime/operations/source-upgrade-${{ github.sha }}/scripts/factory_three_private_upgrade_pilot_20261023.py" --stage-root "$HOME/factory-runtime/operations/source-upgrade-${{ github.sha }}" --private-root "$HOME/factory-runtime/private/autonomous-product-cycle" --commit "${{ github.sha }}"'
