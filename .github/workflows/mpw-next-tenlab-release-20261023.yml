@@ -1,0 +1,178 @@
+name: MojPlayWin second five games and five tools guarded live release
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'site_releases/mojplaywin/ten-lab-20261023-next/**'
+      - 'scripts/mpw_next_tenlab_safe_publish_20261023.py'
+      - 'tests/game/mpw-next-ten-browser.cjs'
+      - '.github/workflows/mpw-next-tenlab-release-20261023.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'site_releases/mojplaywin/ten-lab-20261023-next/**'
+      - 'scripts/mpw_next_tenlab_safe_publish_20261023.py'
+      - 'tests/game/mpw-next-ten-browser.cjs'
+      - '.github/workflows/mpw-next-tenlab-release-20261023.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mpw-next-tenlab-isolated-20261023
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build second distinct game and tool collection and validate source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile site_releases/mojplaywin/ten-lab-20261023-next/build.py scripts/mpw_next_tenlab_safe_publish_20261023.py
+          python3 site_releases/mojplaywin/ten-lab-20261023-next/build.py "$RUNNER_TEMP/mpw-next-build"
+          node --check "$RUNNER_TEMP/mpw-next-build/assets/arcade.js"
+          node --check "$RUNNER_TEMP/mpw-next-build/assets/workshop.js"
+          node --check tests/game/mpw-next-ten-browser.cjs
+          python3 - <<'PY'
+          import json,hashlib,os
+          from pathlib import Path
+          p=Path(os.environ['RUNNER_TEMP'])/'mpw-next-build'
+          cat=json.loads((p/'release.json').read_text())
+          gs=[x['slug'] for x in cat['games']];ts=[x['slug'] for x in cat['tools']]
+          assert len(gs)==len(ts)==5 and len(set(gs+ts))==10
+          old={'windward-regatta','lexicon-sprint','grid-dominion','metro-vault','cargo-switchyard','invoice-craft','csv-workbench','image-slimmer','schema-builder','contrast-studio','pulse-forge','beacon-labyrinth','cipher-garden','skyline-keeper','nebula-salvage','circuit-courier'}
+          assert not old.intersection(gs+ts)
+          assert len(list(p.rglob('index.html')))==11
+          hashes=json.loads((p/'hashes.json').read_text())
+          for name,sha in hashes.items():assert hashlib.sha256((p/name).read_bytes()).hexdigest()==sha
+          assert b'fetch(' not in (p/'assets/workshop.js').read_bytes()
+          for x in p.rglob('index.html'):
+            raw=x.read_text('utf8')
+            assert '<html lang="en">' in raw and 'MojPlayWin' in raw
+            if x!=p/'index.html':
+              assert '../assets/theme.css' in raw
+          print('NEXT_TEN_DISTINCT_SLUGS_ASSETS_AND_11_HTML=PASS')
+          PY
+      - name: Install Chromium QA without modifying game bundle
+        run: |
+          set -euo pipefail
+          npm install --prefix /tmp/mpw-next-qa --no-fund --no-audit playwright-core@1.56.0
+          google-chrome --version
+          nohup python3 -m http.server 8765 --bind 127.0.0.1 --directory "$RUNNER_TEMP/mpw-next-build" >/tmp/mpw-next-http.log 2>&1 &
+          sleep 2
+          curl -fsS http://127.0.0.1:8765/index.html -o /dev/null
+      - name: Real desktop/mobile five game and five tool functional exercise
+        env:
+          NODE_PATH: /tmp/mpw-next-qa/node_modules
+        run: timeout 100s node tests/game/mpw-next-ten-browser.cjs
+      - name: Package only reviewed new content
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/mpw-next-validated.tar.gz" -C "$RUNNER_TEMP/mpw-next-build" .
+          test "$(find "$RUNNER_TEMP/mpw-next-build" -name index.html | wc -l)" -eq 11
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mpw-next-ten-validated
+          path: ${{ runner.temp }}/mpw-next-validated.tar.gz
+          retention-days: 4
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mpw-next-qa-rendered
+          path: |
+            ${{ runner.temp }}/mpw-next-*.png
+            /tmp/mpw-next-http.log
+          if-no-files-found: ignore
+          retention-days: 4
+  publish:
+    needs: validate
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-mpw-next-tenlab-20261023]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: mpw-next-ten-validated
+          path: ${{ runner.temp }}
+      - name: Read public protected host status before isolated release
+        run: |
+          python3 - <<'PY'
+          from urllib.request import urlopen
+          from urllib.error import HTTPError
+          for p in ('/','/games/','/store/','/game-releases/20261023/index.html','/air-supremacy/'):
+            with urlopen('https://mojplaywin.com'+p,timeout=25) as r:assert r.status==200
+          try:
+            with urlopen('https://mojplaywin.com/game-releases/20261023-next/',timeout=20):raise RuntimeError('Destination already exists')
+          except HTTPError as e:assert e.code==404
+          print('NEXT_TEN_PUBLIC_BASELINE_SAFE=PASS')
+          PY
+      - name: Establish pinned relay through VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Stage signed archive on private cPanel folder
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.mpw-next-tenlab-stage-$GITHUB_RUN_ID"
+          timeout 50s ssh -T -F "$d/config" host "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage/payload'"
+          timeout 50s scp -q -F "$d/config" "$RUNNER_TEMP/mpw-next-validated.tar.gz" "host:$stage/site.tgz"
+          timeout 50s scp -q -F "$d/config" scripts/mpw_next_tenlab_safe_publish_20261023.py "host:$stage/deploy.py"
+          timeout 50s ssh -T -F "$d/config" host "tar -xzf '$stage/site.tgz' -C '$stage/payload' && python3 '$stage/deploy.py' prepare '$GITHUB_RUN_ID' '$GITHUB_SHA'"
+      - name: Deploy new namespace only then audit every installed file
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh";stage="/home/zomorod2/.mpw-next-tenlab-stage-$GITHUB_RUN_ID"
+          timeout 55s ssh -T -F "$d/config" host "python3 '$stage/deploy.py' publish '$GITHUB_RUN_ID' '$GITHUB_SHA' && python3 '$stage/deploy.py' verify '$GITHUB_RUN_ID' '$GITHUB_SHA'"
+      - name: Check eleven English public pages plus scripts and all original routes
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          import json,os,time
+          h='https://mojplaywin.com';root='/game-releases/20261023-next/'
+          names=('hex-bloom','prism-relay','kitchen-rush','type-defender','codebreaker-vault','file-fingerprint','meeting-time-planner','subtitle-shifter','text-diff-lab','passphrase-forge')
+          for p in ['index.html']+[x+'/index.html' for x in names]+['assets/arcade.js','assets/workshop.js','assets/theme.css','release.json']:
+           for attempt in range(4):
+            try:
+             with urlopen(Request(h+root+p+'?v='+os.environ['GITHUB_SHA'][:12]+str(attempt),headers={'Cache-Control':'no-cache'}),timeout=25) as r:
+              body=r.read(250000);assert r.status==200
+             break
+            except Exception:
+             if attempt==3:raise
+             time.sleep(2)
+           if p.endswith('.html'):assert b'<html lang="en">' in body and b'MojPlayWin' in body,p
+           if p=='release.json':
+            data=json.loads(body);assert len(data['games'])==len(data['tools'])==5
+           print('NEXT_TEN_PUBLIC_VERIFIED',p)
+          for path in ('/','/games/','/store/','/game-releases/20261023/','/air-supremacy/'):
+           with urlopen(h+path,timeout=25) as r:assert r.status==200
+          print('NEXT_5_GAMES_5_TOOLS_PUBLIC_AND_OLD_SITE_ALIVE=PASS')
+          PY
+      - name: Undo only newly created release on failure and identical evidence
+        if: failure() && steps.stage.outcome == 'success'
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/farm-v4-ssh";stage="/home/zomorod2/.mpw-next-tenlab-stage-$GITHUB_RUN_ID"
+          timeout 55s ssh -T -F "$d/config" host "test -f '$stage/deploy.py' && python3 '$stage/deploy.py' rollback '$GITHUB_RUN_ID' '$GITHUB_SHA'"
+      - name: Destroy transient SSH secrets
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
