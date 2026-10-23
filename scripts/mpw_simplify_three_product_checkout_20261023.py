@@ -25,6 +25,8 @@ NEW_STATUS='TRX checkout available · account required'
 OLD_CHECKOUT='Go to secure checkout ↗'
 NEW_CHECKOUT='Buy securely with TRX ↗'
 OLD_PRODUCT_PAYMENT='ETH/TRX'
+OLD_ATELIER_CTA='Buy website kit — secure ETH/TRX checkout ↗'
+NEW_ATELIER_CTA='Buy website kit securely with TRX ↗'
 
 def fail(message): raise RuntimeError(message)
 def digest(raw): return hashlib.sha256(raw).hexdigest()
@@ -35,9 +37,18 @@ def backup_path(run):
 def transform(source):
     if source.count(START)!=1 or source.count(END)!=1:
         fail('Expected exactly one bounded two-book catalog block')
+    if source.count('id="atelier-original-vector-879"')!=1:
+        fail('Expected exactly one live Atelier product card')
+    if source.count(OLD_ATELIER_CTA)==1 and source.count(NEW_ATELIER_CTA)==0:
+        source=source.replace(OLD_ATELIER_CTA,NEW_ATELIER_CTA,1)
+    elif source.count(OLD_ATELIER_CTA)==0 and source.count(NEW_ATELIER_CTA)==1:
+        pass
+    else:
+        fail('Expected one accurate or one legacy Atelier TRX CTA')
     if (source.count(NEW_INTRO)==1 and source.count(NEW_STATUS)==2
-        and source.count(NEW_CHECKOUT)==2 and 'ETH / TRX' not in source
-        and 'ETH/TRX' not in source and 'mpw-crypto-buy' not in source):
+        and source.count(NEW_CHECKOUT)==2 and source.count(NEW_ATELIER_CTA)==1
+        and 'ETH / TRX' not in source and 'ETH/TRX' not in source
+        and 'mpw-crypto-buy' not in source):
         return source
     for pk,old in OLD_BUY.items():
         if source.count(old)!=1: fail(f'Expected one legacy book CTA for {pk}')
@@ -53,6 +64,8 @@ def transform(source):
         fail('Unsupported or duplicate ETH/TRX purchase control remains')
     if source.count('Buy securely with TRX ↗')!=2:
         fail('Expected exactly one primary TRX purchase CTA per book')
+    if source.count(NEW_ATELIER_CTA)!=1:
+        fail('Expected exactly one accurate Atelier TRX purchase CTA')
     return source
 
 def product_template_patch(source):
@@ -155,8 +168,10 @@ def selftest():
     s+='\n'.join(OLD_BUY.values())+'\n'
     s+='/store/product/72/checkout/\n'
     s+='id="mpw-sale-book72" id="mpw-sale-book225"\n'+END
+    s+='id="atelier-original-vector-879" '+OLD_ATELIER_CTA
     out=transform(s)
     assert out.count('Buy securely with TRX ↗')==2
+    assert out.count(NEW_ATELIER_CTA)==1
     assert 'ETH/TRX' not in out and 'ETH / TRX' not in out and 'mpw-crypto-buy' not in out
     assert transform(out)==out
     print('MPW_THREE_PRODUCT_CATALOG_SELFTEST=PASS')
