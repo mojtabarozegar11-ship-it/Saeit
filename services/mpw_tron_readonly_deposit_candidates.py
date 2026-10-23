@@ -82,14 +82,20 @@ def find_candidate_hashes(recipient,amount_sun,issued_at,expires_at,*,fetch=fetc
             if (not isinstance(txid,str) or not TX_ID.fullmatch(txid)
                 or type(ts) is not int or not start<=ts<=end):
                 continue
-            contracts=entry.get("raw_data",{}).get("contract",[])
+            raw=entry.get("raw_data")
+            if not isinstance(raw,dict):
+                continue
+            contracts=raw.get("contract",[])
             if not isinstance(contracts,list) or len(contracts)!=1 or not isinstance(contracts[0],dict):
                 continue
             contract=contracts[0]
             if contract.get("type")!="TransferContract":
                 continue
-            value=contract.get("parameter",{}).get("value",{})
-            if not isinstance(value,dict) or value.get("amount")!=amount_sun:
+            param=contract.get("parameter")
+            if not isinstance(param,dict):
+                continue
+            value=param.get("value")
+            if not isinstance(value,dict) or type(value.get("amount")) is not int or value["amount"]!=amount_sun:
                 continue
             target=value.get("to_address")
             if not isinstance(target,str) or not HEX_ADDRESS.fullmatch(target):
