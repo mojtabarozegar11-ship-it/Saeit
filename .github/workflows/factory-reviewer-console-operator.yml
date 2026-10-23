@@ -9,14 +9,14 @@ on:
         options: [status, invite]
         default: status
       reviewer_id:
-        description: Verified human's planned ID (needed only for invite)
+        description: Human reviewer ID or owner-delegated agent ID (invite only)
         required: false
         type: string
       reviewer_role:
         description: Expert role to invite (not proof of identity)
         required: true
         type: choice
-        options: [domain_specialist, independent_quality_auditor, rights_reviewer, owner]
+        options: [domain_specialist, independent_quality_auditor, rights_reviewer, owner, owner_delegate_agent]
         default: domain_specialist
   push:
     branches: [main]
@@ -50,7 +50,7 @@ jobs:
           test "$operation" = status || test "$operation" = invite
           if test -z "$REVIEWER_ROLE"; then REVIEWER_ROLE=domain_specialist; fi
           case "$REVIEWER_ROLE" in
-            domain_specialist|independent_quality_auditor|rights_reviewer|owner) ;;
+            domain_specialist|independent_quality_auditor|rights_reviewer|owner|owner_delegate_agent) ;;
             *) echo UNSUPPORTED_REVIEWER_ROLE; exit 2 ;;
           esac
           if [[ "$operation" = invite ]]; then
@@ -74,6 +74,14 @@ jobs:
             echo "NATURAL_LEGAL_OWNER_CAPACITY_PRIVATE_STATUS:"
             ssh -T "${opts[@]}" githubops@178.239.147.150 \
               "python3 -B '$base/factory_owner_legal_capacity_registry_v1.py' status --workspace '$base'"
+            if [[ "${GITHUB_EVENT_NAME}" = push ]]; then
+              # One-time private invitation to the registered master-agent ID;
+              # no new signing key, owner signature, or independent expert claim.
+              ssh -T "${opts[@]}" githubops@178.239.147.150 \
+                "if test -f '$base/reviewer-requests/moj_1ro_1.invite.json'; then echo OWNER_AGENT_INVITE_ALREADY_PRESENT; else python3 -B '$cli' invite --workspace '$base' --reviewer-id moj_1ro_1 --role owner_delegate_agent; fi"
+              echo OWNER_AGENT_INVITATION_PENDING_OFFLINE_ROOT_SIGNATURE=YES
+              echo OWNER_AGENT_TRUSTED_IDENTITY_GRANTED=NO
+            fi
           else
             ssh -T "${opts[@]}" githubops@178.239.147.150 \
               "python3 -B '$cli' invite --workspace '$base' --reviewer-id '$REVIEWER_ID' --role '$REVIEWER_ROLE'"
