@@ -87,11 +87,15 @@ def atomic(path, raw):
         if os.path.exists(tmp): os.unlink(tmp)
 
 def schema_patch(source):
+    if source.count(NEW_SCHEMA) == 1 and OLD_SCHEMA not in source:
+        return source
     if source.count(OLD_SCHEMA) != 1:
         fail('Product schema source changed; refusing broad edit')
     return source.replace(OLD_SCHEMA, NEW_SCHEMA, 1)
 
 def template_patch(source):
+    if source.count(NEW_META) == 1 and OLD_META not in source:
+        return source
     if source.count(OLD_META) != 1: fail('Product template meta description changed; refusing broad edit')
     return source.replace(OLD_META, NEW_META, 1)
 
