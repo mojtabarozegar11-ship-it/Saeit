@@ -106,17 +106,24 @@ def audit():
         "financial_writes": 0,
         "public_checkout_activated": False,
     }
+    stage = "source-a-head"
     try:
         now = datetime.now(timezone.utc)
-        heads = (get(NODES[0], "head"), get(NODES[1], "head"))
+        head_a = get(NODES[0], "head")
+        stage = "source-b-head"
+        head_b = get(NODES[1], "head")
+        heads = (head_a, head_b)
         heights = [head_height_and_age(block, now) for block in heads]
         if abs(heights[0] - heights[1]) > 100:
             raise ValueError("Different solidified head ranges")
         result["two_fresh_solidified_heads"] = True
+        stage = "select-public-native-canary"
         txid = select_native_candidate(heads[0])
         proofs = []
-        for provider in NODES:
+        for index, provider in enumerate(NODES):
+            stage = "source-" + ("a" if index == 0 else "b") + "-body"
             body = get(provider, "body", txid)
+            stage = "source-" + ("a" if index == 0 else "b") + "-receipt"
             receipt = get(provider, "receipt", txid)
             proofs.append(parse_solidified_native_trx(
                 txid, body, receipt, source_id=provider[0]
@@ -134,11 +141,17 @@ def audit():
         result["status"] = "PUBLIC_NETWORK_PROOF_READY_ONLY"
         result["reason"] = "merchant_purchase_and_independent_operator_review_required"
     except Exception as exc:
-        # Only fixed, non-transactional exception type: no response or secret data.
+        # Only safe enum stage, HTTP status and exception class, never RPC data.
         result["reason"] = "public_network_proof_unavailable"
+        result["stage"] = stage
         result["error_class"] = type(exc).__name__
+        if isinstance(exc, urllib.error.HTTPError):
+            result["http_status"] = exc.code
     return result
 
 
 if __name__ == "__main__":
-    print("MPW_TRON_PUBLIC_DUAL_READONLY=" + json.dumps(audit(), sort_keys=True))
+    report = audit()
+    print("MPW_TRON_PUBLIC_DUAL_READONLY=" + json.dumps(report, sort_keys=True))
+    if report["status"] != "PUBLIC_NETWORK_PROOF_READY_ONLY":
+        raise SystemExit(2)
