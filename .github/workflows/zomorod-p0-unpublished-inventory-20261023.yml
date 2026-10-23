@@ -1,4 +1,5 @@
 name: Zomorod P0 Unpublished Source and Live Inventory
+# Owner-authorized fresh P0 live/receipt audit 2026-10-23; no site writes.
 on:
   push:
     branches: [main]
