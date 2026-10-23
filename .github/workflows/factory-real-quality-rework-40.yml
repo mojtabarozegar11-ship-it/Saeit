@@ -31,6 +31,8 @@ on:
     paths:
       - "scripts/factory_autonomous_jump_repair_v1.py"
       - "tests/test_factory_autonomous_jump_repair_v1.py"
+      - "scripts/factory_quality_production_workorders_v1.py"
+      - "tests/test_factory_quality_production_workorders_v1.py"
       - ".github/workflows/factory-real-quality-rework-40.yml"
   workflow_dispatch:
   schedule:
@@ -52,6 +54,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/factory_autonomous_jump_repair_v1.py
           python3 -B -m unittest discover -s tests -p test_factory_autonomous_jump_repair_v1.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_quality_production_workorders_v1.py -v
           python3 -B -m unittest discover -s tests -p test_factory_qa_native_rebuild_bridge_20261021.py -v
   review-real-inventory:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
