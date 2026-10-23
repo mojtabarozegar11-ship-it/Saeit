@@ -1,0 +1,216 @@
+name: Arcade Lab isolated guarded deployment
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/mpw-arcade-lab-release-20261023.yml', 'scripts/mpw_arcade_*', 'site_releases/mojplaywin/arcade-lab-20261022/**']
+  pull_request:
+    branches: [main]
+    paths: ['.github/workflows/mpw-arcade-lab-release-20261023.yml', 'scripts/mpw_arcade_*', 'site_releases/mojplaywin/arcade-lab-20261022/**']
+permissions:
+  contents: read
+concurrency:
+  group: mpw-arcade-guarded-20261022
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify package, build, solve 60 puzzles, validate links
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,subprocess,tarfile
+          from pathlib import Path
+          from html.parser import HTMLParser
+          base=Path('site_releases/mojplaywin/arcade-lab-20261022')
+          archive=base/'source_generator.tar.xz'
+          assert hashlib.sha256(archive.read_bytes()).hexdigest()=='19b74f72fd428d8b76c2028d90999c212fb55a34f09dd32616f62129453553d6'
+          expected={'circuit-courier.webp':'837dd88390fff910fd45a29ac10a5a96973430fdc843f6c16cbcf135d27c8fc1',
+                    'economy-simulator.webp':'577791ffa13c6be01c6b485d36a227add945626d8faef111f5d1899cc8517bcb',
+                    'qa-matrix.webp':'6f7ee4b523704bf663106cd636bdc2604c6baba2e675991e89698a95445794dc'}
+          out=Path(os.environ['RUNNER_TEMP'])/'mpw-arcade-build';out.mkdir()
+          with tarfile.open(archive,'r:xz') as tf:
+              for m in tf.getmembers():
+                  if not m.isfile() or m.name.startswith('/') or '..' in Path(m.name).parts:
+                      raise RuntimeError('Unsafe archive')
+              tf.extractall(out,filter='data')
+          subprocess.run(['python3',str(out/'tests/build_guides.py')],check=True)
+          for p in out.rglob('*.html'):
+              s=p.read_text().replace('https://mojplaywin.com/arcade-lab/20261022/',
+                 'https://mojplaywin.com/mpw-editorial/arcade-lab/20261022/')
+              if p==out/'index.html':
+                  s=s.replace('Before public distribution, complete a real-device accessibility review, external route verification and a reversible deployment.',
+                  'Experimental browser edition; professional quality certification is not claimed.')
+              p.write_text(s)
+          for p in (out/'guides').glob('*.json'):
+              p.write_text(p.read_text().replace('https://mojplaywin.com/arcade-lab/20261022/',
+                 'https://mojplaywin.com/mpw-editorial/arcade-lab/20261022/'))
+          (out/'assets').mkdir(exist_ok=True)
+          for name,sha in expected.items():
+              b=(base/'assets'/name).read_bytes()
+              assert hashlib.sha256(b).hexdigest()==sha and len(b)<60000 and b[:4]==b'RIFF' and b[8:12]==b'WEBP'
+              (out/'assets'/name).write_bytes(b)
+          class H(HTMLParser):
+              def __init__(self):super().__init__();self.urls=[];self.img=[];self.title=False;self.titles=[]
+              def handle_starttag(self,tag,attrs):
+                  d=dict(attrs)
+                  if tag=='title':self.title=True
+                  if tag in ('a','img','script'):
+                      v=d.get('href') if tag=='a' else d.get('src')
+                      if v:self.urls.append(v)
+                  if tag=='img':self.img.append(d)
+              def handle_endtag(self,tag):
+                  if tag=='title':self.title=False
+              def handle_data(self,s):
+                  if self.title:self.titles.append(s)
+          pages=list(out.rglob('*.html'));assert len(pages)==55
+          assert len(list((out/'guides').glob('[0-9][0-9]/index.html')))==50
+          titles=set()
+          for p in pages:
+              s=p.read_text();h=H();h.feed(s)
+              assert h.titles and '<meta name="description"' in s and '<link rel="canonical"' in s
+              assert all(i.get('alt') for i in h.img)
+              titles.add(' '.join(h.titles))
+              for url in h.urls:
+                  if url.startswith(('http:','https:','/','#','mailto:')):continue
+                  assert (p.parent/url.split('#')[0]).resolve().is_file(),(p,url)
+          assert len(titles)==55
+          subprocess.run(['node','--check',str(out/'circuit-courier/app.js')],check=True)
+          subprocess.run(['node','-e',
+            "const E=require(process.argv[1]);for(let i=1;i<=60;i++){const l=E.generate(i),p=E.bfs(l);if(!p||p.length<14)throw Error('unsolvable');let q=0,m=0;for(const d of p){const r=E.move(l,q,m,d);if(!r.moved)throw Error('blocked');q=r.pos;m=r.mask}if(q!==48||m!==7)throw Error('not solved')}console.log('SOLVER_60_PASS')",
+            str((out/'circuit-courier/engine.js').resolve())],check=True)
+          print('STATIC_LINKS_55_HTML_50_GUIDES_3_WEBP_PASS')
+          PY
+      - name: Interact in Chromium desktop and mobile
+        run: |
+          python3 -m pip install --quiet playwright==1.55.0
+          python3 -m playwright install --with-deps chromium
+          python3 scripts/mpw_arcade_browser_smoke.py "$RUNNER_TEMP/mpw-arcade-build"
+      - name: Produce deterministic owned release manifest and artifact
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,shutil,tarfile
+          from pathlib import Path
+          out=Path(os.environ['RUNNER_TEMP'])/'mpw-arcade-build'
+          shutil.rmtree(out/'tests',ignore_errors=True)
+          (out/'release.json').write_text(json.dumps({'git_sha':os.environ['GITHUB_SHA'],'html_count':55,'guides':50,'tools':2,'games':1,'webp':3}))
+          with tarfile.open(Path(os.environ['RUNNER_TEMP'])/'mpw-arcade-validated.tar.gz','w:gz') as tf:tf.add(out,arcname='payload')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mpw-arcade-validated
+          path: ${{ runner.temp }/mpw-arcade-validated.tar.gz
+          retention-days: 2
+  publish:
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: mpw-arcade-validated
+          path: ${{ runner.temp }
+      - name: Verify protected public baseline
+        run: |
+          python3 - <<'PY'
+          import urllib.request
+          for p in ('/','/mpw-editorial/index.html'):
+              with urllib.request.urlopen('https://mojplaywin.com'+p,timeout=20) as r:
+                  if r.status!=200:raise RuntimeError('Site baseline unhealthy '+p)
+          PY
+      - name: Build authenticated SSH relay, pin both server host keys
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }
+          CPANEL_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-arcade-ssh";install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$CPANEL_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/cpanel.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/cpanel.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/cpanel.key
+            UserKnownHostsFile $d/cpanel.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Stage privately and atomically deploy only new static directory
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-arcade-ssh/config"
+          ssh -F "$d" saeit-cpanel "test ! -e /home/zomorod2/.mpw-arcade-$GITHUB_RUN_ID && install -d -m 700 /home/zomorod2/.mpw-arcade-$GITHUB_RUN_ID"
+          scp -F "$d" "$RUNNER_TEMP/mpw-arcade-validated.tar.gz" "saeit-cpanel:/home/zomorod2/.mpw-arcade-$GITHUB_RUN_ID/package.tar.gz"
+          scp -F "$d" scripts/mpw_arcade_safe_deploy.py "saeit-cpanel:/home/zomorod2/.mpw-arcade-$GITHUB_RUN_ID/deploy.py"
+          ssh -F "$d" saeit-cpanel "tar -xzf /home/zomorod2/.mpw-arcade-$GITHUB_RUN_ID/package.tar.gz -C /home/zomorod2/.mpw-arcade-$GITHUB_RUN_ID"
+          ssh -F "$d" saeit-cpanel "python3 /home/zomorod2/.mpw-arcade-$GITHUB_RUN_ID/deploy.py deploy $GITHUB_RUN_ID $GITHUB_SHA"
+      - name: Verify 55 public pages, 3 images, two scripts, version and existing homepage
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request
+          base='https://mojplaywin.com/mpw-editorial/arcade-lab/20261022/'
+          paths=['index.html','guides/index.html','circuit-courier/index.html','economy-simulator/index.html','qa-matrix/index.html']
+          paths += [f'guides/{i:02d}/index.html' for i in range(1,51)]
+          paths += [f'assets/{x}.webp' for x in ('circuit-courier','economy-simulator','qa-matrix')]
+          paths += ['circuit-courier/app.js','circuit-courier/engine.js','release.json']
+          for path in paths:
+              req=urllib.request.Request(base+path+'?rev='+os.environ['GITHUB_SHA'][:12],headers={'Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=20) as r:
+                  data=r.read(400000)
+                  if r.status!=200:raise RuntimeError('HTTP '+str(r.status)+' '+path)
+                  if path.endswith('.html') and b'MojPlayWin' not in data:raise RuntimeError('Unexpected HTML '+path)
+                  if path.endswith('.webp') and not (data[:4]==b'RIFF' and data[8:12]==b'WEBP'):raise RuntimeError('Unexpected image '+path)
+                  if path=='release.json' and json.loads(data)['git_sha']!=os.environ['GITHUB_SHA']:raise RuntimeError('Version mismatch')
+          with urllib.request.urlopen('https://mojplaywin.com/',timeout=20) as r:
+              if r.status!=200:raise RuntimeError('Root regressed')
+          print('PUBLIC_55_PAGES_3_IMAGES_2_JS_1_MANIFEST_PASS')
+          PY
+      - name: Roll back only owned release if final smoke fails
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          ssh -F "$RUNNER_TEMP/mpw-arcade-ssh/config" saeit-cpanel "python3 /home/zomorod2/.mpw-arcade-$GITHUB_RUN_ID/deploy.py rollback $GITHUB_RUN_ID $GITHUB_SHA"
+      - name: Clean temporary private stage
+        if: always()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/mpw-arcade-ssh/config"; then
+            ssh -F "$RUNNER_TEMP/mpw-arcade-ssh/config" saeit-cpanel "test -d /home/zomorod2/.mpw-arcade-$GITHUB_RUN_ID && rm -rf /home/zomorod2/.mpw-arcade-$GITHUB_RUN_ID" || true
+          fi
+          rm -rf "$RUNNER_TEMP/mpw-arcade-ssh"
