@@ -5,7 +5,8 @@ const Core = window.ArrowNexusCore;
 const Experience = window.NexusExperience;
 const $ = id => document.getElementById(id);
 const FA = n => new Intl.NumberFormat('fa-IR').format(n);
-const SAVE_KEY = 'zm-arrow-nexus-v1';
+const SAVE_KEY = 'zm-arrow-nexus-worm-v3';
+const LEGACY_KEY = 'zm-arrow-nexus-v1';
 const canvas = $('nexusCanvas');
 const viewport = $('viewport');
 const colors = { free: 0x5ce7cd, blocked: 0x8aa9b4, phase: 0xf5c87b, link: 0xd879ef, source: 0x6fb4fd, relay: 0x619ef5, charge: 0xffa06e };
@@ -38,13 +39,13 @@ let accentLight;
 
 function message(text) { $('message').textContent = text; }
 function validateSavedLog(raw) {
-  if (!raw || raw.version !== 1 || !Number.isSafeInteger(raw.level) || raw.level < 1 || raw.level > 100000) return;
+  if (!raw || ![1, 3].includes(raw.version) || !Number.isSafeInteger(raw.level) || raw.level < 1 || raw.level > 100000) return;
   level = raw.level;
   best = Number.isSafeInteger(raw.best) ? Math.max(1, Math.min(100000, raw.best)) : 1;
   puzzle = Core.generate(level);
   state = Core.initialState(puzzle);
   moveLog = [];
-  if (Array.isArray(raw.moves)) for (const move of raw.moves.slice(0, 250)) {
+  if (raw.version === 3 && Array.isArray(raw.moves)) for (const move of raw.moves.slice(0, 250)) {
     if (!move || !['twist', 'remove'].includes(move.type)) break;
     const next = Core.transition(state, move);
     if (!next) break;
@@ -53,11 +54,11 @@ function validateSavedLog(raw) {
   }
 }
 function load() {
-  try { validateSavedLog(JSON.parse(localStorage.getItem(SAVE_KEY) || 'null')); }
+  try { validateSavedLog(JSON.parse(localStorage.getItem(SAVE_KEY) || localStorage.getItem(LEGACY_KEY) || 'null')); }
   catch (_) { level = 1; puzzle = Core.generate(1); state = Core.initialState(puzzle); moveLog = []; }
 }
 function save() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 1, level, best, moves: moveLog })); }
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 3, level, best, moves: moveLog })); }
   catch (_) { /* Private browsing can prevent storage. */ }
 }
 function ui() {
@@ -83,36 +84,19 @@ function orientation(piece) {
     vector(f.u), vector(f.v), vector(f.n)
   ));
 }
-function makePieceShape() {
-  const shape = new THREE.Shape();
-  shape.moveTo(-.36, -.095);
-  shape.lineTo(.055, -.095);
-  shape.lineTo(.055, -.26);
-  shape.lineTo(.4, 0);
-  shape.lineTo(.055, .26);
-  shape.lineTo(.055, .095);
-  shape.lineTo(-.36, .095);
-  shape.closePath();
-  return shape;
-}
-const arrowGeometry = new THREE.ExtrudeGeometry(makePieceShape(), {
-  depth: .045, steps: 1, bevelEnabled: true, bevelThickness: .02, bevelSize: .015, bevelSegments: 2
-});
-const glowGeometry = new THREE.ShapeGeometry(makePieceShape());
+// A worm consists of a long winding body and a physical three-dimensional
+// arrowhead. The same body coordinates are used by the collision engine.
 const cubeGeometry = new THREE.BoxGeometry(.976, .976, .976);
 const borderGeometry = new THREE.EdgesGeometry(cubeGeometry);
 const cubeMaterial = new THREE.MeshPhysicalMaterial({
   color: 0x143b49, metalness: .72, roughness: .31, clearcoat: .8, clearcoatRoughness: .22
 });
 const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x3f8891, transparent: true, opacity: .35 });
-
 function cubie(x, y, z) {
   const group = new THREE.Group();
   group.position.set(x, y, z);
-  const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
-  group.add(cube);
-  const edges = new THREE.LineSegments(borderGeometry, edgeMaterial);
-  group.add(edges);
+  group.add(new THREE.Mesh(cubeGeometry, cubeMaterial));
+  group.add(new THREE.LineSegments(borderGeometry, edgeMaterial));
   return group;
 }
 function makeArrow(piece) {
@@ -120,25 +104,50 @@ function makeArrow(piece) {
   group.position.copy(surfacePoint(piece));
   group.quaternion.copy(orientation(piece));
   const active = Core.canExit(piece.id, state);
-  const blocked = !active && Core.blockers(piece, state).length > 0;
-  const name = active ? (piece.id === 0 && puzzle.level >= 2 ? 'source' : 'free') :
-    blocked ? 'blocked' : piece.gate === 'phase' ? 'phase' : piece.gate === 'link' ? 'link' : piece.gate === 'relay' ? 'relay' : piece.gate === 'charge' ? 'charge' : 'blocked';
-  const color = colors[name];
-  const shape = new THREE.Mesh(arrowGeometry, new THREE.MeshPhysicalMaterial({
-    color, emissive: color, emissiveIntensity: active ? .55 : .17,
-    metalness: .33, roughness: .27, clearcoat: .93
-  }));
-  shape.rotation.z = piece.dir * Math.PI / 2;
-  shape.userData.pieceId = piece.id;
-  group.add(shape);
-  arrowMeshes.push(shape);
-  const aura = new THREE.Mesh(glowGeometry, new THREE.MeshBasicMaterial({
-    color, transparent: true, opacity: active ? .21 : .09, depthWrite: false, side: THREE.DoubleSide
-  }));
-  aura.scale.set(1.22, 1.22, 1.22);
-  aura.position.z = -.035;
-  aura.rotation.z = piece.dir * Math.PI / 2;
-  group.add(aura);
+  const palette = [0x5ce7cd, 0x6fb4fd, 0xf4b36b, 0xd879ef, 0xff7d96,
+    0x92e87f, 0xf2d473, 0x70bff9, 0xc9a7ff, 0xfc9c7e, 0x9ee5d0, 0xe5aaff];
+  const tone = palette[piece.id % palette.length];
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: tone, emissive: tone, emissiveIntensity: active ? .43 : .14,
+    metalness: .46, roughness: .24, clearcoat: 1, clearcoatRoughness: .18
+  });
+  const nodes = piece.path.map(([u, v], i) =>
+    new THREE.Vector3(u - piece.u, v - piece.v, .12 + piece.layer * .075 +
+      .028 * Math.sin(i * 1.95 + piece.id)));
+  const curve = new THREE.CatmullRomCurve3(nodes, false, 'centripetal', .35);
+  const tubeLength = Math.max(38, nodes.length * 9);
+  const body = new THREE.Mesh(new THREE.TubeGeometry(curve, tubeLength, .073, 8, false), mat);
+  body.userData.pieceId = piece.id;
+  group.add(body);
+  arrowMeshes.push(body);
+  const halo = new THREE.Mesh(new THREE.TubeGeometry(curve, tubeLength, .11, 6, false),
+    new THREE.MeshBasicMaterial({ color: tone, transparent: true,
+      opacity: active ? .12 : .045, depthWrite: false }));
+  group.add(halo);
+  const [dx, dy] = Core.DIRS[piece.dir];
+  const arrow = new THREE.Mesh(new THREE.ConeGeometry(.17, .36, 8),
+    new THREE.MeshPhysicalMaterial({ color: active ? 0xf5fffc : tone,
+      emissive: tone, emissiveIntensity: active ? .8 : .35,
+      metalness: .38, roughness: .23, clearcoat: 1 }));
+  arrow.position.set(dx * .15, dy * .15, nodes[nodes.length - 1].z);
+  arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dx, dy, 0));
+  arrow.userData.pieceId = piece.id;
+  group.add(arrow);
+  arrowMeshes.push(arrow);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(.08, 9, 7), mat);
+  cap.position.copy(nodes[0]);
+  cap.userData.pieceId = piece.id;
+  group.add(cap);
+  arrowMeshes.push(cap);
+  const beadGeo = new THREE.SphereGeometry(.085, 7, 6);
+  for (let i = 1, count = Math.min(12, nodes.length * 2); i < count; i++) {
+    const bead = new THREE.Mesh(beadGeo, mat);
+    bead.position.copy(curve.getPoint(i / count));
+    bead.scale.set(.72, .72, .56);
+    bead.userData.pieceId = piece.id;
+    group.add(bead);
+    arrowMeshes.push(bead);
+  }
   arrowGroups.set(piece.id, group);
   const worldPos = Core.position(piece);
   (worldPos[1] === 0 ? ringGroup : fixedGroup).add(group);
@@ -149,7 +158,7 @@ function removeGroup(parent) {
     parent.remove(child);
     child.traverse(obj => {
       if (obj.material && ![cubeMaterial, edgeMaterial].includes(obj.material)) obj.material.dispose();
-      if (obj.geometry && ![cubeGeometry, borderGeometry, arrowGeometry, glowGeometry].includes(obj.geometry)) obj.geometry.dispose();
+      if (obj.geometry && ![cubeGeometry, borderGeometry].includes(obj.geometry)) obj.geometry.dispose();
     });
   }
 }
@@ -180,7 +189,7 @@ function preview(pieceId, persistent = false) {
     piece.gate === 'phase' && state.phase !== piece.targetPhase ? 'دروازه طلایی به پیچش حلقه میانی نیاز دارد.' :
     piece.gate === 'relay' ? 'مدار دوگانه را فعال کن: ابتدا هر دو پیکان منبع را خارج کن.' :
     piece.gate === 'charge' ? 'میدان رزونانس: دست‌کم سه پیکان دیگر را آزاد کن.' :
-    'یک پیکان در مسیر خروج قرار دارد.');
+    'بدنهٔ یک فلش مارپیچی جلوی سر این فلش را گرفته؛ گره را از بیرون باز کن.');
   if (!persistent) previewTimer = setTimeout(clearPreview, 2000);
 }
 function rebuild() {
@@ -315,7 +324,8 @@ function playRemove(id) {
     const t = duration ? Math.min(1, (now - started) / duration) : 1;
     const ease = 1 - (1 - t) ** 3;
     group.position.copy(original).addScaledVector(heading, ease * 3.4);
-    group.scale.setScalar(1 - ease * .25);
+    group.rotation.z = Math.sin(ease * Math.PI * 2.5) * (1 - ease) * .065;
+    group.scale.setScalar(1 - ease * .16);
     if (t < 1) { requestAnimationFrame(animate); return; }
     record({ type: 'remove', id }, next);
     busy = false;
@@ -376,7 +386,7 @@ function nextLevel() {
   rebuild();
   save();
   message(level === 2 ? 'جدید: فلش آبی، قفل فلش بنفش را باز می‌کند.' :
-    level === 4 ? 'جدید: حلقه میانی را بچرخان تا دروازه طلایی فعال شود.' : 'معمای تازه آغاز شد.');
+    level === 12 ? 'جدید: حلقه میانی را بچرخان تا دروازه طلایی فعال شود.' : 'معمای تازه آغاز شد.');
 }
 function hint() {
   if (busy) return;
@@ -471,10 +481,10 @@ try {
   initialize();
   listen();
   if (state.removed.length === state.pieces.length) celebrateIfWon();
-  else if (level >= 4 && !moveLog.length) message('چرخش واقعی حلقه فعال است؛ فلش طلایی به هم‌راستایی نیاز دارد.');
+  else if (!moveLog.length) message('بدنه‌های مارپیچی روی هم افتاده‌اند؛ فلشی را لمس کن که مسیر سرش آزاد است.');
 } catch (error) {
   console.warn('ARROW_NEXUS_WEBGL_UNAVAILABLE_USING_CSS3D', error);
-  import('./nexus-fallback.js').then(module => module.start(Core)).catch(fallbackError => {
+  import('./nexus-fallback.js?v=worm-1-20261023').then(module => module.start(Core)).catch(fallbackError => {
     message('اجرای بازی در این دستگاه ممکن نشد؛ لطفاً صفحه را دوباره بارگذاری کنید.');
     console.error('ARROW_NEXUS_ALL_RENDERERS_FAILED', fallbackError);
   });

@@ -99,3 +99,18 @@ body[data-world="aurora"] .nexus-css3d-face{background:linear-gradient(155deg,#2
 @keyframes nexus-note{to{opacity:0;transform:translate(-50%,-160%)}}
 @media(max-width:600px){.nexus-dashboard{padding:9px 10px;margin-bottom:9px}.nexus-scoreline{gap:8px;justify-content:space-around;font-size:10px}.nexus-scoreline strong{font-size:13px}.nexus-scoreline #medal{font-size:14px}.nexus-scoreline .sound-button{min-height:29px;font-size:10px;padding:4px 8px}.nexus-chapterline{font-size:9px}.nexus-css3d-cube{--cube:clamp(190px,57vw,275px);--half:clamp(95px,28.5vw,137.5px)}}
 @media(prefers-reduced-motion:reduce){.nexus-particle{display:none!important}.nexus-css3d-arrow.ready{animation:none!important}.viewport::after{animation:none!important}}
+
+/* V3: genuine intertwined 3D worm arrows, with full-body tap targets in CSS3D mode. */
+.nexus-css3d-grid{opacity:.24;pointer-events:none}
+.nexus-css3d-worms{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:4;filter:drop-shadow(0 7px 5px #0008)}
+.nexus-worm-glow,.nexus-worm-body,.nexus-worm-hit{fill:none;stroke-linecap:round;stroke-linejoin:round}
+.nexus-worm-glow{stroke-width:21;opacity:.13;pointer-events:none;filter:blur(4px)}
+.nexus-worm-body{stroke-width:13;opacity:.93;pointer-events:none}
+.nexus-worm-body.blocked{opacity:.7;filter:saturate(.75)}
+.nexus-worm-body.ready{stroke-width:15;filter:drop-shadow(0 0 6px #79ffec)}
+.nexus-worm-hit{stroke:#fff;stroke-opacity:.002;stroke-width:31;pointer-events:stroke;cursor:pointer}
+.nexus-worm-hit:focus-visible{outline:none;stroke:#ffe5a6;stroke-opacity:.42}
+.nexus-worm-tip{stroke-width:5;stroke-linejoin:round;pointer-events:all;cursor:pointer}
+.nexus-worm-tip.ready{filter:drop-shadow(0 0 7px #6fffe0)}
+@media(prefers-reduced-motion:no-preference){.nexus-worm-body.ready{animation:nexus-worm-breathe 1.8s ease-in-out infinite alternate}}
+@keyframes nexus-worm-breathe{to{stroke-width:17;filter:drop-shadow(0 0 11px #8effde)}}
