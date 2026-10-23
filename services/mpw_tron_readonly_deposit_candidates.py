@@ -64,6 +64,7 @@ def find_candidate_hashes(recipient,amount_sun,issued_at,expires_at,*,fetch=fetc
     for _page in range(4):
         params={"only_confirmed":"true","only_to":"true","limit":str(MAX_PAGE),
                 "min_block_timestamp":str(max(1,start-30000)),
+                "max_block_timestamp":str(end+30000),
                 "order_by":"block_timestamp,desc"}
         if fingerprint:
             params["fingerprint"]=fingerprint
