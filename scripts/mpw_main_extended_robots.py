@@ -31,7 +31,7 @@ PAGES=Path("/home/zomorod2/mojplaywin.com/mpw-editorial")
 DRAFTS=STATE/"page_content_20261018/drafts"
 REPORT=STATE/"extended_robots_status_20261018.json"
 WORKLIST=STATE/"extended_robots_pending_release_20261018.json"
-MAX_PAGES=18
+MAX_PAGES=2048
 MAX_DRAFTS=8
 MAX_REPORT_BYTES=17500
 SECTIONS={"agents":"/agents/","knowledge":"/knowledge/","studio":"/studio/","research":"/research/"}
@@ -101,7 +101,11 @@ def approved_pages(public=PAGES):
     ensure(owned.get("scope")=="mojplaywin-main-static-mpw-editorial-only",
            "STATIC_DOCUMENT_ROOT_NOT_OWNED")
     files=sorted(public.rglob("index.html"))
-    ensure(2<=len(files)<=MAX_PAGES and all(f.is_file() and not f.is_symlink()
+    # Editorial pages grow independently of the bot deployment cadence.
+    # Keep a finite scan bound while preserving all per-file safety checks.
+    ensure(2<=len(files)<=MAX_PAGES,
+           "PUBLIC_HTML_COUNT_OUT_OF_POLICY:"+str(len(files)))
+    ensure(all(f.is_file() and not f.is_symlink()
            and f.stat().st_size<49000 and public in f.parents for f in files),
            "PUBLIC_HTML_LIST_OUT_OF_POLICY")
     return owned,files
