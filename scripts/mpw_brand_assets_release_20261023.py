@@ -6,16 +6,19 @@ from pathlib import Path
 HOME=Path("/home/zomorod2")
 ROOT=HOME/"mojplaywin.com"
 ITEMS={
-  "header.jpg":"static/site/mojplaywin-header-emblem.jpg",
-  "coin.png":"static/site/mojplaywin-coin-logo.420e0d1f954b.png",
+  "official.webp":"design-preview-20261017/static/site/mojplaywin-atelier/official-coin-80.3ea52711f49d.webp",
+  "coin.png":"Saeit-staging/staticfiles/site/mojplaywin-coin-logo.420e0d1f954b.png",
   "favicon.ico":"favicon.ico",
   "apple-touch-icon.png":"apple-touch-icon.png",
   "android-chrome-192x192.png":"android-chrome-192x192.png",
   "android-chrome-512x512.png":"android-chrome-512x512.png",
 }
-MUST_EXIST={"header.jpg","coin.png"}
+MUST_EXIST={"official.webp","coin.png"}
 def sha(data): return hashlib.sha256(data).hexdigest()
 def fail(msg): raise RuntimeError(msg)
+def destination(rel):
+    # Only the known MojPlayWin file roots; app's collected static directory is shared with no other changes.
+    return HOME/rel if rel.startswith("Saeit-staging/staticfiles/site/") else ROOT/rel
 def validate(run, folder):
     if not re.fullmatch(r"[0-9]{8,22}",run): fail("Invalid run")
     if pwd.getpwuid(os.getuid()).pw_name!="zomorod2": fail("Wrong account")
@@ -27,7 +30,7 @@ def validate(run, folder):
     stage=HOME/(".mpw-brand-stage-"+run)
     if stage.is_symlink() or stage!=folder or not stage.is_dir(): fail("Untrusted stage")
     for name,rel in ITEMS.items():
-        dest=ROOT/rel
+        dest=destination(rel)
         if dest.parent.is_symlink() or not dest.parent.is_dir(): fail("Unsafe destination folder")
         if dest.is_symlink() or (dest.exists() and not dest.is_file()): fail("Unsafe target "+rel)
         if name in MUST_EXIST and (not dest.is_file() or dest.stat().st_size<1000):
@@ -37,7 +40,7 @@ def validate(run, folder):
             fail("Missing output "+name)
         raw=src.read_bytes()
         if name.endswith(".png") and not raw.startswith(b"\x89PNG\r\n\x1a\n"):fail("Invalid PNG")
-        if name.endswith(".jpg") and not raw.startswith(b"\xff\xd8"):fail("Invalid JPEG")
+        if name.endswith(".webp") and not (raw.startswith(b"RIFF") and raw[8:12]==b"WEBP"):fail("Invalid WEBP")
         if name.endswith(".ico") and not raw.startswith(b"\x00\x00\x01\x00"):fail("Invalid ICO")
     return stage,HOME/(".mpw-brand-backup-"+run)
 def atomic(path, raw, mode):
@@ -55,7 +58,7 @@ def install(run):
     backup.mkdir(mode=0o700)
     records={}
     for name,rel in ITEMS.items():
-        dest=ROOT/rel; before=dest.read_bytes() if dest.is_file() else None
+        dest=destination(rel); before=dest.read_bytes() if dest.is_file() else None
         after=(stage/"bundle"/name).read_bytes()
         mode=stat.S_IMODE(dest.stat().st_mode) if before is not None else 0o644
         if before is not None:
@@ -73,7 +76,7 @@ def install(run):
     written=[]
     try:
         for name,rel in ITEMS.items():
-            dest=ROOT/rel; item=records[name]
+            dest=destination(rel); item=records[name]
             if item["existed"] and sha(dest.read_bytes())!=item["old"]:fail("Concurrent edit "+rel)
             if not item["existed"] and dest.exists():fail("Concurrent create "+rel)
             atomic(dest,(stage/"bundle"/name).read_bytes(),item["mode"])
@@ -81,7 +84,7 @@ def install(run):
             if sha(dest.read_bytes())!=item["new"]:fail("Post-write mismatch "+rel)
     except Exception:
         for name in reversed(written):
-            dest=ROOT/records[name]["path"]; item=records[name]
+            dest=destination(records[name]["path"]); item=records[name]
             if dest.is_file() and not dest.is_symlink() and sha(dest.read_bytes())==item["new"]:
                 if item["existed"]: atomic(dest,(backup/name).read_bytes(),item["mode"])
                 else: dest.unlink()
@@ -95,12 +98,12 @@ def rollback(run):
     if record["run"]!=run or set(record["items"])!=set(ITEMS):fail("Backup manifest mismatch")
     # Check all targets before touching any of them; never overwrite concurrent edits.
     for name,rel in ITEMS.items():
-        item=record["items"][name]; dest=ROOT/rel
+        item=record["items"][name]; dest=destination(rel)
         if item["path"]!=rel or not dest.is_file() or dest.is_symlink() or sha(dest.read_bytes())!=item["new"]:
             fail("Rollback refused: target changed "+rel)
         if item["existed"] and sha((backup/name).read_bytes())!=item["old"]:fail("Corrupt backup")
     for name,rel in ITEMS.items():
-        item=record["items"][name]; dest=ROOT/rel
+        item=record["items"][name]; dest=destination(rel)
         if item["existed"]:atomic(dest,(backup/name).read_bytes(),item["mode"])
         else:dest.unlink()
     print("MPW_BRAND_ROLLBACK=PASS")
