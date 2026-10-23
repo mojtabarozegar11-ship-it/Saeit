@@ -31,8 +31,10 @@ STAGES = (
     ("bilingual_manuscript", "stage5-evidence-workbook.py", 105, ("--batch", "250")),
     ("technical_preflight", "stage6-preflight-rework.py", 105, ("--batch", "250")),
     ("source_specific_repair", "stage5-substantive-rework.py", 105, ("--batch", "250")),
+    ("source_grounded_reauthoring", "agri200-source-grounded-v003.py", 105, ("--batch", "250")),
     ("candidate_rebuild", "research-navigator.py", 105, ("--batch", "250")),
     ("strict_independent_qc1000", "agri200-strict-qc1000.py", 105, ("--batch", "250")),
+    ("v003_independent_mechanical_qc", "agri200-source-grounded-v003-qc.py", 105, ("--batch", "250")),
 )
 
 
@@ -103,6 +105,8 @@ def snapshot(area):
         "stage5_manuscripts": count_artifacts(area, "stage-05/completed-drafts"),
         "stage5_repair_briefs": count_artifacts(area, "stage-05/substantive-revision-manifests"),
         "stage5_candidate_archives": count_artifacts(area, "stage-05/downloadable-receipts"),
+        "stage5_source_grounded_v003": count_artifacts(area, "stage-05/source-grounded-v003-manifests"),
+        "stage6_source_grounded_v003_mechanical_qc": count_artifacts(area, "stage-06/source-grounded-v003-qc"),
         "stage6_preflights": count_artifacts(area, "stage-06/technical-preflight"),
         "stage6_strict_qc": count_artifacts(area, "stage-06/strict-qc1000"),
         "stage5_returned_to_rework": count_artifacts(area, "stage-05/strict-qc-rework"),
@@ -131,6 +135,11 @@ def worker_command(root, ops, label, filename, args):
         command += ["--stage34-worker", stage34]
     elif label in ("technical_preflight", "candidate_rebuild", "strict_independent_qc1000"):
         command += ["--stage34-worker", stage34, "--stage5-worker", stage5]
+    elif label == "source_grounded_reauthoring":
+        command += ["--stage34-worker", stage34, "--stage5-worker", stage5,
+                    "--candidate-worker", str(ops / "research-navigator.py")]
+    elif label == "v003_independent_mechanical_qc":
+        command += ["--stage34-worker", stage34]
     elif label == "source_specific_repair":
         command += ["--stage34-worker", stage34, "--stage5-worker", stage5,
                     "--stage6-worker", str(ops / "stage6-preflight-rework.py")]
