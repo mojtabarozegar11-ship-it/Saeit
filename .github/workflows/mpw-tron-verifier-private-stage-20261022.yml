@@ -53,6 +53,10 @@ jobs:
           set -euo pipefail
           timeout 70s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'PYTHONPATH=/home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/mpw_tron_dual_provider_auth_readonly_20261022.py
           echo "READ_ONLY_MAINNET_PROBE=COMPLETE; PAYMENT_BROADCAST=0; CUSTOMER_DATA_WRITES=0; PUBLIC_PAYMENT_ACTIVATION=0"
+      - name: Report only presence of TRON RPC credentials (no secret values)
+        run: |
+          set -euo pipefail
+          timeout 35s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel "python3 -c 'import os,json; names=(\"MPW_TRON_RPC_A_API_KEY\",\"MPW_TRON_RPC_B_API_KEY\",\"MPW_TRON_RPC_A_ENDPOINT\",\"MPW_TRON_RPC_B_ENDPOINT\",\"MPW_TRON_RPC_INDEPENDENCE_REVIEWED\",\"MPW_TRON_RPC_CANARY_TXID\"); print(\"TRON_RPC_INPUT_PRESENCE=\"+json.dumps({k:bool(os.getenv(k)) for k in names},sort_keys=True))'"
       - name: Clean ephemeral SSH material
         if: always()
         run: |
