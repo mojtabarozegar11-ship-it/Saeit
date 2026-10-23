@@ -77,13 +77,19 @@ def main():
     if not MAILDIR.is_dir():
         print("FAILED_MAILDIR_MISSING",file=sys.stderr);sys.exit(1)
     refs=candidates()
-    if not refs:print("FAILED_NO_SUPPLIER_REPLIES",file=sys.stderr);sys.exit(1)
+    part_str=os.getenv("ARCHIVE_PART", "-1")
+    try: part=int(part_str)
+    except ValueError: raise SystemExit("INVALID_ARCHIVE_PART")
+    if part not in (-1,0,1,2,3): raise SystemExit("ARCHIVE_PART_OUT_OF_RANGE")
+    numbered=[(i+1,source) for i,source in enumerate(refs)]
+    if part>=0: numbered=[(i,source) for i,source in numbered if (i-1)%4==part]
+    if not numbered:print("FAILED_NO_SUPPLIER_REPLIES",file=sys.stderr);sys.exit(1)
     buf=io.BytesIO()
     index=[]
     total_files=0;omitted=0
     with zipfile.ZipFile(buf,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=6,allowZip64=True) as archive:
         archive.writestr("README_FA.txt","بایگانی خصوصی پاسخ‌های واقعی تأمین‌کنندگان زمرد ملل\nحاوی متن کامل ایمیل‌های دریافتی و فایل‌های PDF/تصویر. اصالت و امنیت محتوای پیوست‌های خارجی مستقل تأیید نشده است.\n\nمحتوای آرشیو محرمانه است و نباید عمومی منتشر شود.\n")
-        for n,path in enumerate(refs,1):
+        for n,path in numbered:
             try:
                 with path.open("rb") as f:msg=BytesParser(policy=policy.default).parse(f)
             except (OSError,ValueError):continue
@@ -128,6 +134,7 @@ def main():
         writer.writeheader();writer.writerows(index)
         archive.writestr("INDEX.csv","\ufeff"+records.getvalue())
     data=buf.getvalue()
+    print("ARCHIVE_PART="+str(part),file=sys.stderr,flush=True)
     print("ARCHIVE_MAILS="+str(len(index)),file=sys.stderr,flush=True)
     print("ARCHIVE_CATALOGUE_FILES="+str(total_files),file=sys.stderr,flush=True)
     print("ARCHIVE_OMITTED_FILES="+str(omitted),file=sys.stderr,flush=True)
