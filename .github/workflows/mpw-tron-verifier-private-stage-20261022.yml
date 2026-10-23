@@ -7,6 +7,7 @@ on:
       - scripts/mpw_tron_public_dual_probe_readonly_20261023.py
       - services/mpw_tron_independent_solidified_rpc.py
       - scripts/mpw_shasta_gateway_chain_canary_20261022.py
+      - scripts/mpw_gateway_stage_contract_probe_20261022.py
       - tests/test_mpw_tron_independent_solidified_rpc.py
   workflow_dispatch:
 permissions: {contents: read}
@@ -77,6 +78,10 @@ jobs:
           remote_hash="$(timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'cd /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022 && sha256sum services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py | sha256sum | cut -d " " -f 1')"
           test "$local_hash" = "$remote_hash"
           echo "PRIVATE_TRON_VERIFIER_SHA256_MATCH=TRUE; CHECKOUT_CONFIG_UNCHANGED=TRUE"
+      - name: Observe actual commercial checkout route and model readiness without modifying data
+        run: |
+          set -euo pipefail
+          timeout 105s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/mpw_gateway_stage_contract_probe_20261022.py
       - name: Probe production providers without sending funds or changing database
         run: |
           set -euo pipefail
