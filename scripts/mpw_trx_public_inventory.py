@@ -30,3 +30,9 @@ print('HISTORY_VIEW='+inspect.getsource(purchased_downloads))
 import hashlib
 for rel in ['services/mpw_walletless_commercial_intent.py','services/mpw_trx_commercial_context.py','scripts/mpw_trx_commercial_reconcile_cron.py','services/mpw_trx_commercial_web.py','services/mpw_trx_walletless_checkout_ui.py']:
  print('SOURCE_HASH='+rel+':'+hashlib.sha256((root/rel).read_bytes()).hexdigest())
+
+from django.urls import resolve
+for route in ["/store/product/72/", "/store/product/225/", "/store/product/879/", "/commerce/trx-easy/"]:
+ match=resolve(route)
+ print("LIVE_ROUTE="+json.dumps({"path":route,"view_module":match.func.__module__,"view_name":match.func.__name__,"source_file":inspect.getsourcefile(match.func)},sort_keys=True))
+print("OUTBOUND_CONFIG="+json.dumps({"smtp_host_configured":bool(getattr(settings,"EMAIL_HOST","")),"smtp_user_configured":bool(getattr(settings,"EMAIL_HOST_USER","")),"from_address_configured":bool(getattr(settings,"DEFAULT_FROM_EMAIL","")),"openai_api_key_configured":bool(os.getenv("OPENAI_API_KEY")),"chat_model_configured":bool(os.getenv("OPENAI_CHAT_MODEL"))},sort_keys=True))
