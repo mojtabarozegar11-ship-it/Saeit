@@ -1,11 +1,11 @@
 'use strict';
 /** Actual interactive WebGL/Canvas smoke against the static game, no server/payment mocks. */
-const { chromium, devices } = require('playwright');
+const { chromium, devices } = require('playwright-core');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const OUT = process.env.RUNNER_TEMP || '/tmp';
 (async()=>{
-  const browser=await chromium.launch({headless:true,args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--enable-webgl']});
+  const browser=await chromium.launch({channel:'chrome',headless:true,args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--enable-webgl']});
   const errors=[];
   for(const profile of [
     {kind:'desktop',opts:{viewport:{width:1280,height:720},deviceScaleFactor:1,hasTouch:false}},
