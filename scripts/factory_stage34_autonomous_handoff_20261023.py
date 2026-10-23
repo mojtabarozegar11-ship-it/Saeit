@@ -290,6 +290,27 @@ def stage4(area, name):
     once(area / "stage-04" / "receipts" / name, proof4)
     return created
 
+def fair_batch(area, stage, names, batch):
+    """Cycle independently through stage 3/4 inboxes across cron invocations."""
+    if stage not in (3, 4):
+        raise RuntimeError("STAGE34_INVALID_SCHEDULER_STAGE")
+    path = area / ("stage-%02d" % stage) / "round-robin-cursor.json"
+    if path.is_symlink():
+        raise RuntimeError("STAGE34_CURSOR_SYMLINK")
+    schema = "saeit.factory.stage%d.round-robin.v1" % stage
+    state = read(path) if path.exists() else {"schema": schema, "next_index": 0}
+    if (state.get("schema") != schema or type(state.get("next_index")) is not int
+            or state["next_index"] < 0):
+        raise RuntimeError("STAGE34_CURSOR_INVALID")
+    total = len(names)
+    first = state["next_index"] % total if total else 0
+    count = min(batch, total)
+    selected = [names[(first + i) % total] for i in range(count)]
+    after = {"schema": schema,
+             "next_index": (first + count) % total if total else 0}
+    return selected, path, after
+
+
 def execute(root, batch=250):
     root = Path(root).expanduser().resolve()
     if not root.is_dir():
@@ -308,8 +329,9 @@ def execute(root, batch=250):
             inbox = area / ("stage-%02d" % n) / "inbox"
             names = sorted(p.name for p in inbox.iterdir()
                            if p.is_file() and not p.is_symlink() and NAME.fullmatch(p.name))
+            selected, cursor_path, next_state = fair_batch(area, n, names, batch)
             fresh, invalid = 0, 0
-            for name in names[:batch]:
+            for name in selected:
                 try:
                     fresh += int(fn(area, name))
                 except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:
@@ -320,6 +342,7 @@ def execute(root, batch=250):
                         "reason": type(exc).__name__ + ":" + str(exc)[:200],
                         "promoted": False
                     })
+            atomic(cursor_path, next_state)
             totals["stage%d_new" % n] = fresh
             totals["stage%d_blocked_this_tick" % n] = invalid
             totals["stage%d_inbox_total" % n] = len(names)
