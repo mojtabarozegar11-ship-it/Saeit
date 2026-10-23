@@ -35,6 +35,15 @@ def transform(source):
     if source.count(START)!=1 or source.count(END)!=1:
         fail('Expected exactly one bounded two-book catalog block')
     if source.count('id="atelier-original-vector-879"')!=1:
+        import json
+        i=source.lower().find('atelier')
+        print('MPW_STOREFRONT_SOURCE_DIAGNOSTIC='+json.dumps({
+            'sha256':digest(source.encode('utf-8')),'bytes':len(source),
+            'catalog_markers':[source.count(START),source.count(END)],
+            'atelier_identifier_variants':{k:source.count(k) for k in (
+                'atelier-original-vector-879','id="atelier-original-vector-879"',
+                "id='atelier-original-vector-879'",'Atelier Interior')},
+            'excerpt':source[max(0,i-180):i+500] if i>=0 else ''},ensure_ascii=False,sort_keys=True))
         fail('Expected exactly one Atelier product block')
     for pk,old in OLD_BUY.items():
         if source.count(old)!=1: fail(f'Expected one legacy book CTA for {pk}')
