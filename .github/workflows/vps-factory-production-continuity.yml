@@ -81,6 +81,18 @@ jobs:
                               or "transaction" in row or "retry" in row.lower()]
                       print("FACTORY_SOURCE_SIGNALS="+file.name+":"+
                             ",".join(str(i+1)+":"+rows[i].strip()[:120] for i in points[:20]))
+          # Bounded private-runtime control-flow inspection; credentials and payloads excluded.
+          for file_name, low, high in (
+              ("core/management/commands/factory_staging_tick.py", 15, 43),
+              ("core/management/commands/seed_factory_agents.py", 32, 68),
+          ):
+              file = Path(file_name)
+              if file.is_file() and not file.is_symlink():
+                  for line_no, line in enumerate(file.read_text(encoding="utf-8").splitlines(), 1):
+                      if low <= line_no <= high:
+                          if re.search(r"(?i)(password|secret|token|api_key|private_key)", line):
+                              continue
+                          print(f"FACTORY_CODE_WINDOW {file.name}:{line_no}:{line[:150]}")
           from django.apps import apps
           pattern = re.compile(r"(factory|task|queue|probe|opportun|evidence|research|workflow|schedule|job|run)", re.I)
           for model in apps.get_app_config("core").get_models():
