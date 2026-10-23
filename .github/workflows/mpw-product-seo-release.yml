@@ -48,7 +48,18 @@ jobs:
       - name: Reload the verified Passenger app process
         run: |
           set -euo pipefail
-          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-seo-ssh/config" saeit-cpanel 'set -eu; root=/home/zomorod2/Saeit-staging; test -f "$root/passenger_wsgi.py"; mkdir -p "$root/tmp"; test ! -L "$root/tmp"; touch "$root/tmp/restart.txt"; echo PASSENGER_RELOAD_REQUESTED_FOR_PRODUCT_SCHEMA=TRUE'
+          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-seo-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          site=Path('/home/zomorod2/mojplaywin.com')
+          if site.is_symlink() or not site.is_dir(): raise RuntimeError('Unexpected MojPlayWin document root')
+          wsgi=site/'passenger_wsgi.py'
+          if wsgi.is_symlink() or "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'): raise RuntimeError('Unexpected Passenger app mapping')
+          folder=site/'tmp'
+          if folder.is_symlink(): raise RuntimeError('Unsafe Passenger restart directory')
+          folder.mkdir(exist_ok=True)
+          (folder/'restart.txt').touch()
+          print('MOJPLAYWIN_PASSENGER_RELOAD_REQUESTED_FOR_PRODUCT_SCHEMA=TRUE')
+          PY
       - name: Verify public product pages
         run: |
           set -euo pipefail
