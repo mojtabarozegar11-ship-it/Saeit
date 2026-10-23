@@ -117,7 +117,7 @@ const SKY_VS=`attribute vec2 aXY;varying vec2 vUV;void main(){vUV=aXY*.5+.5;gl_P
 const SKY_FS=`precision highp float;varying vec2 vUV;uniform float uTime;uniform float uRoll;uniform vec2 uResolution;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+1.),f.x),f.y);}
-float fbm(vec2 p){float x=0.,a=.52;for(int i=0;i<5;i++){x+=a*noise(p);p=p*2.03+14.7;a*=.5;}return x;}
+float fbm(vec2 p){float x=0.,a=.52;for(int i=0;i<3;i++){x+=a*noise(p);p=p*2.03+14.7;a*=.5;}return x;}
 void main(){
  vec2 q=vUV;float aspect=uResolution.x/max(uResolution.y,1.);
  float horizon=.42+sin(q.x*3.14+uRoll*.3)*.017;
@@ -357,7 +357,7 @@ function awardCombat(e){
 
 function toast(text){$('status').textContent=text;$('status').classList.add('visible');toastT=2.6}
 let renderScale=1,slowFrames=0;
-function resize(){const dpr=Math.min(window.devicePixelRatio||1,innerWidth<800?1.5:1.85)*renderScale;canvas.width=Math.max(1,Math.round(innerWidth*dpr));canvas.height=Math.max(1,Math.round(innerHeight*dpr));if(gl)gl.viewport(0,0,canvas.width,canvas.height)}addEventListener('resize',resize);resize();if(gl){gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.clearColor(.29,.58,.69,1);}
+function resize(){const screenBudget=Math.sqrt(1200000/Math.max(1,innerWidth*innerHeight));const dpr=Math.max(.7,Math.min(window.devicePixelRatio||1,innerWidth<800?1.25:1.5,screenBudget))*renderScale;canvas.width=Math.max(1,Math.round(innerWidth*dpr));canvas.height=Math.max(1,Math.round(innerHeight*dpr));if(gl)gl.viewport(0,0,canvas.width,canvas.height)}addEventListener('resize',resize);resize();if(gl){gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.clearColor(.29,.58,.69,1);}
 function spawnScenery(){
  world=[];
  for(let i=0;i<24;i++){
