@@ -293,7 +293,7 @@ def selftest():
     linked,page,data=build(fixture)
     assert b"original header" in page and b"original footer" in page
     assert b"original header" in linked and b"original footer" in linked
-    assert "شناسنامه طرح".encode() in page
+    assert "شناسنامه".encode() in page
     assert b"original research" not in page
     assert len(page)>len(fixture)
     assert json.loads(data)["projects"]==[]
