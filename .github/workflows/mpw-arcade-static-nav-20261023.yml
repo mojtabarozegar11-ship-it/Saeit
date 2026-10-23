@@ -1,0 +1,143 @@
+name: MojPlayWin guarded Arcade Lab static discovery cards
+on:
+  pull_request:
+    branches: [main]
+    paths: [.github/workflows/mpw-arcade-static-nav-20261023.yml, scripts/mpw_arcade_static_nav_20261023.py]
+  push:
+    branches: [main]
+    paths: [.github/workflows/mpw-arcade-static-nav-20261023.yml, scripts/mpw_arcade_static_nav_20261023.py]
+permissions:
+  contents: read
+concurrency:
+  group: mpw-arcade-static-discovery-20261023
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Unit test HTML insertion, idempotency, fail-closed and bounded scope
+        run: |
+          set -euo pipefail
+          python3 -B scripts/mpw_arcade_static_nav_20261023.py selftest
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          p=Path('scripts/mpw_arcade_static_nav_20261023.py')
+          ast.parse(p.read_text())
+          assert p.stat().st_size<18000
+          print('STATIC_NAV_COMPILE_AND_SCOPE_OK')
+          PY
+  publish:
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify all protected routes and original version before modification
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,urllib.request
+          h='https://mojplaywin.com'
+          for p in ('/','/games/','/products/','/mpw-editorial/index.html','/game-releases/20261021/index.html'):
+              with urllib.request.urlopen(h+p,timeout=20) as r:
+                  assert r.status==200,p
+                  print('BEFORE_HTTP200',p)
+          with urllib.request.urlopen(h+'/mpw-editorial/arcade-lab/20261022/release.json',timeout=20) as r:
+              assert json.load(r)['git_sha']=='04ba43522db4af1762c99a5e60eb280cba1dd8b5'
+          PY
+      - name: Establish host-key-pinned VPS relay to cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }
+          CPANEL_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-arcade-nav-ssh";install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$CPANEL_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/cpanel.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/cpanel.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/cpanel.key
+            UserKnownHostsFile $d/cpanel.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/cpanel.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/cpanel.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/cpanel.candidate" "$d/cpanel.known"
+      - name: Install only two static cards with exact owned backups
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-arcade-nav-ssh/config"
+          scp -F "$d" scripts/mpw_arcade_static_nav_20261023.py "saeit-cpanel:/home/zomorod2/.mpw_arcade_nav_$GITHUB_RUN_ID.py"
+          ssh -T -F "$d" saeit-cpanel "python3 /home/zomorod2/.mpw_arcade_nav_$GITHUB_RUN_ID.py install $GITHUB_RUN_ID $GITHUB_SHA"
+      - name: Public HTTP 200 readback for real links and original routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,time,urllib.request
+          h='https://mojplaywin.com';marker='mpw-arcade-discovery-20261023'
+          sha='04ba43522db4af1762c99a5e60eb280cba1dd8b5'
+          for path in ('/mpw-editorial/index.html','/game-releases/20261021/index.html'):
+              with urllib.request.urlopen(urllib.request.Request(h+path+'?v='+str(time.time_ns()),headers={'Cache-Control':'no-cache'}),timeout=20) as r:
+                  body=r.read(900000).decode('utf8','replace')
+                  assert r.status==200 and body.count('id="'+marker+'"')==1,(path,r.status)
+                  assert 'data-arcade-sha="'+sha+'"' in body
+                  assert all('/mpw-editorial/arcade-lab/20261022/'+slug+'/index.html' in body for slug in ('economy-simulator','qa-matrix','circuit-courier'))
+                  print('LIVE_CARD_HTTP200',path)
+          for path in ('/','/games/','/products/','/game-releases/20261021/pulse-forge/index.html'):
+              with urllib.request.urlopen(h+path,timeout=20) as r:assert r.status==200,path
+              print('UNCHANGED_ROUTE_HTTP200',path)
+          with urllib.request.urlopen(h+'/mpw-editorial/arcade-lab/20261022/release.json',timeout=20) as r:assert json.load(r)['git_sha']==sha
+          for x in ('economy-simulator','qa-matrix','circuit-courier'):
+              with urllib.request.urlopen(h+'/mpw-editorial/arcade-lab/20261022/assets/'+x+'.webp',timeout=20) as r:
+                  data=r.read(80000)
+                  assert r.status==200 and data[:4]==b'RIFF' and data[8:12]==b'WEBP'
+          print('ARCADE_NAV_EXTERNAL_SMOKE_PASS')
+          PY
+      - name: Rollback only owned changes if live verification fails
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          ssh -T -F "$RUNNER_TEMP/mpw-arcade-nav-ssh/config" saeit-cpanel \
+            "python3 /home/zomorod2/.mpw_arcade_nav_$GITHUB_RUN_ID.py rollback $GITHUB_RUN_ID $GITHUB_SHA"
+      - name: Delete temporary remote launcher and local SSH keys
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/mpw-arcade-nav-ssh/config"; then
+            ssh -T -F "$RUNNER_TEMP/mpw-arcade-nav-ssh/config" saeit-cpanel \
+              "rm -f /home/zomorod2/.mpw_arcade_nav_$GITHUB_RUN_ID.py" || true
+          fi
+          rm -rf "$RUNNER_TEMP/mpw-arcade-nav-ssh"
