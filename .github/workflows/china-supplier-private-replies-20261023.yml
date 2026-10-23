@@ -1,0 +1,137 @@
+name: Private encrypted analysis of 11 possible company supplier replies
+on:
+  push:
+    branches: ['ops/china-import-500-final136-20261023']
+    paths: ['.github/workflows/china-supplier-private-replies-20261023.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare pinned read-only SSH bridge to cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/company-mail-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/vps.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          {
+            echo 'Host bridge'; echo '  HostName 178.239.147.150'; echo '  User githubops'; echo "  IdentityFile $d/vps.key"; echo "  UserKnownHostsFile $d/vps.known";
+            echo 'Host company'; echo '  HostName zohal.pws-dns.net'; echo '  User zomorod2'; echo '  Port 1396'; echo "  IdentityFile $d/host.key"; echo "  UserKnownHostsFile $d/host.known"; echo '  ProxyJump bridge';
+            echo 'Host *'; echo '  StrictHostKeyChecking yes'; echo '  IdentitiesOnly yes'; echo '  BatchMode yes'; echo '  ConnectTimeout 12'; echo '  ForwardAgent no'; echo '  RequestTTY no';
+          } > "$d/config"
+          chmod 600 "$d/config"
+          echo SSH_BRIDGE_PIN_VERIFIED
+      - name: Retrieve supplier reply content into encrypted-only runner memory and logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/company-mail-inspect"
+          cat > "$d/transfer-cert.pem" <<'CERT'
+          -----BEGIN CERTIFICATE-----
+          MIIEOzCCAqOgAwIBAgIUZ6YZo6UcWMAYK8WOSomAD90SwNAwDQYJKoZIhvcNAQEL
+          BQAwLTErMCkGA1UEAwwiUHJpdmF0ZSBzdXBwbGllciByZXNwb25zZSBhbmFseXNp
+          czAeFw0yNjEwMjMwOTUzNTZaFw0yNjEwMjQwOTUzNTZaMC0xKzApBgNVBAMMIlBy
+          aXZhdGUgc3VwcGxpZXIgcmVzcG9uc2UgYW5hbHlzaXMwggGiMA0GCSqGSIb3DQEB
+          AQUAA4IBjwAwggGKAoIBgQDQEaDBJeDGWVJ/sh09EkB1l7JJVthFzeqHlHUEuh0F
+          dySXJtR8NuTRbxhDiKBxqOnux0XPDptF07b8oO9Hs4N9j8pecVqzJHdiT+Of3OR0
+          BZNHf8oIOTFV+Vb6xlMmZ6TDPZp71e6Bj8tPKMdjRq1lDaVhId0Q9eraJddzAyna
+          jU/+2YFQmkx3+eZ2I/qpW1vxe05tr59DrVvFQC2ngM1uiEIuOFRCCcsnrVbvRJxJ
+          JDl2sKzE5yp5+Xr9gGJo9opn4cHIwR4Yv2c8pUgdlYOupc8wsiE2FVddygPcBsjq
+          U56piJ1YSVg67WjWiP9NBMxzmgWMXPY2FzyA6F9NHqhtdYSf5E08RyHXcejCeJwQ
+          y0oKiMtFxpEyn75Xty/pRRYqGikBUGbRfVBEkHsr9hJikaqmet/u009F2nmcxUiz
+          LngNfagkPiS71H6Aziu0/wU4Z9XqWjqD9XnoUP88L081rqFnItwLNftFunOzyAtN
+          XgHb912hpGLrbUFJgnHmYWECAwEAAaNTMFEwHQYDVR0OBBYEFORL75/ClUrwA//j
+          4prx9pP8vrIBMB8GA1UdIwQYMBaAFORL75/ClUrwA//j4prx9pP8vrIBMA8GA1Ud
+          EwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggGBAM8tEeFHEXee66DbMgyXz8Ai
+          AhVYd8snA+4ulSplZwtsG+ljwcFRlVclNQPDkM05YaLlRlzzPLYw1i3FC4xGbLAF
+          ABvNBX6wbIaJatYiBXycUOYB96a3sljt5lnkz5RB1eX2JDEGKmIvS2RRLoL5soF+
+          Y1/ztAMwjgTzabAa8Q+OwaGiRP6R8B5t82HxhCg2ueXEi0WGJbgGoP18MxWAK8zB
+          ujsDM3LBWmauRqABtwriSigegMJZ9IJFZFqusEbJ1HTCgVHiqsgUq7p9GQEsTZao
+          bboqQ17kDPJCwqQGXoL9GGvYdwJ0yluMb+GiYoY5gpAAaxrKZq1rSXm1QVGIqU/K
+          S61//JbrnbMKEd/E06SaAhKLegGfijv/cWeDpQOkHdEgB7Mg6LZunfehYdTSoxOF
+          BJBj49t0XXaqO3xOZ8UK5ML2SMWHxO+HJF2/n7nNDgJtlm5rogBYF4NkMh/2R+wB
+          MzkzBlR2ulK2sNNdcncPIuyL7awsWcNKxHJdAvS33g==
+          -----END CERTIFICATE-----
+          CERT
+          cat <<'PY' | timeout 80s ssh -T -F "$d/config" company python3 - > "$d/private-replies.json"
+          from pathlib import Path
+          from email import policy
+          from email.parser import BytesParser
+          from email.utils import parseaddr
+          from html import unescape
+          from datetime import datetime,timezone
+          import re, json, os
+          root=Path.home()/"mail"/"zomorodmelal.ir"/"moj_1ro_1"
+          cutoff=datetime(2026,10,20,tzinfo=timezone.utc).timestamp()
+          out=[]
+          def visible_text(msg):
+              candidates=[]
+              for part in msg.walk():
+                  if part.is_multipart():continue
+                  if part.get_content_disposition()=="attachment":continue
+                  typ=part.get_content_type()
+                  if typ not in ("text/plain","text/html"):continue
+                  try:s=part.get_content()
+                  except Exception:continue
+                  if not isinstance(s,str):continue
+                  if typ=="text/html":
+                      s=re.sub(r"(?is)<(style|script)[^>]*>.*?</\\1>"," ",s)
+                      s=re.sub(r"(?is)<[^>]*>"," ",s)
+                      s=unescape(s)
+                  s=re.sub(r"\\s+"," ",s).strip()
+                  if s:candidates.append((0 if typ=="text/plain" else 1,len(s),s))
+              candidates.sort(key=lambda item:(item[0],-item[1]))
+              return candidates[0][2][:7000] if candidates else ""
+          for folder in ("new","cur"):
+              p=root/folder
+              if not p.is_dir():continue
+              for mail in p.iterdir():
+                  if not mail.is_file() or mail.stat().st_mtime<cutoff:continue
+                  try:
+                      with mail.open("rb") as f:raw=f.read(3_500_000)
+                      msg=BytesParser(policy=policy.default).parsebytes(raw)
+                      addr=parseaddr(str(msg.get("From","")))[1].lower()
+                      sub=str(msg.get("Subject","")).lower()
+                      auto=str(msg.get("Auto-Submitted","")).lower()
+                      if not addr or addr.endswith("@zomorodmelal.ir"):continue
+                      if "mailer-daemon" in addr or "postmaster" in addr or "delivery status" in sub or "undeliver" in sub or "failure notice" in sub:continue
+                      if auto and auto!="no":continue
+                      attachments=[{"filename":str(x.get_filename() or "(unnamed)")[:150],"content_type":str(x.get_content_type()),"size":len(x.get_payload(decode=True) or b"")} for x in msg.walk() if x.get_content_disposition()=="attachment"]
+                      body=visible_text(msg)
+                      out.append({"from":str(msg.get("From",""))[:300],"subject":str(msg.get("Subject",""))[:300],"date":str(msg.get("Date",""))[:120],"reply_headers":bool(msg.get("In-Reply-To") or msg.get("References")),"text":body,"attachments":attachments,"message_bytes":len(raw),"message_id":str(msg.get("Message-ID",""))[:200]})
+                  except Exception as e:out.append({"processing_error_type":type(e).__name__})
+          print(json.dumps({"scope":"company_mailbox_2026-10-20_onward","candidates":len(out),"messages":out},ensure_ascii=False))
+          PY
+          python3 -m json.tool "$d/private-replies.json" > /dev/null
+          openssl cms -encrypt -binary -aes256 -in "$d/private-replies.json" -outform DER -out "$d/private-replies.cms" "$d/transfer-cert.pem"
+          shred -u "$d/private-replies.json"
+          echo 'ENCRYPTED_SUPPLIER_REPORT_BEGIN'
+          base64 -w76 "$d/private-replies.cms"
+          echo 'ENCRYPTED_SUPPLIER_REPORT_END'
+          echo 'CONTENT_EXPOSED_IN_LOGS=NO'
+      - name: Secure cleanup of report, cert, and SSH keys
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/company-mail-inspect"
+          test ! -d "$d" || find "$d" -maxdepth 1 -type f -exec shred -u {} +
