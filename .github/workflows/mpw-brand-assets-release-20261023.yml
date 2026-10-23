@@ -53,9 +53,7 @@ jobs:
           def icon(size):return src.resize((size,size),Image.Resampling.LANCZOS)
           icon(384).save(out/"coin.png",optimize=True)
           large=icon(512)
-          bg=Image.new("RGB",(512,512),"#080807")
-          bg.paste(large,mask=large.getchannel("A"))
-          bg.save(out/"header.jpg",quality=88,optimize=True,subsampling=0)
+          icon(224).save(out/"official.webp",format="WEBP",quality=92,method=6)
           icon(180).save(out/"apple-touch-icon.png",optimize=True)
           icon(192).save(out/"android-chrome-192x192.png",optimize=True)
           large.save(out/"android-chrome-512x512.png",optimize=True)
@@ -70,7 +68,7 @@ jobs:
           python3 - <<'PY'
           import urllib.request,urllib.error
           found={}
-          for path in ("/","/company/","/store/","/games/","/static/site/mojplaywin-header-emblem.jpg","/static/site/mojplaywin-coin-logo.420e0d1f954b.png"):
+          for path in ("/","/company/","/store/","/games/","/design-preview-20261017/static/site/mojplaywin-atelier/official-coin-80.3ea52711f49d.webp","/static/site/mojplaywin-coin-logo.420e0d1f954b.png"):
               try:
                   with urllib.request.urlopen("https://mojplaywin.com"+path,timeout=18) as r:
                       found[path]=(r.status,len(r.read(250000)))
@@ -125,18 +123,12 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
-      - name: Read-only cPanel icon path inventory
+      - name: Verify real cPanel icon paths read-only
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-brand-ssh"
-          timeout 50s ssh -T -F "$d/config" saeit-cpanel \
-            'for p in /home/zomorod2/mojplaywin.com/static/site/mojplaywin-header-emblem.jpg /home/zomorod2/mojplaywin.com/static/site/mojplaywin-coin-logo.420e0d1f954b.png /home/zomorod2/Saeit-staging/core/static/site/mojplaywin-header-emblem.jpg /home/zomorod2/mojplaywin.com/.htaccess; do if test -f "$p"; then stat -c "ICON_SOURCE_PRESENT %n %s" "$p"; else echo "ICON_SOURCE_MISSING $p"; fi; done'
-      - name: Find active MojPlayWin public icon files read-only
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/mpw-brand-ssh"
-          timeout 75s ssh -T -F "$d/config" saeit-cpanel \
-            'timeout 55s find /home/zomorod2 -xdev -type f \( -name "mojplaywin-coin-logo.420e0d1f954b.png" -o -name "mojplaywin-header-emblem.jpg" -o -name "favicon.ico" \) -print 2>/dev/null | head -40'
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel \
+            'for p in /home/zomorod2/mojplaywin.com/design-preview-20261017/static/site/mojplaywin-atelier/official-coin-80.3ea52711f49d.webp /home/zomorod2/Saeit-staging/staticfiles/site/mojplaywin-coin-logo.420e0d1f954b.png; do test -f "$p" && test ! -L "$p" || exit 3; stat -c "LIVE_BRAND_SOURCE %n %s" "$p"; done'
       - name: Transfer only brand bundle to site owner account
         id: stage
         run: |
@@ -158,7 +150,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import hashlib,os,time,urllib.request
-          paths={"header.jpg":"/static/site/mojplaywin-header-emblem.jpg",
+          paths={"official.webp":"/design-preview-20261017/static/site/mojplaywin-atelier/official-coin-80.3ea52711f49d.webp",
                  "coin.png":"/static/site/mojplaywin-coin-logo.420e0d1f954b.png",
                  "favicon.ico":"/favicon.ico",
                  "apple-touch-icon.png":"/apple-touch-icon.png",
