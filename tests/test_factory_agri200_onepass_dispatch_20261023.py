@@ -31,6 +31,8 @@ class OnePassTests(unittest.TestCase):
             self.assertFalse(result["after"]["storefront_release_verified"])
             self.assertFalse(result["public_sites_modified"])
             self.assertEqual(result["finished_products_published_by_this_dispatch"], 0)
+            self.assertEqual(result["remaining_research_diagnostics"]["unresearched_orders"], 200)
+            self.assertEqual(result["remaining_research_diagnostics"]["missing_bibliography"], 200)
 
     def test_duplicate_internal_orders_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
