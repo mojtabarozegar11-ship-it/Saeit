@@ -1,0 +1,143 @@
+name: MojPlayWin guarded Field Studio discovery on games and products
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-fieldstudio-main-nav-20261023.yml"
+      - "scripts/mpw_fieldstudio_main_nav_20261023.py"
+permissions:
+  contents: read
+concurrency:
+  group: mpw-fieldstudio-main-nav-20261023
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate bounded PHP insertion, uniqueness, idempotency and lint
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_fieldstudio_main_nav_20261023.py
+          python3 -B scripts/mpw_fieldstudio_main_nav_20261023.py selftest
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('scripts/mpw_fieldstudio_main_nav_20261023.py').read_text()
+          assert 'ORIGINAL_SHA="9cc5942a30b48f8300c90511b6a113452bce5ef87172fc14fc225f2397db79ee"' in src
+          assert src.count('MPW_FIELDSTUDIO_MAIN_NAV_20261023_BEGIN')==1
+          assert ('if: '+chr(36)+'{{ false }}') in Path('.github/workflows/mojplaywin-main-deploy.yml').read_text()
+          print('FIELDSTUDIO_MAIN_NAV_PROTECTED_DEPLOY_LOCK_PASS')
+          PY
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify new Field Studio public release and untouched main routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,json
+          base='https://mojplaywin.com'
+          release='/mpw-editorial/field-guides/20261023/'
+          with urllib.request.urlopen(base+release+'release.json',timeout=20) as r:
+              m=json.load(r)
+          assert m['release_id']=='MPW-FIELDGUIDES-20261023-01' and m['guide_count']==50 and m['stage_count']==150
+          for file in ('index.html','prism-relay/index.html','guides/lcp-hero-images/index.html'):
+              with urllib.request.urlopen(base+release+file,timeout=20) as r:assert r.status==200
+          for page,old_marker in (('/games/','mpw-nextwave-main-discovery-20261023'),('/products/','mpw-assetlab-main-discovery-20261023')):
+              with urllib.request.urlopen(base+page,timeout=20) as r:
+                  b=r.read(1400000).decode('utf8','replace')
+                  assert r.status==200 and r.headers.get('X-MPW-Main-Shell')=='exact-owner-only'
+                  assert old_marker in b and 'mpw-fieldstudio-discovery-20261023' not in b
+                  print('MAIN_ROUTE_SAFE_BASELINE_PASS',page)
+          for p in ('/','/store/','/studio/','/mpw-editorial/index.html','/mpw-editorial/nextwave/20261023/index.html','/mpw-editorial/asset-lab/20261023/index.html'):
+              with urllib.request.urlopen(base+p,timeout=20) as r:assert r.status==200,p
+          PY
+      - name: Establish strict pinned SSH through VPS relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          CPANEL_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-fieldnav-ssh";install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$CPANEL_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/cpanel.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/cpanel.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf 'Host saeit-vps\n HostName 178.239.147.150\n User githubops\n IdentityFile %s/vps.key\n UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n HostName zohal.pws-dns.net\n User zomorod2\n Port 1396\n IdentityFile %s/cpanel.key\n UserKnownHostsFile %s/host.known\n ProxyJump saeit-vps\nHost *\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 10\n ForwardAgent no\n RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/cpanel.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/cpanel.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/cpanel.candidate" "$d/host.known"
+      - name: Save owned backup, lint and atomically insert only two discovery cards
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          c="$RUNNER_TEMP/mpw-fieldnav-ssh/config"
+          scp -F "$c" scripts/mpw_fieldstudio_main_nav_20261023.py "saeit-cpanel:/home/zomorod2/.mpw_fieldnav_$GITHUB_RUN_ID.py"
+          ssh -T -F "$c" saeit-cpanel "chmod 600 /home/zomorod2/.mpw_fieldnav_$GITHUB_RUN_ID.py && python3 /home/zomorod2/.mpw_fieldnav_$GITHUB_RUN_ID.py install $GITHUB_RUN_ID $GITHUB_SHA"
+      - name: Verify both public cards and unaffected pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,time
+          base='https://mojplaywin.com';marker='mpw-fieldstudio-discovery-20261023'
+          routes={'/games/':'/mpw-editorial/field-guides/20261023/prism-relay/index.html','/products/':'/mpw-editorial/field-guides/20261023/index.html'}
+          for route,destination in routes.items():
+              for i in range(8):
+                  with urllib.request.urlopen(urllib.request.Request(base+route+'?fieldstudio='+str(time.time_ns()),headers={'Cache-Control':'no-cache'}),timeout=22) as r:
+                      text=r.read(1500000).decode('utf8','replace')
+                      assert r.status==200 and r.headers.get('X-MPW-Main-Shell')=='exact-owner-only'
+                  if text.count('id="'+marker+'"')==1 and destination in text:break
+                  if i==7:raise RuntimeError('Missing live navigation card '+route)
+                  time.sleep(2)
+              assert 'data-navigation-version="FIELDSTUDIO-MAIN-NAV-20261023-01"' in text
+              print('FIELD_STUDIO_MAIN_CARD_PUBLIC_HTTP200',route,destination)
+          for p in ('/','/store/','/studio/','/mpw-editorial/index.html','/mpw-editorial/field-guides/20261023/index.html','/mpw-editorial/nextwave/20261023/index.html','/mpw-editorial/asset-lab/20261023/index.html'):
+              with urllib.request.urlopen(base+p,timeout=22) as r:assert r.status==200,p
+          print('FIELD_STUDIO_MAIN_CARDS_PUBLIC_VERIFIED')
+          PY
+      - name: Confirm responsive DOM links in mobile and desktop Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v chromium)"
+          for mode in desktop mobile; do
+            if test "$mode" = mobile;then size="390,844";else size="1440,900";fi
+            for page in games products; do
+              timeout 40s "$chrome" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=2500 --window-size="$size" --dump-dom "https://mojplaywin.com/$page/" > "$RUNNER_TEMP/$mode-$page.html" 2>/dev/null
+              grep -Fq 'id="mpw-fieldstudio-discovery-20261023"' "$RUNNER_TEMP/$mode-$page.html"
+              grep -Fq 'data-navigation-version="FIELDSTUDIO-MAIN-NAV-20261023-01"' "$RUNNER_TEMP/$mode-$page.html"
+              echo "FIELD_STUDIO_MAIN_NAV_CHROME_PASS $mode $page"
+            done
+          done
+      - name: Roll back only exact owned PHP version if postinstall checks fail
+        if: failure() && (steps.install.outcome == 'success' || steps.install.outcome == 'failure')
+        shell: bash
+        run: |
+          c="$RUNNER_TEMP/mpw-fieldnav-ssh/config"
+          if test -f "$c";then
+            ssh -T -F "$c" saeit-cpanel "if test -f /home/zomorod2/.mpw_fieldnav_$GITHUB_RUN_ID.py;then python3 /home/zomorod2/.mpw_fieldnav_$GITHUB_RUN_ID.py rollback $GITHUB_RUN_ID $GITHUB_SHA;fi"
+          fi
+      - name: Cleanup only ephemeral runner keys and remote launcher
+        if: always()
+        shell: bash
+        run: |
+          c="$RUNNER_TEMP/mpw-fieldnav-ssh/config"
+          if test -f "$c";then ssh -T -F "$c" saeit-cpanel "rm -f /home/zomorod2/.mpw_fieldnav_$GITHUB_RUN_ID.py" || true;fi
+          rm -rf "$RUNNER_TEMP/mpw-fieldnav-ssh"
