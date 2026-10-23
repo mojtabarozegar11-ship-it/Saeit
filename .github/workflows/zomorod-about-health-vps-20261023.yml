@@ -215,6 +215,54 @@ jobs:
               print('REFERENCE_PATH',rel,p.exists(),p.is_dir())
           print('HTACCESS_SHA256',hashlib.sha256((home/'public_html/.htaccess').read_bytes()).hexdigest())
           PY
+      - name: Inspect 503 message and application runtime state
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-public-health-relay"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          from urllib.request import urlopen
+          from urllib.error import HTTPError
+          from html.parser import HTMLParser
+          import os,subprocess,time,shlex
+          class Visible(HTMLParser):
+              def __init__(self):super().__init__();self.text=[];self.excluded=0
+              def handle_starttag(self,t,a):
+                  if t in ('script','style'):self.excluded+=1
+              def handle_endtag(self,t):
+                  if t in ('script','style') and self.excluded:self.excluded-=1
+              def handle_data(self,v):
+                  if not self.excluded and v.strip():self.text.append(v.strip())
+          try:
+              with urlopen('https://zomorodmelal.ir/',timeout=15) as x:b=x.read(15000)
+          except HTTPError as e:b=e.read(15000)
+          except Exception:b=b''
+          p=Visible();p.feed(b.decode('utf-8','replace'))
+          print('ERROR_VISIBLE_TEXT',' '.join(p.text)[:500])
+          home=Path.home()
+          for rel in ('public_html/.htaccess','Saeit/passenger_wsgi.py','Saeit/manage.py','Saeit/tmp/restart.txt'):
+              f=home/rel
+              print('FILE_AGE_HOURS',rel,round((time.time()-f.stat().st_mtime)/3600,2) if f.exists() else 'absent')
+          try:
+              out=subprocess.run(['ps','-u','zomorod2','-o','pid=,comm=,etimes='],capture_output=True,text=True,timeout=6).stdout
+              for line in out.splitlines():
+                  w=line.split()
+                  if len(w)>=3 and any(x in w[1].lower() for x in ('python','lswsgi','passenger')):
+                      print('APP_PROCESS',w[1],'RUN_SECONDS',w[-1])
+          except Exception as e:print('PS_ERROR',type(e).__name__)
+          for folder in ('logs','Saeit/logs','Saeit/tmp','Saeit'):
+              x=home/folder
+              if x.is_dir():
+                  try:
+                      logs=[f.name for f in x.iterdir() if f.is_file() and any(q in f.name.lower() for q in ('error','stderr','passenger','log'))]
+                      print('APP_LOG_ENTRIES',folder,logs[:12])
+                  except Exception as e:print('APP_LOG_READ_ERROR',folder,type(e).__name__)
+          try:
+              s=subprocess.run(['cloudlinux-selector','--help'],capture_output=True,text=True,timeout=7)
+              print('PY_SELECTOR_HELP_LINES',' | '.join(s.stdout.splitlines()[:12])[:350])
+          except Exception as e:print('SELECTOR_HELP_ERROR',type(e).__name__)
+          PY
       - name: Remove runner key files
         if: always()
         shell: bash
