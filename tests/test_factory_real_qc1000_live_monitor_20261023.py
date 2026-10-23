@@ -107,6 +107,136 @@ class RealQC1000Tests(unittest.TestCase):
         payload.unlink()
         sigfile.unlink()
 
+    def make_test_doctoral_dossier(self, suite_path, domain="agriculture_education"):
+        # Artificial fixture to test structural validation only.
+        # This is never genuine expertise, empirical evidence or a product pass.
+        suite = json.loads(suite_path.read_text())
+        folder = suite_path.parent
+        controls = set(qc.DOCTORAL_COMMON) | set(qc.DOCTORAL_DOMAIN[domain])
+        evidence = {}
+        for key in sorted(controls):
+            path = folder / "doctoral-evidence" / (key + ".json")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            raw = qc.canonical({
+                "synthetic_fixture_not_research": True,
+                "evidence_category": key,
+                "failure_cases_and_limits": "THIS IS TEST DATA ONLY",
+            })
+            path.write_bytes(raw)
+            evidence[key] = {
+                "relative_path": "doctoral-evidence/" + key + ".json",
+                "sha256": h(raw),
+            }
+        sources = [
+            {
+                "source_id": "source-%03d" % i,
+                "source_type": "peer_reviewed_primary",
+                "persistent_identifier": "doi:10.0000/test-fixture-%d" % i,
+                "applicability_explanation":
+                    "Artificial test reference only, never checked with a source registry.",
+            }
+            for i in range(1, 4)
+        ]
+        doc = {
+            "schema": qc.DOCTORAL_SCHEMA, "discipline": domain,
+            "artifact_sha256": suite["artifact_sha256"],
+            "execution_suite_sha256": h(suite_path.read_bytes()),
+            "evidence_files": evidence, "source_register": sources,
+            "claim_inventory_complete": True,
+            "claims": [{
+                "claim_id": "claim-0001",
+                "statement": "Synthetic research claim for unit testing only; not about a real product.",
+                "verdict": "supported_with_limits",
+                "source_ids": [x["source_id"] for x in sources],
+                "limitations": "No experiment has been performed and no scientist has reviewed it.",
+            }],
+            "method_integrity": {
+                key: True for key in qc.DOCTORAL_METHOD_ASSERTIONS
+            },
+            "unresolved_findings": {"critical": 0, "major": 0},
+            "independent_expert_peer_review_required": True,
+            "auto_scientific_approval": False,
+            "auto_commercial_release": False,
+        }
+        dossier = folder / "doctoral-dossier.json"
+        dossier.write_bytes(qc.canonical(doc))
+        return dossier, doc
+
+    @unittest.skipUnless(shutil.which("openssl"), "OpenSSL required")
+    def test_1000_executions_without_doctoral_dossier_remain_blocked(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, area = self.setup_factory(temp)
+            path, pub, _ = self.make_test_signed_suite(temp, area)
+            cycle = qc.scan(root, pub)
+            self.assertEqual(
+                cycle["verdict_counts"], {"BLOCKED_DOCTORAL_DOSSIER_MISSING": 1})
+            self.assertEqual(
+                cycle["actual_execution_scenarios_evidence_verified_this_tick"], 1000)
+            self.assertEqual(
+                cycle["professional_quality_1000_certifications_created"], 0)
+            self.assertFalse(cycle["public_sites_modified"])
+
+    @unittest.skipUnless(shutil.which("openssl"), "OpenSSL required")
+    def test_doctoral_structural_dossier_still_never_certifies_without_experts(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, area = self.setup_factory(temp)
+            path, pub, _ = self.make_test_signed_suite(temp, area)
+            dossier, doc = self.make_test_doctoral_dossier(path)
+            check = qc.verify_doctoral_evidence(
+                dossier, doc["artifact_sha256"],
+                doc["execution_suite_sha256"])
+            self.assertFalse(check["scientific_validity_established"])
+            self.assertFalse(check["independent_doctoral_peer_review_verified"])
+            cycle = qc.scan(root, pub)
+            self.assertIn(
+                "DOCTORAL_EVIDENCE_PENDING_AUTHENTIC_INDEPENDENT_SPECIALISTS",
+                cycle["verdict_counts"])
+            self.assertEqual(
+                cycle["professional_quality_1000_certifications_created"], 0)
+
+    @unittest.skipUnless(shutil.which("openssl"), "OpenSSL required")
+    def test_doctoral_missing_domain_evidence_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            _, area = self.setup_factory(temp)
+            path, _, _ = self.make_test_signed_suite(temp, area)
+            dossier, doc = self.make_test_doctoral_dossier(path)
+            del doc["evidence_files"]["crop_soil_climate_applicability"]
+            dossier.write_bytes(qc.canonical(doc))
+            with self.assertRaisesRegex(qc.QCFault, "DOCTORAL_REQUIRED_EVIDENCE_MISSING"):
+                qc.verify_doctoral_evidence(
+                    dossier, doc["artifact_sha256"], doc["execution_suite_sha256"])
+
+    @unittest.skipUnless(shutil.which("openssl"), "OpenSSL required")
+    def test_doctoral_tampered_scientific_evidence_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            _, area = self.setup_factory(temp)
+            path, _, _ = self.make_test_signed_suite(temp, area)
+            dossier, doc = self.make_test_doctoral_dossier(path)
+            evidence = doc["evidence_files"]["methods_and_controls"]
+            leaf = path.parent / evidence["relative_path"]
+            leaf.write_bytes(leaf.read_bytes() + b"FALSIFIED")
+            with self.assertRaisesRegex(qc.QCFault, "DOCTORAL_EVIDENCE_HASH_MISMATCH"):
+                qc.verify_doctoral_evidence(
+                    dossier, doc["artifact_sha256"], doc["execution_suite_sha256"])
+
+    @unittest.skipUnless(shutil.which("openssl"), "OpenSSL required")
+    def test_doctoral_untraced_claims_and_open_major_defects_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            _, area = self.setup_factory(temp)
+            path, _, _ = self.make_test_signed_suite(temp, area)
+            dossier, doc = self.make_test_doctoral_dossier(path)
+            doc["claims"][0]["source_ids"] = ["source-001", "invented-source"]
+            dossier.write_bytes(qc.canonical(doc))
+            with self.assertRaisesRegex(qc.QCFault, "DOCTORAL_CLAIM_UNSUPPORTED_OR_UNTRACED"):
+                qc.verify_doctoral_evidence(
+                    dossier, doc["artifact_sha256"], doc["execution_suite_sha256"])
+            doc["claims"][0]["source_ids"] = ["source-001", "source-002"]
+            doc["unresolved_findings"]["major"] = 1
+            dossier.write_bytes(qc.canonical(doc))
+            with self.assertRaisesRegex(qc.QCFault, "DOCTORAL_CRITICAL_OR_MAJOR_DEFECT_OPEN"):
+                qc.verify_doctoral_evidence(
+                    dossier, doc["artifact_sha256"], doc["execution_suite_sha256"])
+
     def test_health_tick_without_real_1000_never_certifies(self):
         with tempfile.TemporaryDirectory() as temp:
             root, _ = self.setup_factory(temp)
