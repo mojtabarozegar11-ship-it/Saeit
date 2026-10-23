@@ -1,5 +1,5 @@
 name: Zomorod P0 Unpublished Source and Live Inventory
-# Owner-authorized fresh P0 live/receipt audit 2026-10-23; no site writes.
+# Owner-authorized fresh P0 live/receipt audit 2026-10-23 11:20 UTC; no site writes.
 on:
   push:
     branches: [main]
@@ -50,6 +50,10 @@ jobs:
            "agriculture/water-soil/field-notes-11-14/index.html",
            "agriculture/greenhouse/temperature-uniformity/index.html",
            "agriculture/digital-lab/index.html",
+           "games/seed-guardian/index.html",
+           "agriculture/water-soil/research-lab-20261023/index.html",
+           "agriculture/water-soil/research-lab-20261023/field-capacity-measurement/index.html",
+           "agriculture/water-soil/field-notes-09-10/index.html",
            "topics/digital-lab/index.html",
            "agriculture/assets/zomorod-water-20261023/zomorod-irrigation.webp",
            "agriculture/assets/zomorod-water-20261023/zomorod-greenhouse.webp",
@@ -61,7 +65,7 @@ jobs:
             data=p.read_bytes()
             print("FILE",name,"size",len(data),"sha256",hashlib.sha256(data).hexdigest()[:20])
            else:print("MISSING",name,"symlink",p.is_symlink())
-          for d in (home/".backups"/"zomorod-p0-backlog",home/".backups"/"zomorod-hourly-water-20261023",home/".backups"/"zomorod-water-images-20261023"):
+          for d in (home/".backups"/"zomorod-p0-backlog",home/".backups"/"zomorod-hourly-water-20261023",home/".backups"/"zomorod-water-images-20261023",home/".backups"/"zomorod-seed-guardian-research-20261023",home/".backups"/"zomorod-unreleased-reviewed-20261023"):
            if d.is_dir() and not d.is_symlink():
             runs=sorted([x for x in d.iterdir() if x.is_dir()],key=lambda x:x.name)[-5:]
             for run in runs:
@@ -94,6 +98,9 @@ jobs:
             "https://zomorodmelal.ir/agriculture/water-soil/field-notes-11-14/"
             "https://zomorodmelal.ir/agriculture/greenhouse/temperature-uniformity/"
             "https://zomorodmelal.ir/agriculture/digital-lab/"
+            "https://zomorodmelal.ir/games/seed-guardian/"
+            "https://zomorodmelal.ir/agriculture/water-soil/research-lab-20261023/"
+            "https://zomorodmelal.ir/agriculture/water-soil/field-notes-09-10/"
           )
           for url in "${urls[@]}"; do
             code="$(curl -sS -L --retry 1 --connect-timeout 6 --max-time 18 -H 'Cache-Control: no-cache' -o /dev/null -w '%{http_code}' "$url?audit=$GITHUB_RUN_ID" || true)"
