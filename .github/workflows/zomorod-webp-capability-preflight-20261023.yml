@@ -1,0 +1,41 @@
+name: Zomorod prior WebP media capability and coexistence preflight
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-webp-capability-preflight-20261023.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-agriculture-static
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Establish pinned SSH relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Read media encoders and existing live paths without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          echo "MEDIA_VPS_CAPABILITIES:"
+          timeout 35s ssh -T -F "$d/config" vps "command -v cwebp || true; command -v ffmpeg || true; command -v convert || true; python3 -c 'import importlib.util;print(\"VPS_PIL\", bool(importlib.util.find_spec(\"PIL\")))'"
+          echo "MEDIA_CPANEL_CAPABILITIES:"
+          timeout 35s ssh -T -F "$d/config" host "command -v cwebp || true; command -v ffmpeg || true; command -v convert || true; command -v php || true; python3 -c 'import importlib.util;print(\"HOST_PIL\", bool(importlib.util.find_spec(\"PIL\")))'"
+          timeout 35s ssh -T -F "$d/config" host "python3 -c 'from pathlib import Path; import hashlib; p=Path.home()/\"public_html\"; files=[\"index.html\",\"agriculture/water-soil/index.html\",\"agriculture/greenhouse/index.html\",\"games/index.html\",\"games/water-path/index.html\",\"agriculture/assets/zomorod-water-20261023/zomorod-irrigation.webp\"]; [(print(\"SITE\", f, (p/f).stat().st_size if (p/f).is_file() else \"ABSENT\", hashlib.sha256((p/f).read_bytes()).hexdigest()[:14] if (p/f).is_file() else \"\")) for f in files]'"
+      - name: Wipe temporary relay keys
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/farm-v4-ssh"
