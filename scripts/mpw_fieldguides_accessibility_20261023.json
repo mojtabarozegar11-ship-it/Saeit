@@ -1,0 +1,105 @@
+{
+  "category": "Accessibility",
+  "articles": [
+    [
+      "neon-text-contrast",
+      "Check text contrast on animated neon backgrounds",
+      "Accessibility",
+      "Text may look bright on a game landing page but become unreadable as gradients and moving effects pass behind it.",
+      "Evaluate the least favorable background under labels, not only one screenshot. Give text a stable backing panel, maintain adequate size and verify the normal WCAG AA 4.5:1 text contrast target.",
+      "For large display text, WCAG permits different contrast treatment than normal text. Do not classify a small glowing status label as large text merely because it is bold.",
+      "A translucent panel's contrast can change frame by frame. Test light and dark animation states, different devices and forced-colors presentation.",
+      "WCAG,CAN"
+    ],
+    [
+      "reduced-motion-playability",
+      "Respect reduced motion without hiding essential information",
+      "Accessibility",
+      "Rapid camera shake, zoom effects and pulsating particles can create discomfort for motion-sensitive players.",
+      "Read prefers-reduced-motion, disable decorative oscillation and flashing backgrounds, while keeping hazards visible using static shape and textual cues.",
+      "Replace a rapidly pulsing danger ring with a fixed high-contrast dashed outline; this preserves a warning while removing unnecessary movement.",
+      "An animation-free mode that conceals attack timing is not playable. Run an entire stage in reduced motion and assess the same win conditions.",
+      "WCAG,CAN"
+    ],
+    [
+      "polite-win-announcements",
+      "Announce meaningful game milestones without a speech flood",
+      "Accessibility",
+      "Every score change announced through aria-live can produce a nonstop stream of screen-reader interruptions.",
+      "Announce stage complete, game over and major status changes using a polite live region. Keep rapidly changing clocks and coordinates readable without automatic speech.",
+      "Say 'Stage 8 complete, next stage 9' once; avoid repeating the new point total every time a coin moves across the board.",
+      "Replacing the entire live-region element each frame can duplicate announcements. Check output with a screen reader during fast scoring.",
+      "LIVE,WCAG"
+    ],
+    [
+      "dom-accessible-board",
+      "Expose canvas puzzle controls through semantic buttons",
+      "Accessibility",
+      "Canvas pixels do not automatically describe interactive mirror orientation, coordinates or activation behavior to keyboard users.",
+      "Keep the graphical beam on Canvas or SVG but represent clickable grid cells as buttons with row, column and orientation labels. Preserve focused node identity during updates.",
+      "A row-three column-five mirror announces whether it is slash or backslash, and Enter changes that state exactly as a touch click does.",
+      "A single aria-label on a canvas cannot substitute for dozens of independently operable puzzle cells. Solve a sample level using only keyboard and audio feedback.",
+      "WCAG,PTR"
+    ],
+    [
+      "upload-errors-readable",
+      "Describe image conversion validation failures precisely",
+      "Accessibility",
+      "A WebP tool that displays only a red border or a generic Error 400 leaves users guessing what needs fixing.",
+      "Associate the message with the invalid field and use an accessible live region. Explain allowed types and file-size limits without echoing untrusted HTML.",
+      "Use 'Unsupported image: select PNG, JPEG or WebP under 10 MB' rather than relying on a red outline or obscure parser code.",
+      "Sanitize any displayed filename and use textContent for untrusted material. Test corrupted files, enormous dimensions and keyboard navigation.",
+      "WCAG,INPUT"
+    ],
+    [
+      "stable-grid-focus",
+      "Keep focus on the same puzzle tile after each move",
+      "Accessibility",
+      "A rerender that recreates every button may reset browser focus and make repetitive keyboard play exhausting.",
+      "Track the selected logical cell and restore focus to its new DOM button after state updates, or update stable elements rather than replacing them.",
+      "Rotate cell C4 ten times and use Undo; focus should remain associated with C4 unless an explicit modal or level transition changes the interaction context.",
+      "Do not auto-focus an unrelated footer after each move. Test with keyboard, screen reader and zoomed text.",
+      "WCAG,LIVE"
+    ],
+    [
+      "sound-consent",
+      "Require user choice before playing game audio",
+      "Accessibility",
+      "Sound effects triggered on first load can surprise visitors, conflict with device etiquette and run into autoplay restrictions.",
+      "Create or resume an AudioContext only after a user gesture, expose sound-off and volume options, and ensure all essential clues have visual equivalents.",
+      "A sound toggle should show its state and immediately prevent further sound, while a muted game remains completely solvable.",
+      "Browser suspended audio contexts are normal; do not treat a denied autoplay attempt as evidence a game is broken. Test initial load and tab restoration.",
+      "AUDIO,WCAG"
+    ],
+    [
+      "zoom-200-percent",
+      "Keep settings and instructions accessible at 200 percent zoom",
+      "Accessibility",
+      "Rigid game overlays can clip the Start button when OS text size grows or the browser zoom is increased.",
+      "Use content-driven panel heights, allow vertical scrolling, wrap labels and avoid fixed-width instructions. Keep controls reachable on narrow screens.",
+      "At 200% zoom on a 390-pixel viewport, a player should still find Hint, Undo and Restart without horizontal panning.",
+      "Disabling user scaling hides the problem instead of fixing it. Test portrait, landscape, large text and browser zoom.",
+      "WCAG,IMG"
+    ],
+    [
+      "keyboard-trap-audit",
+      "Detect hidden keyboard traps in pause overlays",
+      "Accessibility",
+      "Focus can become trapped on a game canvas or escape behind a modal, preventing users from reaching Cancel or Resume.",
+      "Use proper modal semantics, focus management, Escape handling and a visible exit. Respect Tab movement instead of overriding it globally.",
+      "Open Pause, Tab through controls, activate Resume, and return to the previously selected puzzle mirror without touching a mouse.",
+      "Hidden dialog controls must not remain in the keyboard sequence. Verify native keyboard and assistive technology paths on every screen.",
+      "WCAG,PTR"
+    ],
+    [
+      "shape-not-only-color",
+      "Make safe items and hazards distinguishable without color vision",
+      "Accessibility",
+      "Danger indicators that rely solely on red versus green fail for players who cannot reliably discriminate that color pair.",
+      "Combine color with shape, iconography and concise text, such as a triangle hazard and a circular energy target. Keep differences visible in a grayscale capture.",
+      "A grayscale screenshot of a gameplay frame should reveal which symbols are unsafe without requiring the player to memorize a subtle color hue.",
+      "Colorblind simulation does not substitute for actual user testing, but it reveals obvious dependence on hue. Also test reduced motion.",
+      "WCAG,CAN"
+    ]
+  ]
+}
