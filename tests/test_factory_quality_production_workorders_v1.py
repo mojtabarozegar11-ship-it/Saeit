@@ -53,4 +53,62 @@ class WorkOrders(unittest.TestCase):
             self.assertEqual(document["status"],"WAITING_SIGNED_INDEPENDENT_APPROVAL")
             self.assertTrue(document["signed_external_quality_approval_required"])
             self.assertFalse(document["commercial_publish_allowed"])
+    def test_engineering_lane_continues_while_external_identity_is_absent(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            bucket=root/"quality-excellence/rework/verified_private_candidate"
+            bucket.mkdir(parents=True)
+            (bucket/"current.json").write_text(json.dumps({
+                "recipe":"verified_private_candidate",
+                "technical_qa_status":"passed",
+                "verified_artifact_integrity":True,
+                "source_provenance_hash_present":True,
+                "defects":[],
+                "external_audit_pending":["P0_INDEPENDENT_ATTESTATION_NOT_AUTHENTICATED"],
+                "artifact_sha256":"c"*64,
+                "quality_1000_scorecard":{"criteria":{}},
+            }))
+            output=jobs.work_orders(root,SCORER,CATALOG,"dual-a")
+            self.assertEqual(output["private_engineering_prechecks_passed"],1)
+            self.assertEqual(output["external_certifications"],0)
+            engineering=json.loads((
+                root/"quality-excellence/engineering-workorders/verified_private_candidate/current.json"
+            ).read_text())
+            external=json.loads((
+                root/"quality-excellence/independent-certification-queue/verified_private_candidate/current.json"
+            ).read_text())
+            self.assertEqual(engineering["status"],"PRIVATE_TECHNICAL_PRECHECK_PASSED")
+            self.assertFalse(engineering["independent_specialist_signature_required_to_continue_engineering"])
+            self.assertEqual(engineering["technical_evidence_gap_count"],100)
+            self.assertEqual(external["verified_external_signatures"],0)
+            self.assertTrue(external["blocks_new_commercial_release"])
+            self.assertFalse(external["blocks_private_engineering"])
+            self.assertEqual(len(external["pending_roles"]),3)
+            before=len(list((root/"quality-excellence/engineering-workorders/verified_private_candidate").glob("order-*.json")))
+            jobs.work_orders(root,SCORER,CATALOG,"dual-b")
+            after=len(list((root/"quality-excellence/engineering-workorders/verified_private_candidate").glob("order-*.json")))
+            self.assertEqual(before,after)
+
+    def test_unproved_technical_precheck_never_claims_pass(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            bucket=root/"quality-excellence/rework/unproved_candidate"
+            bucket.mkdir(parents=True)
+            (bucket/"current.json").write_text(json.dumps({
+                "recipe":"unproved_candidate", "technical_qa_status":"passed",
+                "verified_artifact_integrity":False,
+                "source_provenance_hash_present":True,
+                "defects":["P0_ARTIFACT_UNVERIFIED"],
+                "artifact_sha256":"d"*64, "quality_1000_scorecard":{"criteria":{}},
+            }))
+            jobs.work_orders(root,SCORER,CATALOG,"dual-invalid")
+            engineering=json.loads((
+                root/"quality-excellence/engineering-workorders/unproved_candidate/current.json"
+            ).read_text())
+            self.assertEqual(engineering["status"],"TECHNICAL_REPAIR_REQUIRED")
+            self.assertFalse(engineering["mechanical_precheck_verified"])
+            self.assertIn("P0_ARTIFACT_UNVERIFIED",engineering["unresolved_engineering_defects"])
+            self.assertFalse(engineering["quality_1000_certified"])
+            self.assertFalse(engineering["commercial_release_allowed"])
+
 if __name__=="__main__":unittest.main()
