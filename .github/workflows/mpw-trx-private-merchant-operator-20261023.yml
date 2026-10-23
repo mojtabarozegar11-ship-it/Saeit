@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: f69cbde6b843723edba299374ca7e20c2e24f40b
+          ref: 233b6d056badb8351690ee04f48b41329cc8bd63
           persist-credentials: false
       - name: Test immutable reviewed merchant canary source before accessing relay
         run: |
