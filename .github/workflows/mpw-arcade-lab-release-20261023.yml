@@ -39,6 +39,7 @@ jobs:
                   if not m.isfile() or m.name.startswith('/') or '..' in Path(m.name).parts:
                       raise RuntimeError('Unsafe archive')
               tf.extractall(out,filter='data')
+          (out/'guides').mkdir(exist_ok=True)
           subprocess.run(['python3',str(out/'tests/build_guides.py')],check=True)
           for p in out.rglob('*.html'):
               s=p.read_text().replace('https://mojplaywin.com/arcade-lab/20261022/',
