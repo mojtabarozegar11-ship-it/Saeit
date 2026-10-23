@@ -44,7 +44,7 @@ jobs:
       - name: Publish descriptions and verified Product offers
         run: |
           set -euo pipefail
-          timeout 240s ssh -T -F "$RUNNER_TEMP/mpw-seo-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - $GITHUB_RUN_ID" < scripts/mpw_product_seo_release_20261023.py
+          timeout 240s ssh -T -F "$RUNNER_TEMP/mpw-seo-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - publish $GITHUB_RUN_ID" < scripts/mpw_product_seo_release_20261023.py
       - name: Verify public product pages
         run: |
           set -euo pipefail
