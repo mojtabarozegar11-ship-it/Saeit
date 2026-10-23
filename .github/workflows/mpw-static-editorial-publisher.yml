@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          ref: 87b3d721cd763458ac06cc2bd4ee453249cc3c7d
+          ref: d69c5ebdd0c0521dc8904ab7384e036e32cfbf55
       - name: Prove guarded static article publishing and package pinned private files
         shell: bash
         run: |
@@ -97,7 +97,7 @@ jobs:
           ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel python3 - <<'PY'
           import json
           from pathlib import Path
-          root=Path("/home/zomorod2/mojplaywin.com/mpw-editorial")
+          root=Path("/home/zomorod2/mojplaywin.com/mpw-standalone-guides")
           if not root.exists() and not root.is_symlink():
               print("MPW_EDITORIAL_TARGET_NOT_CREATED_YET=true")
           else:
@@ -107,8 +107,9 @@ jobs:
               entries.sort(key=lambda row:row["name"])
               print("MPW_EDITORIAL_TOP_LEVEL_COUNT="+str(len(entries)))
               print("MPW_EDITORIAL_TOP_LEVEL_JSON="+json.dumps(entries,sort_keys=True))
-              if len(entries)>10:
-                  raise SystemExit("MPW_EDITORIAL_STOP_FOREIGN_TOP_LEVEL_INVENTORY")
+              allowed={".mpw-standalone-guides-owner.json","agents","knowledge","research","studio","index.html","style.css"}
+              if any(row["name"] not in allowed or row["kind"] in ("symlink","special") for row in entries):
+                  raise SystemExit("MPW_GUIDES_STOP_FOREIGN_TOP_LEVEL_INVENTORY")
           PY
       - name: Install only privately scoped files and issue owned public STATIC release
         id: stage
@@ -118,7 +119,7 @@ jobs:
           remote="$RUNNER_TEMP/mojplaywin-inventory-ssh/config"
           script="$(base64 -w0 scripts/mpw_install_public_editorial_cpanel.py)"
           timeout 90s ssh -T -F "$remote" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$script\"))'" < /tmp/mpw-isolated-static-publisher.tgz
-          status="$(ssh -T -F "$remote" saeit-cpanel 'python3 -c "import json;from pathlib import Path;p=Path(\"/home/zomorod2/.private_mojplaywin_main_agents/evolution_runtime_20261018/editorial_publication_state.json\");print(json.loads(p.read_text())[\"status\"])"')"
+          status="$(ssh -T -F "$remote" saeit-cpanel 'python3 -c "import json;from pathlib import Path;p=Path(\"/home/zomorod2/.private_mojplaywin_main_agents/evolution_runtime_20261018/standalone_guides_publication_state_20261024.json\");print(json.loads(p.read_text())[\"status\"])"')"
           if [ "$status" = 'published_standalone_awaiting_external_smoke' ]; then
             echo "new_release=true" >> "$GITHUB_OUTPUT"
           elif [ "$status" = 'published_verified_by_external_smoke' ]; then
@@ -133,8 +134,8 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import urllib.request,urllib.error,time
-          for static_path in ("/mpw-editorial/index.html","/mpw-editorial/style.css",
-                              "/mpw-editorial/agents/index.html",
+          for static_path in ("/mpw-standalone-guides/index.html","/mpw-standalone-guides/style.css",
+                              "/mpw-standalone-guides/agents/index.html",
                               "/design-preview-20261017/production-home-20261017.html"):
               try:
                   with urllib.request.urlopen("https://mojplaywin.com"+static_path+"?diag="+str(time.time_ns()),timeout=15) as probe:
@@ -146,10 +147,10 @@ jobs:
               except Exception as error:
                   print("PHYSICAL_STATIC_READBACK",static_path,type(error).__name__)
           expected={
-            "/mpw-editorial/index.html":"Knowledge &amp; Insights",
-            "/mpw-editorial/agents/index.html":"AI &amp; Agent Systems",
-            "/mpw-editorial/agents/ai-evaluation-before-deployment/index.html":"An AI Evaluation Plan Before Deployment",
-            "/mpw-editorial/agents/documenting-ai-assisted-decisions/index.html":"Documenting AI-Assisted Decisions Without Losing Accountability"}
+            "/mpw-standalone-guides/index.html":"Knowledge &amp; Insights",
+            "/mpw-standalone-guides/agents/index.html":"AI &amp; Agent Systems",
+            "/mpw-standalone-guides/agents/ai-evaluation-before-deployment/index.html":"An AI Evaluation Plan Before Deployment",
+            "/mpw-standalone-guides/agents/documenting-ai-assisted-decisions/index.html":"Documenting AI-Assisted Decisions Without Losing Accountability"}
           for path,marker in expected.items():
               passed=False
               for attempt in range(8):
