@@ -27,7 +27,7 @@ def payload_files(run):
     p=stage(run)/'payload'
     if not p.is_dir() or p.is_symlink():raise RuntimeError('payload stage not a directory')
     hashes=json.loads((p/'hashes.json').read_text('utf8'))
-    expected=set(REQUIRED[:-2]+['assets/arcade.js','assets/workshop.js','assets/theme.css']) | {x+'/index.html' for x in GAMES+TOOLS}
+    expected=(set(REQUIRED)-{'hashes.json'}) | {x+'/index.html' for x in GAMES+TOOLS}
     if not expected.issubset(set(hashes)):raise RuntimeError('required product not in manifest')
     actual={str(x.relative_to(p)) for x in p.rglob('*') if x.is_file()}
     if actual != set(hashes)|{'hashes.json'}:raise RuntimeError('unexpected or missing staged files')
