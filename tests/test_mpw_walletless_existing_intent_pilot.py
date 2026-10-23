@@ -317,6 +317,23 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
             settle_existing_test_intent(pk,fixture.TX_HASH,pair)
         self.assertEqual(ExistingLedgerEntry.objects.count(),0)
 
+    def test_unrelated_pending_legacy_invoice_does_not_block_this_order(self):
+        """A waiting signed invoice for another buyer is not a site-wide freeze."""
+        other=fixture.Order.objects.create(
+            customer_id=57,total=Decimal("0.03"),status="pending",currency="USD")
+        legacy=fixture.CommerceInvoice.objects.create(
+            order=other,status=fixture.CommerceInvoice.Status.AWAITING)
+        pk,invoice,created=self.reserve()
+        self.assertTrue(created)
+        self.assertEqual(invoice.order_id,self.order_id)
+        self.assertEqual(fixture.CommerceInvoice.objects.get(pk=legacy.pk).status,
+            fixture.CommerceInvoice.Status.AWAITING)
+        self.assertEqual(settle_existing_test_intent(pk,fixture.TX_HASH,self.pair()),"paid")
+        self.assertTrue(existing_test_buyer_status(pk,42)["can_download"])
+        self.assertEqual(fixture.Order.objects.get(pk=other.pk).status,"pending")
+        self.assertEqual(fixture.CommerceInvoice.objects.get(pk=legacy.pk).status,
+            fixture.CommerceInvoice.Status.AWAITING)
+
     def test_wrong_owner_legacy_signed_and_live_database_guard(self):
         with self.assertRaises(PaymentHold):self.reserve(buyer=43)
         fixture.CommerceInvoice.objects.create(order_id=self.order_id,status="awaiting")
