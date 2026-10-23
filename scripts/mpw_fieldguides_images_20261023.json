@@ -1,0 +1,105 @@
+{
+  "category": "Images",
+  "articles": [
+    [
+      "srcset-responsive-covers",
+      "Deliver responsive game art with accurate srcset and sizes",
+      "Images",
+      "A card that occupies 300 CSS pixels on a phone need not download a 1600-pixel marketing illustration; choose candidates based on displayed slot width and pixel density.",
+      "Produce and label several real width variants, provide a sizes expression matching CSS and retain an ordinary src fallback with alt. Inspect the browser currentSrc property instead of assuming it selects the smallest file.",
+      "For a card displayed 300 pixels wide at DPR 2, a 640-pixel candidate is a reasonable starting point. A 960-pixel candidate may be useful on wider displays.",
+      "An inaccurate sizes attribute can choose oversized files. Compare network bytes on 360-pixel and 1440-pixel viewports at multiple DPR settings.",
+      "IMG,LCP"
+    ],
+    [
+      "art-directed-mobile-crops",
+      "Make mobile game banners readable without losing the subject",
+      "Images",
+      "A wide desktop hero may hide its main character behind a narrow viewport crop. Shrinking and cropping are different design choices, not interchangeable responsive techniques.",
+      "Use a picture element for art direction, offer deliberate portrait and landscape focal crops and check titles against visual subjects at every breakpoint.",
+      "A character placed on the far-right edge of a 16:9 source may need a different portrait crop with central framing, rather than object-position center alone.",
+      "Do not create mobile art from an older build and desktop art from a new one. Track both assets under a shared release ID and compare screenshots.",
+      "IMG,WCAG"
+    ],
+    [
+      "verify-webp-signatures",
+      "Verify browser-produced WebP files using the container signature",
+      "Images",
+      "A Canvas export request for WebP can silently fall back to another format depending on browser capability, leaving files mislabeled by an extension alone.",
+      "Check the Blob type and confirm RIFF bytes at offsets zero through three and WEBP at offsets eight through eleven. Decode the output and inspect transparency and dimensions.",
+      "A valid RIFF/WEBP prefix is useful for format classification, but it cannot by itself prove the entire file is safe or complete.",
+      "Reject unsupported fallback outputs instead of presenting a PNG as WebP. Test malformed files, JPEG source input and transparent PNG source input.",
+      "IMG,UPLOAD"
+    ],
+    [
+      "codec-visual-comparison",
+      "Compare AVIF, WebP and PNG based on perceptual quality",
+      "Images",
+      "Compression ratio is only useful if the game logo, thin UI text and illustration gradients survive at acceptable quality.",
+      "Export the same crop using a controlled encoder and several quality settings, evaluate at 100% and 200% view and measure decoded performance on a low-end mobile device.",
+      "A 55 KB file with unreadable white lettering is less useful than a 75 KB file whose character and label remain sharp; inspect important semantic details.",
+      "Comparing different crop dimensions can misattribute savings to a codec. Keep dimensions identical and include browser support in the release decision.",
+      "IMG,CWV"
+    ],
+    [
+      "alt-text-game-catalog",
+      "Write meaningful alternative text for game cover links",
+      "Images",
+      "A card image named cover-final-9.webp supplies no helpful context when read aloud. Users need the image purpose rather than the asset filename.",
+      "Describe the relevant game scene and avoid repeating the entire link label. Empty alt is appropriate for decoration that adds nothing beyond adjacent text.",
+      "For a puzzle cover already linked as Prism Relay, alt could describe a gold beam crossing a blue grid of angled mirrors, giving a usable visual cue.",
+      "Keywords stuffed into alt harm clarity. Test a screen reader reading one gallery card at a time, including only the image link context.",
+      "WCAG,IMG"
+    ],
+    [
+      "private-photo-metadata",
+      "Reduce unintended disclosure when exporting customer-supplied photos",
+      "Images",
+      "Camera originals can carry EXIF metadata that has no reason to accompany a game community showcase or product sample.",
+      "Decode, resize and re-encode to a controlled image type; inspect the resulting metadata rather than assuming all converters strip location fields. Limit retention of originals.",
+      "A visible street sign or address embedded in pixels remains sensitive even when metadata chunks are gone; use a human visual review for such cases.",
+      "Re-encoding can expose parser attacks if untrusted inputs are not bounded. Test oversized dimensions, malformed headers and output metadata.",
+      "UPLOAD,IMG"
+    ],
+    [
+      "intrinsic-size-contract",
+      "Reserve space before images finish loading",
+      "Images",
+      "Product pages can shift repeatedly if newly decoded cover art pushes descriptive text and pricing controls downward.",
+      "Set intrinsic width and height and retain aspect-ratio-aware CSS. For art-directed picture sources, confirm the intended ratio in each alternate layout.",
+      "A 400×240 cover sets a 5:3 slot; a portrait replacement should declare its true dimensions rather than borrow those of the desktop source.",
+      "Using object-fit without a reserved slot does not itself stop layout shift. Test slow-network render and text scaling in a 390-pixel viewport.",
+      "CLS,IMG"
+    ],
+    [
+      "sprite-atlas-tradeoffs",
+      "Choose sprite atlases using memory and draw-call evidence",
+      "Images",
+      "Hundreds of sprites as separate assets add request overhead, but one oversized atlas can consume GPU memory even for unseen animations.",
+      "Group atlases by scene lifetime and measure both transfer bytes and decoded RGBA area. Include padding around sprite borders and test fractional scaling.",
+      "A 1024×1024 RGBA atlas requires roughly four megabytes before mipmaps; two unused atlases held in memory may cost more than separate small files.",
+      "Aggressive packing can cause texture bleeding at small scales. Test art sharpness, resident memory and batching gains before merging sheets.",
+      "CAN,IMG"
+    ],
+    [
+      "animated-preview-policy",
+      "Use motion only when a preview benefits the player",
+      "Images",
+      "Autoplaying video covers on every catalog card distracts keyboard users, consumes energy and may hurt initial loading.",
+      "Use static posters by default; provide a deliberate preview control and a clear stop button. Honor reduced-motion preferences for ambient animations.",
+      "Compare a 70 KB poster with a several-megabyte gameplay loop under slow mobile bandwidth to determine whether the preview improves the selection task.",
+      "Do not remove gameplay state cues when disabling decorative motion. Check pause, keyboard focus and scroll performance with ten cards.",
+      "WCAG,LCP"
+    ],
+    [
+      "image-quality-acceptance",
+      "Separate verified file savings from subjective visual quality",
+      "Images",
+      "An image optimizer can accurately measure bytes without knowing whether hair, line art or tiny labels became unreadable after encoding.",
+      "Use objective format and size checks, then run human visual assessment on crops representing text, transparency and gradients. Keep those outcomes as separate claims.",
+      "If a cover shrinks from 120 KB to 62 KB, report a measured byte reduction; do not automatically call it 'better image quality'.",
+      "Encoder settings are not portable quality scores across different source art. Retain approval screenshots and review at native size before promoting a preset.",
+      "IMG,WCAG"
+    ]
+  ]
+}
