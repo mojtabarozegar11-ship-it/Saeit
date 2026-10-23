@@ -66,4 +66,4 @@ const OUT = process.env.RUNNER_TEMP || '/tmp';
   await browser.close();
   assert.deepEqual(errors,[]);
   console.log('AIR_SUPREMACY_INTERACTIVE_RENDER_QA=PASS');
-})().catch(e=>{console.error(e);process.exitCode=1});
+})().catch(e=>{console.error('AIR_INTERACTIVE_TEST_FAILED',e.stack||e);process.exit(1)});
