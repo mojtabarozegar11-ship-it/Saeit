@@ -1,0 +1,88 @@
+name: Read-only recovery proof for installed MojPlayWin ten-app release
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/mpw_tenlab_readonly_attest_20261023.py
+      - .github/workflows/mpw-tenlab-readonly-attest-20261023.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/mpw_tenlab_readonly_attest_20261023.py
+      - .github/workflows/mpw-tenlab-readonly-attest-20261023.yml
+permissions:
+  contents: read
+concurrency:
+  group: mpw-tenlab-isolated-20261023
+  cancel-in-progress: false
+jobs:
+  local:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify pure read-only remote audit command
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_tenlab_readonly_attest_20261023.py
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          source=Path('scripts/mpw_tenlab_readonly_attest_20261023.py').read_text()
+          t=ast.parse(source)
+          for node in ast.walk(t):
+           if isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute) and node.func.attr in ('write_bytes','write_text','unlink','rename','replace','rmtree','mkdir','chmod'):
+            raise RuntimeError('Audit script must never write or delete files')
+          assert "RUN='39908938888'" in source
+          print('MPW_RESCUE_AUDITOR_NO_WRITES=PASS')
+          PY
+  attest:
+    needs: local
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-mpw-tenlab-readonly-20261023]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Establish pinned SSH relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Read-only exact remote inventory and unchanged originals
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 55s ssh -T -F "$d/config" host "python3 -" < scripts/mpw_tenlab_readonly_attest_20261023.py
+      - name: Public confirmation of all eleven pages and protected original site routes
+        run: |
+          python3 - <<'PY'
+          import urllib.request,time,json
+          host='https://mojplaywin.com'
+          folder='/game-releases/20261023/'
+          catalog=['index.html']+[s+'/index.html' for s in ('windward-regatta','lexicon-sprint','grid-dominion','metro-vault','cargo-switchyard','invoice-craft','csv-workbench','image-slimmer','schema-builder','contrast-studio')]
+          for p in catalog+['assets/arcade.js','assets/workshop.js','assets/theme.css','release.json']:
+           req=urllib.request.Request(host+folder+p+'?check='+str(time.time_ns()),headers={'Cache-Control':'no-cache,no-store'})
+           with urllib.request.urlopen(req,timeout=24) as r:
+            body=r.read(180000);assert r.status==200
+           if p.endswith('.html'):assert b'<html lang="en">' in body and b'MojPlayWin' in body
+           if p=='release.json':
+            d=json.loads(body);assert len(d['games'])==len(d['tools'])==5
+           print('TENLAB_PUBLIC_CONFIRMED',p)
+          for path in ('/','/games/','/store/','/air-supremacy/','/game-releases/20261021/'):
+           with urllib.request.urlopen(host+path,timeout=24) as r:
+            assert r.status==200
+            print('TENLAB_PROTECTED_ORIGINAL_ALIVE',path)
+          print('TENLAB_5_GAMES_5_TOOLS_LIVE_SITE_CHECK=PASS')
+          PY
+      - name: Remove runner SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
