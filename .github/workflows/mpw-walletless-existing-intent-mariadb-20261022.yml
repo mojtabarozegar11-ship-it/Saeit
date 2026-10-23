@@ -7,6 +7,13 @@ on:
       - services/mpw_walletless_existing_intent_staging_web.py
       - tests/test_mpw_walletless_existing_intent_pilot.py
       - .github/workflows/mpw-walletless-existing-intent-mariadb-20261022.yml
+  pull_request:
+    branches: [feature/mpw-walletless-trx-e2e-20261022]
+    paths:
+      - services/mpw_walletless_existing_intent_pilot.py
+      - services/mpw_walletless_existing_intent_staging_web.py
+      - tests/test_mpw_walletless_existing_intent_pilot.py
+      - .github/workflows/mpw-walletless-existing-intent-mariadb-20261022.yml
   workflow_dispatch:
 permissions: {contents: read}
 jobs:
