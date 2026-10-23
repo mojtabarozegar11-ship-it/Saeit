@@ -44,6 +44,19 @@ class ExtendedRobotTests(unittest.TestCase):
             self.assertEqual(mod.seo_robot(files,public)["status"],"ok")
             self.assertEqual(mod.content_security_robot(files)["status"],"ok")
 
+    def test_editorial_inventory_scales_to_twenty_two_pages(self):
+        with tempfile.TemporaryDirectory() as td:
+            public,manifest,files=public_fixture(Path(td))
+            for number in range(20):
+                child=public/"agents"/f"guide-{number}"/"index.html"
+                child.parent.mkdir()
+                child.write_text(static_home(
+                    f"MojPlayWin Technical Guide {number}",
+                    f"https://mojplaywin.com/mpw-editorial/agents/guide-{number}/index.html"))
+            _,actual=mod.approved_pages(public)
+            self.assertEqual(len(actual),22)
+            self.assertEqual(mod.seo_robot(actual,public)["status"],"ok")
+
     def test_canonical_and_duplicate_seo_detection(self):
         with tempfile.TemporaryDirectory() as td:
             public,manifest,files=public_fixture(Path(td))
