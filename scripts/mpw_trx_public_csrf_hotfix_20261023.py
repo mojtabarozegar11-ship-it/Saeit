@@ -1,23 +1,53 @@
-"""Repair same-origin checkout CSRF referrer behavior with rollback backup."""
-import hashlib,os,pwd,shutil,stat,sys,tempfile
+"""Align public TRX checkout's HTTP and HTML referrer policies with CSRF."""
+import os,pwd,stat,sys,tempfile
 from pathlib import Path
 
 APP=Path('/home/zomorod2/Saeit-staging')
 PUBLIC=Path('/home/zomorod2/mojplaywin.com')
 BACKUP_ROOT=Path('/home/zomorod2/.local/share/mpw-trx-rollbacks')
-REL='services/mpw_trx_commercial_web.py'
-OLD_POLICY=b'response[\"Referrer-Policy\"]=\"no-referrer\"'
-NEW_POLICY=b'response[\"Referrer-Policy\"]=\"same-origin\"'
+WEB_REL='services/mpw_trx_commercial_web.py'
+PAGES_REL='services/mpw_trx_public_pages.py'
+OLD_POLICY=b'response["Referrer-Policy"]="no-referrer"'
+NEW_POLICY=b'response["Referrer-Policy"]="same-origin"'
+HELPER=b'''\ndef _checkout_csrf_referrer(response):
+    """Permit HTTPS same-origin Referer while suppressing cross-origin referrers."""
+    import re
+    content,count=re.subn(
+        rb'<meta\\s+name=["\\']referrer["\\']\\s+content=["\\']no-referrer["\\']\\s*/?>',
+        b'<meta name="referrer" content="same-origin">',
+        response.content,count=1,flags=re.I)
+    if count!=1:
+        raise Http404("Secure checkout referrer policy is missing or ambiguous")
+    response.content=content
+    response["Referrer-Policy"]="same-origin"
+    return response
+
+'''
+META_ANCHOR=b'\n\ndef _page(title, content):\n'
+CSP_LINE=b'''    response['Content-Security-Policy']="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none"'''
+# Keep the original CSP literal intact; this anchor must appear once in the
+# product-checkout view and nowhere else in the public pages module.
+CSP_LINE=b'''    response['Content-Security-Policy']="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"'''
+CALL=b'    response=_checkout_csrf_referrer(response)\n'
 MARK='MPW_PUBLIC_TRX_CUSTOMERS_20261023'
 
-def digest(data): return hashlib.sha256(data).hexdigest()
 def put(path,data):
     if path.is_symlink(): raise RuntimeError('Refuse symlink target')
     tmp=path.with_name(path.name+'.csrf-hotfix-tmp')
     if tmp.exists() or tmp.is_symlink(): raise RuntimeError('Concurrent hotfix detected')
-    tmp.write_bytes(data)
-    os.chmod(tmp,stat.S_IMODE(path.stat().st_mode))
-    os.replace(tmp,path)
+    tmp.write_bytes(data);os.chmod(tmp,stat.S_IMODE(path.stat().st_mode));os.replace(tmp,path)
+
+def run_python(code):
+    import subprocess
+    py=APP.parent/'virtualenv'/'Saeit-staging'/'3.11'/'bin'/'python'
+    return subprocess.run([str(py),'-B','-c',code],cwd=APP,capture_output=True,text=True,timeout=40)
+
+def verify_runtime():
+    code='''import os\nos.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")\nimport django;django.setup()\nfrom django.http import HttpResponse\nfrom services.mpw_trx_commercial_web import _nocache\nfrom services.mpw_trx_public_pages import _checkout_csrf_referrer\nr=_nocache(HttpResponse("<meta name=\\\"referrer\\\" content=\\\"no-referrer\\\">"))\nr=_checkout_csrf_referrer(r)\nassert r["Referrer-Policy"]=="same-origin"\nassert r["Cache-Control"]=="private, no-store, max-age=0"\nassert b"content=\\\"same-origin\\\"" in r.content\nassert b"no-referrer" not in r.content\nprint("PUBLIC_TRX_CSRF_HEADER_AND_META=PASS")\n'''
+    result=run_python(code)
+    if result.returncode or 'PUBLIC_TRX_CSRF_HEADER_AND_META=PASS' not in result.stdout:
+        raise RuntimeError('Checkout security policy verification failed: '+result.stderr[-1200:])
+    print(result.stdout.strip())
 
 def assert_release_state():
     if pwd.getpwuid(os.getuid()).pw_name!='zomorod2': raise RuntimeError('Wrong cPanel account')
@@ -31,44 +61,52 @@ def assert_release_state():
     if 'MPW_WALLETLESS_TRX_PUBLIC_ENABLED = _mpw_trx_os.environ.get("MPW_WALLETLESS_TRX_PUBLIC_ENABLED", "1") == "1"' not in settings:
         raise RuntimeError('Public checkout flag is not active')
 
-def verify_runtime():
-    code='''import os\nos.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")\nimport django;django.setup()\nfrom django.http import HttpResponse\nfrom services.mpw_trx_commercial_web import _nocache\nr=_nocache(HttpResponse("ok"))\nassert r["Referrer-Policy"]=="same-origin"\nassert r["Cache-Control"]=="private, no-store, max-age=0"\nprint("PUBLIC_TRX_CSRF_SAME_ORIGIN_REFERRER=PASS")\n'''
-    p=subprocess_run([str(APP.parent/'virtualenv'/'Saeit-staging'/'3.11'/'bin'/'python'),'-B','-c',code],cwd=APP)
-    if p.returncode or 'PUBLIC_TRX_CSRF_SAME_ORIGIN_REFERRER=PASS' not in p.stdout:
-        raise RuntimeError('Live Django response header verification failed: '+p.stderr[-1000:])
-    print(p.stdout.strip())
+def transform_web(raw):
+    if raw.count(NEW_POLICY)==1 and OLD_POLICY not in raw:return raw
+    if raw.count(OLD_POLICY)!=1 or NEW_POLICY in raw or b'def _nocache(response):' not in raw or b'Cache-Control' not in raw:
+        raise RuntimeError('Live no-cache policy has unexpected shape')
+    return raw.replace(OLD_POLICY,NEW_POLICY,1)
 
-def subprocess_run(args,*,cwd):
-    import subprocess
-    return subprocess.run(args,cwd=cwd,capture_output=True,text=True,timeout=35)
+def transform_pages(raw):
+    helper_mark=b'def _checkout_csrf_referrer(response):'
+    if helper_mark in raw:
+        if raw.count(helper_mark)!=1 or raw.count(CALL)!=1: raise RuntimeError('Partially installed checkout policy helper')
+        return raw
+    if raw.count(META_ANCHOR)!=1 or raw.count(CSP_LINE)!=1:
+        raise RuntimeError('Live checkout page source has unexpected shape')
+    result=raw.replace(META_ANCHOR,HELPER+META_ANCHOR,1)
+    result=result.replace(CSP_LINE,CALL+CSP_LINE,1)
+    return result
 
 def main():
     if len(sys.argv)!=1: raise SystemExit('no arguments expected')
     assert_release_state()
-    target=APP/REL
-    current=target.read_bytes()
-    if current.count(NEW_POLICY)==1 and OLD_POLICY not in current:
-        verify_runtime();print('PUBLIC_TRX_CSRF_HOTFIX=ALREADY_ACTIVE');return
-    if current.count(OLD_POLICY)!=1 or NEW_POLICY in current or b'def _nocache(response):' not in current or b'Cache-Control' not in current:
-        raise RuntimeError('Live checkout referrer policy or cache guard is not in the expected shape')
-    proposed=current.replace(OLD_POLICY,NEW_POLICY,1)
-    compile(proposed.decode('utf8'),REL,'exec')
+    files={WEB_REL:transform_web((APP/WEB_REL).read_bytes()),PAGES_REL:transform_pages((APP/PAGES_REL).read_bytes())}
+    old={rel:(APP/rel).read_bytes() for rel in files}
+    for rel,data in files.items():compile(data.decode('utf8'),rel,'exec')
+    changed={rel:data for rel,data in files.items() if data!=old[rel]}
+    if not changed:
+        verify_runtime();print('PUBLIC_TRX_CSRF_POLICY=ALREADY_ACTIVE');return
     backup=Path(tempfile.mkdtemp(prefix='trx-public-csrf-',dir=BACKUP_ROOT));os.chmod(backup,0o700)
-    saved=backup/Path(REL);saved.parent.mkdir(parents=True,exist_ok=True)
-    saved.write_bytes(current);os.chmod(saved,0o600)
+    for rel in changed:
+        saved=backup/Path(rel);saved.parent.mkdir(parents=True,exist_ok=True)
+        saved.write_bytes(old[rel]);os.chmod(saved,0o600)
+    installed=[]
     try:
-        if target.read_bytes()!=current: raise RuntimeError('Concurrent source edit')
-        put(target,proposed)
-        if target.read_bytes()!=proposed: raise RuntimeError('Installed source hash mismatch')
+        for rel,data in changed.items():
+            target=APP/rel
+            if target.read_bytes()!=old[rel]:raise RuntimeError('Concurrent source edit')
+            put(target,data);installed.append(rel)
+            if target.read_bytes()!=data:raise RuntimeError('Installed source verification failed')
         (APP/'tmp').mkdir(exist_ok=True);(APP/'tmp/restart.txt').touch()
         (PUBLIC/'tmp').mkdir(exist_ok=True);(PUBLIC/'tmp/restart.txt').touch()
         verify_runtime()
-        print('PUBLIC_TRX_CSRF_HOTFIX=ACTIVE; CSRF_ENFORCEMENT=UNCHANGED; CROSS_ORIGIN_REFERRER=SUPPRESSED; BACKUP='+backup.name)
+        print('PUBLIC_TRX_CSRF_POLICY=ACTIVE; CSRF_ENFORCEMENT=UNCHANGED; CROSS_ORIGIN_REFERRER=SUPPRESSED; BACKUP='+backup.name)
     except BaseException:
-        if target.is_file() and not target.is_symlink() and target.read_bytes()==proposed:
-            put(target,current)
-            (APP/'tmp/restart.txt').touch();(PUBLIC/'tmp/restart.txt').touch()
-            print('PUBLIC_TRX_CSRF_HOTFIX=ROLLED_BACK')
-        raise
+        for rel in reversed(installed):
+            target=APP/rel
+            if target.is_file() and not target.is_symlink() and target.read_bytes()==files[rel]:put(target,old[rel])
+        (APP/'tmp/restart.txt').touch();(PUBLIC/'tmp/restart.txt').touch()
+        print('PUBLIC_TRX_CSRF_POLICY=ROLLED_BACK');raise
 
 if __name__=='__main__':main()
