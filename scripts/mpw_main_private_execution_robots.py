@@ -120,8 +120,12 @@ def editorial_robot(public=EDITORIAL,probe=public_probe):
     require(public.is_dir() and not public.is_symlink(),"EDITORIAL_DIR_UNSAFE")
     paths=[public/"index.html",public/"agents/index.html"]
     discovered=list(public.rglob("index.html"))
-    require(2<=len(discovered)<=15 and not any(p.is_symlink() for p in discovered),
-            "EDITORIAL_DOCUMENT_COUNT_UNSAFE")
+    # Site growth must not disable its own observer. Bound the scan by an
+    # explicit resource budget while retaining per-file and symlink guards.
+    require(2<=len(discovered)<=2048,
+            "EDITORIAL_DOCUMENT_COUNT_UNSAFE:"+str(len(discovered)))
+    require(not any(p.is_symlink() for p in discovered),
+            "EDITORIAL_SYMLINK_UNSAFE")
     require(all(p.is_file() and p.stat().st_size<45000 for p in discovered),
             "EDITORIAL_DOCUMENT_NOT_FILE")
     urls=[]
