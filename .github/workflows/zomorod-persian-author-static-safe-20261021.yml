@@ -6,6 +6,8 @@ on:
       - public/authors/mojtaba-rozegar/index.html
       - scripts/zomorod_author_profile_route_release_20261023.py
       - tests/test_zomorod_author_identity_seo.py
+      - config/urls.py
+      - core/seo_views.py
       - .github/workflows/zomorod-persian-author-static-safe-20261021.yml
   pull_request:
     branches: [main]
@@ -13,6 +15,8 @@ on:
       - public/authors/mojtaba-rozegar/index.html
       - scripts/zomorod_author_profile_route_release_20261023.py
       - tests/test_zomorod_author_identity_seo.py
+      - config/urls.py
+      - core/seo_views.py
       - .github/workflows/zomorod-persian-author-static-safe-20261021.yml
 permissions: {contents: read}
 concurrency:
@@ -104,6 +108,9 @@ jobs:
           actual="$(timeout 45s ssh -T -F "$d/config" cpanel "sha256sum '$stage/source.html' | cut -d' ' -f1")"
           test "$actual" = "$expected"
           timeout 45s ssh -T -F "$d/config" cpanel "test -s '$stage/release.py' && test ! -L '$stage/release.py'"
+          script_expected="$(sha256sum scripts/zomorod_author_profile_route_release_20261023.py | cut -d' ' -f1)"
+          script_actual="$(timeout 45s ssh -T -F "$d/config" cpanel "sha256sum '$stage/release.py' | cut -d' ' -f1")"
+          test "$script_actual" = "$script_expected"
           echo ZM_AUTHOR_STAGING_SHA256=PASS
       - name: Atomically install updated Persian profile and remove only its obsolete redirect
         id: install
