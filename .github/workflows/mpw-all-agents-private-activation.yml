@@ -22,7 +22,7 @@ jobs:
           persist-credentials: false
           # Current main does not contain the historical private robot sources/tests.
           # Pin reviewed agent bundle with scalable editorial checks; no live-site edits.
-          ref: fec2bba8f7bed833039f010621b06f207421b7c8
+          ref: 9dbc0e471a33179eb53a2445ae34ebdde20f495c
       - name: Offline safety and functional tests for five robots
         shell: bash
         run: |
