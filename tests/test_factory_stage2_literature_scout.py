@@ -591,5 +591,72 @@ class SourceScoutTests(unittest.TestCase):
         self.assertIn("awk -v marker=",installer)
         self.assertIn("FACTORY_STAGE2_SCOUT_CRON=UPDATED",installer)
 
+    def test_bounded_three_query_burst_yields_only_real_source_packet(self):
+        seen=[]
+        title="Houseplant Rescue Guide"
+        variants=SCOUT.query_variants(title)
+        def fetch(query):
+            seen.append(query)
+            return [] if len(seen)==1 else sample(title)
+        result=SCOUT.run(self.root,self.program,fetcher=fetch,
+                         backstop=lambda _:[],batch=1,workers=1,query_burst=3)
+        self.assertEqual(result["attempted_this_run"],1)
+        self.assertEqual(result["source_evidence_automatically_documented"],1)
+        self.assertEqual(result["bounded_source_search_rounds_this_run"],2)
+        self.assertEqual(result["max_query_variants_per_topic_this_run"],3)
+        self.assertEqual(seen,variants[:2])
+        self.assertTrue((self.area/"stage-02/source-evidence/AGRI-001--r001.json").is_file())
+
+    def test_burst_never_retries_provider_quota_failure(self):
+        attempts=[]
+        def unavailable(q):
+            attempts.append(q)
+            raise SCOUT.ProviderCoolingDown("SCOUT_PROVIDER_COOLING_DOWN")
+        result=SCOUT.run(self.root,self.program,fetcher=unavailable,
+                         backstop=lambda _:[],batch=1,workers=1,query_burst=3)
+        self.assertEqual(attempts,["Houseplant Rescue Guide"])
+        self.assertEqual(result["bounded_source_search_rounds_this_run"],1)
+        self.assertEqual(result["requests_skipped_due_to_provider_cooldown"],1)
+        self.assertEqual(result["source_evidence_automatically_documented"],0)
+
+    def test_progressive_short_retry_keeps_exhausted_search_on_long_cooldown(self):
+        title="Houseplant Rescue Guide"
+        fresh={"status":"indexed_references_found_require_additional_research",
+               "scout_algorithm_version":SCOUT.SCOUT_ALGO_VERSION,
+               "search_round":1}
+        self.assertEqual(SCOUT.retry_delay(fresh,title),dt.timedelta(minutes=15))
+        full=dict(fresh,search_round=len(SCOUT.query_variants(title))-1)
+        self.assertEqual(SCOUT.retry_delay(full,title),dt.timedelta(hours=8))
+        denied=dict(fresh,status="external_research_api_unavailable")
+        self.assertEqual(SCOUT.retry_delay(denied,title),dt.timedelta(minutes=12))
+        self.assertEqual(SCOUT.retry_delay(dict(fresh,scout_algorithm_version="v7-multiphase-topic-specific-query"),title),dt.timedelta(0))
+        with self.assertRaisesRegex(RuntimeError,"SCOUT_INVALID_SEARCH_ROUND"):
+            SCOUT.retry_delay(dict(fresh,search_round=10001),title)
+        with self.assertRaisesRegex(ValueError,"SCOUT_INVALID_QUERY_BURST"):
+            SCOUT.run(self.root,self.program,batch=1,workers=1,query_burst=4)
+
+    def test_scheduled_quick_retry_moves_only_eligible_gap(self):
+        now=dt.datetime.now(dt.timezone.utc)
+        index=STAGE2.read(self.area/"owner-agri200-p0-index.json")
+        for rank,ident in enumerate(index["order_ids_ranked"],1):
+            checked=(now-dt.timedelta(minutes=16) if rank==1 else now)
+            STAGE2.atomic(self.area/"stage-02/literature-candidates"/
+                          ("AGRI-%03d"%rank+"--r001.json"),{
+                "schema":SCOUT.SCHEMA,"source_product_id":"AGRI-%03d"%rank,
+                "order_id":ident,
+                "status":"indexed_references_found_require_additional_research",
+                "checked_utc":checked.isoformat(),
+                "search_round":0,
+                "scout_algorithm_version":SCOUT.SCOUT_ALGO_VERSION})
+        observed=[]
+        def fetch(query):
+            observed.append(query)
+            return sample("Houseplant Rescue Guide")
+        report=SCOUT.run(self.root,self.program,fetcher=fetch,
+                         backstop=lambda _:[],batch=1,workers=1)
+        self.assertEqual(report["attempted_this_run"],1)
+        self.assertEqual(report["source_evidence_automatically_documented"],1)
+        self.assertEqual(observed,[SCOUT.query_variants("Houseplant Rescue Guide")[1]])
+
 if __name__=="__main__":
     unittest.main()
