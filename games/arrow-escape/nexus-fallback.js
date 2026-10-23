@@ -4,7 +4,8 @@ export function start(Core) {
   const Experience = window.NexusExperience;
   Experience.boot();
   const fmt = n => new Intl.NumberFormat('fa-IR').format(n);
-  const storeKey = 'zm-arrow-nexus-v1';
+  const storeKey = 'zm-arrow-nexus-worm-v3';
+  const legacyKey = 'zm-arrow-nexus-v1';
   let level = 1;
   let best = 1;
   let puzzle;
@@ -27,18 +28,18 @@ export function start(Core) {
 
   function message(value) { $('message').textContent = value; }
   function persist() {
-    try { localStorage.setItem(storeKey, JSON.stringify({ version: 1, level, best, moves: history })); }
+    try { localStorage.setItem(storeKey, JSON.stringify({ version: 3, level, best, moves: history })); }
     catch (_) { /* Storage can be disabled. */ }
   }
   function fromStored() {
     try {
-      const raw = JSON.parse(localStorage.getItem(storeKey) || 'null');
-      if (!raw || raw.version !== 1 || !Number.isSafeInteger(raw.level) || raw.level < 1 || raw.level > 100000) return;
+      const raw = JSON.parse(localStorage.getItem(storeKey) || localStorage.getItem(legacyKey) || 'null');
+      if (!raw || ![1, 3].includes(raw.version) || !Number.isSafeInteger(raw.level) || raw.level < 1 || raw.level > 100000) return;
       level = raw.level;
       best = Number.isSafeInteger(raw.best) ? Math.max(1, Math.min(100000, raw.best)) : 1;
       puzzle = Core.generate(level);
       state = Core.initialState(puzzle);
-      if (!Array.isArray(raw.moves)) return;
+      if (raw.version !== 3 || !Array.isArray(raw.moves)) return;
       for (const action of raw.moves.slice(0, 250)) {
         if (!action || !['twist', 'remove'].includes(action.type)) break;
         const next = Core.transition(state, action);
@@ -73,23 +74,67 @@ export function start(Core) {
         grid.append(tile);
       }
       side.append(grid);
-      for (const piece of state.pieces) {
-        if (piece.face !== name || state.removed.includes(piece.id)) continue;
-        const active = Core.canExit(piece, state);
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = `nexus-css3d-arrow ${active ? 'ready' : piece.gate === 'phase' ? 'phase' : piece.gate === 'link' ? 'link' : piece.gate === 'relay' ? 'relay' : piece.gate === 'charge' ? 'charge' : 'blocked'}`;
-        button.style.left = `${(piece.u + 1.5) / 3 * 100}%`;
-        button.style.top = `${(1.5 - piece.v) / 3 * 100}%`;
-        button.style.setProperty('--direction', `${-90 * piece.dir}deg`);
-        button.dataset.pieceId = String(piece.id);
-        const glyph = document.createElement('span');
-        glyph.className = 'arrow-icon';
-        glyph.textContent = '➜';
-        button.append(glyph);
-        button.setAttribute('aria-label', `پیکان ${fmt(piece.id + 1)} در وجه ${name}؛ ${active ? 'آماده خروج' : 'فعلاً قفل'}`);
-        side.append(button);
+      // SVG polylines are true tangled arrows, not one square button per arrow.
+      // Clicking the body or its head selects the same physical worm.
+      const ns = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('viewBox', '0 0 300 300');
+      svg.setAttribute('class', 'nexus-css3d-worms');
+      svg.setAttribute('aria-label', 'فلش‌های مارپیچی درهم‌تنیده');
+      const pal = ['#5ce7cd', '#6fb4fd', '#f4b36b', '#d879ef', '#ff7d96',
+        '#92e87f', '#f2d473', '#70bff9', '#c9a7ff', '#fc9c7e', '#9ee5d0', '#e5aaff'];
+      const map = ([u, v]) => [150 + u * 100, 150 - v * 100];
+      function wormLine(points) {
+        const a = points.map(map);
+        const parts = ['M', ...a[0]];
+        for (let i = 0; i < a.length - 1; i++) {
+          const p0 = a[Math.max(0, i - 1)], p1 = a[i];
+          const p2 = a[i + 1], p3 = a[Math.min(a.length - 1, i + 2)];
+          parts.push('C', p1[0] + (p2[0] - p0[0]) / 6,
+            p1[1] + (p2[1] - p0[1]) / 6,
+            p2[0] - (p3[0] - p1[0]) / 6,
+            p2[1] - (p3[1] - p1[1]) / 6, ...p2);
+        }
+        return parts.join(' ');
       }
+      for (const piece of state.pieces.filter(p => p.face === name &&
+          !state.removed.includes(p.id)).sort((a, b) => a.layer - b.layer)) {
+        const ready = Core.canExit(piece, state);
+        const color = pal[piece.id % pal.length];
+        const d = wormLine(piece.path);
+        const glow = document.createElementNS(ns, 'path');
+        glow.setAttribute('d', d);
+        glow.setAttribute('class', 'nexus-worm-glow');
+        glow.setAttribute('stroke', color);
+        svg.append(glow);
+        const body = document.createElementNS(ns, 'path');
+        body.setAttribute('d', d);
+        body.setAttribute('class', 'nexus-worm-body' + (ready ? ' ready' : ' blocked'));
+        body.setAttribute('stroke', color);
+        svg.append(body);
+        const hit = document.createElementNS(ns, 'path');
+        hit.setAttribute('d', d);
+        hit.setAttribute('class', 'nexus-worm-hit');
+        hit.dataset.pieceId = String(piece.id);
+        hit.setAttribute('role', 'button');
+        hit.setAttribute('tabindex', '0');
+        hit.setAttribute('aria-label', 'کرم‌فلش شماره ' + fmt(piece.id + 1) +
+          (ready ? ' آماده خروج' : ' مسدود'));
+        svg.append(hit);
+        const [dx, dy] = Core.DIRS[piece.dir];
+        const end = [piece.u, piece.v], perp = [-dy, dx];
+        const triangle = [[end[0] + dx * .24, end[1] + dy * .24],
+          [end[0] - dx * .14 + perp[0] * .18, end[1] - dy * .14 + perp[1] * .18],
+          [end[0] - dx * .14 - perp[0] * .18, end[1] - dy * .14 - perp[1] * .18]];
+        const head = document.createElementNS(ns, 'polygon');
+        head.setAttribute('points', triangle.map(v => map(v).join(',')).join(' '));
+        head.setAttribute('class', 'nexus-worm-tip' + (ready ? ' ready' : ''));
+        head.setAttribute('fill', ready ? '#f6fff7' : color);
+        head.setAttribute('stroke', color);
+        head.dataset.pieceId = String(piece.id);
+        svg.append(head);
+      }
+      side.append(svg);
       return side;
     });
     cube.replaceChildren(...faces);
@@ -114,7 +159,7 @@ export function start(Core) {
       piece.gate === 'phase' && state.phase !== piece.targetPhase ? 'برای دروازه طلایی، حلقه میانی را بچرخان.' :
       piece.gate === 'relay' ? 'مدار دوگانه: دو پیکان منبع باید آزاد شوند.' :
       piece.gate === 'charge' ? 'میدان رزونانس: حداقل سه پیکان را آزاد کن.' :
-      'مسیر این پیکان مسدود است؛ پیکان جلویی را اول آزاد کن.');
+      'بدنهٔ یک فلش مارپیچی مسیر این فلش را بسته؛ گره را باز کن.');
   }
   function remove(id) {
     if (!Core.canExit(id, state)) { preview(id); Experience.action('locked', level, puzzle, history); return; }
@@ -186,6 +231,12 @@ export function start(Core) {
   });
   frame.addEventListener('pointerup', () => { pointer = null; });
   frame.addEventListener('pointercancel', () => { pointer = null; });
+  frame.addEventListener('keydown', event => {
+    if ((event.key === 'Enter' || event.key === ' ') && event.target.dataset.pieceId) {
+      event.preventDefault();
+      remove(Number(event.target.dataset.pieceId));
+    }
+  });
   frame.addEventListener('click', event => {
     const target = event.target.closest('[data-piece-id]');
     if (!target) return;
@@ -200,7 +251,7 @@ export function start(Core) {
   $('next').addEventListener('click', next);
   render();
   if (state.removed.length === puzzle.pieces.length) won();
-  else message('حالت سازگار سه‌بعدی فعال است. مکعب را بکش تا بچرخد و پیکان‌های روشن را لمس کن.');
+  else message('کرم‌فلش‌های درهم‌تنیده را لمس کن؛ اول مسیری را آزاد کن که بدنۀ فلش دیگری جلوی آن نیست.');
   window.ArrowNexusDebug = Object.freeze({
     getState: () => ({ level, best, remaining: state.pieces.length - state.removed.length,
       twistsLeft: state.twistsLeft, phase: state.phase, actions: history.slice(), solution: Core.solve(puzzle, state) }),
