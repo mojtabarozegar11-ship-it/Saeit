@@ -35,6 +35,10 @@ def backup_path(run):
 def transform(source):
     if source.count(START)!=1 or source.count(END)!=1:
         fail('Expected exactly one bounded two-book catalog block')
+    if (source.count(NEW_INTRO)==1 and source.count(NEW_STATUS)==2
+        and source.count(NEW_CHECKOUT)==2 and 'ETH / TRX' not in source
+        and 'ETH/TRX' not in source and 'mpw-crypto-buy' not in source):
+        return source
     for pk,old in OLD_BUY.items():
         if source.count(old)!=1: fail(f'Expected one legacy book CTA for {pk}')
         source=source.replace(old,'',1)
@@ -52,6 +56,8 @@ def transform(source):
     return source
 
 def product_template_patch(source):
+    if OLD_PRODUCT_PAYMENT not in source and source.count('secure order-specific TRX invoice')==1:
+        return source
     if source.count(OLD_PRODUCT_PAYMENT)!=1:
         fail('Expected one unsupported ETH/TRX claim in the product detail template')
     return source.replace(OLD_PRODUCT_PAYMENT,'TRX',1)
@@ -97,8 +103,12 @@ def publish(run):
     new=transform(text).encode('utf-8')
     old_product=PRODUCT_TEMPLATE.read_bytes()
     new_product=product_template_patch(old_product.decode('utf-8')).encode('utf-8')
-    if new==old or new_product==old_product: fail('Storefront already transformed; refusing duplicate release')
     verify_products()
+    if new==old and new_product==old_product:
+        print('MPW_THREE_PRODUCT_CATALOG_RELEASE='+json.dumps({
+            'run':run,'products':list(EXPECTED),'already_current':True,
+            'private_files_ready':True},sort_keys=True))
+        return
     backup=backup_path(run)
     product_backup=backup.with_suffix('.product.bak')
     if backup.exists() or backup.is_symlink() or product_backup.exists() or product_backup.is_symlink():
@@ -161,9 +171,7 @@ def selftest():
     out=transform(s)
     assert out.count('Buy securely with TRX ↗')==2
     assert 'ETH/TRX' not in out and 'ETH / TRX' not in out and 'mpw-crypto-buy' not in out
-    try: transform(out)
-    except RuntimeError: pass
-    else: raise AssertionError('Duplicate transform accepted')
+    assert transform(out)==out
     print('MPW_THREE_PRODUCT_CATALOG_SELFTEST=PASS')
 
 if __name__=='__main__':
