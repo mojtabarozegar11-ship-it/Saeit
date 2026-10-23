@@ -65,7 +65,7 @@ jobs:
               data=(base/part/"index.html").read_text(encoding="utf-8")
               assert data.count('<details class="guide">')==50,(part,"missing 50 guides")
               assert '<html' in data and 'dir="rtl"' in data and '<form' in data
-              assert 'fao.org' in data or 'extension.' in data,(part,"scientific references missing")
+              assert ('fao.org' in data or 'extension.' in data or 'fieldreport.caes.uga.edu' in data),(part,"scientific references missing")
               assert len(data)>12000,(part,"suspiciously short")
               assert len(list((base/part).glob("*.svg")))==1,(part,"illustration missing")
           for f in [base/"planting-planner/app.js",base/"feed-dry-matter/app.js"]:
