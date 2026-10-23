@@ -51,6 +51,18 @@ NEW_SCHEMA = '''    schema = {"@context":"https://schema.org", "@type":"Product"
                        "availability":"https://schema.org/InStock",
                        "url":f"https://mojplaywin.com/store/product/{product.pk}/"}}
 '''
+OLD_PUBLIC_GUARD = '''    product=get_object_or_404(Product, pk=pk, active=True)
+    summary = (product.metadata or {}).get("summary") if isinstance(product.metadata, dict) else None
+'''
+NEW_PUBLIC_GUARD = '''    product=get_object_or_404(Product, pk=pk, active=True)
+    from mpw_commerce.buyer_orders import _eligible
+    import os
+    canary_ids = {779}
+    configured_canary = os.getenv("MPW_TRX_CANARY_PRODUCT_ID", "")
+    if configured_canary.isdigit(): canary_ids.add(int(configured_canary))
+    if product.pk in canary_ids or not _eligible(product): raise Http404
+    summary = (product.metadata or {}).get("summary") if isinstance(product.metadata, dict) else None
+'''
 OLD_META = '''{% block meta_description %}{{ product.metadata.summary|default:"Explore this digital product in the MojPlayWin catalog, including details, pricing and available delivery information."|striptags|truncatechars:155 }}{% endblock %}'''
 NEW_META = '''{% block meta_description %}{{ product.metadata.seo_description|default:product.metadata.summary|default:"Explore this digital product in the MojPlayWin catalog, including details, pricing and available delivery information."|striptags|truncatechars:155 }}{% endblock %}'''
 OLD_SITEMAP = '''        # Only products marked active are included; inactive drafts remain unlisted.
@@ -102,11 +114,19 @@ def atomic(path, raw):
         if os.path.exists(tmp): os.unlink(tmp)
 
 def schema_patch(source):
+    if source.count(NEW_PUBLIC_GUARD) == 1 and OLD_PUBLIC_GUARD not in source:
+        guard_source = source
+    elif OLD_PUBLIC_GUARD not in source and NEW_PUBLIC_GUARD not in source:
+        # Keep focused self-tests (which only pass the schema block) useful.
+        guard_source = source
+    else:
+        if source.count(OLD_PUBLIC_GUARD) != 1: fail('Public product guard source changed; refusing broad edit')
+        guard_source = source.replace(OLD_PUBLIC_GUARD, NEW_PUBLIC_GUARD, 1)
     if source.count(NEW_SCHEMA) == 1 and OLD_SCHEMA not in source:
-        return source
+        return guard_source
     if source.count(OLD_SCHEMA) != 1:
         fail('Product schema source changed; refusing broad edit')
-    return source.replace(OLD_SCHEMA, NEW_SCHEMA, 1)
+    return guard_source.replace(OLD_SCHEMA, NEW_SCHEMA, 1)
 
 def template_patch(source):
     if source.count(NEW_META) == 1 and OLD_META not in source:
@@ -191,6 +211,11 @@ def run_release(run):
             if schema.get('@type') != 'Product' or not numeric_price_ok or offer.get('priceCurrency') != 'USD':
                 fail(f'Product JSON-LD offer check failed for {pk}')
             checks.append({'id': pk, 'status': resp.status_code, 'price': offer['price'], 'schema': 'Product+Offer'})
+        hidden_checks = {}
+        for pk in (779, 968, 969, 970, 971, 972):
+            resp = client.get(f'/store/product/{pk}/', HTTP_HOST='mojplaywin.com', follow=True)
+            hidden_checks[str(pk)] = resp.status_code
+            if resp.status_code != 404: fail(f'Ineligible product route {pk} should return 404, got {resp.status_code}')
         sitemap_resp = client.get('/sitemap.xml', HTTP_HOST='mojplaywin.com', follow=True)
         import xml.etree.ElementTree as ET
         locations = [node.text for node in ET.fromstring(sitemap_resp.content).iter() if node.tag.endswith('loc')]
@@ -199,7 +224,7 @@ def run_release(run):
             fail('Eligible product URLs missing from sitemap')
         if any(f'https://mojplaywin.com/store/product/{pk}/' in locations for pk in (779, 968, 969, 970, 971, 972)):
             fail('Canary or ineligible product URL remains in sitemap')
-        print('MPW_PRODUCT_SEO_RELEASE=' + json.dumps({'run':run,'checks':checks,'sitemap_eligible_products':len(expected_urls),'test_or_ineligible_ids_removed':[779,968,969,970,971,972]}, ensure_ascii=False, sort_keys=True))
+        print('MPW_PRODUCT_SEO_RELEASE=' + json.dumps({'run':run,'checks':checks,'ineligible_routes_404':hidden_checks,'sitemap_eligible_products':len(expected_urls),'test_or_ineligible_ids_removed':[779,968,969,970,971,972]}, ensure_ascii=False, sort_keys=True))
     except BaseException:
         with transaction.atomic():
             for pk, meta in original_metadata.items():
@@ -216,6 +241,8 @@ def selftest():
     assert all(len(x['seo_description']) <= 160 for x in CONTENT.values())
     patched = schema_patch(OLD_SCHEMA)
     assert OLD_SCHEMA not in patched and '"offers"' in patched
+    guarded = schema_patch(OLD_PUBLIC_GUARD + OLD_SCHEMA)
+    assert NEW_PUBLIC_GUARD in guarded and NEW_SCHEMA in guarded
     assert template_patch(OLD_META).count(NEW_META) == 1
     assert OLD_SITEMAP not in sitemap_patch(OLD_SITEMAP) and 'MPW_PUBLIC_PRODUCT_SITEMAP_ELIGIBLE_ONLY_20261023' in sitemap_patch(OLD_SITEMAP)
     print('MPW_PRODUCT_SEO_SELFTEST=PASS')
