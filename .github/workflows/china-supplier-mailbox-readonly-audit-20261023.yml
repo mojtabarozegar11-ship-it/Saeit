@@ -1,0 +1,114 @@
+name: Read-only supplier reply and forwarding audit
+on:
+  push:
+    branches: ['ops/china-import-500-final136-20261023']
+    paths: ['.github/workflows/china-supplier-mailbox-readonly-audit-20261023.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare pinned read-only SSH bridge to cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/company-mail-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/vps.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          {
+            echo 'Host bridge'; echo '  HostName 178.239.147.150'; echo '  User githubops'; echo "  IdentityFile $d/vps.key"; echo "  UserKnownHostsFile $d/vps.known";
+            echo 'Host company'; echo '  HostName zohal.pws-dns.net'; echo '  User zomorod2'; echo '  Port 1396'; echo "  IdentityFile $d/host.key"; echo "  UserKnownHostsFile $d/host.known"; echo '  ProxyJump bridge';
+            echo 'Host *'; echo '  StrictHostKeyChecking yes'; echo '  IdentitiesOnly yes'; echo '  BatchMode yes'; echo '  ConnectTimeout 12'; echo '  ForwardAgent no'; echo '  RequestTTY no';
+          } > "$d/config"
+          chmod 600 "$d/config"
+          echo SSH_BRIDGE_PIN_VERIFIED
+      - name: Inspect company mailbox metadata only (no message bodies or addresses exposed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/company-mail-inspect"
+          cat <<'PY' | timeout 60s ssh -T -F "$d/config" company python3 -
+          from pathlib import Path
+          from collections import Counter
+          from email.parser import BytesParser
+          from email.policy import default
+          from email.utils import parseaddr
+          import datetime as dt
+          import os
+          root=Path.home()/"mail"/"zomorodmelal.ir"/"moj_1ro_1"
+          counts=Counter()
+          cutoff=dt.datetime(2026,10,20,tzinfo=dt.timezone.utc).timestamp()
+          print("AUDIT_TYPE=READ_ONLY_MAILDIR_HEADERS",flush=True)
+          print("MAILDIR_EXISTS="+str(root.is_dir()).lower(),flush=True)
+          if root.is_dir():
+              for folder in ("new","cur"):
+                  sub=root/folder
+                  if not sub.is_dir():
+                      continue
+                  for path in sub.iterdir():
+                      if counts["files_scanned"]>=15000: break
+                      if not path.is_file(): continue
+                      counts["files_scanned"]+=1
+                      try:
+                          if path.stat().st_mtime < cutoff:
+                              counts["older_files"]+=1
+                              continue
+                          with path.open("rb") as fp:
+                              head=fp.read(65536)
+                          if b"\r\n\r\n" in head:
+                              head=head.split(b"\r\n\r\n",1)[0]+b"\r\n\r\n"
+                          elif b"\n\n" in head:
+                              head=head.split(b"\n\n",1)[0]+b"\n\n"
+                          msg=BytesParser(policy=default).parsebytes(head,headersonly=True)
+                          fr=parseaddr(str(msg.get("From","")))[1].lower()
+                          subtext=str(msg.get("Subject","")).lower()
+                          autosub=str(msg.get("Auto-Submitted","")).lower()
+                          counts["recent_total"]+=1
+                          if not fr:
+                              counts["missing_sender"]+=1
+                          elif fr.endswith("@zomorodmelal.ir"):
+                              counts["self_domain"]+=1
+                          elif "mailer-daemon" in fr or "postmaster" in fr or "delivery status" in subtext or "undeliver" in subtext or "failure notice" in subtext:
+                              counts["bounce_or_delivery_notice"]+=1
+                          elif autosub and autosub != "no":
+                              counts["auto_response"]+=1
+                          else:
+                              counts["external_human_candidate"]+=1
+                              if msg.get("In-Reply-To") or msg.get("References") or subtext.startswith(("re:","fw:","fwd:")):
+                                  counts["thread_reply_candidate"]+=1
+                      except (OSError,ValueError,UnicodeError):
+                          counts["unreadable_header"]+=1
+          for k in ("files_scanned","recent_total","external_human_candidate","thread_reply_candidate","auto_response","bounce_or_delivery_notice","self_domain","missing_sender","unreadable_header"):
+              print(k.upper()+"="+str(counts[k]),flush=True)
+          print("SUPPLIER_REPLY_IDENTITY_AND_RELEVANCE_UNVERIFIED",flush=True)
+          PY
+      - name: Inspect existing forwarders without changing them
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/company-mail-inspect"
+          timeout 40s ssh -T -F "$d/config" company 'uapi --output=json Email list_forwarders domain=zomorodmelal.ir' | python3 -c 'import sys,json; d=json.load(sys.stdin).get("result",{}); a=d.get("data") or []; rows=[x for x in a if isinstance(x,dict)]; present=any("moj_1ro_1@zomorodmelal.ir" in json.dumps(x).lower() and "mojtaba.rozegar11@gmail.com" in json.dumps(x).lower() for x in rows); print("FORWARDER_QUERY_OK="+str(d.get("status")==1)); print("FORWARDER_TO_PRIMARY_GMAIL="+str(present)); print("FORWARDER_COUNT="+str(len(rows)))'
+      - name: Remove SSH keys
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/company-mail-inspect"
+          test ! -d "$d" || find "$d" -maxdepth 1 -type f -exec shred -u {} +
