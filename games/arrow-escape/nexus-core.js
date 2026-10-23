@@ -56,6 +56,8 @@
   function isUnlocked(piece, state) {
     if (piece.gate === 'link' && !state.removed.includes(piece.source)) return false;
     if (piece.gate === 'phase' && state.phase !== piece.targetPhase) return false;
+    if (piece.gate === 'relay' && !piece.sources.every(id => state.removed.includes(id))) return false;
+    if (piece.gate === 'charge' && state.removed.length < piece.required) return false;
     return true;
   }
   function blockers(piece, state) {
@@ -124,7 +126,7 @@
     const number = Math.max(1, Math.min(100000, Math.floor(Number(level) || 1)));
     const random = rngFor((Math.imul(number, 2654435761) ^ 0x9e3779b9) >>> 0);
     const advanced = number >= 4;
-    const count = Math.min(10, 5 + Math.floor(number / 3));
+    const count = Math.min(12, 5 + Math.floor(number / 3));
     const maxTwists = advanced ? 2 : 0;
     let fallback;
     for (let attempt = 0; attempt < 30; attempt++) {
@@ -143,6 +145,9 @@
       if (number >= 2) { pieces[1].gate = 'link'; pieces[1].source = 0; }
       // Second relationship: a gold arrow needs the physical middle ring aligned.
       if (advanced) { pieces[2].gate = 'phase'; pieces[2].targetPhase = 1; }
+      // Two-source relay circuits and resonance fields arrive in later chapters.
+      if (number >= 8) { pieces[3].gate = 'relay'; pieces[3].sources = [0, 1]; }
+      if (number >= 12) { pieces[4].gate = 'charge'; pieces[4].required = 3; }
       const candidate = { level: number, pieces, maxTwists, signature: 'NEXUS3D-1' };
       const solution = solve(candidate);
       if (!solution) continue;
