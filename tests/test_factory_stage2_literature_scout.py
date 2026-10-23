@@ -81,6 +81,29 @@ class SourceScoutTests(unittest.TestCase):
         order_id=index["order_ids_ranked"][rank-1]
         return STAGE2.verified_stage1_packet(self.area,order_id+"--r001.json")[1]
 
+    def test_bounded_page_exploration_has_no_weaker_evidence_gate(self):
+        seen=[]
+        def no_network_records(endpoint, params, timeout=10):
+            seen.append((endpoint, params["page"], params["search"]))
+            return {"results":[]}
+        order=self.order(1)
+        with mock.patch.object(SCOUT, "request_json", no_network_records):
+            self.assertEqual("needs_more_research",
+                             SCOUT.sources_for_topic(self.root,STAGE2,order,
+                                                     SCOUT.fetch_openalex,lambda _:[]))
+            self.assertEqual("needs_more_research",
+                             SCOUT.sources_for_topic(self.root,STAGE2,order,
+                                                     SCOUT.fetch_openalex,lambda _:[]))
+        self.assertEqual([1,2],[x[1] for x in seen])
+        evidence=self.area/"stage-02/source-evidence/AGRI-001--r001.json"
+        self.assertFalse(evidence.exists())
+        candidate=STAGE2.read(self.area/"stage-02/literature-candidates/AGRI-001--r001.json")
+        self.assertEqual(candidate["source_search_page"],2)
+        self.assertEqual(candidate["evidence_gap_reason"],
+                         "under_four_topic_relevant_article_abstracts")
+        with self.assertRaisesRegex(ValueError,"SCOUT_BAD_BOUNDED_RESULTS_PAGE"):
+            SCOUT.fetch_openalex("safe agricultural topic",page=7)
+
     def test_short_sentence_reconstructed_exactly_from_index(self):
         paper=study("Houseplant Rescue Guide",1)
         abstract=SCOUT.abstract_from_index(paper["abstract_inverted_index"])
