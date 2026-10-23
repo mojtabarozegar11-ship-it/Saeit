@@ -10,7 +10,7 @@ from core.mojplaywin_views import venture
 from core.commerce_views import store_home, auctions_home
 from core.crown_checkout import crown_cosmetic_checkout
 from core.product_seo_views import product_detail
-from core.seo_views import site_search, robots_txt, sitemap_xml
+from core.seo_views import site_search, robots_txt, sitemap_xml, persian_author_profile
 from core.weather_views import weather
 from core.academy_views import (
     academy, education, education_course_detail, education_enroll,
@@ -25,7 +25,7 @@ from core.knowledge_views import knowledge_article_detail, knowledge_book_detail
 
 urlpatterns = [
     path("", services, name="home"),
-    path("authors/mojtaba-rozegar/", RedirectView.as_view(url="/en/authors/mojtaba-rozegar/", permanent=True), name="mojtaba_roozegar_author_profile"),
+    path("authors/mojtaba-rozegar/", persian_author_profile, name="mojtaba_roozegar_author_profile"),
     path("ghanadi/", TemplateView.as_view(template_name="core/ghanadi.html"), name="ghanadi"),
     path("agriculture/", agriculture_index, name="agriculture"),
     path("agriculture/assets/zomorod-olive-v1/<str:filename>.webp", zomorod_hero_image, name="agriculture_hero_asset"),
