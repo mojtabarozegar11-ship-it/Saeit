@@ -9,7 +9,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 import unittest
 from scripts.zomorod_author_profile_route_release_20261023 import (
-    REDIRECT, without_exact_redirect,
+    REDIRECT, PERSIAN_URL, with_persian_sitemap_entry, without_exact_redirect,
 )
 
 
@@ -110,6 +110,19 @@ class PersianAuthorSeoTests(unittest.TestCase):
             without_exact_redirect(REDIRECT + b"\n" + REDIRECT + b"\n" + other)
         with self.assertRaises(ValueError):
             without_exact_redirect(other + REDIRECT + b"\n")
+
+    def test_only_one_canonical_persian_url_is_added_to_sitemap(self):
+        original = (
+            b'<?xml version="1.0" encoding="utf-8"?>\n'
+            b'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            b'<url><loc>https://zomorodmelal.ir/</loc></url></urlset>'
+        )
+        updated = with_persian_sitemap_entry(original)
+        self.assertEqual(updated.count(PERSIAN_URL.encode()), 1)
+        self.assertIn(b"https://zomorodmelal.ir/", updated)
+        self.assertEqual(with_persian_sitemap_entry(updated), updated)
+        with self.assertRaises(ValueError):
+            with_persian_sitemap_entry(b"<html/>")
 
 
 if __name__ == "__main__":
