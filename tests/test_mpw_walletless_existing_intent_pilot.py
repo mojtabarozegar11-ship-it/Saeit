@@ -216,6 +216,18 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
         with self.assertRaises(Http404):
             _download_paid(stolen,pk)
 
+    def test_staging_reconciliation_post_rejects_missing_csrf(self):
+        from django.test import RequestFactory
+        from services.mpw_walletless_existing_intent_staging_web import reconcile_invoice
+        pk,_,_=self.reserve()
+        request=RequestFactory().post(
+            f"/commerce/trx-easy/reconcile/{pk}/",secure=True,HTTP_HOST="staging.test")
+        request.user=SimpleNamespace(pk=42,is_authenticated=True,is_active=True)
+        response=reconcile_invoice(request,pk)
+        self.assertEqual(response.status_code,403)
+        self.assertEqual(ExistingLedgerEntry.objects.count(),0)
+        self.assertEqual(PaymentWebhookEvent.objects.count(),0)
+
     def test_same_mainnet_hash_cannot_grant_to_second_order(self):
         first,_,_=self.reserve()
         settle_existing_test_intent(first,fixture.TX_HASH,self.pair())
