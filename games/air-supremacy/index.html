@@ -98,21 +98,99 @@ function cuboid(m,x,y,z,w,h,d,c){let p=[P(x-w/2,y-h/2,z-d/2),P(x+w/2,y-h/2,z-d/2
 function prism(m,points,thick,c){const top=points.map(p=>[p[0],p[1]+thick/2,p[2]]),bottom=points.map(p=>[p[0],p[1]-thick/2,p[2]]);face(m,top,c);face(m,bottom.slice().reverse(),c);for(let i=0;i<points.length;i++)face(m,[top[i],top[(i+1)%points.length],bottom[(i+1)%points.length],bottom[i]],c)}
 function compile(m){const data=[];for(const f of m.faces){const vs=f.i.map(i=>m.verts.slice(i*3,i*3+3));const a=vs[0],b=vs[1],c=vs[2],u=b.map((v,i)=>v-a[i]),v=c.map((w,i)=>w-a[i]),n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],d=Math.hypot(...n)||1;for(let k=0;k<3;k++){data.push(...vs[k],...n.map(n=>n/d),...f.color)}}if(!gl)return {buffer:null,count:data.length/9};let buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.STATIC_DRAW);return {buffer:buf,count:data.length/9}}
 const C=(r,g,b)=>[r,g,b];
-function jetGeometry(enemy=false){let m=mesh(),metal=enemy?C(.31,.34,.4):C(.43,.53,.58),light=enemy?C(.50,.40,.40):C(.65,.74,.72),shadow=C(.16,.25,.29),dark=C(.09,.15,.19),glass=enemy?C(.8,.36,.26):C(.19,.80,.92),red=enemy?C(.96,.36,.20):C(.17,.80,.69);
-// Detailed nose-to-tail faceted stealth fuselage, canopy and twin vertical stabilizers.
-prism(m,[P(0,.3,-8.7),P(1.15,.5,-2.2),P(1.5,.45,3.4),P(.84,.4,6),P(-.84,.4,6),P(-1.5,.45,3.4),P(-1.15,.5,-2.2)],1.1,metal);
-for(const s of [-1,1]){prism(m,[P(s*.9,.18,-2),P(s*7.3,.15,2.7),P(s*8.9,.08,4.4),P(s*3.4,.15,3.8),P(s*1.5,.1,5)],.35,light);prism(m,[P(s*1.5,.6,3.1),P(s*4.1,.95,6.3),P(s*1.4,.6,5.2)],.26,metal);prism(m,[P(s*1,.5,3.3),P(s*1.3,3.4,5.1),P(s*2.1,2.1,6.4),P(s*2,.45,6)],.27,shadow);cuboid(m,s*1.1,-.3,5.0,.95,.6,1.8,dark);cuboid(m,s*2.3,-.15,4.4,.4,.4,1.8,red);}
-prism(m,[P(0,.94,-3.5),P(.7,1.42,-1),P(.75,1.28,.45),P(0,.87,1.1),P(-.75,1.28,.45),P(-.7,1.42,-1)],.21,glass);
-prism(m,[P(0,1.09,-3.6),P(.25,1.12,-4.8),P(0,1.06,-5.1),P(-.25,1.12,-4.8)],.10,light);
-prism(m,[P(-.9,.89,2),P(.9,.89,2),P(.7,1,4),P(-.7,1,4)],.1,shadow);
-cuboid(m,0,.28,-4.9,.18,.06,2,red);
-return compile(m)}
-function geomRock(){const m=mesh(),n=9,rx=20;for(let i=0;i<n;i++){let a=i*Math.PI*2/n,b=(i+1)*Math.PI*2/n,r1=rnd(.65,1.15),r2=rnd(.7,1.15);face(m,[P(Math.cos(a)*rx*r1,-1,Math.sin(a)*rx*r1),P(Math.cos(b)*rx*r2,-1,Math.sin(b)*rx*r2),P(0,rnd(12,30),0)],i%2?C(.25,.42,.33):C(.3,.48,.35));}prism(m,Array.from({length:n},(_,i)=>P(Math.cos(i*Math.PI*2/n)*23,-2,Math.sin(i*Math.PI*2/n)*23)),2,C(.64,.71,.53));return compile(m)}
-function geomCarrier(){let m=mesh();cuboid(m,0,0,0,12,3,36,C(.24,.29,.36));cuboid(m,0,2.2,0,20,.55,32,C(.35,.41,.46));cuboid(m,4,5,-4,3,7,9,C(.26,.35,.39));cuboid(m,4.4,9,-2,2,1,5,C(.18,.68,.77));for(let x of [-7,7]){cuboid(m,x,3.0,5,1,.04,14,C(.91,.87,.68))}return compile(m)}
-function geomProjectile(){let m=mesh();prism(m,[P(0,0,-1.8),P(.22,.0,-.8),P(.22,0,1.5),P(-.22,0,1.5),P(-.22,0,-.8)],.25,C(1,.62,.22));return compile(m)}
-function geomExplosion(){let m=mesh();for(let i=0;i<8;i++){const a=i*Math.PI/4;face(m,[P(0,0,0),P(Math.cos(a),Math.sin(a),-.8),P(Math.cos(a+.8),Math.sin(a+.8),.3)],i%2?C(1,.33,.04):C(1,.8,.25));}return compile(m)}
-function geomWater(){let m=mesh();face(m,[P(-900,-32,-1500),P(900,-32,-1500),P(900,-32,120),P(-900,-32,120)],C(.1,.4,.5));return compile(m)}
-const shapes={jet:jetGeometry(),foe:jetGeometry(true),rock:geomRock(),carrier:geomCarrier(),missile:geomProjectile(),blast:geomExplosion(),water:geomWater()};
+function jetGeometry(enemy=false){
+ const m=mesh();
+ const hull=enemy?C(.31,.31,.38):C(.25,.38,.46);
+ const upper=enemy?C(.53,.41,.34):C(.54,.68,.71);
+ const wing=enemy?C(.36,.38,.38):C(.37,.54,.61);
+ const bright=enemy?C(.72,.36,.22):C(.67,.81,.80);
+ const charcoal=C(.07,.12,.17),glass=enemy?C(.69,.28,.18):C(.07,.43,.56);
+ const accent=enemy?C(1.,.32,.14):C(.14,.88,.90);
+ // Swept delta wings, faceted blended lifting body, physical nose and canopy.
+ prism(m,[P(0,.12,-10.5),P(.76,.38,-6.7),P(1.23,.52,-2.3),P(1.48,.48,2.2),P(.91,.38,6.5),P(-.91,.38,6.5),P(-1.48,.48,2.2),P(-1.23,.52,-2.3),P(-.76,.38,-6.7)],1.18,hull);
+ prism(m,[P(0,.78,-9.9),P(.51,.81,-5.2),P(.89,.76,-1.4),P(-.89,.76,-1.4),P(-.51,.81,-5.2)],.12,upper);
+ for(const d of [-1,1]){
+   prism(m,[P(d*.85,.22,-2.2),P(d*4.2,.1,-.8),P(d*10.2,-.02,3.0),P(d*11.8,.01,4.4),P(d*6.5,.02,4.7),P(d*2.4,.08,4.1)],.28,upper);
+   prism(m,[P(d*3,.11,2.25),P(d*7.65,.06,3.18),P(d*8.1,.06,3.75),P(d*3.6,.08,3.36)],.1,wing);
+   prism(m,[P(d*.94,.58,2.9),P(d*3.9,.68,6.6),P(d*2.45,.57,6.6),P(d*.95,.55,5.3)],.22,hull);
+   prism(m,[P(d*1.55,.43,3.0),P(d*1.72,3.9,5.0),P(d*2.5,2.8,7.05),P(d*2.45,.43,6.3)],.28,wing);
+   prism(m,[P(d*1.78,2.9,5.65),P(d*2.38,2.55,6.65),P(d*2.15,2.05,6.1)],.13,accent);
+   cuboid(m,d*.96,-.50,5.3,1.1,.63,2.3,charcoal);
+   cuboid(m,d*.95,-.50,6.51,.6,.23,.19,accent);
+   cuboid(m,d*3.48,-.22,2.43,.22,.18,2.1,charcoal);
+   cuboid(m,d*7.6,-.07,3.60,.17,.10,.5,accent);
+   // Underslung pylon missiles.
+   cuboid(m,d*5.8,-.64,2.82,.12,.14,2.5,bright);
+   cuboid(m,d*5.8,-.56,1.55,.31,.12,.48,charcoal);
+ }
+ prism(m,[P(0,1.08,-5.2),P(.75,1.43,-3.3),P(.81,1.25,-.65),P(.4,1.02,.4),P(-.4,1.02,.4),P(-.81,1.25,-.65),P(-.75,1.43,-3.3)],.18,glass);
+ prism(m,[P(0,1.23,-4.8),P(.35,1.27,-4.0),P(-.35,1.27,-4.0)],.10,bright);
+ cuboid(m,0,.92,3.0,.55,.19,5.3,wing);
+ return compile(m);
+}
+function geomRock(){
+ const m=mesh(),n=12,ring=[],outer=[];
+ for(let i=0;i<n;i++){
+   const a=i*Math.PI*2/n,dist=19+8*Math.sin(i*2.35)+3*Math.cos(i*5.6);
+   ring.push(P(Math.cos(a)*dist,0,Math.sin(a)*dist));
+   outer.push(P(Math.cos(a)*(dist+9),-8,Math.sin(a)*(dist+9)));
+ }
+ const mid=P(-4,18,-6),tip=P(3,34,2);
+ for(let i=0;i<n;i++){
+   const j=(i+1)%n;
+   face(m,[outer[i],ring[i],ring[j],outer[j]],i%2?C(.32,.40,.35):C(.41,.44,.34));
+   face(m,[ring[i],mid,ring[j]],i%3?C(.16,.28,.23):C(.25,.36,.31));
+ }
+ for(let i=0;i<7;i++){
+   const a=i*Math.PI*2/7;
+   face(m,[ring[i],tip,mid],i%2?C(.33,.40,.37):C(.45,.45,.37));
+ }
+ // Small mountain-tops and coastal greenery.
+ for(let i=0;i<8;i++){
+   const a=i*2.399,dist=8+i*.6;
+   cuboid(m,Math.cos(a)*dist,3,Math.sin(a)*dist,1.5,3.5,1.7,i%2?C(.16,.34,.26):C(.13,.27,.23));
+ }
+ return compile(m);
+}
+function geomCarrier(){
+ const m=mesh();
+ const navy=C(.08,.14,.19),deck=C(.19,.27,.32),metal=C(.25,.33,.35),hull=C(.12,.24,.30),mark=C(.83,.78,.52),light=C(.47,.77,.83);
+ prism(m,[P(-7,-2,-24),P(7,-2,-24),P(12,-2,-17),P(12,-2,17),P(6,-2,24),P(-6,-2,24),P(-12,-2,17),P(-12,-2,-17)],4,hull);
+ cuboid(m,0,1.3,0,23,.7,48,deck);
+ for(let z=-19;z<21;z+=5)cuboid(m,-3.8,1.72,z,.29,.06,2.3,mark);
+ for(let z=-18;z<19;z+=4){cuboid(m,-10.6,1.8,z,.12,.08,.4,light);cuboid(m,10.6,1.8,z,.12,.08,.4,light)}
+ cuboid(m,8.5,5,-6.5,4.6,7.0,13.5,metal);
+ cuboid(m,8.7,8,-8.2,5,1.15,6,navy);
+ cuboid(m,7.7,9,-8.5,2.8,1.2,4,light);
+ cuboid(m,8.2,11.3,-11.4,.23,5,.23,metal);
+ for(let d of [-1,1]){
+   cuboid(m,d*7.7,2.3,12,.45,.3,4,navy);
+   cuboid(m,d*8.2,2.7,13,.7,.4,.8,light);
+ }
+ return compile(m);
+}
+function geomCloud(){
+ let m=mesh();
+ const mist=[C(.67,.76,.79),C(.82,.84,.80),C(.63,.73,.79)];
+ for(let i=0;i<9;i++){
+   const x=Math.sin(i*2.12)*4,z=Math.cos(i*2.47)*2.2;
+   cuboid(m,x,Math.sin(i*.7)*.9,z,4.6+Math.sin(i)*1.8,1.5+Math.cos(i)*.8,3.2+Math.cos(i)*1.1,mist[i%3]);
+ }
+ return compile(m);
+}
+function geomPatrolShip(){
+ let m=mesh();
+ const slate=C(.12,.27,.33),metal=C(.24,.35,.4),bright=C(.4,.67,.67);
+ prism(m,[P(0,-.5,-15),P(4,-.5,-10),P(4,-.5,11),P(0,-.5,16),P(-4,-.5,11),P(-4,-.5,-10)],2,slate);
+ cuboid(m,0,2,0,5,2,12,metal);
+ cuboid(m,1.3,4,-1,2.1,2,4,bright);
+ cuboid(m,-.8,3,-11,1,1,4,metal);
+ return compile(m);
+}
+function geomProjectile(){let m=mesh();prism(m,[P(0,0,-2.2),P(.19,0,-1),P(.19,0,1.8),P(-.19,0,1.8),P(-.19,0,-1)],.31,C(1.,.69,.3));return compile(m)}
+function geomExplosion(){let m=mesh();for(let i=0;i<14;i++){let a=i*Math.PI*2/14;face(m,[P(0,0,0),P(Math.cos(a),Math.sin(a),-.65),P(Math.cos(a+.7)*1.7,Math.sin(a+.7)*1.7,.6)],i%2?C(1,.28,.02):C(1,.81,.29))}return compile(m)}
+function geomWater(){let m=mesh();face(m,[P(-1200,-34,-2000),P(1200,-34,-2000),P(1200,-34,300),P(-1200,-34,300)],C(.08,.3,.4));return compile(m)}
+const shapes={jet:jetGeometry(),foe:jetGeometry(true),rock:geomRock(),carrier:geomCarrier(),cloud:geomCloud(),ship:geomPatrolShip(),missile:geomProjectile(),blast:geomExplosion(),water:geomWater()};
 function draw(shape,m,water=false){let g=shapes[shape];gl.bindBuffer(gl.ARRAY_BUFFER,g.buffer);for(const k of [[at.pos,0],[at.normal,3],[at.color,6]]){gl.enableVertexAttribArray(k[0]);gl.vertexAttribPointer(k[0],3,gl.FLOAT,false,36,k[1]*4)}gl.uniformMatrix4fv(un.model,false,m);gl.uniform1f(un.water,water?1:0);gl.drawArrays(gl.TRIANGLES,0,g.count)}
 let world=[],enemies=[],missiles=[],sparks=[],player={x:0,y:3,z:0,vx:0,vy:0,roll:0,pitch:0,shield:100,hp:100,inv:0},camera=[0,12,25],VP=id();let run=false,paused=false,score=0,kills=0,ammo=8,mission=1,missionT=0,spawnT=0,fireT=0,lockTarget=null,last=performance.now(),elapsed=0,toastT=0,fpsFrames=0,fpsT=0,frames=60,dashT=0;const key=new Set();let firing=false,stick={x:0,y:0,active:false},targetX=0,targetY=3;const TOUCH=('ontouchstart'in window||navigator.maxTouchPoints>0);
 
@@ -209,7 +287,19 @@ function awardCombat(e){
 function toast(text){$('status').textContent=text;$('status').classList.add('visible');toastT=2.6}
 let renderScale=1,slowFrames=0;
 function resize(){const dpr=Math.min(window.devicePixelRatio||1,innerWidth<800?1.5:1.85)*renderScale;canvas.width=Math.max(1,Math.round(innerWidth*dpr));canvas.height=Math.max(1,Math.round(innerHeight*dpr));if(gl)gl.viewport(0,0,canvas.width,canvas.height)}addEventListener('resize',resize);resize();if(gl){gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.clearColor(.29,.58,.69,1);}
-function spawnScenery(){world=[];for(let i=0;i<25;i++){let z=40-i*72;for(let side of [-1,1]){if(i%3===0||i%3===2)world.push({shape:'rock',x:side*rnd(140,285),y:-30,z:z-rnd(0,30),scale:rnd(.30,.85),rot:rnd(0,6.3)})}}world.push({shape:'carrier',x:-52,y:-27,z:-270,scale:1.6,rot:0});world.push({shape:'carrier',x:100,y:-27,z:-940,scale:1.1,rot:0})}
+function spawnScenery(){
+ world=[];
+ for(let i=0;i<24;i++){
+  const z=35-i*76;
+  for(const side of [-1,1]){
+   if(i%4!==1)world.push({shape:'rock',x:side*rnd(155,325),y:-29,z:z-rnd(0,65),scale:rnd(.55,1.25),rot:rnd(-.4,.4)});
+   if(i%3===0)world.push({shape:'cloud',x:side*rnd(82,220),y:rnd(48,73),z:z-35,scale:rnd(1.5,2.9),rot:0});
+  }
+  if(i%5===2)world.push({shape:'ship',x:rnd(-110,110),y:-30,z:z-80,scale:rnd(.9,1.5),rot:0});
+ }
+ world.push({shape:'carrier',x:-87,y:-28,z:-290,scale:1.25,rot:0});
+ world.push({shape:'carrier',x:128,y:-28,z:-1060,scale:1.15,rot:0});
+}
 function spawnEnemy(forceBoss=false){
  const boss=forceBoss&&missionBossNeeded&&!bossSpawned;
  const ace=!boss&&mission>=4&&Math.random()<.24;
@@ -319,7 +409,7 @@ function evade(){
  blast(player.x,player.y,2,12,1);toast('BREAK TURN · EVASIVE MANEUVER');
 }
 function simulate(dt){elapsed+=dt;missionT+=dt;fireT=Math.max(0,fireT-dt);player.inv=Math.max(0,player.inv-dt);dashT=Math.max(0,dashT-dt);let sx=(key.has('KeyD')||key.has('ArrowRight')?1:0)-(key.has('KeyA')||key.has('ArrowLeft')?1:0)+stick.x,sy=(key.has('KeyW')||key.has('ArrowUp')?1:0)-(key.has('KeyS')||key.has('ArrowDown')?1:0)-stick.y; sx=clamp(sx,-1,1);sy=clamp(sy,-1,1);player.vx=mix(player.vx,sx*37,clamp(dt*4.5,0,1));player.vy=mix(player.vy,sy*23,clamp(dt*4.5,0,1));player.x=clamp(player.x+player.vx*dt,-65,65);player.y=clamp(player.y+player.vy*dt,-10,24);player.roll=mix(player.roll,-sx*.40,clamp(dt*4,0,1));player.pitch=mix(player.pitch,sy*.16,clamp(dt*4,0,1));if(firing||key.has('Space'))shoot();
-let speed=94+mission*7;for(const w of world){w.z+=speed*dt;if(w.z>110){w.z-=1800;w.x=w.shape==='carrier'?rnd(-130,130):(Math.sign(w.x)||1)*rnd(140,285)}}
+let speed=94+mission*7;for(const w of world){w.z+=speed*dt;if(w.z>110){w.z-=1800;w.x=w.shape==='carrier'?rnd(-145,145):w.shape==='cloud'?(Math.sign(w.x)||1)*rnd(90,230):w.shape==='ship'?rnd(-135,135):(Math.sign(w.x)||1)*rnd(145,285)}}
 spawnT-=dt;
 if(missionBossNeeded&&!bossSpawned&&missionKills>=missionGoal-1&&enemies.length<9)spawnEnemy(true);
 if(spawnT<=0&&enemies.length<(innerWidth<700?8:11)&&missionKills<missionGoal){
