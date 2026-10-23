@@ -41,6 +41,25 @@ jobs:
           chmod 600 "$d/config"
           timeout 50s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+      - name: Publish checksum-verified product poster assets
+        run: |
+          set -euo pipefail
+          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-seo-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          root=Path('/home/zomorod2/Saeit-staging/staticfiles')
+          target=root/'site'/'mojplaywin-products'
+          if root.is_symlink() or not root.is_dir(): raise RuntimeError('Unexpected MojPlayWin STATIC_ROOT')
+          for folder in (root/'site', target):
+              if folder.is_symlink(): raise RuntimeError('Unsafe static asset directory')
+              if folder.exists() and not folder.is_dir(): raise RuntimeError('Static asset path is not a directory')
+              folder.mkdir(exist_ok=True)
+          print('MPW_POSTER_STATIC_TARGET_READY='+str(target))
+          PY
+          timeout 90s scp -F "$RUNNER_TEMP/mpw-seo-ssh/config" \
+            core/static/site/mojplaywin/products/chess-improvement.webp \
+            core/static/site/mojplaywin/products/taniya-baker-worms.webp \
+            core/static/site/mojplaywin/products/atelier-interior-kit.webp \
+            saeit-cpanel:/home/zomorod2/Saeit-staging/staticfiles/site/mojplaywin-products/
       - name: Publish descriptions and verified Product offers
         run: |
           set -euo pipefail
@@ -69,11 +88,18 @@ jobs:
             grep -q 'application/ld+json' <<<"$body"
             grep -q '"offers"' <<<"$body"
             grep -q "\"price\": \"$price\"" <<<"$body"
+            grep -q '"image": \[' <<<"$body"
+            grep -q '/static/site/mojplaywin-products/' <<<"$body"
+            grep -q 'property="og:image"' <<<"$body"
             case "$id" in
               72) grep -q 'An 84-day chess improvement guide' <<<"$body" ;;
               225) grep -q 'Taniya and the Little Baker Worms' <<<"$body" ;;
               879) grep -q 'Atelier Interior' <<<"$body" ;;
             esac
+          done
+          for file in chess-improvement.webp taniya-baker-worms.webp atelier-interior-kit.webp; do
+            headers="$(curl --fail --silent --show-error --max-time 30 -I "https://mojplaywin.com/static/site/mojplaywin-products/$file?poster_audit=$GITHUB_RUN_ID")"
+            grep -qi 'content-type: image/webp' <<<"$headers"
           done
           sitemap="$(curl --fail --silent --show-error --max-time 30 -H 'Cache-Control: no-cache' "https://mojplaywin.com/sitemap.xml?__mpw_seo_audit=$GITHUB_RUN_ID")"
           for id in 72 225 879; do grep -q "store/product/$id/" <<<"$sitemap"; done

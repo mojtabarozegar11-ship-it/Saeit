@@ -4,7 +4,6 @@ root=Path('/home/zomorod2/Saeit-staging')
 os.chdir(root);sys.path.insert(0,str(root));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
 import django;django.setup()
 from django.conf import settings
-print('STATIC_SETTINGS='+json.dumps({'static_url':settings.STATIC_URL,'static_root':str(settings.STATIC_ROOT),'base_dir':str(settings.BASE_DIR)}))
 from core.models import Product
 from mpw_commerce.buyer_orders import _eligible
 from mpw_commerce.downloads import _private_file
@@ -45,11 +44,10 @@ for pk in (72,225,879):
  for k,v in list(safe.items()):
   if isinstance(v,str): safe[k]=v[:1600]
  print("PUBLIC_SEO_METADATA="+json.dumps({"id":pk,"fields":safe},ensure_ascii=False,sort_keys=True))
-for rel in ["core/templates/brands/mojplaywin/product.html","core/templates/brands/mojplaywin/base.html"]:
+for rel in ["core/templates/brands/mojplaywin/product.html"]:
  path=root/rel
  if path.is_file():
   print("PRODUCT_TEMPLATE="+rel)
-  print("PRODUCT_TEMPLATE_FULL_SOURCE="+path.read_text()[:30000])
   for line in path.read_text()[:30000].splitlines():
    if any(token in line.lower() for token in ("description","og:","json-ld","product_schema_json","product.title","product.metadata")): print("PRODUCT_TEMPLATE_LINE="+line[:2000])
 match=resolve("/sitemap.xml")
