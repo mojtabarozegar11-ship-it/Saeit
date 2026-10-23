@@ -1,0 +1,26 @@
+{
+  "release_id": "NEXTWAVE-20261023-01",
+  "published_when_verified_only": true,
+  "locale": "en",
+  "items": [
+    {
+      "id": "orbit-switch",
+      "type": "game",
+      "path": "orbit-switch/index.html",
+      "stages": 200
+    },
+    {
+      "id": "frame-budget-lab",
+      "type": "interactive_tool",
+      "path": "frame-budget-lab/index.html",
+      "fps_targets": [
+        30,
+        60,
+        90,
+        120,
+        144
+      ]
+    }
+  ],
+  "no_previous_release_reused": true
+}
