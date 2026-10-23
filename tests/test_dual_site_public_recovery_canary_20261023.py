@@ -78,6 +78,19 @@ class RecoveryCanaryTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     redirect.redirect_request(request, None, 302, "found", {}, destination)
 
+    def test_legacy_crown_game_redirect_is_the_only_permitted_new_path(self):
+        handler = RestrictedRedirect("mojplaywin.com", "/games/corwn-defender/")
+        request = urllib.request.Request("https://mojplaywin.com/games/corwn-defender/")
+        canonical = "https://mojplaywin.com/games/crown-defender/"
+        redirected = handler.redirect_request(request, None, 301, "moved", {}, canonical)
+        self.assertEqual(redirected.full_url, canonical)
+        original_html = b"<html><title>Crown Defender</title>" + b"x" * 100
+        self.assertEqual(examine("mojplaywin.com", "/games/corwn-defender/",
+                                 200, original_html, canonical), "")
+        with self.assertRaises(ValueError):
+            handler.redirect_request(request, None, 302, "moved", {},
+                                     "https://mojplaywin.com/store/")
+
     def test_unapproved_paths_refuse_network(self):
         for host, path in (("mojplaywin.com", "/store/checkout/"),
                            ("zomorodmelal.ir", "/admin/"), ("attacker.example", "/")):
