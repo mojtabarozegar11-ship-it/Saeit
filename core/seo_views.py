@@ -71,7 +71,7 @@ def robots_txt(request):
 
 @require_GET
 def sitemap_xml(request):
-    urls = ["/", "/company/", "/company/executive/", "/research/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/agents/", "/education/", "/weather/", "/economy/", "/studio/", "/newsletter/", "/blog/", "/store/", "/auctions/", "/ghanadi/", "/company-gallery/", "/agriculture/genetics/", "/en/authors/mojtaba-rozegar/"]
+    urls = ["/", "/company/", "/company/executive/", "/research/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/agents/", "/education/", "/weather/", "/economy/", "/studio/", "/newsletter/", "/blog/", "/store/", "/auctions/", "/ghanadi/", "/company-gallery/", "/agriculture/genetics/", "/en/authors/mojtaba-rozegar/", "/authors/mojtaba-rozegar/"]
     urls += [f"/blog/{quote(str(code), safe='')}/" for code in BlogPage.objects.filter(active=True).values_list("code", flat=True)]
     company_ranges = {"department": 9, "unit": 9, "genetics": 12, "product": 55, "statutory": 18, "craft": 2, "project": 5, "channel": 4, "social": 3, "future": 4}
     for kind, count in company_ranges.items():
@@ -103,3 +103,15 @@ def organization_jsonld():
         "description": "شرکت کشت و صنعت زمرد ملل؛ پژوهش، دانش، کشاورزی، صنعت و توسعه فناوری.",
         "employee": {"@type": "Person", "name": "مجتبی روزگار", "jobTitle": "محقق و پژوهشگر / مدیرعامل شرکت کشت و صنعت زمرد ملل"}
     }, ensure_ascii=False)
+
+
+# zm-author-persian-view-20261023: a real 200 HTML response, not a canonical-damaging 301.
+@require_GET
+def persian_author_profile(request):
+    from pathlib import Path
+    from django.conf import settings
+
+    page = Path(settings.BASE_DIR) / "public/authors/mojtaba-rozegar/index.html"
+    if page.is_symlink() or not page.is_file():
+        return HttpResponse(status=404)
+    return HttpResponse(page.read_bytes(), content_type="text/html; charset=utf-8")
