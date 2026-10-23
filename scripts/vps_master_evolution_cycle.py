@@ -31,6 +31,25 @@ def evaluate(db_path: Path, state_path: Path):
         counts = dict(db.execute(
             "SELECT status,COUNT(*) FROM core_agenttask WHERE agent_id=? GROUP BY status",
             (row[0],)).fetchall())
+    # A "completed" row is not necessarily a new commercial outcome. Inspect
+    # recent signed-off execution results and require action diversity before
+    # increasing the master's execution budget. Never read private payloads
+    # into public logs or send them to a model.
+    with sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True, timeout=12) as db:
+        db.execute("PRAGMA query_only=ON")
+        rows = db.execute(
+            "SELECT action_type,output_data FROM core_agenttask "
+            "WHERE agent_id=? AND status='completed' "
+            "ORDER BY id DESC LIMIT 128", (row[0],)
+        ).fetchall()
+    recent_verified_actions = []
+    for action, raw in rows:
+        try:
+            evidence = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            continue
+        if isinstance(evidence, dict) and evidence.get("verified_effect") is True:
+            recent_verified_actions.append(str(action))
     allowed = ("completed", "failed", "blocked", "queued", "running")
     counts = {key: int(counts.get(key, 0)) for key in allowed}
     previous = {}
@@ -45,10 +64,15 @@ def evaluate(db_path: Path, state_path: Path):
     old_steps = int(previous.get("max_steps", 1))
     if old_steps not in (1, 2, 3):
         raise RuntimeError("INVALID_PREVIOUS_EVOLUTION_POLICY")
+    # Compare only the newly completed portion, not historical successes.
+    recent_new = recent_verified_actions[:min(max(delta_completed, 0), len(recent_verified_actions))]
+    diversity = len(set(recent_new))
     if delta_failed > 0 or delta_blocked > 0:
         steps, decision = 1, "rollback_to_conservative_after_regression"
-    elif delta_completed >= 2 and counts["blocked"] == 0:
-        steps, decision = min(3, old_steps + 1), "benchmark_improved_expand_bounded_cycle"
+    elif delta_completed >= 2 and diversity < 2:
+        steps, decision = 1, "rollback_repeated_or_unverified_completions"
+    elif delta_completed >= 2 and diversity >= 2 and counts["blocked"] == 0:
+        steps, decision = min(3, old_steps + 1), "diverse_verified_actions_expand_bounded_cycle"
     else:
         steps, decision = old_steps, "hold_strategy_until_measurable_progress"
     report = {
@@ -59,6 +83,8 @@ def evaluate(db_path: Path, state_path: Path):
         "task_counts": counts,
         "delta": {"verified_completed_tasks": delta_completed,
                   "failed_tasks": delta_failed, "blocked_tasks": delta_blocked},
+        "recent_new_verified_action_types": diversity,
+        "repeat_completion_is_not_diverse_progress": True,
         "max_steps": steps,
         "previous_max_steps": old_steps,
         "decision": decision,
