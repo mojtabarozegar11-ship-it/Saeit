@@ -76,6 +76,22 @@ class PrivateThreeTests(unittest.TestCase):
                 mod.vps_ingest(dest, bundle(bad_hash=True)[0])
             self.assertFalse((dest / "copies").exists())
 
+    def test_broken_deflate_is_reported_without_crashing_the_review(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "broken.zip"
+            archive_bytes = io.BytesIO()
+            with zipfile.ZipFile(archive_bytes, "w", compression=zipfile.ZIP_DEFLATED) as z:
+                z.writestr("notes.txt", "quality review text " * 100)
+            raw = bytearray(archive_bytes.getvalue())
+            with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                info = z.infolist()[0]
+                first_compressed_byte = info.header_offset + 30 + len(info.filename.encode()) + len(info.extra)
+            raw[first_compressed_byte] = 0xFF
+            archive.write_bytes(raw)
+            report = mod.technical_review(archive)
+            self.assertFalse(report["archive_crc_pass"])
+            self.assertTrue(any(s.startswith("ZIP_INTEGRITY_") for s in report["issues"]))
+
     def test_traversal_inside_zip_is_flagged_not_extracted(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "unsafe.zip"
