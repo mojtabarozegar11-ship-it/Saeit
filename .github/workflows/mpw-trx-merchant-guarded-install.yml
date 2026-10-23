@@ -42,7 +42,7 @@ jobs:
           chmod 600 "$d/config"
           timeout 50s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
-      - name: Transfer allowlisted new gateway modules and install only disabled-by-default URLs
+      - name: Deploy commercial quote-timestamp repair validated by isolated MariaDB end-to-end
         run: |
           set -euo pipefail
           remote="$(timeout 40s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'mktemp -d /home/zomorod2/.local/share/mpw-trx-deploy-XXXXXXXX')"
