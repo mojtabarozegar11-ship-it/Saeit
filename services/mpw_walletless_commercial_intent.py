@@ -228,7 +228,7 @@ def settle_commercial_intent(intent_id: int, tx_hash: str,
 
     db = db or connection
     settings = settings or django_settings
-    _commercial_db(settings, db)
+    _paid_read_db(settings, db)
     with transaction.atomic(using=db.alias):
         intent = PaymentIntent.objects.select_for_update().select_related("order").get(pk=intent_id)
         if intent.status != WAITING:
@@ -288,11 +288,11 @@ def settle_commercial_intent(intent_id: int, tx_hash: str,
 def reconcile_commercial_intent_from_candidates(intent_id: int, buyer_id: int,
                                                    *, server_lookup, pair,
                                                    db=None, settings=None) -> str:
-    """Buyer status event -> independently proved settlement in TEST MariaDB.
+    """Buyer status event -> independent verified settlement of a previously issued invoice.
 
-    The merchant-owned indexer returns transaction IDs only. Neither browser
-    callbacks nor wallet responses can supply a payment proof. Any ambiguity
-    is held for review; no background timer or public route is installed.
+    The merchant-owned indexer returns candidate transaction IDs only. Neither
+    browser callbacks nor wallet responses may supply payment proof. On-chain
+    finality and atomic accounting remain mandatory even if issuance is paused.
     """
     if (type(intent_id) is not int or intent_id<=0 or type(buyer_id) is not int
             or buyer_id<=0 or not callable(server_lookup)
@@ -305,7 +305,7 @@ def reconcile_commercial_intent_from_candidates(intent_id: int, buyer_id: int,
 
     db=db or connection
     settings=settings or django_settings
-    _commercial_db(settings,db)
+    _paid_read_db(settings,db)
     intent=PaymentIntent.objects.select_related("order").filter(
         pk=intent_id,order__customer_id=buyer_id,provider=PROVIDER,
     ).first()
