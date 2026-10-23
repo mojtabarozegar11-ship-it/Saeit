@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+"""One-time, nonbinding, personalized supplier RFI from verified company mailbox."""
+import csv
+import email.utils
+import fcntl
+import io
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import time
+from email.message import EmailMessage
+
+CAMPAIGN = "cn-food-second100-catalogue-credit-20261023"
+SENDER = "moj_1ro_1@zomorodmelal.ir"
+RECIPIENT_CSV = r'''category,company,email,official_source_url
+"flavors","Zhuhai Bocing Food Technology","market@cnflavour.com","https://www.cnflavour.com/contacts.html"
+"canned","Xiamen WECAN Food","justin@wecanfood.cn","https://www.wecanfood.cn/"
+"canned","Zhangzhou Zhentian Food","cai@zt-food.com","https://www.zt-food.com/contact-us"
+"canned","Tianjin Kunyu International","office@kunyutj.com","https://www.kunyutj.com/contact-us"
+"additives","Ruichfood Chemical","info@ruichfood.com","https://www.ruichfood.com/"
+"canned","Shandong Juxinyuan Agricultural Technology","juanson@zgjxyjt.com","https://www.sdjxy.com/"
+"additives","Shanghai Xuanmai Industrial","tkog@xuanmaicn.cn","https://www.xuanmaicn.com/contact.html"
+"canned","Ningbo Kenale Food","emilio@knlfood.com","https://www.canned-foods.com/contact-us"
+"canned","Zhangzhou TAN","info@zhangzhoutan.com","https://www.tancanfood.com/contact-us"
+"additives","Punature Food Ingredients","sales@punature-ingredients.com","https://www.punature-ingredients.com/contact/"
+"dry_vegetables","Xinghua Mark Food","markfood@foxmail.com","https://markfood.com.cn/"
+"dry_vegetables","Shandong Rongfeng Food","fengup@163.com","https://rongfengfood.com/contact"
+"fresh_vegetables","WH Produce","wanhui635241@163.com","https://wh-produce.com/pages/contact-us"
+"additives","Hylix Chemicals","info@hylixchem.com","https://hylixchem.com/contact/"
+"tomato","Hebei Tomato Industry","service@chinesetomato.com","https://www.chinesetomatopaste.com/contact.html"
+"tomato","Xinjiang RTM Trade","sales@rtmtomato.com","https://rtmtomato.com/contact/"
+"frozen","Huixin Food","huixin@huixinfood.com","https://en.huixinfood.com/"
+"tomato","Bayan Nur Weimei Food","richard@toptomatopaste.com","https://toptomatopaste.com/contact/"
+"frozen","Future Foods","fancy@futurefoodltd.com","https://www.futurefoodltd.com/contact-us"
+"mushrooms","Zhejiang Baixing Food","yql@bxfood.com","https://www.bxfood.com/contact-us"
+"frozen","XMG Food","sale1@xmgfood.com","https://xmgfood.com/contact/"
+"canned","Dangshan Best Foods","admin@dsbestfoods.com","https://www.dsbestfoods.com/contact.html"
+"frozen","Juxian Yuansheng Food","cgctts@gmail.com","https://www.yuanshengvegetable.com/contactus.html"
+"tomato","ASMY Food","sales@asmyfood.com","https://www.asmyfood.com/contact.html"
+"fresh_vegetables","Yuanda Export","sales@yuandaexport.com","https://yuandaexport.com/contact-us/"
+"additives","Henan Chemsino Industry","info@cnchemsino.com","https://www.cnchemsino.com/contact-us.html"
+"additives","Zhengzhou Yizeli Industrial","foodadditive@yizeliadditive.com","https://cn.linkedin.com/in/foodemulsifiers/en"
+"additives","WEHENGFOOD","nancy@wehengfood.com","https://wehengfood.com/product/sodium-benzoate/"
+"additives","Zhengzhou Cinogel Biotech","sales@cinogel.com","https://www.cinogel.com/p/contact-us.html"
+"additives","Xiamen Foodarian Biotech","info@foodarianbio.com","https://www.foodarianjelly.com/"
+"additives","Tianjin Chanyuan International","yanjiao@tjcyint.com","https://www.tjcy.com/business-center-2-products-department/"
+"additives","GBH Co","info@gbh-co.com","https://en.gbh-co.com/contact.html"
+"tea","Yuanjin Tea","bruce@yuanjingroup.com","https://www.yuanjinteax.com/contact-us"
+"tea","Xiangfeng Tea Group","admin@xf-tea.com","https://xiangfengtea.com/contact"
+"tea","Yi-Li Tea","fairy@yili-tea.com","https://www.yeeleetea.com/contact-us"
+"tea","Zhejiang Chunli Tea","cltea@chunlitea.com","https://www.chunlitea.com/contact-us"
+"noodles","YangZhangGui Food Technology","daisy_dai@yangzg.com.cn","https://www.noodles-instant.com/"
+"tea","China Tea Hunan","info@chinateahunan.com","https://www.chinateahunan.com/contact-us"
+"tea","Guizhou Aultras Tea","admin@aultrastea.com","https://aultras-tea.com/"
+"noodles","Lisheng International Noodles","lishengnoodles@gmail.com","https://lishengnoodles.com/contact/"
+"noodles","Top Fortune Foods","TF88-vanessa@hotmail.com","https://www.topfortunefood.com/"
+"nuts_seeds","Inner Mongolia Xiangshuji Agricultural Technology","xsjfarm@gmail.com","https://sunflowerseedchina.com/contact-us"
+"spices","Qingdao Yuanrunqiang Food","lisa@yuanrunqiangfood.com","https://www.yuanrunqiangfood.com/contact-us"
+"nuts_seeds","Inner Mongolia Yalong Seeds","yalong_zy@163.com","https://yalongfood.com/contact"
+"nuts_seeds","Inner Mongolia Longdingshengmao Agricultural Development","george8110@163.com","https://www.ldsmfoods.com/"
+"spices","Inner Mongolia Hongzeyuan Food","sales@hongzeyuanfood.com","https://hongzeyuanfood.com/"
+"confectionery","ChocoMFG","info@chocomfg.com","https://www.chocomfg.com/contact/"
+"spices","Qingdao Kairun Foods","helenliu@kairun-pp.cn","https://en.kairun-pp.cn/"
+"nuts_seeds","Shandong Xiaochaowang Food","JoyceJialelin@gmail.com","https://www.wonfood.cn/pd.jsp?id=27"
+"nuts_seeds","Inner Mongolia Henghua Zhongxu Agricultural Trade","hhzx_summer@163.com","https://www.henghuafood.com/en/col.jsp?id=101"
+"dried_fruit","Jiaozuo Hailian Food","jzhailian@gmail.com","https://hldriedfood.com/contact-us/"
+"frozen","T&H Foods","michael@thfoods.cn","https://www.thfoods.cn/Contact.html"
+"snacks","Anhui Yueshang Food","15309696924@163.com","https://www.yoshanricecrisps.com/"
+"dried_fruit","Henan Fitaky Food","info@fitaky.com","https://www.fitaky.com/product/freeze-dried-fruits.html"
+"dried_fruit","Tianqin Food","info@tianqinfood.com","https://tianqinfood.com/?lang=en"
+"dried_fruit","Fujian Lixing Foods","ann@lixingfoods.com","https://www.lixingfdfoods.com/contact-us"
+"dry_vegetables","Shandong Xinnuo Food Technology","hu@driedgarlics.com","https://www.driedgarlics.com/"
+"starch","Hebei Guanjin Technology","jessie@guanjinmade.com","https://www.gjadditive.com/news.html"
+"starch","Shandong Xiwang Sugar Industry","xiwangsugar@chemmail.net","https://www.chemball.com/factory/nnanjy/request.html"
+"starch","GFMStech","info@gfmstech.com","https://gfmstech.com/ru/contact-us/"
+"additives","Shanghai Tianjia Biochemical","info@tianjiachemical.com","https://www.tianjiachem.com/coconut-milk-powder-product/"
+"coffee","Yunnan New-start Coffee and Food","Mr-digger@tastoca.com","https://www.tastoca.com/product_list/1379756119418773504.html"
+"fruit_powders","Hainan Nicepal Industry","jxu@nicepal.com.cn","https://www.foodmaster.com/directories/72-food-ingredients/listing/13046-hainan-nicepal-industry-co-ltd"
+"extracts","RD Health Ingredients","info@health-ingredients.com","https://www.health-ingredients.com/contact-us/"
+"extracts","Yangling Daily Health Bioengineering","jiangll@htinc.cn","https://www.dailyhealth-bio.com/contact-us"
+"nuts_seeds","Hebei Luhua Import and Export Trade","qincuiran@luhuawalnut.com","https://www.luhuawalnut.com/contactus.html"
+"coffee","Yunnan Golden Brew Biotechnology","Trade@goldenbrew.coffee","https://goldenbrew.coffee/contact/"
+"coffee","Shanghai Richfield Investment","info@freezedrycoffee.com","https://www.freezedrycoffee.com/"
+"seaweed","Fujian Hongan Food","hasp@fjhasp.com","https://www.dried-seaweeds.com/contactus.html"
+"starch","Hebei Junsheng Agricultural Technology","potato@chineseag.com","https://chinesepotatostarch.com/contact/"
+"canned","Jimei Food Liaoning","sweetcornjimei@126.com","https://en.jimeifoods.com.cn/product/"
+"canned","Shandong Sangongju Food","miles@sangongjufood.com","https://www.sangongjufood.com/"
+"canned","Zhangzhou Sunshine Foods","sales@zhangzhousunshinefoods.com","https://www.zhangzhousunshinefoods.com/ProDetail.aspx?ProId=41"
+"seaweed","Nantong Yuanwei Food","marina@yuanweinori.com","https://www.yuanweinori.com/contactus.html"
+"canned","Xiamen Honeyhour Foods","manager@suntreatfoods.com","https://www.honeyhourfoods.com/contact.html"
+"seafood","Zhejiang Retronx Foodstuff Industry","crystal@retronx.com","https://www.retronxfoodstuff.com/contact.html"
+"canned","Jieyang Yuxiu Industrial","Vincent.cai@yzfoodcn.com","https://yuxiuindustrial.com/about"
+"additives","Shanghai Ruifu Chemical","alvin@ruifuchem.com","https://www.ruifuchem.com/fish-collagen-peptide-cas-9064-67-9-product/"
+"spices","Sinopaprika","sales@sinopaprika.com","https://www.sinopaprika.com/About.html"
+"seafood","Shandong Lanrun Group","derrick-gu@shandonglanrun.com","https://en.shandonglanrun.com/Products/3.html"
+"colors","Yangge Biotech","info@yanggebiotech.com","https://www.yanggebiotech.com/natural-colorants/paprika-extract-e160c"
+"colors","CNJ Natural Colors","hkcolor4@hotmail.com","https://www.cnjnaturalcolors.com/"
+"additives","Weifang Collagen Biotechnology","sales@wfcollagen.com","https://www.wfcollagen.com/"
+"additives","Hainan Huayan Collagen Technology","hainanhuayan@china-collagen.com","https://www.huayancollagen.com/"
+"colors","Qingdao Zhongren Zhiye Biotechnology","cavinzhengwm@hotmail.com","https://qdzrzy.guidechem.com/"
+"seafood","Yanghua Fishery","john@yanghuafishery.com","https://yanghuafishery.com/contact/"
+"additives","Wuxi Baifude Biotechnology","ym@baifude.net","https://baifude.net/src/pages/contact"
+"seafood","Hengtai Aquatic Food","offer@htseafood.cn","https://htseafood.cn/"
+"seafood","Zhejiang Zhoufu Food","zfood@vip.163.com","https://www.zhoufu-food.com/"
+"seafood","Haiwang Seafoods","ares@haiwangseafood.com","https://www.haiwangseafoods.com/"
+"seafood","AICO Aquatic Products","sales@aicoseafoods.com","https://aicoseafoods.com/contact-us-frozen-seafoods-in-china.html"
+"seafood","Fuzhou Shiny Zone Food Easy Seafood","services@fzeasyseafood.com","https://www.fzeasyseafood.com/contact"
+"seafood","Fujian Dongshan Zaisheng Aquatic Foods","David@zaishengseafood.com","https://zaishengseafood.com/encontact/"
+"seafood","Xiamen Yangzhen Import Export","allen@yxfoodltd.com","https://www.yingyangfoods.com/Contact-Us"
+"seafood","Haidong Seafood","clhd@haidongsc.com","https://haidongseafood.com/contact-us/"
+"canned","Jutai Foods Group","admin@jutaifoods.com","https://www.jutaifoods.com/Products/Canned-Fruits_022.html"
+"mushrooms","Daneng Food Group","peter@dnfoodgroup.com","https://dnfoodgroup.com/col.jsp?id=101"
+"garlic","Qingdao Creekbay Trading","owen@black-garlic.com","https://black-garlic.net/contact/"
+"confectionery","Shantou Gabet Foods","gabet.gummy@aliyun.com","https://www.gabetfood.com/"
+"bakery","Hunan Dajie Food","export@dajiefood.com","https://www.dajiefood.com/contact"
+'''
+FOCUS = {
+  "flavors": "food-grade flavours and flavour systems",
+  "canned": "shelf-stable canned foods and preserved ingredients",
+  "additives": "food-grade additives and speciality formulation ingredients",
+  "dry_vegetables": "dehydrated culinary vegetables and spices",
+  "fresh_vegetables": "fresh agricultural produce and packing services",
+  "tomato": "food-grade tomato paste, concentrates and tomato products",
+  "frozen": "IQF and frozen fruits and vegetables",
+  "mushrooms": "edible mushrooms, dried mushroom products and extracts",
+  "tea": "tea leaves, tea concentrates and food-grade tea",
+  "noodles": "noodles and shelf-stable food products",
+  "nuts_seeds": "edible nuts, seeds and food ingredient kernels",
+  "spices": "food-grade dried spices and culinary seasoning ingredients",
+  "confectionery": "confectionery and candy suitable for the Iranian market",
+  "dried_fruit": "dried, freeze-dried and preserved fruits",
+  "snacks": "packaged food snacks and rice-based products",
+  "starch": "starches, glucose, modified starches and potato ingredients",
+  "coffee": "coffee and coffee-processing ingredients",
+  "fruit_powders": "food-grade fruit and vegetable powders",
+  "extracts": "food-grade plant extracts",
+  "seaweed": "edible seaweed, kelp, nori and related food ingredients",
+  "seafood": "edible fish and seafood products",
+  "colors": "food-grade natural colorants and plant pigments",
+  "garlic": "garlic and culinary food ingredients",
+  "bakery": "food-grade bakery fillings and confectionery ingredients"
+}
+
+def write_state(path, data):
+    fd, tmp = tempfile.mkstemp(prefix=".mailtemp-", dir=str(path.parent), text=True)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as out:
+            os.chmod(tmp, 0o600)
+            json.dump(data, out, ensure_ascii=False, indent=2, sort_keys=True)
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+def letter(row):
+    sector = row["category"]
+    company = row["company"]
+    recipient = row["email"]
+    focus = FOCUS[sector]
+    msg = EmailMessage()
+    msg["From"] = f"Zomorod Melal International Cooperation <{SENDER}>"
+    msg["To"] = recipient
+    msg["Reply-To"] = SENDER
+    msg["Date"] = email.utils.formatdate(localtime=False, usegmt=True)
+    msg["Message-ID"] = email.utils.make_msgid(domain="zomorodmelal.ir")
+    msg["Subject"] = f"Zomorod Melal - {company} | Complete food product catalogue, OEM and trade-credit enquiry"
+    body = f"""Dear {company} Export Sales / International Business Team,
+
+I am writing on behalf of Zomorod Melal Agro-Industry Company, Iran, under the authority of CEO Mojtaba Roozegar. We are reviewing a long-term commercial relationship in your specialist area: {focus}.
+
+1. PLEASE SEND YOUR ENTIRE CURRENT PRODUCT CATALOGUE.
+We request the complete catalogue of products actually manufactured by your company, ideally in PDF and Excel, with each SKU and specification, pack sizes, food-grade applications, annual capacity, certificates, sample costs, production lead time, MOQ, and export pricing EXW / FCA / FOB. Clearly separate items manufactured at your own factory from goods distributed from other factories.
+
+2. FOOD SAFETY AND IRAN MARKET DOCUMENTS.
+Please send available valid food-production licences, ISO 22000 / HACCP / FSSC 22000 / BRCGS where applicable, relevant halal certificates, product-specific batch CoA, ingredient and allergen lists, traceability, origin, shelf life and storage requirements. NO pork, porcine-derived gelatin or ingredients, or unlawful/non-halal preparations. For flavours please declare any alcohol-based carriers; for animal/marine ingredients confirm the precise species, source, and halal suitability. Tell us whether each product can legally enter the Iranian market, subject to national import and labelling rules.
+
+3. PRIVATE LABEL OR AUTHORIZED DISTRIBUTION.
+Can you offer genuine contract manufacture and product packaging under Zomorod Melal brand? Please quote minimum pack quantities, printing cost and Iranian-appropriate retail, foodservice and bulk packaging. Label must truthfully disclose real manufacturer, origin, ingredients, allergens and full required Persian/English information. If OEM/private labelling is unavailable, please offer official distribution under your actual brand.
+
+4. SUPPLIER TRADE CREDIT (REQUEST, NOT AGREEMENT).
+Please advise whether 180-250 calendar days deferred payment following shipment documentation can be offered subject to credit approval. If not, identify any legally permissible export credit insurance, usance LC, bank-guarantee or other compliant secured terms. We understand approval is not assured and that all transactions must comply with relevant restrictions and regulations.
+
+5. IRAN EXPORTS, NEXT STEPS AND PARTNERSHIP.
+Can you legally export your products to Iran? Please provide a quotation, responsible export department contact, applicable export/import paperwork, sample arrangements, shipping logistics, conditions for potential long-term distribution and an expected response date.
+
+This message is solely a non-binding REQUEST FOR INFORMATION. We are NOT placing an order, committing to payment, requesting a sanctions workaround, or claiming an existing agency agreement.
+
+Kind regards,
+International Cooperation Office
+On behalf of Mojtaba Roozegar, CEO
+Zomorod Melal Agro-Industry Company, Iran
+https://zomorodmelal.ir
+Email: {SENDER}
+
+中文摘要：伊朗 Zomorod Melal 农业与工业公司希望洽谈{focus}产品。烦请提供贵司全部自产产品目录、真实生产工厂及证书、FOB/EXW报价、起订量、合法清真产品、OEM自有品牌包装、合法出口伊朗的条件，以及可否在资信审查后提供180–250天账期。此邮件仅为询价，不构成采购订单或付款义务。
+"""
+    msg.set_content(body, charset="utf-8")
+    return msg
+
+def main():
+    os.umask(0o077)
+    rows=list(csv.DictReader(io.StringIO(RECIPIENT_CSV)))
+    addresses=[r["email"].strip().lower() for r in rows]
+    names=[r["company"].strip().lower() for r in rows]
+    if len(rows)!=100 or len(set(addresses))!=100 or len(set(names))!=100:
+        raise SystemExit("UNIQUE_RECIPIENT_PREFLIGHT_FAILED")
+    if any(r["category"] not in FOCUS or not r["official_source_url"].startswith("https://") for r in rows):
+        raise SystemExit("CATEGORY_OR_SOURCE_PREFLIGHT_FAILED")
+    info=subprocess.run(["uapi","--output=json","Email","list_pops"],capture_output=True,text=True,timeout=35,check=True)
+    result=json.loads(info.stdout).get("result",{})
+    known={str(x.get("email","")).lower() for x in (result.get("data") or []) if isinstance(x,dict)}
+    if result.get("status")!=1 or SENDER not in known:
+        raise SystemExit("COMPANY_SENDER_MAILBOX_NOT_OWNED")
+    if not Path("/usr/sbin/sendmail").exists():
+        raise SystemExit("LOCAL_EXIM_SENDMAIL_MISSING")
+    private=Path.home()/".company-outreach-private"
+    private.mkdir(mode=0o700,parents=True,exist_ok=True)
+    private.chmod(0o700)
+    ledger=private/(CAMPAIGN+".json")
+    lock=private/(CAMPAIGN+".lock")
+    with lock.open("a+") as fh:
+        os.chmod(lock,0o600)
+        fcntl.flock(fh,fcntl.LOCK_EX)
+        state=json.loads(ledger.read_text(encoding="utf-8")) if ledger.exists() else {"campaign":CAMPAIGN,"sender":SENDER,"entries":{}}
+        print("CAMPAIGN="+CAMPAIGN,flush=True)
+        print("EXPECTED_RECIPIENTS=100",flush=True)
+        for idx,row in enumerate(rows,1):
+            email=row["email"].lower()
+            if email in state["entries"]:
+                print(f"RECIPIENT_{idx:03d}=ALREADY_ATTEMPTED",flush=True)
+                continue
+            msg=letter(row)
+            state["entries"][email]={"category":row["category"],"company":row["company"],"source":row["official_source_url"],"status":"attempt_started","message_id":str(msg["Message-ID"])}
+            write_state(ledger,state)
+            try:
+                result=subprocess.run(["/usr/sbin/sendmail","-t","-i","-f",SENDER],input=msg.as_bytes(),capture_output=True,timeout=35)
+                state["entries"][email]["status"]="accepted_by_local_exim" if result.returncode==0 else "mail_submission_failed"
+                state["entries"][email]["exit_code"]=result.returncode
+            except Exception as error:
+                state["entries"][email]["status"]="submission_exception"
+                state["entries"][email]["error_type"]=type(error).__name__
+            write_state(ledger,state)
+            print(f"RECIPIENT_{idx:03d}={row['category']}:{state['entries'][email]['status']}",flush=True)
+            if idx<100:
+                time.sleep(5)
+        accepted=sum(v["status"]=="accepted_by_local_exim" for v in state["entries"].values())
+        print("SUBMITTED_TO_EXIM="+str(accepted),flush=True)
+        print("NOT_CONFIRMED_OR_FAILED="+str(len(rows)-accepted),flush=True)
+        print("REMOTE_MAILBOX_DELIVERY_AND_REPLY_NOT_VERIFIED",flush=True)
+        if accepted!=100:
+            raise SystemExit(2)
+
+if __name__=="__main__":
+    main()
