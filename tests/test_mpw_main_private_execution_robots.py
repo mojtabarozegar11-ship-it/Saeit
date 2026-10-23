@@ -90,6 +90,30 @@ class MainRobotsTests(unittest.TestCase):
             self.assertEqual(bad["broken_internal_links"],1)
             self.assertEqual(bad["status"],"warning")
 
+    def test_editorial_over_fifteen_documents_remains_observable(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            editorial=root/"mpw-editorial"
+            (editorial/"agents").mkdir(parents=True)
+            (editorial/"index.html").write_text("<html>MojPlayWin</html>")
+            (editorial/"agents/index.html").write_text("<html>MojPlayWin</html>")
+            for number in range(20):
+                doc=editorial/"agents"/f"topic-{number}"/"index.html"
+                doc.parent.mkdir()
+                doc.write_text("<html>MojPlayWin</html>")
+            (editorial/".mpw-editorial-owner.json").write_text(json.dumps({
+                "tenant":"mojplaywin-main",
+                "scope":"mojplaywin-main-static-mpw-editorial-only",
+                "published_articles":20}))
+            (root/"editorial_publication_state.json").write_text(json.dumps({
+                "tenant":"mojplaywin-main",
+                "status":"published_verified_by_external_smoke"}))
+            with patch.object(robots,"EVO",root):
+                result=robots.editorial_robot(editorial,
+                    lambda *args:(200,b"MojPlayWin live public"))
+            self.assertEqual(result["status"],"ok")
+            self.assertEqual(result["published_documents"],22)
+
     def test_cron_and_evolution_health_detection(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td)
