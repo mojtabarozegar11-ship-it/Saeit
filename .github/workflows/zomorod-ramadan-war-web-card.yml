@@ -103,10 +103,10 @@ jobs:
             m=re.search(rb'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',body,re.S)
             assert m,'live homepage manifest not found'
             data=json.loads(m.group(1));row=next(r for r in data['rows'] if r.get('id')=='ZM-R25')
-            assert row['title']=='فناوری اطلاعات و خدمات دیجیتال' and len(row['cards'])==23
+            assert row['title']=='فناوری اطلاعات و خدمات دیجیتال' and len(row['cards'])>=24
             assert row['cards'][0]['id']=='ZM-R25-GAME-FARM-DOMINION-20261019'
             assert row['cards'][1]['id']=='ZM-R25-GAME-RAMADAN-WAR-20261022'
-            assert row['cards'][1]['canonicalUrl']=='/ramadan-war/' and row['cards'][2]['slug']=='website-design'
+            assert row['cards'][1]['canonicalUrl']=='/ramadan-war/' and row['cards'][2]['id']=='ZM-R25-GAME-ARROW-ESCAPE-20261022' and row['cards'][2]['canonicalUrl']=='/arrow-escape/' and row['cards'][3]['slug']=='website-design'
           with urlopen(Request(root+'/ramadan-war/',headers={'Cache-Control':'no-cache','User-Agent':'RamadanWarWebPort/1'}),timeout=35) as r:
            assert r.status==200
            body=r.read(1000000)
@@ -190,7 +190,7 @@ jobs:
           d=json.loads(re.search(rb'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',data,re.S).group(1))
           row=next(x for x in d['rows'] if x.get('id')=='ZM-R25')
           assert row['cards'][1]['id']=='ZM-R25-GAME-RAMADAN-WAR-20261022'
-          assert row['cards'][1]['canonicalUrl']=='/ramadan-war/' and row['cards'][2]['slug']=='website-design'
+          assert row['cards'][1]['canonicalUrl']=='/ramadan-war/' and row['cards'][2]['id']=='ZM-R25-GAME-ARROW-ESCAPE-20261022' and row['cards'][2]['canonicalUrl']=='/arrow-escape/' and row['cards'][3]['slug']=='website-design'
           for asset in ['weapon-overlay.webp','soldier-enemy.webp','stone-wall.webp','scene-desert.webp','scene-sniper-desert-v2.webp','scene-night.webp','scene-airbase.webp']:
            with urlopen(Request(root+'/ramadan-war/'+asset+'?asset='+str(time.time_ns()),headers={'Cache-Control':'no-cache,no-store'}),timeout=35) as r:
             assert r.status==200 and len(r.read())>50000,asset
