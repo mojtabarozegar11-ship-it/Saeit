@@ -21,8 +21,8 @@ jobs:
         with:
           persist-credentials: false
           # Current main does not contain the historical private robot sources/tests.
-          # Reuse the exact previously verified agent-only bundle until migrated.
-          ref: efc14442fd9782b039088d19b50edf5cfb3ca6b2
+          # Pin reviewed agent bundle with scalable editorial checks; no live-site edits.
+          ref: fec2bba8f7bed833039f010621b06f207421b7c8
       - name: Offline safety and functional tests for five robots
         shell: bash
         run: |
