@@ -64,6 +64,16 @@ class DownloadableCandidateTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,"INSUFFICIENT_EVIDENCE"):
             mod.render_navigator({"chapters":d["chapters"][:4]},r,e,"WO-00000001")
 
+    def test_rotating_batch_does_not_starve_future_orders(self):
+        names=["WO-%08d--r001.json" % i for i in range(1,301)]
+        first,state=mod.fair_selection(names,None,250)
+        second,state=mod.fair_selection(names,state,250)
+        self.assertEqual(len(first),250)
+        self.assertEqual(len(second),250)
+        self.assertEqual(set(first+second),set(names))
+        with self.assertRaisesRegex(RuntimeError,"CURSOR_INVALID"):
+            mod.fair_selection(names,{"schema":"fake","next_index":0},250)
+
     def test_semantic_no_commercial_clearance(self):
         src=TARGET.read_text(encoding="utf-8")
         for value in ('"scientific_quality_certified":False',
