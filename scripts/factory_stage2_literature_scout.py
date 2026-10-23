@@ -27,7 +27,7 @@ import urllib.parse
 import urllib.request
 
 SCHEMA="saeit.factory.stage2-literature-scout.v1"
-SCOUT_ALGO_VERSION="v9-paged-source-diversity"
+SCOUT_ALGO_VERSION="v10-complete-page-grid-source-diversity"
 EVIDENCE_SCHEMA="saeit.factory.stage2-source-evidence.v1"
 TOPIC_ID=re.compile(r"AGRI-[0-9]{3}\Z")
 WORD_RE=re.compile(r"[a-z]{3,}")
@@ -753,7 +753,8 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
              "v5-publisher-diversity-gap-diagnostics",
               "v6-evidence-first-fullword-query",
               "v7-multiphase-topic-specific-query",
-              "v8-bounded-progressive-search",SCOUT_ALGO_VERSION)
+              "v8-bounded-progressive-search",
+              "v9-paged-source-diversity",SCOUT_ALGO_VERSION)
             and isinstance(cached,list) and 4<=len(cached)<=20
             and previous.get("candidate_sha256")==sha(cached)):
         valid=[]
@@ -788,8 +789,10 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
     if not 0<=round_no<=10000:
         raise RuntimeError("SCOUT_INVALID_SEARCH_ROUND")
     queries=query_variants(title)
+    # Visit page 1 for every distinct query before page 2, and so on.
+    # The older paired modulo schedule never explored most query/page pairs.
     query=queries[round_no%len(queries)]
-    page=1 + round_no % 4
+    page=1 + (round_no//len(queries)) % 4
     try:
         # Explore different scholarly result pages before repeated queries
         # keep returning the same publisher. Mocks/custom fetchers remain compatible.
@@ -820,14 +823,24 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
     except ProviderCoolingDown:
         return "provider_cooldown"
     except Exception as exc:
+        # A transient provider error must never erase verified references
+        # accumulated across prior search pages. Do not advance the cursor
+        # either: retry the SAME missing query/page once service returns.
+        old_candidates=previous.get("indexed_abstract_candidates",[])
+        intact=(isinstance(old_candidates,list) and len(old_candidates)<=20
+                and previous.get("candidate_sha256")==sha(old_candidates))
         packet={
             "schema":SCHEMA,"source_product_id":ident,"order_id":order_id,
             "source_search_query":query,"source_search_page":page,
-            "search_round":round_no,
+            "search_round":prior_round,"attempted_search_round":round_no,
             "scout_algorithm_version":SCOUT_ALGO_VERSION,
             "status":"external_research_api_unavailable",
             "last_error":type(exc).__name__+":"+str(exc)[:160],
             "research_completed":False,"source_verified_count":0,
+            "indexed_abstract_candidates":old_candidates if intact else [],
+            "candidate_sha256":sha(old_candidates if intact else []),
+            "indexed_abstract_candidate_count":len(old_candidates) if intact else 0,
+            "evidence_gap_reason":previous.get("evidence_gap_reason"),
             "checked_utc":utc(),"commercial_release":False
         }
         worker.atomic(output,packet)
@@ -878,8 +891,12 @@ def retry_delay(candidate, title):
     round_no=candidate.get("search_round",-1)
     if type(round_no) is not int or not -1<=round_no<=10000:
         raise RuntimeError("SCOUT_INVALID_SEARCH_ROUND")
+    # A full source sweep is queries x 4 pages, not merely one page per
+    # query. Do not hold outstanding orders eight hours after only ~25%
+    # of available bounded search space has been explored.
+    sweep_rounds=4*len(query_variants(title))
     return (dt.timedelta(minutes=15)
-            if round_no+1<len(query_variants(title))
+            if round_no+1<sweep_rounds
             else dt.timedelta(hours=8))
 
 
