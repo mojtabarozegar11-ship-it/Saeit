@@ -7,7 +7,9 @@ on:
       - scripts/mpw_trx_public_csrf_hotfix_20261023.py
       - services/mpw_trx_commercial_web.py
       - services/mpw_trx_public_pages.py
+      - services/mpw_trx_walletless_checkout_ui.py
       - tests/test_mpw_trx_commercial_gateway.py
+      - tests/test_mpw_trx_commercial_ui_contract.py
 permissions: {contents: read}
 concurrency:
   group: mpw-public-trx-csrf-hotfix
@@ -37,8 +39,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m pip install --disable-pip-version-check 'Django>=5.2,<6' 'mysqlclient>=2.2,<3' 'PyMySQL==1.1.2' 'segno==1.6.6'
-          python3 -B -m py_compile scripts/mpw_trx_public_csrf_hotfix_20261023.py services/mpw_trx_commercial_web.py services/mpw_trx_public_pages.py tests/test_mpw_trx_commercial_gateway.py
-          python3 -B -m unittest tests.test_mpw_trx_commercial_gateway tests.test_mpw_trx_commercial_real_mariadb_e2e -v
+          python3 -B -m py_compile scripts/mpw_trx_public_csrf_hotfix_20261023.py services/mpw_trx_commercial_web.py services/mpw_trx_public_pages.py services/mpw_trx_walletless_checkout_ui.py tests/test_mpw_trx_commercial_gateway.py tests/test_mpw_trx_commercial_ui_contract.py
+          python3 -B -m unittest tests.test_mpw_trx_commercial_gateway tests.test_mpw_trx_commercial_ui_contract tests.test_mpw_trx_commercial_real_mariadb_e2e -v
           echo 'PUBLIC_TRX_CSRF_REGRESSION_TESTS=PASS'
   deploy:
     needs: tests
