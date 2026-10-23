@@ -14,11 +14,13 @@ from pathlib import Path
 import re
 import sys
 import tempfile
+from xml.etree import ElementTree
 
 
 HOME = Path("/home/zomorod2")
 WEB = HOME / "public_html"
 HTACCESS = WEB / ".htaccess"
+SITEMAP = WEB / "sitemap.xml"
 TARGET = WEB / "authors/mojtaba-rozegar/index.html"
 PHOTO = WEB / "static/site/zomorod-about/ceo-mojtaba-rozegar.webp"
 STAGE_ROOT = HOME / ".private-zm-author-route"
@@ -31,6 +33,7 @@ OLD_SOURCE_SHA256 = (
 )
 PASSENGER_ANCHOR = b'PassengerAppRoot "/home/zomorod2/Saeit"'
 PROFILE_MARKER = b'id="profile-name"'
+PERSIAN_URL = "https://zomorodmelal.ir/authors/mojtaba-rozegar/"
 
 
 def digest(blob: bytes) -> str:
@@ -49,16 +52,47 @@ def without_exact_redirect(blob: bytes) -> bytes:
     return b"".join(lines[:matches[0]] + lines[matches[0] + 1:])
 
 
+def with_persian_sitemap_entry(blob: bytes) -> bytes:
+    """Append one actual, canonical, crawlable author URL without reformatting."""
+    root = ElementTree.fromstring(blob)
+    if not root.tag.endswith("urlset"):
+        raise ValueError("NOT_A_URLSET_SITEMAP")
+    urls = [
+        (node.text or "").strip()
+        for node in root.iter() if node.tag.endswith("loc")
+    ]
+    if PERSIAN_URL in urls:
+        if urls.count(PERSIAN_URL) != 1:
+            raise ValueError("DUPLICATE_PERSIAN_AUTHOR_URL")
+        return blob
+    closings = list(re.finditer(rb"</(?:[\w.-]+:)?urlset\s*>", blob))
+    if len(closings) != 1:
+        raise ValueError("SITEMAP_CLOSING_TAG_CONFLICT")
+    entry = (
+        b"<url><loc>" + PERSIAN_URL.encode("ascii")
+        + b"</loc><lastmod>2026-10-23</lastmod></url>\n"
+    )
+    result = blob[:closings[0].start()] + entry + blob[closings[0].start():]
+    check = ElementTree.fromstring(result)
+    found = [
+        (node.text or "").strip()
+        for node in check.iter() if node.tag.endswith("loc")
+    ]
+    if found.count(PERSIAN_URL) != 1:
+        raise ValueError("SITEMAP_INSERT_VERIFY_FAILED")
+    return result
+
+
 def safe_paths(run: str) -> Path:
     if not re.fullmatch(r"[0-9]{6,24}", run):
         raise ValueError("INVALID_RUN_ID")
     if Path.home() != HOME:
         raise ValueError("CPANEL_ACCOUNT_MISMATCH")
     stage = STAGE_ROOT / run
-    for path in (HOME, WEB, HTACCESS, TARGET.parent, TARGET, PHOTO, STAGE_ROOT, stage):
+    for path in (HOME, WEB, HTACCESS, SITEMAP, TARGET.parent, TARGET, PHOTO, STAGE_ROOT, stage):
         if path.is_symlink():
             raise ValueError("SYMLINK_BLOCKED:" + str(path))
-    if not WEB.is_dir() or not HTACCESS.is_file() or not PHOTO.is_file():
+    if not WEB.is_dir() or not HTACCESS.is_file() or not SITEMAP.is_file() or not PHOTO.is_file():
         raise ValueError("SITE_OR_REAL_PORTRAIT_MISSING")
     if not stage.is_dir():
         raise ValueError("STAGING_DIRECTORY_MISSING")
@@ -95,9 +129,11 @@ def install(run: str, want: str) -> None:
         raise ValueError("CANDIDATE_INCOMPLETE")
 
     original_ht = HTACCESS.read_bytes()
+    original_sitemap = SITEMAP.read_bytes()
     if PASSENGER_ANCHOR not in original_ht:
         raise ValueError("HOST_APP_MAPPING_DRIFT")
     new_ht = without_exact_redirect(original_ht)
+    new_sitemap = with_persian_sitemap_entry(original_sitemap)
     existing_page = TARGET.read_bytes() if TARGET.is_file() else None
     if TARGET.exists() and existing_page is None:
         raise ValueError("AUTHOR_DEST_NOT_A_REGULAR_FILE")
@@ -107,11 +143,14 @@ def install(run: str, want: str) -> None:
         raise ValueError("CONCURRENT_HTACCESS_CHANGE")
 
     atomic_write(stage / "htaccess.before", original_ht, 0o600)
+    atomic_write(stage / "sitemap.before", original_sitemap, 0o600)
     if existing_page is not None:
         atomic_write(stage / "profile.before", existing_page, 0o600)
     record = {
         "run": run, "had_page": existing_page is not None,
         "ht_before": digest(original_ht), "ht_after": digest(new_ht),
+        "sitemap_before": digest(original_sitemap),
+        "sitemap_after": digest(new_sitemap),
         "page_before": digest(existing_page) if existing_page is not None else None,
         "page_after": want,
     }
@@ -123,6 +162,12 @@ def install(run: str, want: str) -> None:
             atomic_write(TARGET, new_page, 0o644)
         if digest(TARGET.read_bytes()) != want:
             raise ValueError("PROFILE_WRITE_FAILED")
+        if digest(SITEMAP.read_bytes()) != digest(original_sitemap):
+            raise ValueError("CONCURRENT_SITEMAP_CHANGE_BEFORE_COMMIT")
+        if new_sitemap != original_sitemap:
+            atomic_write(SITEMAP, new_sitemap, SITEMAP.stat().st_mode & 0o777)
+        if digest(SITEMAP.read_bytes()) != digest(new_sitemap):
+            raise ValueError("SITEMAP_WRITE_FAILED")
         if digest(HTACCESS.read_bytes()) != digest(original_ht):
             raise ValueError("CONCURRENT_HTACCESS_CHANGE_BEFORE_COMMIT")
         atomic_write(HTACCESS, new_ht, HTACCESS.stat().st_mode & 0o777)
@@ -144,11 +189,17 @@ def rollback(run: str) -> None:
     if record["run"] != run:
         raise ValueError("ROLLBACK_RUN_MISMATCH")
     saved_ht = (stage / "htaccess.before").read_bytes()
+    saved_sitemap = (stage / "sitemap.before").read_bytes()
     if digest(saved_ht) != record["ht_before"]:
         raise ValueError("ROLLBACK_BACKUP_MISMATCH")
+    if digest(saved_sitemap) != record["sitemap_before"]:
+        raise ValueError("ROLLBACK_SITEMAP_BACKUP_MISMATCH")
     current_ht = HTACCESS.read_bytes()
+    current_sitemap = SITEMAP.read_bytes()
     if digest(current_ht) not in (record["ht_before"], record["ht_after"]):
         raise ValueError("ROLLBACK_CONCURRENT_HTACCESS_CHANGE")
+    if digest(current_sitemap) not in (record["sitemap_before"], record["sitemap_after"]):
+        raise ValueError("ROLLBACK_CONCURRENT_SITEMAP_CHANGE")
     if TARGET.is_symlink():
         raise ValueError("ROLLBACK_PROFILE_SYMLINK")
     current_page = TARGET.read_bytes() if TARGET.is_file() else None
@@ -166,10 +217,14 @@ def rollback(run: str) -> None:
             atomic_write(TARGET, saved_page, 0o644)
     elif current_page is not None and digest(current_page) == record["page_after"]:
         TARGET.unlink()
+    if digest(current_sitemap) != record["sitemap_before"]:
+        atomic_write(SITEMAP, saved_sitemap, SITEMAP.stat().st_mode & 0o777)
     if digest(current_ht) != record["ht_before"]:
         atomic_write(HTACCESS, saved_ht, HTACCESS.stat().st_mode & 0o777)
     if HTACCESS.read_bytes() != saved_ht:
         raise ValueError("ROLLBACK_HTACCESS_VERIFY_FAILED")
+    if SITEMAP.read_bytes() != saved_sitemap:
+        raise ValueError("ROLLBACK_SITEMAP_VERIFY_FAILED")
     print("ZM_PERSIAN_AUTHOR_SCOPE_ROLLBACK=PASS")
 
 
