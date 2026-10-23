@@ -13,6 +13,59 @@ import json
 import os
 from pathlib import Path
 import sys
+import tempfile
+
+
+CURSOR_SCHEMA = "saeit.factory.stage4-due-dispatch.cursor.v1"
+
+
+def read_cursor(root):
+    """Resume beyond the previous bounded batch without trusting arbitrary state."""
+    path = root / "stage4-due-dispatch.cursor.json"
+    if path.is_symlink():
+        raise RuntimeError("STAGE4_DISPATCH_CURSOR_SYMLINK")
+    if not path.exists():
+        return 0
+    if not path.is_file() or path.stat().st_size > 1024:
+        raise RuntimeError("STAGE4_DISPATCH_CURSOR_INVALID")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeError) as exc:
+        raise RuntimeError("STAGE4_DISPATCH_CURSOR_INVALID") from exc
+    cursor = data.get("last_pk") if isinstance(data, dict) and data.get("schema") == CURSOR_SCHEMA else None
+    if type(cursor) is not int or not 0 <= cursor <= 2**63 - 1:
+        raise RuntimeError("STAGE4_DISPATCH_CURSOR_INVALID")
+    return cursor
+
+
+def write_cursor(root, last_pk):
+    """Atomically checkpoint scanned IDs, never changing product or QC records."""
+    path = root / "stage4-due-dispatch.cursor.json"
+    if path.is_symlink():
+        raise RuntimeError("STAGE4_DISPATCH_CURSOR_SYMLINK")
+    fd, temp = tempfile.mkstemp(prefix=".stage4-cursor-", dir=root)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            os.fchmod(stream.fileno(), 0o600)
+            json.dump({"schema": CURSOR_SCHEMA, "last_pk": last_pk}, stream)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp, path)
+    finally:
+        if os.path.exists(temp):
+            os.unlink(temp)
+
+
+def candidate_window(manager, cursor, limit):
+    """Page after the saved PK, wrapping exactly once to avoid starvation."""
+    after = list(manager.filter(pk__gt=cursor).order_by("pk").values_list(
+        "pk", "metadata")[:limit])
+    if len(after) == limit:
+        return after
+    before = list(manager.filter(pk__lte=cursor).order_by("pk").values_list(
+        "pk", "metadata")[:limit - len(after)])
+    return after + before
 
 
 def due_retry(metadata, now):
@@ -98,10 +151,15 @@ def dispatch(*, root, apply, batch=12, scan_limit=500):
         # MariaDB cursor open while the planner creates tasks on the same
         # connection can cause intermittent OperationalError and lost cycles.
         # Every candidate is still re-read within its own locked transaction.
-        candidates = list(Product.objects.order_by("pk").values_list(
-            "pk", "metadata")[:scan_limit])
+        prior_cursor = read_cursor(root)
+        candidates = candidate_window(Product.objects, prior_cursor, scan_limit)
+        last_scanned_pk = prior_cursor
         for product_pk, metadata in candidates:
+            if counts["queued"] + counts["approval_gated"] >= batch:
+                counts["batch_limit_reached"] += 1
+                break
             scanned += 1
+            last_scanned_pk = product_pk
             if due_retry(metadata, now) is None:
                 continue
             counts["due_seen"] += 1
@@ -133,9 +191,6 @@ def dispatch(*, root, apply, batch=12, scan_limit=500):
                     if not apply:
                         counts["would_queue_validation"] += 1
                         continue
-                    if counts["queued"] + counts["approval_gated"] >= batch:
-                        counts["batch_limit_reached"] += 1
-                        break
                     task = brain.plan_product_factory_step(
                         product_id=product_pk, run_id=run.run_id,
                         payload={"goal": "Perform the existing Stage4 evidence validation without changing research limits, quality review or release policy."})
@@ -149,9 +204,12 @@ def dispatch(*, root, apply, batch=12, scan_limit=500):
                 counts["planning_error_" + type(error).__name__] += 1
                 if isinstance(error, OperationalError):
                     counts["db_error_code_" + safe_error_code(error)] += 1
+        if apply and scanned:
+            write_cursor(root, last_scanned_pk)
         result = {
             "schema": "saeit.factory.stage4-due-dispatch.v1",
-            "apply": apply, "scanned": scanned, "counts": dict(sorted(counts.items())),
+            "apply": apply, "scanned": scanned, "cursor_before": prior_cursor,
+            "cursor_after": last_scanned_pk, "counts": dict(sorted(counts.items())),
             "policy_override": False, "budget_override": False,
             "self_approval": False, "release_modified": False,
         }
