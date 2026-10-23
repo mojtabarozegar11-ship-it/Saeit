@@ -51,7 +51,7 @@ def _nocache(response):
     response["Cache-Control"]="private, no-store, max-age=0"
     response["Pragma"]="no-cache"
     response["X-Content-Type-Options"]="nosniff"
-    response["Referrer-Policy"]="no-referrer"
+    response["Referrer-Policy"]="same-origin"
     return response
 
 
