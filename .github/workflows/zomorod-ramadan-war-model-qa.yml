@@ -1,0 +1,49 @@
+name: Ramadan War complete models and real-browser preflight
+on:
+  pull_request:
+    paths:
+      - 'games/ramadan-war/**'
+      - '.github/workflows/zomorod-ramadan-war-web-card.yml'
+      - '.github/workflows/zomorod-ramadan-war-model-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  model-and-browser-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Replace repository-truncated models with fully hash-attested originals
+        run: |
+          set -euo pipefail
+          bash -n games/ramadan-war/fetch_verified_models.sh
+          bash games/ramadan-war/fetch_verified_models.sh
+      - name: Parse code and assert all model files are complete
+        run: |
+          set -euo pipefail
+          node --check games/ramadan-war/game.js
+          node --check games/ramadan-war/engine3d.js
+          node --check games/ramadan-war/site-smoke.cjs
+          python3 -m py_compile games/ramadan-war/deploy.py
+          test "$(wc -c < games/ramadan-war/soldier-rigged-ccby.glb)" -eq 3094592
+          test "$(wc -c < games/ramadan-war/m24-sniper-ccby.glb)" -eq 1247684
+      - name: Full desktop and mobile gameplay with real GLB texture loading
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ramadan-playwright"
+          cd "$RUNNER_TEMP/ramadan-playwright"
+          npm init -y >/dev/null
+          npm install --silent --no-audit --no-fund --no-save playwright@1.55.0
+          npx playwright install chromium
+          cd "$GITHUB_WORKSPACE"
+          python3 -m http.server 8765 --directory games/ramadan-war > "$RUNNER_TEMP/ramadan-http.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 15); do
+            if curl -fsS http://127.0.0.1:8765/ >/dev/null; then break; fi
+            sleep 1
+          done
+          GAME_URL=http://127.0.0.1:8765/ NODE_PATH="$RUNNER_TEMP/ramadan-playwright/node_modules" node games/ramadan-war/site-smoke.cjs
