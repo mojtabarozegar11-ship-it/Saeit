@@ -164,7 +164,7 @@ def _reconcile_invoice(request, invoice_id):
     from services.mpw_walletless_commercial_intent import reconcile_commercial_intent_from_candidates
     from services.mpw_tron_readonly_deposit_candidates import find_candidate_hashes
     from services.mpw_trx_commercial_chain import read_only_independent_pair
-    _ensure_live(request)
+    _ensure_live(request,for_paid_read=True)
     _get_owner_invoice(request,invoice_id)
     try:
         reconcile_commercial_intent_from_candidates(
