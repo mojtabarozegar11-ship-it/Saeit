@@ -1,0 +1,122 @@
+name: MojPlayWin original Image Delivery Lab guarded publication
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/mpw-assetlab-publish-20261023.yml]
+permissions:
+  contents: read
+concurrency:
+  group: mpw-assetlab-20261023
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build original WebP images and SHA-256 manifest
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_asset_lab_release_20261023.py
+          python3 -m pip install --disable-pip-version-check 'Pillow==11.3.0'
+          python3 -B scripts/mpw_asset_lab_release_20261023.py build "$RUNNER_TEMP/assetlab-build/20261023"
+          python3 -B scripts/mpw_asset_lab_release_20261023.py verify "$RUNNER_TEMP/assetlab-build/20261023"
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json
+          from pathlib import Path
+          assert ('if: '+chr(36)+'{{ false }}') in Path('.github/workflows/mojplaywin-main-deploy.yml').read_text()
+          root='https://mojplaywin.com'
+          for route in ('/','/games/','/products/','/mpw-editorial/nextwave/20261023/index.html','/mpw-editorial/arcade-lab/20261022/index.html'):
+              with urllib.request.urlopen(root+route,timeout=20) as r:assert r.status==200,route
+          try:
+              with urllib.request.urlopen(root+'/mpw-editorial/asset-lab/20261023/release.json',timeout=20) as r:raise RuntimeError('Release already exists')
+          except urllib.error.HTTPError as e:
+              if e.code!=404:raise
+          print('ASSETLAB_PROTECTED_BASELINE_OK')
+          PY
+      - name: Test actual canvas WebP encoding and responsive variants in desktop and mobile Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory "$RUNNER_TEMP/assetlab-build/20261023" >/dev/null 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for i in 1 2 3 4 5; do curl -fsS http://127.0.0.1:8765/index.html >/dev/null && break || sleep 1; done
+          chrome="$(command -v google-chrome || command -v chromium)"
+          for dims in 1440,900 390,844; do
+            timeout 50s "$chrome" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --window-size="$dims" --virtual-time-budget=9000 --dump-dom "http://127.0.0.1:8765/index.html?selftest=1" > "$RUNNER_TEMP/assetlab-local-$dims.html" 2>/dev/null
+            grep -Fq 'ASSET_LAB_FUNCTIONAL_TEST_PASS' "$RUNNER_TEMP/assetlab-local-$dims.html"
+            grep -Fq 'data-result="pass"' "$RUNNER_TEMP/assetlab-local-$dims.html"
+            echo "ASSETLAB_LOCAL_CHROME_FUNCTIONAL_PASS $dims"
+          done
+      - name: Establish host-key pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          CPANEL_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/assetlab-ssh";install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$CPANEL_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/cpanel.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/cpanel.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf 'Host saeit-vps\n HostName 178.239.147.150\n User githubops\n IdentityFile %s/vps.key\n UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n HostName zohal.pws-dns.net\n User zomorod2\n Port 1396\n IdentityFile %s/cpanel.key\n UserKnownHostsFile %s/cpanel.known\n ProxyJump saeit-vps\nHost *\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 10\n ForwardAgent no\n RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/cpanel.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/cpanel.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/cpanel.candidate" "$d/cpanel.known"
+      - name: Stage and atomically publish only the new isolated directory
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          c="$RUNNER_TEMP/assetlab-ssh/config"
+          ssh -T -F "$c" saeit-cpanel "umask 077; mkdir -p /home/zomorod2/.private_mpw_assetlab_20261023/staging-$GITHUB_RUN_ID"
+          tar -cf - -C "$RUNNER_TEMP/assetlab-build" 20261023 | ssh -T -F "$c" saeit-cpanel "umask 077; tar -xf - -C /home/zomorod2/.private_mpw_assetlab_20261023/staging-$GITHUB_RUN_ID"
+          ssh -T -F "$c" saeit-cpanel "python3 - install $GITHUB_RUN_ID $GITHUB_SHA" < scripts/mpw_asset_lab_release_20261023.py
+      - name: Verify public HTTP 200, original WebP headers, manifest and real Chrome interaction
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,json,hashlib
+          root='https://mojplaywin.com/mpw-editorial/asset-lab/20261023/'
+          with urllib.request.urlopen(root+'release.json',timeout=20) as r:
+              assert r.status==200
+              m=json.load(r)
+          assert m['release_id']=='ASSETLAB-20261023-01' and m['guides_count']==10
+          for rel,sha in m['files_sha256'].items():
+              with urllib.request.urlopen(root+rel,timeout=20) as r:
+                  assert r.status==200
+                  b=r.read(120001)
+              assert hashlib.sha256(b).hexdigest()==sha,rel
+              if rel.endswith('.webp'):assert b[:4]==b'RIFF' and b[8:12]==b'WEBP'
+              print('ASSETLAB_PUBLIC_HASH_HTTP200',rel,len(b))
+          for path in ('/','/games/','/products/','/mpw-editorial/nextwave/20261023/index.html','/mpw-editorial/arcade-lab/20261022/index.html'):
+              with urllib.request.urlopen('https://mojplaywin.com'+path,timeout=20) as r:assert r.status==200,path
+          print('ASSETLAB_PROTECTED_ROUTES_PASS')
+          PY
+          chrome="$(command -v google-chrome || command -v chromium)"
+          for dims in 1440,900 390,844; do
+            timeout 50s "$chrome" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --window-size="$dims" --virtual-time-budget=9000 --dump-dom "https://mojplaywin.com/mpw-editorial/asset-lab/20261023/index.html?selftest=1" > "$RUNNER_TEMP/assetlab-public-$dims.html" 2>/dev/null
+            grep -Fq 'ASSET_LAB_FUNCTIONAL_TEST_PASS' "$RUNNER_TEMP/assetlab-public-$dims.html"
+            grep -Fq 'data-result="pass"' "$RUNNER_TEMP/assetlab-public-$dims.html"
+            echo "ASSETLAB_LIVE_CHROME_FUNCTIONAL_PASS $dims"
+          done
+      - name: Roll back exact owned release on failed live verification
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          ssh -T -F "$RUNNER_TEMP/assetlab-ssh/config" saeit-cpanel "python3 - rollback $GITHUB_RUN_ID $GITHUB_SHA" < scripts/mpw_asset_lab_release_20261023.py
+      - name: Delete ephemeral SSH keys
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/assetlab-ssh"
