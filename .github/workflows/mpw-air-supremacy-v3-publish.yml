@@ -1,0 +1,199 @@
+name: MojPlayWin Air Supremacy v3 cinematic guarded publish
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - games/air-supremacy/index.html
+      - scripts/mpw_air_supremacy_v3_publish.py
+      - tests/game/air-supremacy-campaign.cjs
+      - .github/workflows/mpw-air-supremacy-v3-publish.yml
+  push:
+    branches: [main]
+    paths:
+      - games/air-supremacy/index.html
+      - scripts/mpw_air_supremacy_v3_publish.py
+      - .github/workflows/mpw-air-supremacy-v3-publish.yml
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Exact game mechanics and release guard
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_air_supremacy_v3_publish.py
+          node tests/game/air-supremacy-campaign.cjs
+          node --check tests/game/air-supremacy-visual.cjs
+          python3 - <<'PY'
+          from pathlib import Path
+          import importlib.util
+          spec=importlib.util.spec_from_file_location('upgrade','scripts/mpw_air_supremacy_v3_publish.py')
+          mod=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          raw=Path('games/air-supremacy/index.html').read_bytes()
+          new=mod.sha(raw)
+          mod.valid_new(raw,new)
+          assert mod.BEFORE=='c148daee2899d6451cac9d069a90210990f1aaf3e7733b7c06014f8e174e788a'
+          assert new!=mod.BEFORE
+          print('AIR_CAMPAIGN_SOURCE_RELEASE_SHA256='+new)
+          PY
+  publish:
+    needs: validate
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-air-v3-20261023]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Record original game bytes and protected routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          from urllib.request import urlopen,Request
+          root='https://mojplaywin.com'
+          target='/air-supremacy/'
+          checks=('/','/games/','/studio/','/store/','/games/crown-defender/')
+          before={}
+          for path in (target,*checks):
+            with urlopen(Request(root+path,headers={'Cache-Control':'no-cache','User-Agent':'MPW-AirCampaign-ReadOnly-Baseline'}),timeout=24) as response:
+              code=response.status
+              body=response.read(175000) if path in (target,'/games/crown-defender/') else None
+            if code!=200:raise AssertionError('Page down before release '+path)
+            before[path]={'status':code,'sha':hashlib.sha256(body).hexdigest() if body else None}
+          if before[target]['sha']!='c148daee2899d6451cac9d069a90210990f1aaf3e7733b7c06014f8e174e788a':
+            raise AssertionError('Unexpected existing Air Supremacy live bytes; refuse upgrade')
+          Path(os.environ['RUNNER_TEMP']+'/air-campaign-baseline.json').write_text(json.dumps(before))
+          print('AIR_AND_CROWN_PUBLIC_BASELINES=PASS')
+          PY
+      - name: Pinned GitHub SSH to VPS to cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-air-v3-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo 'AIR_SUPREMACY_PINNED_RELAY=PASS'
+      - name: Stage upgrade exclusively under private cPanel HOME
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-air-v3-ssh"
+          timeout 48s scp -q -F "$d/config" games/air-supremacy/index.html \
+            "saeit-cpanel:/home/zomorod2/.mpw-air-v3-stage-$GITHUB_RUN_ID.html"
+      - name: Atomic replacement of Air Supremacy game only
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-air-v3-ssh"
+          sha=$(sha256sum games/air-supremacy/index.html | awk '{print $1}')
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID' '$sha'" < scripts/mpw_air_supremacy_v3_publish.py
+      - name: Verify public SHA and protected Crown Defender unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,time
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          root='https://mojplaywin.com'
+          target='/air-supremacy/'
+          before=json.loads(Path(os.environ['RUNNER_TEMP']+'/air-campaign-baseline.json').read_text())
+          expected=hashlib.sha256(Path('games/air-supremacy/index.html').read_bytes()).hexdigest()
+          for trial in range(6):
+            with urlopen(Request(root+target+'?air_campaign='+os.environ['GITHUB_RUN_ID']+'-'+str(trial),headers={'Cache-Control':'no-cache','User-Agent':'MPW-AirCampaign-Safe-Smoke'}),timeout=24) as response:
+              body=response.read(175000)
+              status=response.status
+              kind=response.headers.get('Content-Type','')
+            got=hashlib.sha256(body).hexdigest()
+            print('AIR_LIVE_TRIAL='+str(trial)+' sha='+got)
+            if status==200 and 'text/html' in kind and got==expected:
+              assert b'MAX_MISSION=12' in body and b'campaignStats' in body and b'armorUpgrade' in body and b'SKY_FS' in body
+              break
+            time.sleep(2)
+          else:
+            raise AssertionError('New Air Supremacy HTML did not reach live site')
+          for path,ref in before.items():
+            if path==target:continue
+            with urlopen(Request(root+path,headers={'Cache-Control':'no-cache','User-Agent':'MPW-AirCampaign-Protected-QA'}),timeout=24) as response:
+              assert response.status==ref['status'],path
+              body=response.read(175000) if ref['sha'] else None
+            if ref['sha']:
+              assert hashlib.sha256(body).hexdigest()==ref['sha'], 'Protected original Crown Defender changed'
+          print('AIR_CAMPAIGN_LIVE_SHA_AND_ORIGINAL_CROWN=PASS')
+          PY
+          d="$RUNNER_TEMP/mpw-air-v3-ssh"
+          sha=$(sha256sum games/air-supremacy/index.html | awk '{print $1}')
+          timeout 25s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - status '$GITHUB_RUN_ID' '$sha'" < scripts/mpw_air_supremacy_v3_publish.py
+      - name: Restore original Air Supremacy HTML if smoke fails
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-air-v3-ssh"
+          sha=$(sha256sum games/air-supremacy/index.html | awk '{print $1}')
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID' '$sha'" < scripts/mpw_air_supremacy_v3_publish.py
+      - name: Clean private staged release file only
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-air-v3-ssh"
+          if test -f "$d/config"; then
+            timeout 30s ssh -T -F "$d/config" saeit-cpanel \
+              "test ! -L /home/zomorod2/.mpw-air-v3-stage-$GITHUB_RUN_ID.html && rm -f -- /home/zomorod2/.mpw-air-v3-stage-$GITHUB_RUN_ID.html" || true
+          fi
