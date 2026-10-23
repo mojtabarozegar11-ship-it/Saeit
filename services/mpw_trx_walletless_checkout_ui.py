@@ -63,8 +63,6 @@ async function check(){
   if(Date.now()-started>35*60*1000){stopped=true;status.textContent="Automatic status checks paused. Contact support; do not send a second payment.";return;}
   if(document.hidden){schedule(10000);return;}
   checking=true;
-  const controller=new AbortController();
-  const timeout=window.setTimeout(()=>controller.abort(),8000);
   let delay=nextDelay();
   try{
     const url=frame.getAttribute("data-status-url");
@@ -77,13 +75,21 @@ async function check(){
       && /^[A-Za-z0-9]{32,128}$/.test(csrf)
       && Date.now()-lastProofAttempt>=15000){
       lastProofAttempt=Date.now();
+      const proofController=new AbortController();
+      const proofTimeout=window.setTimeout(()=>proofController.abort(),8000);
       try{
-        await fetch(proofUrl,{method:"POST",credentials:"same-origin",cache:"no-store",
-          redirect:"error",signal:controller.signal,headers:{"Accept":"application/json","X-CSRFToken":csrf}});
+          await fetch(proofUrl,{method:"POST",credentials:"same-origin",cache:"no-store",
+            redirect:"error",signal:proofController.signal,headers:{"Accept":"application/json","X-CSRFToken":csrf}});
       }catch(e){/* Await next authenticated status observation; never accept browser proof. */}
+      finally{window.clearTimeout(proofTimeout);}
     }
-    const r=await fetch(url,{credentials:"same-origin",cache:"no-store",redirect:"error",
-      signal:controller.signal,headers:{"Accept":"application/json"}});
+    const statusController=new AbortController();
+    const statusTimeout=window.setTimeout(()=>statusController.abort(),8000);
+    let r;
+    try{
+      r=await fetch(url,{credentials:"same-origin",cache:"no-store",redirect:"error",
+        signal:statusController.signal,headers:{"Accept":"application/json"}});
+    }finally{window.clearTimeout(statusTimeout);}
     if(!r.ok)throw new Error("Payment check temporarily unavailable");
     const data=await r.json();
     if(data.status==="paid" && data.can_download===true
@@ -105,7 +111,6 @@ async function check(){
     delay=Math.min(30000,6000*(2**(failures-1)));
     status.textContent="Connection to payment checker is interrupted. It will retry; do not pay twice.";
   }finally{
-    window.clearTimeout(timeout);
     checking=false;
     if(!stopped)schedule(delay);
   }
@@ -151,7 +156,7 @@ def render_invoice_page(invoice: InvoiceIntent, *, status_path: str) -> tuple[by
     qr=build_recipient_qr(invoice.recipient)
     content=f"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex,nofollow"><meta name="referrer" content="same-origin">
 <title>Secure TRX payment - MojPlayWin</title><style>{STYLES}</style></head><body>
 <main id="checkout" data-status-url="{escape(status_path,quote=True)}">
 <h1>Pay securely with TRX</h1><p>No website wallet connection or signing is required.</p>
