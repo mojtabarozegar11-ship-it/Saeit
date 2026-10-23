@@ -1,6 +1,6 @@
 """Atomic, strictly MojPlayWin main-domain-only static editorial publishing.
 
-Publishes under /home/zomorod2/mojplaywin.com/mpw-editorial exclusively.
+Publishes under /home/zomorod2/mojplaywin.com/mpw-standalone-guides exclusively.
 Never touches .htaccess, other domain directories, Django/Passenger, databases,
 payments or other site trees. Actual external HTTP smoke test runs separately
 before scheduled publishing is installed. Safe, idempotent, rollbackable.
@@ -23,10 +23,10 @@ EVO=ROOT/"evolution_runtime_20261018"
 STAGE=ROOT/"v91_verified_main_port_20261018"
 CODE=STAGE/"mpw_v91_port"
 DOCROOT=Path("/home/zomorod2/mojplaywin.com")
-LIVE=DOCROOT/"mpw-editorial"
-ROLLBACKS=EVO/"editorial_rollback_20261018"
-CONTROL=EVO/"editorial_publication_state.json"
-LOCK=EVO/"editorial_publication.lock"
+LIVE=DOCROOT/"mpw-standalone-guides"
+ROLLBACKS=EVO/"standalone_guides_rollback_20261024"
+CONTROL=EVO/"standalone_guides_publication_state_20261024.json"
+LOCK=EVO/"standalone_guides_publication_20261024.lock"
 ENABLED=STAGE/"operator_state/enabled"
 MARKER="MPW_MAIN_STATIC_EDITORIAL_20261018"
 
@@ -83,7 +83,7 @@ def _content_signature(data):
 def _publish():
     from mpw_v91_port.public_editorial_publisher import render_to_staging,OWNER
     old=read_json(LIVE/OWNER,9000) if LIVE.exists() else None
-    tmp=Path(tempfile.mkdtemp(prefix=".mpw-editorial-prepare-",dir=DOCROOT))
+    tmp=Path(tempfile.mkdtemp(prefix=".mpw-standalone-guides-prepare-",dir=DOCROOT))
     tmp.chmod(0o700)
     try:
         result=render_to_staging(EVO,tmp)
@@ -100,7 +100,7 @@ def _publish():
             require(state.get("status")=="published_verified_by_external_smoke"
                     and prior.is_dir() and not prior.is_symlink()
                     and read_json(prior/OWNER).get("scope")==
-                    "mojplaywin-main-static-mpw-editorial-only",
+                    "mojplaywin-main-static-standalone-guides-only",
                     "PREVIOUS_ROLLBACK_NOT_RECONCILED")
             # Rotate one explicitly owned prior backup only after successful
             # external smoke of the currently live release.
@@ -122,7 +122,7 @@ def _publish():
                "content_signature":_content_signature(fresh),
                "has_previous":prior.exists(),
                "published_utc":datetime.now(timezone.utc).isoformat(),
-               "public_prefix":"/mpw-editorial/",
+               "public_prefix":"/mpw-standalone-guides/",
                "original_site_files_modified":False,
                "passenger_restarted":False}
         atomic_json(CONTROL,state)
@@ -147,7 +147,7 @@ def _rollback():
         if previous.exists():
             require(previous.is_dir() and not previous.is_symlink()
                     and read_json(previous/OWNER,9000).get("scope")==
-                    "mojplaywin-main-static-mpw-editorial-only","PREVIOUS_ROLLBACK_NOT_OWNED")
+                    "mojplaywin-main-static-standalone-guides-only","PREVIOUS_ROLLBACK_NOT_OWNED")
             os.replace(previous,LIVE)
     except BaseException:
         if not LIVE.exists():os.replace(discard,LIVE)
