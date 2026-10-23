@@ -174,28 +174,39 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
 
     def test_staging_http_invoice_trust_wallet_status_and_private_download(self):
         from services.mpw_walletless_existing_intent_staging_web import (
-            _show_invoice,_invoice_status,_download_paid,
+            _show_invoice,_invoice_status,_reconcile_invoice,_download_paid,
         )
         from django.http import Http404
         request=SimpleNamespace(user=SimpleNamespace(
-            pk=42,is_authenticated=True,is_active=True),
+            pk=42,is_authenticated=True,is_active=True),META={},
             is_secure=lambda:True,get_host=lambda:"staging.test")
         stolen=SimpleNamespace(user=SimpleNamespace(
-            pk=43,is_authenticated=True,is_active=True),
+            pk=43,is_authenticated=True,is_active=True),META={},
             is_secure=lambda:True,get_host=lambda:"staging.test")
         pk,_,_=self.reserve()
         with patch("django.utils.timezone.now",return_value=fixture.NOW+timedelta(seconds=10)):
             response=_show_invoice(request,pk)
         self.assertEqual(response.status_code,200)
         self.assertIn(b"Open in Trust Wallet (TRX)",response.content)
+        self.assertIn(b'data-reconcile-url="/commerce/trx-easy/reconcile/',response.content)
+        self.assertIn(b'data-csrf-token="',response.content)
         self.assertIn(b"link.trustwallet.com/send?",response.content)
         self.assertIn("Content-Security-Policy",response)
         self.assertFalse(json.loads(_invoice_status(request,pk).content)["can_download"])
+        # Read-only GET cannot settle, even if a trusted server event exists.
+        with patch.object(settings,"MPW_WALLETLESS_TRX_TEST_STATUS_RECONCILER",
+                          lambda i,b:reconcile_existing_test_intent_from_candidates(
+                              i,b,server_lookup=lambda *args:[fixture.TX_HASH],pair=self.pair()),
+                          create=True):
+            self.assertFalse(json.loads(_invoice_status(request,pk).content)["can_download"])
+            confirmed=json.loads(_reconcile_invoice(request,pk).content)
+            self.assertEqual(confirmed["status"],"paid")
+            self.assertTrue(confirmed["can_download"])
+        self.assertEqual(ExistingLedgerEntry.objects.count(),1)
         with self.assertRaises(Http404):
             _show_invoice(stolen,pk)
         with self.assertRaises(Http404):
             _download_paid(request,pk)
-        settle_existing_test_intent(pk,fixture.TX_HASH,self.pair())
         self.assertTrue(json.loads(_invoice_status(request,pk).content)["can_download"])
         download=_download_paid(request,pk)
         self.assertEqual(download.status_code,200)
