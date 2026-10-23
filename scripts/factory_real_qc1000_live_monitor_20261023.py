@@ -91,10 +91,17 @@ def verify_artifact(area, receipt):
             require(archive.testzip() is None, "ARTIFACT_ZIP_CRC_INVALID")
             members = archive.infolist()
             require(0 < len(members) <= 256, "ARTIFACT_ZIP_MEMBER_COUNT")
+            require(sum(m.file_size for m in members) <= 32_000_000,
+                    "ARTIFACT_ZIP_EXPANSION_UNBOUNDED")
             for member in members:
+                require(member.file_size <= 8_000_000 and not (member.flag_bits & 1),
+                        "ARTIFACT_ZIP_MEMBER_UNSAFE")
                 require(not member.filename.startswith("/")
                         and ".." not in Path(member.filename).parts,
                         "ARTIFACT_ZIP_TRAVERSAL")
+                mode = (member.external_attr >> 16) & 0o170000
+                require(mode in (0, 0o100000, 0o040000),
+                        "ARTIFACT_ZIP_SYMLINK_OR_DEVICE")
     except (OSError, zipfile.BadZipFile, zipfile.LargeZipFile) as exc:
         raise QCFault("ARTIFACT_ZIP_UNREADABLE") from exc
     return digest
@@ -261,7 +268,10 @@ def scan(root, pubkey, limit=20):
                 receipt = read_json(receipts / filename, 150000)
                 artifact = verify_artifact(area, receipt)
                 suite = stage / "real-qc1000-executions" / filename[:-5] / artifact / "suite.json"
-                require(not suite.is_symlink(), "QC_SUITE_SYMLINK")
+                require(not any(p.is_symlink() for p in
+                                (suite, suite.parent, suite.parent.parent,
+                                 suite.parent.parent.parent)),
+                        "QC_SUITE_SYMLINK")
                 require(suite.is_file(), "NO_REAL1000_EXECUTION_SUITE")
                 details = verify_real_suite(suite, artifact, Path(pubkey))
                 verified_cases += details["verified_distinct_scenarios"]
@@ -282,6 +292,8 @@ def scan(root, pubkey, limit=20):
         result = {
             "schema": SCHEMA, "updated_utc": datetime.now(timezone.utc).isoformat(),
             "scanner_health": "RUNNING", "indexed_candidates": len(names),
+            "trusted_execution_runner_enrolled": Path(pubkey).is_file()
+                and not Path(pubkey).is_symlink(),
             "inspected_this_tick": len(chosen),
             "next_cursor": (start + len(chosen)) % len(names) if names else 0,
             "actual_execution_scenarios_evidence_verified_this_tick": verified_cases,
