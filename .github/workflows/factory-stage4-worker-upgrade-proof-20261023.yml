@@ -1,0 +1,84 @@
+name: VPS Factory Stage4 Worker Upgrade Proof
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-stage4-worker-upgrade-proof-20261023.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify faster live loop and persisted task consumption read only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-worker-proof"
+          install -d -m 700 "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 90s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/factory-runtime/django-app"
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+          "$HOME/factory-runtime/.venv/bin/python" -B - <<'PY'
+          import collections,datetime,hashlib,json,os,re,subprocess
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.apps import apps
+          from django.utils import timezone
+          ops=Path.home()/"factory-runtime/operations"
+          loop=ops/"vps-only-loop.sh"
+          pidfile=ops/"vps-only-loop.pid"
+          if not loop.is_file() or loop.is_symlink() or not pidfile.is_file():
+              raise SystemExit("WORKER_PROOF_UNSAFE_PATH")
+          pid=int(pidfile.read_text().strip())
+          proc=Path("/proc")/str(pid)
+          args=(proc/"cmdline").read_bytes().decode("utf8","replace").replace("\x00"," ") if proc.is_dir() else ""
+          if "vps-only-loop.sh" not in args:raise SystemExit("NATIVE_WORKER_NOT_ALIVE")
+          fd=proc/"fd/9"
+          try: inherited_lock=os.readlink(fd)==str(ops/"vps-only-launch-v2.lock")
+          except OSError: inherited_lock=False
+          source=loop.read_text()
+          tick=[l for l in source.splitlines() if "factory_staging_tick" in l]
+          if len(tick)!=1:raise SystemExit("WORKER_PROOF_NATIVE_TICK_MISSING")
+          def arg(pattern,line):
+              v=re.search(pattern,line)
+              return int(v.group(1)) if v else None
+          Task=apps.get_model("core","AgentTask")
+          now=timezone.now()
+          queue=collections.Counter(Task.objects.filter(status__in=("queued","running","blocked")).values_list("status","action_type"))
+          recent={}
+          for m in (10,30):
+              recent[str(m)+"m"]=dict(collections.Counter(Task.objects.filter(action_type="product_validation",updated_at__gte=now-datetime.timedelta(minutes=m)).values_list("status",flat=True)))
+          data={
+              "schema":"saeit.factory.stage4-worker-upgrade-proof.v1","utc":now.isoformat(),"read_only":True,
+              "worker_live":True,"launch_lock_inherited":inherited_lock,
+              "script_sha256":hashlib.sha256(loop.read_bytes()).hexdigest(),
+              "sleep_seconds":arg(r"(?m)^\s*sleep\s+(\d+)\s*$",source),
+              "max_runs":arg(r"--max-runs\s+(\d+)",tick[0]),
+              "max_steps":arg(r"--max-steps\s+(\d+)",tick[0]),
+              "queued_running_blocked":{a+":"+b:c for (a,b),c in queue.items()},
+              "validation_updated_windows":recent,
+              "policy_modified":False,"commercial_release_modified":False}
+          print("STAGE4_WORKER_UPGRADE_PROOF="+json.dumps(data,sort_keys=True))
+          if data["sleep_seconds"]!=20 or inherited_lock:
+              raise SystemExit("WORKER_THROUGHPUT_OR_LOCK_NOT_APPLIED")
+          PY
+          REMOTE
+      - name: Destroy temporary key
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/factory-worker-proof"
+          if test -d "$d"; then rm -f -- "$d/key" "$d/known"; rmdir "$d"; fi
