@@ -88,7 +88,6 @@ def verify_artifact(area, receipt):
     require(sha(raw) == digest, "ARTIFACT_HASH_MISMATCH")
     try:
         with zipfile.ZipFile(path, "r") as archive:
-            require(archive.testzip() is None, "ARTIFACT_ZIP_CRC_INVALID")
             members = archive.infolist()
             require(0 < len(members) <= 256, "ARTIFACT_ZIP_MEMBER_COUNT")
             require(sum(m.file_size for m in members) <= 32_000_000,
@@ -102,6 +101,7 @@ def verify_artifact(area, receipt):
                 mode = (member.external_attr >> 16) & 0o170000
                 require(mode in (0, 0o100000, 0o040000),
                         "ARTIFACT_ZIP_SYMLINK_OR_DEVICE")
+            require(archive.testzip() is None, "ARTIFACT_ZIP_CRC_INVALID")
     except (OSError, zipfile.BadZipFile, zipfile.LargeZipFile) as exc:
         raise QCFault("ARTIFACT_ZIP_UNREADABLE") from exc
     return digest
