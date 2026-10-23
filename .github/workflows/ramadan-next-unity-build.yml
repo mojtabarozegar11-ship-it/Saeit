@@ -1,0 +1,64 @@
+name: Ramadan War Next Unity build gate
+on:
+  pull_request:
+    paths:
+      - 'games/ramadan-war-next/**'
+      - '.github/workflows/ramadan-next-unity-build.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ramadan-unity-build-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  license-preflight:
+    name: Check Unity license prerequisites
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+      UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+      UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+      UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+    steps:
+      - name: Confirm supported non-empty license secrets without leaking them
+        run: |
+          if [ -z "$UNITY_EMAIL" ] || [ -z "$UNITY_PASSWORD" ]; then
+            echo "::error title=Unity activation blocker::UNITY_EMAIL or UNITY_PASSWORD secret is not configured."
+            exit 1
+          fi
+          if [ -z "$UNITY_LICENSE" ] && [ -z "$UNITY_SERIAL" ]; then
+            echo "::error title=Unity activation blocker::Neither UNITY_LICENSE nor UNITY_SERIAL exists. Activate Unity through an authorized process first."
+            exit 1
+          fi
+          echo "UNITY_ACTIVATION_PREREQUISITES_PRESENT=PASS"
+  webgl-build:
+    name: Unity 6 WebGL2 compiler + player build
+    needs: license-preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+      UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+      UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+      UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate isolated Unity project contract
+        run: python3 games/ramadan-war-next/tools/check_contract.py
+      - name: Compile and build actual Unity WebGL player
+        uses: game-ci/unity-builder@v4
+        with:
+          projectPath: games/ramadan-war-next
+          unityVersion: 6000.0.35f1
+          targetPlatform: WebGL
+          buildMethod: RamadanWar.Next.Editor.RWBuild.BuildWeb
+          allowDirtyBuild: true
+      - name: Upload playable WebGL build for staged GPU QA only
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ramadan-war-next-webgl-unreviewed
+          path: games/ramadan-war-next/Builds/Web/
+          if-no-files-found: error
+          retention-days: 7
