@@ -129,6 +129,9 @@ jobs:
           grep -Fq 'https://zomorodmelal.ir/authors/mojtaba-rozegar/' "$RUNNER_TEMP/author-public.html"
           image_code="$(curl -sS --max-time 18 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/static/site/zomorod-about/ceo-mojtaba-rozegar.webp")"
           test "$image_code" = 200
+          sitemap_code="$(curl -sS --max-time 20 -o "$RUNNER_TEMP/author-sitemap.xml" -w '%{http_code}' "https://zomorodmelal.ir/sitemap.xml")"
+          test "$sitemap_code" = 200
+          grep -Fq 'https://zomorodmelal.ir/authors/mojtaba-rozegar/' "$RUNNER_TEMP/author-sitemap.xml"
           for path in / /about/ /en/authors/mojtaba-rozegar/; do
             status="$(curl -sSL --max-time 18 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path")"
             test "$status" = 200
