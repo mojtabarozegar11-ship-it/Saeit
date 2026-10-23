@@ -54,7 +54,12 @@ if test -f "$target"; then
     chmod 600 "$backup"
   fi
 fi
-install -m 700 -- "$staged" "$target"
+# Replace the scheduler source atomically: an existing cron must never read a
+# partially-copied Python module. The previous SHA-bound copy stays recoverable.
+pending="$(mktemp "$ops/.stage4-dispatch-install.XXXXXX")"
+trap 'rm -f -- "$pending"' EXIT
+install -m 700 -- "$staged" "$pending"
+mv -f -- "$pending" "$target"
 test "$(sha256sum "$target" | cut -d' ' -f1)" = "$expected_sha"
 
 cd "$app"
@@ -72,7 +77,17 @@ if not line.startswith("STAGE4_DUE_DISPATCH="):
 obj=json.loads(line.partition("=")[2])
 c=obj["counts"]
 if c.get("due_seen",0)>0 and c.get("queued",0)+c.get("approval_gated",0)==0:
-    raise SystemExit("STAGE4_PILOT_NO_TASKS_QUEUED")
+    # A healthy scheduler can discover only already-running, policy-gated, or
+    # no-longer-eligible work. This must be visible, not treated as success in
+    # production throughput and not misreported as a deployment fault.
+    recognized=("already_in_flight_or_gated", "already_validated_this_window",
+                "no_active_run", "changed_or_not_due")
+    accounted=sum(c.get(key,0) for key in recognized)
+    accounted+=sum(value for key,value in c.items() if key.startswith("master_decision_"))
+    faults=sum(value for key,value in c.items() if key.startswith("planning_error_"))
+    if faults or accounted < c["due_seen"]:
+        raise SystemExit("STAGE4_PILOT_UNEXPLAINED_DISPATCH_STALL")
+    print("STAGE4_PILOT_DUE_GATED_OR_INFLIGHT="+str(accounted))
 print("STAGE4_PILOT_TASKS="+str(c.get("queued",0)))
 print("STAGE4_PILOT_GATED="+str(c.get("approval_gated",0)))
 PY
