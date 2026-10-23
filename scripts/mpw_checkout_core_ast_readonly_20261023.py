@@ -48,12 +48,12 @@ def describe(relative,selected):
 result={"read_only":True,"financial_writes":0,"core_checkout":describe(
     "core/cryptopay_checkout.py",("checkout","crypto_order","private_download","product_delivery_ready")),
     "commerce_receiver":describe("mpw_commerce/invoicing.py",("_configured_receiver","issue_invoice","create_invoice")),
-    "wallet_quotes":describe("mpw_commerce/buyer_wallets.py",("fetch_server_rate",)),
-    "checkout_page":describe("mpw_commerce/product_checkout_page.py",("product_checkout_page",)),
+    "wallet_quotes":describe("mpw_commerce/buyer_wallets.py",("fetch_server_rate","issue_buyer_wallet_challenge")),
+    "checkout_page":describe("mpw_commerce/product_checkout_page.py",("product_checkout_page","approved_for_checkout")),
     "commerce_invoicing":describe("mpw_commerce/invoicing.py",("reserve_order_invoice",)),
-    "buyer_orders":describe("mpw_commerce/buyer_orders.py",("create_order","create_buyer_order","start_checkout","_eligible")),
+    "buyer_orders":describe("mpw_commerce/buyer_orders.py",("create_digital_order","_eligible")),
     "wallet_buy":describe("mpw_commerce/buyer_wallets.py",("invoice_from_verified_buyer","verify_signed_buyer_message")),
-    "commerce_settlement":describe("mpw_commerce/settlement.py",("settle","reconcile","order_snapshot")),
+    "commerce_settlement":describe("mpw_commerce/settlement.py",("settle_order_invoice","_verify_evidence")),
 
 }
 print("MPW_DEPLOYED_CHECKOUT_REDACTED_AST="+json.dumps(result,sort_keys=True))
