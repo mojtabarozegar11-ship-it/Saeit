@@ -33,3 +33,6 @@ for i in sorted(expanded):
     print("SHELL_SOURCE",json.dumps({"line":i+1,"text":safe(lines[i])},ensure_ascii=False))
 for needle in ("First Realm","Digital Products","__mpw_template_route","<main","</main>","arcade-lab"):
     print("SHELL_MARKER",json.dumps({"marker":needle,"count":s.lower().count(needle.lower()),"positions":[m.start() for m in list(re.finditer(re.escape(needle),s,re.I))[:8]]}))
+
+for i in range(397,min(446,len(lines))):
+    print("SHELL_TAIL",json.dumps({"line":i+1,"text":safe(lines[i])},ensure_ascii=False))
