@@ -42,7 +42,7 @@ jobs:
             if not path.is_file():
               errors.append(f"Missing prior-record file: {filename}")
               continue
-            for email in re.findall(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}', path.read_text(encoding="utf-8"), re.I):
+            for email in re.findall(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}', path.read_text(encoding="utf-8"), re.I):
               old_emails.add(email.casefold())
           rows = []
           if not last.is_file():
@@ -64,7 +64,7 @@ jobs:
             company = " ".join(row["company"].split()).casefold()
             source = row["public_source_url"].strip()
             basis = row["contact_basis"].strip()
-            if not re.fullmatch(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}', address, re.I):
+            if not re.fullmatch(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}', address, re.I):
               errors.append(f"Invalid email, row {idx}")
             if address in emails or address in old_emails:
               errors.append(f"Duplicate or prior-contact email, row {idx}")
@@ -90,11 +90,11 @@ jobs:
           summary = os.environ.get("GITHUB_STEP_SUMMARY")
           if summary:
             with open(summary,"a",encoding="utf-8") as fp:
-              fp.write("### Read-only supplier contact gate\\n")
-              fp.write(f"Previously recorded Exim acceptance: {expected_sent}; target: {target}; needed: {needed}; candidate rows: {len(rows)}.\\n")
-              fp.write("**No email was or can be sent by this workflow.**\\n")
+              fp.write("### Read-only supplier contact gate\n")
+              fp.write(f"Previously recorded Exim acceptance: {expected_sent}; target: {target}; needed: {needed}; candidate rows: {len(rows)}.\n")
+              fp.write("**No email was or can be sent by this workflow.**\n")
               for reason in errors[:30]:
-                fp.write("- "+reason+"\\n")
+                fp.write("- "+reason+"\n")
           for reason in errors[:30]:
             print("BLOCKER="+reason)
           sys.exit(1 if errors else 0)
