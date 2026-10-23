@@ -22,8 +22,8 @@ jobs:
       - name: Install isolated Chromium QA dependencies
         run: |
           set -euo pipefail
-          npm install --prefix /tmp/air-qa --no-audit --no-fund playwright@1.56.0
-          /tmp/air-qa/node_modules/.bin/playwright install --with-deps chromium
+          npm install --prefix /tmp/air-qa --no-audit --no-fund playwright-core@1.56.0
+          google-chrome --version
       - name: Start read-only local web origin
         run: |
           set -euo pipefail
@@ -37,7 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           node tests/game/air-supremacy-campaign.cjs
-          node tests/game/air-supremacy-visual.cjs
+          timeout 85s node tests/game/air-supremacy-visual.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
