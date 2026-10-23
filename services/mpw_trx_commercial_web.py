@@ -98,10 +98,14 @@ def _select_order(product_id: int, buyer_id: int, connection):
 
 
 def _start_order(request, product_id):
+    from django.conf import settings
     from django.http import Http404,HttpResponseRedirect
     db=_ensure_live(request)
     if type(product_id) is not int or product_id<=0:
         raise Http404
+    approved_ids=getattr(settings,"MPW_TRX_PUBLIC_PRODUCT_IDS",None)
+    if approved_ids is not None and product_id not in approved_ids:
+        raise Http404("Product is not available for public TRX purchase")
     try:
         invoice_id=_select_order(product_id,request.user.pk,db)
     except (PaymentHold,ValueError) as exc:
