@@ -131,6 +131,12 @@ jobs:
           d="$RUNNER_TEMP/mpw-brand-ssh"
           timeout 50s ssh -T -F "$d/config" saeit-cpanel \
             'for p in /home/zomorod2/mojplaywin.com/static/site/mojplaywin-header-emblem.jpg /home/zomorod2/mojplaywin.com/static/site/mojplaywin-coin-logo.420e0d1f954b.png /home/zomorod2/Saeit-staging/core/static/site/mojplaywin-header-emblem.jpg /home/zomorod2/mojplaywin.com/.htaccess; do if test -f "$p"; then stat -c "ICON_SOURCE_PRESENT %n %s" "$p"; else echo "ICON_SOURCE_MISSING $p"; fi; done'
+      - name: Find active MojPlayWin public icon files read-only
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-brand-ssh"
+          timeout 75s ssh -T -F "$d/config" saeit-cpanel \
+            'timeout 55s find /home/zomorod2 -xdev -type f \( -name "mojplaywin-coin-logo.420e0d1f954b.png" -o -name "mojplaywin-header-emblem.jpg" -o -name "favicon.ico" \) -print 2>/dev/null | head -40'
       - name: Transfer only brand bundle to site owner account
         id: stage
         run: |
