@@ -48,6 +48,7 @@ for rel in ["core/templates/brands/mojplaywin/product.html"]:
  path=root/rel
  if path.is_file():
   print("PRODUCT_TEMPLATE="+rel)
+  print("PRODUCT_TEMPLATE_FULL_SOURCE="+path.read_text()[:30000])
   for line in path.read_text()[:30000].splitlines():
    if any(token in line.lower() for token in ("description","og:","json-ld","product_schema_json","product.title","product.metadata")): print("PRODUCT_TEMPLATE_LINE="+line[:2000])
 match=resolve("/sitemap.xml")
