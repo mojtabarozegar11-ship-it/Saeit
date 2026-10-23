@@ -27,7 +27,7 @@ import urllib.parse
 import urllib.request
 
 SCHEMA="saeit.factory.stage2-literature-scout.v1"
-SCOUT_ALGO_VERSION="v6-evidence-first-fullword-query"
+SCOUT_ALGO_VERSION="v7-multiphase-topic-specific-query"
 EVIDENCE_SCHEMA="saeit.factory.stage2-source-evidence.v1"
 TOPIC_ID=re.compile(r"AGRI-[0-9]{3}\Z")
 WORD_RE=re.compile(r"[a-z]{3,}")
@@ -146,6 +146,14 @@ def query_variants(title):
         equivalents.extend(scientific.get(term,(term,)))
     broadened=" OR ".join(dict.fromkeys(equivalents[:4]))
     variants=[title,base,broadened,topical[0]]
+    # Extra whole-word, evidence-gated searches for topics that do not match
+    # a single vocabulary formulation. No lowered source-quality threshold.
+    if len(topical)>=3:
+        variants.append(" ".join(topical[1:3]))
+    if len(equivalents)>=2:
+        variants.append(" ".join(dict.fromkeys(equivalents[:2])))
+    if len(topical)>=2:
+        variants.append(" OR ".join(topical[:2]))
     return list(dict.fromkeys(v for v in variants if v))
 
 
@@ -739,7 +747,8 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
             ("v2-relevance-provenance",
              "v3-four-source-safety-desk-research",
              "v4-normalized-scientific-synonyms",
-             "v5-publisher-diversity-gap-diagnostics",SCOUT_ALGO_VERSION)
+             "v5-publisher-diversity-gap-diagnostics",
+              "v6-evidence-first-fullword-query",SCOUT_ALGO_VERSION)
             and isinstance(cached,list) and 4<=len(cached)<=20
             and previous.get("candidate_sha256")==sha(cached)):
         valid=[]
@@ -961,6 +970,10 @@ def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
             "blocked_until_utc":blocked,"openalex_credential_mode":openalex_mode,
             "checked_utc":utc()})
         report["openalex_key_configured"]=openalex_mode=="keyed"
+        # Count actual independently indexed dossiers (not workpapers or APIs).
+        report["total_research_source_evidence"] = sum(1 for rank in range(1,201)
+            if (stage/"source-evidence"/("AGRI-%03d"%rank+"--r001.json")).is_file())
+        report["remaining_priority_orders"] = 200 - report["total_research_source_evidence"]
         report["provider_cooldown_active"]=any(
             dt.datetime.fromisoformat(v)>dt.datetime.now(dt.timezone.utc)
             for v in blocked.values())
