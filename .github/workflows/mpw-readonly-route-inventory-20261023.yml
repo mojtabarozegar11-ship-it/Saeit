@@ -47,7 +47,7 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
           mv "$d/host.candidate" "$d/host.known"
-          ssh -T -F "$d/config" saeit-cpanel 'python3 -c '\''from pathlib import Path;import json,hashlib;root=Path("/home/zomorod2/mojplaywin.com");print("ROOT",root.is_dir(),root.is_symlink());names=(".htaccess","passenger_wsgi.py","games","games/index.html","products","products/index.html","mpw-editorial/index.html");[(lambda p:print("ROUTE_FILE",json.dumps({"name":str(p.relative_to(root)),"exists":p.exists(),"symlink":p.is_symlink(),"kind":"dir" if p.is_dir() else "file" if p.is_file() else "absent","sha256":hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() and not p.is_symlink() and p.stat().st_size < 500000 else None}))))(root/n) for n in names]'\'''
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -c '\''from pathlib import Path; import os; root=Path("/home/zomorod2/mojplaywin.com"); print("ROOT",root.is_dir(),root.is_symlink()); names=(".htaccess","passenger_wsgi.py","games","games/index.html","products","products/index.html","mpw-editorial/index.html"); [print("ROUTE_FILE",n,(root/n).exists(),(root/n).is_symlink(),(root/n).is_dir(), (root/n).stat().st_uid if (root/n).exists() else -1) for n in names]'\'''
           ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' | python3 -c 'import json,sys; d=json.load(sys.stdin); stack=[d];found=0
           while stack:
               x=stack.pop()
