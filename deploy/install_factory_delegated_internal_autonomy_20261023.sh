@@ -15,7 +15,7 @@ marker=SAEIT_FACTORY_OWNER_DELEGATE_COORDINATION_V1
 test -x "$python_bin"
 test -d "$ops" && test ! -L "$ops"
 test -d "$root/production-instructions" && test ! -L "$root/production-instructions"
-for dependency in stage34-autonomous-handoff.py stage5-evidence-workbook.py stage6-preflight-rework.py stage5-substantive-rework.py; do
+for dependency in stage1-handoff.py stage2-literature-scout.py stage2-research.py stage34-autonomous-handoff.py stage5-evidence-workbook.py stage6-preflight-rework.py stage5-substantive-rework.py; do
     test -f "$ops/$dependency" && test ! -L "$ops/$dependency"
 done
 command -v flock >/dev/null
@@ -38,8 +38,8 @@ timeout 660s "$python_bin" -B "$worker" \
     --factory-private "$root" \
     --operations "$ops" \
     --python "$python_bin" \
-    --batch 200 --worker-timeout 150
-cron='*/5 * * * * /usr/bin/flock -n /home/githubops/factory-runtime/operations/production-instructions/.delegated-internal-autonomy-minute.lock /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/delegated-internal-autonomy.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --operations /home/githubops/factory-runtime/operations/production-instructions --python /home/githubops/factory-runtime/.venv/bin/python --batch 50 --worker-timeout 150 >> /home/githubops/factory-runtime/operations/production-instructions/delegated-internal-autonomy.log 2>&1 # SAEIT_FACTORY_OWNER_DELEGATE_COORDINATION_V1'
+    --batch 200 --worker-timeout 75
+cron='*/5 * * * * /usr/bin/flock -n /home/githubops/factory-runtime/operations/production-instructions/.delegated-internal-autonomy-minute.lock /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/delegated-internal-autonomy.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --operations /home/githubops/factory-runtime/operations/production-instructions --python /home/githubops/factory-runtime/.venv/bin/python --batch 50 --worker-timeout 75 >> /home/githubops/factory-runtime/operations/production-instructions/delegated-internal-autonomy.log 2>&1 # SAEIT_FACTORY_OWNER_DELEGATE_COORDINATION_V1'
 if grep -Fq "$marker" "$backup/crontab.before"; then
     test "$(grep -Fc "$marker" "$backup/crontab.before")" -eq 1
     if grep -Fxq "$cron" "$backup/crontab.before"; then

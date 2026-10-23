@@ -20,10 +20,16 @@ parser.add_argument('--stage34-worker')
 parser.add_argument('--stage5-worker')
 parser.add_argument('--stage6-worker')
 parser.add_argument('--batch')
+parser.add_argument('--stage2-program')
+parser.add_argument('--workers')
+parser.add_argument('--query-burst')
 args=parser.parse_args()
 directory=Path(args.factory_private)/'production-instructions'
 name=Path(__file__).name
 mapping={
+    'stage1-handoff.py': ('stage-01/receipts',),
+    'stage2-literature-scout.py': ('stage-02/source-evidence',),
+    'stage2-research.py': ('stage-02/receipts',),
     'stage34-autonomous-handoff.py': ('stage-03/receipts','stage-04/receipts'),
     'stage5-evidence-workbook.py': ('stage-05/completed-drafts',),
     'stage6-preflight-rework.py': ('stage-06/technical-preflight',),
@@ -32,7 +38,7 @@ mapping={
 for target in mapping[name]:
     folder=directory/target
     folder.mkdir(parents=True,exist_ok=True)
-    (folder/'WO-001.json').write_text('{"verified":true}',encoding='utf-8')
+    (folder/('AGRI-001--r001.json' if 'source-evidence' in target else 'WO-001.json')).write_text('{"verified":true}',encoding='utf-8')
 print('VERIFIED_PRIVATE_MOCK_STAGE=' + name)
 """
 
@@ -46,18 +52,19 @@ class OwnerDelegatedAutonomy(unittest.TestCase):
         (self.private / "production-instructions").mkdir(parents=True)
         self.ops = self.base / "operations"
         self.ops.mkdir()
-        for _, name in agent.STEPS:
+        for _, name, _ in agent.STEPS:
             (self.ops / name).write_text(GOOD_WORKER, encoding="utf-8")
 
     def cycle(self):
         return agent.execute(self.private, self.ops, sys.executable, batch=2, timeout=10)
 
-    def test_runs_four_real_subprocess_steps_without_owner_prompt(self):
+    def test_runs_seven_real_subprocess_steps_without_owner_prompt(self):
         out = self.cycle()
         self.assertEqual("advanced", out["status"])
-        self.assertEqual(4, len(out["workers"]))
+        self.assertEqual(7, len(out["workers"]))
         self.assertTrue(all(x["passed"] for x in out["workers"]))
-        self.assertEqual(5, sum(out["new_private_receipts"].values()))
+        self.assertEqual(8, sum(out["new_private_receipts"].values()))
+        self.assertEqual(7, out["worker_successes_this_cycle"])
         self.assertFalse(
             out["operating_authority"]["repeat_owner_confirmation_required_for_internal_work"])
         self.assertFalse(out["independent_specialist_review_auto_certified"])
@@ -88,8 +95,18 @@ class OwnerDelegatedAutonomy(unittest.TestCase):
         worker = self.ops / "stage5-evidence-workbook.py"
         worker.unlink()
         worker.symlink_to(self.ops / "stage34-autonomous-handoff.py")
-        with self.assertRaisesRegex(RuntimeError, "AUTONOMY_UNSAFE_EXECUTABLE"):
-            self.cycle()
+        out = self.cycle()
+        self.assertEqual("degraded", out["status"])
+        self.assertEqual(["stage5", "stage6", "stage5_rework"], out["failed_workers"])
+        self.assertTrue(next(w for w in out["workers"] if w["stage"] == "stage1")["passed"])
+
+    def test_missing_stage1_does_not_stop_other_stage_workers(self):
+        (self.ops / "stage1-handoff.py").unlink()
+        out = self.cycle()
+        self.assertEqual(["stage1"], out["failed_workers"])
+        self.assertEqual(6, out["worker_successes_this_cycle"])
+        self.assertGreater(sum(out["new_private_receipts"].values()), 0)
+        self.assertTrue(out["no_global_shutdown_on_single_worker_failure"])
 
     def test_resource_limits(self):
         with self.assertRaisesRegex(RuntimeError, "AUTONOMY_BOUNDED_RESOURCES_REQUIRED"):
