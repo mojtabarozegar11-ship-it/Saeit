@@ -86,7 +86,7 @@ jobs:
         run: |
           set -euo pipefail
           tar -czf "$RUNNER_TEMP/tenlab-validated.tar.gz" -C "$RUNNER_TEMP/tenlab-dist" .
-          test "$(tar -tzf "$RUNNER_TEMP/tenlab-validated.tar.gz" | grep -Ec '/index.html$')" -eq 10
+          test "$(tar -tzf "$RUNNER_TEMP/tenlab-validated.tar.gz" | grep -Ec '/index.html$')" -eq 11
       - uses: actions/upload-artifact@v4
         with:
           name: mpw-tenlab-validated-payload
