@@ -171,6 +171,19 @@ class SignedApprovalTests(unittest.TestCase):
             self.assertEqual(len(v["valid_signed_roles"]),4)
             self.assertFalse(v["publication_executed"])
             self.assertFalse(v["payment_activated"])
+    def test_reused_private_key_cannot_impersonate_distinct_experts(self):
+        with tempfile.TemporaryDirectory() as d:
+            x=list(self.make(d))
+            x[5]["reviewers"]["trusted_owner"]["public_key_pem"]=x[5]["reviewers"]["trusted_domain_specialist"]["public_key_pem"]
+            payload=x[0]/"tampered-registry.bin";signature=x[0]/"tampered-registry.sig"
+            payload.write_bytes(mod.canonical({"schema":mod.KEY_SCHEMA,
+                                               "reviewers":x[5]["reviewers"]}))
+            subprocess.run(["openssl","pkeyutl","-sign","-rawin","-inkey",
+                            str(x[0]/"authorized-owner-root.pem"),"-in",str(payload),
+                            "-out",str(signature)],check=True,capture_output=True)
+            x[5]["root_signature_hex"]=signature.read_bytes().hex()
+            self.assertIn("TRUST_REGISTRY_INVALID",self.check(x)["blocking_reasons"])
+
     def test_no_registered_human_reviewer_cannot_self_approve(self):
         with tempfile.TemporaryDirectory() as d:
             x=list(self.make(d));x[5]={"schema":mod.KEY_SCHEMA,"reviewers":{}}
