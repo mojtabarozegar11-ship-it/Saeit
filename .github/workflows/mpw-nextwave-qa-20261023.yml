@@ -1,0 +1,53 @@
+name: MojPlayWin Nextwave new releases browser QA
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-nextwave-qa-20261023.yml"
+      - "mpw-editorial/nextwave/20261023/**"
+permissions:
+  contents: read
+jobs:
+  independent-browser-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate new release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path('mpw-editorial/nextwave/20261023')
+          release=json.loads((root/'release.json').read_text())
+          assert release['release_id']=='NEXTWAVE-20261023-01'
+          assert set(v['id'] for v in release['items'])=={'orbit-switch','frame-budget-lab'}
+          for path in ('index.html','orbit-switch/index.html','frame-budget-lab/index.html'):
+              data=(root/path).read_text()
+              assert '<!doctype html>' in data.lower()
+              assert len(data)>500
+          print('NEW_RELEASE_SOURCE_QA_PASS')
+          PY
+      - name: Validate JavaScript and interactions in headless Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v chromium)"
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory mpw-editorial/nextwave/20261023 >/dev/null 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in 1 2 3 4 5; do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:8765/index.html; then break; fi
+            sleep 1
+          done
+          for slug in orbit-switch frame-budget-lab; do
+            timeout 40s "$chrome" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=3500 --dump-dom "http://127.0.0.1:8765/$slug/index.html?selftest=1" > "$RUNNER_TEMP/$slug.html" 2>/dev/null
+            if test "$slug" = orbit-switch; then marker=ORBIT_SWITCH_FUNCTIONAL_TEST_PASS; else marker=FRAME_BUDGET_FUNCTIONAL_TEST_PASS; fi
+            grep -Fq "$marker" "$RUNNER_TEMP/$slug.html"
+            grep -Fq 'data-result="pass"' "$RUNNER_TEMP/$slug.html"
+            echo "ORIGINAL_APP_JS_CHROME_PASS $slug"
+          done
