@@ -1,0 +1,69 @@
+name: QC only - genuine 1000-scenario evidence verification and live health
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/factory_real_qc1000_live_monitor_20261023.py
+      - tests/test_factory_real_qc1000_live_monitor_20261023.py
+      - deploy/install_factory_real_qc1000_live_monitor_20261023.sh
+      - .github/workflows/factory-real-qc1000-live-monitor-20261023.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_real_qc1000_live_monitor_20261023.py
+      - tests/test_factory_real_qc1000_live_monitor_20261023.py
+      - deploy/install_factory_real_qc1000_live_monitor_20261023.sh
+      - .github/workflows/factory-real-qc1000-live-monitor-20261023.yml
+permissions: {contents: read}
+concurrency:
+  group: saeit-private-real-qc1000-only
+  cancel-in-progress: false
+jobs:
+  quality-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Require real 1000 distinct executed evidence receipts, no false approval
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_real_qc1000_live_monitor_20261023.py -v
+          python3 -B -m py_compile scripts/factory_real_qc1000_live_monitor_20261023.py
+          bash -n deploy/install_factory_real_qc1000_live_monitor_20261023.sh
+  private-vps-qc-health:
+    needs: quality-regression
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-real-qc1000-20261023]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Pinned SSH and scoped private QC1000 install with exact readback
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/private-qc1000"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          opts=(-T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2)
+          target="/home/githubops/factory-runtime/operations/.private-real-qc1000-$GITHUB_RUN_ID"
+          ssh "${opts[@]}" githubops@178.239.147.150 "set -eu; test \"\$(id -un)\" = githubops; umask 077; test ! -e '$target'; install -d -m 700 '$target/scripts' '$target/tests' '$target/deploy'"
+          for file in scripts/factory_real_qc1000_live_monitor_20261023.py tests/test_factory_real_qc1000_live_monitor_20261023.py deploy/install_factory_real_qc1000_live_monitor_20261023.sh; do
+            ssh "${opts[@]}" githubops@178.239.147.150 "umask 077; cat > '$target/$file'; chmod 600 '$target/$file'" < "$file"
+            expected="$(sha256sum "$file" | awk '{print $1}')"
+            ssh "${opts[@]}" githubops@178.239.147.150 "test \"\$(sha256sum '$target/$file' | awk '{print \$1}')\" = '$expected'"
+          done
+          ssh "${opts[@]}" githubops@178.239.147.150 "timeout 110s /home/githubops/factory-runtime/.venv/bin/python -B -m unittest discover -s '$target/tests' -p test_factory_real_qc1000_live_monitor_20261023.py -v"
+          ssh "${opts[@]}" githubops@178.239.147.150 "bash -n '$target/deploy/install_factory_real_qc1000_live_monitor_20261023.sh'"
+          ssh "${opts[@]}" githubops@178.239.147.150 "timeout 160s bash '$target/deploy/install_factory_real_qc1000_live_monitor_20261023.sh' '$target/scripts/factory_real_qc1000_live_monitor_20261023.py'"
+          ssh "${opts[@]}" githubops@178.239.147.150 "crontab -l | grep -F SAEIT_PRIVATE_REAL_QC1000_MONITOR_20261023"
