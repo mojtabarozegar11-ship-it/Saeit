@@ -193,6 +193,8 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
         self.assertIn(b"link.trustwallet.com/send?",response.content)
         self.assertIn("Content-Security-Policy",response)
         self.assertFalse(json.loads(_invoice_status(request,pk).content)["can_download"])
+        with self.assertRaises(Http404):
+            _download_paid(request,pk)
         # Read-only GET cannot settle, even if a trusted server event exists.
         with patch.object(settings,"MPW_WALLETLESS_TRX_TEST_STATUS_RECONCILER",
                           lambda i,b:reconcile_existing_test_intent_from_candidates(
@@ -205,8 +207,6 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
         self.assertEqual(ExistingLedgerEntry.objects.count(),1)
         with self.assertRaises(Http404):
             _show_invoice(stolen,pk)
-        with self.assertRaises(Http404):
-            _download_paid(request,pk)
         self.assertTrue(json.loads(_invoice_status(request,pk).content)["can_download"])
         download=_download_paid(request,pk)
         self.assertEqual(download.status_code,200)
