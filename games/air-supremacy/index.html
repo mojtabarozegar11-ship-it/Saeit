@@ -87,8 +87,8 @@
 const $=id=>document.getElementById(id),canvas=$('field');let gl;
 try{gl=canvas.getContext('webgl2',{alpha:false,antialias:true,powerPreference:'high-performance'})||canvas.getContext('webgl',{alpha:false,antialias:true,powerPreference:'high-performance'});}catch{}
 const fallback=!gl,ctx2=fallback?canvas.getContext('2d'):null;if(fallback)$('support').textContent='Your browser is using a reduced-detail canvas fallback because WebGL is unavailable.';
-const VS=\`attribute vec3 aPos;attribute vec3 aNormal;attribute vec3 aColor;uniform mat4 uModel,uVP;varying vec3 vN,vColor,vWorld;void main(){vec4 w=uModel*vec4(aPos,1.);vWorld=w.xyz;vN=normalize(mat3(uModel)*aNormal);vColor=aColor;gl_Position=uVP*w;}\`;
-const FS=\`precision highp float;varying vec3 vN,vColor,vWorld;uniform float uTime,uWater;uniform vec3 uCamera;
+const VS=`attribute vec3 aPos;attribute vec3 aNormal;attribute vec3 aColor;uniform mat4 uModel,uVP;varying vec3 vN,vColor,vWorld;void main(){vec4 w=uModel*vec4(aPos,1.);vWorld=w.xyz;vN=normalize(mat3(uModel)*aNormal);vColor=aColor;gl_Position=uVP*w;}`;
+const FS=`precision highp float;varying vec3 vN,vColor,vWorld;uniform float uTime,uWater;uniform vec3 uCamera;
 float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+1.),f.x),f.y);}
 void main(){
@@ -112,9 +112,9 @@ void main(){
  c=mix(c,vec3(.35,.49,.57),fog);
  c=c/(c+vec3(.30));
  c=pow(c,vec3(.90));
- gl_FragColor=vec4(c,1.);}\`;
-const SKY_VS=\`attribute vec2 aXY;varying vec2 vUV;void main(){vUV=aXY*.5+.5;gl_Position=vec4(aXY,0.,1.);}\`;
-const SKY_FS=\`precision highp float;varying vec2 vUV;uniform float uTime;uniform float uRoll;uniform vec2 uResolution;
+ gl_FragColor=vec4(c,1.);}`;
+const SKY_VS=`attribute vec2 aXY;varying vec2 vUV;void main(){vUV=aXY*.5+.5;gl_Position=vec4(aXY,0.,1.);}`;
+const SKY_FS=`precision highp float;varying vec2 vUV;uniform float uTime;uniform float uRoll;uniform vec2 uResolution;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+1.),f.x),f.y);}
 float fbm(vec2 p){float x=0.,a=.52;for(int i=0;i<5;i++){x+=a*noise(p);p=p*2.03+14.7;a*=.5;}return x;}
@@ -142,7 +142,7 @@ void main(){
  col*=vign;
  col=col/(col+vec3(.26));
  gl_FragColor=vec4(pow(col,vec3(.94)),1.);
-}\`;
+}`;
 const sh=(type,source)=>{let s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s};
 let prog=null,at={},un={},skyProgram=null,skyXY=null,skyTime=null,skyRoll=null,skyRes=null,skyBuf=null;
 if(gl){
