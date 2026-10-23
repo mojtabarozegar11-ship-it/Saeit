@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Publish a *new* standalone Air Supremacy game without touching Crown Defender.
 
-Only creates /home/zomorod2/mojplaywin.com/air-supremacy/index.html.
+Only creates /home/zomorod2/mojplaywin.com/design-preview-20261017/air-supremacy/index.html.
 No existing path may be replaced, including parent .htaccess, games index,
 Django, MariaDB, business pages or other game files.
 Private staged source must match the SHA-256 of the approved repo bytes.
@@ -17,7 +17,8 @@ import sys
 
 HOME=Path('/home/zomorod2')
 ROOT=HOME/'mojplaywin.com'
-NEW=ROOT/'air-supremacy'
+STATIC=ROOT/'design-preview-20261017'
+NEW=STATIC/'air-supremacy'
 HTML=NEW/'index.html'
 MARKERS=(b'Air Supremacy',b'<canvas',b'<script',b'requestAnimationFrame',
          b'<!doctype html>',b'</body></html>')
@@ -36,7 +37,7 @@ def inspect(run, sha):
         abort('invalid run')
     if not re.fullmatch(r'[0-9a-f]{64}',sha):
         abort('invalid expected digest')
-    for d in (HOME,ROOT):
+    for d in (HOME,ROOT,STATIC):
         if not d.is_dir() or d.is_symlink():
             abort('unsafe parent '+str(d))
     if ROOT.stat().st_uid != os.getuid():
