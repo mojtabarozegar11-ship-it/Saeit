@@ -37,3 +37,16 @@ for route in ["/store/product/72/", "/store/product/225/", "/store/product/879/"
  print("LIVE_ROUTE="+json.dumps({"path":route,"view_module":match.func.__module__,"view_name":match.func.__name__,"source_file":inspect.getsourcefile(match.func)},sort_keys=True))
  if route=="/store/product/72/": print("BRANDED_PRODUCT_VIEW_SOURCE="+inspect.getsource(match.func))
 print("OUTBOUND_CONFIG="+json.dumps({"smtp_host_configured":bool(getattr(settings,"EMAIL_HOST","")),"smtp_user_configured":bool(getattr(settings,"EMAIL_HOST_USER","")),"from_address_configured":bool(getattr(settings,"DEFAULT_FROM_EMAIL","")),"openai_api_key_configured":bool(os.getenv("OPENAI_API_KEY")),"chat_model_configured":bool(os.getenv("OPENAI_CHAT_MODEL"))},sort_keys=True))
+
+for pk in (72,225,879):
+ p=Product.objects.get(pk=pk); meta=p.metadata if isinstance(p.metadata,dict) else {}
+ safe={k:meta[k] for k in ("summary","description","seo_description","seo_keywords","keywords","image","seo_image","language","file_type","license","contents","features") if k in meta and isinstance(meta[k],(str,list,dict))}
+ for k,v in list(safe.items()):
+  if isinstance(v,str): safe[k]=v[:1600]
+ print("PUBLIC_SEO_METADATA="+json.dumps({"id":pk,"fields":safe},ensure_ascii=False,sort_keys=True))
+for rel in ["core/templates/brands/mojplaywin/product.html"]:
+ path=root/rel
+ if path.is_file():
+  print("PRODUCT_TEMPLATE="+rel)
+  for line in path.read_text()[:30000].splitlines():
+   if any(token in line.lower() for token in ("description","og:","json-ld","product_schema_json","product.title","product.metadata")): print("PRODUCT_TEMPLATE_LINE="+line[:2000])
