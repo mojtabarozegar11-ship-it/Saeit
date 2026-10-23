@@ -1,0 +1,105 @@
+{
+  "category": "Input",
+  "articles": [
+    [
+      "pointer-capture-board",
+      "Keep touch drags working beyond a puzzle board edge",
+      "Input",
+      "A selected tile may stop following a finger once the pointer crosses the element boundary, causing inconsistent drops and frustration.",
+      "Capture the pointer on pointerdown and track its pointerId, including pointerup and pointercancel. Release capture explicitly and clear dragging state on visibility loss.",
+      "Begin a move inside cell B3, drag outside the board, then return and release. The interface should still know which piece is active.",
+      "Touch scrolling or an incoming call can generate pointercancel. Test cancellation without ghost dragging and ensure ordinary page scroll remains available.",
+      "PTR,WCAG"
+    ],
+    [
+      "keyboard-parity-puzzles",
+      "Make every essential puzzle action reachable by keyboard",
+      "Input",
+      "A swipe-only mechanic excludes players who cannot or do not use touch gestures. Keyboard interaction needs a visible, systematic alternative.",
+      "Use focusable tile buttons, arrow key movement where appropriate, and Enter or Space to rotate. Keep reset, hint and next controls in natural Tab order.",
+      "Complete one entire mirror puzzle without a pointing device; track whether the active tile retains focus after rotation and after a win.",
+      "A document-level handler that intercepts every arrow and Tab key can break navigation. Scope controls to the game region and test screen readers.",
+      "WCAG,PTR"
+    ],
+    [
+      "two-tap-drag-fallback",
+      "Offer a two-tap alternative to complex dragging",
+      "Input",
+      "Dragging between distant grid cells requires motor precision and may conflict with touch scrolling. A simple select-then-target mode can make the same game playable.",
+      "Allow a tap to select a source piece and a second tap to select its destination. Show a clear selection outline and permit Escape or Cancel.",
+      "Moving a tile from A2 to D2 should obey exactly the same collision and movement rules whether performed by drag or two-tap selection.",
+      "If tapping already inspects a tile, explain when the interface is in move mode. Avoid overlapping gestures with ambiguous outcomes.",
+      "WCAG,PTR"
+    ],
+    [
+      "focus-return-menus",
+      "Return keyboard focus predictably after closing a menu",
+      "Input",
+      "After a level-complete overlay closes, the previous focused tile may no longer exist, leaving keyboard users stranded.",
+      "Focus a relevant heading or primary button when the dialog opens, and restore focus to the invoking control when it closes. Keep focus within a truly modal dialog.",
+      "Press Enter to finish a stage, use Next, then reach the first interactive tile without touching the mouse or cycling through irrelevant page links.",
+      "Hidden overlays should not retain focusable elements. Test with a screen reader, keyboard-only input and repeated open-close cycles.",
+      "WCAG,LIVE"
+    ],
+    [
+      "touch-controls-spacing",
+      "Design reachable action buttons for narrow mobile screens",
+      "Input",
+      "Hint, Pause and Restart are often grouped into tiny icons that fingers cannot operate reliably. Wrong taps may erase progress.",
+      "Increase actual hit target area, maintain visible spacing, and separate destructive controls from high-frequency actions. Test at 360 CSS pixels wide.",
+      "A 20-pixel icon can sit inside a roughly 44-pixel interactive region. Verify that adjacent button hitboxes do not overlap.",
+      "Invisible hit areas can still create accidental activations. Perform repeated one-handed play tests and check focus outlines.",
+      "WCAG,PTR"
+    ],
+    [
+      "pause-on-visibility",
+      "Freeze game time when the browser becomes hidden",
+      "Input",
+      "A timed stage may expire while the user answers a call or switches apps, punishing unavoidable interruptions.",
+      "Use visibilitychange to freeze simulation time, hold remaining countdown and resume on an explicit user action. Record state in memory before the page hides.",
+      "If a player had 18 seconds remaining, returning after a minute should not create a huge physics time step or instantly end the round.",
+      "Discarding elapsed time without resetting the frame clock can still move objects abruptly. Test app switching, screen locking and landscape rotation.",
+      "PTR,STORE"
+    ],
+    [
+      "fixed-step-physics",
+      "Use stable simulation steps across different refresh rates",
+      "Input",
+      "A game that advances one fixed distance each animation frame behaves differently at 60 Hz and 120 Hz and becomes unfair across devices.",
+      "Accumulate elapsed real time and advance physics in bounded fixed steps; render separately with requestAnimationFrame. Cap catch-up work after a hidden-tab interval.",
+      "At 60 simulation steps per second, each step represents about 16.67 milliseconds, regardless of whether the display requests 60 or 144 redraws.",
+      "Do not run an unlimited catch-up loop after a ten-minute pause. Replay a seeded input recording across refresh rates and compare final state.",
+      "CAN,INP"
+    ],
+    [
+      "input-response-traces",
+      "Measure action responsiveness independently of display refresh",
+      "Input",
+      "A high-refresh display is not a substitute for responsive event callbacks when the JavaScript main thread is blocked.",
+      "Measure pointer timestamps, callback duration and visible presentation in a browser trace. Compare idle performance with animation and third-party scripts enabled.",
+      "A 100-millisecond long task can delay an action even when the screen refreshes every seven milliseconds. Remove the block before increasing decorative animation.",
+      "Do not convert number of animation frames directly into milliseconds. Report measured distributions for the tested hardware.",
+      "INP,PTR"
+    ],
+    [
+      "scroll-versus-tap",
+      "Distinguish intentional card taps from touch scrolling",
+      "Input",
+      "A gallery card may navigate when a user tries to swipe the page, especially if pointerdown immediately triggers a game launch.",
+      "Wait for a valid click activation or use a measured drag threshold; handle pointercancel and retain normal anchor behavior for navigation.",
+      "Swipe vertically across a large game tile and confirm the catalog scrolls without opening the game. A stationary short tap should still activate it.",
+      "Preventing all touch defaults can break page scroll and pinch zoom. Test slow scroll, fast scroll and stylus input.",
+      "PTR,WCAG"
+    ],
+    [
+      "accessible-action-feedback",
+      "Give one clear response for each shield or undo action",
+      "Input",
+      "Players repeat an action when the interface delays acknowledgement, potentially spending two shields for one intention.",
+      "Update the visible button state immediately, make only one state transition per activation and announce major changes in a polite live region.",
+      "When the shield count drops from 2 to 1, both visual and accessible feedback should reflect the new value before the next independent action.",
+      "Announcing every animation frame overwhelms assistive technology. Test rapid taps, key repeats and one-to-one action event handling.",
+      "LIVE,INP"
+    ]
+  ]
+}
