@@ -246,6 +246,9 @@ class RealQC1000Tests(unittest.TestCase):
             self.assertEqual(result["professional_quality_1000_certifications_created"], 0)
             self.assertIn("BLOCKED_NO_REAL1000_EXECUTION_SUITE", result["verdict_counts"])
             self.assertFalse(result["public_sites_modified"])
+            self.assertEqual(result["doctorate_level_evidence_policy"], qc.DOCTORAL_SCHEMA)
+            self.assertEqual(result["required_common_scientific_evidence_controls"], 12)
+            self.assertEqual(result["independent_doctoral_scientific_approvals_created"], 0)
 
     def test_bad_original_archive_detected(self):
         with tempfile.TemporaryDirectory() as temp:
