@@ -50,6 +50,98 @@ function geomWater(){let m=mesh();face(m,[P(-900,-32,-1500),P(900,-32,-1500),P(9
 const shapes={jet:jetGeometry(),foe:jetGeometry(true),rock:geomRock(),carrier:geomCarrier(),missile:geomProjectile(),blast:geomExplosion(),water:geomWater()};
 function draw(shape,m,water=false){let g=shapes[shape];gl.bindBuffer(gl.ARRAY_BUFFER,g.buffer);for(const k of [[at.pos,0],[at.normal,3],[at.color,6]]){gl.enableVertexAttribArray(k[0]);gl.vertexAttribPointer(k[0],3,gl.FLOAT,false,36,k[1]*4)}gl.uniformMatrix4fv(un.model,false,m);gl.uniform1f(un.water,water?1:0);gl.drawArrays(gl.TRIANGLES,0,g.count)}
 let world=[],enemies=[],missiles=[],sparks=[],player={x:0,y:3,z:0,vx:0,vy:0,roll:0,pitch:0,shield:100,hp:100,inv:0},camera=[0,12,25],VP=id();let run=false,paused=false,score=0,kills=0,ammo=8,mission=1,missionT=0,spawnT=0,fireT=0,lockTarget=null,last=performance.now(),elapsed=0,toastT=0,fpsFrames=0,fpsT=0,frames=60,dashT=0;const key=new Set();let firing=false,stick={x:0,y:0,active:false},targetX=0,targetY=3;const TOUCH=('ontouchstart'in window||navigator.maxTouchPoints>0);
+
+const MISSION_NAMES=['','Coastal Shield','Island Scramble','Carrier Strike','Blue Horizon','Breakwater Patrol','Storm Fleet','Northern Passage','Midnight Intercept','Ocean Hammer','Ghost Formation','Last Stronghold','Air Supremacy'];
+const MISSION_GOALS=[0,4,5,6,7,8,9,10,11,12,13,14,16];
+const MAX_MISSION=12,SAVE_KEY='mpw-air-supremacy-campaign-v2',MAX_UPGRADE=4,UPGRADE_COST=[250,450,700,1000];
+const newProfile=()=>({version:2,unlocked:1,credits:0,bestScore:0,sorties:0,wins:0,difficulty:'cadet',upgrades:{cannon:0,armor:0,missile:0}});
+function safeInt(n,min,max,def=min){return Number.isSafeInteger(n)&&n>=min&&n<=max?n:def}
+function loadProfile(){
+ const basic=newProfile();try{
+   const o=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');if(!o||o.version!==2)return basic;
+   basic.unlocked=safeInt(o.unlocked,1,MAX_MISSION);
+   basic.credits=safeInt(o.credits,0,1000000);
+   basic.bestScore=safeInt(o.bestScore,0,100000000);
+   basic.sorties=safeInt(o.sorties,0,1000000);
+   basic.wins=safeInt(o.wins,0,1000000);
+   basic.difficulty=o.difficulty==='ace'?'ace':'cadet';
+   for(const key of ['cannon','armor','missile'])basic.upgrades[key]=safeInt(o.upgrades?.[key],0,MAX_UPGRADE);
+ }catch{}return basic;
+}
+const profile=loadProfile();
+let missionKills=0,missionGoal=MISSION_GOALS[1],missionBossNeeded=false,bossSpawned=false,bossCleared=true,creditsEarned=0,combatStreak=0,streakTimer=0;
+let audioOn=false,audioCtx=null,missionWon=false,missionNotified=false;
+function persistProfile(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(profile))}catch{}}
+function upgradeCost(key){return profile.upgrades[key]>=MAX_UPGRADE?null:UPGRADE_COST[profile.upgrades[key]]}
+function refreshHangar(){
+ const sel=$('missionSelect'),requested=Number(sel.value)||profile.unlocked;
+ sel.replaceChildren();
+ for(let m=1;m<=profile.unlocked;m++){const opt=document.createElement('option');opt.value=String(m);opt.textContent=String(m).padStart(2,'0')+' · '+MISSION_NAMES[m];sel.append(opt)}
+ sel.value=String(Math.min(profile.unlocked,Math.max(1,requested)));
+ $('difficulty').value=profile.difficulty;
+ $('campaignStats').textContent='MISSION '+profile.unlocked+' / 12 · CREDITS '+profile.credits+' · BEST '+profile.bestScore+' · SORTIES '+profile.sorties;
+ for(const key of ['cannon','armor','missile']){
+   const bt=$(key+'Upgrade'),price=upgradeCost(key);
+   bt.disabled=price===null||profile.credits<price;
+   bt.replaceChildren();
+   const h=document.createElement('strong');h.textContent=key.toUpperCase()+' LV '+profile.upgrades[key];
+   bt.append(h,document.createTextNode(price===null?' MAXED':' Upgrade · '+price+' CR'));
+ }
+}
+function buyUpgrade(key){
+ const cost=upgradeCost(key);if(cost===null||profile.credits<cost||run)return;
+ profile.credits-=cost;profile.upgrades[key]++;persistProfile();refreshHangar();
+}
+for(const key of ['cannon','armor','missile'])$(key+'Upgrade').addEventListener('click',()=>buyUpgrade(key));
+$('difficulty').addEventListener('change',()=>{if(run)return;profile.difficulty=$('difficulty').value==='ace'?'ace':'cadet';persistProfile();refreshHangar()});
+let audioEnabled=false;
+function audioFX(type){
+ if(!audioOn||!audioEnabled)return;
+ try{
+   audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+   if(audioCtx.state==='suspended')audioCtx.resume();
+   const oscillator=audioCtx.createOscillator(),volume=audioCtx.createGain(),start=audioCtx.currentTime;
+   const notes={fire:[130,75,.055,.018],missile:[310,95,.27,.055],kill:[480,180,.18,.055],hit:[100,48,.27,.07],win:[570,890,.30,.08]};
+   const spec=notes[type]||notes.fire;
+   oscillator.type=type==='missile'?'sawtooth':'triangle';oscillator.frequency.setValueAtTime(spec[0],start);
+   oscillator.frequency.exponentialRampToValueAtTime(spec[1],start+spec[2]);
+   volume.gain.setValueAtTime(Math.min(spec[3],.09),start);
+   volume.gain.exponentialRampToValueAtTime(.0001,start+spec[2]);
+   oscillator.connect(volume);volume.connect(audioCtx.destination);
+   oscillator.start(start);oscillator.stop(start+spec[2]);
+ }catch{audioEnabled=false;audioOn=false;$('audioToggle').textContent='SOUND OFF'}
+}
+$('audioToggle').addEventListener('click',()=>{
+ audioOn=!audioOn;audioEnabled=!!(window.AudioContext||window.webkitAudioContext);
+ $('audioToggle').textContent=audioOn&&audioEnabled?'SOUND ON':'SOUND OFF';
+ if(audioOn&&audioEnabled)audioFX('win');
+});
+function startMission(level){
+ mission=level;missionT=0;missionKills=0;missionGoal=MISSION_GOALS[level];
+ missionBossNeeded=level%3===0;bossSpawned=false;bossCleared=!missionBossNeeded;
+ spawnT=.6;enemies.length=0;missiles.length=0;lockTarget=null;
+ ammo=Math.min(18,8+profile.upgrades.missile*2);
+ player.shield=Math.min(100,player.shield+28);
+ $('mission').textContent=MISSION_NAMES[level].toUpperCase()+' · '+(missionBossNeeded?'DESTROY ESCORTS + CAPITAL SHIP':'ELIMINATE ENEMY INTERCEPTORS');
+ toast('MISSION '+String(level).padStart(2,'0')+' · '+MISSION_NAMES[level].toUpperCase());
+ updateHud();
+}
+function resolveMission(){
+ if(missionNotified||!run||missionKills<missionGoal||!bossCleared)return;
+ missionNotified=true;profile.unlocked=Math.max(profile.unlocked,Math.min(MAX_MISSION,mission+1));
+ creditsEarned+=100+mission*35;
+ persistProfile();audioFX('win');
+ if(mission===MAX_MISSION){missionWon=true;finish(true);return}
+ player.shield=Math.min(100,player.shield+22);
+ startMission(mission+1);
+ missionNotified=false;
+}
+function awardCombat(e){
+ combatStreak=streakTimer>0?Math.min(10,combatStreak+1):1;streakTimer=6;
+ creditsEarned+=e.value*(profile.difficulty==='ace'?20:12);
+ score+=e.value*(100+combatStreak*25)*(profile.difficulty==='ace'?2:1);
+}
+
 function toast(text){$('status').textContent=text;$('status').classList.add('visible');toastT=2.6}
 function resize(){const dpr=Math.min(window.devicePixelRatio||1,innerWidth<800?1.5:1.85);canvas.width=Math.max(1,Math.round(innerWidth*dpr));canvas.height=Math.max(1,Math.round(innerHeight*dpr));if(gl)gl.viewport(0,0,canvas.width,canvas.height)}addEventListener('resize',resize);resize();if(gl){gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.clearColor(.29,.58,.69,1);}
 function spawnScenery(){world=[];for(let i=0;i<25;i++){let z=40-i*72;for(let side of [-1,1]){if(i%3===0||i%3===2)world.push({shape:'rock',x:side*rnd(140,285),y:-30,z:z-rnd(0,30),scale:rnd(.30,.85),rot:rnd(0,6.3)})}}world.push({shape:'carrier',x:-52,y:-27,z:-270,scale:1.6,rot:0});world.push({shape:'carrier',x:100,y:-27,z:-940,scale:1.1,rot:0})}
