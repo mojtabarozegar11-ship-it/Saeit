@@ -94,7 +94,9 @@ class RealQC1000Tests(unittest.TestCase):
         signed = {k: v for k, v in suite.items() if k != "signature_hex"}
         payload = folder / "payload.tmp"
         sigfile = folder / "sig.tmp"
-        payload.write_bytes(qc.canonical(signed))
+        payload.write_bytes(hashlib.sha256(
+            b"SAEIT_REAL_QC1000_ED25519_V1\x00" + qc.canonical(signed)
+        ).digest())
         subprocess.run(["openssl", "pkeyutl", "-sign", "-rawin",
                         "-inkey", str(private), "-in", str(payload),
                         "-out", str(sigfile)], check=True, capture_output=True)
