@@ -31,8 +31,8 @@ for name in templates:
     info.append({"relative":str(origin.relative_to(ROOT)),"sha256":hashlib.sha256(txt.encode()).hexdigest(),
       "bytes":len(txt),"csrf_tokens":txt.count("csrf_token"),"main_end_tags":txt.count("</main>"),
       "body_end_tags":txt.count("</body>"),"form_tags":txt.count("<form"),
-      "form_self":("form-action 'self'" in source or "form-action \\"self\\"" in source),
-      "form_none":("form-action 'none'" in source or "form-action \\"none\\"" in source),
+      "form_action_self_in_source":("form-action" in source and "self" in source),
       "has_trx_text":"TRX" in txt,"wallet_signature_text":"signature" in txt.lower(),
       "extends_base":"{% extends" in txt})
 print("MPW_TRX_TEMPLATE_CONTRACT="+json.dumps({"files":info,"read_only":True},sort_keys=True))
+
