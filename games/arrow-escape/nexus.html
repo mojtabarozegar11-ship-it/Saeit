@@ -6,18 +6,18 @@
   <meta name="theme-color" content="#071522">
   <meta name="description" content="نکسوس سه‌بعدی زمرد ملل؛ معمای مکعب مکانیکی با پیچش واقعی لایه‌ها، فلش‌های مرتبط و مسیرهای قابل‌پیش‌بینی.">
   <title>نکسوس سه‌بعدی | زمرد ملل</title>
-  <link rel="stylesheet" href="./nexus.css?v=css3d-r2-20261023">
+  <link rel="stylesheet" href="./nexus.css?v=major-1-20261023">
 </head>
 <body>
   <main class="shell">
     <header class="header">
       <a class="brand" href="/arrow-escape/" aria-label="بازگشت به بازی هزارتوی پیکان‌ها"><span class="brand-mark">✦</span><span>زمرد ملل <small>NEXUS GAME LAB</small></span></a>
-      <div class="tag"><span class="indicator"></span> آزمایشگاه سه‌بعدی</div>
+      <div class="tag"><span class="indicator"></span> نسل سینمایی ۲٫۰</div>
     </header>
     <section class="hero">
       <span class="eyebrow">ARROW NEXUS 3D · LIVING CUBE</span>
-      <h1>مکعبی که با تصمیم تو <em>تغییر می‌کند</em></h1>
-      <p>پیکان‌ها را آزاد کن، قفل‌های پیوندی را بشکن و حلقه میانی را برای بازکردن دروازه طلایی بچرخان.</p>
+      <h1>مکعبی زنده در <em>چهار جهان اسرارآمیز</em></h1>
+      <p>پیکان‌ها را آزاد کن، مدارهای دوگانه را روشن کن، رزونانس بساز و با هر پنج مرحله وارد جهانی تازه شو.</p>
     </section>
     <section class="game" aria-label="مکعب معمایی سه‌بعدی">
       <div class="stats">
@@ -26,8 +26,21 @@
         <div><small>چرخش باقی‌مانده</small><strong id="twists">۰</strong></div>
         <div><small>رکورد</small><strong id="best">۱</strong></div>
       </div>
+      <div class="nexus-dashboard" aria-label="امتیاز و پیشرفت">
+        <div class="nexus-scoreline">
+          <span>امتیاز <strong id="score">۰</strong></span>
+          <span>زنجیره <strong id="combo">×۱</strong></span>
+          <span>نشان مرحله <strong id="medal" aria-label="ستاره‌های به‌دست‌آمده">☆☆☆</strong></span>
+          <span>رکورد امتیاز <strong id="record">۰</strong></span>
+          <span>حرکات مرجع <strong id="par">۰</strong></span>
+          <button id="soundToggle" class="button sound-button" type="button" aria-pressed="true">♫ صدا روشن</button>
+        </div>
+        <div class="nexus-charge-track" role="presentation"><span id="charge"></span></div>
+        <div class="nexus-chapterline"><span id="chapter">ژرفای اقیانوسی</span><span id="chargeLabel">رزونانس · ۰٪</span></div>
+      </div>
       <div class="viewport" id="viewport">
         <div class="ambient-label top">DRAG TO ORBIT · TAP TO RELEASE</div>
+        <div class="nexus-fx" id="nexusFx" aria-hidden="true"></div>
         <canvas id="nexusCanvas" aria-label="مکعب سه‌بعدی؛ بکشید تا دوربین بچرخد و روی یک فلش لمس کنید" tabindex="0"></canvas>
         <div class="ambient-label bottom">◈ NEXUS ENGINE · SOLVER VERIFIED</div>
         <div class="toast" role="status" aria-live="polite" id="message">برای چرخاندن دوربین، روی مکعب بکش؛ برای آزادکردن، فلش را لمس کن.</div>
@@ -35,7 +48,7 @@
           <div class="victory-card">
             <span class="victory-spark">✦</span>
             <h2 id="victoryHeading">هسته آزاد شد!</h2>
-            <p>معمای بعدی با قوانین و ارتباط‌های تازه منتظر توست.</p>
+            <p id="victoryDetail">معمای بعدی با قوانین و ارتباط‌های تازه منتظر توست.</p>
             <button id="next" class="button primary" type="button">مرحله بعد ←</button>
           </div>
         </div>
@@ -57,14 +70,17 @@
       <span><i class="swatch gold"></i> دروازه پیچشی</span>
       <span><i class="swatch purple"></i> پیوند قفل‌شده</span>
       <span><i class="swatch slate"></i> مسیر مسدود</span>
+      <span><i class="swatch blue"></i> مدار دوگانه</span>
+      <span><i class="swatch orange"></i> میدان رزونانس</span>
     </div>
     <details class="guide">
       <summary>قوانین نکسوس و امکانات تازه</summary>
-      <p>فلش‌ها روی شش وجه مکعب قرار دارند. چرخاندن دوربین فقط زاویه دید را عوض می‌کند؛ دکمه‌های چرخش، حلقه مرکزی مکعب را واقعاً می‌چرخانند. فلش‌های بنفش با حذف فلش پیوندی باز می‌شوند و فلش‌های طلایی پس از هم‌راستاشدن حلقه مجاز می‌شوند. لمس طولانی، پیش‌نمایش نتیجه است. هر مرحله راه‌حل محاسبه‌شده دارد، امکان بازگشت هست و پیشرفت روی همان دستگاه ذخیره می‌شود.</p>
+      <p>فلش‌ها روی شش وجه مکعب قرار دارند. چرخاندن دوربین فقط زاویه دید را عوض می‌کند؛ دکمه‌های چرخش، حلقه مرکزی مکعب را واقعاً می‌چرخانند. فلش‌های بنفش با حذف فلش پیوندی باز می‌شوند و فلش‌های طلایی پس از هم‌راستاشدن حلقه مجاز می‌شوند. لمس طولانی، پیش‌نمایش نتیجه است. از مرحله هشتم مدار دوگانه فقط با آزادسازی دو منبع فعال می‌شود و از مرحله دوازدهم میدان رزونانس با آزادسازی سه پیکان باز خواهد شد. هر پنج مرحله جهان و نورپردازی تغییر می‌کند؛ رهاسازی‌های پیاپی امتیاز زنجیره‌ای بیشتری می‌دهند. صدا پس از اولین لمس فعال می‌شود و با دکمه صدا قابل کنترل است. هر مرحله راه‌حل محاسبه‌شده دارد و پیشرفت روی همین دستگاه ذخیره می‌شود.</p>
     </details>
     <footer>© شرکت کشت و صنعت زمرد ملل · نمونه قابل‌بازی نکسوس سه‌بعدی</footer>
   </main>
   <script src="./nexus-core.js"></script>
-  <script type="module" src="./nexus.js?v=css3d-20261023"></script>
+  <script src="./nexus-experience.js?v=major-1-20261023"></script>
+  <script type="module" src="./nexus.js?v=major-1-20261023"></script>
 </body>
 </html>
