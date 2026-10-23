@@ -21,6 +21,7 @@ MARK="MPW_WALLETLESS_TRX_BUTTON_V1"
 CTX_MARK="# MPW_TRX_TEMPLATE_CONTEXT_PROCESSOR_V1"
 
 BUTTON="""
+<!-- MPW_WALLETLESS_TRX_BUTTON_V1 -->
 {% if mpw_trx_easy_enabled %}
 <section aria-label="Automatic TRX checkout" class="checkout-trx-easy" data-gateway="trx-easy">
   <h2>Pay with TRX — automatic download</h2>
