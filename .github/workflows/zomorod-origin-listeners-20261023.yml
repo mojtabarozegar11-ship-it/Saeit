@@ -87,6 +87,42 @@ jobs:
             status="$(curl -kLsS --connect-timeout 5 --max-time 12 -H 'Cache-Control: no-cache' -o /dev/null -w '%{http_code} %{remote_ip}' "$protocol://zomorodmelal.ir/" 2>/dev/null || true)"
             echo "EXTERNAL_PROTOCOL_RESULT $protocol ${status%% *}"
           done
+
+      - name: Diagnose 503 server-vs-proxy from cPanel, VPS and external runner without changing files
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          for node in host vps; do
+            echo "HTTP_TRIAGE_NODE=$node"
+            timeout 100s ssh -T -F "$d/config" "$node" 'python3 -' <<'PY'
+          import subprocess,re,sys
+          urls=[
+          ("public_home","https://zomorodmelal.ir/"),
+          ("public_old_static","https://zomorodmelal.ir/games/water-path/"),
+          ("public_water","https://zomorodmelal.ir/agriculture/water-soil/"),
+          ("loopback_http","http://127.0.0.1/"),
+          ("loopback_https","https://zomorodmelal.ir/")
+          ]
+          for label,url in urls:
+              args=["curl","-k","-sS","--connect-timeout","5","--max-time","10",
+                    "-H","Cache-Control: no-cache","-H","Host: zomorodmelal.ir",
+                    "-D","-","-o","/dev/null","-w","HTTP_STATUS:%{http_code}"]
+              if label=="loopback_https":args+=["--resolve","zomorodmelal.ir:443:127.0.0.1"]
+              result=subprocess.run(args+[url],capture_output=True,text=True,timeout=13)
+              status=re.search(r"HTTP_STATUS:(\d+)",result.stdout)
+              headers=[line.strip() for line in result.stdout.splitlines()
+                 if re.match(r"(?i)^(http/|server:|via:|content-type:|retry-after:|cache-control:|x-cache:|cf-cache-status:|location:)",line)]
+              print("HTTP_PROBE",label,"status",status.group(1) if status else "NA","curl_rc",result.returncode,
+                    "headers",";".join(headers[:7])[:270],
+                    "error_type",("timeout" if result.returncode==28 else "connection" if result.returncode==7 else "tls" if result.returncode in (35,60) else "none" if result.returncode==0 else "other"))
+          PY
+          done
+          echo "HTTP_TRIAGE_NODE=runner"
+          for target in https://zomorodmelal.ir/ https://zomorodmelal.ir/games/water-path/; do
+            headers="$(curl -sS --connect-timeout 6 --max-time 12 -H 'Cache-Control: no-cache' -D - -o /dev/null -w 'CODE:%{http_code}' "$target" 2>/dev/null || true)"
+            printf '%s\n' "$headers" | grep -Eai '^(HTTP/|server:|retry-after:|via:|content-type:|CODE:)' | head -n 12 || true
+          done
       - name: Remove temporary pinned relay credentials
         if: always()
         shell: bash
