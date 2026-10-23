@@ -167,6 +167,53 @@ jobs:
               print("DSN_STATUS_"+code.replace(".","_").replace("-","_")+"="+str(count))
           print("NO_PRIVATE_EMAIL_ADDRESSES_OR_MESSAGE_BODIES_PRINTED")
           PY
+      - name: Classify secondary remote SMTP codes in bounced messages (aggregate only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/company-mail-inspect"
+          cat <<'PY' | timeout 70s ssh -T -F "$d/config" company python3 -
+          from pathlib import Path
+          from collections import Counter
+          from email.parser import BytesParser
+          from email.policy import default
+          from email.utils import parseaddr
+          import datetime as dt, re
+          root=Path.home()/"mail"/"zomorodmelal.ir"/"moj_1ro_1"
+          cutoff=dt.datetime(2026,10,20,tzinfo=dt.timezone.utc).timestamp()
+          result=Counter()
+          for folder in ("new","cur"):
+              sub=root/folder
+              if not sub.is_dir(): continue
+              for path in sub.iterdir():
+                  if not path.is_file() or path.stat().st_mtime<cutoff: continue
+                  raw=path.read_bytes()[:200000]
+                  msg=BytesParser(policy=default).parsebytes(raw,headersonly=True)
+                  sender=parseaddr(str(msg.get("From","")))[1].lower()
+                  subject=str(msg.get("Subject","")).lower()
+                  if not ("mailer-daemon" in sender or "postmaster" in sender or "delivery status" in subject or "undeliver" in subject or "failure notice" in subject): continue
+                  txt=raw.decode("utf-8","replace").lower()
+                  result["bounce_notices"]+=1
+                  codes=set(re.findall(r"(?<![.\d])([45]\d\d)(?![.\d])",txt))
+                  for status in ("550","551","552","553","554","450","451","452","421","500","501","502"):
+                      if status in codes: result["SMTP_"+status]+=1
+                  phrases={
+                      "sender_verification_or_authentication":("sender verify failed","sender address rejected","spf fail","dkim fail","dmarc","unauthenticated sender","authentication required","sender rejected"),
+                      "antispam_policy":("spamhaus","spam detected","marked as spam","unsolicited","blocked by","blacklisted","blacklist","spam filter"),
+                      "bad_recipient_or_address":("user unknown","no such user","unknown recipient","unrouteable address","recipient address rejected","recipient not found","mailbox not found","invalid recipient"),
+                      "mail_routing_dns":("host not found","domain not found","unrouteable domain","dns lookup","no mx record","mx record"),
+                      "outbound_volume_or_rate":("too many messages","rate limit","message quota","outbound limit","maximum number of emails"),
+                      "temporary_delivery":("temporarily deferred","try again later","connection timed out","connection refused","timed out"),
+                      "non_delivery_terminal":("permanent error","failed to deliver","delivery failed","returned to sender")
+                  }
+                  for key,words in phrases.items():
+                      if any(w in txt for w in words): result["EVIDENCE_"+key.upper()]+=1
+                  if "smtp error from remote mail server" in txt: result["REMOTE_SERVER_REJECTED"]+=1
+                  if "remote host" in txt: result["REMOTE_HOST_MENTIONED"]+=1
+          for k,v in sorted(result.items()):
+              print(k+"="+str(v))
+          print("AGGREGATES_ONLY_NO_SENSITIVE_CONTENT")
+          PY
       - name: Remove SSH keys
         if: always()
         run: |
