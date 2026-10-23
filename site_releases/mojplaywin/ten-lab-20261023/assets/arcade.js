@@ -65,7 +65,7 @@ function lexicon(){
   const occupied=new Set();
   for(const w of list){let placed=false;
    for(let tryN=0;tryN<600&&!placed;tryN++){
-    const x=Math.floor(rand(0,8)),y=Math.floor(rand(0,8)),dir=[[1,0],[0,1],[-1,0],[0,-1],[1,1],[-1,1]][Math.floor(rand(0,6))],coords=[];
+    const x=Math.floor(rand(0,8)),y=Math.floor(rand(0,8)),dir=[[1,0],[0,1],[-1,0],[0,-1],[1,1],[-1,1]][Math.floor(rand(0,6))];let coords=[];
     for(let j=0;j<w.length;j++){let X=x+dir[0]*j,Y=y+dir[1]*j;if(X<0||X>7||Y<0||Y>7){coords=[];break}coords.push(Y*8+X)}
     if(coords.length===w.length&&coords.every(k=>!occupied.has(k))){coords.forEach((k,i)=>{board[k]=w[i];occupied.add(k)});placed=true}
    }
