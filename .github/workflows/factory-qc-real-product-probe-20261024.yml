@@ -1,0 +1,123 @@
+name: QC only - read-only empirical audit of actual private product archives
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/factory-qc-real-product-probe-20261024.yml']
+permissions: {contents: read}
+jobs:
+  real-private-product-probe:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && contains(github.event.head_commit.message, '[approved-qc-real-probe-20261024]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: SSH pinned - three actual private archives, read-only
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/private-qc1000"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          opts=(-T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2)
+          ssh "${opts[@]}" githubops@178.239.147.150 'timeout 70s /home/githubops/factory-runtime/.venv/bin/python -B -' <<'PY'
+          import hashlib, json, re, zipfile
+          from pathlib import Path
+          
+          area = Path("/home/githubops/factory-runtime/private/autonomous-product-cycle/production-instructions")
+          receipt_root = area / "stage-05/downloadable-receipts"
+          names = sorted(p.name for p in receipt_root.iterdir() if p.is_file() and not p.is_symlink() and re.fullmatch(r"WO-\d{8}--r\d{3}\.json", p.name))
+          assert len(names) >= 1, "NO_REAL_PRODUCT_CANDIDATE"
+          samples = list(dict.fromkeys((names[0], names[len(names)//2], names[-1])))
+          def hashbytes(raw):
+              return hashlib.sha256(raw).hexdigest()
+          def inspect(name):
+              checks = []
+              def test(label, predicate):
+                  checks.append({"case": label, "observed_pass": bool(predicate)})
+              receipt_path = receipt_root / name
+              rec = json.loads(receipt_path.read_text(encoding="utf-8"))
+              manifest_path = area / "stage-05/completed-drafts" / name
+              man = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.is_file() and not manifest_path.is_symlink() else {}
+              test("original_receipt_is_private", rec.get("ready_for_paid_store") is False)
+              test("scientific_approval_not_fabricated", rec.get("scientific_quality_certified") is False)
+              test("public_distribution_prohibited", rec.get("public_distribution_allowed") is False)
+              test("document_binding_matches", rec.get("order_id") == man.get("order_id"))
+              path_parts = Path(str(rec.get("archive_relative_path", "")))
+              assert not path_parts.is_absolute() and ".." not in path_parts.parts, "ARCHIVE_TRAVERSAL"
+              archive_path = area
+              for part in path_parts.parts:
+                  archive_path = archive_path / part
+                  assert not archive_path.is_symlink(), "ARCHIVE_SYMLINK"
+              assert archive_path.is_file() and archive_path.stat().st_size <= 12000000, "UNSAFE_ARCHIVE"
+              raw = archive_path.read_bytes()
+              digest = hashbytes(raw)
+              test("zip_bytes_sha256_bound", digest == rec.get("zip_sha256"))
+              test("zip_size_bound", len(raw) == rec.get("zip_bytes"))
+              payload = {}
+              with zipfile.ZipFile(archive_path) as z:
+                  files = z.infolist()
+                  expected_root = "agri-" + name[:-5] + "/"
+                  expected_names = {expected_root + part for part in ("README.md","index.html","fa-IR.md","en-US.md","sources.json","integrity.json")}
+                  test("exact_6_deliverable_members", {i.filename for i in files} == expected_names and len(files)==6)
+                  test("archive_crc_passed", z.testzip() is None)
+                  test("zip_bomb_and_unsafe_members_rejected", len(files)<=256 and sum(i.file_size for i in files) <= 12000000 and all(i.file_size<=700000 and not (i.flag_bits & 1) and ".." not in Path(i.filename).parts for i in files))
+                  for member in files:
+                      assert member.filename in expected_names and member.file_size<=700000, "UNSAFE_ZIP_MEMBER"
+                      payload[member.filename.rsplit("/",1)[-1]] = z.read(member)
+              expected_hashes = rec.get("file_hashes",{})
+              test("each_file_sha256_receipt_bound", isinstance(expected_hashes,dict) and all(hashbytes(value)==expected_hashes.get(key) for key,value in payload.items()))
+              integrity = json.loads(payload.get("integrity.json", b"{}"))
+              test("internal_manifest_bound", integrity.get("contents_sha256")=={k:hashbytes(v) for k,v in payload.items() if k!="integrity.json"})
+              test("internal_no_false_certification", integrity.get("scientific_quality_certified") is False and integrity.get("ready_for_paid_store") is False)
+              stats = {}
+              for locale in ("fa-IR","en-US"):
+                  text = payload[locale+".md"].decode("utf-8")
+                  paragraphs = [re.sub(r"\s+"," ",p).strip().casefold() for p in re.split(r"\n\s*\n",text) if len(p.split())>=20]
+                  dup = (len(paragraphs)-len(set(paragraphs)))/len(paragraphs) if paragraphs else 1
+                  stats[locale] = {"words":len(text.split()),"substantial_paragraphs":len(paragraphs),"duplicate_fraction":round(dup,4),"manuscript_sha256":hashbytes(payload[locale+".md"])}
+                  test("minimum_real_words_"+locale, len(text.split())>=1000)
+                  test("real_duplicate_fraction_"+locale, dup<=0.35)
+                  test("version_bound_manuscript_"+locale, hashbytes(payload[locale+".md"])==man.get("manuscript_sha256",{}).get(locale))
+              try:
+                  sources = json.loads(payload["sources.json"])
+              except (ValueError, UnicodeError):
+                  sources = None
+              test("bibliography_is_list", isinstance(sources,list))
+              test("bibliography_minimum_4", isinstance(sources,list) and len(sources)>=4)
+              test("bibliography_entries_are_records", isinstance(sources,list) and all(isinstance(x,dict) for x in sources))
+              html = payload["index.html"].decode("utf-8")
+              test("offline_navigator_code_present","<html" in html.casefold() and "function render()" in html)
+              test("original_subject_specific_product",man.get("draft_kind")!="original_bilingual_evidence_method_workbook" and bool(man.get("draft_kind")))
+              # These are NON-passing human-only checks, never infer scholarship from tokens.
+              test("scientific_claim_sources_independently_verified",False)
+              test("domain_expert_human_review_verified",False)
+              test("field_protocol_reproduced_and_signed",False)
+              return {"product_id": name, "actual_archive_sha256":digest,
+                      "manifest_kind":str(man.get("draft_kind","UNKNOWN"))[:80],
+                      "executed_mechanical_checks":len(checks),
+                      "passed_mechanical_checks":sum(x["observed_pass"] for x in checks),
+                      "failed_checks":[x["case"] for x in checks if not x["observed_pass"]],
+                      "text_metrics":stats,
+                      "bibliography_count":len(sources) if isinstance(sources,list) else None,
+                      "scientifically_certified":False, "quality1000_approved":False,
+                      "checked_directly_on_private_vps_archive":True}
+          
+          result = {"sampled_real_products":len(samples), "total_private_candidates":len(names),
+                    "checks_are_real_archive_inspections_not_1000_scientific_tests":True,
+                    "scientific_clearances_issued":0,"samples":[]}
+          for name in samples:
+              try:
+                  result["samples"].append(inspect(name))
+              except Exception as exc:
+                  result["samples"].append({"product_id":name,"audit_error":type(exc).__name__+":"+str(exc)[:100],
+                                            "scientifically_certified":False})
+          print("REAL_PRIVATE_PRODUCT_QC_PROBE="+json.dumps(result,ensure_ascii=False,sort_keys=True),flush=True)
+          PY
