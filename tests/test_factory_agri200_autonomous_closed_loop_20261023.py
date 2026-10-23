@@ -92,6 +92,34 @@ class ClosedLoopTests(unittest.TestCase):
             self.assertEqual(res["repair_route"]["authentic_external_specialist_required"], 1)
             self.assertEqual(res["repair_route"]["distribution_rights_review_required"], 1)
 
+    def test_noop_ticks_trigger_watchdog_without_forged_quality(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, ops, area = self.fixture(temp)
+            py = ops.parent.parent / ".venv/bin/python"
+            py.parent.mkdir(parents=True)
+            py.write_text("#!/bin/sh\nexit 0\n")
+            py.chmod(0o700)
+            for _, filename, _, _ in mod.STAGES:
+                (ops / filename).write_text("# mock")
+            def done(_command, **_kwargs):
+                return SimpleNamespace(returncode=0, stdout=b"{}", stderr=b"")
+            for tick in range(1, 4):
+                result = mod.run_tick(root, ops, workers=True, invoke=done)
+                self.assertEqual(result["consecutive_no_progress_ticks"], tick)
+                self.assertFalse(result["generated_new_artifacts"])
+                self.assertEqual(result["worker_errors"], 0)
+                self.assertEqual(result["missing_stage2_orders"], 200)
+                self.assertEqual(result["missing_v003_orders"], 200)
+                self.assertEqual(result["qc1000_approved_by_internal_workers"], 0)
+            self.assertEqual(result["cycle_state"], "stalled_requires_source_or_review_recovery")
+            new_source = area / "stage-02/receipts"
+            new_source.mkdir(parents=True)
+            (new_source / "WO-00000001--r001.json").write_text("{}")
+            result = mod.run_tick(root, ops, workers=True, invoke=done)
+            self.assertEqual(result["missing_stage2_orders"], 199)
+            # Files predating the tick are inventory, not newly produced progress.
+            self.assertEqual(result["consecutive_no_progress_ticks"], 4)
+
     def test_bad_symlink_is_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
             root, ops, area = self.fixture(temp)
