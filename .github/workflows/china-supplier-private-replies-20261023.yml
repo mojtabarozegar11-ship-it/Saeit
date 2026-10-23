@@ -102,7 +102,7 @@ jobs:
                   s=re.sub(r"\\s+"," ",s).strip()
                   if s:candidates.append((0 if typ=="text/plain" else 1,len(s),s))
               candidates.sort(key=lambda item:(item[0],-item[1]))
-              return candidates[0][2][:7000] if candidates else ""
+              return candidates[0][2][:550] if candidates else ""
           for folder in ("new","cur"):
               p=root/folder
               if not p.is_dir():continue
