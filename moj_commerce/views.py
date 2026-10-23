@@ -41,7 +41,7 @@ def _buyer_id(request):
 @csrf_exempt  # HMAC authentication instead of cookie-based CSRF for machine-to-machine webhooks.
 @require_POST
 def receive_tron_fulfillment(request):
-    if not getattr(settings, 'MOJ_COMMERCE_RECEIVER_ENABLED', False):
+    if getattr(settings, 'MOJ_COMMERCE_RECEIVER_ENABLED', False) is not True:
         return _json({'error': 'receiver_not_enabled'}, 503)
     if request.META.get('CONTENT_TYPE', '').split(';')[0].lower() != 'application/json':
         return _json({'error': 'unsupported_media_type'}, 415)

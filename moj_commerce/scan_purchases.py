@@ -51,7 +51,7 @@ def scan_purchases_once(*, max_orders=10, discover=incoming_candidates,
     Real cron may call via an owner-approved service, but nothing in this
     repository schedules it or gives it access to a wallet private key.
     """
-    if not getattr(settings,'MOJ_COMMERCE_SCANNER_ENABLED',False):
+    if getattr(settings,'MOJ_COMMERCE_SCANNER_ENABLED',False) is not True:
         raise ScanUnavailable('Scanner is disabled')
     if type(max_orders) is not int or not 1 <= max_orders <= 25:
         raise ValueError('Invalid scanner batch size')
