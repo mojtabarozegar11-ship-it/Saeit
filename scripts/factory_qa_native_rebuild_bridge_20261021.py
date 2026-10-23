@@ -112,6 +112,7 @@ def recover_source_from_archive(root,recipe,order,maker,recovered_root):
     if not archive.is_file():return False,None
     if archive.is_symlink() or (manifest.exists() and manifest.is_symlink()):
         return False,"unsafe_archive_path"
+    phase="receipt_preflight"
     try:
         expected_artifact=order.get("artifact_sha256")
         receipt=root/"quality-excellence"/"rework"/recipe/"current.json"
@@ -120,6 +121,7 @@ def recover_source_from_archive(root,recipe,order,maker,recovered_root):
                 or sha(receipt.read_bytes())!=order.get("source_quality_receipt_sha256")
                 or checked_json(receipt).get("artifact_sha256")!=expected_artifact):
             return False,"triage_receipt_mismatch"
+        phase="manufacturing_manifest"
         try:meta=checked_json(manifest) if manifest.is_file() else {}
         except (ValueError,OSError,UnicodeError):meta={}
         # A bound ZIP is not proof of original *source* unless the exact
@@ -145,18 +147,22 @@ def recover_source_from_archive(root,recipe,order,maker,recovered_root):
                 for name in files)
             or len(set(files))!=len(files)):
             return False,"source_file_inventory_not_verifiable"
+        phase="original_archive_hash"
         raw=archive.read_bytes()
         if len(raw)>64*1024*1024:return False,"archive_too_large"
         if sha(raw)!=expected_artifact:return False,"archive_hash_mismatch"
         if recovered_root.parent.is_symlink():return False,"unsafe_recovered_root"
+        phase="private_staging_root"
         recovered_root.mkdir(parents=True,mode=0o700,exist_ok=True)
         if recovered_root.is_symlink():return False,"unsafe_recovered_root"
         target=recovered_root/recipe
         if target.exists() or target.is_symlink():return False,"recovered_target_conflict"
+        phase="private_staging_creation"
         stage=Path(tempfile.mkdtemp(prefix="."+recipe+"-",dir=str(recovered_root)))
         try:
             payload=stage/recipe
             payload.mkdir(mode=0o700)
+            phase="zip_structure_validation"
             with zipfile.ZipFile(archive,"r") as zf:
                 infos=zf.infolist()
                 if not infos or len(infos)>256 or zf.testzip() is not None or sum(i.file_size for i in infos)>64*1024*1024:
@@ -182,22 +188,32 @@ def recover_source_from_archive(root,recipe,order,maker,recovered_root):
                     names=[name[len(wrapper)+1:] for name in archive_names]
                 normalized=sorted(files) if files is not None else sorted(names)
                 if sorted(names)!=normalized:return False,"archive_members_invalid"
+                phase="zip_member_extraction"
                 for info,name in zip(infos,names):
                     if stat.S_ISLNK(info.external_attr>>16):return False,"archive_symlink_member"
                     dest=payload/name
                     dest.parent.mkdir(parents=True,exist_ok=True)
                     dest.write_bytes(zf.read(info));os.chmod(dest,0o600)
+            # Do not disclose archived names or exception messages: only the
+            # fixed stage and exception class are aggregated in private QA.
+            # A customer-delivery ZIP that lacks executable original source
+            # must remain unbuildable, never silently synthesized.
+            phase="native_recipe_inspection"
             _,checked_files=maker.inspect_recipe(payload)
+            phase="canonical_source_digest"
             source_hash=maker.source_digest(payload,checked_files)
             if tuple(checked_files)!=tuple(normalized) or source_hash!=source_expected:
                 return False,"source_hash_mismatch"
+            phase="verified_source_promotion"
             os.chmod(payload,0o700);os.replace(payload,target)
             return True,None
         finally:
             if stage.exists():shutil.rmtree(stage)
     except zipfile.BadZipFile:return False,"archive_invalid_zip"
-    except (OSError,ValueError,RuntimeError,UnicodeError,KeyError):
-        return False,"archive_recovery_error"
+    except (OSError,ValueError,RuntimeError,UnicodeError,KeyError) as error:
+        # Stable, non-sensitive reason: never print exception text, paths,
+        # member names or customer document bytes. No provenance gate relaxed.
+        return False,"archive_"+phase+"_"+type(error).__name__.lower()
 
 
 def classify_unrecoverable_artifact(root,recipe):
