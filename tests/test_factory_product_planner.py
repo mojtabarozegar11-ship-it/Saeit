@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -135,6 +136,39 @@ class ProductPlanner(unittest.TestCase):
         report=planner.cycle(self.root,REGISTRY)
         self.assertEqual(report['unique_product_plans'],40)
         self.assertEqual(len(report['rejected_inputs']),1)
+    def test_large_queue_fair_window_reaches_both_order_and_general_lanes(self):
+        legacy={hashlib.sha256(('order-'+str(i)).encode()).hexdigest():{'family_id':'F31'} for i in range(900)}
+        general={hashlib.sha256(('general-'+str(i)).encode()).hexdigest():{'family_id':'F32'} for i in range(200)}
+        unique={**legacy,**general};seen=set();area=self.root/'product-planning'
+        area.mkdir()
+        for _ in range(3):
+            selection,cursor,path=planner.planning_window(unique,legacy,area)
+            keys=[k for k,_ in selection]
+            self.assertEqual(len(keys),500)
+            self.assertEqual(len(keys),len(set(keys)))
+            self.assertGreaterEqual(sum(k in general for k in keys),100)
+            seen.update(keys)
+            planner.save(path,cursor)
+        self.assertEqual(seen,set(unique))
+        selection,_,_=planner.planning_window(unique,legacy,area)
+        self.assertEqual(len(selection),500)
+
+    def test_window_fills_unused_reserved_slots_and_rejects_unsafe_state(self):
+        legacy={hashlib.sha256(('order-'+str(i)).encode()).hexdigest():{} for i in range(10)}
+        general={hashlib.sha256(('general-'+str(i)).encode()).hexdigest():{} for i in range(1000)}
+        area=self.root/'product-planning';area.mkdir()
+        selection,cursor,path=planner.planning_window({**legacy,**general},legacy,area)
+        self.assertEqual(len(selection),500)
+        self.assertEqual(sum(key in legacy for key,_ in selection),10)
+        planner.save(path,cursor)
+        self.assertEqual(planner.planning_window({**legacy,**general},legacy,area)[1]['legacy'],cursor['legacy'])
+        path.write_text('{"schema":"wrong","legacy":"","general":""}')
+        with self.assertRaisesRegex(ValueError,'PLANNER_WINDOW_CURSOR_SCHEMA'):
+            planner.planning_window({**legacy,**general},legacy,area)
+        path.unlink();path.symlink_to(self.root/'not-a-cursor')
+        with self.assertRaisesRegex(ValueError,'PLANNER_WINDOW_UNSAFE_CURSOR'):
+            planner.planning_window({**legacy,**general},legacy,area)
+
     def test_f19_route_restores_tampered_export_and_metadata(self):
         req={'family_id':'F19'};product=planner.CATALOG['F19']
         self.assertEqual(planner.execute(self.root,req)['exit_code'],0)
