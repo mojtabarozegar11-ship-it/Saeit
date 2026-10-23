@@ -151,14 +151,15 @@ def run_release(run):
             body = resp.content.decode('utf-8')
             if title not in body or CONTENT[pk]['seo_description'] not in body:
                 fail(f'Product page metadata missing for {pk}')
-            m = re.search(r'<script type="application/ld\+json">(.*?)</script>', body, re.S)
-            if not m: fail(f'Product JSON-LD missing for {pk}')
-            schema = json.loads(m.group(1))
+            scripts = re.findall(r'<script type="application/ld\+json">(.*?)</script>', body, re.S)
+            schemas = [json.loads(script) for script in scripts]
+            schema = next((item for item in schemas if item.get('@type') == 'Product'), None)
+            if schema is None: fail(f'Product JSON-LD missing for {pk}')
             offer = schema.get('offers', {})
             try: numeric_price_ok = Decimal(str(offer.get('price'))) == Decimal(price)
             except (InvalidOperation, TypeError): numeric_price_ok = False
             if schema.get('@type') != 'Product' or not numeric_price_ok or offer.get('priceCurrency') != 'USD':
-                fail(f'Product JSON-LD offer check failed for {pk}: {json.dumps(schema, ensure_ascii=False)}')
+                fail(f'Product JSON-LD offer check failed for {pk}')
             checks.append({'id': pk, 'status': resp.status_code, 'price': offer['price'], 'schema': 'Product+Offer'})
         print('MPW_PRODUCT_SEO_RELEASE=' + json.dumps({'run':run,'checks':checks,'metadata_only_product_rows':list(EXPECTED)}, ensure_ascii=False, sort_keys=True))
     except BaseException:
