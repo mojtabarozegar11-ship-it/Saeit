@@ -301,9 +301,37 @@ def _write_receipt_file(path, record):
         os.fsync(file.fileno())
 
 
+
+def inventory():
+    """Read-only merchant eligibility inventory; never disclose buyer identities."""
+    from django.contrib.auth import get_user_model
+    from core.models import Product
+    from mpw_commerce.buyer_orders import _eligible
+    from mpw_commerce.downloads import _private_file
+
+    _preflight(nodes=False)
+    staff = get_user_model().objects.filter(is_active=True, is_staff=True).count()
+    candidates = []
+    for product in Product.objects.filter(
+        active=True, currency="USD",
+        price__gt=Decimal("0"), price__lte=MAX_PRICE_USD,
+    ).order_by("pk")[:100]:
+        try:
+            if _eligible(product):
+                _, byte_count = _asset_hash(_private_file(SimpleNamespace(product=product)))
+                if byte_count > 0:
+                    candidates.append(product.pk)
+        except (OSError, ValueError, PaymentHold):
+            continue
+    return {"status": "PRIVATE_CANARY_READONLY_INVENTORY",
+            "eligible_micro_sku_ids": candidates[:10],
+            "eligible_micro_sku_count_capped": len(candidates),
+            "active_staff_account_count": staff,
+            "financial_writes": 0, "public_enabled": False, "broadcasts": 0}
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Merchant-only, no-public-release TRX canary")
-    parser.add_argument("action", choices=("preflight", "issue", "verify"))
+    parser.add_argument("action", choices=("preflight", "inventory", "issue", "verify"))
     parser.add_argument("--invoice-id", type=int)
     args = parser.parse_args(argv)
     if args.action == "verify" and args.invoice_id is None:
@@ -324,6 +352,8 @@ def main(argv=None):
         _preflight(nodes=True)
         result = {"status": "PRIVATE_CANARY_MAINNET_NODES_READY",
                   "financial_writes": 0, "public_enabled": False, "broadcasts": 0}
+    elif args.action == "inventory":
+        result = inventory()
     elif args.action == "issue":
         result = issue()
     else:
