@@ -1,0 +1,71 @@
+name: QC-only read-only inspection of quality rejection and rework route
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/factory-qc-rework-route-triage-20261024.yml']
+permissions: {contents: read}
+jobs:
+  private-qc-rework-triage:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && contains(github.event.head_commit.message, '[approved-qc-rework-triage-20261024]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Read private QC status and rework only, no writes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/private-qc1000"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          opts=(-T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2)
+          ssh "${opts[@]}" githubops@178.239.147.150 'timeout 90s /home/githubops/factory-runtime/.venv/bin/python -B -' <<'PY'
+          import json,re,subprocess
+          from pathlib import Path
+          from datetime import datetime,timezone
+          root=Path("/home/githubops/factory-runtime")
+          area=root/"private/autonomous-product-cycle/production-instructions"
+          ops=root/"operations/production-instructions"
+          folders=[
+          "stage-02/receipts","stage-03/receipts","stage-04/receipts",
+          "stage-05/completed-drafts","stage-05/downloadable-receipts",
+          "stage-05/strict-qc-rework","stage-05/substantive-rework-inbox",
+          "stage-05/substantive-revision-manifests","stage-05/substantive-revision-blocked",
+          "stage-05/source-grounded-v003-manifests","stage-05/source-grounded-v003-blocked",
+          "stage-06/strict-qc1000","stage-06/strict-qc-blocked",
+          "stage-06/source-grounded-v003-qc","stage-06/real-qc1000-verdicts",
+          ]
+          def count(label):
+           p=area/label
+           if not p.is_dir() or p.is_symlink(): return None
+           return sum(bool(re.fullmatch(r"WO-\d{8}--r\d{3}\.json",f.name)) for f in p.iterdir() if f.is_file() and not f.is_symlink())
+          def state(label):
+           p=area/label
+           if not p.is_file() or p.is_symlink() or p.stat().st_size > 300000: return {"present":False}
+           try:
+            v=json.loads(p.read_text(encoding="utf8"))
+            allowed=("cycle_state","stage_results","worker_errors","consecutive_no_progress_ticks","missing_stage2_orders","missing_v003_orders","stage5_products_seen","strict_qc1000_audits_total","returned_to_rework_total","source_specific_revision_briefs_total","blocked_this_run","private_v003_total","input_rework_tickets","indexed_candidates","scanner_health","trusted_execution_runner_enrolled","verdict_counts")
+            return {"present":True,"age_seconds":int(datetime.now(timezone.utc).timestamp()-p.stat().st_mtime),"fields":{k:v[k] for k in allowed if k in v}}
+           except (ValueError,UnicodeError,OSError) as exc:return {"present":True,"read_error":type(exc).__name__}
+          statuses=[
+          "stage-06/autonomous-closed-loop-status.json","stage-06/strict-qc-status.json",
+          "stage-05/substantive-revision-status.json","stage-05/source-grounded-v003-status.json",
+          "stage-06/source-grounded-v003-qc-status.json","stage-06/real-qc1000-health.json",
+          ]
+          c=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=8)
+          markers=["SAEIT_PRIVATE_REAL_QC1000_MONITOR_20261023","AGRI200","STRICT_QC","AUTONOMOUS"]
+          result={"folders":{x:count(x) for x in folders},"statuses":{x:state(x) for x in statuses},
+          "cron_marker_lines":{m:sum(m in ln for ln in c.stdout.splitlines()) for m in markers},
+          "qc_code_files_installed":{x:(ops/x).is_file() and not (ops/x).is_symlink() for x in
+          ["agri200-strict-qc1000.py","agri200-source-grounded-v003.py","agri200-source-grounded-v003-qc.py","real-qc1000-live-monitor.py","agri200-autonomous-closed-loop.py"]},
+          "sites_modified":False}
+          print("QC_REWORK_LIVE_DIAGNOSTIC="+json.dumps(result,ensure_ascii=False,sort_keys=True),flush=True)
+          PY
