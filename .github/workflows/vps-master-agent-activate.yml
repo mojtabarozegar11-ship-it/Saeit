@@ -1,4 +1,4 @@
-name: VPS Activate Single Master Agent and Evolution
+name: VPS Activate and Repair Single Master Agent and Evolution
 on:
   push:
     branches: [main]
