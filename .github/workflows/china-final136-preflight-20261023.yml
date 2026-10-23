@@ -1,0 +1,101 @@
+name: China supplier 500-target preflight (review only; never sends mail)
+on:
+  push:
+    branches:
+      - ops/china-import-500-final136-20261023
+    paths:
+      - .github/workflows/china-final136-preflight-20261023.yml
+      - data/outreach/china_final136_import_manufacturers_20261023.csv
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-campaign:
+    name: Check exact goal, duplicates and contact review
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read-only audit; absolutely no SMTP, SSH or mail dispatch
+        shell: bash
+        run: |
+          python - <<'PY'
+          import csv, os, re, sys
+          from pathlib import Path
+          from urllib.parse import urlparse
+          root = Path(".")
+          last = root / "data/outreach/china_final136_import_manufacturers_20261023.csv"
+          previous = [
+            "data/outreach/china_food_50_companies_20261023.csv",
+            "data/outreach/china_food_next100_20261023.csv",
+            "data/outreach/china_machinery_150_manufacturers_20261023.csv",
+            "scripts/company_manufacturer_outreach_20261022.py",
+            "scripts/company_russian_outreach_20261022.py",
+          ]
+          expected_sent = 364
+          target = 500
+          needed = target - expected_sent
+          errors = []
+          old_emails = set()
+          for filename in previous:
+            path = root / filename
+            if not path.is_file():
+              errors.append(f"Missing prior-record file: {filename}")
+              continue
+            for email in re.findall(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}', path.read_text(encoding="utf-8"), re.I):
+              old_emails.add(email.casefold())
+          rows = []
+          if not last.is_file():
+            errors.append(f"Missing reviewed recipient file: {last}")
+          else:
+            with last.open(encoding="utf-8-sig", newline="") as fp:
+              reader = csv.DictReader(fp)
+              required = {"category", "company", "email", "public_source_url", "contact_basis", "reviewed_by", "reviewed_at"}
+              missing = required - set(reader.fieldnames or [])
+              if missing:
+                errors.append("Missing mandatory review columns: " + ",".join(sorted(missing)))
+              else:
+                rows = list(reader)
+          emails = set()
+          companies = set()
+          permitted_basis = {"opt_in", "existing_relationship", "public_business_inquiry"}
+          for idx, row in enumerate(rows, 2):
+            address = row["email"].strip().casefold()
+            company = " ".join(row["company"].split()).casefold()
+            source = row["public_source_url"].strip()
+            basis = row["contact_basis"].strip()
+            if not re.fullmatch(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}', address, re.I):
+              errors.append(f"Invalid email, row {idx}")
+            if address in emails or address in old_emails:
+              errors.append(f"Duplicate or prior-contact email, row {idx}")
+            if not company or company in companies:
+              errors.append(f"Missing or duplicate company, row {idx}")
+            if urlparse(source).scheme != "https" or not urlparse(source).netloc:
+              errors.append(f"Missing HTTPS public business source, row {idx}")
+            if basis not in permitted_basis:
+              errors.append(f"Missing or invalid lawful contact basis, row {idx}")
+            if not row["reviewed_by"].strip() or not row["reviewed_at"].strip():
+              errors.append(f"Unreviewed recipient, row {idx}")
+            emails.add(address)
+            companies.add(company)
+          if len(rows) != needed:
+            errors.append(f"Expected exactly {needed} new reviewed contacts, found {len(rows)}")
+          print(f"BASELINE_PRIOR_EXIM_ACCEPTED={expected_sent}")
+          print(f"TARGET_TOTAL={target}")
+          print(f"REQUIRED_NEW_UNIQUE_CONTACTS={needed}")
+          print(f"CANDIDATE_RECORDS={len(rows)}")
+          print(f"UNIQUE_PRIOR_EMAILS_FOR_DUPLICATE_CHECK={len(old_emails)}")
+          print(f"REVIEW_STATUS={'PASS' if not errors else 'BLOCKED'}")
+          print("EMAILS_SENT_BY_THIS_WORKFLOW=0")
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+            with open(summary,"a",encoding="utf-8") as fp:
+              fp.write("### Read-only supplier contact gate\\n")
+              fp.write(f"Previously recorded Exim acceptance: {expected_sent}; target: {target}; needed: {needed}; candidate rows: {len(rows)}.\\n")
+              fp.write("**No email was or can be sent by this workflow.**\\n")
+              for reason in errors[:30]:
+                fp.write("- "+reason+"\\n")
+          for reason in errors[:30]:
+            print("BLOCKER="+reason)
+          sys.exit(1 if errors else 0)
+          PY
