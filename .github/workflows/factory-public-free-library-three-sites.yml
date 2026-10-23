@@ -1,8 +1,14 @@
 name: Factory approved free resource library three-site activation
 on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
   push:
     branches: [main]
-    paths: [.github/workflows/factory-public-free-library-three-sites.yml]
+    paths:
+      - .github/workflows/factory-public-free-library-three-sites.yml
+      - scripts/factory_public_library_adapter.py
+      - tests/test_factory_public_library_adapter.py
 permissions: {contents: read}
 concurrency:
   group: saeit-factory-public-resource-activation

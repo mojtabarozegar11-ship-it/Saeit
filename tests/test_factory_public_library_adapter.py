@@ -2,6 +2,7 @@
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -44,6 +45,22 @@ class ResourceTests(unittest.TestCase):
             self.assertIn(mod.CANONICAL, (root / location / "index.html").read_text())
             self.assertIn("PassengerEnabled off", (root / location / ".htaccess").read_text())
         mod.publish(self.home, "zomorod-main")
+
+    def test_restricted_umask_and_existing_private_directory_are_fixed(self):
+        # Previously the published files existed but parent folders stayed
+        # 0700 (the job's umask 077), causing live HTTP 404/403.
+        old = os.umask(0o077)
+        try:
+            mod.publish(self.home, "mojplaywin-main")
+            dest = self.mpw / "factory-releases" / "resources"
+            self.assertEqual(dest.stat().st_mode & 0o777, 0o755)
+            dest.chmod(0o700)
+            mod.publish(self.home, "mojplaywin-main")
+            self.assertEqual(dest.stat().st_mode & 0o777, 0o755)
+            self.assertEqual((dest / "catalog.json").stat().st_mode & 0o777, 0o644)
+            self.assertEqual((dest / mod.MARKER).stat().st_mode & 0o777, 0o600)
+        finally:
+            os.umask(old)
 
     def test_existing_non_factory_directory_is_protected(self):
         target = self.mpw / "factory-releases" / "resources"
