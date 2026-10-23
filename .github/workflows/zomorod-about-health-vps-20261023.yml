@@ -1,0 +1,125 @@
+name: Zomorod public health and cPanel read-only diagnosis 20261023
+on:
+  push:
+    branches: [zomorod/about-science-evidence-20261023]
+    paths: [.github/workflows/zomorod-about-health-vps-20261023.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare fingerprint-pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-public-health-relay"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo 'RELAY_PINNED=yes'
+      - name: Public routes from VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-public-health-relay"
+          ssh -T -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          from urllib.request import Request, urlopen
+          from urllib.error import HTTPError
+          for domain in ('https://zomorodmelal.ir','https://mojplaywin.com'):
+              for route in ('/','/about/') if 'zomorod' in domain else ('/',):
+                  try:
+                      with urlopen(Request(domain+route,headers={'User-Agent':'Mozilla/5.0'}),timeout=16) as res:
+                          status=res.status; prefix=res.read(80)
+                  except HTTPError as e:
+                      status=e.code; prefix=e.read(80)
+                  except Exception as e:
+                      status=type(e).__name__;prefix=b''
+                  print('VPS_PUBLIC',domain+route,status,'bytes_prefix',len(prefix))
+          PY
+      - name: cPanel local files, process and routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-public-health-relay"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          import os,shutil,subprocess
+          home=Path.home()
+          print('CPANEL_HOME_MATCH',home.name=='zomorod2')
+          for rel in ('public_html/index.html','public_html/about/index.html','public_html/company/index.html','public_html/.htaccess','public_html/passenger_wsgi.py'):
+              p=home/rel
+              print('CPANEL_FILE',rel,'exists',p.exists(),'bytes',(p.stat().st_size if p.exists() and p.is_file() else 0),'readable',os.access(p,os.R_OK))
+          p=home/'public_html/about/index.html'
+          if p.is_file():
+              b=p.read_bytes()
+              print('CPANEL_ABOUT_MARKER',b'zm-about-research-evidence-20261023' in b)
+          for rel in ('public_html/error_log','logs'):
+              p=home/rel
+              print('CPANEL_LOG_ENTRY',rel,'exists',p.exists(),'is_dir',p.is_dir())
+          for domain in ('https://zomorodmelal.ir','https://mojplaywin.com'):
+              for route in ('/','/about/') if 'zomorod' in domain else ('/',):
+                  try:
+                      with urlopen(Request(domain+route,headers={'User-Agent':'Mozilla/5.0'}),timeout=16) as res:
+                          code=res.status
+                  except HTTPError as e: code=e.code
+                  except Exception as e: code=type(e).__name__
+                  print('CPANEL_PUBLIC',domain+route,code)
+          print('CPANEL_FREE_GB',round(shutil.disk_usage(home).free/1e9,2))
+          for cmd in ('lveinfo','cloudlinux-selector','selectorctl'):
+              print('CPANEL_TOOL',cmd,bool(shutil.which(cmd)))
+          try:
+              result=subprocess.run(['ps','-u','zomorod2','-o','comm='],text=True,capture_output=True,timeout=5)
+              names=result.stdout.splitlines()
+              print('CPANEL_PROCESSES',len(names),'python',sum('python' in n.lower() for n in names),'lsphp',sum('lsphp' in n.lower() for n in names))
+          except Exception as e:print('CPANEL_PS_UNAVAILABLE',type(e).__name__)
+          PY
+      - name: Remove runner key files
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zomorod-public-health-relay"
+          test ! -f "$d/vps.key" || shred -u "$d/vps.key"
+          test ! -f "$d/host.key" || shred -u "$d/host.key"
