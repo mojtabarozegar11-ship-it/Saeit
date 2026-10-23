@@ -1,0 +1,69 @@
+{
+  "schema": "saeit.three-independent-factories.hourly-checkpoint.v1",
+  "updated_utc": "2026-10-23T10:19:02Z",
+  "safety": {
+    "independent_factory_boundaries": true,
+    "no_live_database_write_authorized": true,
+    "no_public_product_republication": true,
+    "no_payment_changes": true,
+    "no_claimed_expert_signature": true,
+    "no_1000_quality_certification": true
+  },
+  "vps": {
+    "base_merge": "a40a822fd31edb99737117c56a8417174ab7082c",
+    "diagnostic_commits": [
+      "3a850253f182d914c44b57cce538ac2ecdb6e570",
+      "8f71974b0ed8f01767b78963fafc1bd878a58ee8"
+    ],
+    "production_run": "39938042630",
+    "regression": "PASS",
+    "source_pinning": "PASS",
+    "workorders": 128,
+    "sources_available": 91,
+    "missing_sources": 37,
+    "archive_recovery_rejected": 37,
+    "reasons": {
+      "original_recipe_readme_missing": 16,
+      "original_recipe_tests_missing": 8,
+      "source_provenance_missing": 13
+    },
+    "prior_generic_archive_recovery_error": 24,
+    "remaining_generic_archive_recovery_error": 0,
+    "private_document_editions_already_issued": 36,
+    "private_document_edition_engineering_review": 1,
+    "native_rebuild_attempted_before": 0,
+    "native_rebuild_attempted_after": 0,
+    "technical_candidates_verified_before": 0,
+    "technical_candidates_verified_after": 0,
+    "commercial_release_authorized": false,
+    "independent_qa_1000_verified": false,
+    "next_action": "Do not infer original source from delivery ZIP. Seek authenticated original README/test_*.py and source hash for 24 archive-contract failures; recover only on matching immutable provenance. For 13 other products, require original source SHA256 evidence. Recheck existing document-edition engineering conflict without overwriting."
+  },
+  "zomorod": {
+    "base_merge": "16801966583834d0017d234f1a419f9f31bff640",
+    "site_agent_run": "39933618074",
+    "live_config_db_engine": "sqlite3",
+    "live_db_table_count": 0,
+    "agent_cycle_success": false,
+    "historical_isolated_sandbox_run": "39274574451",
+    "historical_backup_tables": 25,
+    "historical_sandbox_migrate": "passed",
+    "missing_expected_agent_tables": [
+      "core_agent",
+      "core_agenttask",
+      "core_knowledgeagentrun",
+      "core_knowledgebook"
+    ],
+    "production_db_restoration_authorized": false,
+    "never_select_staging_db": "zomorod2_sites_main",
+    "next_action": "Identify true site-only production DB with read-only inspection; prove identity, age, integrity, history, recoverable backup, no live data loss. Do not migrate or write zero-table sqlite or staging MariaDB."
+  },
+  "mojplaywin": {
+    "public_store_page_readable": true,
+    "public_games_page_readable": true,
+    "real_sales_or_payment_success_verified": false,
+    "qa_return_count_verified_this_run": false,
+    "products_republished": 0,
+    "next_action": "Inspect independent private QA returns and verified test-sale receipts without altering live payment or republishing products."
+  }
+}
