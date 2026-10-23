@@ -43,7 +43,7 @@ function hexBloom(){
 function prismRelay(){
  const levels=[[[2,2,1],[2,0,1]],[[1,2,1],[1,4,0],[6,4,0]],[[3,2,1],[3,0,1]],[[4,2,1],[4,4,0],[7,4,0]],[[2,2,1],[2,0,1],[6,0,0]],[[1,2,1],[1,4,0],[5,4,0]]];
  // A preset's final receiver follows the trace of its solved mirror states.
- const solved=[{x:7,y:0},{x:7,y:4},{x:7,y:0},{x:7,y:4},{x:6,y:4},{x:5,y:0}];
+ const solved=[{x:7,y:0},{x:6,y:0},{x:7,y:0},{x:7,y:4},{x:6,y:4},{x:5,y:0}];
  let grid={},target=solved[0],path=[],solvedNow=false,pause=0;
  function stage(){grid={};for(const [x,y,v] of levels[level-1])grid[y*8+x]=1-v;target=solved[level-1];path=[];solvedNow=false;pause=0}
  stage();
@@ -68,8 +68,8 @@ function kitchenRush(){
 function typeDefender(){
  const wordlist=['ORBIT','SOLAR','METRIC','CANVAS','PYTHON','CIPHER','ROCKET','COMET','OCEAN','CLOUD','LOGIC','SQUAD','VECTOR','MATRIX','SECURE','PUZZLE','NEBULA','GALAXY','NIMBLE','BRIGHT','QUARTZ','STREAM'];
  const input=mountInput('typeInput','Type the falling word',15);let enemies=[],clock=0,spawn=1.8,miss=0,kills=0;
- function type(){const t=input.value.trim().toUpperCase();if(!t)return;const i=enemies.findIndex(x=>x.word===t);if(i>=0){reward(110+Math.round((1-enemies[i].y/505)*70));enemies.splice(i,1);kills++;level=1+Math.floor(kills/5);notify('Intercept confirmed! '+kills+' of 20 targets cleared.');input.value='';if(kills>=20)finish(true,'Cyber perimeter protected against twenty threats')}else{input.value='';notify('No matching threat. Type any visible falling word.')}}input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();type()}});const form=input.parentElement;
- return{help:'Type an entire falling word and press Enter / ACTION. Defeat 20 words before four reach the shield.',act(k){if(k==='action')type();else{input.focus()}},update(dt){clock+=dt;spawn-=dt;if(spawn<=0){let w=wordlist[rnd(wordlist.length)];enemies.push({word:w,y:-12,x:125+rnd(645)});spawn=Math.max(.8,2.6-level*.19)}for(const e of enemies)e.y+=(40+level*7)*dt;const lost=enemies.filter(x=>x.y>=445);miss+=lost.length;enemies=enemies.filter(x=>x.y<445);if(lost.length){notify(lost.length+' threats reached the shield; '+Math.max(0,4-miss)+' shields remain.');if(miss>=4)finish(false,'Four threats breached the firewall')}},draw(){bg('#131332','#0b3547');for(let i=0;i<27;i++){let x=(i*71)%W;stroke(x,0,x,H,'#6c9de818',1)}rectangle(0,467,W,53,'#176572',0);label('FIREWALL',24,499,20,'#b3f4e6');for(const e of enemies){rectangle(e.x-62,e.y-26,124,48,'#244c69',11);label(e.word,e.x,e.y+5,21,'#f0dbad','center')}label('INTERCEPTED '+kills+'/20',27,49,19,'#b5f4e6');label('SHIELDS '+Math.max(0,4-miss),765,49,18,'#ffdab4')}},dispose(){form.remove()}}
+ function type(){const t=input.value.trim().toUpperCase();if(!t)return;const i=enemies.findIndex(x=>x.word===t);if(i>=0){reward(110+Math.round((1-enemies[i].y/505)*70));enemies.splice(i,1);kills++;level=1+Math.floor(kills/5);notify('Intercept confirmed! '+kills+' of 20 targets cleared.');input.value='';if(kills>=20)finish(true,'Cyber perimeter protected against twenty threats')}else{input.value='';notify('No matching threat. Type any visible falling word.')}}input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();type()}});const form=input.parentElement;
+ return{help:'Type an entire falling word and press Enter / ACTION. Defeat 20 words before four reach the shield.',act(k){if(k==='action')type();else{input.focus()}},update(dt){clock+=dt;spawn-=dt;if(spawn<=0){let w=wordlist[rnd(wordlist.length)];enemies.push({word:w,y:-12,x:125+rnd(645)});spawn=Math.max(.8,2.6-level*.19)}for(const e of enemies)e.y+=(40+level*7)*dt;const lost=enemies.filter(x=>x.y>=445);miss+=lost.length;enemies=enemies.filter(x=>x.y<445);if(lost.length){notify(lost.length+' threats reached the shield; '+Math.max(0,4-miss)+' shields remain.');if(miss>=4)finish(false,'Four threats breached the firewall')}},draw(){bg('#131332','#0b3547');for(let i=0;i<27;i++){let x=(i*71)%W;stroke(x,0,x,H,'#6c9de818',1)}rectangle(0,467,W,53,'#176572',0);label('FIREWALL',24,499,20,'#b3f4e6');for(const e of enemies){rectangle(e.x-62,e.y-26,124,48,'#244c69',11);label(e.word,e.x,e.y+5,21,'#f0dbad','center')}label('INTERCEPTED '+kills+'/20',27,49,19,'#b5f4e6');label('SHIELDS '+Math.max(0,4-miss),765,49,18,'#ffdab4')},dispose(){form.remove()}}
 }
 function codebreaker(){
  const input=mountInput('codeInput','Four unique digits 1–6',4),secret=[];while(secret.length<4){const x=1+rnd(6);if(!secret.includes(x))secret.push(x)}
@@ -81,11 +81,11 @@ function codebreaker(){
  if(exact===4){finish(true,'Security vault unlocked in '+guesses+' guesses!');return}
  if(guesses>=8){finish(false,'Vault locked after eight guesses.');return}
  level=guesses+1;notify('Exact position: '+exact+'. Correct digit, wrong slot: '+misplaced+'. '+(8-guesses)+' tries left.')}
- input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();guess()}});
+ input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();guess()}});
  return{help:'Deduce four UNIQUE digits between 1 and 6. After each guess see exact matches and misplaced matches. Eight attempts.',act(k){if(k==='action')guess();else input.focus()},update(){},draw(){bg('#121c2f','#122f42');label('CODEBREAKER VAULT',32,50,31,'#ffd5a1');label('4 unique digits from 1–6  •  8 attempts',34,77,17);
  for(let i=0;i<8;i++){const y=106+i*47;rectangle(35,y,849,41,i===history.length?'#24465b':'#142c41',7);if(history[i]){const h=history[i];for(let j=0;j<4;j++){circle(70+j*56,y+20,17,col[Number(h.s[j])-1]);label(h.s[j],70+j*56,y+26,17,'#0a2936','center')}
  label(h.exact+' EXACT',355,y+27,17,'#a5edcc');label(h.misplaced+' MISPLACED',568,y+27,17,'#efd196')}else{label('ATTEMPT '+(i+1),57,y+26,14,'#819daa')}}
- label('Submit using Enter or ACTION',33,505,17,'#f2d5a4')}},dispose(){input.parentElement.remove()}}
+ label('Submit using Enter or ACTION',33,505,17,'#f2d5a4')},dispose(){input.parentElement.remove()}}
 }
 const builders={'hex-bloom':hexBloom,'prism-relay':prismRelay,'kitchen-rush':kitchenRush,'type-defender':typeDefender,'codebreaker-vault':codebreaker};
 if(!builders[slug])throw Error('Unknown game '+slug);
