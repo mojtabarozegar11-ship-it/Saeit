@@ -15,6 +15,21 @@ from tests.test_mpw_tron_independent_solidified_rpc import (
 )
 
 class ProductionCheckoutReleaseTests(unittest.TestCase):
+    def test_explicit_public_launch_does_not_claim_a_merchant_test_payment(self):
+        config=SimpleNamespace(DEBUG=False, MPW_COMMERCE_RELEASE_READY=True,
+            MPW_COMMERCE_DOWNLOADS_ENABLED=True, MPW_WALLETLESS_TRX_PUBLIC_ENABLED=True,
+            MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED=False,
+            MPW_WALLETLESS_TRX_PUBLIC_RELEASE_AUTHORIZED=True)
+        db=SimpleNamespace(vendor="mysql",alias="default")
+        _commercial_db(config,db)
+        self.assertFalse(config.MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED)
+        for field in ('MPW_COMMERCE_DOWNLOADS_ENABLED','MPW_COMMERCE_RELEASE_READY',
+                      'MPW_WALLETLESS_TRX_PUBLIC_ENABLED','MPW_WALLETLESS_TRX_PUBLIC_RELEASE_AUTHORIZED'):
+            setattr(config,field,False)
+            with self.subTest(field=field),self.assertRaises(PaymentHold):
+                _commercial_db(config,db)
+            setattr(config,field,True)
+
     def setUp(self):
         self.settings=SimpleNamespace(
             DEBUG=False,
