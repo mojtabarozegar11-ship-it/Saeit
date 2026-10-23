@@ -48,7 +48,7 @@ async function copy(which){
 }
 document.getElementById("copy-recipient").addEventListener("click",()=>copy("recipient"));
 document.getElementById("copy-amount").addEventListener("click",()=>copy("amount"));
-let stopped=false,checking=false,failures=0,started=Date.now(),timer=null;
+let stopped=false,checking=false,failures=0,started=Date.now(),timer=null,lastProofAttempt=0;
 function schedule(delay){
   if(stopped)return;
   if(timer!==null)window.clearTimeout(timer);
@@ -69,6 +69,19 @@ async function check(){
   try{
     const url=frame.getAttribute("data-status-url");
     if(!/^\\/commerce\\/trx-easy\\/status\\/[1-9][0-9]*\\/$/.test(url))throw new Error("Invalid status endpoint");
+    // Optional isolated adapter: ask the merchant server to verify incoming
+    // transfers. This POST carries no txID, wallet signature or proof claim.
+    const proofUrl=frame.getAttribute("data-reconcile-url")||"";
+    const csrf=frame.getAttribute("data-csrf-token")||"";
+    if(/^\\/commerce\\/trx-easy\\/reconcile\\/[1-9][0-9]*\\/$/.test(proofUrl)
+      && /^[A-Za-z0-9]{32,128}$/.test(csrf)
+      && Date.now()-lastProofAttempt>=15000){
+      lastProofAttempt=Date.now();
+      try{
+        await fetch(proofUrl,{method:"POST",credentials:"same-origin",cache:"no-store",
+          redirect:"error",signal:controller.signal,headers:{"Accept":"application/json","X-CSRFToken":csrf}});
+      }catch(e){/* Await next authenticated status observation; never accept browser proof. */}
+    }
     const r=await fetch(url,{credentials:"same-origin",cache:"no-store",redirect:"error",
       signal:controller.signal,headers:{"Accept":"application/json"}});
     if(!r.ok)throw new Error("Payment check temporarily unavailable");
