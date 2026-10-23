@@ -46,7 +46,7 @@ def safe(rel):
 
 def read_required(rel):
     p=safe(rel)
-    if not p.is_file() or p.stat().st_size<100:
+    if not p.is_file() or p.stat().st_size < (1 if rel.endswith(".htaccess") else 100):
         raise RuntimeError("Protected file missing/empty: "+rel)
     return p.read_bytes()
 
