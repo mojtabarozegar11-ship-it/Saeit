@@ -120,7 +120,12 @@ def verify_runner_signature(document, pubkey):
     try:
         with tempfile.TemporaryDirectory(prefix="qc1000-verifier-") as tmp:
             base = Path(tmp)
-            (base / "payload").write_bytes(canonical(payload))
+            # Ed25519 verifies a domain-separated 32-byte SHA256 digest.
+            # Some VPS OpenSSL builds reject large one-shot raw messages.
+            signed_digest = hashlib.sha256(
+                b"SAEIT_REAL_QC1000_ED25519_V1\x00" + canonical(payload)
+            ).digest()
+            (base / "payload").write_bytes(signed_digest)
             (base / "signature").write_bytes(bytes.fromhex(signature))
             result = subprocess.run(
                 ["openssl", "pkeyutl", "-verify", "-pubin", "-inkey", str(pubkey),
