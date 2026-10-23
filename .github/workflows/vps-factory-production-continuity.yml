@@ -56,6 +56,31 @@ jobs:
           os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
           import django
           django.setup()
+          # Read-only SQLite contention diagnostics. Never print DATABASE_URL,
+          # credentials, the database name or private task payloads.
+          from django.conf import settings
+          from django.db import connection
+          from pathlib import Path
+          engine=settings.DATABASES["default"]["ENGINE"]
+          print("FACTORY_DB_ENGINE_KIND="+("sqlite" if engine.endswith("sqlite3") else "non_sqlite"))
+          if engine.endswith("sqlite3"):
+              timeout=settings.DATABASES["default"].get("OPTIONS",{}).get("timeout",5)
+              print("FACTORY_SQLITE_CONFIGURED_BUSY_TIMEOUT_SECONDS="+str(timeout))
+              with connection.cursor() as cursor:
+                  cursor.execute("PRAGMA journal_mode")
+                  print("FACTORY_SQLITE_JOURNAL_MODE="+str(cursor.fetchone()[0]))
+                  cursor.execute("PRAGMA busy_timeout")
+                  print("FACTORY_SQLITE_ACTUAL_BUSY_TIMEOUT_MS="+str(cursor.fetchone()[0]))
+              for name in ("core/management/commands/factory_staging_tick.py",
+                           "core/management/commands/seed_factory_agents.py"):
+                  file=Path(name)
+                  if file.is_file() and not file.is_symlink():
+                      rows=file.read_text(encoding="utf8").splitlines()
+                      points=[i for i,row in enumerate(rows)
+                              if "seed_factory_agents" in row or "atomic" in row
+                              or "transaction" in row or "retry" in row.lower()]
+                      print("FACTORY_SOURCE_SIGNALS="+file.name+":"+
+                            ",".join(str(i+1)+":"+rows[i].strip()[:120] for i in points[:20]))
           from django.apps import apps
           pattern = re.compile(r"(factory|task|queue|probe|opportun|evidence|research|workflow|schedule|job|run)", re.I)
           for model in apps.get_app_config("core").get_models():
