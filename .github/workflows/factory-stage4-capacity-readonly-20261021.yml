@@ -482,11 +482,6 @@ jobs:
               "research_requests_started":0,"budget_changed":False},sort_keys=True))
           PY
           REMOTE
-      - name: Destroy runner SSH key material
-        if: always()
-        shell: bash
-        run: rm -rf -- "$RUNNER_TEMP/stage4-readonly"
-
       - name: Inspect due-active master scheduling branch without mutation
         shell: bash
         run: |
@@ -514,3 +509,8 @@ jobs:
               print("STAGE4_MASTER_CONTROL:"+str(i+1)+"="+line)
           print("STAGE4_MASTER_CONTROL_LINES="+str(len(show)))
           PY
+      - name: Destroy runner SSH key material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/stage4-readonly"
+
