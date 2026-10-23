@@ -970,10 +970,10 @@ def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
             "blocked_until_utc":blocked,"openalex_credential_mode":openalex_mode,
             "checked_utc":utc()})
         report["openalex_key_configured"]=openalex_mode=="keyed"
-         # Count actual independently indexed dossiers (not workpapers or APIs).
-         report["total_research_source_evidence"] = sum(1 for order_id in ids
-             if (stage/"source-evidence"/(order_id+"--r001.json")).is_file())
-         report["remaining_priority_orders"] = 200 - report["total_research_source_evidence"]
+        # Count actual independently indexed dossiers (not workpapers or APIs).
+        report["total_research_source_evidence"] = sum(1 for order_id in ids
+            if (stage/"source-evidence"/(order_id+"--r001.json")).is_file())
+        report["remaining_priority_orders"] = 200 - report["total_research_source_evidence"]
         report["provider_cooldown_active"]=any(
             dt.datetime.fromisoformat(v)>dt.datetime.now(dt.timezone.utc)
             for v in blocked.values())
