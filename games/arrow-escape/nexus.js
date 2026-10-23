@@ -407,8 +407,11 @@ try {
   if (state.removed.length === state.pieces.length) celebrateIfWon();
   else if (level >= 4 && !moveLog.length) message('چرخش واقعی حلقه فعال است؛ فلش طلایی به هم‌راستایی نیاز دارد.');
 } catch (error) {
-  message('نمایش سه‌بعدی روی این دستگاه راه‌اندازی نشد. مرورگر را به‌روز کنید یا شتاب‌دهی گرافیکی را فعال کنید.');
-  console.error('ARROW_NEXUS_STARTUP_FAILED', error);
+  console.warn('ARROW_NEXUS_WEBGL_UNAVAILABLE_USING_CSS3D', error);
+  import('./nexus-fallback.js').then(module => module.start(Core)).catch(fallbackError => {
+    message('اجرای بازی در این دستگاه ممکن نشد؛ لطفاً صفحه را دوباره بارگذاری کنید.');
+    console.error('ARROW_NEXUS_ALL_RENDERERS_FAILED', fallbackError);
+  });
 }
 window.ArrowNexusDebug = Object.freeze({
   getState: () => ({ level, best, remaining: state.pieces.length - state.removed.length,
