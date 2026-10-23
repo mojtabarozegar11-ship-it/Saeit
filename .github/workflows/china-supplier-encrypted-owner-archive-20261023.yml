@@ -1,0 +1,97 @@
+name: Private encrypted supplier original texts and catalogues for owner download
+on:
+  push:
+    branches: ['ops/china-import-500-final136-20261023']
+    paths: ['.github/workflows/china-supplier-encrypted-owner-archive-20261023.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate supplier archive creation code
+        run: python3 -m py_compile scripts/company_bundle_supplier_catalogues_private_20261023.py
+      - name: Prepare verified pinned SSH bridge to private corporate mailbox
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/company-mail-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/vps.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          {
+            echo 'Host bridge'; echo '  HostName 178.239.147.150'; echo '  User githubops'; echo "  IdentityFile $d/vps.key"; echo "  UserKnownHostsFile $d/vps.known";
+            echo 'Host company'; echo '  HostName zohal.pws-dns.net'; echo '  User zomorod2'; echo '  Port 1396'; echo "  IdentityFile $d/host.key"; echo "  UserKnownHostsFile $d/host.known"; echo '  ProxyJump bridge';
+            echo 'Host *'; echo '  StrictHostKeyChecking yes'; echo '  IdentitiesOnly yes'; echo '  BatchMode yes'; echo '  ConnectTimeout 12'; echo '  ForwardAgent no'; echo '  RequestTTY no';
+          } > "$d/config"
+          chmod 600 "$d/config"
+          echo SSH_BRIDGE_PIN_VERIFIED
+      - name: Stream corporate catalogue ZIP directly into encrypted CMS archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/company-mail-inspect"
+          cat > "$d/recipient.pem" <<'CERT'
+          -----BEGIN CERTIFICATE-----
+          MIIETzCCAregAwIBAgIUEZc2NUf+3nMdpPBO1KA2myeK7IgwDQYJKoZIhvcNAQEL
+          BQAwNzE1MDMGA1UEAwwsU3VwcGxpZXIgYXJjaGl2ZSBwcml2YXRlIHRyYW5zZmVy
+          IDIwMjYtMTAtMjMwHhcNMjYxMDIzMTAxNTQzWhcNMjYxMDI1MTAxNTQzWjA3MTUw
+          MwYDVQQDDCxTdXBwbGllciBhcmNoaXZlIHByaXZhdGUgdHJhbnNmZXIgMjAyNi0x
+          MC0yMzCCAaIwDQYJKoZIhvcNAQEBBQADggGPADCCAYoCggGBAMyZ8IiE1wHizefx
+          C94DKiMsqyMOQ5PwvIAOil6DFXy2Qhva90atGSC/sdrRGFRCRXstF586yn4CkN7j
+          D7gh6on9TH18LPlwQ3lDw4479KDplJqhDAio5GmmII+U5ClMSy6oiwJwRawm/rZB
+          AEyRPK33KN1v/ijyaZNksuKkUCVGiOOOVqBGHx5UhNL+Ih9V8EHxyNqy6yoFBBa6
+          z0tQ+JAOLcNjg1SJdDhn91Yj+vQTrw/txAJ8R/hSblkmu9bM1vk2Rf2zG33YQuEj
+          Zhn2dZ4S7PHl4bblWVEJfgBnKMkalqzhw9I9jKbuicoDlzYdCg7swp+4iZg5fhtl
+          4dObIIFTPx5iQvCwyj3Vl/tG5Gt/AUzgRKVkzj5n6GfFwNTfxkEI61S/ZodI14+5
+          5NdTuRnTybzv8lxCUjti10U3agGJZ0Q56c/zzsC+xAIfZcjZ/JpU+MCzuviaEe/K
+          nN5xXPf9A5Mys2fN5nSbNv4TZ9oE6FWwnbDA3rsSKSCqDnUUuQIDAQABo1MwUTAd
+          BgNVHQ4EFgQU7NFMsRuuCDZ3Cty/JiwcV6kftjgwHwYDVR0jBBgwFoAU7NFMsRuu
+          CDZ3Cty/JiwcV6kftjgwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOC
+          AYEAoi0mw+07lXYe928xrwjBxKubvcoDuKz955+nNoUHi6EAWvvvpBRWmHUyYWJG
+          9oSMKqsnwmT3UtbtO9Epb0AbZa0Jbddkv1lnlG+Fgqdzz9Oe7bPzAagr9HCD1/L1
+          HnZ0qiMkTIRuD7xOCOMUpatccT+Q2M1DKPSLxMYtfrtFyj94UpVwslps9y/6C0uH
+          J+aBGco5eIckS0ww3wcE/kP4WhBnieGPa/X6BkfF0vEZF/0EvC7FE1641cLztfAE
+          nxPDZ/bUGzKi6e+Dg6Nq8tQxQSmCuT8FlyXSKC8NsvZQkuZpnPavzXcHQeSy5hYW
+          KTYoSj3XSLMT6DqndRH2PtU8EOEAEBKEgBMWoNlh+Bz/bnAvkH3/cM77CmEKE0ao
+          XmWnzuoQfBLZtok3dWgFDIhEFMlnm4xHJp9DNqHwjK2j8l0R+fUjA1eKaNPu3xsg
+          Z8cP3t5n4AL586k4diyRHdmLELy027okB7I+t8XLJ3xfMrZJvUPKJgDd12yv9UsE
+          KlfO
+          -----END CERTIFICATE-----
+          CERT
+          timeout 280s ssh -T -F "$d/config" company python3 - < scripts/company_bundle_supplier_catalogues_private_20261023.py | openssl cms -encrypt -binary -aes256 -outform DER -out "$RUNNER_TEMP/supplier-catalogues-20261023.cms" "$d/recipient.pem"
+          test -s "$RUNNER_TEMP/supplier-catalogues-20261023.cms"
+          openssl cms -cmsout -print -inform DER -in "$RUNNER_TEMP/supplier-catalogues-20261023.cms" >/dev/null
+          echo ENCRYPTED_CATALOGUE_ARCHIVE_READY=true
+          stat -c 'ENCRYPTED_ARCHIVE_BYTES=%s' "$RUNNER_TEMP/supplier-catalogues-20261023.cms"
+      - name: Upload encrypted only (GitHub public repo, key NOT present)
+        uses: actions/upload-artifact@v4
+        with:
+          name: supplier-catalogues-encrypted-owner-20261023
+          path: ${{ runner.temp }}/supplier-catalogues-20261023.cms
+          retention-days: 1
+          if-no-files-found: error
+          compression-level: 0
+      - name: Remove private runner SSH materials
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/company-mail-inspect"
+          test ! -d "$d" || find "$d" -maxdepth 1 -type f -exec shred -u {} +
