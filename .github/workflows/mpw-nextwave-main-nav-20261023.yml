@@ -1,0 +1,117 @@
+name: MojPlayWin guarded Nextwave cards on main games and products
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/mpw-nextwave-main-nav-20261023.yml]
+permissions:
+  contents: read
+concurrency:
+  group: mpw-nextwave-main-cards-20261023
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check narrow PHP patch selftest and pre-deploy production ownership
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_nextwave_main_nav_20261023.py
+          python3 -B scripts/mpw_nextwave_main_nav_20261023.py selftest
+          python3 - <<'PY'
+          import urllib.request,json
+          from pathlib import Path
+          assert ('if: '+chr(36)+'{{ false }}') in Path('.github/workflows/mojplaywin-main-deploy.yml').read_text()
+          root='https://mojplaywin.com'
+          with urllib.request.urlopen(root+'/mpw-editorial/nextwave/20261023/release.json',timeout=20) as r:
+              assert json.load(r)['release_id']=='NEXTWAVE-20261023-01'
+          for path in ('/games/','/products/'):
+              with urllib.request.urlopen(root+path,timeout=20) as r:
+                  t=r.read(950000).decode('utf-8','replace')
+                  assert r.status==200 and r.headers.get('X-MPW-Main-Shell')=='exact-owner-only'
+                  assert t.count('id="mpw-arcade-main-discovery-20261023"')==1
+                  assert 'id="mpw-nextwave-main-discovery-20261023"' not in t
+              print('NEXTWAVE_MAIN_PREDEPLOY_PROTECTED_200',path)
+          PY
+      - name: Connect via verified VPS SSH host keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          CPANEL_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-nextwave";install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$CPANEL_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/cpanel.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/cpanel.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf 'Host saeit-vps\n HostName 178.239.147.150\n User githubops\n IdentityFile %s/vps.key\n UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n HostName zohal.pws-dns.net\n User zomorod2\n Port 1396\n IdentityFile %s/cpanel.key\n UserKnownHostsFile %s/host.known\n ProxyJump saeit-vps\nHost *\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 10\n ForwardAgent no\n RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/cpanel.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/cpanel.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/cpanel.candidate" "$d/host.known"
+      - name: Install guarded new-navigation snippet into exact prehashed PHP owner
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          c="$RUNNER_TEMP/mpw-nextwave/config"
+          ssh -T -F "$c" saeit-cpanel "python3 - install $GITHUB_RUN_ID $GITHUB_SHA" < scripts/mpw_nextwave_main_nav_20261023.py
+      - name: Check both live homepage cards, version, existing releases and browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,json,time
+          root='https://mojplaywin.com'
+          required={
+              '/games/':'/mpw-editorial/nextwave/20261023/orbit-switch/index.html',
+              '/products/':'/mpw-editorial/nextwave/20261023/frame-budget-lab/index.html'
+          }
+          for path,link in required.items():
+              body=''
+              for i in range(8):
+                  req=urllib.request.Request(root+path+'?__navverify='+str(time.time_ns()),headers={'Cache-Control':'no-cache'})
+                  with urllib.request.urlopen(req,timeout=20) as r:
+                      assert r.status==200 and r.headers.get('X-MPW-Main-Shell')=='exact-owner-only'
+                      body=r.read(950000).decode('utf-8','replace')
+                  if body.count('id="mpw-nextwave-main-discovery-20261023"')==1:break
+                  if i==7:raise AssertionError('Missing public Nextwave card:'+path)
+                  time.sleep(2)
+              assert 'data-nextwave-version="NEXTWAVE-20261023-01"' in body
+              assert 'data-navigation-version="NEXTWAVE-MAIN-NAV-20261023-01"' in body
+              assert body.count('id="mpw-arcade-main-discovery-20261023"')==1
+              assert link in body
+              print('NEXTWAVE_PUBLIC_CARD_HTTP200',path)
+          with urllib.request.urlopen(root+'/mpw-editorial/nextwave/20261023/release.json',timeout=20) as r:
+              assert json.load(r)['release_id']=='NEXTWAVE-20261023-01'
+          for p in ('/','/store/','/studio/','/mpw-editorial/index.html','/game-releases/20261021/index.html','/mpw-editorial/arcade-lab/20261022/index.html'):
+              with urllib.request.urlopen(root+p,timeout=20) as r:assert r.status==200,p
+              print('PROTECTED_OTHER_ROUTE_200',p)
+          PY
+          chrome="$(command -v google-chrome || command -v chromium)"
+          for page in games products; do
+            for dims in 1440,900 390,844; do
+              timeout 35s "$chrome" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --window-size="$dims" --dump-dom "https://mojplaywin.com/$page/" > "$RUNNER_TEMP/nextwave-$page-$dims.html" 2>/dev/null
+              grep -Fq 'id="mpw-nextwave-main-discovery-20261023"' "$RUNNER_TEMP/nextwave-$page-$dims.html"
+              grep -Fq 'data-nextwave-version="NEXTWAVE-20261023-01"' "$RUNNER_TEMP/nextwave-$page-$dims.html"
+              echo "NEXTWAVE_MAIN_BROWSER_CARD_PASS $page $dims"
+            done
+          done
+      - name: Exact owned-file rollback on production test failure
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          ssh -T -F "$RUNNER_TEMP/mpw-nextwave/config" saeit-cpanel "python3 - rollback $GITHUB_RUN_ID $GITHUB_SHA" < scripts/mpw_nextwave_main_nav_20261023.py
+      - name: Remove ephemeral SSH keys
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/mpw-nextwave"
