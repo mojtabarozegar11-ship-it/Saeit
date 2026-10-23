@@ -16,14 +16,23 @@ import subprocess
 import sys
 import tempfile
 
-SCHEMA = "saeit.factory.delegated-internal-autonomy.v1"
+SCHEMA = "saeit.factory.delegated-internal-autonomy.v2"
+# Each stage is isolated: missing/failing prerequisites affect that stage only.
+# Unrelated stages still run and can process valid work already in their inbox.
 STEPS = (
-    ("stage34", "stage34-autonomous-handoff.py"),
-    ("stage5", "stage5-evidence-workbook.py"),
-    ("stage6", "stage6-preflight-rework.py"),
-    ("stage5_rework", "stage5-substantive-rework.py"),
+    ("stage1", "stage1-handoff.py", ()),
+    ("stage2_scout", "stage2-literature-scout.py", ("stage2",)),
+    ("stage2", "stage2-research.py", ()),
+    ("stage34", "stage34-autonomous-handoff.py", ()),
+    ("stage5", "stage5-evidence-workbook.py", ("stage34",)),
+    ("stage6", "stage6-preflight-rework.py", ("stage34", "stage5")),
+    ("stage5_rework", "stage5-substantive-rework.py",
+     ("stage34", "stage5", "stage6")),
 )
 COUNTERS = {
+    "stage1_receipts": "stage-01/receipts",
+    "stage2_source_evidence": "stage-02/source-evidence",
+    "stage2_receipts": "stage-02/receipts",
     "stage3_receipts": "stage-03/receipts",
     "stage4_receipts": "stage-04/receipts",
     "stage5_drafts": "stage-05/completed-drafts",
@@ -82,17 +91,27 @@ def atomic_json(target, value):
 
 
 def commands(ops, root, python, batch):
-    paths = {key: str(regular(ops / filename)) for key, filename in STEPS}
+    paths = {key: ops / filename for key, filename, deps in STEPS}
     base = [str(python), "-B"]
     shared = ["--factory-private", str(root)]
-    stage34 = ["--stage34-worker", paths["stage34"]]
-    stage5 = ["--stage5-worker", paths["stage5"]]
-    stage6 = ["--stage6-worker", paths["stage6"]]
+    stage34 = ["--stage34-worker", str(paths["stage34"])]
+    stage5 = ["--stage5-worker", str(paths["stage5"])]
+    stage6 = ["--stage6-worker", str(paths["stage6"])]
     return (
-        ("stage34", base + [paths["stage34"]] + shared + ["--batch", str(batch)]),
-        ("stage5", base + [paths["stage5"]] + shared + stage34 + ["--batch", str(batch)]),
-        ("stage6", base + [paths["stage6"]] + shared + stage34 + stage5 + ["--batch", str(batch)]),
-        ("stage5_rework", base + [paths["stage5_rework"]] + shared +
+        ("stage1", base + [str(paths["stage1"])] + shared +
+         ["--batch", str(min(1000, max(600, batch * 3)))]),
+        ("stage2_scout", base + [str(paths["stage2_scout"])] + shared +
+         ["--stage2-program", str(paths["stage2"]), "--batch", str(min(12, batch)),
+          "--workers", "1", "--query-burst", "1"]),
+        ("stage2", base + [str(paths["stage2"])] + shared +
+         ["--batch", str(max(300, batch))]),
+        ("stage34", base + [str(paths["stage34"])] + shared +
+         ["--batch", str(batch)]),
+        ("stage5", base + [str(paths["stage5"])] + shared + stage34 +
+         ["--batch", str(batch)]),
+        ("stage6", base + [str(paths["stage6"])] + shared + stage34 +
+         stage5 + ["--batch", str(batch)]),
+        ("stage5_rework", base + [str(paths["stage5_rework"])] + shared +
          stage34 + stage5 + stage6 + ["--batch", str(batch)]),
     )
 
@@ -123,7 +142,21 @@ def execute(root, operations, python, batch=200, timeout=150):
             return {"schema": SCHEMA, "status": "already_running"}
         before = inventory(area)
         receipts = []
+        names = {name: operations / filename for name, filename, deps in STEPS}
+        dependencies = {name: (name,) + deps for name, filename, deps in STEPS}
         for stage, argv in steps:
+            unavailable = []
+            for dep in dependencies[stage]:
+                target = names[dep]
+                if target.is_symlink() or not target.is_file():
+                    unavailable.append(dep)
+            if unavailable:
+                receipts.append({
+                    "stage": stage, "executed": False, "exit_code": None,
+                    "result_excerpt": "STAGE_DEPENDENCY_MISSING:" + ",".join(unavailable),
+                    "passed": False,
+                })
+                continue
             try:
                 proc = subprocess.run(
                     argv, shell=False, cwd=str(operations),
@@ -136,16 +169,28 @@ def execute(root, operations, python, batch=200, timeout=150):
                     "result_excerpt": proc.stdout[-1200:],
                     "passed": proc.returncode == 0,
                 })
-            except subprocess.TimeoutExpired:
+            except (subprocess.TimeoutExpired, OSError) as exc:
                 receipts.append({
                     "stage": stage, "executed": True, "exit_code": None,
-                    "result_excerpt": "TIMEOUT_BOUNDED_WORKER",
+                    "result_excerpt": type(exc).__name__ + ":" + str(exc)[:200],
                     "passed": False,
                 })
         after = inventory(area)
         gains = {key: max(0, after[key] - before[key]) for key in COUNTERS}
         failures = [r["stage"] for r in receipts if not r["passed"]]
         status = "degraded" if failures else "advanced" if any(gains.values()) else "idle"
+        previous_path = area / "delegated-internal-autonomy-status.json"
+        previous = {}
+        if previous_path.is_file() and not previous_path.is_symlink():
+            try:
+                previous = json.loads(previous_path.read_text(encoding="utf-8"))
+                if not isinstance(previous, dict):
+                    previous = {}
+            except (OSError, ValueError):
+                previous = {}
+        prior_no_progress = previous.get("consecutive_zero_progress_cycles", 0)
+        if type(prior_no_progress) is not int or prior_no_progress < 0:
+            prior_no_progress = 0
         result = {
             "schema": SCHEMA, "status": status, "finished_at_utc": utcnow(),
             "operating_authority": {
@@ -158,12 +203,20 @@ def execute(root, operations, python, batch=200, timeout=150):
                 "independent_human_specialist_or_legal_proxy_claimed": False,
             },
             "workers": receipts, "failed_workers": failures,
+            "independent_stage_execution": True,
+            "worker_attempts_this_cycle": len(receipts),
+            "worker_successes_this_cycle": sum(int(r["passed"]) for r in receipts),
+            "consecutive_zero_progress_cycles": (
+                0 if any(gains.values()) else prior_no_progress + 1
+            ),
+            "all_stages_are_eligible_for_next_cycle": True,
+            "no_global_shutdown_on_single_worker_failure": True,
             "prior_verified_receipt_counts": before,
             "verified_receipt_counts": after,
             "new_private_receipts": gains,
             "next_action": (
                 "repair_failed_worker_and_retry" if failures else
-                "continue_new_inbox_work_when_available"
+                "retry_missing_evidence_and_continue_all_stage_workers"
             ),
             "independent_specialist_review_auto_certified": False,
             "commercial_quality1000_certified": False,
