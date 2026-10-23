@@ -199,7 +199,18 @@ def recover_source_from_archive(root,recipe,order,maker,recovered_root):
             # A customer-delivery ZIP that lacks executable original source
             # must remain unbuildable, never silently synthesized.
             phase="native_recipe_inspection"
-            _,checked_files=maker.inspect_recipe(payload)
+            try:
+                _,checked_files=maker.inspect_recipe(payload)
+            except RuntimeError:
+                # The manufacturer requires an authentic README and original
+                # test_*.py source. Delivery-only archives are not recipes.
+                # Inspect verified member names only; never expose them.
+                if "README.md" not in normalized:
+                    return False,"original_recipe_readme_missing"
+                if not any(PurePosixPath(name).name.startswith("test_")
+                           and name.endswith(".py") for name in normalized):
+                    return False,"original_recipe_tests_missing"
+                return False,"original_recipe_contract_rejected"
             phase="canonical_source_digest"
             source_hash=maker.source_digest(payload,checked_files)
             if tuple(checked_files)!=tuple(normalized) or source_hash!=source_expected:
