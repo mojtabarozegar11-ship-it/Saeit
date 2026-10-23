@@ -15,10 +15,8 @@ OLD_PARAGRAPH = "نزدیک به ۹۰ درصد فعالیت‌های آن به �
 NEW_PARAGRAPH = "۹۰ درصد فعالیت‌های آن به تحقیقات علمی، پژوهش‌های ژنتیکی و اصلاح نژاد اختصاص یافته است؛ ۱۰ درصد باقی‌مانده به سایر حوزه‌های فعالیت شرکت مربوط است و تفکیک جزئی آن اعلام نشده است. معرفی مستقل"
 OLD_METRIC = "<strong>نزدیک به ۹۰٪</strong>"
 NEW_METRIC = "<strong>۹۰٪</strong>"
-OLD_CONTEXT = "تمرکز نزدیک به ۹۰ درصدی بر پژوهش"
-NEW_CONTEXT = "تمرکز ۹۰ درصدی بر پژوهش"
 MARKER = 'id="zm-about-official-20261018"'
-REPLACEMENTS = ((OLD_PARAGRAPH, NEW_PARAGRAPH), (OLD_METRIC, NEW_METRIC), (OLD_CONTEXT, NEW_CONTEXT))
+REPLACEMENTS = ((OLD_PARAGRAPH, NEW_PARAGRAPH), (OLD_METRIC, NEW_METRIC))
 
 
 def digest(data: bytes) -> str:
