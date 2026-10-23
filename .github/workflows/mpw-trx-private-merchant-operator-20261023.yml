@@ -1,0 +1,111 @@
+name: MPW private merchant-only TRON Mainnet acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      canary_action:
+        description: 'Read-only preflight, one real invoice plus automatic verification, or verify'
+        required: true
+        type: choice
+        default: preflight
+        options: [preflight, issue, verify]
+      sender:
+        description: 'Mainnet public sender TRON address; NEVER seed or private key'
+        required: false
+        type: string
+      invoice_id:
+        description: 'Previously issued private canary invoice ID for verify only'
+        required: false
+        type: string
+permissions: {contents: read}
+jobs:
+  merchant-private-canary:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 19
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: f69cbde6b843723edba299374ca7e20c2e24f40b
+          persist-credentials: false
+      - name: Test immutable reviewed merchant canary source before accessing relay
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/mpw_trx_private_canary_20261023.py
+          python3 -B -m unittest tests.test_mpw_trx_private_canary_20261023 -q
+      - name: Authenticate pinned GitHub-to-VPS-to-cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-gateway-contract-ssh"
+          install -d -m 700 "$d"
+          test -n "$VPS_KEY"
+          test -n "$HOST_KEY"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf 'Host saeit-vps\n HostName 178.239.147.150\n User githubops\n Port 22\n IdentityFile %s/vps.key\n UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n HostName zohal.pws-dns.net\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/host.known\n ProxyJump saeit-vps\nHost *\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 3\n ForwardAgent no\n RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          timeout 50s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+      - name: Check both actual TRON solidified heads on cPanel without funds or DB writes
+        run: |
+          set -euo pipefail
+          timeout 125s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - preflight' < scripts/mpw_trx_private_canary_20261023.py
+      - name: Inventory real low-value digital SKU and merchant staff accounts without writes
+        run: |
+          set -euo pipefail
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - inventory' < scripts/mpw_trx_private_canary_20261023.py
+      - name: Issue exactly one private merchant Mainnet invoice; show exact address and amount
+        if: github.event_name == 'workflow_dispatch' && inputs.canary_action == 'issue'
+        id: issue
+        env:
+          CANARY_SENDER: ${{ inputs.sender }}
+        run: |
+          set -euo pipefail
+          # An untrusted workflow input must never reach a remote shell without
+          # strict character validation. The Python checker also verifies Base58Check.
+          [[ "$CANARY_SENDER" =~ ^T[1-9A-HJ-NP-Za-km-z]{33}$ ]] || { echo 'INVALID_PUBLIC_MAINNET_SENDER'; exit 2; }
+          output="$(timeout 125s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel "MPW_TRX_CANARY_ISSUE_ACK=merchant-one-time-mainnet-canary-20261023 MPW_TRX_CANARY_BUYER_ID=auto MPW_TRX_CANARY_PRODUCT_ID=auto MPW_TRX_CANARY_EXPECTED_SENDER=$CANARY_SENDER /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - issue" < scripts/mpw_trx_private_canary_20261023.py)"
+          printf '%s\n' "$output"
+          CANARY_RESULT="$output" python3 -c 'import json,os; lines=[s for s in os.environ["CANARY_RESULT"].splitlines() if s.startswith("MPW_PRIVATE_MAINNET_CANARY=")]; d=json.loads(lines[-1].split("=",1)[1]); n=d.get("invoice_id"); assert d.get("status") in ("PRIVATE_CANARY_INVOICE_CREATED","EXISTING_PRIVATE_CANARY") and type(n) is int and 0<n<2**63; print("invoice_id="+str(n))' >> "$GITHUB_OUTPUT"
+      - name: Automatically witness finalized Mainnet payment, accounting and exact buyer download
+        if: github.event_name == 'workflow_dispatch' && inputs.canary_action == 'issue'
+        env:
+          CANARY_SENDER: ${{ inputs.sender }}
+          CANARY_INVOICE_ID: ${{ steps.issue.outputs.invoice_id }}
+        run: |
+          set -euo pipefail
+          [[ "$CANARY_SENDER" =~ ^T[1-9A-HJ-NP-Za-km-z]{33}$ ]] || exit 2
+          [[ "$CANARY_INVOICE_ID" =~ ^[1-9][0-9]{0,18}$ ]] || exit 2
+          for attempt in $(seq 1 35); do
+            result="$(timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel "MPW_TRX_CANARY_BUYER_ID=auto MPW_TRX_CANARY_PRODUCT_ID=auto MPW_TRX_CANARY_EXPECTED_SENDER=$CANARY_SENDER /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify --invoice-id $CANARY_INVOICE_ID" < scripts/mpw_trx_private_canary_20261023.py)"
+            if [[ "$result" == *'PRIVATE_CANARY_PAYMENT_AND_DOWNLOAD_PASSED'* ]]; then
+              printf '%s\n' "$result"
+              echo 'PRIVATE_CANARY_ACCEPTED_REAL_MAINNET_PAYMENT=PASS'
+              exit 0
+            fi
+            echo "PRIVATE_MAINNET_SETTLEMENT_PENDING attempt=$attempt/35"
+            sleep 15
+          done
+          echo 'PRIVATE_MAINNET_CANARY_NOT_SETTLED_BEFORE_TIMEOUT; PUBLIC_RELEASE_STAYS_OFF'
+          exit 2
+      - name: Independently recheck an existing real private canary receipt
+        if: github.event_name == 'workflow_dispatch' && inputs.canary_action == 'verify'
+        env:
+          CANARY_SENDER: ${{ inputs.sender }}
+          CANARY_INVOICE_ID: ${{ inputs.invoice_id }}
+        run: |
+          set -euo pipefail
+          [[ "$CANARY_SENDER" =~ ^T[1-9A-HJ-NP-Za-km-z]{33}$ ]] || { echo 'INVALID_PUBLIC_MAINNET_SENDER'; exit 2; }
+          [[ "$CANARY_INVOICE_ID" =~ ^[1-9][0-9]{0,18}$ ]] || { echo 'INVALID_CANARY_INVOICE_ID'; exit 2; }
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel "MPW_TRX_CANARY_BUYER_ID=auto MPW_TRX_CANARY_PRODUCT_ID=auto MPW_TRX_CANARY_EXPECTED_SENDER=$CANARY_SENDER /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify --invoice-id $CANARY_INVOICE_ID" < scripts/mpw_trx_private_canary_20261023.py
+      - name: Cleanup relay key material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-gateway-contract-ssh"
