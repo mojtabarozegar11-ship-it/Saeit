@@ -535,6 +535,7 @@ jobs:
           decisions=collections.Counter()
           errors=collections.Counter()
           tasks=collections.Counter()
+          freshness=collections.Counter()
           eligible=0
           for pk,metadata in Product.objects.values_list("pk","metadata").iterator(chunk_size=100):
               if not isinstance(metadata,dict):
@@ -555,6 +556,8 @@ jobs:
               eligible+=1
               for status,n in run.tasks.values("status").annotate(n=Count("pk")).values_list("status","n"):
                   tasks[str(status)[:40]]+=n
+              latest=run.tasks.filter(action_type="product_validation",status="completed").order_by("-updated_at","-pk").first()
+              freshness["latest_validation_completed_after_due" if latest and latest.updated_at>=due else "no_validation_since_due"]+=1
               try:
                   choice=brain.decide_product_factory_step(product_id=pk,run_id=run.run_id)
                   decisions[str(choice.get("action","unknown"))[:60]]+=1
@@ -567,11 +570,29 @@ jobs:
               "read_only":True,"due_active_checked":eligible,
               "decisions":dict(sorted(decisions.items())),
               "task_statuses":dict(sorted(tasks.items())),
+              "validation_freshness":dict(sorted(freshness.items())),
               "errors_by_type":dict(sorted(errors.items())),
               "new_tasks_created":0,"budgets_modified":False,
               "releases_modified":False},sort_keys=True))
           PY
           REMOTE
+      - name: Identify private worker loop dispatch hooks without changing them
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/stage4-readonly"
+          timeout 45s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
+          import hashlib,re
+          from pathlib import Path
+          p=Path.home()/"factory-runtime/operations/vps-only-loop.sh"
+          if not p.is_file() or p.is_symlink() or p.stat().st_size>10000:
+              raise SystemExit("LOOP_SOURCE_UNSAFE")
+          lines=p.read_text(encoding="utf8").splitlines()
+          print("FACTORY_LOOP_SOURCE_SHA256="+hashlib.sha256(p.read_bytes()).hexdigest())
+          for i,line in enumerate(lines,1):
+              if len(line)<180 and not re.search(r"secret|password|token|private|api.key|https?://|ssh|host|env",line,re.I):
+                  print("FACTORY_LOOP_LINE="+str(i)+":"+line)
+          PY
       - name: Destroy runner SSH key material
         if: always()
         shell: bash
