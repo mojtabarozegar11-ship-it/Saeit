@@ -9,6 +9,7 @@ from unittest.mock import patch
 from services.mpw_trx_walletless_core import InvoiceIntent,PaymentHold
 from services.mpw_walletless_commercial_intent import _commercial_db
 from services.mpw_trx_commercial_web import _nocache
+from services.mpw_trx_public_pages import _checkout_csrf_referrer
 from services.mpw_trx_commercial_chain import read_only_independent_pair,PINNED
 from services.mpw_tron_independent_solidified_rpc import hex_to_tron_address
 from tests.test_mpw_tron_independent_solidified_rpc import (
@@ -16,6 +17,14 @@ from tests.test_mpw_tron_independent_solidified_rpc import (
 )
 
 class ProductionCheckoutReleaseTests(unittest.TestCase):
+    def test_checkout_replaces_no_referrer_meta_and_keeps_same_origin_header(self):
+        from django.http import HttpResponse
+        response=HttpResponse('<meta name="referrer" content="no-referrer">')
+        response=_checkout_csrf_referrer(response)
+        self.assertIn(b'<meta name="referrer" content="same-origin">',response.content)
+        self.assertNotIn(b'content="no-referrer"',response.content)
+        self.assertEqual(response["Referrer-Policy"],"same-origin")
+
     def test_private_checkout_allows_same_origin_csrf_referer_without_leaking_cross_origin(self):
         from django.http import HttpResponse
         response=_nocache(HttpResponse("form"))
