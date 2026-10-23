@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 233b6d056badb8351690ee04f48b41329cc8bd63
+          ref: 18c0e81c37c55af9bcf72e3b932296bc77c29819
           persist-credentials: false
       - name: Test immutable reviewed merchant canary source before accessing relay
         run: |
@@ -61,7 +61,7 @@ jobs:
       - name: Inventory real low-value digital SKU and merchant staff accounts without writes
         run: |
           set -euo pipefail
-          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - inventory' < scripts/mpw_trx_private_canary_20261023.py
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'MPW_TRX_CANARY_EXPECTED_SENDER=THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - inventory' < scripts/mpw_trx_private_canary_20261023.py
       - name: Issue exactly one private merchant Mainnet invoice; show exact address and amount
         if: github.event_name == 'workflow_dispatch' && inputs.canary_action == 'issue'
         id: issue
