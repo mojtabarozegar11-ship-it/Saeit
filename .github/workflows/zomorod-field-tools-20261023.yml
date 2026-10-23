@@ -145,10 +145,18 @@ jobs:
           p=Path(sys.argv[1]);rid=sys.argv[2]
           m=json.loads((p/'source-manifest.json').read_text())
           def get(url):
-              req=urllib.request.Request(url,headers={'Cache-Control':'no-cache','User-Agent':'ZomorodExternalQA/2'})
-              with urllib.request.urlopen(req,timeout=25) as r:
-                  assert r.status==200,(url,r.status)
-                  return r.read(300000)
+              import time,ssl
+              req=urllib.request.Request(url,headers={'Cache-Control':'no-cache','User-Agent':'ZomorodExternalQA/2','Connection':'close'})
+              errors=[]
+              for attempt in range(4):
+                  try:
+                      with urllib.request.urlopen(req,timeout=35) as r:
+                          assert r.status==200,(url,r.status)
+                          return r.read(300000)
+                  except Exception as exc:
+                      errors.append(type(exc).__name__+': '+str(exc)[:160])
+                      if attempt<3:time.sleep(2+attempt*2)
+              raise RuntimeError('EXTERNAL_HTTPS_RETRY_EXHAUSTED '+url+' '+repr(errors))
           for rel,meta in m.items():
               u=meta['url']+'?release='+rid
               assert hashlib.sha256(get(u)).hexdigest()==meta['sha256'],u
