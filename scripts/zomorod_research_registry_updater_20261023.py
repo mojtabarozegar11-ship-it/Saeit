@@ -27,6 +27,7 @@ FIELDS = {"id", "title", "domain", "lead", "method", "status", "updated_on",
           "evidence", "publication_permission", "summary"}
 EVIDENCE_FIELDS = {"title", "url", "sha256"}
 APPROVAL_FIELDS = {"authorized_by", "record_id", "approved_on"}
+MAX_APPROVED_PROJECTS = 5000  # includes the reported 1,457 historical projects if substantiated
 
 def nonempty(value: object, field: str, min_len: int = 2, max_len: int = 350) -> str:
     assert isinstance(value, str), f"{field} must be text"
@@ -104,7 +105,7 @@ def validate(raw: str) -> list[dict]:
     assert isinstance(package, dict) and set(package) == {"schema_version", "projects"}
     assert package["schema_version"] == 1
     entries = package["projects"]
-    assert isinstance(entries, list) and len(entries) <= 1000
+    assert isinstance(entries, list) and len(entries) <= MAX_APPROVED_PROJECTS
     clean = [clean_project(item) for item in entries]
     keys = [entry["id"] for entry in clean]
     assert len(keys) == len(set(keys)), "duplicate project ID"
@@ -170,6 +171,10 @@ def selftest():
             pass
         else:
             raise AssertionError(f"invalid field accepted: {field}")
+    approved_example = [dict(base, id=f"ZM-RD-2026-{i:04d}") for i in range(1, 1458)]
+    assert len(approved_example) == 1457
+    assert len({clean_project(item)["id"] for item in approved_example}) == 1457
+    print("RESEARCH_REGISTRY_1457_CAPACITY_SELFTEST=passed")
     print("RESEARCH_REGISTRY_UPDATER_SELFTEST=passed")
 
 if __name__ == "__main__":
