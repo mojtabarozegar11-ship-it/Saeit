@@ -2,6 +2,7 @@
 import copy
 import json
 import unittest
+from email.message import Message
 from datetime import datetime,timedelta,timezone
 from unittest.mock import patch
 from services.mpw_tron_readonly_deposit_candidates import (
@@ -80,7 +81,8 @@ class CandidateIndexerTests(unittest.TestCase):
     def test_only_https_json_and_bounded_content(self):
         class Response:
             status=200
-            headers={"Content-Type":"application/json"}
+            headers=Message()
+            headers["Content-Type"]="application/json"
             def __init__(self,payload):self.payload=payload
             def __enter__(self):return self
             def __exit__(self,*args):return False
