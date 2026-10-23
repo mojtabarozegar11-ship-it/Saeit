@@ -16,8 +16,8 @@ GAME = ROOT / 'arrow-escape'
 FILES = ('index.html', 'cube-engine.js', 'app.js', 'style.css')
 PROTECTED = ('index.html', 'agriculture/index.html', 'research/index.html',
              'topics/zm-r25/website-design/index.html', 'ramadan-war/index.html')
-OLD = b'cube3d-touchfix-20261023-1'
-NEW = b'maze3d-v3-20261023'
+OLD = b'maze3d-v3-20261023'
+NEW = b'maze3d-v4-20261023'
 
 
 def digest(data):

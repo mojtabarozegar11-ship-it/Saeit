@@ -14,7 +14,7 @@ jobs:
   release:
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
-      contains(github.event.head_commit.message, '[approved-zm-arrow-maze3d-20261023]')
+      contains(github.event.head_commit.message, '[approved-zm-arrow-maze3d-v4-20261023]')
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
@@ -33,7 +33,7 @@ jobs:
           from pathlib import Path
           root = Path('games/arrow-escape')
           html = (root / 'index.html').read_text('utf-8')
-          assert 'maze3d-v3-20261023' in html
+          assert 'maze3d-v4-20261023' in html
           assert 'id="facePips"' in html
           assert 'id="cubeStage"' in html
           assert 'id="hintMoveButton"' in html
@@ -68,7 +68,7 @@ jobs:
           import time
           from urllib.request import Request, urlopen
           base='https://zomorodmelal.ir/arrow-escape/'
-          version='maze3d-v3-20261023'
+          version='maze3d-v4-20261023'
           def get(name):
               with urlopen(Request(base+name,headers={'Cache-Control':'no-cache',
                              'User-Agent':'ArrowCubeMaze3DQA/1'}),timeout=45) as r:
