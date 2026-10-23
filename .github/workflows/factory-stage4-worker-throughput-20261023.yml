@@ -1,0 +1,154 @@
+name: VPS Factory Stage4 Native Worker Throughput
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-stage4-worker-throughput-20261023.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: vps-factory-stage4-throughput
+  cancel-in-progress: false
+jobs:
+  guarded-upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Verify pinned VPS and adapt native worker without bypassing gates
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/stage4-throughput"
+          install -d -m 700 "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 580s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          base="$HOME/factory-runtime"
+          ops="$base/operations"
+          script="$ops/vps-only-loop.sh"
+          pidfile="$ops/vps-only-loop.pid"
+          test -f "$base/django-app/manage.py"
+          test -x "$base/.venv/bin/python"
+          test -f "$base/private/factory-fresh-isolated.sqlite3"
+          test -x "$script" && test ! -L "$script"
+          test ! -L "$pidfile"
+          exec 9>"$ops/vps-only-launch-v2.lock"
+          flock -w 45 9
+          expected="368075ae83c152ae8eefe8370a8be909f067a5e7d72a5d4fe11f090f7829548b"
+          test "$(sha256sum "$script" | cut -d' ' -f1)" = "$expected" || {
+            echo FACTORY_LOOP_PIN_MISMATCH_NO_CHANGE
+            exit 1
+          }
+          mem_kb="$(awk '$1=="MemAvailable:" {print $2;exit}' /proc/meminfo)"
+          test "${mem_kb:-0}" -ge 950000 || {
+            echo FACTORY_RAM_BELOW_SAFE_THRESHOLD_NO_CHANGE
+            exit 1
+          }
+          cores="$(getconf _NPROCESSORS_ONLN)"
+          load="$(cut -d' ' -f1 /proc/loadavg)"
+          mode="$(python3 - "$cores" "$load" <<'PY'
+          import sys
+          cores=int(sys.argv[1]); load=float(sys.argv[2])
+          print("balanced" if cores>=4 and load<=cores*0.85 else "conservative")
+          PY
+          )"
+          candidate="$(mktemp "$ops/vps-only-loop.stage4.XXXXXX")"
+          trap 'test ! -f "$candidate" || rm -f -- "$candidate"' EXIT
+          python3 - "$script" "$candidate" "$mode" <<'PY'
+          import pathlib,re,sys
+          source=pathlib.Path(sys.argv[1])
+          destination=pathlib.Path(sys.argv[2])
+          mode=sys.argv[3]
+          text=source.read_text()
+          tick=[line for line in text.splitlines() if "factory_staging_tick" in line]
+          if len(tick)!=1:
+              raise SystemExit("FACTORY_NATIVE_TICK_LAYOUT_UNEXPECTED")
+          line=tick[0]
+          wanted=("180","2","4") if mode=="balanced" else ("100","1","2")
+          for pattern,replacement in (
+              (r"\btimeout\s+100\b","timeout "+wanted[0]),
+              (r"--max-runs\s+1\b","--max-runs "+wanted[1]),
+              (r"--max-steps\s+2\b","--max-steps "+wanted[2])):
+              modified,count=re.subn(pattern,replacement,line)
+              if count!=1: raise SystemExit("FACTORY_WORKER_LIMIT_LAYOUT_UNEXPECTED")
+              line=modified
+          updated=text.replace(tick[0],line)
+          updated,count=re.subn(r"(?m)^(\s*)sleep 60(\s*)$",r"\g<1>sleep 20\g<2>",updated)
+          if count!=1 or updated==text:
+              raise SystemExit("FACTORY_WORKER_SLEEP_LAYOUT_UNEXPECTED")
+          destination.write_text(updated)
+          print("FACTORY_WORKER_CANDIDATE_VALID="+mode)
+          PY
+          bash -n "$candidate"
+          old=""
+          if test -s "$pidfile"; then
+            read -r old < "$pidfile"
+            case "$old" in ''|*[!0-9]*) echo FACTORY_BAD_PID_NO_CHANGE; exit 1;; esac
+            if kill -0 "$old" 2>/dev/null; then
+              cmd="$(ps -p "$old" -o args= || true)"
+              case "$cmd" in *vps-only-loop.sh*) :;; *) echo FACTORY_UNEXPECTED_PID_NO_CHANGE; exit 1;; esac
+              safe_window=0
+              for i in $(seq 1 180); do
+                direct_child="$(ps --ppid "$old" -o comm= | tr '\n' ' ' || true)"
+                case "$direct_child" in *timeout*|*python*) sleep 1;; *) safe_window=1; break;; esac
+              done
+              test "$safe_window" = 1 || {
+                echo FACTORY_ACTIVE_TASK_NOT_INTERRUPTED_NO_CHANGE
+                exit 1
+              }
+            fi
+          fi
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          install -d -m 700 "$ops/backups"
+          backup="$ops/backups/vps-only-loop-before-throughput-$stamp.sh"
+          cp -p "$script" "$backup"
+          chmod 700 "$candidate"
+          mv -f -- "$candidate" "$script"
+          restored=0
+          restore_on_error() {
+            if test "$restored" = 0; then
+              cp -p "$backup" "$script"
+              echo FACTORY_WORKER_SCRIPT_ROLLED_BACK
+              if ! test -s "$pidfile" || ! kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+                nohup "$script" </dev/null >> "$ops/vps-only-launch.log" 2>&1 9>&- &
+                printf '%s\n' "$!" > "$pidfile"
+              fi
+            fi
+          }
+          trap restore_on_error ERR
+          if test -n "$old" && kill -0 "$old" 2>/dev/null; then
+            kill -TERM "$old"
+            for i in $(seq 1 25); do
+              kill -0 "$old" 2>/dev/null || break
+              sleep 1
+            done
+            ! kill -0 "$old" 2>/dev/null || {
+              echo FACTORY_OLD_LOOP_DID_NOT_STOP
+              false
+            }
+          fi
+          nohup "$script" </dev/null >> "$ops/vps-only-launch.log" 2>&1 9>&- &
+          new="$!"
+          printf '%s\n' "$new" > "$pidfile"
+          sleep 8
+          kill -0 "$new"
+          test "$(sha256sum "$script" | cut -d' ' -f1)" != "$expected"
+          restored=1
+          trap - ERR
+          printf 'FACTORY_NATIVE_THROUGHPUT_UPGRADED mode=%s cores=%s load_before=%s mem_available_kb=%s pid_live=true backup_stored=true policy_unchanged=true\n' "$mode" "$cores" "$load" "$mem_kb"
+          REMOTE
+      - name: Destroy runner SSH key material
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/stage4-throughput"
+          if test -d "$d"; then rm -f -- "$d/key" "$d/known"; rmdir "$d"; fi
