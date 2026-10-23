@@ -1,0 +1,68 @@
+name: Stage4 capacity/retry diagnosis two safe phases on VPS
+on:
+  pull_request:
+    paths:
+      - scripts/factory_stage4_wait_classifier_20261023.py
+      - tests/test_factory_stage4_wait_classifier_20261023.py
+      - .github/workflows/factory-stage4-wait-classifier-20261023.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_stage4_wait_classifier_20261023.py
+      - tests/test_factory_stage4_wait_classifier_20261023.py
+      - .github/workflows/factory-stage4-wait-classifier-20261023.yml
+permissions: {contents: read}
+concurrency:
+  group: saeit-stage4-wait-code-safe-release
+  cancel-in-progress: false
+jobs:
+  policy-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test both transformations and fail-closed invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/factory_stage4_wait_classifier_20261023.py
+          python3 -B -m unittest discover -s tests -p 'test_factory_stage4_wait_classifier_20261023.py' -v
+  pinned-vps-install:
+    needs: policy-tests
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      contains(github.event.head_commit.message, '[approved-stage4-wait-classifier-20261023]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify existing VPS identity and install bounded Stage4 diagnostics with rollback
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/stage4-wait"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "$VPS_KEY"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          host="githubops@178.239.147.150"
+          stage="/home/githubops/factory-runtime/operations/.stage4-wait-${GITHUB_RUN_ID}"
+          ssh -T "${opts[@]}" "$host" "set -eu; test ! -e '$stage'; install -d -m 700 '$stage'"
+          scp -q "${opts[@]}" scripts/factory_stage4_wait_classifier_20261023.py "$host:$stage/classifier.py"
+          wanted="$(sha256sum scripts/factory_stage4_wait_classifier_20261023.py | awk '{print $1}')"
+          have="$(ssh -T "${opts[@]}" "$host" "sha256sum '$stage/classifier.py' | cut -d' ' -f1")"
+          test "$wanted" = "$have"
+          echo STAGE4_SHA_BOUND_SOURCE=PASS
+          ssh -T "${opts[@]}" "$host" "timeout 120s /home/githubops/factory-runtime/.venv/bin/python -B '$stage/classifier.py'"
+          echo STAGE4_WAIT_CLASSIFIER_VPS_RELEASE=PASS
