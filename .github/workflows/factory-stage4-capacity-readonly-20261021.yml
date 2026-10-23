@@ -423,6 +423,65 @@ jobs:
               "policy_modified":False},sort_keys=True))
           PY
           REMOTE
+      - name: Diagnose Stage4 overdue eligibility without modifying factory state
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/stage4-readonly"
+          timeout 90s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/factory-runtime/django-app"
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+          "$HOME/factory-runtime/.venv/bin/python" -B - <<'PY'
+          import collections,datetime,json,os
+          from django.utils.dateparse import parse_datetime
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.apps import apps
+          from django.utils import timezone
+          Product=apps.get_model("core","Product")
+          Run=apps.get_model("core","FactoryRun")
+          now=timezone.now()
+          out=collections.Counter()
+          by_run=collections.Counter()
+          for pk,metadata in Product.objects.values_list("pk","metadata").iterator(chunk_size=100):
+              if not isinstance(metadata,dict):
+                  continue
+              v=metadata.get("validation")
+              progress=v.get("stage4_research") if isinstance(v,dict) else None
+              if not isinstance(progress,dict):
+                  continue
+              stamp=progress.get("next_retry_at")
+              due=parse_datetime(stamp) if isinstance(stamp,str) else None
+              status=progress.get("status")
+              if status=="capacity_exhausted":
+                  out["capacity_exhausted"]+=1
+                  continue
+              if not due or timezone.is_naive(due):
+                  out["no_valid_retry_window"]+=1
+                  continue
+              if due>now:
+                  out["not_yet_due"]+=1
+                  continue
+              out["due"]+=1
+              runs=list(Run.objects.filter(product_id=pk).order_by("-created_at","-pk").values("status","run_id")[:2])
+              if not runs:
+                  out["due_no_run"]+=1
+                  continue
+              if len(runs)>1:
+                  out["due_multiple_runs"]+=1
+              current=runs[0]
+              by_run[str(current["status"])[:32]]+=1
+              if current["status"]=="active":
+                  out["due_active_run"]+=1
+          print("STAGE4_DUE_DECISION_DIAGNOSTIC="+json.dumps({
+              "read_only":True,"schema":"saeit.stage4.due-decision-diagnostic.v1",
+              "utc":now.isoformat(),"counts":dict(sorted(out.items())),
+              "latest_run_statuses":dict(sorted(by_run.items())),
+              "research_requests_started":0,"budget_changed":False},sort_keys=True))
+          PY
+          REMOTE
       - name: Destroy runner SSH key material
         if: always()
         shell: bash
