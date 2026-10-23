@@ -1,0 +1,108 @@
+name: MojPlayWin guarded Image Delivery Lab products discovery card
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/mpw-assetlab-nav-20261023.yml]
+permissions:
+  contents: read
+concurrency:
+  group: mpw-assetlab-main-nav-20261023
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify public release, guarded PHP patch and original products route
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_asset_lab_nav_20261023.py
+          python3 -B scripts/mpw_asset_lab_nav_20261023.py selftest
+          python3 - <<'PY'
+          import urllib.request,json
+          from pathlib import Path
+          assert ('if: '+chr(36)+'{{ false }}') in Path('.github/workflows/mojplaywin-main-deploy.yml').read_text()
+          root='https://mojplaywin.com'
+          with urllib.request.urlopen(root+'/mpw-editorial/asset-lab/20261023/release.json',timeout=20) as r:
+              assert json.load(r)['release_id']=='ASSETLAB-20261023-01'
+          for path in ('/products/','/games/'):
+              with urllib.request.urlopen(root+path,timeout=20) as r:
+                  assert r.status==200 and r.headers.get('X-MPW-Main-Shell')=='exact-owner-only'
+                  html=r.read(950000).decode('utf8','replace')
+                  assert html.count('id="mpw-nextwave-main-discovery-20261023"')==1
+                  assert 'id="mpw-assetlab-main-discovery-20261023"' not in html
+              print('ASSETLAB_NAV_BASELINE_HTTP200',path)
+          PY
+      - name: Establish host-key pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          CPANEL_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/assetlab-ssh";install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$CPANEL_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/cpanel.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/cpanel.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf 'Host saeit-vps\n HostName 178.239.147.150\n User githubops\n IdentityFile %s/vps.key\n UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n HostName zohal.pws-dns.net\n User zomorod2\n Port 1396\n IdentityFile %s/cpanel.key\n UserKnownHostsFile %s/cpanel.known\n ProxyJump saeit-vps\nHost *\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 10\n ForwardAgent no\n RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/cpanel.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/cpanel.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/cpanel.candidate" "$d/cpanel.known"
+      - name: Atomically install one bounded products-page card with PHP lint and SHA receipt
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/assetlab-ssh/config" saeit-cpanel "python3 - install $GITHUB_RUN_ID $GITHUB_SHA" < scripts/mpw_asset_lab_nav_20261023.py
+      - name: Verify new public card, previous cards and desktop/mobile browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,json,time
+          root='https://mojplaywin.com'
+          for attempt in range(8):
+              req=urllib.request.Request(root+'/products/?assetlab_verify='+str(time.time_ns()),headers={'Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=20) as r:
+                  assert r.status==200 and r.headers.get('X-MPW-Main-Shell')=='exact-owner-only'
+                  text=r.read(950000).decode('utf8','replace')
+              if text.count('id="mpw-assetlab-main-discovery-20261023"')==1:break
+              if attempt==7:raise RuntimeError('New card missing from public products route')
+              time.sleep(2)
+          assert text.count('id="mpw-nextwave-main-discovery-20261023"')==1
+          assert text.count('id="mpw-arcade-main-discovery-20261023"')==1
+          assert 'data-assetlab-version="ASSETLAB-20261023-01"' in text
+          assert 'data-navigation-version="ASSETLAB-MAIN-NAV-20261023-01"' in text
+          assert '/mpw-editorial/asset-lab/20261023/index.html' in text
+          print('ASSETLAB_MAIN_PRODUCTS_CARD_HTTP200_PASS')
+          for path in ('/','/games/','/studio/','/mpw-editorial/index.html','/mpw-editorial/nextwave/20261023/index.html','/mpw-editorial/asset-lab/20261023/index.html'):
+              with urllib.request.urlopen(root+path,timeout=20) as r:assert r.status==200,path
+              print('ASSETLAB_NAV_PROTECTED_ROUTE_PASS',path)
+          PY
+          chrome="$(command -v google-chrome || command -v chromium)"
+          for dims in 1440,900 390,844; do
+            timeout 45s "$chrome" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --window-size="$dims" --dump-dom "https://mojplaywin.com/products/" > "$RUNNER_TEMP/assetlab-products-$dims.html" 2>/dev/null
+            grep -Fq 'id="mpw-assetlab-main-discovery-20261023"' "$RUNNER_TEMP/assetlab-products-$dims.html"
+            grep -Fq 'data-navigation-version="ASSETLAB-MAIN-NAV-20261023-01"' "$RUNNER_TEMP/assetlab-products-$dims.html"
+            echo "ASSETLAB_PRODUCTS_CHROME_CARD_PASS $dims"
+          done
+      - name: Rollback only exact owned PHP file if live verification fails
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          ssh -T -F "$RUNNER_TEMP/assetlab-ssh/config" saeit-cpanel "python3 - rollback $GITHUB_RUN_ID $GITHUB_SHA" < scripts/mpw_asset_lab_nav_20261023.py
+      - name: Delete ephemeral SSH keys
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/assetlab-ssh"
