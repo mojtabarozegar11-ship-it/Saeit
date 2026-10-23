@@ -144,8 +144,10 @@ class CommercialMariaDBTest(unittest.TestCase):
             self.assertEqual(fixture.Order.objects.count(),count+1)
             self.assertEqual(PaymentIntent.objects.count(),1)
             self.assertFalse(ExistingLedgerEntry.objects.exists())
-            no_token=start_order(factory.post("/commerce/trx-easy/start/779/",
-                                   secure=True,HTTP_HOST="mojplaywin.com"),779)
+            missing_csrf=factory.post("/commerce/trx-easy/start/779/",
+                                   secure=True,HTTP_HOST="mojplaywin.com")
+            missing_csrf.user=SimpleNamespace(pk=42,is_authenticated=True,is_active=True)
+            no_token=start_order(missing_csrf,779)
             self.assertEqual(no_token.status_code,403)
 
     def test_public_invoice_and_file_are_buyer_only(self):
