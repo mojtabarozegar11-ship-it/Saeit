@@ -53,6 +53,52 @@ jobs:
               print("DOCROOT_ROOT_PRESENT",True,"SIZE",p.stat().st_size,"SHA_PREFIX",hashlib.sha256(p.read_bytes()).hexdigest()[:16])
           PY
           done
+      - name: Persist private blocked-or-queued hourly release receipt without public writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 65s ssh -T -F "$d/config" host "python3 - '$GITHUB_RUN_ID' '$GITHUB_SHA'" <<'PY'
+          import hashlib,json,os,socket,sys,time
+          from pathlib import Path
+          run,sha=sys.argv[1:]
+          home=Path.home();web=home/'public_html'
+          store=home/'.backups'/'zomorod-hourly-cycle'/run
+          store.mkdir(parents=True,mode=0o700,exist_ok=False)
+          root=web/'index.html'
+          try:
+              conn=socket.create_connection(('zomorodmelal.ir',443),timeout=6)
+              conn.close();available=True
+          except OSError:available=False
+          manifest={
+              'status':'queued' if available else 'blocked',
+              'release_id':run,
+              'commit_sha':sha,
+              'source_release_commit':'60f9e44751fcb754f1d44b9ab5a0b6881fdd02b4',
+              'run_url':'https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/'+run,
+              'source_test_run_url':'https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/39946146761',
+              'backup_path':str(home/'.backups'/'zomorod-field-tools-20261023'/'39946146761'),
+              'public_urls':[],
+              'public_http':{'https://zomorodmelal.ir/':'unreachable' if not available else 'recheck'},
+              'hashes':{'protected_root':hashlib.sha256(root.read_bytes()).hexdigest()},
+              'counts':{'tools':{'built':2,'tested':2,'published':0},
+                        'articles':{'built':2,'tested':2,'published':0},
+                        'images':{'built':2,'tested':2,'published':0},
+                        'games':{'built':0,'tested':0,'published':0}},
+              'previous_attempts':[
+                  {'run_id':'39945985056','status':'rolled_back'},
+                  {'run_id':'39946146761','status':'rolled_back'},
+                  {'run_id':'39946652709','status':'blocked_preflight'},
+                  {'run_id':'39946880562','status':'blocked_preflight'}],
+              'error':None if available else 'PUBLIC_TCP_443_REFUSED_FROM_VPS_AND_CPANEL; EXTERNAL_HTTP_UNREACHABLE',
+              'next':'recheck_external_https_and_only_then_attempt_scoped_live_release',
+              'created_at':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),
+          }
+          p=store/'manifest.json'
+          p.write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
+          os.chmod(p,0o600)
+          print('PRIVATE_CYCLE_RECEIPT_STATE',manifest['status'],'ROOT_SHA_PREFIX',manifest['hashes']['protected_root'][:16])
+          PY
       - name: Scrub SSH keys
         if: always()
         run: rm -rf "$RUNNER_TEMP/farm-v4-ssh"
