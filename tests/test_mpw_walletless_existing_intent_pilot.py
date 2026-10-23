@@ -20,6 +20,7 @@ from services.mpw_walletless_existing_intent_pilot import (
     PROVIDER, WAITING, _decode, _encode, _key,
     reserve_existing_test_intent, settle_existing_test_intent,
     existing_test_buyer_status, open_existing_test_paid_file,
+    reconcile_existing_test_intent_from_candidates,
 )
 
 from tests import test_mpw_walletless_real_django_orm_e2e as fixture
@@ -333,6 +334,40 @@ class ExistingNoDDLWalletlessTests(unittest.TestCase):
         self.assertEqual(fixture.Order.objects.get(pk=other.pk).status,"pending")
         self.assertEqual(fixture.CommerceInvoice.objects.get(pk=legacy.pk).status,
             fixture.CommerceInvoice.Status.AWAITING)
+
+    def test_server_only_candidate_reconciliation_grants_exactly_one_download(self):
+        pk,invoice,_=self.reserve()
+        observed=[]
+        def server_lookup(recipient,sun,issued,expires):
+            observed.append((recipient,sun,issued,expires))
+            return [fixture.TX_HASH]
+        self.assertEqual(reconcile_existing_test_intent_from_candidates(
+            pk,42,server_lookup=server_lookup,pair=self.pair()),"paid")
+        self.assertEqual(observed[0],(invoice.recipient,invoice.amount_sun,
+                                      invoice.issued_at,invoice.expires_at))
+        self.assertTrue(existing_test_buyer_status(pk,42)["can_download"])
+        self.assertEqual(reconcile_existing_test_intent_from_candidates(
+            pk,42,server_lookup=server_lookup,pair=self.pair()),"unchanged")
+        self.assertEqual(len(observed),1)
+        self.assertEqual(ExistingLedgerEntry.objects.count(),1)
+        self.assertEqual(PaymentWebhookEvent.objects.count(),1)
+
+    def test_untrusted_or_ambiguous_chain_candidates_never_settle(self):
+        pk,_,_=self.reserve()
+        valid_pair=self.pair()
+        alternate="0"*64 if fixture.TX_HASH!="0"*64 else "1"*64
+        for candidates in ([fixture.TX_HASH,alternate],["invalid"],[fixture.TX_HASH]*17):
+            with self.assertRaises(PaymentHold):
+                reconcile_existing_test_intent_from_candidates(
+                    pk,42,server_lookup=lambda *args:list(candidates),pair=valid_pair)
+        with self.assertRaises(PaymentHold):
+            reconcile_existing_test_intent_from_candidates(
+                pk,43,server_lookup=lambda *args:[fixture.TX_HASH],pair=valid_pair)
+        self.assertEqual(reconcile_existing_test_intent_from_candidates(
+            pk,42,server_lookup=lambda *args:[],pair=valid_pair),"awaiting")
+        self.assertEqual(ExistingLedgerEntry.objects.count(),0)
+        self.assertEqual(PaymentWebhookEvent.objects.count(),0)
+        self.assertEqual(fixture.Order.objects.get(pk=self.order_id).status,"pending")
 
     def test_wrong_owner_legacy_signed_and_live_database_guard(self):
         with self.assertRaises(PaymentHold):self.reserve(buyer=43)
