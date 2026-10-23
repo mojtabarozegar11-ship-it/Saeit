@@ -102,7 +102,7 @@ class SourceScoutTests(unittest.TestCase):
         self.assertEqual(candidate["evidence_gap_reason"],
                          "under_four_topic_relevant_article_abstracts")
         with self.assertRaisesRegex(ValueError,"SCOUT_BAD_BOUNDED_RESULTS_PAGE"):
-            SCOUT.fetch_openalex("safe agricultural topic",page=7)
+            SCOUT.fetch_openalex("safe agricultural topic",page=9)
 
     def test_full_query_page_grid_is_explored_before_long_cooldown(self):
         order=self.order(1)
