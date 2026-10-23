@@ -23,3 +23,10 @@ print('ELIGIBLE_PRODUCTS='+json.dumps(items))
 print('FLAGS='+json.dumps({n:getattr(settings,n,None) for n in ['DEBUG','MPW_COMMERCE_RELEASE_READY','MPW_COMMERCE_DOWNLOADS_ENABLED','MPW_WALLETLESS_TRX_PUBLIC_ENABLED','MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED']}))
 r=subprocess.run(['crontab','-l'],capture_output=True,text=True)
 print('TRX_CRON_PRESENT='+str('mpw_trx_commercial_reconcile_cron.py' in r.stdout))
+from mpw_commerce.product_checkout_page import product_checkout_page
+from mpw_commerce.purchase_history import purchased_downloads
+print('CHECKOUT_VIEW='+inspect.getsource(product_checkout_page))
+print('HISTORY_VIEW='+inspect.getsource(purchased_downloads))
+import hashlib
+for rel in ['services/mpw_walletless_commercial_intent.py','services/mpw_trx_commercial_context.py','scripts/mpw_trx_commercial_reconcile_cron.py','services/mpw_trx_commercial_web.py','services/mpw_trx_walletless_checkout_ui.py']:
+ print('SOURCE_HASH='+rel+':'+hashlib.sha256((root/rel).read_bytes()).hexdigest())
