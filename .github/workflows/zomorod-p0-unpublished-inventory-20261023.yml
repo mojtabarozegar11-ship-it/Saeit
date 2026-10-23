@@ -1,0 +1,104 @@
+name: Zomorod P0 Unpublished Source and Live Inventory
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-p0-unpublished-inventory-20261023.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-agriculture-static
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Establish fingerprint-pinned relay for read-only evidence
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Audit real cPanel files, hashes and backup receipts
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 100s ssh -T -F "$d/config" host 'python3 -' <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          home=Path.home();web=home/"public_html"
+          names=[
+           "index.html", ".htaccess", "agriculture/index.html", "agriculture/.htaccess", "games/index.html", "research/index.html",
+           "agriculture/water-soil/index.html", "agriculture/greenhouse/index.html",
+           "agriculture/water-soil/irrigation-planner/index.html",
+           "agriculture/greenhouse/ventilation-estimator/index.html",
+           "games/water-path/index.html", "games/air-supremacy/index.html",
+           "agriculture/water-soil/irrigation-need.html",
+           "agriculture/seeds/seeding-rate.html",
+           "agriculture/greenhouse/planting-planner/index.html",
+           "agriculture/livestock/feed-dry-matter/index.html",
+           "research/updates/20261022/index.html",
+           "agriculture/water-soil/field-notes-11-14/index.html",
+           "agriculture/greenhouse/temperature-uniformity/index.html",
+           "agriculture/digital-lab/index.html",
+           "topics/digital-lab/index.html",
+           "agriculture/assets/zomorod-water-20261023/zomorod-irrigation.webp",
+           "agriculture/assets/zomorod-water-20261023/zomorod-greenhouse.webp",
+           "agriculture/assets/zomorod-water-20261023/zomorod-water-path.webp"]
+          print("CPANEL_DOCROOT_IS_DIR",web.is_dir(),"IS_SYMLINK",web.is_symlink())
+          for name in names:
+           p=web/name
+           if p.is_file() and not p.is_symlink():
+            data=p.read_bytes()
+            print("FILE",name,"size",len(data),"sha256",hashlib.sha256(data).hexdigest()[:20])
+           else:print("MISSING",name,"symlink",p.is_symlink())
+          for d in (home/".backups"/"zomorod-p0-backlog",home/".backups"/"zomorod-hourly-water-20261023",home/".backups"/"zomorod-water-images-20261023"):
+           if d.is_dir() and not d.is_symlink():
+            runs=sorted([x for x in d.iterdir() if x.is_dir()],key=lambda x:x.name)[-5:]
+            for run in runs:
+             f=run/"manifest.json"
+             if f.is_file():
+              try:
+               m=json.loads(f.read_text());print("RECEIPT",d.name,run.name,"state",m.get("state"),"created",len(m.get("created",[])),"modified",len(m.get("modified",[])))
+              except Exception as exc:print("RECEIPT_PARSE_ERROR",d.name,run.name,type(exc).__name__)
+             else:print("BACKUP",d.name,run.name,"NO_MANIFEST")
+          PY
+      - name: Check real public site routes with fresh content
+        shell: bash
+        run: |
+          set -euo pipefail
+          urls=(
+            "https://zomorodmelal.ir/"
+            "https://zomorodmelal.ir/agriculture/"
+            "https://zomorodmelal.ir/games/"
+            "https://zomorodmelal.ir/agriculture/water-soil/"
+            "https://zomorodmelal.ir/agriculture/greenhouse/"
+            "https://zomorodmelal.ir/agriculture/water-soil/irrigation-planner/"
+            "https://zomorodmelal.ir/agriculture/greenhouse/ventilation-estimator/"
+            "https://zomorodmelal.ir/games/water-path/"
+            "https://zomorodmelal.ir/games/air-supremacy/"
+            "https://zomorodmelal.ir/agriculture/water-soil/irrigation-need.html"
+            "https://zomorodmelal.ir/agriculture/seeds/seeding-rate.html"
+            "https://zomorodmelal.ir/agriculture/greenhouse/planting-planner/"
+            "https://zomorodmelal.ir/agriculture/livestock/feed-dry-matter/"
+            "https://zomorodmelal.ir/research/updates/20261022/"
+            "https://zomorodmelal.ir/agriculture/water-soil/field-notes-11-14/"
+            "https://zomorodmelal.ir/agriculture/greenhouse/temperature-uniformity/"
+            "https://zomorodmelal.ir/agriculture/digital-lab/"
+          )
+          for url in "${urls[@]}"; do
+            code="$(curl -sS -L --retry 1 --connect-timeout 6 --max-time 18 -H 'Cache-Control: no-cache' -o /dev/null -w '%{http_code}' "$url?audit=$GITHUB_RUN_ID" || true)"
+            echo "PUBLIC_HTTP $code $url"
+          done
+      - name: Scrub SSH credentials
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
