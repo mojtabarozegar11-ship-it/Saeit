@@ -16,17 +16,31 @@ receipt_dir="$ops/evidence/stage4-due-dispatch"
 python="$base/.venv/bin/python"
 master="$app/core/autonomous_brain.py"
 
-for path in "$ops" "$app" "$master" "$staged" "$python"; do
+for path in "$ops" "$app" "$master" "$staged"; do
   test ! -L "$path"
 done
+echo STAGE4_PRECHECK_REGULAR_PATHS=PASS
 test -d "$ops" && test -d "$app" && test -f "$master"
 test -f "$staged" && test -x "$python"
+echo STAGE4_PRECHECK_RUNTIME_FILES=PASS
 test "$(sha256sum "$staged" | cut -d' ' -f1)" = "$expected_sha"
-test "$(sha256sum "$master" | cut -d' ' -f1)" = 8b1e268ece7e9d5aacb496679cdfc2003bc2f3f9a58828cc398f651afd7d1ab1
+echo STAGE4_PRECHECK_TRANSFER_HASH=PASS
+if test "$(sha256sum "$master" | cut -d' ' -f1)" != 8b1e268ece7e9d5aacb496679cdfc2003bc2f3f9a58828cc398f651afd7d1ab1; then
+  echo STAGE4_MASTER_SOURCE_PIN_CHANGED
+  exit 1
+fi
+echo STAGE4_PRECHECK_MASTER_PIN=PASS
 test ! -L "$target"
 test ! -L "$backup_dir" && test ! -L "$receipt_dir"
-command -v crontab >/dev/null
-ps -eo comm= | grep -Eq '^(cron|crond)$'
+if ! command -v crontab >/dev/null; then
+  echo STAGE4_CRONTAB_NOT_INSTALLED
+  exit 1
+fi
+if ! ps -eo comm= | grep -Eq '^(cron|crond)$'; then
+  echo STAGE4_CRON_DAEMON_NOT_RUNNING
+  exit 1
+fi
+echo STAGE4_PRECHECK_NATIVE_CRON=PASS
 "$python" -B -m py_compile "$staged"
 
 mkdir -p -m 700 "$backup_dir" "$receipt_dir"
