@@ -57,6 +57,35 @@ def scoped_canary_settings(settings, connection):
 def _configured_ids():
     def exact_id(key):
         value = os.environ.get(key, "")
+        if value == "auto":
+            if key == "MPW_TRX_CANARY_BUYER_ID":
+                from django.contrib.auth import get_user_model
+                candidates = list(get_user_model().objects.filter(
+                    is_active=True, is_staff=True).values_list("pk", flat=True)[:2])
+                if len(candidates) != 1:
+                    raise PaymentHold("Private canary needs exactly one active merchant staff")
+                return candidates[0]
+            # Restrict auto selection to a unique eligible, existing, private
+            # digital micro-product. Never silently pick among two offerings.
+            from core.models import Product
+            from mpw_commerce.buyer_orders import _eligible
+            from mpw_commerce.downloads import _private_file
+            queryset = Product.objects.filter(
+                active=True, currency="USD", price__gt=Decimal("0"),
+                price__lte=MAX_PRICE_USD).order_by("pk")[:101]
+            candidates = []
+            for product in queryset:
+                try:
+                    if _eligible(product):
+                        _asset_hash(_private_file(SimpleNamespace(product=product)))
+                        candidates.append(product.pk)
+                        if len(candidates) > 1:
+                            break
+                except (OSError, ValueError, PaymentHold):
+                    continue
+            if len(candidates) != 1:
+                raise PaymentHold("Private canary needs exactly one eligible micro-product")
+            return candidates[0]
         if not value.isascii() or not value.isdecimal() or not 0 < len(value) <= 12:
             raise PaymentHold("Private canary buyer and product must be explicitly configured")
         parsed = int(value)
@@ -64,6 +93,15 @@ def _configured_ids():
             raise PaymentHold("Private canary ID is outside permitted range")
         return parsed
     return exact_id("MPW_TRX_CANARY_BUYER_ID"), exact_id("MPW_TRX_CANARY_PRODUCT_ID")
+
+
+def _payment_instructions(record, status):
+    """Only public receiving details; never reveal the merchant buyer account."""
+    return {"status": status, "network": "tron-mainnet",
+            "invoice_id": record["invoice_id"], "recipient": record["recipient"],
+            "amount_trx": format(Decimal(record["amount_sun"]) / Decimal(1000000), "f"),
+            "expires_at": record["expires_at"], "private_receipt": True,
+            "public_enabled": False, "broadcasts": 0}
 
 
 
@@ -174,9 +212,9 @@ def _validate_buyer_product(buyer_id, product_id):
 def issue():
     if os.environ.get("MPW_TRX_CANARY_ISSUE_ACK", "") != ARMED:
         raise PaymentHold("Private merchant order issuance has not been explicitly armed")
+    secure = _preflight(nodes=True)
     buyer_id, product_id = _configured_ids()
     expected_sender = _expected_sender()
-    secure = _preflight(nodes=True)
     from django.db import connection, transaction
     from django.contrib.auth import get_user_model
     from django.utils import timezone
@@ -210,9 +248,7 @@ def issue():
                     break
             if existing is not None:
                 record = _read_receipt(existing.pk)
-                return {"status": "EXISTING_PRIVATE_CANARY", "invoice_id": existing.pk,
-                        "private_receipt": True, "public_enabled": False,
-                        "broadcasts": 0, "expires_at": record["expires_at"]}
+                return _payment_instructions(record, "EXISTING_PRIVATE_CANARY")
             product = Product.objects.select_for_update().get(
                 pk=product_id, active=True, currency="USD")
             if Decimal(str(product.price)) != price:
@@ -241,9 +277,7 @@ def issue():
                 "public_payment_enabled": False, "broadcasts": 0,
             }
             written = _write_receipt(invoice_id, record)
-        return {"status": "PRIVATE_CANARY_INVOICE_CREATED", "invoice_id": invoice_id,
-                "private_receipt": True, "public_enabled": False, "broadcasts": 0,
-                "expires_at": record["expires_at"]}
+        return _payment_instructions(record, "PRIVATE_CANARY_INVOICE_CREATED")
     except BaseException:
         if written is not None:
             written.unlink(missing_ok=True)
