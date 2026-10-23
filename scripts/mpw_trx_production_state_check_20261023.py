@@ -85,6 +85,30 @@ def inspect():
                     except (ValueError,TypeError):
                         result["last_worker_mode"]="MALFORMED_WORKER_STATUS"
                     break
+    # Verify merchant checkout dependencies read-only, without exposing
+    # wallet address or current pricing to CI logs.
+    try:
+        from services.mpw_trx_commercial_web import _configured_receiver
+        from scripts.mojplaywin_native_chain_verify import tron_address_to_hex
+        recipient=_configured_receiver()
+        tron_address_to_hex(recipient)
+        result["merchant_native_trx_receiver_valid"]=True
+    except Exception as exc:
+        result["merchant_native_trx_receiver_valid"]=False
+        result["receiver_error_type"]=type(exc).__name__
+    try:
+        from services.mpw_trx_commercial_web import _rate_provider
+        from decimal import Decimal
+        from django.utils import timezone
+        rate,observed=_rate_provider()
+        age=(timezone.now()-observed).total_seconds()
+        result["new_trx_quote_valid"]=bool(
+            Decimal(str(rate)).is_finite() and Decimal(str(rate))>0 and -15<=age<=120
+        )
+        result["quote_observation_recent"]=bool(-15<=age<=120)
+    except Exception as exc:
+        result["new_trx_quote_valid"]=False
+        result["quote_error_type"]=type(exc).__name__
     try:
         _commercial_db(settings,connection)
         result["release_gate_open"]=True
