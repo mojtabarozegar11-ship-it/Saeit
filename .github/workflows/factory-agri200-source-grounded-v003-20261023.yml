@@ -1,0 +1,84 @@
+name: Factory subject-specific scientific revision v003 and independent mechanical QC
+on:
+  pull_request:
+    paths:
+      - scripts/factory_agri200_source_grounded_v003_20261023.py
+      - scripts/factory_agri200_source_grounded_v003_qc_20261023.py
+      - scripts/factory_agri200_autonomous_closed_loop_20261023.py
+      - tests/test_factory_agri200_source_grounded_v003_20261023.py
+      - tests/test_factory_agri200_autonomous_closed_loop_20261023.py
+      - deploy/install_factory_agri200_source_grounded_v003_20261023.sh
+      - .github/workflows/factory-agri200-source-grounded-v003-20261023.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_agri200_source_grounded_v003_20261023.py
+      - scripts/factory_agri200_source_grounded_v003_qc_20261023.py
+      - scripts/factory_agri200_autonomous_closed_loop_20261023.py
+      - tests/test_factory_agri200_source_grounded_v003_20261023.py
+      - tests/test_factory_agri200_autonomous_closed_loop_20261023.py
+      - deploy/install_factory_agri200_source_grounded_v003_20261023.sh
+      - .github/workflows/factory-agri200-source-grounded-v003-20261023.yml
+permissions: {contents: read}
+concurrency:
+  group: factory-agri200-source-grounded-v003
+  cancel-in-progress: false
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify unique source-grounded bilingual revision, packaging, QC and orchestration
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_factory_agri200_source_grounded_v003_20261023.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_factory_agri200_autonomous_closed_loop_20261023.py' -v
+          bash -n deploy/install_factory_agri200_source_grounded_v003_20261023.sh
+  deploy-private:
+    needs: regression
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-agri200-science-rework-20261023]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Upload hash-verified worker and deliver new real private editions via VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/agri200-revision"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          ssh_vps 'test "$(id -un)" = githubops && test -x "$HOME/factory-runtime/.venv/bin/python" && crontab -l | grep -Fq SAEIT_AGRI200_AUTONOMOUS_CLOSED_LOOP_V1'
+          target="/home/githubops/factory-runtime/operations/.agri200-revision-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh_vps "umask 077; test ! -e '$target'; install -d -m 700 '$target/scripts' '$target/tests' '$target/deploy'"
+          for file in \
+            scripts/factory_agri200_source_grounded_v003_20261023.py \
+            scripts/factory_agri200_source_grounded_v003_qc_20261023.py \
+            scripts/factory_agri200_autonomous_closed_loop_20261023.py \
+            scripts/factory_agri200_downloadable_20261023.py \
+            tests/test_factory_agri200_source_grounded_v003_20261023.py \
+            tests/test_factory_agri200_autonomous_closed_loop_20261023.py \
+            deploy/install_factory_agri200_source_grounded_v003_20261023.sh; do
+            ssh_vps "umask 077; cat > '$target/$file'; chmod 600 '$target/$file'" < "$file"
+            expected="$(sha256sum "$file" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$target/$file' | awk '{print \$1}')\" = '$expected'"
+          done
+          ssh_vps "timeout 150s /home/githubops/factory-runtime/.venv/bin/python -B -m unittest discover -s '$target/tests' -p test_factory_agri200_source_grounded_v003_20261023.py -v"
+          ssh_vps "bash -n '$target/deploy/install_factory_agri200_source_grounded_v003_20261023.sh'"
+          ssh_vps "timeout 950s bash '$target/deploy/install_factory_agri200_source_grounded_v003_20261023.sh' '$target/scripts/factory_agri200_source_grounded_v003_20261023.py' '$target/scripts/factory_agri200_source_grounded_v003_qc_20261023.py' '$target/scripts/factory_agri200_autonomous_closed_loop_20261023.py'"
+          ssh_vps 'crontab -l | grep -F SAEIT_AGRI200_AUTONOMOUS_CLOSED_LOOP_V1'
