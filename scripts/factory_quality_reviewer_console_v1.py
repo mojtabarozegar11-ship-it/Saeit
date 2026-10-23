@@ -228,7 +228,10 @@ def summary(workspace):
     return {"schema":"saeit.factory.reviewer-console-status.v1",
             "pending_invitations":pending,"trusted_reviewer_count":enrolled,
             "trusted_roles":roles,
-            "all_four_roles_registered":set(roles)==set(ROLES),
+            "all_four_roles_registered":(set(ROLES[:3]).issubset(roles)
+                                         and bool({"owner",DELEGATE_ROLE}.intersection(roles))),
+            "delegated_owner_agent_registered":DELEGATE_ROLE in roles,
+            "missing_independent_specialist_roles":sorted(set(ROLES[:3])-set(roles)),
             "actual_specialist_approvals_created_by_console":0,
             "commercial_release_allowed_by_console":False}
 def main():
