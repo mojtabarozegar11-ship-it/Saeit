@@ -161,7 +161,34 @@ class SignedApprovalTests(unittest.TestCase):
             x[5]["reviewers"]["factory_agent_moj1"]["owner_delegation_signature_hex"]=sign(owner_priv,grant)
             x[5]["root_signature_hex"]=sign(owner_priv,{"schema":mod.KEY_SCHEMA,
                                                         "reviewers":x[5]["reviewers"]})
-            self.assertIn("TRUST_REGISTRY_INVALID",self.check(x)["blocking_reasons"])
+            v=self.check(x)
+            self.assertIn("OWNER_AGENT_DELEGATION_NOT_CURRENT",v["blocking_reasons"])
+            self.assertNotIn("TRUST_REGISTRY_INVALID",v["blocking_reasons"])
+
+    def test_expired_unused_agent_cannot_block_valid_direct_owner_approval(self):
+        with tempfile.TemporaryDirectory() as d:
+            x,owner_priv,sign=self.make_delegated(d)
+            root=x[0]
+            from datetime import datetime,timedelta,timezone
+            agent=x[5]["reviewers"]["factory_agent_moj1"]
+            grant=agent["owner_delegation"]
+            now=datetime.now(timezone.utc)
+            grant["not_before_utc"]=(now-timedelta(days=5)).isoformat()
+            grant["expires_at_utc"]=(now-timedelta(days=2)).isoformat()
+            agent["owner_delegation_signature_hex"]=sign(owner_priv,grant)
+            x[5]["reviewers"]["trusted_owner"]={
+                "role":"owner",
+                "public_key_pem":(root/"trusted_owner.pub.pem").read_text(),
+                "externally_identity_verified":True,
+                "identity_verification_evidence_sha256":"e"*64,"active":True}
+            x[5]["root_signature_hex"]=sign(owner_priv,{
+                "schema":mod.KEY_SCHEMA,"reviewers":x[5]["reviewers"]})
+            x[6]=[sig for sig in x[6] if sig["role"]!=mod.DELEGATE_ROLE]
+            x[6].append({"reviewer_id":"trusted_owner","role":"owner",
+                         "signature_hex":sign(root/"trusted_owner.pem",x[3])})
+            result=self.check(x)
+            self.assertTrue(result["eligible"],result["blocking_reasons"])
+            self.assertEqual(result["owner_authorization_kind"],"direct_owner")
 
     def test_truly_signed_multirole_exact_version_allows_clearance_only(self):
         with tempfile.TemporaryDirectory() as d:
