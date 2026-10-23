@@ -79,6 +79,31 @@ class PrivateCanaryIsolationTests(unittest.TestCase):
             with patch.dict("os.environ", {"MPW_TRX_CANARY_EXPECTED_SENDER": "T" + "A" * 33}):
                 self.assertEqual(canary._expected_sender(), "T" + "A" * 33)
 
+    def test_unique_merchant_staff_can_be_discovered_without_disclosing_id(self):
+        from unittest.mock import MagicMock
+        manager = MagicMock()
+        manager.filter.return_value.values_list.return_value.__getitem__.return_value = [17]
+        with patch("django.contrib.auth.get_user_model",
+                   return_value=SimpleNamespace(objects=manager)):
+            with patch.dict("os.environ", {"MPW_TRX_CANARY_BUYER_ID": "auto",
+                                           "MPW_TRX_CANARY_PRODUCT_ID": "779"}):
+                self.assertEqual(canary._configured_ids(), (17, 779))
+                manager.filter.return_value.values_list.return_value.__getitem__.return_value = [17, 18]
+                with self.assertRaises(PaymentHold):
+                    canary._configured_ids()
+
+    def test_invoice_shares_only_public_payment_destination_and_exact_amount(self):
+        instructions = canary._payment_instructions({
+            "invoice_id": 123, "recipient": "T" + "A" * 33,
+            "amount_sun": 1234567, "expires_at": "2026-10-23T12:00:00+00:00",
+            "buyer_id": 17, "expected_sender": "private-not-printed",
+        }, "PRIVATE_CANARY_INVOICE_CREATED")
+        self.assertEqual(instructions["amount_trx"], "1.234567")
+        self.assertNotIn("buyer_id", instructions)
+        self.assertNotIn("expected_sender", instructions)
+        self.assertFalse(instructions["public_enabled"])
+        self.assertEqual(instructions["broadcasts"], 0)
+
     def test_private_receipt_is_atomic_owner_private_and_tamper_checked(self):
         with tempfile.TemporaryDirectory() as d, patch.object(canary, "RECEIPTS", Path(d) / "receipts"):
             record = {"network": "tron-mainnet", "invoice_id": 412, "amount_sun": 123456}
