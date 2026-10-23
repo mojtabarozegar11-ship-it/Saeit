@@ -1,6 +1,6 @@
 """Install isolated, SHA-checked MojPlayWin public editorial publisher.
 
-Main docroot gets ONLY the new owned /mpw-editorial/ subtree. We do NOT edit
+Main docroot gets ONLY the new owned /mpw-standalone-guides/ subtree. We do NOT edit
 Apache .htaccess, Django, Passenger, shared app, payments, personal or sibling
 subsites. External public HTTP canary must pass before finalizing the release.
 """
@@ -55,7 +55,7 @@ def read_input():
 
 def atom(path,raw):
     need(not path.is_symlink(),"PUBLIC_PUBLISH_SOURCE_SYMLINK")
-    fd,temp=tempfile.mkstemp(prefix=".mpw-editorial-source-",dir=str(path.parent))
+    fd,temp=tempfile.mkstemp(prefix=".mpw-standalone-guides-source-",dir=str(path.parent))
     try:
         os.fchmod(fd,0o600)
         with os.fdopen(fd,"wb") as w:
@@ -104,11 +104,11 @@ def main():
         need(p.returncode==0,"STATIC_PUBLICATION_PRECHECK_OR_DEPLOY_FAILED:"+p.stderr[-450:])
         result=json.loads(p.stdout)
         need(result["status"] in ("already_published_no_change","published_standalone_awaiting_external_smoke")
-             and (DOCROOT/"mpw-editorial/index.html").is_file(),
+             and (DOCROOT/"mpw-standalone-guides/index.html").is_file(),
              "STATIC_PUBLICATION_DOCUMENT_NOT_WRITTEN")
         print(json.dumps({"status":"MPW_EDITORIAL_STANDALONE_FIRST_RELEASE_STAGED",
             "server_status":result["status"],"source_sha256":hashlib.sha256(sources["public_editorial_publisher.py"]).hexdigest(),
-            "public_prefix":"/mpw-editorial/","articles":result["articles"],
+            "public_prefix":"/mpw-standalone-guides/","articles":result["articles"],
             "original_htaccess_modified":False,"shared_django_modified":False,
             "passenger_restart":False,"other_sites_modified":False,
             "external_http_smoke_pending":True},sort_keys=True))
