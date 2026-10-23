@@ -345,6 +345,84 @@ jobs:
               "worker_restarted":False}
           print("FACTORY_UNIQUE_WORKER_ACTIVITY="+json.dumps(result,sort_keys=True))
           PY
+
+      - name: Read master Stage4 retry decision and classify due linked runs safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/stage4-readonly"
+          timeout 90s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/factory-runtime/django-app"
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+          "$HOME/factory-runtime/.venv/bin/python" -B - <<'PY'
+          import ast,collections,datetime,hashlib,json,os,re
+          from pathlib import Path
+          from django.utils.dateparse import parse_datetime
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.apps import apps
+          path=Path("core/autonomous_brain.py")
+          if path.is_symlink() or not path.is_file() or path.stat().st_size>180000:
+              raise SystemExit("STAGE4_MASTER_SOURCE_UNSAFE")
+          src=path.read_text(encoding="utf8")
+          ast.parse(src)
+          lines=src.splitlines()
+          needles=[i for i,s in enumerate(lines) if "if not revised_evidence:" in s]
+          if len(needles)!=1:
+              raise SystemExit("STAGE4_MASTER_DECISION_MARKER_CHANGED")
+          pos=needles[0]
+          for i in range(max(0,pos-24),min(len(lines),pos+31)):
+              line=lines[i]
+              if len(line)<=250 and not re.search(r"secret|password|credential|private.key|api.key|auth.token|https?://|address|email",line,re.I):
+                  print("STAGE4_MASTER_DECISION_LINE="+str(i+1)+":"+line)
+          Product=apps.get_model("core","Product")
+          FactoryRun=apps.get_model("core","FactoryRun")
+          run_fields={f.name for f in FactoryRun._meta.fields}
+          now=datetime.datetime.now(datetime.timezone.utc)
+          due=collections.Counter()
+          status_counts=collections.Counter()
+          scanned=0
+          for pk,metadata in Product.objects.values_list("pk","metadata").iterator(chunk_size=100):
+              scanned+=1
+              if scanned>5000:
+                  due["truncated"]=1
+                  break
+              if not isinstance(metadata,dict):
+                  continue
+              v=metadata.get("validation")
+              s=v.get("stage4_research") if isinstance(v,dict) else None
+              if not isinstance(s,dict):
+                  s=metadata.get("stage4_research")
+              if not isinstance(s,dict):
+                  continue
+              stamp=s.get("next_retry_at")
+              if not isinstance(stamp,str):
+                  continue
+              when=parse_datetime(stamp)
+              if when is None or when.tzinfo is None or when>now:
+                  continue
+              due["due_products"]+=1
+              if "product" not in run_fields:
+                  due["run_link_not_available"]+=1
+                  continue
+              runs=list(FactoryRun.objects.filter(product_id=pk).values_list("status",flat=True)[:20])
+              if not runs:
+                  due["no_linked_run"]+=1
+              else:
+                  due["linked_run"]+=1
+                  for status in set(map(str,runs)):
+                      status_counts[status[:40]]+=1
+          print("STAGE4_DUE_RUN_ELIGIBILITY="+json.dumps({
+              "read_only":True,"schema":"saeit.factory.stage4-due-run-eligibility.v1",
+              "master_source_sha256":hashlib.sha256(src.encode()).hexdigest(),
+              "run_link_field_available":"product" in run_fields,
+              "counts":dict(sorted(due.items())),
+              "linked_run_statuses":dict(sorted(status_counts.items())),
+              "policy_modified":False},sort_keys=True))
+          PY
+          REMOTE
       - name: Destroy runner SSH key material
         if: always()
         shell: bash
