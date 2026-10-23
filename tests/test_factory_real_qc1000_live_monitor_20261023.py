@@ -79,7 +79,8 @@ class RealQC1000Tests(unittest.TestCase):
             })
         pub = Path(base) / "test-runner.pub"
         priv = Path(base) / "test-runner.key"
-        subprocess.run(["openssl", "genpkey", "-algorithm", "ED25519",
+        subprocess.run(["openssl", "genpkey", "-algorithm", "RSA",
+                        "-pkeyopt", "rsa_keygen_bits:3072",
                         "-out", str(priv)], check=True, capture_output=True)
         subprocess.run(["openssl", "pkey", "-in", str(priv), "-pubout",
                         "-out", str(pub)], check=True, capture_output=True)
@@ -94,12 +95,13 @@ class RealQC1000Tests(unittest.TestCase):
         signed = {k: v for k, v in suite.items() if k != "signature_hex"}
         payload = folder / "payload.tmp"
         sigfile = folder / "sig.tmp"
-        payload.write_bytes(hashlib.sha256(
-            b"SAEIT_REAL_QC1000_ED25519_V1\x00" + qc.canonical(signed)
-        ).digest())
-        subprocess.run(["openssl", "pkeyutl", "-sign", "-rawin",
-                        "-inkey", str(private), "-in", str(payload),
-                        "-out", str(sigfile)], check=True, capture_output=True)
+        payload.write_bytes(
+            b"SAEIT_REAL_QC1000_RSA_PSS_V1\x00" + qc.canonical(signed))
+        subprocess.run(["openssl", "dgst", "-sha256",
+                        "-sigopt", "rsa_padding_mode:pss",
+                        "-sigopt", "rsa_pss_saltlen:digest",
+                        "-sign", str(private), "-out", str(sigfile),
+                        str(payload)], check=True, capture_output=True)
         suite["signature_hex"] = sigfile.read_bytes().hex()
         (folder / "suite.json").write_bytes(qc.canonical(suite))
         payload.unlink()
@@ -165,7 +167,8 @@ class RealQC1000Tests(unittest.TestCase):
             path, _, _ = self.make_test_signed_suite(temp, area)
             other = Path(temp) / "other.key"
             otherpub = Path(temp) / "other.pub"
-            subprocess.run(["openssl", "genpkey", "-algorithm", "ED25519",
+            subprocess.run(["openssl", "genpkey", "-algorithm", "RSA",
+                        "-pkeyopt", "rsa_keygen_bits:3072",
                             "-out", str(other)], check=True, capture_output=True)
             subprocess.run(["openssl", "pkey", "-in", str(other),
                             "-pubout", "-out", str(otherpub)], check=True, capture_output=True)
