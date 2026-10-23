@@ -670,7 +670,7 @@ def fetch_openalex(title, page=1):
     # Search actual complete natural-language terms. Internal normalized
     # stems are only for validating hits, not OpenAlex whole-word retrieval.
     subject=" ".join(str(title).split())[:200]
-    if type(page) is not int or not 1 <= page <= 4:
+    if type(page) is not int or not 1 <= page <= 8:
         raise ValueError("SCOUT_BAD_BOUNDED_RESULTS_PAGE")
     if not subject:
         raise ValueError("SCOUT_EMPTY_SCHOLARLY_QUERY")
@@ -792,7 +792,7 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
     # Visit page 1 for every distinct query before page 2, and so on.
     # The older paired modulo schedule never explored most query/page pairs.
     query=queries[round_no%len(queries)]
-    page=1 + (round_no//len(queries)) % 4
+    page=1 + (round_no//len(queries)) % 8
     try:
         # Explore different scholarly result pages before repeated queries
         # keep returning the same publisher. Mocks/custom fetchers remain compatible.
@@ -894,14 +894,14 @@ def retry_delay(candidate, title):
     # A full source sweep is queries x 4 pages, not merely one page per
     # query. Do not hold outstanding orders eight hours after only ~25%
     # of available bounded search space has been explored.
-    sweep_rounds=4*len(query_variants(title))
+    sweep_rounds=8*len(query_variants(title))
     return (dt.timedelta(minutes=15)
             if round_no+1<sweep_rounds
             else dt.timedelta(hours=8))
 
 
 def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
-        batch=200,workers=3,query_burst=1):
+        batch=200,workers=3,query_burst=1,expedite_gap_research=False):
     if not 1<=query_burst<=3:
         raise ValueError("SCOUT_INVALID_QUERY_BURST")
     root=Path(root).expanduser().resolve()
@@ -954,6 +954,7 @@ def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
         # every 15 minutes, then 8-hour cooldown after a full sweep.
         unsearched=[]
         retries=[]
+        expedited=[]
         now=dt.datetime.now(dt.timezone.utc)
         for rank,ident in enumerate(ids,1):
             packet,order=worker.verified_stage1_packet(
@@ -980,8 +981,22 @@ def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
             minimum=retry_delay(old,title)
             if now-checked>=minimum:
                 retries.append((checked,rank,order))
+            elif (expedite_gap_research and checked<=now
+                  and old.get("scout_algorithm_version")==SCOUT_ALGO_VERSION
+                  and old.get("status")=="indexed_references_found_require_additional_research"
+                  and old.get("evidence_gap_reason") in (
+                      "under_four_topic_relevant_article_abstracts",
+                      "insufficient_independent_publishers_or_domains")
+                  and type(old.get("search_round")) is int
+                  and old["search_round"]+1>=4*len(query_variants(title))):
+                # A single owner-approved deployment may probe unexplored
+                # pages 5-8 immediately. Normal cron retains its retry budget.
+                expedited.append((checked,rank,order))
         retries.sort(key=lambda x:(x[0],x[1]))
-        selected=(unsearched+[v[2] for v in retries])[:batch]
+        expedited.sort(key=lambda x:(x[0],x[1]))
+        selected=(unsearched+[v[2] for v in retries]
+                  +[v[2] for v in expedited])[:batch]
+        expedited_ids={item[2]["source_product_id"] for item in expedited}
         counts={"traceable_abstracts":0,"needs_more_research":0,
                 "api_unavailable":0,"already_seeded":0,"provider_cooldown":0}
         def research_topic(order):
@@ -1005,6 +1020,9 @@ def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
         report={
             "schema":SCHEMA,"input_priority_order_count":200,
             "attempted_this_run":len(selected),
+            "expedited_unresolved_evidence_gaps":sum(
+                o["source_product_id"] in expedited_ids for o in selected),
+            "evidence_review_and_release_gates_unchanged":True,
             "bounded_source_search_rounds_this_run":research_rounds,
             "max_query_variants_per_topic_this_run":query_burst,
             "source_evidence_automatically_documented":counts["traceable_abstracts"],
@@ -1043,11 +1061,13 @@ def main():
     p.add_argument("--batch",type=int,default=100)
     p.add_argument("--workers",type=int,default=3)
     p.add_argument("--query-burst",type=int,default=1)
+    p.add_argument("--expedite-gap-research",action="store_true")
     args=p.parse_args()
     if not 1<=args.batch<=200 or not 1<=args.workers<=4 or not 1<=args.query_burst<=3:
         raise ValueError("SCOUT_INVALID_BOUNDED_EXECUTION")
     output=run(args.factory_private,args.stage2_program,batch=args.batch,
-               workers=args.workers,query_burst=args.query_burst)
+               workers=args.workers,query_burst=args.query_burst,
+               expedite_gap_research=args.expedite_gap_research)
     for key,value in output.items():
         print("FACTORY_STAGE2_SCOUT_"+key.upper()+"="+str(value))
 

@@ -150,12 +150,28 @@ def dispatch(root, ops, *, run_workers=True):
                 except (OSError, RuntimeError) as exc:
                     outcomes[label] = "error_" + type(exc).__name__
     final = inventory(root, names)
+    advanced = any(final[k] > initial[k] for k in initial
+                   if k.startswith("stage") and isinstance(initial[k], int))
+    failed = any(status != "ok" for status in outcomes.values())
+    if not run_workers:
+        production_outcome = "audit_only"
+        safe_next_action = "run_authorized_workers"
+    elif failed:
+        production_outcome = "worker_failure"
+        safe_next_action = "inspect_worker_errors_before_retry"
+    elif advanced:
+        production_outcome = "internal_progress_verified"
+        safe_next_action = "continue_evidence_and_quality_review"
+    else:
+        production_outcome = "blocked_no_progress"
+        safe_next_action = "investigate_evidence_rework_and_approval_gates"
     return {"schema": "saeit.factory.agri200.onepass-dispatch.v1",
             "before": initial, "after": final, "worker_results": outcomes,
+            "production_outcome": production_outcome,
+            "safe_next_action": safe_next_action,
+            "workers_success_does_not_mean_products_completed": True,
             "remaining_research_diagnostics": evidence_gaps(root, names),
-            "automated_factory_progress_confirmed": any(
-                final[k] > initial[k] for k in initial
-                if k.startswith("stage") and isinstance(initial[k], int)),
+            "automated_factory_progress_confirmed": advanced,
             "finished_products_published_by_this_dispatch": 0,
             "why_no_unverified_release": "stage6_review_and_full_specific_manuscript_missing",
             "public_sites_modified": False}

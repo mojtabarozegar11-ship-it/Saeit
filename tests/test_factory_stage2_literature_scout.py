@@ -102,7 +102,7 @@ class SourceScoutTests(unittest.TestCase):
         self.assertEqual(candidate["evidence_gap_reason"],
                          "under_four_topic_relevant_article_abstracts")
         with self.assertRaisesRegex(ValueError,"SCOUT_BAD_BOUNDED_RESULTS_PAGE"):
-            SCOUT.fetch_openalex("safe agricultural topic",page=7)
+            SCOUT.fetch_openalex("safe agricultural topic",page=9)
 
     def test_full_query_page_grid_is_explored_before_long_cooldown(self):
         order=self.order(1)
@@ -698,7 +698,9 @@ class SourceScoutTests(unittest.TestCase):
                "scout_algorithm_version":SCOUT.SCOUT_ALGO_VERSION,
                "search_round":1}
         self.assertEqual(SCOUT.retry_delay(fresh,title),dt.timedelta(minutes=15))
-        full=dict(fresh,search_round=4*len(SCOUT.query_variants(title))-1)
+        first_sweep=dict(fresh,search_round=4*len(SCOUT.query_variants(title))-1)
+        self.assertEqual(SCOUT.retry_delay(first_sweep,title),dt.timedelta(minutes=15))
+        full=dict(fresh,search_round=8*len(SCOUT.query_variants(title))-1)
         self.assertEqual(SCOUT.retry_delay(full,title),dt.timedelta(hours=8))
         denied=dict(fresh,status="external_research_api_unavailable")
         self.assertEqual(SCOUT.retry_delay(denied,title),dt.timedelta(minutes=12))
@@ -707,6 +709,68 @@ class SourceScoutTests(unittest.TestCase):
             SCOUT.retry_delay(dict(fresh,search_round=10001),title)
         with self.assertRaisesRegex(ValueError,"SCOUT_INVALID_QUERY_BURST"):
             SCOUT.run(self.root,self.program,batch=1,workers=1,query_burst=4)
+
+    def test_extended_pages_explore_new_indexed_records_before_repeat(self):
+        order=self.order(1)
+        queries=SCOUT.query_variants("Houseplant Rescue Guide")
+        candidate_path=(self.area/"stage-02/literature-candidates/"
+                        "AGRI-001--r001.json")
+        STAGE2.atomic(candidate_path,{
+            "schema":SCOUT.SCHEMA,"source_product_id":"AGRI-001",
+            "order_id":order["id"],
+            "status":"indexed_references_found_require_additional_research",
+            "checked_utc":dt.datetime.now(dt.timezone.utc).isoformat(),
+            "search_round":4*len(queries)-1,
+            "scout_algorithm_version":SCOUT.SCOUT_ALGO_VERSION})
+        seen=[]
+        def empty_provider(endpoint,params,timeout=10):
+            seen.append((params["search"],params["page"]))
+            return {"results":[]}
+        with mock.patch.object(SCOUT,"request_json",empty_provider):
+            self.assertEqual(SCOUT.sources_for_topic(
+                self.root,STAGE2,order,SCOUT.fetch_openalex,lambda _:[]),
+                "needs_more_research")
+        self.assertEqual(seen,[(queries[0],5)])
+        with mock.patch.object(SCOUT,"request_json",empty_provider):
+            SCOUT.fetch_openalex("houseplant science",page=8)
+        self.assertEqual(seen[-1],("houseplant science",8))
+        with self.assertRaisesRegex(ValueError,"SCOUT_BAD_BOUNDED_RESULTS_PAGE"):
+            SCOUT.fetch_openalex("houseplant science",page=9)
+
+    def test_one_off_recovery_only_targets_real_evidence_gaps(self):
+        now=dt.datetime.now(dt.timezone.utc)
+        index=STAGE2.read(self.area/"owner-agri200-p0-index.json")
+        for rank,ident in enumerate(index["order_ids_ranked"],1):
+            order=self.order(rank)
+            title=next(e["title"] for e in order["editions"]
+                       if e["locale"]=="en-US")
+            STAGE2.atomic(self.area/"stage-02/literature-candidates"/
+                          ("AGRI-%03d"%rank+"--r001.json"),{
+                "schema":SCOUT.SCHEMA,
+                "source_product_id":"AGRI-%03d"%rank,
+                "order_id":ident,
+                "status":"indexed_references_found_require_additional_research",
+                "checked_utc":now.isoformat(),
+                "search_round":4*len(SCOUT.query_variants(title))-1,
+                "scout_algorithm_version":SCOUT.SCOUT_ALGO_VERSION,
+                "evidence_gap_reason":(
+                    "under_four_topic_relevant_article_abstracts"
+                    if rank==1 else "unclassified")})
+        attempted=[]
+        def empty_search(query):
+            attempted.append(query)
+            return []
+        ordinary=SCOUT.run(self.root,self.program,fetcher=empty_search,
+                           backstop=lambda _:[],batch=1,workers=1)
+        self.assertEqual(ordinary["attempted_this_run"],0)
+        urgent=SCOUT.run(self.root,self.program,fetcher=empty_search,
+                         backstop=lambda _:[],batch=1,workers=1,
+                         expedite_gap_research=True)
+        self.assertEqual(urgent["attempted_this_run"],1)
+        self.assertEqual(urgent["expedited_unresolved_evidence_gaps"],1)
+        self.assertEqual(urgent["source_evidence_automatically_documented"],0)
+        self.assertEqual(len(attempted),1)
+        self.assertTrue(urgent["evidence_review_and_release_gates_unchanged"])
 
     def test_scheduled_quick_retry_moves_only_eligible_gap(self):
         now=dt.datetime.now(dt.timezone.utc)

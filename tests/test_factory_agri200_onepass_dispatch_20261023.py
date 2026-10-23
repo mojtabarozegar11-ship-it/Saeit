@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 
 
 SOURCE = Path(__file__).resolve().parents[1] / "scripts/factory_agri200_onepass_dispatch_20261023.py"
@@ -33,6 +35,36 @@ class OnePassTests(unittest.TestCase):
             self.assertEqual(result["finished_products_published_by_this_dispatch"], 0)
             self.assertEqual(result["remaining_research_diagnostics"]["unresearched_orders"], 200)
             self.assertEqual(result["remaining_research_diagnostics"]["missing_bibliography"], 200)
+            self.assertEqual(result["production_outcome"], "audit_only")
+            self.assertFalse(result["automated_factory_progress_confirmed"])
+
+    def test_green_worker_exits_without_artifacts_are_reported_as_blocked(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "private"
+            area = root / "production-instructions"
+            ops = Path(directory) / "operations/production-instructions"
+            area.mkdir(parents=True)
+            ops.mkdir(parents=True)
+            orders = ["WO-%08d" % i for i in range(1, 201)]
+            (area / "owner-agri200-p0-index.json").write_text(json.dumps({
+                "topic_count": 200, "edition_goal_count": 400,
+                "order_ids_ranked": orders}), encoding="utf8")
+            with mock.patch.object(module, "worker_command", return_value=["true"]):
+                with mock.patch.object(module.subprocess, "run",
+                                       return_value=SimpleNamespace(returncode=0)):
+                    report = module.dispatch(root, ops)
+            self.assertEqual(report["production_outcome"], "blocked_no_progress")
+            self.assertTrue(report["workers_success_does_not_mean_products_completed"])
+            self.assertFalse(report["automated_factory_progress_confirmed"])
+            self.assertEqual(report["finished_products_published_by_this_dispatch"], 0)
+            self.assertTrue(all(value == "ok" for value
+                                in report["worker_results"].values()))
+            with mock.patch.object(module, "worker_command", return_value=["true"]):
+                with mock.patch.object(module.subprocess, "run",
+                                       return_value=SimpleNamespace(returncode=3)):
+                    failed = module.dispatch(root, ops)
+            self.assertEqual(failed["production_outcome"], "worker_failure")
+            self.assertFalse(failed["public_sites_modified"])
 
     def test_duplicate_internal_orders_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
