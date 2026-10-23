@@ -7,7 +7,6 @@ Only already-paid, validated on-chain funds produce ledger/fulfillment writes.
 """
 from __future__ import annotations
 import json,os,sys
-from datetime import timedelta
 from pathlib import Path
 ROOT=Path("/home/zomorod2/Saeit-staging")
 if not ROOT.is_dir() or ROOT.is_symlink():
@@ -21,8 +20,8 @@ def run_once():
     django.setup()
     from django.conf import settings
     from django.db import connection
-    from django.utils import timezone
     from core.models import PaymentIntent
+    from services.mpw_trx_reconcile_cursor import (read_cursor,write_cursor,pick_pending_page)
     from services.mpw_trx_walletless_core import PaymentHold
     from services.mpw_walletless_commercial_intent import (
         PROVIDER,WAITING,_paid_read_db,reconcile_commercial_intent_from_candidates,
@@ -41,12 +40,12 @@ def run_once():
     result["public_checkout_activated"]=bool(
         getattr(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False) and
         getattr(settings,"MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED",False)\n    )
-    # Review transfers within the immutable issued invoice window, even
-    # when the browser has closed. A 36-hour lookback tolerates short outages.
-    queued=list(PaymentIntent.objects.filter(
-        provider=PROVIDER,status=WAITING,
-        created_at__gte=timezone.now()-timedelta(hours=36),
-    ).select_related("order").order_by("created_at")[:6])
+    # All unpaid invoices must remain eligible after service downtime.
+    # A rotating checkpoint prevents six old unresolved invoices from
+    # starving all other buyers forever.
+    home=Path("/home/zomorod2/.local/share")
+    cursor=read_cursor(home)
+    queued=pick_pending_page(PaymentIntent,PROVIDER,WAITING,cursor,limit=6)
     if not queued:
         return result
     try:
@@ -69,6 +68,9 @@ def run_once():
             result["settled"]+=1
         else:
             result["pending"]+=1
+    # Advance only AFTER the batch was attempted. A failed blockchain
+    # transaction remains pending and will be retried on subsequent cycles.
+    write_cursor(home,queued[-1].pk)
     return result
 
 if __name__=="__main__":
