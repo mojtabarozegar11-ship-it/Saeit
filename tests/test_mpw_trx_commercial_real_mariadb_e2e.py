@@ -138,6 +138,42 @@ class CommercialMariaDBTest(unittest.TestCase):
                     pk,43,server_lookup=lambda *args:[fixture.TX_HASH],pair=self.pair())
         self.assertEqual(ExistingLedgerEntry.objects.count(),1)
 
+    def test_old_pending_invoices_rotate_without_starving_new_buyers(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from services.mpw_trx_reconcile_cursor import (
+            read_cursor,write_cursor,pick_pending_page,
+        )
+        from services.mpw_walletless_commercial_intent import PROVIDER,WAITING
+        pending_ids=[]
+        for i in range(9):
+            order=fixture.Order.objects.create(customer_id=42,total=Decimal("0.03"),
+                    currency="USD",status="pending")
+            item=fixture.OrderItem.objects.create(order=order,
+                    unit_price=Decimal("0.03"),kind="digital")
+            pi=PaymentIntent.objects.create(order=order,amount=Decimal("0.03"),
+                    currency="USD",status=WAITING,provider=PROVIDER,
+                    idempotency_key="cursor-test-"+str(i),
+                    provider_reference="test-not-a-payable-invoice")
+            pending_ids.append(pi.pk)
+        seen=[]
+        with TemporaryDirectory() as d:
+            root=Path(d)
+            self.assertEqual(read_cursor(root),0)
+            for _ in range(4):
+                batch=pick_pending_page(PaymentIntent,PROVIDER,WAITING,
+                                        read_cursor(root),limit=3)
+                seen.extend(x.pk for x in batch)
+                write_cursor(root,batch[-1].pk)
+            self.assertEqual(seen[:9],pending_ids)
+            self.assertEqual(seen[9:12],pending_ids[:3])
+            self.assertEqual(read_cursor(root),pending_ids[2])
+            (root/"mpw-trx-reconcile-cursor-v1").write_text("not-a-safe-id",encoding="utf8")
+            with self.assertRaises(ValueError):
+                read_cursor(root)
+        self.assertEqual(ExistingLedgerEntry.objects.count(),0)
+        self.assertEqual(PaymentWebhookEvent.objects.count(),0)
+
     def test_wrong_owner_and_failed_finality_never_pay(self):
         pk,_,_=self.reserve()
         with self.assertRaises(PaymentHold):
