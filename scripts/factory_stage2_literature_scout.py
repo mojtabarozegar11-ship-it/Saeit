@@ -27,7 +27,7 @@ import urllib.parse
 import urllib.request
 
 SCHEMA="saeit.factory.stage2-literature-scout.v1"
-SCOUT_ALGO_VERSION="v7-multiphase-topic-specific-query"
+SCOUT_ALGO_VERSION="v8-bounded-progressive-search"
 EVIDENCE_SCHEMA="saeit.factory.stage2-source-evidence.v1"
 TOPIC_ID=re.compile(r"AGRI-[0-9]{3}\Z")
 WORD_RE=re.compile(r"[a-z]{3,}")
@@ -748,7 +748,8 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
              "v3-four-source-safety-desk-research",
              "v4-normalized-scientific-synonyms",
              "v5-publisher-diversity-gap-diagnostics",
-              "v6-evidence-first-fullword-query",SCOUT_ALGO_VERSION)
+              "v6-evidence-first-fullword-query",
+              "v7-multiphase-topic-specific-query",SCOUT_ALGO_VERSION)
             and isinstance(cached,list) and 4<=len(cached)<=20
             and previous.get("candidate_sha256")==sha(cached)):
         valid=[]
@@ -859,8 +860,24 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
     return "needs_more_research"
 
 
+def retry_delay(candidate, title):
+    """Use short retries for unexplored searches, then slow after full sweep."""
+    if candidate.get("status")=="external_research_api_unavailable":
+        return dt.timedelta(minutes=12)
+    if candidate.get("scout_algorithm_version")!=SCOUT_ALGO_VERSION:
+        return dt.timedelta(0)
+    round_no=candidate.get("search_round",-1)
+    if type(round_no) is not int or not -1<=round_no<=10000:
+        raise RuntimeError("SCOUT_INVALID_SEARCH_ROUND")
+    return (dt.timedelta(minutes=15)
+            if round_no+1<len(query_variants(title))
+            else dt.timedelta(hours=8))
+
+
 def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
-        batch=200,workers=3):
+        batch=200,workers=3,query_burst=1):
+    if not 1<=query_burst<=3:
+        raise ValueError("SCOUT_INVALID_QUERY_BURST")
     root=Path(root).expanduser().resolve()
     worker=load_worker(stage2_program)
     area=root/"production-instructions"
@@ -907,8 +924,8 @@ def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
                         _limit_provider(endpoint,min(seconds,86400))
                 except (ValueError,TypeError):
                     continue
-        # New P0 orders run before retries. Provider failures retry in minutes,
-        # substantive source gaps in hours. Neither blocks other P0 orders.
+        # New P0 orders run before retries. Explore unused variants
+        # every 15 minutes, then 8-hour cooldown after a full sweep.
         unsearched=[]
         retries=[]
         now=dt.datetime.now(dt.timezone.utc)
@@ -930,28 +947,40 @@ def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
                     raise ValueError("SCOUT_NAIVE_CANDIDATE_TIMESTAMP")
             except (ValueError,KeyError,TypeError):
                 checked=dt.datetime.min.replace(tzinfo=dt.timezone.utc)
-            # A 429 must not impose the same 18-hour hold as a fully explored
-            # evidence gap. Retain a small cooldown to respect provider quotas.
-            is_provider_error=old.get("status")=="external_research_api_unavailable"
-            minimum=dt.timedelta(minutes=12) if is_provider_error else dt.timedelta(hours=8)
-            # Historical zero-hit packets were produced by an over-restrictive
-            # search filter; let each get one bounded, evidence-safe retry now.
-            upgraded=old.get("scout_algorithm_version")!=SCOUT_ALGO_VERSION
-            if upgraded or now-checked>=minimum:
+            # A version upgrade gets one immediate search burst; substantive
+            # gaps stay scheduled without falsifying scholarly provenance.
+            title=next((ed.get("title") for ed in order.get("editions",[])
+                        if isinstance(ed,dict) and ed.get("locale")=="en-US"),"")
+            minimum=retry_delay(old,title)
+            if now-checked>=minimum:
                 retries.append((checked,rank,order))
         retries.sort(key=lambda x:(x[0],x[1]))
         selected=(unsearched+[v[2] for v in retries])[:batch]
         counts={"traceable_abstracts":0,"needs_more_research":0,
                 "api_unavailable":0,"already_seeded":0,"provider_cooldown":0}
+        def research_topic(order):
+            # Persist each incomplete attempt; stop at real evidence, provider
+            # errors or cooldown. Hard bound of three external searches.
+            last="needs_more_research"
+            searched=0
+            for _ in range(query_burst):
+                last=sources_for_topic(root,worker,order,fetcher,backstop)
+                searched+=1
+                if last!="needs_more_research":
+                    break
+            return last,searched
+        research_rounds=0
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-            futures=[pool.submit(sources_for_topic,root,worker,o,fetcher,backstop)
-                     for o in selected]
+            futures=[pool.submit(research_topic,o) for o in selected]
             for future in concurrent.futures.as_completed(futures):
-                value=future.result()
+                value,searches=future.result()
+                research_rounds+=searches
                 counts[value]+=1
         report={
             "schema":SCHEMA,"input_priority_order_count":200,
             "attempted_this_run":len(selected),
+            "bounded_source_search_rounds_this_run":research_rounds,
+            "max_query_variants_per_topic_this_run":query_burst,
             "source_evidence_automatically_documented":counts["traceable_abstracts"],
             "still_require_manual_or_external_research":counts["needs_more_research"],
             "external_provider_unavailable":counts["api_unavailable"],
@@ -987,11 +1016,12 @@ def main():
     p.add_argument("--stage2-program",required=True)
     p.add_argument("--batch",type=int,default=100)
     p.add_argument("--workers",type=int,default=3)
+    p.add_argument("--query-burst",type=int,default=1)
     args=p.parse_args()
-    if not 1<=args.batch<=200 or not 1<=args.workers<=4:
+    if not 1<=args.batch<=200 or not 1<=args.workers<=4 or not 1<=args.query_burst<=3:
         raise ValueError("SCOUT_INVALID_BOUNDED_EXECUTION")
     output=run(args.factory_private,args.stage2_program,batch=args.batch,
-               workers=args.workers)
+               workers=args.workers,query_burst=args.query_burst)
     for key,value in output.items():
         print("FACTORY_STAGE2_SCOUT_"+key.upper()+"="+str(value))
 
