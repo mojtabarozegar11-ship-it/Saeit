@@ -583,7 +583,8 @@ class EditionTests(unittest.TestCase):
             zipfile.BadZipFile,KeyError,EOFError,NotImplementedError):
         # Retry transient maker/receipt failures from the same authenticated
         # archive; do not strand unreceipted generated source or partial stock.
-        for candidate in ((dest if created_source else None),package_dir):
+        for candidate in ((dest if created_source else None),
+                          (package_dir if created_source else None)):
             if candidate is not None and candidate.is_dir() and not candidate.is_symlink():
                 shutil.rmtree(candidate)
         return "document_edition_failed_needs_engineering"
