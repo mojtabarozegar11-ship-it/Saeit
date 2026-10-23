@@ -65,10 +65,10 @@ const OUT = process.env.RUNNER_TEMP || '/tmp';
     assert.equal(data.webgl,true,'A supported Chrome browser must render native 3D WebGL, not the 2D fallback');
     assert.equal(data.mission,1);
     assert.ok(thisErrors.length===0,'Browser errors: '+thisErrors.join('; ').slice(0,800));
-    assert.ok(fs.statSync(OUT+'/air-redesign-'+profile.kind+'-gameplay.png').size>12000,
+    assert.ok(fs.statSync(OUT+'/zm-air-fa-'+profile.kind+'-gameplay.png').size>12000,
       'screenshot must contain a rendered battlefield');
     errors.push(...thisErrors);
-    console.log('AIR_RED_SIGNOFF',JSON.stringify({profile:profile.kind,...data,shotBytes:fs.statSync(OUT+'/air-redesign-'+profile.kind+'-gameplay.png').size,jsErrors:thisErrors.length}));
+    console.log('AIR_RED_SIGNOFF',JSON.stringify({profile:profile.kind,...data,shotBytes:fs.statSync(OUT+'/zm-air-fa-'+profile.kind+'-gameplay.png').size,jsErrors:thisErrors.length}));
     await context.close();
   }
   await browser.close();
