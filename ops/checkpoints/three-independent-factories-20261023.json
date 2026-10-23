@@ -1,6 +1,6 @@
 {
   "schema": "saeit.three-independent-factories.hourly-checkpoint.v1",
-  "updated_utc": "2026-10-23T10:19:02Z",
+  "updated_utc": "2026-10-23T11:20:20Z",
   "safety": {
     "independent_factory_boundaries": true,
     "no_live_database_write_authorized": true,
@@ -13,10 +13,11 @@
     "base_merge": "a40a822fd31edb99737117c56a8417174ab7082c",
     "diagnostic_commits": [
       "3a850253f182d914c44b57cce538ac2ecdb6e570",
-      "8f71974b0ed8f01767b78963fafc1bd878a58ee8"
+      "8f71974b0ed8f01767b78963fafc1bd878a58ee8",
+      "1d038f8219647989f1a7c5f857bb0067311fcf3c"
     ],
-    "production_run": "39938042630",
-    "regression": "PASS",
+    "production_run": "39945112560",
+    "regression": "PASS: 33 document-edition tests including private rollback and backup retention; factory 40-family policy tests",
     "source_pinning": "PASS",
     "workorders": 128,
     "sources_available": 91,
@@ -37,7 +38,14 @@
     "technical_candidates_verified_after": 0,
     "commercial_release_authorized": false,
     "independent_qa_1000_verified": false,
-    "next_action": "Do not infer original source from delivery ZIP. Seek authenticated original README/test_*.py and source hash for 24 archive-contract failures; recover only on matching immutable provenance. For 13 other products, require original source SHA256 evidence. Recheck existing document-edition engineering conflict without overwriting."
+    "next_action": "Read-only search for an authenticated pre-existing private edition receipt for the single orphaned source; do not synthesize or overwrite. For 16 missing README, 8 missing original tests and 13 missing source SHA, recover only exact source bytes and signed/hash-bound provenance from trusted backups. No live DB, payment or public release until independent gates pass.",
+    "previous_production_run": "39938042630",
+    "private_document_edition_outcomes": {
+      "already_issued_private_edition": 36,
+      "existing_edition_receipt_missing_or_unsafe": 1
+    },
+    "safe_edition_stock_repair_guard_deployed": true,
+    "safe_edition_stock_repair_executed_on_real_stock": false
   },
   "zomorod": {
     "base_merge": "16801966583834d0017d234f1a419f9f31bff640",
@@ -56,7 +64,8 @@
     ],
     "production_db_restoration_authorized": false,
     "never_select_staging_db": "zomorod2_sites_main",
-    "next_action": "Identify true site-only production DB with read-only inspection; prove identity, age, integrity, history, recoverable backup, no live data loss. Do not migrate or write zero-table sqlite or staging MariaDB."
+    "next_action": "Read-only verify true site-only production DB identity, freshness, integrity, change history and recoverable backup; zero-table sqlite and staging MariaDB remain write-prohibited.",
+    "historical_sandbox_run_conclusion": "failure_after_successful_isolated_migrate_missing_four_expected_agent_tables"
   },
   "mojplaywin": {
     "public_store_page_readable": true,
@@ -64,6 +73,34 @@
     "real_sales_or_payment_success_verified": false,
     "qa_return_count_verified_this_run": false,
     "products_republished": 0,
-    "next_action": "Inspect independent private QA returns and verified test-sale receipts without altering live payment or republishing products."
+    "next_action": "Inspect separate QA returns and genuine buyer settlement receipts read-only. Correct independent TRX install syntax error in its own branch and rerun before any gated release; no claim of real sales from synthetic E2E.",
+    "isolated_mariadb_commercial_e2e_run": "39944390445",
+    "isolated_mariadb_commercial_e2e_tests_passed": 26,
+    "isolated_e2e_uses_synthetic_chain": true,
+    "live_trx_install_attempt": "39944414071",
+    "live_trx_install_status": "failed_in_predeploy_syntax_check; relay and production deploy skipped"
+  },
+  "cycle2": {
+    "completed_utc": "2026-10-23T11:20:20Z",
+    "primary_bottleneck": "one existing private edition source had no verifiable receipt",
+    "before_reason": "existing_edition_requires_engineering_review: 1",
+    "after_reason": "existing_edition_receipt_missing_or_unsafe: 1",
+    "change": "private stock backup/rollback and explicit provenance classification",
+    "commit": "1d038f8219647989f1a7c5f857bb0067311fcf3c",
+    "production_run": "39945112560",
+    "regression_run": "39944995787",
+    "workorders_before": 128,
+    "workorders_after": 128,
+    "rebuild_attempted_before": 0,
+    "rebuild_attempted_after": 0,
+    "technical_candidates_before": 0,
+    "technical_candidates_after": 0,
+    "commercial_release_count": 0,
+    "source_fabrication": false,
+    "expert_signatures_fabricated": false,
+    "site_database_writes": 0,
+    "payment_changes": 0,
+    "public_product_republication": 0,
+    "overlap": "separate MojPlayWin TRX workflows active; no cross-factory deployment"
   }
 }
