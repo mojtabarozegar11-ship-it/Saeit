@@ -1,0 +1,148 @@
+name: Zomorod Soil Moisture — browser QA and guarded live release
+on:
+  pull_request:
+    paths: ["scripts/zomorod_soil_moisture_*20261023.py", ".github/workflows/zomorod-soil-moisture-two-tools-20261023.yml"]
+  push:
+    branches: [main]
+    paths: ["scripts/zomorod_soil_moisture_*20261023.py", ".github/workflows/zomorod-soil-moisture-two-tools-20261023.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-agriculture-static
+  cancel-in-progress: false
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Build and validate two scientific tools and Python syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_soil_moisture_two_tools_20261023.py scripts/zomorod_soil_moisture_install_20261023.py
+          python3 scripts/zomorod_soil_moisture_two_tools_20261023.py build "$RUNNER_TEMP/soil-pages"
+          python3 scripts/zomorod_soil_moisture_two_tools_20261023.py qa "$RUNNER_TEMP/soil-pages"
+          for js in "$RUNNER_TEMP"/soil-pages/qa-*.js; do node --check "$js"; done
+      - name: Real browser valid and invalid form interaction for both tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$browser" || { echo BROWSER_MISSING; exit 1; }
+          for slug in soil-moisture-converter soil-water-storage; do
+            page="$RUNNER_TEMP/soil-pages/agriculture/water-soil/$slug/index.html"
+            timeout 35s "$browser" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
+              --no-first-run --disable-background-networking --virtual-time-budget=1400 \
+              --user-data-dir="$RUNNER_TEMP/soil-browser-$slug" --dump-dom "file://$page?qa=1" \
+              > "$RUNNER_TEMP/soil-browser-$slug.html" 2>/dev/null
+            grep -Fq 'data-qa="pass"' "$RUNNER_TEMP/soil-browser-$slug.html"
+            echo "REAL_BROWSER_VALID_INVALID_PASS $slug"
+          done
+  release:
+    needs: qa
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      ((github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-zm-moisture-20261023]')) ||
+       github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Build exact audited HTML and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/zomorod_soil_moisture_two_tools_20261023.py build "$RUNNER_TEMP/soil-stage"
+          python3 scripts/zomorod_soil_moisture_two_tools_20261023.py qa "$RUNNER_TEMP/soil-stage"
+      - name: Pinned GitHub to VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Acquire remote exclusive lock and preserve versioned original file
+        id: prep
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"; target="/home/zomorod2/.zm-soil-installer-$GITHUB_RUN_ID.py"
+          timeout 55s scp -q -F "$d/config" scripts/zomorod_soil_moisture_install_20261023.py "host:$target"
+          timeout 70s ssh -T -F "$d/config" host "python3 '$target' prepare '$GITHUB_RUN_ID'"
+      - name: Transfer only two new scientific tools and rehearsal rollback
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"; base="/home/zomorod2/.backups/zomorod-soil-moisture-two-tools-20261023/$GITHUB_RUN_ID/stage"
+          tar -cf - -C "$RUNNER_TEMP/soil-stage" agriculture source-manifest.json | timeout 90s ssh -T -F "$d/config" host "tar -xf - -C '$base'"
+          target="/home/zomorod2/.zm-soil-installer-$GITHUB_RUN_ID.py"
+          timeout 70s ssh -T -F "$d/config" host "python3 '$target' rehearsal '$GITHUB_RUN_ID'"
+      - name: Atomic scoped publication
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"; target="/home/zomorod2/.zm-soil-installer-$GITHUB_RUN_ID.py"
+          timeout 95s ssh -T -F "$d/config" host "python3 '$target' apply '$GITHUB_RUN_ID'"
+          timeout 60s ssh -T -F "$d/config" host "python3 '$target' verify '$GITHUB_RUN_ID'"
+      - name: Independent external cache-busting 200 and exact SHA256 plus protected pages
+        id: public
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/soil-stage" "$GITHUB_RUN_ID" <<'PY'
+          import hashlib,json,sys,urllib.request
+          from pathlib import Path
+          stage=Path(sys.argv[1]);rid=sys.argv[2]
+          for rel,item in json.loads((stage/'source-manifest.json').read_text()).items():
+              url='https://zomorodmelal.ir/'+rel.removesuffix('index.html')+'?release='+rid
+              req=urllib.request.Request(url,headers={'Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=25) as r:
+                  assert r.status==200,url
+                  data=r.read(200000)
+              assert hashlib.sha256(data).hexdigest()==item['sha256'],url
+              print('INDEPENDENT_LIVE_SHA256_PASS',url)
+          url='https://zomorodmelal.ir/agriculture/water-soil/?release='+rid
+          with urllib.request.urlopen(urllib.request.Request(url,headers={'Cache-Control':'no-cache'}),timeout=25) as r:
+              assert r.status==200
+              t=r.read(180000).decode('utf-8')
+          for slug in ('soil-moisture-converter','soil-water-storage'):
+              assert '/agriculture/water-soil/'+slug+'/' in t
+          assert 'ZM-SOIL-MOISTURE-TOOLS-20261023-V1' in t
+          print('EXTERNAL_CATEGORY_LINKS_PASS',url)
+          for p in ('','agriculture/','games/','games/air-supremacy/','games/water-path/',
+              'agriculture/water-soil/irrigation-planner/','agriculture/greenhouse/ventilation-estimator/',
+              'agriculture/digital-lab/'):
+              u='https://zomorodmelal.ir/'+p+'?smoke='+rid
+              with urllib.request.urlopen(urllib.request.Request(u,headers={'Cache-Control':'no-cache'}),timeout=25) as r:
+                  assert r.status==200,u
+              print('PROTECTED_ROUTE_HTTP200',p or '/')
+          PY
+      - name: Commit live verified private manifest, release lock
+        id: complete
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"; target="/home/zomorod2/.zm-soil-installer-$GITHUB_RUN_ID.py"
+          timeout 70s ssh -T -F "$d/config" host "python3 '$target' finalize '$GITHUB_RUN_ID'"
+      - name: Exact hash-guarded rollback on error
+        if: failure() && steps.prep.outcome == 'success' && steps.complete.outcome != 'success'
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/farm-v4-ssh"; target="/home/zomorod2/.zm-soil-installer-$GITHUB_RUN_ID.py"
+          if test -f "$d/config"; then timeout 120s ssh -T -F "$d/config" host "python3 '$target' rollback '$GITHUB_RUN_ID'"; fi
+      - name: Remove temporary credentials and installer, retain backup receipt
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/farm-v4-ssh"; target="/home/zomorod2/.zm-soil-installer-$GITHUB_RUN_ID.py"
+          if test -f "$d/config"; then timeout 30s ssh -T -F "$d/config" host "rm -f -- '$target'" || true; fi
+          rm -rf "$d" "$RUNNER_TEMP/soil-stage"
