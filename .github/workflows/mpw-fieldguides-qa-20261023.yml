@@ -1,0 +1,75 @@
+name: MojPlayWin Field Studio 50 guides and Prism Relay QA
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-fieldguides-qa-20261023.yml"
+      - "scripts/mpw_fieldguides_*_20261023.json"
+      - "scripts/mpw_fieldguides_build_20261023.py"
+      - "mpw-editorial/field-guides/20261023/prism-relay/index.html"
+permissions:
+  contents: read
+jobs:
+  original-release-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build 50 separate unique research-backed pages
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_fieldguides_build_20261023.py
+          python3 scripts/mpw_fieldguides_build_20261023.py --out "$RUNNER_TEMP/field-studio/20261023"
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,os,hashlib,re
+          root=Path(os.environ['RUNNER_TEMP'])/'field-studio/20261023'
+          manifest=json.loads((root/'release.json').read_text())
+          assert manifest['release_id']=='MPW-FIELDGUIDES-20261023-01'
+          assert manifest['guide_count']==50
+          assert manifest['stage_count']==150
+          assert len(manifest['files_sha256'])==53
+          articles=list((root/'guides').glob('*/index.html'))
+          assert len(articles)==50
+          titles=[]
+          for path in articles:
+              content=path.read_text()
+              assert '<link rel="canonical"' in content
+              assert '<h1>' in content and 'Source material and evidence boundaries' in content
+              assert 'Worked scenario' in content and 'Acceptance criteria' in content
+              assert 'https://' in content
+              titles+=re.findall(r'<h1>([^<]+)</h1>',content)
+          assert len(titles)==len(set(titles))==50
+          for relative,digest in manifest['files_sha256'].items():
+              assert hashlib.sha256((root/relative).read_bytes()).hexdigest()==digest,relative
+          print('FIELD_STUDIO_INDEPENDENT_CONTENT_50_UNIQUE_AND_HASHED_PASS')
+          PY
+      - name: Chrome browser test all pages and game mechanics
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/field-studio/20261023"
+          python3 -m http.server 8967 --bind 127.0.0.1 --directory "$dir" >/dev/null 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in 1 2 3 4 5; do if curl -fsS -o /dev/null http://127.0.0.1:8967/index.html; then break; fi; sleep 1; done
+          chrome="$(command -v google-chrome || command -v chromium)"
+          timeout 35s "$chrome" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --disable-background-networking --virtual-time-budget=3000 --dump-dom "http://127.0.0.1:8967/index.html?selftest=1" > "$RUNNER_TEMP/field-index.html" 2>/dev/null
+          grep -Fq 'FIELDGUIDES_SEARCH_SELFTEST_PASS' "$RUNNER_TEMP/field-index.html"
+          grep -Fq 'data-result="pass"' "$RUNNER_TEMP/field-index.html"
+          timeout 40s "$chrome" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --disable-background-networking --virtual-time-budget=3000 --dump-dom "http://127.0.0.1:8967/prism-relay/index.html?selftest=1" > "$RUNNER_TEMP/prism-relay.html" 2>/dev/null
+          grep -Fq 'PRISM_RELAY_FUNCTIONAL_TEST_PASS' "$RUNNER_TEMP/prism-relay.html"
+          grep -Fq 'data-result="pass"' "$RUNNER_TEMP/prism-relay.html"
+          python3 - <<'PY'
+          import json,os,urllib.request
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])/'field-studio/20261023'
+          paths=sorted(str(p.relative_to(root)) for p in (root/'guides').glob('*/index.html'))
+          for path in paths:
+              with urllib.request.urlopen('http://127.0.0.1:8967/'+path,timeout=6) as r:
+                  assert r.status==200 and b'Acceptance criteria' in r.read(),path
+          print('LOCAL_ALL_50_INDEPENDENT_ARTICLE_ROUTES_HTTP200_PASS')
+          PY
+          echo "FIELD_STUDIO_REAL_CHROME_INDEX_AND_150_SOLVABLE_STAGE_GAME_PASS"
