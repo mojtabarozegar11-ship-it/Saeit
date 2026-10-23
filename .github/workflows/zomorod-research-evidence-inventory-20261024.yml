@@ -132,7 +132,22 @@ jobs:
                       if not low.endswith((".csv",".xlsx",".xls",".ods",".tsv",".json",".sqlite3")):continue
                       if any(x in low for x in ("research","project","پژوهش","تحقیق")):
                           matches+=1
-                          if matches<=35:print("RESEARCH_FILE_CANDIDATE_EXT="+pathlib.Path(fname).suffix.lower()+" root="+root.name)
+                          if matches<=35:
+                              full=pathlib.Path(base)/fname
+                              print("RESEARCH_FILE_CANDIDATE="+str(full.relative_to(root))[:180]+" ext="+pathlib.Path(fname).suffix.lower()+" root="+root.name)
+                              if low.endswith(".json") and full.stat().st_size <= 3_000_000:
+                                  try:
+                                      import json
+                                      with full.open("r",encoding="utf-8") as f: data=json.load(f)
+                                      kind=type(data).__name__
+                                      if isinstance(data,list):count=len(data); keys=[]
+                                      elif isinstance(data,dict):
+                                          keys=list(data.keys())[:12]
+                                          count=max((len(v) for v in data.values() if isinstance(v,list)),default=0)
+                                      else:count=0;keys=[]
+                                      print("RESEARCH_FILE_JSON_STRUCTURE="+str(full.relative_to(root))[:180]+" type="+kind+" max_array_count="+str(count)+" keys="+",".join(str(k)[:25] for k in keys))
+                                  except Exception as e:
+                                      print("RESEARCH_FILE_JSON_UNREADABLE="+type(e).__name__)
                   if scanned>14000:break
           print("RESEARCH_FILE_CANDIDATES="+str(matches))
           print("RESEARCH_DB_AUDIT=read_only_complete")
