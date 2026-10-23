@@ -463,6 +463,10 @@ def scan(root, pubkey, limit=20):
             "professional_quality_1000_certifications_created": 0,
             "public_products_released": 0, "public_sites_modified": False,
             "hard_gate": "1000 distinct signed cases + discipline-specific hashed scientific dossier + source/claim trace + zero major or critical flaws + authentic independent doctoral-level expert assessment",
+            "doctorate_level_evidence_policy": DOCTORAL_SCHEMA,
+            "required_common_scientific_evidence_controls": len(DOCTORAL_COMMON),
+            "required_discipline_specific_evidence_controls": 3,
+            "independent_doctoral_scientific_approvals_created": 0,
             "health_not_equivalent_to_product_pass": True,
         }
         atomic_json(state_file, result)
