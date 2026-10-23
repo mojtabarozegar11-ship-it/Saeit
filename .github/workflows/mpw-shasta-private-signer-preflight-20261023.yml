@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/mpw-shasta-private-signer-preflight-20261023.yml
       - scripts/mpw_trx_shasta_signer_preflight_20261023.py
+      - scripts/mpw_shasta_public_metadata_only_20261023.py
   workflow_dispatch:
 permissions: {contents: read}
 jobs:
@@ -38,6 +39,10 @@ jobs:
           chmod 600 "$d/config"
           timeout 50s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+      - name: Inspect existing public metadata for safe testnet tag only
+        run: |
+          set -euo pipefail
+          timeout 70s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-vps 'python3 -' < scripts/mpw_shasta_public_metadata_only_20261023.py
       - name: Check previously provisioned test signer and balance without retrieving any key
         run: |
           set -euo pipefail
