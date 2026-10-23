@@ -86,7 +86,7 @@ jobs:
                   except Exception as e:
                       code='ERR:'+type(e).__name__+':'+str(getattr(e,'code',''))
                   print('PANEL_LINK',href,code)
-          except Exception as e: print('PUBLIC_FETCH_ERROR',type(e).__name__,str(e)[:150])
+          except Exception as e: print('PUBLIC_FETCH_ERROR',type(e).__name__,str(e)[:150]); raise
           for program in ('chromium','chromium-browser','google-chrome','firefox','node'):
               print('BINARY',program, bool(shutil.which(program)))
           for module in ('playwright','selenium'):
