@@ -3,6 +3,9 @@ on:
   push:
     branches: [main]
     paths: [.github/workflows/mpw-all-agents-private-activation.yml]
+  schedule:
+    - cron: "37 2,14 * * *"
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -17,7 +20,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          ref: efc14442fd9782b039088d19b50edf5cfb3ca6b2
       - name: Offline safety and functional tests for five robots
         shell: bash
         run: |
