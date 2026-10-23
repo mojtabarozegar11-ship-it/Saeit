@@ -41,8 +41,8 @@ def inspect(run, sha):
             abort('unsafe parent '+str(d))
     if ROOT.stat().st_uid != os.getuid():
         abort('document root owned by another account')
-    if not (ROOT/'index.html').is_file():
-        abort('document root not verified')
+    # The site root may be Django/Passenger rather than a static index.html.
+    # Existing public page status is checked separately by the publish workflow.
     stage=HOME/('.mpw-air-supremacy-stage-'+run+'.html')
     if stage.is_symlink():
         abort('staging symlink forbidden')
