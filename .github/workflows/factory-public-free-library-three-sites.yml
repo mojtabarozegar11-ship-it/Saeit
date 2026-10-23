@@ -80,6 +80,7 @@ jobs:
             python3 "$bin/factory_public_library_adapter.py" --home "$HOME" --site-id "$id"
           done
           echo FACTORY_PUBLIC_RESOURCE_PAGES_STAGED
+          REMOTE
           # Read-only evidence: actual cPanel document-root mapping, target
           # directory presence/permissions and parent rewrite rules.  Never
           # echo .htaccess contents or any account secrets into CI logs.
@@ -110,7 +111,6 @@ jobs:
                   "has_htaccess":(p/".htaccess").is_file(),
               },sort_keys=True))
           PY
-          REMOTE
           for item in "mojplaywin-main|https://mojplaywin.com/factory-releases/resources/index.html" "zomorod-main|https://zomorodmelal.ir/factory-products/index.html" "zomorod-tala|https://zomorodmelal.ir/tala/factory-products/index.html"; do
             label="${item%%|*}"
             url="${item#*|}"
