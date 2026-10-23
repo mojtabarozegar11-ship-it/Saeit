@@ -2,6 +2,7 @@
 """Bounded MojPlayWin SEO metadata and Product JSON-LD release."""
 from __future__ import annotations
 import hashlib, json, os, re, stat, sys, tempfile
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 ROOT = Path('/home/zomorod2/Saeit-staging')
@@ -154,8 +155,10 @@ def run_release(run):
             if not m: fail(f'Product JSON-LD missing for {pk}')
             schema = json.loads(m.group(1))
             offer = schema.get('offers', {})
-            if schema.get('@type') != 'Product' or offer.get('price') != price or offer.get('priceCurrency') != 'USD':
-                fail(f'Product JSON-LD offer check failed for {pk}')
+            try: numeric_price_ok = Decimal(str(offer.get('price'))) == Decimal(price)
+            except (InvalidOperation, TypeError): numeric_price_ok = False
+            if schema.get('@type') != 'Product' or not numeric_price_ok or offer.get('priceCurrency') != 'USD':
+                fail(f'Product JSON-LD offer check failed for {pk}: {json.dumps(schema, ensure_ascii=False)}')
             checks.append({'id': pk, 'status': resp.status_code, 'price': offer['price'], 'schema': 'Product+Offer'})
         print('MPW_PRODUCT_SEO_RELEASE=' + json.dumps({'run':run,'checks':checks,'metadata_only_product_rows':list(EXPECTED)}, ensure_ascii=False, sort_keys=True))
     except BaseException:
