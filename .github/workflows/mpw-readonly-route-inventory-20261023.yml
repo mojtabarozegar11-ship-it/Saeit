@@ -2,7 +2,7 @@ name: MojPlayWin read-only protected route inventory
 on:
   push:
     branches: [main]
-    paths: [.github/workflows/mpw-readonly-route-inventory-20261023.yml, scripts/mpw_route_ownership_probe_20261023.py]
+    paths: [.github/workflows/mpw-readonly-route-inventory-20261023.yml, scripts/mpw_route_ownership_probe_20261023.py, scripts/mpw_dynamic_shell_probe_20261023.py]
 permissions:
   contents: read
 jobs:
@@ -63,3 +63,9 @@ jobs:
           test -f scripts/mpw_route_ownership_probe_20261023.py
           python3 -m py_compile scripts/mpw_route_ownership_probe_20261023.py
           ssh -T -F "$RUNNER_TEMP/mpw-ro/config" saeit-cpanel 'python3 -' < scripts/mpw_route_ownership_probe_20261023.py
+      - name: Inspect narrowly owned GET-only dynamic shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_dynamic_shell_probe_20261023.py
+          ssh -T -F "$RUNNER_TEMP/mpw-ro/config" saeit-cpanel 'python3 -' < scripts/mpw_dynamic_shell_probe_20261023.py
