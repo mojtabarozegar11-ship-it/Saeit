@@ -2,7 +2,7 @@
 """Small, reentrant merchant-owned TRX auto-reconciliation cycle.
 
 Run from a locked server cron; no wallet keys, no broadcasts, no user claims.
-Disabled until independently verified and merchant-canary release flags exist.
+Reads only previously issued invoices when checkout is disabled. Never creates an order.
 Only already-paid, validated on-chain funds produce ledger/fulfillment writes.
 """
 from __future__ import annotations
@@ -25,7 +25,7 @@ def run_once():
     from core.models import PaymentIntent
     from services.mpw_trx_walletless_core import PaymentHold
     from services.mpw_walletless_commercial_intent import (
-        PROVIDER,WAITING,_commercial_db,reconcile_commercial_intent_from_candidates,
+        PROVIDER,WAITING,_paid_read_db,reconcile_commercial_intent_from_candidates,
     )
     from services.mpw_tron_readonly_deposit_candidates import find_candidate_hashes
     from services.mpw_trx_commercial_chain import read_only_independent_pair
@@ -34,11 +34,13 @@ def run_once():
             "public_checkout_activated":False,"examined":0,"settled":0,
             "pending":0,"held":0}
     try:
-        _commercial_db(settings,connection)
+        _paid_read_db(settings,connection)
     except PaymentHold:
-        result["mode"]="NOT_RELEASED"
+        result["mode"]="FINANCIAL_BACKEND_UNAVAILABLE"
         return result
-    result["public_checkout_activated"]=True
+    result["public_checkout_activated"]=bool(
+        getattr(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False) and
+        getattr(settings,"MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED",False)\n    )
     # Review transfers within the immutable issued invoice window, even
     # when the browser has closed. A 36-hour lookback tolerates short outages.
     queued=list(PaymentIntent.objects.filter(
