@@ -61,6 +61,24 @@ class PrivateCanaryIsolationTests(unittest.TestCase):
                 with self.subTest(buyer=value), self.assertRaises(PaymentHold):
                     canary._configured_ids()
 
+    def test_canary_requires_exact_preapproved_mainnet_sender(self):
+        import sys
+        from types import ModuleType
+        fake = ModuleType("scripts.mojplaywin_native_chain_verify")
+        fake.tron_address_to_hex = lambda address: (
+            "41" + "AB" * 20 if address == "T" + "A" * 33
+            else (_ for _ in ()).throw(ValueError("bad Base58Check"))
+        )
+        with patch.dict(sys.modules, {"scripts.mojplaywin_native_chain_verify": fake}):
+            with patch.dict("os.environ", {"MPW_TRX_CANARY_EXPECTED_SENDER": ""}):
+                with self.assertRaises(PaymentHold):
+                    canary._expected_sender()
+            with patch.dict("os.environ", {"MPW_TRX_CANARY_EXPECTED_SENDER": "T" + "B" * 33}):
+                with self.assertRaises(PaymentHold):
+                    canary._expected_sender()
+            with patch.dict("os.environ", {"MPW_TRX_CANARY_EXPECTED_SENDER": "T" + "A" * 33}):
+                self.assertEqual(canary._expected_sender(), "T" + "A" * 33)
+
     def test_private_receipt_is_atomic_owner_private_and_tamper_checked(self):
         with tempfile.TemporaryDirectory() as d, patch.object(canary, "RECEIPTS", Path(d) / "receipts"):
             record = {"network": "tron-mainnet", "invoice_id": 412, "amount_sun": 123456}
