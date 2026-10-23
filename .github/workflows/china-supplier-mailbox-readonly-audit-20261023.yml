@@ -107,6 +107,71 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/company-mail-inspect"
           timeout 40s ssh -T -F "$d/config" company 'uapi --output=json Email list_forwarders domain=zomorodmelal.ir' | python3 -c 'import sys,json; d=json.load(sys.stdin).get("result",{}); a=d.get("data") or []; rows=[x for x in a if isinstance(x,dict)]; present=any("moj_1ro_1@zomorodmelal.ir" in json.dumps(x).lower() and "mojtaba.rozegar11@gmail.com" in json.dumps(x).lower() for x in rows); print("FORWARDER_QUERY_OK="+str(d.get("status")==1)); print("FORWARDER_TO_PRIMARY_GMAIL="+str(present)); print("FORWARDER_COUNT="+str(len(rows)))'
+      - name: Diagnose delivery failures as aggregate codes only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/company-mail-inspect"
+          cat <<'PY' | timeout 75s ssh -T -F "$d/config" company python3 -
+          from pathlib import Path
+          from email.parser import BytesParser
+          from email.policy import default
+          from email.utils import parseaddr
+          from collections import Counter
+          import re, datetime as dt
+          root=Path.home()/"mail"/"zomorodmelal.ir"/"moj_1ro_1"
+          cutoff=dt.datetime(2026,10,20,tzinfo=dt.timezone.utc).timestamp()
+          codes=Counter()
+          groups=Counter()
+          bounce_found=0
+          for folder in ("new","cur"):
+              sub=root/folder
+              if not sub.is_dir():
+                  continue
+              for path in sub.iterdir():
+                  if not path.is_file() or path.stat().st_mtime<cutoff:
+                      continue
+                  with path.open("rb") as f:
+                      raw=f.read(180000)
+                  msg=BytesParser(policy=default).parsebytes(raw,headersonly=False)
+                  sender=parseaddr(str(msg.get("From","")))[1].lower()
+                  subj=str(msg.get("Subject","")).lower()
+                  if not ("mailer-daemon" in sender or "postmaster" in sender or "delivery status" in subj or "undeliver" in subj or "failure notice" in subj):
+                      continue
+                  bounce_found+=1
+                  txt=raw.decode("utf-8","replace")
+                  statuses=re.findall(r'(?im)^Status:\\s*([245]\\.[0-9]\\.[0-9])\\s*
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/company-mail-inspect"
+          test ! -d "$d" || find "$d" -maxdepth 1 -type f -exec shred -u {} +
+,txt)
+                  if not statuses:
+                      statuses=re.findall(r'(?i)\\b([245]\\.[0-9]\\.[0-9])\\b',txt)
+                  code=statuses[0] if statuses else "none"
+                  codes[code]+=1
+                  lower=txt.lower()
+                  if code.startswith("5.1.") or any(x in lower for x in ("no such user","user unknown","unknown recipient","address rejected","recipient not found")):
+                      groups["invalid_recipient"]+=1
+                  elif code.startswith("5.7.") or any(x in lower for x in ("blocked by","spam policy","spamhaus","blacklist","not authorized","access denied","policy rejection")):
+                      groups["spam_policy_or_authentication"]+=1
+                  elif code.startswith("5.2.") or any(x in lower for x in ("mailbox full","quota exceeded")):
+                      groups["mailbox_or_quota"]+=1
+                  elif code.startswith("4.") or any(x in lower for x in ("timed out","temporary failure","try again later","connection refused")):
+                      groups["transient_network_failure"]+=1
+                  elif code.startswith("5.4.") or any(x in lower for x in ("no mx","domain not found","name or service not known","dns error")):
+                      groups["domain_or_routing"]+=1
+                  elif code.startswith("5.3."):
+                      groups["mail_system_or_size"]+=1
+                  else:
+                      groups["unclassified"]+=1
+          print("DSN_BOUNCES_PROCESSED="+str(bounce_found))
+          for key in ("invalid_recipient","spam_policy_or_authentication","mailbox_or_quota","transient_network_failure","domain_or_routing","mail_system_or_size","unclassified"):
+              print("DSN_REASON_"+key.upper()+"="+str(groups[key]))
+          for code,count in codes.most_common(12):
+              print("DSN_STATUS_"+code.replace(".","_").replace("-","_")+"="+str(count))
+          print("NO_PRIVATE_EMAIL_ADDRESSES_OR_MESSAGE_BODIES_PRINTED")
+          PY
       - name: Remove SSH keys
         if: always()
         run: |
