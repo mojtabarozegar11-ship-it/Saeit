@@ -90,7 +90,7 @@ jobs:
           activation_report="$(ssh_vps "python3 '$remote_stage/factory_verify_openalex_activation.py' --credential-dir '/home/githubops/factory-runtime/operations/production-instructions' --factory-private '/home/githubops/factory-runtime/private/autonomous-product-cycle'")"
           printf '%s\n' "$activation_report"
           if printf '%s\n' "$activation_report" | grep -Fxq 'FACTORY_OPENALEX_IMMEDIATE_RESEARCH_ALLOWED=true'; then
-            ssh_vps 'timeout 650s /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --stage2-program /home/githubops/factory-runtime/operations/production-instructions/stage2-research.py --batch 50 --workers 2'
+            ssh_vps 'timeout 650s /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/stage2-literature-scout.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --stage2-program /home/githubops/factory-runtime/operations/production-instructions/stage2-research.py --batch 50 --workers 2 --query-burst 3'
             ssh_vps 'timeout 120s /home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/stage2-research.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --batch 250'
           fi
           ssh_vps 'python3 -' <<'PY'
