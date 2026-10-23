@@ -61,7 +61,7 @@ jobs:
           ssh -T "${opts[@]}" "$host" "set -eu; test ! -e '$stage'; install -d -m 700 '$stage'"
           scp -q "${opts[@]}" scripts/factory_stage4_wait_classifier_20261023.py "$host:$stage/classifier.py"
           wanted="$(sha256sum scripts/factory_stage4_wait_classifier_20261023.py | awk '{print $1}')"
-          have="$(ssh -T "${opts[@]}" "$host" "sha256sum '$stage/classifier.py' | awk '{print \\$1}'")"
+          have="$(ssh -T "${opts[@]}" "$host" "sha256sum '$stage/classifier.py' | cut -d' ' -f1")"
           test "$wanted" = "$have"
           echo STAGE4_SHA_BOUND_SOURCE=PASS
           ssh -T "${opts[@]}" "$host" "timeout 120s /home/githubops/factory-runtime/.venv/bin/python -B '$stage/classifier.py'"
