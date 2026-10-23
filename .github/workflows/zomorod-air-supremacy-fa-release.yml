@@ -1,0 +1,204 @@
+name: Zomorod separate Persian Air Supremacy game and games index
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - games/air-supremacy-fa/index.html
+      - tests/game/zomorod-air-supremacy-fa-visual.cjs
+      - scripts/zomorod_air_supremacy_fa_publish.py
+      - .github/workflows/zomorod-air-supremacy-fa-release.yml
+  push:
+    branches: [main]
+    paths:
+      - games/air-supremacy-fa/index.html
+      - scripts/zomorod_air_supremacy_fa_publish.py
+      - .github/workflows/zomorod-air-supremacy-fa-release.yml
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-agriculture-static
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify Persian source, append-only games hub and independent English original
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_air_supremacy_fa_publish.py
+          python3 - <<'PY'
+          import importlib.util, hashlib
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location('deploy','scripts/zomorod_air_supremacy_fa_publish.py')
+          mod=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          spec2=importlib.util.spec_from_file_location('base','scripts/zomorod_hourly_water_safe_release.py')
+          base=importlib.util.module_from_spec(spec2)
+          spec2.loader.exec_module(base)
+          old=base.GAMES_INDEX.encode('utf8')
+          new=mod.updated_hub(old)
+          assert new.replace(mod.CARD,b'',1)==old
+          assert new.count(b'/games/water-path/')==1
+          assert new.count(b'/games/air-supremacy/')==1
+          assert b'zm-air-supremacy-fa-20261023' in new
+          source=Path('games/air-supremacy-fa/index.html').read_bytes()
+          english=Path('games/air-supremacy/index.html').read_bytes()
+          assert b'<html lang="fa" dir="rtl">' in source and mod.MARK in source
+          assert b'SAVE_KEY=' in source and b'zm-air-supremacy-fa-campaign-v2' in source
+          assert b'mpw-air-supremacy-campaign-v2' not in source
+          assert b'12' in source and b'MAX_MISSION=12' in source
+          assert b'<html lang="en">' in english and b'MOJPLAYWIN ORIGINAL' in english
+          assert b'ZM-AIR-SUPREMACY-FA' not in english
+          js=source.split(b'<script>',1)[1].split(b'</script>',1)[0]
+          Path('/tmp/zm-air-fa.js').write_bytes(js)
+          print('ZOMOROD_FA_SOURCE_SHA256='+hashlib.sha256(source).hexdigest())
+          print('MOJPLAYWIN_ENGLISH_SOURCE_SHA256='+hashlib.sha256(english).hexdigest())
+          print('APPEND_ONLY_GAME_LIST_AND_LANGUAGE_ISOLATION=PASS')
+          PY
+          node --check /tmp/zm-air-fa.js
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Set up system Chrome visual test
+        run: |
+          set -euo pipefail
+          npm install --prefix /tmp/zm-fa-qa --no-audit --no-fund playwright-core@1.56.0
+          google-chrome --version
+          nohup python3 -m http.server 8765 --bind 127.0.0.1 --directory games >/tmp/zm-fa-http.log 2>&1 &
+          sleep 2
+          curl -fsS http://127.0.0.1:8765/air-supremacy-fa/index.html -o /dev/null
+      - name: Real Chrome Persian gameplay on mobile and desktop
+        env:
+          NODE_PATH: /tmp/zm-fa-qa/node_modules
+        run: |
+          timeout 90s node tests/game/zomorod-air-supremacy-fa-visual.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zomorod-persian-air-game-chrome-images
+          path: |
+            ${{ runner.temp }}/zm-air-fa-*.png
+            /tmp/zm-fa-http.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  publish:
+    needs: validate
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-zm-persian-air-20261023]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Public preflight keeps English MojPlayWin and existing Persian game
+        run: |
+          python3 - <<'PY'
+          import json,hashlib,os
+          from urllib.request import Request,urlopen
+          targets=[
+            ('https://zomorodmelal.ir/games/',b'/games/water-path/'),
+            ('https://zomorodmelal.ir/games/water-path/',b'ZM-WATER-PATH-20261023-V2'),
+            ('https://mojplaywin.com/air-supremacy/',b'<html lang="en">')
+          ]
+          previous={}
+          for url,needle in targets:
+            with urlopen(Request(url,headers={'Cache-Control':'no-cache','User-Agent':'ZM-FaGame-Preflight'}),timeout=30) as response:
+              assert response.status==200,url
+              body=response.read(150000)
+            assert needle in body,url
+            previous[url]=hashlib.sha256(body).hexdigest()
+            print('LANGUAGE_AND_OLD_GAME_BASELINE',url,previous[url])
+          from pathlib import Path
+          Path(os.environ['RUNNER_TEMP']+'/zm-air-fa-preflight.json').write_text(json.dumps(previous))
+          PY
+      - name: Establish existing SSH relay to Zomorod cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Create private staging, never replace existing public paths
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-air-supremacy-fa-$GITHUB_RUN_ID"
+          timeout 40s ssh -T -F "$d/config" host \
+            "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage/incoming'"
+          timeout 55s scp -q -F "$d/config" scripts/zomorod_air_supremacy_fa_publish.py "host:$stage/deploy.py"
+          timeout 55s scp -q -F "$d/config" games/air-supremacy-fa/index.html "host:$stage/incoming/index.html"
+          timeout 40s ssh -T -F "$d/config" host \
+            "python3 -m py_compile '$stage/deploy.py' && python3 '$stage/deploy.py' prepare '$GITHUB_RUN_ID'"
+      - name: Publish only the new Persian game and append one games card
+        id: installed
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-air-supremacy-fa-$GITHUB_RUN_ID"
+          timeout 65s ssh -T -F "$d/config" host \
+            "python3 '$stage/deploy.py' publish '$GITHUB_RUN_ID' && python3 '$stage/deploy.py' verify '$GITHUB_RUN_ID'"
+      - name: Prove public Persian game, games directory and untouched English original
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,time
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          expected=hashlib.sha256(Path('games/air-supremacy-fa/index.html').read_bytes()).hexdigest()
+          root='https://zomorodmelal.ir'
+          found=False
+          for i in range(7):
+            with urlopen(Request(root+'/games/air-supremacy/?ver='+os.environ['GITHUB_RUN_ID']+'-'+str(i),headers={'Cache-Control':'no-cache,no-store','User-Agent':'ZM-FaGame-LiveQA'}),timeout=30) as r:
+              assert r.status==200
+              content=r.read(200000)
+              typ=r.headers.get('Content-Type','')
+            got=hashlib.sha256(content).hexdigest()
+            if got==expected and 'text/html' in typ:
+              found=True;break
+            time.sleep(2)
+          assert found,('Persian new route SHA mismatch',got,expected)
+          assert b'<html lang="fa" dir="rtl">' in content
+          assert b'ZM-AIR-SUPREMACY-FA-20261023-V1' in content
+          with urlopen(Request(root+'/games/?ver='+os.environ['GITHUB_RUN_ID'],headers={'Cache-Control':'no-cache'}),timeout=30) as r:
+            hub=r.read(140000)
+          assert hub.count(b'/games/water-path/')==1
+          assert hub.count(b'/games/air-supremacy/')==1
+          assert hub.find(b'/games/water-path/')<hub.find(b'/games/air-supremacy/')
+          original=json.loads(Path(os.environ['RUNNER_TEMP']+'/zm-air-fa-preflight.json').read_text())
+          for url,sha in original.items():
+            with urlopen(Request(url,headers={'Cache-Control':'no-cache','User-Agent':'ZM-FaGame-Postflight'}),timeout=30) as r:
+              assert r.status==200
+              body=r.read(150000)
+            if url.endswith('/games/'):continue
+            assert hashlib.sha256(body).hexdigest()==sha, 'Old game or English original changed: '+url
+          print('ZOMOROD_FA_NEW_GAME_LIVE=PASS')
+          print('ZOMOROD_OLD_GAMES_PRESERVED=PASS')
+          print('MOJPLAYWIN_ENGLISH_UNMODIFIED=PASS')
+          PY
+      - name: Restore only our appended card and new game on failed verification
+        if: failure() && steps.stage.outcome == 'success'
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-air-supremacy-fa-$GITHUB_RUN_ID"
+          timeout 60s ssh -T -F "$d/config" host \
+            "test -f '$stage/deploy.py' && python3 '$stage/deploy.py' rollback '$GITHUB_RUN_ID'"
+      - name: Remove SSH material (keep private recoverable backups)
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          if test -d "$d";then rm -rf "$d";fi
