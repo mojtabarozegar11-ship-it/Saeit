@@ -97,16 +97,6 @@ jobs:
               echo "REAL_CHROME_VALID_INVALID_FORM_PASS $type $size"
             done
           done
-      - name: Preflight public HTTPS with independent curl before any production write
-        shell: bash
-        run: |
-          set -euo pipefail
-          for route in "" "agriculture/" "games/seed-guardian/"; do
-            url="https://zomorodmelal.ir/$route?preflight=$GITHUB_RUN_ID"
-            code="$(curl -sS -L --retry 2 --retry-all-errors --retry-delay 2 --connect-timeout 8 --max-time 30 -H 'Cache-Control: no-cache' -o /dev/null -w '%{http_code}' "$url")"
-            echo "PREFLIGHT_PUBLIC_HTTP=$code $route"
-            test "$code" = 200
-          done
       - name: Fingerprint-pinned SSH relay
         shell: bash
         env:
@@ -115,6 +105,14 @@ jobs:
         run: |
           set -euo pipefail
           bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Independent VPS external HTTPS preflight before cPanel writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          script="/tmp/.zm-external-check-$GITHUB_RUN_ID.py"
+          timeout 65s scp -q -F "$d/config" scripts/zomorod_field_tools_external_verify_20261023.py "vps:$script"
+          timeout 160s ssh -T -F "$d/config" vps "python3 '$script' /dev/null '$GITHUB_RUN_ID' preflight"
       - name: Acquire cPanel shared lock and versioned backup of all affected pages
         id: prepare
         shell: bash
@@ -144,62 +142,16 @@ jobs:
           target="/home/zomorod2/.zm-field-release-$GITHUB_RUN_ID.py"
           timeout 100s ssh -T -F "$d/config" host "python3 '$target' apply '$GITHUB_RUN_ID'"
           timeout 65s ssh -T -F "$d/config" host "python3 '$target' verify '$GITHUB_RUN_ID'"
-      - name: External no-cache HTTP 200 SHA256 of all files and legacy routes
+      - name: Verify all six public SHA and protected routes from independent VPS outside cPanel
         id: public
         shell: bash
         run: |
           set -euo pipefail
-          python3 - "$RUNNER_TEMP/zm-field-stage" "$GITHUB_RUN_ID" <<'PY'
-          import hashlib,json,sys,urllib.request
-          from pathlib import Path
-          p=Path(sys.argv[1]);rid=sys.argv[2]
-          m=json.loads((p/'source-manifest.json').read_text())
-          def get(url):
-              import subprocess,tempfile,os,time
-              errors=[]
-              for attempt in range(3):
-                  with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                      fname=tmp.name
-                  try:
-                      cmd=['curl','--fail','--location','--silent','--show-error',
-                           '--connect-timeout','8','--max-time','28',
-                           '--header','Cache-Control: no-cache',
-                           '--header','User-Agent: ZomorodExternalCurlQA/2',
-                           '--output',fname,'--write-out','%{http_code}',url]
-                      r=subprocess.run(cmd,capture_output=True,text=True,timeout=35)
-                      if r.returncode==0 and r.stdout.strip()=='200':
-                          with open(fname,'rb') as f:return f.read(300000)
-                      errors.append('curl_rc='+str(r.returncode)+' http='+r.stdout.strip()+' '+r.stderr[-160:])
-                  except Exception as exc:
-                      errors.append(type(exc).__name__+': '+str(exc)[:160])
-                  finally:
-                      os.unlink(fname)
-                  if attempt<2:time.sleep(2+attempt*3)
-              raise RuntimeError('EXTERNAL_CURL_RETRY_EXHAUSTED '+url+' '+repr(errors))
-          for rel,meta in m.items():
-              u=meta['url']+'?release='+rid
-              assert hashlib.sha256(get(u)).hexdigest()==meta['sha256'],u
-              print('EXTERNAL_PUBLIC_200_SHA256_PASS',u)
-          for cat,needles in {
-              'agriculture/water-soil/':['emitter-uniformity/','emitter-uniformity-guide/','irrigation-uniformity.webp'],
-              'agriculture/greenhouse/':['dewpoint-vpd/','dewpoint-vpd-guide/','greenhouse-dewpoint.webp']
-          }.items():
-              s=get('https://zomorodmelal.ir/'+cat+'?release='+rid).decode('utf-8')
-              assert 'ZM-AGRICULTURE-TOOLS-20261023-B' in s
-              for n in needles:assert n in s,(cat,n)
-              print('EXTERNAL_CARD_IMAGE_LINK_PASS',cat)
-          for rel in ('','agriculture/','games/','games/water-path/','games/air-supremacy/',
-              'games/seed-guardian/','agriculture/water-soil/irrigation-planner/',
-              'agriculture/greenhouse/ventilation-estimator/',
-              'agriculture/water-soil/research-lab-20261023/',
-              'agriculture/water-soil/irrigation-need.html',
-              'agriculture/seeds/seeding-rate.html',
-              'agriculture/greenhouse/planting-planner/',
-              'agriculture/livestock/feed-dry-matter/','agriculture/digital-lab/'):
-              get('https://zomorodmelal.ir/'+rel+'?protected='+rid)
-              print('PRESERVED_PUBLIC_200',rel or '/')
-          print('SIX_PUBLIC_HASHES_TWO_CARDS_FOURTEEN_PROTECTED_ROUTES_PASS')
-          PY
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          script="/tmp/.zm-external-check-$GITHUB_RUN_ID.py"
+          manifest="/tmp/.zm-public-manifest-$GITHUB_RUN_ID.json"
+          timeout 65s scp -q -F "$d/config" "$RUNNER_TEMP/zm-field-stage/source-manifest.json" "vps:$manifest"
+          timeout 260s ssh -T -F "$d/config" vps "python3 '$script' '$manifest' '$GITHUB_RUN_ID'"
       - name: Persist live-verified private receipt and release lock
         id: finalize
         shell: bash
@@ -223,5 +175,8 @@ jobs:
           set +e
           d="$RUNNER_TEMP/farm-v4-ssh"
           target="/home/zomorod2/.zm-field-release-$GITHUB_RUN_ID.py"
-          if test -f "$d/config";then timeout 35s ssh -T -F "$d/config" host "rm -f -- '$target'" || true;fi
+          if test -f "$d/config";then
+            timeout 35s ssh -T -F "$d/config" host "rm -f -- '$target'" || true
+            timeout 35s ssh -T -F "$d/config" vps "rm -f -- '/tmp/.zm-external-check-$GITHUB_RUN_ID.py' '/tmp/.zm-public-manifest-$GITHUB_RUN_ID.json'" || true
+          fi
           rm -rf "$d" "$RUNNER_TEMP/zm-field-stage"
