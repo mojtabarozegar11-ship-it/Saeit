@@ -1,0 +1,247 @@
+name: Zomorod Seed Guardian and six original soil studies — protected live publication
+on:
+  pull_request:
+    paths:
+      - "content/zomorod-seed-guardian-20261023/**"
+      - "scripts/zomorod_seed_guardian_research_*20261023.py"
+      - ".github/workflows/zomorod-seed-guardian-research-20261023.yml"
+  push:
+    branches: [main]
+    paths:
+      - "content/zomorod-seed-guardian-20261023/**"
+      - "scripts/zomorod_seed_guardian_research_*20261023.py"
+      - ".github/workflows/zomorod-seed-guardian-research-20261023.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-agriculture-static
+  cancel-in-progress: false
+
+jobs:
+  qa:
+    name: Source copyright, six separate studies, 3 WebPs and interactive game
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install isolated deterministic graphics dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check -q pillow
+      - name: Build 6 separate articles + 3 original <100kb WebP assets in isolated stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_seed_guardian_research_build_20261023.py scripts/zomorod_seed_guardian_research_install_20261023.py
+          python3 scripts/zomorod_seed_guardian_research_build_20261023.py render "$RUNNER_TEMP/seed-science"
+          python3 scripts/zomorod_seed_guardian_research_build_20261023.py qa "$RUNNER_TEMP/seed-science"
+          python3 - "$RUNNER_TEMP/seed-science" <<'PY'
+          from pathlib import Path
+          import hashlib,json,sys
+          root=Path(sys.argv[1]);rel='games/seed-guardian/index.html'
+          game=Path('content/zomorod-seed-guardian-20261023/index.html').read_bytes()
+          assert game.startswith(b'<!doctype html>') and b'ZM-SEED-GUARDIAN-20261023-V1' in game
+          p=root/rel;p.parent.mkdir(exist_ok=True,parents=True);p.write_bytes(game)
+          m=json.loads((root/'source-manifest.json').read_text(encoding='utf-8'))
+          m[rel]={'size':len(game),'sha256':hashlib.sha256(game).hexdigest(),
+                  'url':'https://zomorodmelal.ir/games/seed-guardian/'}
+          assert len(m)==11
+          (root/'source-manifest.json').write_text(json.dumps(m,ensure_ascii=False,indent=2),encoding='utf-8')
+          from PIL import Image
+          for img in root.rglob('*.webp'):
+              with Image.open(img) as im:
+                  assert im.size==(960,540) and im.format=='WEBP'
+          s=game.decode('utf-8')
+          assert s.count('localStorage.setItem')==1 and s.count('pointerdown')>=2
+          assert 'aria-live="polite"' in s and 'tabindex="0"' in s and '120' in s
+          import re
+          app=re.search(r'<script>([\s\S]*?)</script>',s)
+          assert app
+          (root/'game-script.js').write_text(app.group(1),encoding='utf-8')
+          print("ELEVEN_SOURCE_FILES_AND_GAME_HTML_VERIFIED")
+          PY
+          node --check "$RUNNER_TEMP/seed-science/game-script.js"
+      - name: Exercise actual Chromium touch-pointer keyboard success fail and level save/reload
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$browser" || { echo REAL_CHROMIUM_REQUIRED; exit 1; }
+          game="$RUNNER_TEMP/seed-science/games/seed-guardian/index.html"
+          profile="$RUNNER_TEMP/seed-browser-persistent"
+          timeout 38s "$browser" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
+            --no-first-run --disable-background-networking --enable-features=TouchEventFeatureDetection \
+            --touch-events=enabled --window-size=430,910 --force-device-scale-factor=2 \
+            --virtual-time-budget=1800 --user-data-dir="$profile" --dump-dom "file://$game?qa=1" \
+            > "$RUNNER_TEMP/game-mobile-qa.html" 2> "$RUNNER_TEMP/game-mobile-err.txt"
+          if ! grep -Fq 'data-qa="pass"' "$RUNNER_TEMP/game-mobile-qa.html"; then
+            echo "ACTUAL_BROWSER_TOUCH_KEYBOARD_STAGE_STORAGE_QA_FAILED"
+            grep -o 'QA [^<]*' "$RUNNER_TEMP/game-mobile-qa.html" | tail -n 2 || true
+            tail -n 16 "$RUNNER_TEMP/game-mobile-err.txt" || true
+            exit 1
+          fi
+          timeout 38s "$browser" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
+            --no-first-run --disable-background-networking --window-size=430,910 \
+            --virtual-time-budget=1400 --user-data-dir="$profile" --dump-dom "file://$game?qa=reload" \
+            > "$RUNNER_TEMP/game-save-reload.html" 2> "$RUNNER_TEMP/game-reload-err.txt"
+          if ! grep -Fq 'data-qa="pass"' "$RUNNER_TEMP/game-save-reload.html"; then
+            echo "ACTUAL_CHROME_PERSISTENT_STAGE_RELOAD_FAILED"
+            exit 1
+          fi
+          echo "REAL_CHROMIUM_POINTER_KEYBOARD_SCORING_STAGE_PROGRESS_AND_RELOAD_PASS"
+      - name: Source JS static lint and unique scientific source domains
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check "$RUNNER_TEMP/seed-science/game-script.js"
+          python3 - "$RUNNER_TEMP/seed-science" <<'PY'
+          import json,sys,hashlib
+          from pathlib import Path
+          base=Path(sys.argv[1]);m=json.loads((base/'source-manifest.json').read_text())
+          assert len(m)==11
+          research=[p for p in m if p.startswith('agriculture/water-soil/research-lab-20261023/') and p.endswith('/index.html')]
+          assert len(research)==7
+          for p,data in m.items():
+              payload=(base/p).read_bytes()
+              assert hashlib.sha256(payload).hexdigest()==data['sha256']
+          print('ARTICLES_6_WEBP_3_GAME_1_SOURCE_HASHES_PASS')
+          PY
+
+  release:
+    name: Pinned relay, lock, 11 additive files, 2 card links, public SHA, rollback
+    needs: qa
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      ((github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-zm-seed-research-live-20261023]')) ||
+       github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 26
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Build immutable eleven-file source package with original assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check -q pillow
+          python3 scripts/zomorod_seed_guardian_research_build_20261023.py render "$RUNNER_TEMP/seed-stage"
+          python3 scripts/zomorod_seed_guardian_research_build_20261023.py qa "$RUNNER_TEMP/seed-stage"
+          python3 - "$RUNNER_TEMP/seed-stage" <<'PY'
+          import json,sys,hashlib
+          from pathlib import Path
+          root=Path(sys.argv[1])
+          game=Path('content/zomorod-seed-guardian-20261023/index.html').read_bytes()
+          target=root/'games/seed-guardian/index.html'
+          target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(game)
+          mf=root/'source-manifest.json';m=json.loads(mf.read_text())
+          m['games/seed-guardian/index.html']={'sha256':hashlib.sha256(game).hexdigest(),'size':len(game),
+              'url':'https://zomorodmelal.ir/games/seed-guardian/'}
+          mf.write_text(json.dumps(m,ensure_ascii=False,indent=2))
+          assert len(m)==11
+          print('READY_ELEVEN_SCOPED_RELEASE_FILES')
+          PY
+      - name: SSH bridge with pinned VPS and cPanel fingerprints
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Acquire shared exclusive lock and backup all affected public pages
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          target="/home/zomorod2/.zm-seed-research-$GITHUB_RUN_ID.py"
+          timeout 65s scp -q -F "$d/config" scripts/zomorod_seed_guardian_research_install_20261023.py "host:$target"
+          timeout 75s ssh -T -F "$d/config" host "python3 -m py_compile '$target' && python3 '$target' prepare '$GITHUB_RUN_ID'"
+      - name: Stage exact eleven originals privately and rehearse both category rollbacks
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          backup="/home/zomorod2/.backups/zomorod-seed-guardian-research-20261023/$GITHUB_RUN_ID"
+          tar -cf - -C "$RUNNER_TEMP/seed-stage" agriculture games source-manifest.json |
+            timeout 110s ssh -T -F "$d/config" host "tar -xf - -C '$backup/stage'"
+          target="/home/zomorod2/.zm-seed-research-$GITHUB_RUN_ID.py"
+          timeout 80s ssh -T -F "$d/config" host "python3 '$target' rehearsal '$GITHUB_RUN_ID'"
+      - name: Scoped atomic install and origin file SHA checks
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          target="/home/zomorod2/.zm-seed-research-$GITHUB_RUN_ID.py"
+          timeout 120s ssh -T -F "$d/config" host "python3 '$target' install '$GITHUB_RUN_ID'"
+          timeout 65s ssh -T -F "$d/config" host "python3 '$target' verify '$GITHUB_RUN_ID'"
+      - name: Independent runner no-cache HTTP200 SHA256 for all 11 assets and critical old routes
+        id: public
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/seed-stage" "$GITHUB_RUN_ID" <<'PY'
+          import hashlib,json,sys,urllib.request
+          from pathlib import Path
+          stage=Path(sys.argv[1]);rid=sys.argv[2]
+          manifest=json.loads((stage/'source-manifest.json').read_text())
+          for rel,entry in manifest.items():
+              url=entry['url']+('?release='+rid)
+              req=urllib.request.Request(url,headers={'Cache-Control':'no-cache','User-Agent':'ZomorodVerifiedRelease/1'})
+              with urllib.request.urlopen(req,timeout=27) as r:
+                  assert r.status==200,(url,r.status)
+                  payload=r.read(300000)
+              assert hashlib.sha256(payload).hexdigest()==entry['sha256'],url
+              print('INDEPENDENT_HTTPS_200_FULL_SHA256_PASS',url)
+          for loc,marker,required in [
+              ('games/','ZM-SOIL-RESEARCH-GAME-20261023-V1',['/games/seed-guardian/','/games/assets/seed-guardian-20261023.webp']),
+              ('agriculture/water-soil/','ZM-SOIL-RESEARCH-GAME-20261023-V1',['/agriculture/water-soil/research-lab-20261023/'])]:
+              url='https://zomorodmelal.ir/'+loc+'?release='+rid
+              with urllib.request.urlopen(urllib.request.Request(url,headers={'Cache-Control':'no-cache'}),timeout=27) as r:
+                  assert r.status==200
+                  doc=r.read(240000).decode('utf-8')
+              assert marker in doc,url
+              for needle in required:assert needle in doc,(url,needle)
+              print('EXTERNAL_CATEGORY_CARD_LINK_AND_IMAGE_PASS',url)
+          for loc in ('','agriculture/','research/','games/water-path/','games/air-supremacy/',
+              'agriculture/water-soil/irrigation-planner/','agriculture/water-soil/soil-moisture-converter/',
+              'agriculture/water-soil/soil-water-storage/','agriculture/greenhouse/ventilation-estimator/',
+              'agriculture/digital-lab/','about/','contact/'):
+              url='https://zomorodmelal.ir/'+loc+'?protect='+rid
+              with urllib.request.urlopen(urllib.request.Request(url,headers={'Cache-Control':'no-cache'}),timeout=27) as r:
+                  assert r.status==200,url
+              print('PRESERVED_PUBLIC_ROUTE_HTTP200',loc or '/')
+          print('ALL_ELEVEN_PUBLIC_FILES_AND_TWELVE_PROTECTED_ROUTES_PASS')
+          PY
+      - name: Commit persistent server receipt and safely release shared lock
+        id: finalize
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          target="/home/zomorod2/.zm-seed-research-$GITHUB_RUN_ID.py"
+          timeout 65s ssh -T -F "$d/config" host "python3 '$target' finalize '$GITHUB_RUN_ID'"
+      - name: Exact-hash rollback only touched paths on any failure
+        if: failure() && steps.prepare.outcome == 'success' && steps.finalize.outcome != 'success'
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          target="/home/zomorod2/.zm-seed-research-$GITHUB_RUN_ID.py"
+          if test -f "$d/config"; then
+            timeout 130s ssh -T -F "$d/config" host "python3 '$target' rollback '$GITHUB_RUN_ID'"
+          fi
+      - name: Scrub SSH keys and private installer; retain versioned backup
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          target="/home/zomorod2/.zm-seed-research-$GITHUB_RUN_ID.py"
+          if test -f "$d/config";then timeout 30s ssh -T -F "$d/config" host "rm -f -- '$target'" || true;fi
+          rm -rf "$d" "$RUNNER_TEMP/seed-stage"

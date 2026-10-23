@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>نگهبان بذر | بازی مهارتی ۱۲۰ مرحله‌ای زمرد ملل</title>
+<meta name="description" content="بازی مهارتی فارسی نگهبان بذر؛ رنگ‌بندی دانه‌ها را با سه دریچه هماهنگ کنید، زنجیره امتیاز بسازید و ۱۲۰ مرحله را تجربه کنید.">
+<link rel="canonical" href="https://zomorodmelal.ir/games/seed-guardian/">
+<meta name="theme-color" content="#0a1924">
+<style>
+:root{color-scheme:dark;--cream:#fff5da;--mint:#a6f4ce;--gold:#f5c268;--purple:#9cb9ff;--red:#ff9b9b}
+*{box-sizing:border-box}html{min-height:100%;scroll-behavior:smooth}
+body{margin:0;background:radial-gradient(ellipse at 55% -20%,#204d50 0,#0a1b28 42%,#07141b 100%);color:var(--cream);font:500 1rem/1.8 Tahoma,Arial,sans-serif;min-height:100vh}
+header{max-width:1150px;margin:auto;padding:1rem 1.3rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.8rem}
+a{color:var(--mint)}header a{font-size:.9rem}
+main{max-width:1150px;margin:0 auto;display:grid;grid-template-columns:minmax(300px,670px) minmax(265px,1fr);gap:1.2rem;padding:0 1.1rem 2rem;align-items:start}
+.game-wrap{border:1px solid #476d68;background:#102d37;border-radius:23px;padding:.6rem;box-shadow:0 20px 65px #020a10b0;position:relative}
+canvas{display:block;width:100%;height:auto;aspect-ratio:720/820;touch-action:none;border-radius:17px;background:#143d48;user-select:none}
+.sidebar{background:linear-gradient(150deg,#133141,#0a202b);border:1px solid #345e5e;border-radius:20px;padding:1.2rem;box-shadow:0 8px 30px #0004}
+h1{font-size:clamp(1.4rem,3vw,2.2rem);margin:.15rem 0 .4rem;line-height:1.4;letter-spacing:-.02em}
+h2{font-size:1.2rem;margin:1.1rem 0 .35rem}p{margin:.45rem 0}.lead{color:#d4ecdc;font-size:.95rem}
+.hud{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.6rem;margin:.8rem 0}
+.metric{border:1px solid #44756d;background:#122d31;border-radius:12px;padding:.45rem;text-align:center}
+.metric small{display:block;font-size:.72rem;color:#9ccac5}.metric strong{font-size:1.27rem;font-variant-numeric:tabular-nums}
+.progress{height:10px;overflow:hidden;border:1px solid #416a65;background:#091e27;border-radius:99px}
+.progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,#7ce3b4,#f5c268);transition:width .15s}
+button{font:inherit;border:1px solid #558276;border-radius:12px;background:#17413e;color:#fff5da;cursor:pointer;min-height:45px;padding:.65rem .9rem;touch-action:manipulation}
+button:focus-visible,a:focus-visible{outline:3px solid #ffe3a1;outline-offset:3px}
+button:hover{filter:brightness(1.18)}.primary{background:linear-gradient(145deg,#21a87a,#186450);border-color:#65eabb;color:white;font-weight:bold}
+.controls{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin:.8rem 0}
+.controls button{padding:.45rem;font-size:.95rem}
+.actions{display:flex;flex-wrap:wrap;gap:.5rem}.muted{color:#9ec4bd;font-size:.86rem}
+ul{padding-right:1.1rem;margin:.5rem 0;line-height:2}.tag{color:#ffd892}
+.overlay{position:absolute;inset:.6rem;display:none;align-items:center;justify-content:center;z-index:4;background:#061820dc;border-radius:17px;text-align:center;padding:1rem}
+.overlay.show{display:flex}.dialog{background:linear-gradient(150deg,#1c5148,#143341);padding:1.2rem;border:1px solid #7fc4a2;border-radius:20px;max-width:390px;width:100%;box-shadow:0 20px 60px #000a}
+.dialog h2{font-size:1.6rem;margin:.3rem 0}.dialog button{width:100%;margin-top:.5rem}
+.status{min-height:2.5rem;margin-top:.6rem;color:#cdebd4;font-size:.85rem}
+footer{max-width:1140px;margin:auto;padding:1rem 1.4rem 2rem;color:#99c6bb;font-size:.85rem}
+@media(max-width:850px){main{grid-template-columns:1fr;max-width:640px;padding:0 .65rem 1.5rem}.sidebar{padding:1rem}.game-wrap{padding:.35rem}.overlay{inset:.35rem}header{padding:.65rem 1rem}}
+@media(prefers-reduced-motion:reduce){.progress i{transition:none}*{scroll-behavior:auto!important}}
+</style>
+</head>
+<body data-release="ZM-SEED-GUARDIAN-20261023-V1">
+<header><div><b>زمرد ملل</b> <span class="tag">/ سرگرمی‌های آموزشی و مهارتی</span></div>
+<nav><a href="/games/">تمام بازی‌ها</a> · <a href="/">صفحه اصلی</a></nav></header>
+<main>
+<section class="game-wrap" aria-label="بازی نگهبان بذر">
+<canvas id="arena" width="720" height="820" aria-label="سه مسیر فرود بذر؛ روی هر مسیر لمس کنید تا دریچه رنگ دانه در حال فرود را انتخاب کند." tabindex="0"></canvas>
+<div class="overlay" id="overlay" role="dialog" aria-labelledby="dialogTitle" aria-modal="true">
+<div class="dialog"><h2 id="dialogTitle">مرحله تمام شد!</h2><p id="dialogText"></p><button id="next" class="primary">ادامه بازی</button></div>
+</div>
+</section>
+<aside class="sidebar">
+<h1>نگهبان بذر <span aria-hidden="true">✦</span></h1>
+<p class="lead">سه دریچه، چهار نوع دانه و تصمیم‌های سریع. بذرهای رنگی را به دریچه هم‌رنگ برسانید و برای بذر فاسد دریچه را ببندید!</p>
+<div class="hud" role="group" aria-label="آمار بازی">
+<div class="metric"><small>مرحله</small><strong id="stage">۱ / ۱۲۰</strong></div>
+<div class="metric"><small>جان</small><strong id="lives">۷</strong></div>
+<div class="metric"><small>امتیاز</small><strong id="score">۰</strong></div>
+</div>
+<p class="muted">پیشروی مرحله: <span id="count">۰ / ۸</span> · زنجیره <span id="combo">۰</span> · رکورد <span id="best">۰</span></p>
+<div class="progress" aria-label="میزان پیشرفت مرحله"><i id="progress"></i></div>
+<h2>کنترل سریع موبایل</h2>
+<p>روی دانه در حال سقوط یا هرکدام از سه مسیر بزنید؛ اگر دانه نزدیک باشد، دریچه به رنگ آن تغییر می‌کند. با لمس دوباره می‌توانید رنگ دریچه را بچرخانید.</p>
+<div class="controls">
+<button type="button" data-lane="0" aria-label="تغییر دریچه سمت راست">مسیر ۱</button>
+<button type="button" data-lane="1" aria-label="تغییر دریچه وسط">مسیر ۲</button>
+<button type="button" data-lane="2" aria-label="تغییر دریچه سمت چپ">مسیر ۳</button>
+</div>
+<p class="muted">دریچه‌ها: <span class="tag">طلایی</span>، <span style="color:#a3ebdf">فیروزه‌ای</span>، <span style="color:#bfa9fa">بنفش</span> و <strong>بسته</strong> (برای دانه فاسد).</p>
+<h2>صفحه‌کلید</h2>
+<ul><li>کلیدهای <b>۱، ۲، ۳</b> برای تغییر مستقیم دریچه هر مسیر</li>
+<li>کلیدهای <b>← و →</b> برای انتخاب مسیر، <b>Enter</b> برای چرخاندن</li>
+<li><b>Space</b> برای توقف/ادامه و <b>۰</b> برای بستن دریچه انتخاب‌شده</li></ul>
+<div class="actions">
+<button id="pause" type="button" class="primary">شروع بازی</button>
+<button id="restart" type="button">تلاش دوباره</button>
+<button id="sound" type="button" aria-pressed="false">صدا: خاموش</button>
+</div>
+<div id="status" class="status" role="status" aria-live="polite"></div>
+<h2>ویژگی‌ها</h2>
+<p class="muted">۱۲۰ مرحله با سرعت تدریجی، ذخیره رکورد و مرحله در همین مرورگر، افکت‌های بصری، امتیاز زنجیره‌ای و امکان بازی رایگان بدون حساب کاربری.</p>
+</aside>
+</main>
+<footer>بازی مستقل HTML5، بدون ذخیره اطلاعات شخصی روی سرور. از مرورگرهای به‌روز موبایل و رایانه استفاده کنید. <a href="/games/">بازگشت به بازی‌ها</a></footer>
+<script>
+(function(){
+'use strict';
+const W=720,H=820,canvas=document.getElementById('arena'),ctx=canvas.getContext('2d',{alpha:false});
+const $=id=>document.getElementById(id),colors=['#fac56b','#76e4cd','#b69cf4','#40525b'];
+const storeKey='zm.seed.guardian.v1';
+let saved={stage:1,best:0,clears:0};try{const v=JSON.parse(localStorage.getItem(storeKey)||'null');if(v&&Number.isInteger(v.stage))saved={stage:Math.max(1,Math.min(120,v.stage)),best:Math.max(0,v.best|0),clears:Math.max(0,v.clears|0)};}catch(_){}
+let stage=saved.stage,lives=7,score=0,best=saved.best,hits=0,goal=8,combo=0;
+let gates=[3,3,3],seeds=[],particles=[],stars=[],spawnClock=0,runTime=0,playing=false,mode='ready',selected=1,lastFrame=0,sound=false;
+let ac=null,mutation=0;
+function persist(){try{localStorage.setItem(storeKey,JSON.stringify({stage:stage,best:Math.max(score,best),clears:saved.clears}));}catch(_){}}
+function seeded(seed){let s=seed>>>0;return function(){s=(1664525*s+1013904223)>>>0;return s/4294967296;};}
+const decor=seeded(18052);for(let i=0;i<100;i++)stars.push({x:decor()*W,y:decor()*H*.73,r:.7+decor()*2,a:.25+decor()*.6});
+function tone(freq=560){if(!sound)return;try{ac=ac||new(window.AudioContext||window.webkitAudioContext)();let o=ac.createOscillator(),g=ac.createGain();o.type='sine';o.frequency.value=freq;g.gain.setValueAtTime(.045,ac.currentTime);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.12);o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+.13);}catch(_){}}
+const laneX=i=>W*(i+.5)/3;
+function setStatus(t){$('status').textContent=t;}
+function paintHud(){
+ $('stage').textContent=stage+' / ۱۲۰';$('lives').textContent='❤ '+lives;$('score').textContent=score.toLocaleString('fa-IR');
+ $('count').textContent=hits.toLocaleString('fa-IR')+' / '+goal.toLocaleString('fa-IR');
+ $('combo').textContent=combo;$('best').textContent=Math.max(best,score).toLocaleString('fa-IR');$('progress').style.width=Math.min(100,hits/goal*100)+'%';
+ $('pause').textContent=playing?'توقف موقت':mode==='ready'?'شروع بازی':'ادامه بازی';
+ document.body.setAttribute('data-game-stage',String(stage));
+ document.body.setAttribute('data-game-mode',mode);
+}
+function reset(keepStage=true){
+ if(!keepStage)stage=1;
+ goal=Math.min(28,8+Math.floor(stage/2)*2);lives=7;score=0;hits=0;combo=0;
+ gates=[3,3,3];seeds=[];particles=[];spawnClock=0;runTime=0;selected=1;playing=false;mode='ready';mutation++;paintHud();
+ setStatus('برای شروع، دکمه شروع بازی را لمس کنید.');
+}
+function start(){if(mode==='levelup'||mode==='lost')return;playing=!playing;mode=playing?'playing':'paused';paintHud();setStatus(playing?'دریچه‌ها را به رنگ بذر در حال سقوط تنظیم کنید.':'بازی متوقف شد.');}
+function finish(success){
+ playing=false;mode=success?'levelup':'lost';
+ if(success){best=Math.max(best,score);saved.clears=Math.max(saved.clears,stage);if(stage<120)stage++;persist();
+ $('dialogTitle').textContent=stage>120?'قهرمان دانه‌ها!':'مرحله را بردید!';$('dialogText').textContent='امتیاز این تلاش: '+score.toLocaleString('fa-IR')+' | مرحله بعد: '+stage;
+ $('next').textContent='مرحله بعد';tone(850);
+ }else{$('dialogTitle').textContent='دانه‌ها از دست رفتند';$('dialogText').textContent='رکورد: '+Math.max(best,score).toLocaleString('fa-IR')+' | از همین مرحله دوباره تلاش کنید.';$('next').textContent='تلاش دوباره';tone(190);}
+ $('overlay').classList.add('show');paintHud();
+}
+function nextStage(){ $('overlay').classList.remove('show');reset(true);playing=true;mode='playing';paintHud();}
+function tapLane(lane,exact=false){
+ lane=Math.min(2,Math.max(0,Number(lane)|0));selected=lane;
+ const target=seeds.filter(s=>s.lane===lane&&s.y<H*.86).sort((a,b)=>b.y-a.y)[0];
+ if(!exact&&target){gates[lane]=target.kind;}else{gates[lane]=(gates[lane]+1)%4;}
+ if(mode==='ready') {playing=true;mode='playing';}
+ mutation++;tone(420+lane*90);paintHud();
+}
+function spritz(x,y,color,count=13){
+ const rnd=seeded(Math.floor(x*13+y*91+runTime*1000));
+ for(let i=0;i<count;i++){const a=rnd()*Math.PI*2,r=35+rnd()*170;particles.push({x,y,vx:Math.cos(a)*r,vy:Math.sin(a)*r,life:.6+rnd()*.55,r:2+rnd()*4,c:color});}
+}
+function spawn(forcedKind,forcedLane){
+ const rng=seeded((stage*2654435761+Math.floor(runTime*76)+mutation*17+seeds.length*73)>>>0);
+ let lane=forcedLane===undefined?Math.floor(rng()*3):forcedLane;
+ let kind=forcedKind===undefined?(rng()<Math.min(.17,.06+stage*.0015)?3:Math.floor(rng()*3)):forcedKind;
+ seeds.push({lane,kind,x:laneX(lane),y:-34,v:105+Math.min(170,stage*3)+rng()*32,phase:rng()*6.28,id:mutation++});
+}
+function settle(seed){
+ const ok=gates[seed.lane]===seed.kind;
+ if(ok){combo++;hits++;score+=80+Math.min(12,combo)*22;spritz(seed.x,675,colors[seed.kind],11+Math.min(12,combo));tone(520+Math.min(combo,12)*35);setStatus(seed.kind===3?'دانه فاسد با دریچه بسته دفع شد.':'تطبیق درست! زنجیره '+combo);}
+ else{lives--;combo=0;spritz(seed.x,675,'#fa756f',16);tone(170);setStatus('رنگ دریچه با دانه تطبیق نداشت.');}
+ best=Math.max(best,score);if(hits>=goal){finish(true);}else if(lives<=0){finish(false);}
+ paintHud();
+}
+function update(dt){
+ if(!playing||mode!=='playing')return;
+ runTime+=dt;
+ spawnClock-=dt;
+ const interval=Math.max(.70,1.75-stage*.014);
+ if(spawnClock<=0){spawn();spawnClock+=interval;}
+ for(let i=seeds.length-1;i>=0;i--){
+  const s=seeds[i];s.y+=s.v*dt;
+  if(s.y>=677){seeds.splice(i,1);settle(s);if(!playing)break;}
+ }
+ particles=particles.filter(p=>p.life>0);
+ particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=150*dt;p.life-=dt;});
+}
+function roundRect(x,y,w,h,r,color){ctx.fillStyle=color;ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill();}
+function draw(seedTime){
+ const t=seedTime/1000;
+ const grad=ctx.createLinearGradient(0,0,0,H);grad.addColorStop(0,'#102b3b');grad.addColorStop(.66,'#1b615b');grad.addColorStop(1,'#132f28');ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
+ stars.forEach(s=>{ctx.globalAlpha=s.a+Math.sin(t*1.7+s.x)*.12;ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle='#bff2cd';ctx.fill();});ctx.globalAlpha=1;
+ for(let j=0;j<3;j++){
+  const x=j*W/3;roundRect(x+12,44,W/3-24,660,24,j===selected?'#ffffff0d':'#00000013');
+  ctx.strokeStyle='#d9f4ce19';ctx.setLineDash([10,16]);ctx.beginPath();ctx.moveTo(x+W/3,42);ctx.lineTo(x+W/3,710);ctx.stroke();ctx.setLineDash([]);
+  const gx=laneX(j),gy=685;
+  ctx.shadowColor=colors[gates[j]];ctx.shadowBlur=gates[j]===3?4:22;
+  roundRect(gx-88,gy-33,176,86,20,gates[j]===3?'#283945':'#22493d');
+  ctx.shadowBlur=0;ctx.lineWidth=5;ctx.strokeStyle=colors[gates[j]];ctx.strokeRect(gx-75,gy-22,150,63);
+  ctx.textAlign='center';ctx.font='bold 30px Tahoma';ctx.fillStyle=colors[gates[j]];ctx.fillText(gates[j]===3?'✖':['◆','●','✿'][gates[j]],gx,gy+19);
+  ctx.font='bold 16px Tahoma';ctx.fillStyle='#b8dfcd';ctx.fillText('دریچه '+(j+1),gx,778);
+ }
+ ctx.font='bold 19px Tahoma';ctx.textAlign='center';ctx.fillStyle='#e4f6d7';ctx.fillText('بذرهای درست را هدایت کن، دانه فاسد را دفع کن',W/2,28);
+ for(const s of seeds){
+  const x=s.x+Math.sin(t*2+s.phase)*9,y=s.y;
+  ctx.save();ctx.translate(x,y);ctx.rotate(Math.sin(t*4+s.phase)*.2);
+  ctx.shadowColor=colors[s.kind];ctx.shadowBlur=18;
+  ctx.fillStyle=colors[s.kind];ctx.beginPath();
+  if(s.kind===3){ctx.moveTo(0,-26);ctx.lineTo(25,15);ctx.lineTo(-25,15);ctx.closePath();}
+  else{ctx.ellipse(0,0,24,30,.2,0,Math.PI*2);}
+  ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle='#ffffff90';ctx.lineWidth=2;ctx.stroke();
+  ctx.font='bold 21px Tahoma';ctx.textAlign='center';ctx.fillStyle='#123b39';ctx.fillText(s.kind===3?'!':['✦','•','✿'][s.kind],0,7);ctx.restore();
+ }
+ particles.forEach(p=>{ctx.globalAlpha=Math.max(0,Math.min(1,p.life));ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=p.c;ctx.fill();});ctx.globalAlpha=1;
+ if(!playing&&mode!=='levelup'&&mode!=='lost'){
+   ctx.fillStyle='#081c28bd';ctx.fillRect(0,305,W,170);ctx.textAlign='center';ctx.fillStyle='#fff2ce';ctx.font='bold 34px Tahoma';
+   ctx.fillText(mode==='paused'?'بازی متوقف است':'برای آغاز لمس کنید',W/2,369);
+   ctx.font='20px Tahoma';ctx.fillText('هر مسیر را لمس کنید تا رنگ دریچه تنظیم شود',W/2,421);
+ }
+}
+function frame(t){let dt=Math.min(.04,Math.max(0,(t-lastFrame)/1000));lastFrame=t;update(dt);draw(t);requestAnimationFrame(frame);}
+function point(event){
+ const r=canvas.getBoundingClientRect(),x=(event.clientX-r.left)/r.width*W;
+ const lane=Math.max(0,Math.min(2,Math.floor(x/(W/3))));
+ if(mode==='levelup'||mode==='lost')return;
+ tapLane(lane,false);
+}
+canvas.addEventListener('pointerdown',e=>{e.preventDefault();point(e);});
+document.querySelectorAll('[data-lane]').forEach(b=>b.addEventListener('click',()=>tapLane(Number(b.dataset.lane),false)));
+document.addEventListener('keydown',e=>{
+ if(e.target instanceof HTMLInputElement)return;
+ if([' ','ArrowLeft','ArrowRight','Enter','1','2','3','0'].includes(e.key))e.preventDefault();
+ if(e.key===' '){if(mode==='levelup'||mode==='lost')nextStage();else start();}
+ if(e.key==='ArrowLeft')selected=(selected+2)%3;
+ if(e.key==='ArrowRight')selected=(selected+1)%3;
+ if(['1','2','3'].includes(e.key))tapLane(Number(e.key)-1,false);
+ if(e.key==='Enter') {if(mode==='levelup'||mode==='lost')nextStage();else tapLane(selected,true);}
+ if(e.key==='0'){gates[selected]=3;mutation++;}
+ paintHud();
+});
+$('pause').addEventListener('click',()=>start());
+$('restart').addEventListener('click',()=>{ $('overlay').classList.remove('show');reset(true);playing=true;mode='playing';paintHud();});
+$('next').addEventListener('click',nextStage);
+$('sound').addEventListener('click',()=>{sound=!sound;$('sound').textContent=sound?'صدا: روشن':'صدا: خاموش';$('sound').setAttribute('aria-pressed',String(sound));tone();});
+reset(true);
+requestAnimationFrame(frame);
+// Real-browser smoke harness; tests actual pointer/keyboard events, scoring, level progression, and persistent storage.
+const qa=new URLSearchParams(location.search).get('qa');
+if(qa==='1'){
+ try {
+  const rect=canvas.getBoundingClientRect(),lane0x=rect.left+rect.width/6;
+  canvas.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,clientX:lane0x,clientY:rect.top+rect.height*.45,pointerType:'touch'}));
+  const pointerOK=selected===0&&playing;
+  document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
+  document.dispatchEvent(new KeyboardEvent('keydown',{key:'1',bubbles:true}));
+  const keyboardOK=selected===0&&gates[0]!==3;
+  seeds.length=0;gates[0]=1;seeds.push({lane:0,kind:1,x:laneX(0),y:670,v:1000,phase:0,id:0});update(.02);
+  const hitOK=hits===1&&score>=100;
+  hits=goal-1;seeds.length=0;gates[0]=0;
+  seeds.push({lane:0,kind:0,x:laneX(0),y:675,v:1000,phase:0,id:1});update(.02);
+  const progressionOK=mode==='levelup'&&saved.clears>=1&&stage===2;
+  const stored=JSON.parse(localStorage.getItem(storeKey)||'{}');
+  const storageOK=stored.stage===2;
+  document.body.setAttribute('data-qa',(pointerOK&&keyboardOK&&hitOK&&progressionOK&&storageOK)?'pass':'fail');
+  setStatus('QA pointer='+pointerOK+' keyboard='+keyboardOK+' hit='+hitOK+' level='+progressionOK+' storage='+storageOK);
+ }catch(e){document.body.setAttribute('data-qa','error');setStatus('QA error '+e.message);}
+}
+if(qa==='reload'){
+ try{document.body.setAttribute('data-qa',saved.stage>=2?'pass':'fail');}
+ catch(e){document.body.setAttribute('data-qa','error');}
+}
+})();
+</script>
+</body></html>
