@@ -110,6 +110,21 @@ jobs:
                   "has_passenger":(p/"passenger_wsgi.py").is_file(),
                   "has_htaccess":(p/".htaccess").is_file(),
               },sort_keys=True))
+          import re
+          for name, path in (("mpw",h/"mojplaywin.com"/".htaccess"),
+                             ("zm",h/"public_html"/".htaccess"),
+                             ("mpw_library",h/"mojplaywin.com/factory-releases/resources/.htaccess"),
+                             ("zm_library",h/"public_html/factory-products/.htaccess")):
+              if not path.is_file() or path.is_symlink():continue
+              for n,line in enumerate(path.read_text(encoding="utf8",errors="replace").splitlines(),1):
+                  line=line.strip()
+                  if (line.startswith(("RewriteRule ","RewriteCond ","PassengerEnabled ","DirectoryIndex "))
+                       or "factory-releases" in line or "factory-products" in line):
+                      if (len(line)<=180 and all(32<=ord(ch)<127 for ch in line)
+                            and not re.search(r"(?i)(token|secret|password|credential|authorization|api.?key)",line)):
+                          print("FACTORY_ROUTE_RULE",name,n,line)
+                      else:
+                          print("FACTORY_ROUTE_RULE",name,n,"[redacted]")
           PY
           for item in "mojplaywin-main|https://mojplaywin.com/factory-releases/resources/index.html" "zomorod-main|https://zomorodmelal.ir/factory-products/index.html" "zomorod-tala|https://zomorodmelal.ir/tala/factory-products/index.html"; do
             label="${item%%|*}"
