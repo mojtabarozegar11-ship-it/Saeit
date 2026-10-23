@@ -66,7 +66,6 @@ def build(repo:Path,out:Path):
             if len(ref_ids)!=2 or any(r not in SOURCES for r in ref_ids):raise RuntimeError("Invalid source reference "+slug)
             all_rows.append(dict(slug=slug,title=title,group=group,context=context,method=method,example=example,caution=caution,verification=verification,refs=ref_ids))
     if len(all_rows)!=50 or len({x["slug"] for x in all_rows})!=50:raise RuntimeError("Missing or duplicate independent guides")
-    bodies=[(x["context"],"Decision context"),(x["method"],"Implementation protocol"),(x["example"],"Worked application"),(x["caution"],"Failure mode and trade-off"),(x["verification"],"Reproducible acceptance test")]
     for i,x in enumerate(all_rows):
         rel="guides/"+x["slug"]+"/index.html"
         target=out/rel;target.parent.mkdir(parents=True)
