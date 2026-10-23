@@ -7,6 +7,7 @@ PUBLIC=Path('/home/zomorod2/mojplaywin.com')
 BACKUP_ROOT=Path('/home/zomorod2/.local/share/mpw-trx-rollbacks')
 WEB_REL='services/mpw_trx_commercial_web.py'
 PAGES_REL='services/mpw_trx_public_pages.py'
+INVOICE_REL='services/mpw_trx_walletless_checkout_ui.py'
 OLD_POLICY=b'response["Referrer-Policy"]="no-referrer"'
 NEW_POLICY=b'response["Referrer-Policy"]="same-origin"'
 HELPER=b'''\ndef _checkout_csrf_referrer(response):
@@ -44,9 +45,15 @@ def run_python(code):
 
 def verify_runtime():
     code='''import os\nos.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")\nimport django;django.setup()\nfrom django.http import HttpResponse\nfrom services.mpw_trx_commercial_web import _nocache\nfrom services.mpw_trx_public_pages import _checkout_csrf_referrer\nr=_nocache(HttpResponse("<meta name=\\\"referrer\\\" content=\\\"no-referrer\\\">"))\nr=_checkout_csrf_referrer(r)\nassert r["Referrer-Policy"]=="same-origin"\nassert r["Cache-Control"]=="private, no-store, max-age=0"\nassert b"content=\\\"same-origin\\\"" in r.content\nassert b"no-referrer" not in r.content\nprint("PUBLIC_TRX_CSRF_HEADER_AND_META=PASS")\n'''
+    code += '''from services.mpw_trx_walletless_checkout_ui import SCRIPT
+assert "proofController.signal" in SCRIPT and "statusController.signal" in SCRIPT
+assert "signal:controller.signal" not in SCRIPT
+assert 'content="same-origin"' in open("services/mpw_trx_walletless_checkout_ui.py",encoding="utf8").read()
+print("PUBLIC_TRX_INVOICE_POLLING_ISOLATION=PASS")
+'''
     result=run_python(code)
-    if result.returncode or 'PUBLIC_TRX_CSRF_HEADER_AND_META=PASS' not in result.stdout:
-        raise RuntimeError('Checkout security policy verification failed: '+result.stderr[-1200:])
+    if result.returncode or 'PUBLIC_TRX_CSRF_HEADER_AND_META=PASS' not in result.stdout or 'PUBLIC_TRX_INVOICE_POLLING_ISOLATION=PASS' not in result.stdout:
+        raise RuntimeError('Checkout runtime verification failed: '+result.stderr[-1200:])
     print(result.stdout.strip())
 
 def assert_release_state():
@@ -78,10 +85,29 @@ def transform_pages(raw):
     result=result.replace(CSP_LINE,CALL+CSP_LINE,1)
     return result
 
+def transform_invoice_ui(raw):
+    marker=b'const statusController=new AbortController();'
+    if marker in raw:
+        if raw.count(marker)!=1 or b'const proofController=new AbortController();' not in raw or b'content="same-origin"' not in raw:
+            raise RuntimeError('Partially installed invoice polling isolation')
+        return raw
+    allocations=b'  const controller=new AbortController();\n  const timeout=window.setTimeout(()=>controller.abort(),8000);\n  let delay=nextDelay();'
+    proof_old=b'''      try{\n        await fetch(proofUrl,{method:"POST",credentials:"same-origin",cache:"no-store",\n          redirect:"error",signal:controller.signal,headers:{"Accept":"application/json","X-CSRFToken":csrf}});\n      }catch(e){/* Await next authenticated status observation; never accept browser proof. */}'''
+    proof_new=b'''      const proofController=new AbortController();\n      const proofTimeout=window.setTimeout(()=>proofController.abort(),8000);\n      try{\n        await fetch(proofUrl,{method:"POST",credentials:"same-origin",cache:"no-store",\n          redirect:"error",signal:proofController.signal,headers:{"Accept":"application/json","X-CSRFToken":csrf}});\n      }catch(e){/* Await next authenticated status observation; never accept browser proof. */}\n      finally{window.clearTimeout(proofTimeout);}'''
+    status_old=b'''    const r=await fetch(url,{credentials:"same-origin",cache:"no-store",redirect:"error",\n      signal:controller.signal,headers:{"Accept":"application/json"}});'''
+    status_new=b'''    const statusController=new AbortController();\n    const statusTimeout=window.setTimeout(()=>statusController.abort(),8000);\n    let r;\n    try{\n      r=await fetch(url,{credentials:"same-origin",cache:"no-store",redirect:"error",\n        signal:statusController.signal,headers:{"Accept":"application/json"}});\n    }finally{window.clearTimeout(statusTimeout);}'''
+    old_meta=b'<meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">'
+    new_meta=b'<meta name="robots" content="noindex,nofollow"><meta name="referrer" content="same-origin">'
+    for fragment in (allocations,proof_old,status_old,old_meta):
+        if raw.count(fragment)!=1: raise RuntimeError('Invoice UI source shape changed')
+    result=raw.replace(allocations,b'  let delay=nextDelay();',1)
+    result=result.replace(proof_old,proof_new,1).replace(status_old,status_new,1).replace(old_meta,new_meta,1)
+    return result
+
 def main():
     if len(sys.argv)!=1: raise SystemExit('no arguments expected')
     assert_release_state()
-    files={WEB_REL:transform_web((APP/WEB_REL).read_bytes()),PAGES_REL:transform_pages((APP/PAGES_REL).read_bytes())}
+    files={WEB_REL:transform_web((APP/WEB_REL).read_bytes()),PAGES_REL:transform_pages((APP/PAGES_REL).read_bytes()),INVOICE_REL:transform_invoice_ui((APP/INVOICE_REL).read_bytes())}
     old={rel:(APP/rel).read_bytes() for rel in files}
     for rel,data in files.items():compile(data.decode('utf8'),rel,'exec')
     changed={rel:data for rel,data in files.items() if data!=old[rel]}
