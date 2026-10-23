@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Bounded VPS-private factory supervisor acting under standing owner instruction.
 
-Runs already installed stages 3/4, 5, 6 technical preflight, and stage-5
-revision in order. All internal decisions run without owner confirmation.
+Runs already installed stages 1, 2 literature evidence, 2 handoff, 3/4,
+5, 6 technical preflight, and 5 revision in independent bounded steps. All internal decisions run without owner confirmation.
 No independent human attestations, legal certifications, public release, site
 updates, purchases, or disbursements can be issued by this supervisor.
 """
@@ -63,7 +63,7 @@ def inventory(area):
             continue
         result[key] = sum(
             p.is_file() and not p.is_symlink() and
-            p.name.startswith("WO-") and p.suffix == ".json"
+            (p.name.startswith("AGRI-") if key == "stage2_source_evidence" else p.name.startswith("WO-")) and p.suffix == ".json"
             for p in folder.iterdir()
         )
     return result
