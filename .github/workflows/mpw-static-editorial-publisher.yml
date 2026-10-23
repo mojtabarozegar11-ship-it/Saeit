@@ -90,6 +90,26 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
+      - name: Attest owned editorial directory inventory without changing site files
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("/home/zomorod2/mojplaywin.com/mpw-editorial")
+          if not root.exists() and not root.is_symlink():
+              print("MPW_EDITORIAL_TARGET_NOT_CREATED_YET=true")
+          else:
+              if root.is_symlink() or not root.is_dir():
+                  raise SystemExit("MPW_EDITORIAL_TARGET_NOT_A_SAFE_DIRECTORY")
+              entries=[{"name":p.name,"kind":"symlink" if p.is_symlink() else "directory" if p.is_dir() else "file" if p.is_file() else "special"} for p in root.iterdir()]
+              entries.sort(key=lambda row:row["name"])
+              print("MPW_EDITORIAL_TOP_LEVEL_COUNT="+str(len(entries)))
+              print("MPW_EDITORIAL_TOP_LEVEL_JSON="+json.dumps(entries,sort_keys=True))
+              if len(entries)>10:
+                  raise SystemExit("MPW_EDITORIAL_STOP_FOREIGN_TOP_LEVEL_INVENTORY")
+          PY
       - name: Install only privately scoped files and issue owned public STATIC release
         id: stage
         shell: bash
