@@ -30,12 +30,12 @@ class EditorialPublicationTests(unittest.TestCase):
             self.assertIn('rel="canonical"',body)
             self.assertIn("Educational material",body)
             self.assertIn('/index.html"',body)
-            self.assertIn('<link rel="canonical" href="https://mojplaywin.com/mpw-editorial/agents/',body)
-            self.assertNotIn('href="/mpw-editorial/agents/ai-evaluation-before-deployment/"',body)
+            self.assertIn('<link rel="canonical" href="https://mojplaywin.com/mpw-standalone-guides/agents/',body)
+            self.assertNotIn('href="/mpw-standalone-guides/agents/ai-evaluation-before-deployment/"',body)
             index=(stage/"index.html").read_text()
-            self.assertIn('href="/mpw-editorial/agents/ai-evaluation-before-deployment/index.html"',index)
-            self.assertIn('href="/mpw-editorial/agents/documenting-ai-assisted-decisions/index.html"',index)
-            self.assertIn('href="/mpw-editorial/index.html"',index)
+            self.assertIn('href="/mpw-standalone-guides/agents/ai-evaluation-before-deployment/index.html"',index)
+            self.assertIn('href="/mpw-standalone-guides/agents/documenting-ai-assisted-decisions/index.html"',index)
+            self.assertIn('href="/mpw-standalone-guides/index.html"',index)
             self.assertIn("href=",body)
             self.assertNotIn("zomorodmelal.ir",body.lower())
             self.assertNotIn("<script",body)
@@ -95,10 +95,41 @@ class EditorialPublicationTests(unittest.TestCase):
             self.assertFalse(any("farnaz" in key or "mojtaba" in key for key in files))
             self.assertRaisesRegex(RuntimeError,"article_limit",p.make_files,rows+rows[0:1])
 
+    def test_shared_or_foreign_directory_is_never_replaced(self):
+        with tempfile.TemporaryDirectory() as td:
+            docroot=Path(td)
+            (docroot/"passenger_wsgi.py").write_text("pass")
+            (docroot/".htaccess").write_text("pass")
+            target=docroot/"mpw-standalone-guides"
+            target.mkdir()
+            (target/p.OWNER).write_text(json.dumps({
+                "tenant":p.TENANT,
+                "scope":"mojplaywin-main-static-standalone-guides-only",
+                "content_fingerprints":{}
+            }))
+            (target/"arcade-lab").mkdir()
+            with patch.object(p,"DOCROOT",docroot):
+                with self.assertRaisesRegex(RuntimeError,"unexpected_top_level"):
+                    p.verify_public_target(docroot,target)
+            self.assertTrue((target/"arcade-lab").is_dir())
+
+    def test_nonowned_standalone_target_is_denied(self):
+        with tempfile.TemporaryDirectory() as td:
+            docroot=Path(td)
+            (docroot/"passenger_wsgi.py").write_text("pass")
+            (docroot/".htaccess").write_text("pass")
+            target=docroot/"mpw-standalone-guides"
+            target.mkdir()
+            (target/"index.html").write_text("not our page")
+            with patch.object(p,"DOCROOT",docroot):
+                with self.assertRaisesRegex(RuntimeError,"unsafe_editorial_input"):
+                    p.verify_public_target(docroot,target)
+            self.assertEqual((target/"index.html").read_text(),"not our page")
+
     def test_private_manifest_and_unowned_docroot_refused(self):
         with tempfile.TemporaryDirectory() as td:
             with self.assertRaisesRegex(RuntimeError,"documentroot_attestation_failed"):
-                p.verify_public_target(Path(td),Path(td)/"mpw-editorial")
+                p.verify_public_target(Path(td),Path(td)/"mpw-standalone-guides")
 
 if __name__=="__main__":
     unittest.main()
