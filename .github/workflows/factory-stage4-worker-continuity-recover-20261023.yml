@@ -1,0 +1,90 @@
+name: VPS Factory Worker Continuity Recovery
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-stage4-worker-continuity-recover-20261023.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: vps-factory-worker-continuity-recover
+  cancel-in-progress: false
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Restore existing native worker after legacy inherited launch lock clears
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-continuity-recover"
+          install -d -m 700 "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 410s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          base="$HOME/factory-runtime"
+          ops="$base/operations"
+          script="$ops/vps-only-loop.sh"
+          pidfile="$ops/vps-only-loop.pid"
+          test -x "$script" && test ! -L "$script"
+          test -f "$base/django-app/manage.py"
+          test -f "$base/private/factory-fresh-isolated.sqlite3"
+          test "$(sha256sum "$script" | cut -d' ' -f1)" = "368075ae83c152ae8eefe8370a8be909f067a5e7d72a5d4fe11f090f7829548b"
+          exec 8>"$ops/stage4-throughput-maintenance.lock"
+          flock -w 30 8
+          exec 9>"$ops/vps-only-launch-v2.lock"
+          is_live() {
+            test -s "$pidfile" || return 1
+            read -r p < "$pidfile"
+            case "$p" in ''|*[!0-9]*) return 1;; esac
+            kill -0 "$p" 2>/dev/null || return 1
+            cmd="$(ps -p "$p" -o args= || true)"
+            case "$cmd" in *vps-only-loop.sh*) return 0;; *) return 1;; esac
+          }
+          if is_live; then
+            echo FACTORY_WORKER_CONTINUITY_ALREADY_HEALTHY
+            exit 0
+          fi
+          got_lock=0
+          for i in $(seq 1 66); do
+            if is_live; then
+              echo FACTORY_WORKER_CONTINUITY_WATCHDOG_RECOVERED
+              exit 0
+            fi
+            if flock -n 9; then
+              got_lock=1
+              break
+            fi
+            sleep 5
+          done
+          test "$got_lock" = 1 || {
+            echo FACTORY_WORKER_CONTINUITY_LOCK_BUSY_AFTER_WAIT
+            exit 1
+          }
+          if is_live; then
+            echo FACTORY_WORKER_CONTINUITY_OTHER_LAUNCH_SUCCEEDED
+            exit 0
+          fi
+          nohup "$script" </dev/null >> "$ops/vps-only-launch.log" 2>&1 8>&- 9>&- &
+          new="$!"
+          printf '%s\n' "$new" > "$pidfile"
+          sleep 8
+          kill -0 "$new"
+          test "$(readlink "/proc/$new/fd/9" 2>/dev/null || true)" != "$ops/vps-only-launch-v2.lock"
+          echo FACTORY_WORKER_CONTINUITY_RECOVERED=PASS
+          REMOTE
+      - name: Destroy temporary key
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/factory-continuity-recover"
+          if test -d "$d"; then rm -f -- "$d/key" "$d/known"; rmdir "$d"; fi
