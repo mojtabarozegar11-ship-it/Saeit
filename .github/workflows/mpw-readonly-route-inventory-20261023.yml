@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v4
       - name: Fail if deployment lock is absent
         run: |
-          grep -Fq 'if: ${{ false }}' .github/workflows/mojplaywin-main-deploy.yml
+          python3 -c 'from pathlib import Path; assert ("if: " + chr(36) + "{{ false }}") in Path(".github/workflows/mojplaywin-main-deploy.yml").read_text()'
           echo MAIN_DEPLOY_SAFETY_LOCK_PRESENT
       - name: Pinned read-only VPS relay and cPanel mapping
         env:
