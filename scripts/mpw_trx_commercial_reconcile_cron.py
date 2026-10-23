@@ -39,7 +39,8 @@ def run_once():
         return result
     result["public_checkout_activated"]=bool(
         getattr(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False) and
-        getattr(settings,"MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED",False)\n    )
+        getattr(settings,"MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED",False)
+    )
     # All unpaid invoices must remain eligible after service downtime.
     # A rotating checkpoint prevents six old unresolved invoices from
     # starving all other buyers forever.
