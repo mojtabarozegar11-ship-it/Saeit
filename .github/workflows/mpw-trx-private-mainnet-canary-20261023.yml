@@ -8,6 +8,21 @@ on:
       - tests/test_mpw_trx_private_canary_20261023.py
       - tests/test_mpw_trx_commercial_real_mariadb_e2e.py
   workflow_dispatch:
+    inputs:
+      canary_action:
+        description: 'Private merchant canary: read-only, or issue one invoice and auto-verify'
+        required: true
+        type: choice
+        default: preflight
+        options: [preflight, issue, verify]
+      sender:
+        description: 'Public Mainnet TRON sender address (never a private key)'
+        required: false
+        type: string
+      invoice_id:
+        description: 'Existing private invoice ID (verify only)'
+        required: false
+        type: string
 permissions: {contents: read}
 jobs:
   safety-and-receipts:
@@ -55,7 +70,7 @@ jobs:
   live-mainnet-readonly-preflight:
     needs: [safety-and-receipts, mainnet-canary-isolated-mariadb]
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 19
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
@@ -89,6 +104,50 @@ jobs:
         run: |
           set -euo pipefail
           timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - inventory' < scripts/mpw_trx_private_canary_20261023.py
+      - name: Issue exactly one private merchant Mainnet invoice; show exact address and amount
+        if: github.event_name == 'workflow_dispatch' && inputs.canary_action == 'issue'
+        id: issue
+        env:
+          CANARY_SENDER: ${{ inputs.sender }}
+        run: |
+          set -euo pipefail
+          # An untrusted workflow input must never reach a remote shell without
+          # strict character validation. The Python checker also verifies Base58Check.
+          [[ "$CANARY_SENDER" =~ ^T[1-9A-HJ-NP-Za-km-z]{33}$ ]] || { echo 'INVALID_PUBLIC_MAINNET_SENDER'; exit 2; }
+          output="$(timeout 125s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel "MPW_TRX_CANARY_ISSUE_ACK=merchant-one-time-mainnet-canary-20261023 MPW_TRX_CANARY_BUYER_ID=auto MPW_TRX_CANARY_PRODUCT_ID=auto MPW_TRX_CANARY_EXPECTED_SENDER=$CANARY_SENDER /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - issue" < scripts/mpw_trx_private_canary_20261023.py)"
+          printf '%s\n' "$output"
+          CANARY_RESULT="$output" python3 -c 'import json,os; lines=[s for s in os.environ["CANARY_RESULT"].splitlines() if s.startswith("MPW_PRIVATE_MAINNET_CANARY=")]; d=json.loads(lines[-1].split("=",1)[1]); n=d.get("invoice_id"); assert d.get("status") in ("PRIVATE_CANARY_INVOICE_CREATED","EXISTING_PRIVATE_CANARY") and type(n) is int and 0<n<2**63; print("invoice_id="+str(n))' >> "$GITHUB_OUTPUT"
+      - name: Automatically witness finalized Mainnet payment, accounting and exact buyer download
+        if: github.event_name == 'workflow_dispatch' && inputs.canary_action == 'issue'
+        env:
+          CANARY_SENDER: ${{ inputs.sender }}
+          CANARY_INVOICE_ID: ${{ steps.issue.outputs.invoice_id }}
+        run: |
+          set -euo pipefail
+          [[ "$CANARY_SENDER" =~ ^T[1-9A-HJ-NP-Za-km-z]{33}$ ]] || exit 2
+          [[ "$CANARY_INVOICE_ID" =~ ^[1-9][0-9]{0,18}$ ]] || exit 2
+          for attempt in $(seq 1 35); do
+            result="$(timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel "MPW_TRX_CANARY_BUYER_ID=auto MPW_TRX_CANARY_PRODUCT_ID=auto MPW_TRX_CANARY_EXPECTED_SENDER=$CANARY_SENDER /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify --invoice-id $CANARY_INVOICE_ID" < scripts/mpw_trx_private_canary_20261023.py)"
+            if [[ "$result" == *'PRIVATE_CANARY_PAYMENT_AND_DOWNLOAD_PASSED'* ]]; then
+              printf '%s\n' "$result"
+              echo 'PRIVATE_CANARY_ACCEPTED_REAL_MAINNET_PAYMENT=PASS'
+              exit 0
+            fi
+            echo "PRIVATE_MAINNET_SETTLEMENT_PENDING attempt=$attempt/35"
+            sleep 15
+          done
+          echo 'PRIVATE_MAINNET_CANARY_NOT_SETTLED_BEFORE_TIMEOUT; PUBLIC_RELEASE_STAYS_OFF'
+          exit 2
+      - name: Independently recheck an existing real private canary receipt
+        if: github.event_name == 'workflow_dispatch' && inputs.canary_action == 'verify'
+        env:
+          CANARY_SENDER: ${{ inputs.sender }}
+          CANARY_INVOICE_ID: ${{ inputs.invoice_id }}
+        run: |
+          set -euo pipefail
+          [[ "$CANARY_SENDER" =~ ^T[1-9A-HJ-NP-Za-km-z]{33}$ ]] || { echo 'INVALID_PUBLIC_MAINNET_SENDER'; exit 2; }
+          [[ "$CANARY_INVOICE_ID" =~ ^[1-9][0-9]{0,18}$ ]] || { echo 'INVALID_CANARY_INVOICE_ID'; exit 2; }
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel "MPW_TRX_CANARY_BUYER_ID=auto MPW_TRX_CANARY_PRODUCT_ID=auto MPW_TRX_CANARY_EXPECTED_SENDER=$CANARY_SENDER /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify --invoice-id $CANARY_INVOICE_ID" < scripts/mpw_trx_private_canary_20261023.py
       - name: Cleanup relay key material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-gateway-contract-ssh"
