@@ -1,0 +1,76 @@
+name: Factory P0 Stage 6 technical evidence audit and Stage 5 rework routing
+on:
+  pull_request:
+    paths:
+      - scripts/factory_stage6_preflight_rework_20261023.py
+      - tests/test_factory_stage6_preflight_rework_20261023.py
+      - deploy/install_factory_stage6_preflight_rework.sh
+      - .github/workflows/factory-stage6-preflight-rework-20261023.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_stage6_preflight_rework_20261023.py
+      - tests/test_factory_stage6_preflight_rework_20261023.py
+      - deploy/install_factory_stage6_preflight_rework.sh
+      - .github/workflows/factory-stage6-preflight-rework-20261023.yml
+permissions: {contents: read}
+concurrency:
+  group: factory-stage6-p0-preflight-rework
+  cancel-in-progress: false
+jobs:
+  regression-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate fail-closed manuscript integrity, source packets and reviewer gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_factory_stage6_preflight_rework_20261023.py' -v
+          bash -n deploy/install_factory_stage6_preflight_rework.sh
+  private-vps-install:
+    needs: regression-tests
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-stage6-preflight-rework-20261023]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Transfer versioned workers through verified VPS SSH and install
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/private-stage6"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          ssh_vps 'test "$(id -un)" = githubops && test -x "$HOME/factory-runtime/.venv/bin/python" && test -f "$HOME/factory-runtime/operations/production-instructions/stage34-autonomous-handoff.py" && test -f "$HOME/factory-runtime/operations/production-instructions/stage5-evidence-workbook.py" && test -d "$HOME/factory-runtime/private/autonomous-product-cycle/production-instructions/stage-06/inbox" && echo FACTORY_STAGE6_VPS_PREFLIGHT=PASS'
+          target="/home/githubops/factory-runtime/operations/.stage6-$GITHUB_RUN_ID"
+          ssh_vps "umask 077; test ! -e '$target'; install -d -m 700 '$target/scripts' '$target/tests' '$target/deploy'"
+          for file in \
+            scripts/factory_stage34_autonomous_handoff_20261023.py \
+            scripts/factory_stage5_evidence_workbook_20261023.py \
+            scripts/factory_stage6_preflight_rework_20261023.py \
+            tests/test_factory_stage34_autonomous_handoff_20261023.py \
+            tests/test_factory_stage6_preflight_rework_20261023.py \
+            deploy/install_factory_stage6_preflight_rework.sh; do
+            cat "$file" | ssh_vps "umask 077; cat > '$target/$file'; chmod 600 '$target/$file'"
+            expected="$(sha256sum "$file" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$target/$file' | awk '{print \$1}')\" = '$expected'"
+          done
+          ssh_vps "timeout 120s /home/githubops/factory-runtime/.venv/bin/python -B -m unittest discover -s '$target/tests' -p 'test_factory_stage6_preflight_rework_20261023.py' -v"
+          ssh_vps "bash -n '$target/deploy/install_factory_stage6_preflight_rework.sh'"
+          ssh_vps "timeout 320s bash '$target/deploy/install_factory_stage6_preflight_rework.sh' '$target/scripts/factory_stage6_preflight_rework_20261023.py'"
