@@ -264,6 +264,26 @@ def stage5(area, name, lib):
     return created
 
 
+def fair_batch(area, names, batch, lib):
+    """Durable rotating selection so a failed/finished prefix cannot starve later work."""
+    cursor_path = area / "stage-05" / "round-robin-cursor.json"
+    if cursor_path.is_symlink():
+        raise RuntimeError("STAGE5_CURSOR_SYMLINK")
+    state = lib.read(cursor_path) if cursor_path.exists() else {
+        "schema": "saeit.factory.stage5.round-robin.v1", "next_index": 0}
+    if (state.get("schema") != "saeit.factory.stage5.round-robin.v1"
+            or type(state.get("next_index")) is not int
+            or state["next_index"] < 0):
+        raise RuntimeError("STAGE5_CURSOR_INVALID")
+    total = len(names)
+    start = state["next_index"] % total if total else 0
+    count = min(batch, total)
+    chosen = [names[(start + i) % total] for i in range(count)]
+    next_state = {"schema": "saeit.factory.stage5.round-robin.v1",
+                  "next_index": (start + count) % total if total else 0}
+    return chosen, cursor_path, next_state
+
+
 def execute(root, lib, batch=200):
     root = Path(root).expanduser().resolve()
     if not root.is_dir():
@@ -279,8 +299,9 @@ def execute(root, lib, batch=200):
         fcntl.flock(guard.fileno(), fcntl.LOCK_EX)
         names = sorted(p.name for p in (area / "stage-05" / "inbox").iterdir()
                        if p.is_file() and not p.is_symlink() and lib.NAME.fullmatch(p.name))
+        selected, cursor_path, next_state = fair_batch(area, names, batch, lib)
         created, blocked = 0, 0
-        for name in names[:batch]:
+        for name in selected:
             try:
                 created += int(stage5(area, name, lib))
             except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:
@@ -290,6 +311,7 @@ def execute(root, lib, batch=200):
                     "reason": type(exc).__name__ + ":" + str(exc)[:200],
                     "status": "requires_stage5_rework_or_scientific_input",
                     "advanced_to_stage6": False})
+        lib.atomic(cursor_path, next_state)
         result = {
             "stage5_inbox": len(names), "stage5_created_this_tick": created,
             "stage5_blocked_this_tick": blocked,
