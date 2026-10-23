@@ -1,0 +1,39 @@
+name: Air Supremacy campaign quality gates
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - games/air-supremacy/index.html
+      - tests/game/air-supremacy-campaign.cjs
+      - scripts/mpw_air_supremacy_upgrade_publish.py
+      - .github/workflows/mpw-air-supremacy-upgrade.yml
+      - .github/workflows/mpw-air-campaign-quality.yml
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-air-campaign-quality.yml
+permissions:
+  contents: read
+jobs:
+  playable-campaign:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Browser game JavaScript parse and executable gameplay regressions
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('games/air-supremacy/index.html').read_text('utf-8')
+          js=source.split('<script>',1)[1].split('</script>',1)[0]
+          Path('/tmp/air-campaign.js').write_text(js,'utf-8')
+          assert 'MAX_MISSION=12' in js
+          assert 'SAVE_KEY=' in js
+          assert 'fetch(' not in js, 'Do not introduce unverified payment endpoints'
+          assert len(source)>40000
+          PY
+          node --check /tmp/air-campaign.js
+          node tests/game/air-supremacy-campaign.cjs
