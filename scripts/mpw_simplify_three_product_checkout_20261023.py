@@ -8,6 +8,7 @@ from types import SimpleNamespace
 ROOT=Path('/home/zomorod2/Saeit-staging')
 HOME=Path('/home/zomorod2')
 STORE=ROOT/'core/templates/mojplaywin/store.html'
+PRODUCT_TEMPLATE=ROOT/'core/templates/brands/mojplaywin/product.html'
 EXPECTED={72:('The Science and Practice of Chess Improvement','7.50'),
           225:('Taniya and the Little Baker Worms','4.00'),
           879:('Atelier Interior — Client-Ready Website Kit','6.80')}
@@ -23,7 +24,7 @@ OLD_STATUS='Available now · verified crypto payment'
 NEW_STATUS='TRX checkout available · account required'
 OLD_CHECKOUT='Go to secure checkout ↗'
 NEW_CHECKOUT='Buy securely with TRX ↗'
-OLD_KIT='Buy website kit — secure ETH/TRX checkout ↗'
+OLD_PRODUCT_PAYMENT='ETH/TRX'
 
 def fail(message): raise RuntimeError(message)
 def digest(raw): return hashlib.sha256(raw).hexdigest()
@@ -34,17 +35,6 @@ def backup_path(run):
 def transform(source):
     if source.count(START)!=1 or source.count(END)!=1:
         fail('Expected exactly one bounded two-book catalog block')
-    if source.count('id="atelier-original-vector-879"')!=1:
-        import json
-        i=source.lower().find('atelier')
-        print('MPW_STOREFRONT_SOURCE_DIAGNOSTIC='+json.dumps({
-            'sha256':digest(source.encode('utf-8')),'bytes':len(source),
-            'catalog_markers':[source.count(START),source.count(END)],
-            'atelier_identifier_variants':{k:source.count(k) for k in (
-                'atelier-original-vector-879','id="atelier-original-vector-879"',
-                "id='atelier-original-vector-879'",'Atelier Interior')},
-            'excerpt':source[max(0,i-180):i+500] if i>=0 else ''},ensure_ascii=False,sort_keys=True))
-        fail('Expected exactly one Atelier product block')
     for pk,old in OLD_BUY.items():
         if source.count(old)!=1: fail(f'Expected one legacy book CTA for {pk}')
         source=source.replace(old,'',1)
@@ -52,15 +42,19 @@ def transform(source):
         (OLD_INTRO,NEW_INTRO,1),
         (OLD_STATUS,NEW_STATUS,2),
         (OLD_CHECKOUT,NEW_CHECKOUT,2),
-        (OLD_KIT,'Buy securely with TRX ↗',1),
     ):
         if source.count(old)!=count: fail(f'Expected {count} copies of audited storefront text: {old}')
         source=source.replace(old,new)
     if 'ETH / TRX' in source or 'ETH/TRX' in source or 'mpw-crypto-buy' in source:
         fail('Unsupported or duplicate ETH/TRX purchase control remains')
-    if source.count('Buy securely with TRX ↗')!=3:
-        fail('Expected exactly one primary TRX purchase CTA per product')
+    if source.count('Buy securely with TRX ↗')!=2:
+        fail('Expected exactly one primary TRX purchase CTA per book')
     return source
+
+def product_template_patch(source):
+    if source.count(OLD_PRODUCT_PAYMENT)!=1:
+        fail('Expected one unsupported ETH/TRX claim in the product detail template')
+    return source.replace(OLD_PRODUCT_PAYMENT,'TRX',1)
 
 def atomic(path,raw):
     mode=stat.S_IMODE(path.stat().st_mode)
@@ -72,21 +66,6 @@ def atomic(path,raw):
         os.replace(tmp,path)
     finally:
         if os.path.exists(tmp): os.unlink(tmp)
-
-def diagnose_third_product_source():
-    matches=[]
-    for base in (ROOT/'core/templates',ROOT/'templates',ROOT/'core'):
-        if not base.is_dir(): continue
-        for p in base.rglob('*'):
-            if not p.is_file() or p.is_symlink() or p.suffix not in {'.html','.py'}: continue
-            try: text=p.read_text('utf-8',errors='replace')
-            except OSError: continue
-            for token in ('atelier-original-vector-879','Buy website kit','ETH/TRX'):
-                i=text.find(token)
-                if i>=0:
-                    matches.append({'path':str(p.relative_to(ROOT)),'token':token,
-                                    'excerpt':text[max(0,i-160):i+len(token)+240]})
-    print('MPW_THIRD_PRODUCT_SOURCE_AUDIT='+json.dumps(matches[:30],ensure_ascii=False,sort_keys=True))
 
 def verify_products():
     os.chdir(ROOT); sys.path.insert(0,str(ROOT))
@@ -109,37 +88,53 @@ def verify_products():
             fail(f'Public catalog listing or checkout link missing for {pk}')
 
 def publish(run):
-    if ROOT.is_symlink() or not ROOT.is_dir() or STORE.is_symlink() or not STORE.is_file():
-        fail('Unexpected checkout root or store template')
+    if (ROOT.is_symlink() or not ROOT.is_dir() or STORE.is_symlink() or not STORE.is_file()
+        or PRODUCT_TEMPLATE.is_symlink() or not PRODUCT_TEMPLATE.is_file()):
+        fail('Unexpected checkout root or product template')
     if not (ROOT/'manage.py').is_file(): fail('Django app root is incomplete')
     old=STORE.read_bytes()
     text=old.decode('utf-8')
-    if 'atelier-original-vector-879' not in text: diagnose_third_product_source()
     new=transform(text).encode('utf-8')
-    if new==old: fail('Storefront already transformed; refusing duplicate release')
+    old_product=PRODUCT_TEMPLATE.read_bytes()
+    new_product=product_template_patch(old_product.decode('utf-8')).encode('utf-8')
+    if new==old or new_product==old_product: fail('Storefront already transformed; refusing duplicate release')
     verify_products()
     backup=backup_path(run)
-    if backup.exists() or backup.is_symlink(): fail('Release backup already exists')
+    product_backup=backup.with_suffix('.product.bak')
+    if backup.exists() or backup.is_symlink() or product_backup.exists() or product_backup.is_symlink():
+        fail('Release backup already exists')
     with backup.open('xb') as f:
         os.fchmod(f.fileno(),0o600); f.write(old); f.flush(); os.fsync(f.fileno())
+    with product_backup.open('xb') as f:
+        os.fchmod(f.fileno(),0o600); f.write(old_product); f.flush(); os.fsync(f.fileno())
     try:
         if digest(STORE.read_bytes())!=digest(old): fail('Concurrent template update detected')
+        if digest(PRODUCT_TEMPLATE.read_bytes())!=digest(old_product): fail('Concurrent product detail template update detected')
         atomic(STORE,new)
+        atomic(PRODUCT_TEMPLATE,new_product)
         from django.test import Client
         from django.urls import reverse
         body=Client(HTTP_HOST='mojplaywin.com').get('/store/').content.decode('utf-8')
-        if body.count('Buy securely with TRX ↗')!=3 or 'ETH / TRX' in body or 'ETH/TRX' in body:
-            fail('Rendered storefront CTA verification failed')
+        if body.count('Buy securely with TRX ↗')!=2 or 'ETH / TRX' in body or 'mpw-crypto-buy' in body:
+            fail('Rendered book storefront CTA verification failed')
         if '/commerce/book/72/' in body or '/commerce/book/225/' in body:
             fail('Legacy book purchase route remains in the catalog')
         for pk in EXPECTED:
             if f'/store/product/{pk}/checkout/' not in body: fail(f'Checkout link missing for {pk}')
+        kit_page=Client(HTTP_HOST='mojplaywin.com').get('/store/product/879/').content.decode('utf-8')
+        if ('ETH/TRX' in kit_page or EXPECTED[879][0] not in kit_page
+            or '/store/product/879/checkout/' not in kit_page):
+            fail('Third product payment copy is not aligned with its live TRX checkout')
         print('MPW_THREE_PRODUCT_CATALOG_RELEASE='+json.dumps({
-            'run':run,'products':list(EXPECTED),'one_trx_cta_each':True,
-            'legacy_eth_ctas_removed':True,'private_files_ready':True,
-            'before_sha256':digest(old),'after_sha256':digest(new)},sort_keys=True))
+            'run':run,'products':list(EXPECTED),'book_trx_ctas':2,
+            'third_product_eth_claim_removed':True,'legacy_book_ctas_removed':True,
+            'private_files_ready':True,'store_before_sha256':digest(old),
+            'store_after_sha256':digest(new),'product_before_sha256':digest(old_product),
+            'product_after_sha256':digest(new_product)},sort_keys=True))
     except BaseException:
         if STORE.exists() and digest(STORE.read_bytes())==digest(new): atomic(STORE,old)
+        if PRODUCT_TEMPLATE.exists() and digest(PRODUCT_TEMPLATE.read_bytes())==digest(new_product):
+            atomic(PRODUCT_TEMPLATE,old_product)
         raise
 
 def rollback(run):
@@ -148,19 +143,23 @@ def rollback(run):
     old=backup.read_bytes()
     if STORE.is_symlink() or not STORE.is_file(): fail('Unsafe storefront template')
     current=STORE.read_bytes()
-    if transform(old.decode('utf-8')).encode('utf-8')!=current:
+    product_backup=backup.with_suffix('.product.bak')
+    if product_backup.is_symlink() or not product_backup.is_file(): fail('Product template backup missing')
+    old_product=product_backup.read_bytes()
+    if (transform(old.decode('utf-8')).encode('utf-8')!=current
+        or product_template_patch(old_product.decode('utf-8')).encode('utf-8')!=PRODUCT_TEMPLATE.read_bytes()):
         fail('Storefront changed after release; refusing to overwrite newer edits')
     atomic(STORE,old)
-    print('MPW_THREE_PRODUCT_CATALOG_ROLLBACK='+json.dumps({'restored':True,'sha256':digest(old)},sort_keys=True))
+    atomic(PRODUCT_TEMPLATE,old_product)
+    print('MPW_THREE_PRODUCT_CATALOG_ROLLBACK='+json.dumps({'restored':True,'store_sha256':digest(old),'product_sha256':digest(old_product)},sort_keys=True))
 
 def selftest():
     s=START+'\n'+OLD_INTRO+'\n'+OLD_STATUS*2+'\n'+OLD_CHECKOUT*2+'\n'
     s+='\n'.join(OLD_BUY.values())+'\n'
-    s+='Buy website kit — secure ETH/TRX checkout ↗\n'
-    s+='id="atelier-original-vector-879"\n/store/product/72/checkout/\n'
+    s+='/store/product/72/checkout/\n'
     s+='id="mpw-sale-book72" id="mpw-sale-book225"\n'+END
     out=transform(s)
-    assert out.count('Buy securely with TRX ↗')==3
+    assert out.count('Buy securely with TRX ↗')==2
     assert 'ETH/TRX' not in out and 'ETH / TRX' not in out and 'mpw-crypto-buy' not in out
     try: transform(out)
     except RuntimeError: pass
