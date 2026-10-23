@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 APP=Path("/home/zomorod2/Saeit-staging")
 DOMAIN=Path("/home/zomorod2/mojplaywin.com")
@@ -66,6 +67,24 @@ def inspect():
         lines=[s for s in proc.stdout.decode("utf8","replace").splitlines()
                if "MPW_TRX_AUTORECONCILE_GUARDED_V1" in s]
         result["scheduled_worker_installed_once"]=len(lines)==1
+    # Confirm cron actually EXECUTED; a registered schedule alone proves little.
+    logfile=Path("/home/zomorod2/.local/share/mpw-trx-reconcile.log")
+    result["cron_recent_execution"]=False
+    result["last_worker_mode"]="NO_RECENT_LOG"
+    if logfile.is_file() and not logfile.is_symlink() and logfile.stat().st_size<2_000_000:
+        result["cron_recent_execution"]=bool(
+            0<=time.time()-logfile.stat().st_mtime<=240)
+        if result["cron_recent_execution"]:
+            for entry in reversed(logfile.read_text("utf8","replace").splitlines()[-30:]):
+                if entry.startswith("MPW_TRX_AUTORECONCILE="):
+                    try:
+                        report=json.loads(entry.split("=",1)[1])
+                        if isinstance(report,dict):
+                            mode=str(report.get("mode","UNKNOWN"))
+                            result["last_worker_mode"]=mode[:55]
+                    except (ValueError,TypeError):
+                        result["last_worker_mode"]="MALFORMED_WORKER_STATUS"
+                    break
     try:
         _commercial_db(settings,connection)
         result["release_gate_open"]=True
