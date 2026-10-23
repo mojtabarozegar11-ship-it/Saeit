@@ -38,7 +38,7 @@ jobs:
           with urlopen(Request('https://zomorodmelal.ir/', headers={'Cache-Control': 'no-cache', 'User-Agent': 'RamadanReadOnlyCardQA/1'}), timeout=40) as response:
               assert response.status == 200
               page = response.read(3500000)
-          match = re.search(rb'window\\.ZOMOROD_ORBIT_DATA=(\\{.*?\\});</script>', page, re.S)
+          match = re.search(rb'window[.]ZOMOROD_ORBIT_DATA=([{].*?[}]);</script>', page, re.S)
           assert match, 'Cannot locate live homepage manifest'
           rows = json.loads(match.group(1))['rows']
           row = next(item for item in rows if item.get('id') == 'ZM-R25')
