@@ -1,6 +1,8 @@
 /* CPU-friendly CSS3D presentation. Uses exactly the same solver and saved moves. */
 export function start(Core) {
   const $ = id => document.getElementById(id);
+  const Experience = window.NexusExperience;
+  Experience.boot();
   const fmt = n => new Intl.NumberFormat('fa-IR').format(n);
   const storeKey = 'zm-arrow-nexus-v1';
   let level = 1;
@@ -59,6 +61,7 @@ export function start(Core) {
     $('twistLeft').disabled = $('twistRight').disabled = state.twistsLeft === 0;
     $('undo').disabled = history.length === 0;
     $('hint').disabled = state.removed.length === puzzle.pieces.length;
+    Experience.update(level, puzzle, history);
     const faces = Core.FACE_NAMES.map(name => {
       const side = document.createElement('div');
       side.className = `nexus-css3d-face face-${name}`;
@@ -75,7 +78,7 @@ export function start(Core) {
         const active = Core.canExit(piece, state);
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = `nexus-css3d-arrow ${active ? 'ready' : piece.gate === 'phase' ? 'phase' : piece.gate === 'link' ? 'link' : 'blocked'}`;
+        button.className = `nexus-css3d-arrow ${active ? 'ready' : piece.gate === 'phase' ? 'phase' : piece.gate === 'link' ? 'link' : piece.gate === 'relay' ? 'relay' : piece.gate === 'charge' ? 'charge' : 'blocked'}`;
         button.style.left = `${(piece.u + 1.5) / 3 * 100}%`;
         button.style.top = `${(1.5 - piece.v) / 3 * 100}%`;
         button.style.setProperty('--direction', `${-90 * piece.dir}deg`);
@@ -97,6 +100,9 @@ export function start(Core) {
     best = Math.max(best, level + 1);
     persist();
     $('victory').classList.remove('hidden');
+    const award = Experience.complete(level, puzzle, history);
+    $('victoryDetail').textContent = 'امتیاز ' + fmt(award.score) + ' · ' +
+      '★'.repeat(award.stars) + '☆'.repeat(3 - award.stars) + ' · مسیر مرجع ' + fmt(award.reference) + ' حرکت';
     message('همه پیکان‌ها آزاد شدند!');
   }
   function preview(id) {
@@ -106,18 +112,22 @@ export function start(Core) {
     message(active ? 'این پیکان آزاد است؛ یک بار لمسش کن.' :
       piece.gate === 'link' && !state.removed.includes(piece.source) ? 'ابتدا پیکان پیوندی آبی را آزاد کن.' :
       piece.gate === 'phase' && state.phase !== piece.targetPhase ? 'برای دروازه طلایی، حلقه میانی را بچرخان.' :
+      piece.gate === 'relay' ? 'مدار دوگانه: دو پیکان منبع باید آزاد شوند.' :
+      piece.gate === 'charge' ? 'میدان رزونانس: حداقل سه پیکان را آزاد کن.' :
       'مسیر این پیکان مسدود است؛ پیکان جلویی را اول آزاد کن.');
   }
   function remove(id) {
-    if (!Core.canExit(id, state)) { preview(id); return; }
+    if (!Core.canExit(id, state)) { preview(id); Experience.action('locked', level, puzzle, history); return; }
     const next = Core.transition(state, { type: 'remove', id });
     if (!next) return;
     state = next;
     history.push({ type: 'remove', id });
     persist();
     render();
+    const bonus = Experience.action('remove', level, puzzle, history);
     if (state.removed.length === puzzle.pieces.length) won();
-    else message('پیکان آزاد شد؛ مکعب را بچرخان و مسیر بعدی را پیدا کن.');
+    else message(bonus.chain >= 3 ? 'رزونانس فعال! زنجیره ' + fmt(bonus.chain) + ' حرکت پشت سر هم.'
+      : 'پیکان آزاد شد؛ مکعب را بچرخان و مسیر بعدی را پیدا کن.');
   }
   function twist(step) {
     const next = Core.transition(state, { type: 'twist', step });
@@ -125,7 +135,9 @@ export function start(Core) {
     state = next;
     history.push({ type: 'twist', step });
     persist();
+    yaw += step * 12;
     render();
+    Experience.action('twist', level, puzzle, history);
     message(state.phase === 1 ? 'دروازه طلایی هم‌راستا شد!' : 'حلقه میانی چرخید؛ مسیرهای خروج عوض شدند.');
   }
   function reset(rewind = false) {
@@ -156,6 +168,7 @@ export function start(Core) {
     else preview(first.id);
   }
   frame.addEventListener('pointerdown', event => {
+    Experience.primeAudio();
     pointer = { x: event.clientX, y: event.clientY };
     dragged = false;
   });
