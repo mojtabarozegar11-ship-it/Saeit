@@ -46,7 +46,8 @@ class ClosedLoopTests(unittest.TestCase):
         self.assertEqual(labels, [
             "source_discovery", "source_validation", "design_and_prototype",
             "bilingual_manuscript", "technical_preflight", "source_specific_repair",
-            "candidate_rebuild", "strict_independent_qc1000"])
+            "source_grounded_reauthoring", "candidate_rebuild",
+            "strict_independent_qc1000", "v003_independent_mechanical_qc"])
         self.assertFalse(any("publish" in x for x in labels))
 
     def test_every_stage_runs_despite_an_earlier_failure(self):
@@ -63,10 +64,11 @@ class ClosedLoopTests(unittest.TestCase):
                 seen.append(Path(command[2]).name)
                 return SimpleNamespace(returncode=9 if len(seen) == 1 else 0)
             outcome = mod.run_tick(root, ops, workers=True, invoke=fake)
-            self.assertEqual(len(seen), 8)
+            self.assertEqual(len(seen), 10)
             self.assertEqual(outcome["worker_errors"], 1)
             self.assertEqual(outcome["stage_results"]["source_discovery"], "worker_exit_9")
             self.assertEqual(outcome["stage_results"]["strict_independent_qc1000"], "ok")
+            self.assertEqual(outcome["stage_results"]["v003_independent_mechanical_qc"], "ok")
             self.assertFalse(outcome["public_sites_modified"])
             persisted = json.loads((area / "stage-06/autonomous-closed-loop-status.json").read_text())
             self.assertEqual(persisted["worker_errors"], 1)
