@@ -97,6 +97,27 @@ class CommercialMariaDBTest(unittest.TestCase):
         self.assertEqual(settle_commercial_intent(pk,fixture.TX_HASH,self.pair()),"paid")
         PaymentWebhookEvent.objects.filter(payment_intent_id=pk).delete()
         self.assertFalse(commercial_buyer_status(pk,42)["can_download"])
+    def test_existing_paid_download_survives_emergency_pause_of_new_payments(self):
+        from django.test import RequestFactory
+        pk,_,_=self.reserve()
+        self.assertEqual(settle_commercial_intent(pk,fixture.TX_HASH,self.pair()),"paid")
+        req=RequestFactory().get(f"/commerce/trx-easy/download/{pk}/",
+                                 secure=True,HTTP_HOST="mojplaywin.com")
+        req.user=SimpleNamespace(pk=42,is_authenticated=True,is_active=True)
+        with patch.object(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False):
+            self.assertTrue(commercial_buyer_status(pk,42)["can_download"])
+            with open_commercial_paid_file(pk,42) as f:
+                self.assertTrue(f.read().startswith(b"PK"))
+            status=json.loads(_invoice_status(req,pk).content)
+            self.assertEqual(status["status"],"paid")
+            result=_download_paid(req,pk)
+            self.assertEqual(result.status_code,200)
+            result.close()
+            with self.assertRaises(PaymentHold):
+                reserve_commercial_intent(self.order_id,42,
+                    rate_provider=lambda:(Decimal("0.30"),fixture.NOW),
+                    configured_receiver=lambda:fixture.RECIPIENT,now=fixture.NOW)
+
     def test_wrong_owner_and_failed_finality_never_pay(self):
         pk,_,_=self.reserve()
         with self.assertRaises(PaymentHold):
