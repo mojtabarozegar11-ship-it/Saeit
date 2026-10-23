@@ -32,3 +32,14 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+## بازیابی فایل‌های کامل و منشأ مشتقات
+
+برای جلوگیری از استفاده از نسخه‌های ناقص فایل GLB، دو فایل کامل از نسخهٔ مشخص مخزن عمومی `cktang88/3d-fps` دریافت می‌شوند؛ این پروژه نیز مدل‌های اصلی BAMEN و Naudaff3D و تغییرات خود را مستند کرده است:
+
+- کد منشأ: https://github.com/cktang88/3d-fps/tree/130ac2a5c856401ec36e7d35afcfefe40c5801f4
+- سرباز: `public/assets/models/characters/soldier.glb` — 3,094,592 bytes — Git blob SHA-1 `b00ed33108f2579880c82cd27d10f9237ff3a219`.
+- M24 با اجزای نمای اول‌شخص: `public/assets/models/fp/m24.glb` — 1,247,684 bytes — Git blob SHA-1 `537d61b8a28f1cea048c048c1e6a29c27c02cb6e`.
+
+مدل‌ها در اجرای آزمون با `fetch_verified_models.sh` فقط پس از تطبیق شناسهٔ محتوا، طول فایل و ساختار GLB جایگزین می‌شوند. هیچ نشانی دانلود موقت یا کلید شخصی در مخزن نگهداری نمی‌شود. نام فایل‌ها برای سازگاری با بازی تغییر کرده است و حقوق سازندگان اصلی با همان مجوز CC BY 4.0 محفوظ است.
