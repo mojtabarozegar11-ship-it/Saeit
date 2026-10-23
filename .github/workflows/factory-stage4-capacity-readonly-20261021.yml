@@ -671,6 +671,72 @@ jobs:
               "budget_override":False,"commercial_approvals_changed":False},sort_keys=True))
           PY
           REMOTE
+      - name: Inspect bounded native worker capacity and validation backlog
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/stage4-readonly"
+          timeout 60s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/factory-runtime/django-app"
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+          "$HOME/factory-runtime/.venv/bin/python" -B - <<'PY'
+          import ast,collections,datetime,json,os,re
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.apps import apps
+          from django.utils import timezone
+          base=Path.home()/"factory-runtime"
+          loop=base/"operations/vps-only-loop.sh"
+          command=base/"django-app/core/management/commands/factory_staging_tick.py"
+          if not loop.is_file() or loop.is_symlink() or loop.stat().st_size>10000:
+              raise SystemExit("NATIVE_WORKER_LOOP_UNSAFE")
+          settings={}
+          for row in loop.read_text().splitlines():
+              if "factory_staging_tick" in row:
+                  for key in ("max-runs","max-steps"):
+                      match=re.search(r"--"+key+r"\s+([0-9]{1,4})\b",row)
+                      settings[key]=int(match.group(1)) if match else "not_literal"
+                  timeout=re.search(r"\btimeout\s+([0-9]{1,4})\b",row)
+                  settings["timeout_seconds"]=int(timeout.group(1)) if timeout else "not_literal"
+          defaults={}
+          if command.is_file() and not command.is_symlink() and command.stat().st_size<60000:
+              tree=ast.parse(command.read_text())
+              for node in ast.walk(tree):
+                  if isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute) and node.func.attr=="add_argument":
+                      flags=[v.value for v in node.args if isinstance(v,ast.Constant) and isinstance(v.value,str)]
+                      if not any(flag in {"--max-runs","--max-steps"} for flag in flags):continue
+                      arg=flags[0]
+                      values={k.arg:k.value.value for k in node.keywords if k.arg in {"default","type"} and isinstance(k.value,ast.Constant) and type(k.value.value) in (int,str)}
+                      defaults[arg]=values
+          Task=apps.get_model("core","AgentTask")
+          now=timezone.now()
+          counts=collections.Counter()
+          oldest={}
+          for status,action,created in Task.objects.filter(status__in=("queued","running","blocked")).values_list("status","action_type","created_at").iterator(chunk_size=300):
+              key=str(status)+":"+str(action)
+              counts[key]+=1
+              age=int((now-created).total_seconds()//60) if created else 0
+              oldest[key]=max(oldest.get(key,0),age)
+          recent=collections.Counter()
+          for status,action in Task.objects.filter(updated_at__gte=now-datetime.timedelta(minutes=30)).values_list("status","action_type").iterator(chunk_size=300):
+              recent[str(status)+":"+str(action)]+=1
+          mem_kb=None
+          mem=Path("/proc/meminfo")
+          if mem.is_file():
+              found=re.search(r"^MemAvailable:\s+(\d+)\s+kB",mem.read_text(),re.M)
+              if found:mem_kb=int(found.group(1))
+          print("STAGE4_NATIVE_WORKER_CAPACITY_READONLY="+json.dumps({
+              "schema":"saeit.factory.native-worker-capacity-readonly.v1",
+              "read_only":True,"utc":now.isoformat(),"loop_limits":settings,
+              "management_arg_defaults":defaults,"queued_running_blocked":dict(counts),
+              "oldest_age_minutes":oldest,"recent_task_changes_30m":dict(recent),
+              "available_ram_kb":mem_kb,"load_average":list(os.getloadavg()),
+              "approvals_modified":False,"budget_modified":False},sort_keys=True))
+          PY
+          REMOTE
       - name: Destroy runner SSH key material
         if: always()
         shell: bash
