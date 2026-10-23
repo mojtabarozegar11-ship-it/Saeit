@@ -1,0 +1,205 @@
+name: MojPlayWin five games and five distinct tools safe release
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'site_releases/mojplaywin/ten-lab-20261023/**'
+      - 'scripts/mpw_tenlab_safe_publish_20261023.py'
+      - 'tests/game/mpw-tenlab-browser.cjs'
+      - '.github/workflows/mpw-tenlab-release-20261023.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'site_releases/mojplaywin/ten-lab-20261023/**'
+      - 'scripts/mpw_tenlab_safe_publish_20261023.py'
+      - 'tests/game/mpw-tenlab-browser.cjs'
+      - '.github/workflows/mpw-tenlab-release-20261023.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mpw-tenlab-isolated-20261023
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build and statically validate ten distinct routes and apps
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile site_releases/mojplaywin/ten-lab-20261023/build.py scripts/mpw_tenlab_safe_publish_20261023.py
+          python3 site_releases/mojplaywin/ten-lab-20261023/build.py "$RUNNER_TEMP/tenlab-dist"
+          node --check "$RUNNER_TEMP/tenlab-dist/assets/arcade.js"
+          node --check "$RUNNER_TEMP/tenlab-dist/assets/workshop.js"
+          node --check tests/game/mpw-tenlab-browser.cjs
+          python3 - <<'PY'
+          import os,json
+          from pathlib import Path
+          from html.parser import HTMLParser
+          p=Path(os.environ['RUNNER_TEMP'])/'tenlab-dist'
+          manifest=json.loads((p/'release.json').read_text())
+          games=manifest['games'];tools=manifest['tools']
+          assert len(games)==len(tools)==5
+          slugs=[x['slug'] for x in games+tools]
+          assert len(set(slugs))==10
+          assert not set(slugs)&{'pulse-forge','beacon-labyrinth','cipher-garden','skyline-keeper','nebula-salvage','circuit-courier','crown-defender','air-supremacy'}
+          class Parse(HTMLParser):
+           def __init__(self):super().__init__();self.links=[];self.scripts=[]
+           def handle_starttag(self,t,a):
+            d=dict(a)
+            if t in ('link','script'):self.links.append(d.get('href') or d.get('src'))
+          for path in p.rglob('*.html'):
+           q=Parse();src=path.read_text('utf8');q.feed(src)
+           assert 'lang="en"' in src and 'MojPlayWin' in src
+           for name in q.links:
+            if not name or name.startswith(('http','/')):continue
+            assert (path.parent/name).resolve().is_file(),(path,name)
+          assert len(list(p.rglob('index.html')))==11
+          assert sum(1 for x in p.rglob('*.html'))==11
+          assert sum(1 for x in p.rglob('*.js'))==2
+          assert b'fetch(' not in (p/'assets/workshop.js').read_bytes()
+          assert b'XMLHttpRequest' not in (p/'assets/workshop.js').read_bytes()
+          print('TEN_ENGLISH_DISTINCT_ROUTES_AND_PRIVATE_TOOL_SOURCE=PASS')
+          PY
+      - name: Install isolated browser automation dependencies
+        run: |
+          set -euo pipefail
+          npm install --prefix /tmp/tenlab-qa --no-audit --no-fund playwright-core@1.56.0
+          google-chrome --version
+          nohup python3 -m http.server 8765 --bind 127.0.0.1 --directory "$RUNNER_TEMP/tenlab-dist" >/tmp/tenlab-http.log 2>&1 &
+          sleep 2
+          curl -fsS http://127.0.0.1:8765/index.html -o /dev/null
+      - name: Actual desktop and mobile game controls and tool output test
+        env:
+          NODE_PATH: /tmp/tenlab-qa/node_modules
+        run: |
+          timeout 130s node tests/game/mpw-tenlab-browser.cjs
+      - name: Create the exact validated static release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/tenlab-validated.tar.gz" -C "$RUNNER_TEMP/tenlab-dist" .
+          test "$(tar -tzf "$RUNNER_TEMP/tenlab-validated.tar.gz" | grep -Ec '/index.html$')" -eq 10
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mpw-tenlab-validated-payload
+          path: ${{ runner.temp }}/tenlab-validated.tar.gz
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mpw-tenlab-browser-proof
+          path: |
+            ${{ runner.temp }}/tenlab-*.png
+            /tmp/tenlab-http.log
+          if-no-files-found: ignore
+          retention-days: 3
+  publish:
+    needs: validate
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-mpw-tenlab-20261023]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: mpw-tenlab-validated-payload
+          path: ${{ runner.temp }}
+      - name: Read-only public preflight baseline
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          from pathlib import Path
+          import os,hashlib,json
+          orig={}
+          for path in ('/','/games/','/store/','/game-releases/20261021/index.html','/air-supremacy/'):
+           with urlopen(Request('https://mojplaywin.com'+path,headers={'Cache-Control':'no-cache'}),timeout=25) as r:
+            body=r.read(220000);assert r.status==200
+           orig[path]=hashlib.sha256(body).hexdigest()
+          Path(os.environ['RUNNER_TEMP']+'/tenlab-before.json').write_text(json.dumps(orig))
+          try:
+           with urlopen('https://mojplaywin.com/game-releases/20261023/',timeout=20):raise AssertionError('Release namespace already exists')
+          except HTTPError as e:
+           assert e.code==404
+          print('MPW_ENGLISH_SITE_PROTECTED_BASELINE_AND_EMPTY_ROUTE=PASS')
+          PY
+      - name: Establish host-pinned SSH bridge from GitHub to VPS to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Stage validated distribution in private cPanel directory
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.mpw-tenlab-stage-$GITHUB_RUN_ID"
+          timeout 50s ssh -T -F "$d/config" host "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage/payload'"
+          timeout 50s scp -q -F "$d/config" "$RUNNER_TEMP/tenlab-validated.tar.gz" "host:$stage/site.tgz"
+          timeout 50s scp -q -F "$d/config" scripts/mpw_tenlab_safe_publish_20261023.py "host:$stage/deploy.py"
+          timeout 60s ssh -T -F "$d/config" host "tar -xzf '$stage/site.tgz' -C '$stage/payload'"
+          timeout 45s ssh -T -F "$d/config" host "python3 '$stage/deploy.py' prepare '$GITHUB_RUN_ID' '$GITHUB_SHA'"
+      - name: Atomically add only new release, without touching original pages
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.mpw-tenlab-stage-$GITHUB_RUN_ID"
+          timeout 60s ssh -T -F "$d/config" host "python3 '$stage/deploy.py' publish '$GITHUB_RUN_ID' '$GITHUB_SHA' && python3 '$stage/deploy.py' verify '$GITHUB_RUN_ID' '$GITHUB_SHA'"
+      - name: Public verification for all ten URLs, runnable scripts and protected originals
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,hashlib,urllib.request,time
+          from pathlib import Path
+          root='https://mojplaywin.com'
+          base='/game-releases/20261023/'
+          pages=['index.html']
+          pages.extend(x+'/index.html' for x in ('windward-regatta','lexicon-sprint','grid-dominion','metro-vault','cargo-switchyard','invoice-craft','csv-workbench','image-slimmer','schema-builder','contrast-studio'))
+          for path in pages+['assets/arcade.js','assets/workshop.js','assets/theme.css','release.json']:
+           req=urllib.request.Request(root+base+path+'?rev='+os.environ['GITHUB_SHA'][:8],headers={'Cache-Control':'no-cache'})
+           with urllib.request.urlopen(req,timeout=25) as response:
+            body=response.read(200000)
+            assert response.status==200,(path,response.status)
+           if path.endswith('.html'):
+            assert b'<html lang="en">' in body and b'MojPlayWin' in body,path
+           if path=='release.json':
+            data=json.loads(body);assert len(data['games'])==len(data['tools'])==5
+           print('PUBLIC_TENLAB_OK',path)
+          orig=json.loads(Path(os.environ['RUNNER_TEMP']+'/tenlab-before.json').read_text())
+          for path,expected in orig.items():
+           with urllib.request.urlopen(urllib.request.Request(root+path,headers={'Cache-Control':'no-cache'}),timeout=25) as response:
+            body=response.read(220000)
+           assert hashlib.sha256(body).hexdigest()==expected,'protected original changed: '+path
+          print('FIVE_GAMES_FIVE_TOOLS_PUBLIC_AND_ORIGINAL_ROUTES_UNMODIFIED=PASS')
+          PY
+      - name: Roll back only the new namespace on verification failure
+        if: failure() && steps.stage.outcome == 'success'
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.mpw-tenlab-stage-$GITHUB_RUN_ID"
+          timeout 80s ssh -T -F "$d/config" host "test -f '$stage/deploy.py' && python3 '$stage/deploy.py' rollback '$GITHUB_RUN_ID' '$GITHUB_SHA'"
+      - name: Drop temporary SSH credentials but keep private release metadata
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
