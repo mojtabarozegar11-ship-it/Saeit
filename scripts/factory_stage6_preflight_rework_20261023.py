@@ -184,6 +184,26 @@ def preflight(area, name, lib, stage5):
     return created
 
 
+def fair_batch(area, names, batch, lib):
+    """Cycle through all orders, including after a blocked or already-reviewed prefix."""
+    cursor_path = area / "stage-06" / "round-robin-cursor.json"
+    if cursor_path.is_symlink():
+        raise RuntimeError("STAGE6_CURSOR_SYMLINK")
+    state = lib.read(cursor_path) if cursor_path.exists() else {
+        "schema": "saeit.factory.stage6.round-robin.v1", "next_index": 0}
+    if (state.get("schema") != "saeit.factory.stage6.round-robin.v1"
+            or type(state.get("next_index")) is not int
+            or state["next_index"] < 0):
+        raise RuntimeError("STAGE6_CURSOR_INVALID")
+    total = len(names)
+    start = state["next_index"] % total if total else 0
+    count = min(batch, total)
+    chosen = [names[(start + i) % total] for i in range(count)]
+    next_state = {"schema": "saeit.factory.stage6.round-robin.v1",
+                  "next_index": (start + count) % total if total else 0}
+    return chosen, cursor_path, next_state
+
+
 def execute(root, lib, stage5, batch=300):
     root = Path(root).expanduser().resolve()
     if not root.is_dir():
@@ -203,8 +223,9 @@ def execute(root, lib, stage5, batch=300):
             raise RuntimeError("STAGE6_UNSAFE_INBOX")
         names = sorted(p.name for p in queue.iterdir()
                        if p.is_file() and not p.is_symlink() and lib.NAME.fullmatch(p.name))
+        selected, cursor_path, next_state = fair_batch(area, names, batch, lib)
         created, blocked = 0, 0
-        for name in names[:batch]:
+        for name in selected:
             try:
                 created += int(preflight(area, name, lib, stage5))
             except (RuntimeError, ValueError, KeyError, TypeError, OSError, UnicodeError) as exc:
@@ -214,6 +235,7 @@ def execute(root, lib, stage5, batch=300):
                     "reason": type(exc).__name__ + ":" + str(exc)[:180],
                     "requires_evidence_repair": True, "stage7_authorized": False,
                     "quality1000_approved": False})
+        lib.atomic(cursor_path, next_state)
         result = {
             "stage6_inbox": len(names),
             "stage6_technical_preflights_created_this_tick": created,
