@@ -177,10 +177,25 @@ jobs:
           d="$RUNNER_TEMP/factory-store-preflight"
           source="$(base64 -w0 scripts/mpw_vps_warehouse_courier.py)"
           echo MPW_VPS_STOCK_EXPORT_START=PASS
-          timeout 360s ssh -T -F "$d/config" -o ServerAliveInterval=20 -o ServerAliveCountMax=3 saeit-vps \
-            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-export" \
-            > "$RUNNER_TEMP/mpw-factory-stock.tgz"
-          test -s "$RUNNER_TEMP/mpw-factory-stock.tgz"
+          # A prior verified transfer stalled on an intermittent SSH stream;
+          # retries touch only a temporary runner file, never the live store.
+          export_file="$RUNNER_TEMP/mpw-factory-stock.tgz"
+          transfer_ok=false
+          for attempt in 1 2; do
+            echo "MPW_VPS_STOCK_EXPORT_ATTEMPT=$attempt"
+            if timeout 360s ssh -T -F "$d/config" -o ServerAliveInterval=20 -o ServerAliveCountMax=3 saeit-vps \
+              "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-export" \
+              > "$export_file"; then
+              transfer_ok=true
+              break
+            fi
+            # A timed-out binary stream is incomplete and must NEVER be imported.
+            : > "$export_file"
+            echo "MPW_VPS_STOCK_EXPORT_INCOMPLETE_RETRY=$attempt"
+            sleep 4
+          done
+          test "$transfer_ok" = true
+          test -s "$export_file"
           size="$(stat -c %s "$RUNNER_TEMP/mpw-factory-stock.tgz")"
           test "$size" -le 115343360
           echo "MPW_FACTORY_ENCRYPTED_CHANNEL_EXPORT_BYTES=$size"
