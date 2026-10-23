@@ -51,7 +51,7 @@ class Stage5Proof(unittest.TestCase):
             body = (self.area / "stage-05/drafts" / relative).read_bytes()
             self.assertEqual(stage5.sha_bytes(body), manifest["manuscript_sha256"][loc])
             self.assertGreater(len(body.decode("utf-8").split()), 1000)
-            self.assertEqual(body.count(b"## "), 7)  # 5 instructional units + bibliography + review policy
+            self.assertEqual(sum(line.startswith("## ") for line in body.decode("utf-8").splitlines()), 7)
         self.assertIn("تمرین و کلید پاسخ", (self.area / "stage-05/drafts" / (self.name[:-5]) / "fa-IR.md").read_text())
 
     def test_rerun_idempotent_no_duplicate_approval(self):
