@@ -145,6 +145,33 @@ class ReadOnlyTronVerifierTests(unittest.TestCase):
             with self.subTest(payload=payload),self.assertRaises(PaymentHold):
                 query_solidified_head(SOURCE_A,transport=lambda *_:payload,now=now)
 
+    def test_realistic_large_solidified_head_stays_bounded_separately(self):
+        now=datetime.now(timezone.utc)
+        header={"block_header":{"raw_data":{"number":70000001,
+                "timestamp":int(now.timestamp()*1000)-15000}}}
+        body=json.dumps({**header,"transactions":"a"*500_000}).encode()
+        self.assertGreater(len(body),150_000)
+        class Response:
+            status=200
+            headers={"Content-Type":"application/json"}
+            def __init__(self,payload):self.payload=payload
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def read(self,limit):return self.payload[:limit]
+        class Opener:
+            def __init__(self,payload):self.payload=payload
+            def open(self,request,timeout):return Response(self.payload)
+        with patch("services.mpw_tron_independent_solidified_rpc.urllib.request.build_opener",
+                   return_value=Opener(body)):
+            self.assertEqual(query_solidified_head(SOURCE_A,now=now),70000001)
+            with self.assertRaises(PaymentHold):
+                _post(SOURCE_A,"/walletsolidity/gettransactionbyid",TX)
+        oversized=json.dumps({**header,"transactions":"a"*2_000_000}).encode()
+        with patch("services.mpw_tron_independent_solidified_rpc.urllib.request.build_opener",
+                   return_value=Opener(oversized)):
+            with self.assertRaises(PaymentHold):
+                query_solidified_head(SOURCE_A,now=now)
+
     def test_nodit_solidified_head_uses_get_and_x_api_key(self):
         provider=RpcProvider("nodit","Nodit","https://tron-mainnet.nodit.io","private-test-key","X-API-KEY")
         captures=[]
