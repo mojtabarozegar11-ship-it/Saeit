@@ -53,5 +53,6 @@ if __name__=="__main__":
     except Exception as exc:
         print("MPW_SHASTA_SIGNER_PREFLIGHT="+json.dumps({
             "status":"BLOCKED","reason_type":type(exc).__name__,
+            "reason":str(exc) if isinstance(exc,RuntimeError) else "private_preflight_failed",
             "private_key_exported":False},sort_keys=True))
         raise SystemExit(2)
