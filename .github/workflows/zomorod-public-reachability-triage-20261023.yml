@@ -1,0 +1,58 @@
+name: Zomorod public HTTPS reachability triage — read only
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-public-reachability-triage-20261023.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-agriculture-static
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Fingerprint pinned relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Compare external DNS and TCP from VPS with local cPanel origin
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          for node in vps host; do
+            echo "DIAGNOSTIC_NODE=$node"
+            timeout 80s ssh -T -F "$d/config" "$node" 'python3 -' <<'PY'
+          import socket,subprocess,hashlib
+          from pathlib import Path
+          host="zomorodmelal.ir"
+          try:
+              addresses=socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)
+              print("PUBLIC_DNS_RESOLVES",bool(addresses),"RECORDS",len(addresses))
+              for item in addresses[:2]:
+                  try:
+                      sock=socket.create_connection(item[4],timeout=5)
+                      print("PUBLIC_TCP_443",True);sock.close();break
+                  except OSError as e:print("PUBLIC_TCP_443",False,"ERROR_CLASS",type(e).__name__)
+          except Exception as e:print("PUBLIC_DNS_RESOLVES",False,"ERROR_CLASS",type(e).__name__)
+          for name,args in [
+              ("PUBLIC_HTTPS",["curl","-sS","-L","--connect-timeout","6","--max-time","10","-o","/dev/null","-w","%{http_code}","https://"+host+"/"]),
+              ("ORIGIN_LOCAL_HTTP",["curl","-sS","--connect-timeout","4","--max-time","8","-H","Host: "+host,"-o","/dev/null","-w","%{http_code}","http://127.0.0.1/"]),
+              ("ORIGIN_LOCAL_HTTPS",["curl","-sS","-L","--connect-timeout","4","--max-time","8","--resolve",host+":443:127.0.0.1","-o","/dev/null","-w","%{http_code}","https://"+host+"/"])]:
+              p=subprocess.run(args,capture_output=True,text=True,timeout=13)
+              print(name,"HTTP",p.stdout.strip(),"RC",p.returncode,"ERROR_TYPE",("timeout" if p.returncode==28 else "connection" if p.returncode==7 else "tls" if p.returncode in (35,60) else "none" if p.returncode==0 else "other"))
+          if Path.home().joinpath("public_html","index.html").is_file():
+              p=Path.home()/"public_html"/"index.html"
+              print("DOCROOT_ROOT_PRESENT",True,"SIZE",p.stat().st_size,"SHA_PREFIX",hashlib.sha256(p.read_bytes()).hexdigest()[:16])
+          PY
+          done
+      - name: Scrub SSH keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/farm-v4-ssh"
