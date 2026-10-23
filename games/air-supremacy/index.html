@@ -70,7 +70,7 @@ function loadProfile(){
 }
 const profile=loadProfile();
 let missionKills=0,missionGoal=MISSION_GOALS[1],missionBossNeeded=false,bossSpawned=false,bossCleared=true,creditsEarned=0,combatStreak=0,streakTimer=0;
-let audioOn=false,audioCtx=null,missionWon=false,missionNotified=false;
+let audioOn=false,audioCtx=null,missionWon=false,missionNotified=false,radarT=0;
 function persistProfile(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(profile))}catch{}}
 function upgradeCost(key){return profile.upgrades[key]>=MAX_UPGRADE?null:UPGRADE_COST[profile.upgrades[key]]}
 function refreshHangar(){
@@ -255,13 +255,37 @@ function evade(){
 }
 function simulate(dt){elapsed+=dt;missionT+=dt;fireT=Math.max(0,fireT-dt);player.inv=Math.max(0,player.inv-dt);dashT=Math.max(0,dashT-dt);let sx=(key.has('KeyD')||key.has('ArrowRight')?1:0)-(key.has('KeyA')||key.has('ArrowLeft')?1:0)+stick.x,sy=(key.has('KeyW')||key.has('ArrowUp')?1:0)-(key.has('KeyS')||key.has('ArrowDown')?1:0)-stick.y; sx=clamp(sx,-1,1);sy=clamp(sy,-1,1);player.vx=mix(player.vx,sx*37,clamp(dt*4.5,0,1));player.vy=mix(player.vy,sy*23,clamp(dt*4.5,0,1));player.x=clamp(player.x+player.vx*dt,-65,65);player.y=clamp(player.y+player.vy*dt,-10,24);player.roll=mix(player.roll,-sx*.40,clamp(dt*4,0,1));player.pitch=mix(player.pitch,sy*.16,clamp(dt*4,0,1));if(firing||key.has('Space'))shoot();
 let speed=94+mission*7;for(const w of world){w.z+=speed*dt;if(w.z>110){w.z-=1800;w.x=w.shape==='carrier'?rnd(-130,130):(Math.sign(w.x)||1)*rnd(140,285)}}
-spawnT-=dt;if(spawnT<=0&&enemies.length<12){spawnEnemy();spawnT=rnd(.9,1.6)*Math.max(.64,1-(mission-1)*.11)}
-for(let i=enemies.length-1;i>=0;i--){const e=enemies[i];e.z+=e.speed*dt*1.38;e.turn+=dt;e.x+=Math.sin(e.turn*(e.kind==='carrier'?.5:1.3))*dt*(e.kind==='carrier'?2.3:8);if(e.z>30){enemies.splice(i,1);if(e.kind!=='carrier'&&Math.abs(e.x-player.x)<10)hit();continue}if(e.z>-35&&e.z<10&&len(e.x-player.x,e.y-player.y,e.z)<13){hit();e.z=50;}
-e.shot-=dt;if(e.shot<=0&&e.z<-55&&e.z>-180&&Math.abs(e.x-player.x)<30){e.shot=rnd(2,4);if(Math.random()<.22)hit();}}
+spawnT-=dt;
+if(missionBossNeeded&&!bossSpawned&&missionKills>=missionGoal-1&&enemies.length<9)spawnEnemy(true);
+if(spawnT<=0&&enemies.length<(innerWidth<700?8:11)&&missionKills<missionGoal){
+ spawnEnemy();spawnT=rnd(.9,1.45)*Math.max(.65,1-(mission-1)*.025);
+}
+for(let i=enemies.length-1;i>=0;i--){const e=enemies[i];e.z+=e.speed*dt*1.38;e.turn+=dt;e.x+=Math.sin(e.turn*(e.kind==='carrier'?.5:1.3))*dt*(e.kind==='carrier'?2.3:8);if(e.z>30){enemies.splice(i,1);if(e.boss){bossSpawned=false}else if(Math.abs(e.x-player.x)<10)hit();continue}if(e.z>-35&&e.z<10&&len(e.x-player.x,e.y-player.y,e.z)<13){hit();e.z=50;}
+e.shot-=dt;if(e.shot<=0&&e.z<-55&&e.z>-180&&Math.abs(e.x-player.x)<30){e.shot=rnd(2,4);if(Math.random()<(profile.difficulty==='ace'?.19:.09))hit();}}
 for(let i=missiles.length-1;i>=0;i--){const m=missiles[i];m.life-=dt;if(m.kind==='guided'&&m.target&&enemies.includes(m.target)){let dx=m.target.x-m.x,dy=m.target.y-m.y,dz=m.target.z-m.z,d=Math.max(1,len(dx,dy,dz));m.x+=dx/d*m.speed*dt;m.y+=dy/d*m.speed*dt;m.z+=dz/d*m.speed*dt;if(d<13){m.target.hp-=5.6;blast(m.x,m.y,m.z,8,.8);if(m.target.hp<=0)kill(m.target);m.life=0}}else{m.z-=m.speed*dt}if(m.life<=0||m.z< -530)missiles.splice(i,1)}
 for(let i=sparks.length-1;i>=0;i--){const p=sparks[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;p.vy-=12*dt;p.life-=dt;if(p.life<=0)sparks.splice(i,1)}
-lockTarget=acquire();if(missionT>58){if(mission<3){mission++;missionT=0;ammo=Math.min(12,ammo+4);player.shield=Math.min(100,player.shield+30);toast('MISSION 0'+mission+' · '+['','ISLAND RUNWAY','CARRIER INTERCEPT','FINAL AIR SUPERIORITY'][mission]);}else finish(true)}if(toastT>0){toastT-=dt;if(toastT<=0)$('status').classList.remove('visible')}if(player.shield<100)player.shield=Math.min(100,player.shield+dt*2.5);camera[0]=mix(camera[0],player.x*.68,clamp(dt*2.2,0,1));camera[1]=mix(camera[1],player.y+9.8,clamp(dt*2.2,0,1));updateHud()}
-function updateHud(){$('hullFill').style.width=player.hp+'%';$('hullText').textContent=Math.round(player.hp);$('shieldFill').style.width=player.shield+'%';$('shieldText').textContent=Math.round(player.shield);$('kills').textContent=kills;$('missiles').textContent=ammo;$('missionNum').textContent=String(mission).padStart(2,'0');$('targetState').textContent=lockTarget?'ACQUIRED':'SEARCHING';$('targetLock').classList.toggle('on',!!lockTarget);const radar=$('radar');radar.querySelectorAll('i').forEach(i=>i.remove());for(const e of enemies.slice(0,14)){let p=document.createElement('i');p.style.left=clamp(50+(e.x-player.x)*.55,5,94)+'%';p.style.top=clamp(78+(e.z*.18),5,94)+'%';radar.append(p)}}
+lockTarget=acquire();if(missionT>=100){toast('OPERATION TIMED OUT');finish(false);return}if(toastT>0){toastT-=dt;if(toastT<=0)$('status').classList.remove('visible')}streakTimer=Math.max(0,streakTimer-dt);radarT=Math.max(0,radarT-dt);if(player.shield<100)player.shield=Math.min(100,player.shield+dt*(profile.difficulty==='ace'?1.5:2.6));camera[0]=mix(camera[0],player.x*.68,clamp(dt*2.2,0,1));camera[1]=mix(camera[1],player.y+9.8,clamp(dt*2.2,0,1));updateHud()}
+function updateHud(){
+ $('hullFill').style.width=player.hp+'%';$('hullText').textContent=Math.round(player.hp);
+ $('shieldFill').style.width=player.shield+'%';$('shieldText').textContent=Math.round(player.shield);
+ $('kills').textContent=kills;$('missiles').textContent=ammo;
+ $('missionNum').textContent=String(mission).padStart(2,'0');
+ $('targetState').textContent=lockTarget?'ACQUIRED':'SEARCHING';
+ $('targetLock').classList.toggle('on',!!lockTarget);
+ $('objectiveLabel').textContent='INTERCEPT '+missionKills+' / '+missionGoal
+   +(missionBossNeeded?(bossCleared?' · CAPITAL SHIP DOWN':' · CAPITAL SHIP ACTIVE'):'')
+   +' · '+Math.max(0,Math.ceil(100-missionT))+'s';
+ $('missionProgressFill').style.width=(Math.min(100,missionKills/missionGoal*100))+'%';
+ if(radarT>0)return;
+ radarT=.19;const radar=$('radar');radar.querySelectorAll('i').forEach(i=>i.remove());
+ for(const foe of enemies.slice(0,12)){
+   const dot=document.createElement('i');
+   dot.style.left=clamp(50+(foe.x-player.x)*.55,5,94)+'%';
+   dot.style.top=clamp(78+(foe.z*.18),5,94)+'%';
+   if(foe.boss){dot.style.width='9px';dot.style.height='9px';dot.style.background='#ffe38a'}
+   radar.append(dot);
+ }
+}
 
 // Reduced-detail 2.5D renderer used only when the browser blocks hardware WebGL.
 // Main gameplay and original third-person WebGL scene share the same simulation.
