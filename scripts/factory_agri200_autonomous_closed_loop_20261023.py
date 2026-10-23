@@ -119,6 +119,38 @@ def snapshot(area):
     }
 
 
+def missing_orders(area, folder, orders):
+    """Actual order coverage, not a misleading count of revision files."""
+    location = area / folder
+    if location.is_symlink() or not location.is_dir():
+        return list(orders)
+    present = {
+        item.name.split("--r", 1)[0]
+        for item in location.iterdir()
+        if item.is_file() and not item.is_symlink()
+        and NAME.fullmatch(item.name)
+    }
+    return [order for order in orders if order not in present]
+
+
+def previous_stalls(path):
+    """Read only our own prior status, bounded and fail-closed for symlinks."""
+    if path.is_symlink():
+        raise RuntimeError("AUTONOMOUS_STATUS_SYMLINK")
+    if not path.exists():
+        return 0
+    if not path.is_file() or path.stat().st_size > 200000:
+        raise RuntimeError("AUTONOMOUS_STATUS_INVALID")
+    try:
+        previous = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, UnicodeError, OSError):
+        return 0
+    if previous.get("schema") != SCHEMA:
+        return 0
+    count = previous.get("consecutive_no_progress_ticks", 0)
+    return min(9999, max(0, count)) if isinstance(count, int) else 0
+
+
 def worker_command(root, ops, label, filename, args):
     py = ops.parent.parent / ".venv/bin/python"
     script = ops / filename
@@ -203,13 +235,37 @@ def run_tick(root, ops, *, workers=True, invoke=None):
                     results[label] = "worker_error_" + type(exc).__name__
         after = snapshot(area)
         diffs = {key: after[key] - before[key] for key in before}
+        errors = sum(result != "ok" for result in results.values())
+        real_progress = any(increment > 0 for increment in diffs.values())
+        prior_stalls = previous_stalls(state / "autonomous-closed-loop-status.json") if workers else 0
+        consecutive_stalls = 0 if real_progress else prior_stalls + int(workers)
+        awaiting_sources = missing_orders(area, "stage-02/receipts", orders)
+        awaiting_revisions = missing_orders(area, "stage-05/source-grounded-v003-manifests", orders)
+        if not workers:
+            cycle_state = "read_only_inventory"
+        elif errors:
+            cycle_state = "worker_failure_retry"
+        elif real_progress:
+            cycle_state = "new_private_artifacts_verified"
+        elif consecutive_stalls >= 3:
+            cycle_state = "stalled_requires_source_or_review_recovery"
+        else:
+            cycle_state = "idle_no_new_artifacts_retry"
         report = {
             "schema": SCHEMA, "updated_utc": datetime.now(timezone.utc).isoformat(),
             "order_count": 200, "planned_bilingual_editions": 400,
             "stage_results": results, "before": before, "after": after,
             "new_artifacts_by_stage": diffs,
             "qc_feedback": qc_rework_facts(area),
-            "worker_errors": sum(result != "ok" for result in results.values()),
+            "worker_errors": errors,
+            "cycle_state": cycle_state,
+            "generated_new_artifacts": real_progress,
+            "consecutive_no_progress_ticks": consecutive_stalls,
+            "missing_stage2_orders": len(awaiting_sources),
+            "missing_stage2_order_ids_sample": awaiting_sources[:20],
+            "missing_v003_orders": len(awaiting_revisions),
+            "missing_v003_order_ids_sample": awaiting_revisions[:20],
+            "needs_independent_approval_before_sale": True,
             "next_cycle_policy": "VPS_LOCAL_EVERY_MINUTE_SKIP_IF_PREVIOUS_ACTIVE",
             "same_revision_retries_do_not_equal_new_products": True,
             "qc1000_approved_by_internal_workers": 0,
