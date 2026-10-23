@@ -6,6 +6,7 @@ on:
       - .github/workflows/mpw-tron-verifier-private-stage-20261022.yml
       - scripts/mpw_tron_public_dual_probe_readonly_20261023.py
       - services/mpw_tron_independent_solidified_rpc.py
+      - services/mpw_tron_readonly_deposit_candidates.py
       - scripts/mpw_shasta_gateway_chain_canary_20261022.py
       - scripts/mpw_gateway_stage_contract_probe_20261022.py
       - scripts/mpw_tron_origin_connectivity_readonly_20261023.py
@@ -23,7 +24,7 @@ jobs:
       - name: Validate module sources without executing payment actions
         run: |
           set -euo pipefail
-          python3 -B -m py_compile services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py scripts/mpw_tron_dual_provider_auth_readonly_20261022.py scripts/mpw_tron_public_dual_probe_readonly_20261023.py
+          python3 -B -m py_compile services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py services/mpw_tron_readonly_deposit_candidates.py services/mpw_tron_readonly_deposit_candidates.py scripts/mpw_tron_dual_provider_auth_readonly_20261022.py scripts/mpw_tron_public_dual_probe_readonly_20261023.py
       - name: Run mainnet verifier contract tests offline
         run: |
           set -euo pipefail
@@ -68,15 +69,15 @@ jobs:
           scratch="$(timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-vps "$remote")"
           case "$scratch" in /tmp/mpw-tron-readonly-*) ;; *) exit 3;; esac
           trap 'ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-vps "rm -rf -- $scratch" >/dev/null 2>&1 || true' EXIT
-          tar -cf - services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py scripts/mpw_tron_public_dual_probe_readonly_20261023.py scripts/mpw_shasta_gateway_chain_canary_20261022.py | timeout 55s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-vps "umask 077; tar -xf - -C $scratch --no-same-owner --no-same-permissions"
+          tar -cf - services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py services/mpw_tron_readonly_deposit_candidates.py scripts/mpw_tron_public_dual_probe_readonly_20261023.py scripts/mpw_shasta_gateway_chain_canary_20261022.py | timeout 55s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-vps "umask 077; tar -xf - -C $scratch --no-same-owner --no-same-permissions"
           timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-vps "cd $scratch && PYTHONPATH=. python3 -B scripts/mpw_tron_public_dual_probe_readonly_20261023.py"
           timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-vps "cd $scratch && PYTHONPATH=. python3 -B scripts/mpw_shasta_gateway_chain_canary_20261022.py"
       - name: Install verifier in isolated private directory only
         run: |
           set -euo pipefail
-          tar -cf - services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py | timeout 65s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'umask 077; mkdir -p /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022/services; tar -xf - -C /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022 --no-same-owner --no-same-permissions; chmod 700 /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022 /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022/services; chmod 600 /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022/services/*.py'
-          local_hash="$(sha256sum services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py | sha256sum | cut -d ' ' -f 1)"
-          remote_hash="$(timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'cd /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022 && sha256sum services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py | sha256sum | cut -d " " -f 1')"
+          tar -cf - services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py services/mpw_tron_readonly_deposit_candidates.py | timeout 65s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'umask 077; mkdir -p /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022/services; tar -xf - -C /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022 --no-same-owner --no-same-permissions; chmod 700 /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022 /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022/services; chmod 600 /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022/services/*.py'
+          local_hash="$(sha256sum services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py services/mpw_tron_readonly_deposit_candidates.py | sha256sum | cut -d ' ' -f 1)"
+          remote_hash="$(timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'cd /home/zomorod2/.local/share/mpw-tron-rpc-verifier-private-20261022 && sha256sum services/mpw_trx_walletless_core.py services/mpw_tron_independent_solidified_rpc.py services/mpw_tron_readonly_deposit_candidates.py | sha256sum | cut -d " " -f 1')"
           test "$local_hash" = "$remote_hash"
           echo "PRIVATE_TRON_VERIFIER_SHA256_MATCH=TRUE; CHECKOUT_CONFIG_UNCHANGED=TRUE"
       - name: Observe actual commercial checkout route and model readiness without modifying data
