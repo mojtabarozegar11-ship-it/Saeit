@@ -1,0 +1,74 @@
+name: Factory 200 agricultural orders one-pass safe advancement
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
+  pull_request:
+    paths:
+      - scripts/factory_agri200_onepass_dispatch_20261023.py
+      - tests/test_factory_agri200_onepass_dispatch_20261023.py
+      - .github/workflows/factory-agri200-onepass-dispatch-20261023.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_agri200_onepass_dispatch_20261023.py
+      - tests/test_factory_agri200_onepass_dispatch_20261023.py
+      - .github/workflows/factory-agri200-onepass-dispatch-20261023.yml
+permissions: {contents: read}
+concurrency:
+  group: factory-agri200-safe-dispatch
+  cancel-in-progress: false
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Check P0 dispatch identities, safeguards and syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_agri200_onepass_dispatch_20261023.py -v
+  bounded-vps-advancement:
+    needs: regression
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Advance validated P0 work and prove the delivery boundary
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          key_dir="$RUNNER_TEMP/agri200-identity"
+          install -d -m 700 "$key_dir"
+          trap 'rm -rf -- "$key_dir"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r", "").replace("\\n","\n").rstrip()+"\n",end="")' > "$key_dir/key"
+          chmod 600 "$key_dir/key"
+          ssh-keygen -y -P '' -f "$key_dir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$key_dir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$key_dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$key_dir/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$key_dir/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          ssh_vps 'test "$(id -un)" = githubops && test -x "$HOME/factory-runtime/.venv/bin/python" && test -f "$HOME/factory-runtime/private/autonomous-product-cycle/production-instructions/owner-agri200-p0-index.json" && echo AGRI200_VPS_ACCESS=PASS'
+          staging="/home/githubops/factory-runtime/operations/.agri200-onepass-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh_vps "umask 077; test ! -e '$staging'; install -d -m 700 '$staging'"
+          src=scripts/factory_agri200_onepass_dispatch_20261023.py
+          cat "$src" | ssh_vps "umask 077; cat > '$staging/dispatch.py'; chmod 600 '$staging/dispatch.py'"
+          digest="$(sha256sum "$src" | awk '{print $1}')"
+          ssh_vps "test \"\$(sha256sum '$staging/dispatch.py' | awk '{print \$1}')\" = '$digest'"
+          ssh_vps "timeout 710s /home/githubops/factory-runtime/.venv/bin/python -B '$staging/dispatch.py' --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --operations /home/githubops/factory-runtime/operations/production-instructions"
+      - name: Check main storefronts are responding (not a proof of delivery)
+        shell: bash
+        run: |
+          for site in https://zomorodmelal.ir/ https://mojplaywin.com/; do
+            result="$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "$site")" || result=000
+            echo "SITE_HTTP_STATUS=$site:$result"
+          done
