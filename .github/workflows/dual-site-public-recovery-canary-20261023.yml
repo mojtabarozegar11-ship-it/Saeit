@@ -33,7 +33,7 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s tests -p test_dual_site_public_recovery_canary_20261023.py -v
           python3 -m py_compile scripts/dual_site_public_recovery_canary_20261023.py
-      - name: Independently verify 21 named public pages and original release identity
+      - name: Independently verify 22 named public pages and original release identity
         if: github.event_name != 'pull_request'
         shell: bash
         run: |
