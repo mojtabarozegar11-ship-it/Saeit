@@ -5,6 +5,7 @@ Custom objectives never silently resolve to a fixed catalog kit. Plans are not
 production receipts. Unimplemented specialist executors remain explicit blockers.
 """
 import argparse
+from bisect import bisect_right
 from collections import Counter
 from datetime import date,timedelta
 import fcntl
@@ -33,6 +34,7 @@ CATALOG={'F18':'fieldwork_local_calculator_webapps','F19':'saas_launch_starter_2
  'F36':'fieldwork_tileable_materials_48','F37':'fieldwork_animated_motion_48',
  'F39':'fieldwork_original_audio_cues_48'}
 BATCH={'F20','F21','F22','F25','F28'}
+WINDOW_SCHEMA='saeit.factory.product-planning-window.v1'
 
 def load(name):
     p=HERE/(name+'.py')
@@ -64,6 +66,42 @@ def save(p,v):
         os.replace(tmp,p)
     finally:
         if os.path.exists(tmp):os.unlink(tmp)
+
+def planning_window(unique,legacy_aliases,area,limit=500):
+    """Persist a bounded, fair two-lane planning cursor over all requests.
+
+    Existing site/manufacturing orders retain at least 80% of a full page
+    when backlogged, while 20% remains available to other requests. The
+    selection changes only planning coverage, never QC or order state.
+    """
+    if type(limit) is not int or not 1<=limit<=500:raise ValueError('PLANNER_WINDOW_LIMIT')
+    path=Path(area)/'planning-window-cursor.json'
+    cursor={'schema':WINDOW_SCHEMA,'legacy':'','general':''}
+    if path.exists() or path.is_symlink():
+        if path.is_symlink() or path.stat().st_size>1024:raise ValueError('PLANNER_WINDOW_UNSAFE_CURSOR')
+        cursor=read(path)
+        if cursor.get('schema')!=WINDOW_SCHEMA or set(cursor)!={'schema','legacy','general'}:
+            raise ValueError('PLANNER_WINDOW_CURSOR_SCHEMA')
+        if any(not isinstance(cursor[x],str) or
+               (cursor[x] and not re.fullmatch('[a-f0-9]{64}',cursor[x]))
+               for x in ('legacy','general')):raise ValueError('PLANNER_WINDOW_CURSOR_INVALID')
+    legacy=sorted(k for k in unique if k in legacy_aliases)
+    general=sorted(k for k in unique if k not in legacy_aliases)
+    reserve=min(len(general),limit//5)
+    legacy_slots=min(len(legacy),limit-reserve)
+    general_slots=min(len(general),limit-legacy_slots)
+    legacy_slots=min(len(legacy),limit-general_slots)
+    def rotate(keys,last,n):
+        if not keys or not n:return []
+        start=bisect_right(keys,last)
+        return (keys[start:]+keys[:start])[:n]
+    chosen_legacy=rotate(legacy,cursor['legacy'],legacy_slots)
+    chosen_general=rotate(general,cursor['general'],general_slots)
+    next_cursor=dict(cursor)
+    if chosen_legacy:next_cursor['legacy']=chosen_legacy[-1]
+    if chosen_general:next_cursor['general']=chosen_general[-1]
+    selected=[(key,unique[key]) for key in chosen_legacy+chosen_general]
+    return selected,next_cursor,path
 
 def request(value,profiles):
     if not isinstance(value,dict):raise ValueError('PLANNER_OBJECT_REQUIRED')
@@ -324,7 +362,7 @@ def cycle(root,registry,dispatch=False,max_execute=1):
                 req=request(item,profiles);unique[digest(req)]=req
             except (ValueError,TypeError):rejected.append({'reason':'request_schema_or_scope_invalid'})
         rows=[];now=time.time();capacity=resources(root);holds=admissible(capacity)
-        selected=sorted(unique.items(),key=lambda item:(item[0] not in legacy_aliases,item[0]))[:500]
+        selected,next_cursor,cursor_path=planning_window(unique,legacy_aliases,area)
         for key,req in selected:
             plan=prepare(root,req,profiles[req['family_id']],routes);plan['source_orders']=legacy_aliases.get(key,[]);save(plans/(key+'.json'),plan)
             path=states/(key+'.json');prior=read(path) if path.exists() else {}
@@ -355,6 +393,9 @@ def cycle(root,registry,dispatch=False,max_execute=1):
           'status':'specialist_executor_must_be_implemented_and_validated'} for f in blocked_families]
         report={'schema':'saeit.factory.product-planning-dashboard.v1','registered_family_routes':40,
           'unique_product_plans':len(rows),'deferred_plan_count':max(0,len(unique)-len(rows)),'duplicate_intakes_suppressed':max(0,len(raw)-len(unique)-len(rejected)),
+          'total_distinct_requests':len(unique),'window_legacy_plans':sum(k in legacy_aliases for k,_ in selected),
+          'window_general_plans':sum(k not in legacy_aliases for k,_ in selected),
+          'window_cursor_advances':bool(dispatch and len(unique)>500),
           'existing_orders_scanned':legacy_scanned,'existing_order_plans':len(legacy_aliases),
           'verified_native_product_plans':sum(r['status']=='native_recipe_verified' for r in rows),
           'custom_product_executors_verified':0,'families_awaiting_specialist_executor':blocked_families,
@@ -363,9 +404,12 @@ def cycle(root,registry,dispatch=False,max_execute=1):
           'execution_limit':max_execute,'commercial_release':False,'observed_unix':now,
           'warning':'Forty engineering routes are planning coverage, not forty working product generators.'}
         save(area/'dashboard.json',report)
+        # Move the cursor only after all bounded plans and their state have
+        # been durably written. Read-only audits do not consume a work page.
+        if dispatch and len(unique)>500:save(cursor_path,next_cursor)
         return report
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--factory-private',required=True);p.add_argument('--registry',required=True);p.add_argument('--dispatch',action='store_true');p.add_argument('--max-execute',type=int,default=1)
     a=p.parse_args();r=cycle(a.factory_private,a.registry,a.dispatch,a.max_execute)
-    print('FACTORY_PER_PRODUCT_PLANNER='+json.dumps({k:r.get(k) for k in ('status','registered_family_routes','unique_product_plans','verified_native_product_plans','executions_this_tick','resource_holds')},sort_keys=True))
+    print('FACTORY_PER_PRODUCT_PLANNER='+json.dumps({k:r.get(k) for k in ('status','registered_family_routes','total_distinct_requests','unique_product_plans','deferred_plan_count','window_legacy_plans','window_general_plans','window_cursor_advances','verified_native_product_plans','executions_this_tick','resource_holds')},sort_keys=True))
