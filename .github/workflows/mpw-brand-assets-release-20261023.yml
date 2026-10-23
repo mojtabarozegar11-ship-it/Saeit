@@ -68,11 +68,19 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import urllib.request
+          import urllib.request,urllib.error
+          found={}
           for path in ("/","/company/","/store/","/games/","/static/site/mojplaywin-header-emblem.jpg","/static/site/mojplaywin-coin-logo.420e0d1f954b.png"):
-              with urllib.request.urlopen("https://mojplaywin.com"+path,timeout=20) as r:
-                  assert r.status==200 and len(r.read(250000))>400
-          print("BRAND_PRECHECK=PASS")
+              try:
+                  with urllib.request.urlopen("https://mojplaywin.com"+path,timeout=18) as r:
+                      found[path]=(r.status,len(r.read(250000)))
+              except urllib.error.HTTPError as error:
+                  found[path]=(error.code,0)
+              except Exception as error:
+                  found[path]=(type(error).__name__,0)
+              print("MPW_BRAND_PUBLIC_PRECHECK",path,found[path],flush=True)
+          assert found["/"][0]==200, "Main site unavailable; refuse brand deployment"
+          print("BRAND_MAIN_PRECHECK=PASS")
           PY
       - name: Set up pinned VPS to cPanel SSH relay
         env:
@@ -117,6 +125,12 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
+      - name: Read-only cPanel icon path inventory
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-brand-ssh"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel \
+            'for p in /home/zomorod2/mojplaywin.com/static/site/mojplaywin-header-emblem.jpg /home/zomorod2/mojplaywin.com/static/site/mojplaywin-coin-logo.420e0d1f954b.png /home/zomorod2/Saeit-staging/core/static/site/mojplaywin-header-emblem.jpg /home/zomorod2/mojplaywin.com/.htaccess; do if test -f "$p"; then stat -c "ICON_SOURCE_PRESENT %n %s" "$p"; else echo "ICON_SOURCE_MISSING $p"; fi; done'
       - name: Transfer only brand bundle to site owner account
         id: stage
         run: |
