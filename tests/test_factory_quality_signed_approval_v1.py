@@ -70,6 +70,99 @@ class SignedApprovalTests(unittest.TestCase):
         with patch.dict("os.environ",{"FACTORY_QA_TRUST_ROOT_SHA256":hashlib.sha256(trust.get("trusted_root_public_key_pem","").encode()).hexdigest()}):
             return mod.inspect_approval({"schema":mod.SCHEMA,"decision":decision,
                   "approvals":sigs},gate,build,cat,trust)
+    def make_delegated(self,d):
+        """Synthetic cryptographic authority; does not represent a real owner/expert."""
+        x=list(self.make(d))
+        root,_,_,decision,_,trust,sigs=x
+        del trust["reviewers"]["trusted_owner"]
+        sigs[:]=[v for v in sigs if v["role"]!="owner"]
+        agent_priv=root/"delegate.private.pem"
+        agent_pub=root/"delegate.public.pem"
+        subprocess.run(["openssl","genpkey","-algorithm","ED25519","-out",str(agent_priv)],
+                       check=True,capture_output=True)
+        with agent_pub.open("wb") as f:
+            subprocess.run(["openssl","pkey","-in",str(agent_priv),"-pubout"],
+                           check=True,stdout=f,stderr=subprocess.PIPE)
+        owner_priv=root/"authorized-owner-root.pem"
+        owner_pub=root/"authorized-owner-root.pub.pem"
+        from datetime import datetime,timedelta,timezone
+        now=datetime.now(timezone.utc)
+        grant={"schema":mod.DELEGATION_SCHEMA,"reviewer_id":"factory_agent_moj1",
+               "agent_public_key_sha256":hashlib.sha256(agent_pub.read_bytes()).hexdigest(),
+               "owner_root_public_key_sha256":hashlib.sha256(owner_pub.read_bytes()).hexdigest(),
+               "scope":mod.DELEGATION_SCOPE,"authorized_family_ids":["F14"],
+               "not_before_utc":(now-timedelta(minutes=1)).isoformat(),
+               "expires_at_utc":(now+timedelta(days=30)).isoformat()}
+        def signed_by(key,payload):
+            path=root/"payload.bin";sig=root/"sig.bin"
+            path.write_bytes(mod.canonical(payload))
+            subprocess.run(["openssl","pkeyutl","-sign","-rawin","-inkey",str(key),
+                            "-in",str(path),"-out",str(sig)],check=True,capture_output=True)
+            return sig.read_bytes().hex()
+        trust["reviewers"]["factory_agent_moj1"]={
+            "reviewer_id":"factory_agent_moj1",
+            "role":mod.DELEGATE_ROLE,
+            "public_key_pem":agent_pub.read_text(),
+            "identity_verification_evidence_sha256":"b"*64,
+            "externally_identity_verified":False,
+            "agent_identity_verified":True,"active":True,
+            "owner_delegation":grant,
+            "owner_delegation_signature_hex":signed_by(owner_priv,grant)}
+        trust["root_signature_hex"]=signed_by(owner_priv,{"schema":mod.KEY_SCHEMA,
+                                                           "reviewers":trust["reviewers"]})
+        sigs.append({"reviewer_id":"factory_agent_moj1","role":mod.DELEGATE_ROLE,
+                     "signature_hex":signed_by(agent_priv,decision)})
+        return x,owner_priv,signed_by
+
+    def test_real_root_signed_scoped_agent_may_replace_owner_signoff_but_not_experts(self):
+        with tempfile.TemporaryDirectory() as d:
+            x,_,_=self.make_delegated(d)
+            v=self.check(x)
+            self.assertTrue(v["eligible"],v["blocking_reasons"])
+            self.assertEqual(v["owner_authorization_kind"],"verified_delegated_agent")
+            self.assertTrue(v["agent_not_a_human_expert"])
+            self.assertEqual(len(v["valid_signed_roles"]),4)
+            self.assertFalse(v["publication_executed"])
+
+    def test_agent_with_correct_signature_but_wrong_product_scope_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            x,root_priv,sign=self.make_delegated(d)
+            grant=x[5]["reviewers"]["factory_agent_moj1"]["owner_delegation"]
+            grant["authorized_family_ids"]=["F28"]
+            x[5]["reviewers"]["factory_agent_moj1"]["owner_delegation_signature_hex"]=sign(root_priv,grant)
+            x[5]["root_signature_hex"]=sign(root_priv,{"schema":mod.KEY_SCHEMA,
+                                                        "reviewers":x[5]["reviewers"]})
+            self.assertIn("OWNER_AGENT_DELEGATION_SCOPE_VIOLATION",
+                          self.check(x)["blocking_reasons"])
+
+    def test_unsigned_agent_certificate_must_not_pass_root_registry(self):
+        with tempfile.TemporaryDirectory() as d:
+            x,root_priv,sign=self.make_delegated(d)
+            x[5]["reviewers"]["factory_agent_moj1"]["owner_delegation"]["scope"]="unrestricted"
+            x[5]["root_signature_hex"]=sign(root_priv,{"schema":mod.KEY_SCHEMA,
+                                                        "reviewers":x[5]["reviewers"]})
+            self.assertIn("TRUST_REGISTRY_INVALID",self.check(x)["blocking_reasons"])
+
+    def test_agent_never_replaces_one_of_three_independent_humans(self):
+        with tempfile.TemporaryDirectory() as d:
+            x,_,_=self.make_delegated(d)
+            x[6]=[sig for sig in x[6] if sig["role"]!="domain_specialist"]
+            self.assertIn("MISSING_INDEPENDENT_SIGNED_ROLE:domain_specialist",
+                          self.check(x)["blocking_reasons"])
+
+    def test_owner_agent_delegation_date_window_enforced(self):
+        with tempfile.TemporaryDirectory() as d:
+            x,owner_priv,sign=self.make_delegated(d)
+            from datetime import datetime,timedelta,timezone
+            grant=x[5]["reviewers"]["factory_agent_moj1"]["owner_delegation"]
+            now=datetime.now(timezone.utc)
+            grant["not_before_utc"]=(now-timedelta(days=4)).isoformat()
+            grant["expires_at_utc"]=(now-timedelta(days=2)).isoformat()
+            x[5]["reviewers"]["factory_agent_moj1"]["owner_delegation_signature_hex"]=sign(owner_priv,grant)
+            x[5]["root_signature_hex"]=sign(owner_priv,{"schema":mod.KEY_SCHEMA,
+                                                        "reviewers":x[5]["reviewers"]})
+            self.assertIn("TRUST_REGISTRY_INVALID",self.check(x)["blocking_reasons"])
+
     def test_truly_signed_multirole_exact_version_allows_clearance_only(self):
         with tempfile.TemporaryDirectory() as d:
             v=self.check(self.make(d))
@@ -78,6 +171,19 @@ class SignedApprovalTests(unittest.TestCase):
             self.assertEqual(len(v["valid_signed_roles"]),4)
             self.assertFalse(v["publication_executed"])
             self.assertFalse(v["payment_activated"])
+    def test_reused_private_key_cannot_impersonate_distinct_experts(self):
+        with tempfile.TemporaryDirectory() as d:
+            x=list(self.make(d))
+            x[5]["reviewers"]["trusted_owner"]["public_key_pem"]=x[5]["reviewers"]["trusted_domain_specialist"]["public_key_pem"]
+            payload=x[0]/"tampered-registry.bin";signature=x[0]/"tampered-registry.sig"
+            payload.write_bytes(mod.canonical({"schema":mod.KEY_SCHEMA,
+                                               "reviewers":x[5]["reviewers"]}))
+            subprocess.run(["openssl","pkeyutl","-sign","-rawin","-inkey",
+                            str(x[0]/"authorized-owner-root.pem"),"-in",str(payload),
+                            "-out",str(signature)],check=True,capture_output=True)
+            x[5]["root_signature_hex"]=signature.read_bytes().hex()
+            self.assertIn("TRUST_REGISTRY_INVALID",self.check(x)["blocking_reasons"])
+
     def test_no_registered_human_reviewer_cannot_self_approve(self):
         with tempfile.TemporaryDirectory() as d:
             x=list(self.make(d));x[5]={"schema":mod.KEY_SCHEMA,"reviewers":{}}

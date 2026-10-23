@@ -7,6 +7,7 @@ unresolved defects and unsigned approvals. Signing keys belong to genuinely
 authorized external reviewers and the owner, never the factory.
 """
 import argparse
+from datetime import datetime,timezone,timedelta
 import hashlib
 import json
 import os
@@ -18,6 +19,11 @@ import tempfile
 SCHEMA="saeit.factory.quality-1000-signed-approval.v1"
 KEY_SCHEMA="saeit.factory.trusted-reviewer-keys.v1"
 ROLES=("domain_specialist","independent_quality_auditor","rights_reviewer","owner")
+INDEPENDENT_ROLES=ROLES[:3]
+DELEGATE_ROLE="owner_delegate_agent"
+TRUST_ROLES=ROLES+(DELEGATE_ROLE,)
+DELEGATION_SCHEMA="saeit.factory.owner-agent-delegation.v1"
+DELEGATION_SCOPE="quality-owner-operational-signoff-only"
 HEX=re.compile(r"^[a-f0-9]{64}$")
 
 def canonical(value):
@@ -29,6 +35,34 @@ def digest(path):
         for block in iter(lambda:stream.read(1024*1024),b""):
             h.update(block)
     return h.hexdigest()
+
+def validate_agent_delegation(entry,root_pub,at=None):
+    """An owner-root signed, scoped, expiring grant; never a human identity."""
+    grant=entry.get("owner_delegation")
+    if not isinstance(grant,dict) or grant.get("schema")!=DELEGATION_SCHEMA:
+        raise ValueError("OWNER_DELEGATION_MISSING")
+    families=grant.get("authorized_family_ids")
+    if (grant.get("scope")!=DELEGATION_SCOPE
+            or grant.get("reviewer_id")!=entry.get("reviewer_id")
+            or grant.get("agent_public_key_sha256")!=hashlib.sha256(entry["public_key_pem"].encode()).hexdigest()
+            or grant.get("owner_root_public_key_sha256")!=hashlib.sha256(root_pub.encode()).hexdigest()
+            or not isinstance(families,list) or not 1<=len(families)<=49
+            or len(families)!=len(set(str(x) for x in families))
+            or any(not isinstance(x,str) or not re.fullmatch(r"F(?:0[1-9]|[1-3][0-9]|4[0-9])",x) for x in families)
+            or not verify_sig(root_pub,canonical(grant),entry.get("owner_delegation_signature_hex"))):
+        raise ValueError("OWNER_DELEGATION_UNTRUSTED")
+    try:
+        start=datetime.fromisoformat(grant["not_before_utc"])
+        end=datetime.fromisoformat(grant["expires_at_utc"])
+    except (KeyError,ValueError,TypeError):
+        raise ValueError("OWNER_DELEGATION_DATES_INVALID")
+    if (start.tzinfo is None or end.tzinfo is None or end<=start
+            or end-start>timedelta(days=90)):
+        raise ValueError("OWNER_DELEGATION_WINDOW_INVALID")
+    now=at or datetime.now(timezone.utc)
+    if not start<=now<=end:
+        raise ValueError("OWNER_DELEGATION_NOT_CURRENT")
+    return grant
 
 def validate_key_registry(config):
     """Only a root-signed registry anchored OUTSIDE that registry is trusted.
@@ -49,16 +83,28 @@ def validate_key_registry(config):
             or hashlib.sha256(root_pub.encode("utf-8")).hexdigest()!=pinned
             or not verify_sig(root_pub,canonical({"schema":KEY_SCHEMA,"reviewers":entries}),root_sig)):
         raise ValueError("UNVERIFIED_OR_UNPINNED_TRUST_REGISTRY")
+    seen_signing_keys=set()
     for name,entry in entries.items():
         if (not re.fullmatch(r"[a-zA-Z0-9_.-]{4,64}",name)
-            or not isinstance(entry,dict) or entry.get("role") not in ROLES
+            or not isinstance(entry,dict) or entry.get("role") not in TRUST_ROLES
             or not isinstance(entry.get("public_key_pem"),str)
             or "BEGIN PUBLIC KEY" not in entry["public_key_pem"]
-            or entry.get("externally_identity_verified") is not True
             or not isinstance(entry.get("identity_verification_evidence_sha256"),str)
             or not HEX.fullmatch(entry["identity_verification_evidence_sha256"])
             or entry.get("active") is not True):
             raise ValueError("UNTRUSTED_REVIEWER_IDENTITY")
+        key_fingerprint=hashlib.sha256(entry["public_key_pem"].encode()).hexdigest()
+        if key_fingerprint in seen_signing_keys or key_fingerprint==pinned:
+            raise ValueError("NON_INDEPENDENT_REVIEWER_SIGNING_KEY")
+        seen_signing_keys.add(key_fingerprint)
+        if entry["role"]==DELEGATE_ROLE:
+            if (entry.get("externally_identity_verified") is not False
+                    or entry.get("agent_identity_verified") is not True
+                    or entry.get("reviewer_id")!=name):
+                raise ValueError("OWNER_AGENT_MUST_NOT_IMPERSONATE_HUMAN")
+            validate_agent_delegation(entry,root_pub)
+        elif entry.get("externally_identity_verified") is not True:
+            raise ValueError("INDEPENDENT_HUMAN_IDENTITY_UNVERIFIED")
     return entries
 
 def verify_sig(key_pem,payload,signature_hex):
@@ -147,14 +193,24 @@ def inspect_approval(receipt, report, artifact_path, catalog_path, trust_config)
             defect("SIGNER_ROLE_MISMATCH");continue
         if not verify_sig(keys[signer]["public_key_pem"],payload,s.get("signature_hex")):
             defect("INVALID_APPROVAL_SIGNATURE");continue
+        if role==DELEGATE_ROLE:
+            grant=keys[signer]["owner_delegation"]
+            if data.get("family_id") not in grant["authorized_family_ids"]:
+                defect("OWNER_AGENT_DELEGATION_SCOPE_VIOLATION")
+                continue
         identities.add(signer);valid_roles.add(role)
-    for role in ROLES:
+    for role in INDEPENDENT_ROLES:
         if role not in valid_roles:defect("MISSING_INDEPENDENT_SIGNED_ROLE:"+role)
+    if not ({"owner",DELEGATE_ROLE} & valid_roles):
+        defect("MISSING_INDEPENDENT_SIGNED_ROLE:owner")
     return {
         "schema":"saeit.factory.signed-quality-clearance.v1",
         "artifact_sha256":build_hash,
         "catalog_sha256":catalog_hash,
-        "required_roles":list(ROLES),
+        "required_roles":list(INDEPENDENT_ROLES)+["owner OR "+DELEGATE_ROLE],
+        "owner_authorization_kind":("direct_owner" if "owner" in valid_roles else
+                                     "verified_delegated_agent" if DELEGATE_ROLE in valid_roles else "missing"),
+        "agent_not_a_human_expert":True,
         "valid_signed_roles":sorted(valid_roles),
         "verifiable_reviewer_count":len(identities),
         "verified_grade_total":1000 if not problems else None,

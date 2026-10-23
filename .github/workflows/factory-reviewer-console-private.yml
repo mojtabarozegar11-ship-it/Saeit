@@ -73,11 +73,29 @@ jobs:
                   assert source.is_file() and not source.is_symlink()
                   assert sha(source)==expected and not dest.is_symlink()
                   if dest.exists():
-                      assert dest.is_file() and sha(dest)==expected,"EXISTING_CONSOLE_VERSION_DRIFT"
-                  else:
-                      with dest.open("xb") as f:
+                      assert dest.is_file(),"EXISTING_CONSOLE_FILE_INVALID"
+                      old_hash=sha(dest)
+                      if old_hash!=expected:
+                          # Immutable, private backup of the previous reviewed executable.
+                          archives=workspace/"versioned-backups"/old_hash
+                          assert not archives.is_symlink()
+                          archives.mkdir(parents=True,mode=0o700,exist_ok=True)
+                          os.chmod(archives,0o700)
+                          backup=archives/target
+                          if not backup.exists():
+                              with backup.open("xb") as f:
+                                  f.write(dest.read_bytes());f.flush();os.fsync(f.fileno())
+                              os.chmod(backup,0o600)
+                          assert backup.is_file() and not backup.is_symlink() and sha(backup)==old_hash
+                  if not dest.exists() or sha(dest)!=expected:
+                      # Verify exact uploaded bytes before an atomic code-only replacement.
+                      staged=workspace/(".next-"+target+"-"+expected[:16])
+                      assert not staged.exists() and not staged.is_symlink()
+                      with staged.open("xb") as f:
                           f.write(source.read_bytes());f.flush();os.fsync(f.fileno())
-                      os.chmod(dest,0o600)
+                      os.chmod(staged,0o600)
+                      assert sha(staged)==expected
+                      os.replace(staged,dest)
                   assert sha(dest)==expected
           print("VPS_PRIVATE_REVIEWER_CONSOLE_INSTALLED=PASS")
           print("VPS_REVIEWER_CONSOLE_INSTALL_SHA256="+console_hash)
