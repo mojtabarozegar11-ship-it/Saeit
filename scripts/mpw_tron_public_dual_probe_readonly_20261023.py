@@ -8,8 +8,14 @@ No wallet, transfer amount, transaction ID, URL response, or auth detail is logg
 from __future__ import annotations
 from datetime import datetime, timezone
 import json
+import sys
+from pathlib import Path
 import urllib.error
 import urllib.request
+
+ROOT = Path(__file__).resolve().parents[1] if '__file__' in globals() else Path.cwd()
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from services.mpw_tron_independent_solidified_rpc import parse_solidified_native_trx
 
