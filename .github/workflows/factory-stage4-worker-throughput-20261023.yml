@@ -101,10 +101,18 @@ jobs:
             if kill -0 "$old" 2>/dev/null; then
               cmd="$(ps -p "$old" -o args= || true)"
               case "$cmd" in *vps-only-loop.sh*) :;; *) echo FACTORY_UNEXPECTED_PID_NO_CHANGE; exit 1;; esac
-              test "$(readlink "/proc/$old/fd/9" 2>/dev/null || true)" = "$ops/vps-only-launch-v2.lock" || {
-                echo FACTORY_LEGACY_LOCK_OWNERSHIP_UNPROVEN_NO_CHANGE
-                exit 1
-              }
+              inherited="$(readlink "/proc/$old/fd/9" 2>/dev/null || true)"
+              if test "$inherited" = "$ops/vps-only-launch-v2.lock"; then
+                echo FACTORY_LEGACY_FD9_LOCK_CONFIRMED
+              else
+                # The continuity recovery already started a healthy worker
+                # with FD9 closed. Acquire its free launch lock now.
+                flock -w 20 9 || {
+                  echo FACTORY_HEALTHY_LOOP_CONCURRENT_LAUNCH_LOCK_BUSY
+                  exit 1
+                }
+                echo FACTORY_HEALTHY_LOOP_LAUNCH_LOCK_HELD_FOR_UPGRADE
+              fi
               safe_window=0
               for i in $(seq 1 180); do
                 direct_child="$(ps --ppid "$old" -o comm= | tr '\n' ' ' || true)"
