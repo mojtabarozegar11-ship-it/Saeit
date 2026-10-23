@@ -4,6 +4,11 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/zomorod-p0-backlog-release.yml"
+  pull_request:
+    paths:
+      - ".github/workflows/zomorod-p0-backlog-release.yml"
+      - "scripts/zomorod_p0_backlog_release.py"
+      - "content/zomorod-p0-backlog/**"
   workflow_dispatch:
 permissions:
   contents: read
@@ -11,9 +16,34 @@ concurrency:
   group: zomorod-agriculture-static
   cancel-in-progress: false
 jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile publisher and run calculator tests without host access
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_p0_backlog_release.py
+          node content/zomorod-p0-backlog/test_tools.cjs
+          python3 - <<'PY'
+          from pathlib import Path
+          base=Path('content/zomorod-p0-backlog')
+          for slug in ['irrigation-need','seeding-rate','planting-planner','feed-dry-matter']:
+              html=(base/slug/'index.html').read_text(encoding='utf-8')
+              assert html.count('<details class="guide">')==50,(slug,'guides')
+              assert '<form' in html and 'dir="rtl"' in html
+              assert len(list((base/slug).glob('*.svg')))==1
+          print('P0_QUALITY_PRECHECK=PASS')
+          PY
   release:
+    needs: quality-check
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name != 'pull_request' &&
       (github.event_name == 'workflow_dispatch' ||
        contains(github.event.head_commit.message, '[approved-zm-p0-release-20261023]'))
     runs-on: ubuntu-latest
