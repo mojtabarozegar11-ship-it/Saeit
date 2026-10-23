@@ -1,0 +1,100 @@
+name: Read-only Zomorod About QA via VPS 20261023
+on:
+  push:
+    branches: [zomorod/about-science-evidence-20261023]
+    paths: [.github/workflows/zomorod-about-qa-vps-20261023.yml]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/zomorod-about-qa-relay"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          chmod 600 "$d/vps.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Audit served HTML, public section links and mobile capability on VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-about-qa-relay"
+          ssh -T -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          from html.parser import HTMLParser
+          from urllib.request import urlopen, Request
+          from urllib.parse import urljoin
+          import importlib.util
+          import shutil
+          import re
+          class AboutParser(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.collect=False; self.links=[]; self.styles=[]; self.instyle=False
+              def handle_starttag(self, tag, attrs):
+                  d=dict(attrs)
+                  if tag=='details' and d.get('id')=='zm-about-research-evidence-20261023': self.collect=True
+                  if self.collect and tag=='a': self.links.append(d.get('href',''))
+                  if tag=='style': self.instyle=True
+              def handle_endtag(self, tag):
+                  if tag=='details' and self.collect: self.collect=False
+                  if tag=='style': self.instyle=False
+              def handle_data(self, value):
+                  if self.instyle: self.styles.append(value)
+          site='https://zomorodmelal.ir'
+          try:
+              req=Request(site+'/about/?qa=20261023',headers={'User-Agent':'ZomorodMelal-QA/1.0'})
+              with urlopen(req,timeout=25) as res:
+                  status=res.status; html=res.read().decode('utf-8','replace')
+              print('PUBLIC_STATUS',status,'BYTES',len(html.encode()))
+              print('PANEL_FOUND', 'zm-about-research-evidence-20261023' in html)
+              print('VIEWPORT_META',bool(re.search(r'<meta[^>]*name="viewport"[^>]*width=device-width',html)))
+              p=AboutParser();p.feed(html)
+              css=' '.join(p.styles)
+              print('MOBILE_MEDIA_BREAKPOINT',bool(re.search(r'@media\s*\(max-width:\s*700px\)',css)))
+              print('MOBILE_CARDS_SINGLE_COLUMN',bool(re.search(r'\.cards\s*\{\s*grid-template-columns\s*:\s*1fr',css)))
+              for href in sorted(set(p.links)):
+                  if not href.startswith('/'): continue
+                  try:
+                      req=Request(urljoin(site,href),headers={'User-Agent':'ZomorodMelal-QA/1.0'})
+                      with urlopen(req,timeout=20) as x: code=x.status
+                  except Exception as e:
+                      code='ERR:'+type(e).__name__+':'+str(getattr(e,'code',''))
+                  print('PANEL_LINK',href,code)
+          except Exception as e: print('PUBLIC_FETCH_ERROR',type(e).__name__,str(e)[:150])
+          for program in ('chromium','chromium-browser','google-chrome','firefox','node'):
+              print('BINARY',program, bool(shutil.which(program)))
+          for module in ('playwright','selenium'):
+              print('PY_MODULE',module,bool(importlib.util.find_spec(module)))
+          PY
+      - name: Clear ephemeral SSH key
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zomorod-about-qa-relay"
+          test ! -f "$d/vps.key" || shred -u "$d/vps.key"
