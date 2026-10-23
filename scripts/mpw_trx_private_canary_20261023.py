@@ -117,6 +117,11 @@ def _expected_sender():
         raise PaymentHold("Invalid trusted merchant canary sender address") from exc
     return sender
 
+def require_independent_sender(receiver, sender):
+    if receiver == sender:
+        raise PaymentHold("Mainnet merchant canary cannot be a self-transfer")
+
+
 def _private_receipt_dir():
     if RECEIPTS.is_symlink():
         raise PaymentHold("Unsafe private canary receipt directory")
@@ -223,6 +228,7 @@ def issue():
         PROVIDER, WAITING, _decode, reserve_commercial_intent,
     )
     from services.mpw_trx_commercial_web import _configured_receiver, _rate_provider
+    require_independent_sender(_configured_receiver(), expected_sender)
     price, asset_sha, size = _validate_buyer_product(buyer_id, product_id)
     written = None
     try:
@@ -305,6 +311,7 @@ def verify(invoice_id):
         raise PaymentHold("Canary receipt not owned by the designated merchant buyer")
     intent = PaymentIntent.objects.select_related("order").get(pk=invoice_id, provider=PROVIDER)
     invoice = _decode(intent)
+    require_independent_sender(invoice.recipient, expected_sender)
     if (invoice.customer_id != buyer_id
             or invoice.recipient != record.get("recipient")
             or invoice.amount_sun != record.get("amount_sun")
@@ -379,7 +386,14 @@ def inventory():
                     candidates.append(product.pk)
         except (OSError, ValueError, PaymentHold):
             continue
+    # The registered Trust Wallet is public, but compare against the live
+    # cPanel receiver on-server without printing the receiver or any credentials.
+    sender_is_receiver = None
+    if os.environ.get("MPW_TRX_CANARY_EXPECTED_SENDER"):
+        from services.mpw_trx_commercial_web import _configured_receiver
+        sender_is_receiver = _configured_receiver() == _expected_sender()
     return {"status": "PRIVATE_CANARY_READONLY_INVENTORY",
+            "registered_sender_is_live_receiver": sender_is_receiver,
             "eligible_micro_sku_ids": candidates[:10],
             "eligible_micro_sku_count_capped": len(candidates),
             "active_staff_account_count": staff,
