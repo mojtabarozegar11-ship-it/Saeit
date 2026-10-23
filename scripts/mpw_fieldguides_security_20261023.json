@@ -1,0 +1,105 @@
+{
+  "category": "Security",
+  "articles": [
+    [
+      "full-match-level-codes",
+      "Reject near-matching level codes before they enter a game",
+      "Security",
+      "A level-code parser can accidentally accept a prefix of malicious or malformed input if its regular expression does not match the full string.",
+      "Define a bounded grammar, normalize consistently and use full-string matching. Reject leading spaces, embedded newlines and extra suffixes unless the grammar explicitly permits them.",
+      "For the format L- followed by three digits, accept L-007 but reject L-007-extra, empty input and a thousand-character copy-paste.",
+      "Blindly stripping invalid characters may silently transform a different code into a valid one. Test exact, near-valid and oversized cases with safe error display.",
+      "INPUT,CSP"
+    ],
+    [
+      "content-type-and-decoder",
+      "Reject renamed HTML files masquerading as image uploads",
+      "Security",
+      "An attacker can supply an HTML payload named picture.png and forge its Content-Type. An extension and MIME header are untrusted claims.",
+      "Allowlist file extensions, inspect magic bytes and validate using an actual image decoder under bounded dimensions and memory. Re-encode when appropriate.",
+      "A claimed image/png beginning with HTML must fail before it reaches any public path. A valid PNG header with broken payload should also be rejected.",
+      "File signatures are not complete safety guarantees. Test malformed formats, polyglot inputs, decompression bombs and oversized dimensions.",
+      "UPLOAD,INPUT"
+    ],
+    [
+      "csp-migration",
+      "Introduce strict Content Security Policy without breaking paid storefronts",
+      "Security",
+      "A legacy site has inline scripts and payment buttons that may fail under a newly enforced CSP, creating a business outage.",
+      "Start in report-only mode, inventory owners and inline handlers, migrate to controlled nonces or hashes, then test before enforcement. Keep a documented rollback.",
+      "An isolated trial with a nonce-based script policy reveals each blocked listener while existing checkout remains protected by the current safe policy.",
+      "Adding unsafe-inline solely to silence errors weakens XSS defenses. Test real critical flows and independent subdomains before deploying a stricter policy.",
+      "CSP,INPUT"
+    ],
+    [
+      "safe-player-names",
+      "Render user-supplied player names as text, never executable markup",
+      "Security",
+      "A leaderboard that writes a nickname into innerHTML can interpret tags and event handlers supplied by a player.",
+      "Use textContent for untrusted values and create trusted elements through DOM APIs. Validate length and display normalization before storing any nickname.",
+      "A name containing <img> must appear literally as text, not create an image or attempt script execution after reload.",
+      "Client-side validation can be bypassed by directly calling a server endpoint. Verify server-side constraints and all later rendering contexts.",
+      "INPUT,CSP"
+    ],
+    [
+      "local-progress-trust",
+      "Distinguish local progress convenience from real purchase entitlement",
+      "Security",
+      "Browser localStorage is writable by the user and may be cleared automatically in private browsing. It is suitable for game progress but not for charging customers.",
+      "Validate persisted objects, clamp unlocked stages to documented bounds and catch storage exceptions. Keep paid downloads behind independent server-side authorization.",
+      "If a stored level changes from 8 to 999999, the game must clamp or reset safely. Editing a flag must not unlock a paid file.",
+      "A browser-side 'paid=true' value is never reliable proof of payment. Test spoofed storage, quota failures and browser data clearing.",
+      "STORE,INPUT"
+    ],
+    [
+      "atomic-versioned-publish",
+      "Avoid partial customer-facing releases during bulk uploads",
+      "Security",
+      "Publishing an HTML page before its linked scripts and assets creates a broken public interval and makes rollback uncertain.",
+      "Upload complete files to private same-filesystem staging, validate owner and file hashes, then atomically rename into a previously absent versioned public directory.",
+      "With release R1, users see either no R1 or the complete R1 directory; never publish R1 index while its game file is still being copied.",
+      "Directory rename is not atomic across filesystems, and shared hosts require symlink checks. Simulate interruption halfway through staging.",
+      "UPLOAD,CSP"
+    ],
+    [
+      "rollback-sha-verification",
+      "Prevent old deployment rollback from overwriting new improvements",
+      "Security",
+      "After deployment A completes, another authorized workflow might change the same file. A blind rollback from A would destroy newer work.",
+      "Save the exact pre- and post-install SHA-256 values and only restore while current bytes still match A's deployed digest.",
+      "If A wrote hash X and B subsequently wrote hash Y, A must refuse a rollback rather than replacing B's version with its old snapshot.",
+      "Timestamps alone cannot prove file identity. Test competing changes and require a clear mismatch error without mutation.",
+      "INPUT,CSP"
+    ],
+    [
+      "public-manifest-evidence",
+      "Prove a publicly served game matches its release manifest",
+      "Security",
+      "A green workflow is not evidence that visitors see the correct bytes; caching or a wrong document root can serve old files.",
+      "Include release ID, expected paths, digest values and commit SHA in a manifest. Verify each public URL externally and test interactive behavior in Chrome.",
+      "Compare the served game's SHA against its release record and confirm a browser test marker appears in the rendered result.",
+      "Checking only repository contents can miss a blocked cPanel transfer. Maintain per-file results with HTTP status and browser evidence.",
+      "UPLOAD,SEO"
+    ],
+    [
+      "cache-release-boundaries",
+      "Prevent mixed HTML and JavaScript versions after a site update",
+      "Security",
+      "Old cached JavaScript combined with fresh HTML can create broken game states and impossible reproduction steps.",
+      "Use immutable versioned asset filenames and a controlled entry HTML refresh strategy. Bind application state schema to explicit release versions.",
+      "When logic changes, publish app.abcd1234.js and let the new index reference that filename; do not silently replace a shared cached file.",
+      "Aggressive service-worker caching can pin old HTML indefinitely. Test warm and cold clients and service-worker activation logic.",
+      "SW,CSP"
+    ],
+    [
+      "paid-delivery-boundary",
+      "Keep free play previews separate from purchase authorization",
+      "Security",
+      "A free browser-game preview and a paid download might share a page, tempting developers to gate downloads with JavaScript booleans.",
+      "Let previews run publicly, but require payment verification, order ownership and server-side entitlement before sending a purchased file.",
+      "Editing localStorage from paid=false to paid=true must not let a visitor download an order they did not purchase.",
+      "A success animation after sending a wallet transaction is not verified settlement. Test replay attacks, failed purchases and refunded orders in a nonproduction environment.",
+      "INPUT,CSP"
+    ]
+  ]
+}
