@@ -169,7 +169,7 @@ jobs:
           chmod 600 "$d/config"
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
-          mv "$d/host.candidate" "$d/host.known"
+          mv "$d/host.candidate" "$d/cpanel.known"
       - name: Stage privately and atomically deploy only new static directory
         id: install
         shell: bash
