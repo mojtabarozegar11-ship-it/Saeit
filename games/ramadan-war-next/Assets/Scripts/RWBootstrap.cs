@@ -30,7 +30,8 @@ namespace RamadanWar.Next
 
         private static Material Material(Color color, float metallic = 0f)
         {
-            var shader = Shader.Find("Universal Render Pipeline/Lit");
+            var shader = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline != null
+                ? Shader.Find("Universal Render Pipeline/Lit") : Shader.Find("Standard");
             if (shader == null) shader = Shader.Find("Standard");
             if (shader == null) shader = Shader.Find("Unlit/Color");
             var material = new Material(shader);
