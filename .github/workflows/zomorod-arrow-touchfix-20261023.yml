@@ -1,0 +1,89 @@
+name: Zomorod Arrow Escape — reliable touch fix
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/zomorod-arrow-touchfix-20261023.yml'
+      - 'games/arrow-escape/**'
+permissions:
+  contents: read
+concurrency:
+  group: zm-arrow-touchfix-20261023
+  cancel-in-progress: false
+jobs:
+  repair:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-zm-arrow-touchfix-20261023]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check proposed game repair
+        run: |
+          set -euo pipefail
+          python3 -m py_compile games/arrow-escape/deploy_touchfix.py
+          node --check games/arrow-escape/app.js
+          node --check games/arrow-escape/engine.js
+          node --check games/arrow-escape/cube-engine.js
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('games/arrow-escape')
+          html=(p/'index.html').read_text('utf-8')
+          assert 'cube3d-touchfix-20261023-1' in html
+          assert 'id="hintMoveButton"' in html
+          assert 'arrow-hit-point' in (p/'app.js').read_text('utf-8')
+          PY
+      - name: Connect existing SSH relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Snapshot cPanel game files and check concurrency guards
+        id: stage
+        run: |
+          set -euo pipefail
+          relay="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-arrow-touchfix-$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$relay/config" host "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage/incoming'"
+          for file in index.html app.js style.css deploy_touchfix.py; do
+            timeout 60s scp -q -F "$relay/config" "games/arrow-escape/$file" "host:$stage/incoming/$file"
+          done
+          timeout 60s ssh -T -F "$relay/config" host "python3 '$stage/incoming/deploy_touchfix.py' prepare '$GITHUB_RUN_ID'"
+      - name: Publish only repaired game assets
+        run: |
+          set -euo pipefail
+          relay="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-arrow-touchfix-$GITHUB_RUN_ID"
+          timeout 90s ssh -T -F "$relay/config" host "python3 '$stage/incoming/deploy_touchfix.py' publish '$GITHUB_RUN_ID'"
+          timeout 60s ssh -T -F "$relay/config" host "python3 '$stage/incoming/deploy_touchfix.py' verify '$GITHUB_RUN_ID'"
+      - name: Verify public game assets over HTTP
+        run: |
+          python3 - <<'PY'
+          import time
+          from urllib.request import Request, urlopen
+          base='https://zomorodmelal.ir/arrow-escape/'
+          def get(name):
+              with urlopen(Request(base+name,headers={'Cache-Control':'no-cache','User-Agent':'ArrowTouchFixQA/1'}),timeout=45) as r:
+                  assert r.status==200,name
+                  return r.read(3500000)
+          for attempt in range(12):
+              html=get('?touchfix='+str(time.time_ns()))
+              if b'cube3d-touchfix-20261023-1' in html: break
+              time.sleep(2)
+          else: raise AssertionError('new public game HTML not visible')
+          assert b'id="hintMoveButton"' in html
+          assert b'arrow-hit-point' in get('app.js?v=cube3d-touchfix-20261023-1')
+          assert b'arrow-hit-point' in get('style.css?v=cube3d-touchfix-20261023-1')
+          assert b'ArrowCubeCore' in get('cube-engine.js?v=cube3d-touchfix-20261023-1')
+          print('ARROW_TOUCH_LIVE_ASSETS=PASS')
+          PY
+      - name: Restore original game files if verification fails
+        if: failure() && steps.stage.outcome == 'success'
+        run: |
+          set -euo pipefail
+          relay="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-arrow-touchfix-$GITHUB_RUN_ID"
+          timeout 75s ssh -T -F "$relay/config" host "python3 '$stage/incoming/deploy_touchfix.py' rollback '$GITHUB_RUN_ID'"

@@ -41,6 +41,8 @@ h1 em{font-style:normal;color:#ac894a}
 .action-button.hint{background:#f7eed9;border-color:#eadab7;color:#8d6b2d}
 .action-button span{font-size:18px}.action-button.icon-button{flex:0 0 51px;font-size:20px}
 .action-button[aria-pressed="false"]{color:#9ea8a2}
+.action-button[hidden]{display:none!important}
+.assist-action{background:#174b3a!important;border-color:#174b3a!important;color:white!important}
 .below-game{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:22px 0}
 .stat{display:flex;flex-direction:column;align-items:center;justify-content:center;background:#ffffffaa;border:1px solid #dfe7dd;min-height:94px;border-radius:18px}
 .stat b{font-family:Arial,sans-serif;font-size:24px;color:#264a3d}.stat span{font-size:11px;color:#718678;margin-top:8px;font-weight:700}
@@ -88,9 +90,10 @@ footer a{color:#587565}
 .surface-grain{position:absolute;inset:0;pointer-events:none;opacity:.42;background-image:radial-gradient(#60776b20 1px,transparent 1px);background-size:19px 19px}
 .face-arrows{position:absolute;inset:4%;width:92%;height:92%;overflow:visible;touch-action:none;pointer-events:auto}
 .cube-arrow{cursor:pointer;transform-origin:center;transform-box:fill-box}
-.arrow-touch{fill:none;stroke:transparent;stroke-width:.72;stroke-linecap:round;stroke-linejoin:round;pointer-events:stroke}
+.arrow-touch{fill:none;stroke:transparent;stroke-width:1.03;stroke-linecap:round;stroke-linejoin:round;pointer-events:stroke}
 .arrow-stroke{fill:none;stroke:#273b36;stroke-width:.22;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;filter:drop-shadow(.035px .06px .03px #10271b22)}
 .arrow-head{fill:#253b35;stroke:#f5f5eb;stroke-width:.018;pointer-events:visiblePainted}
+.arrow-hit-point{fill:transparent;stroke:none;pointer-events:all}
 .cube-arrow.hinted .arrow-stroke{stroke:#b58c37;stroke-width:.30;filter:drop-shadow(0 0 .11px #e5b850)}
 .cube-arrow.hinted .arrow-head{fill:#b58c37}
 .cube-arrow.blocked .arrow-stroke,.cube-arrow.blocked .arrow-head{stroke:#db574f;fill:#db574f}
@@ -111,4 +114,5 @@ footer a{color:#587565}
  .view-controls{left:7px;top:49%;gap:6px}
  .view-controls button{width:31px;height:34px;font-size:17px;border-radius:8px}
  .game-toolbar .hearts{font-size:13px}
+ .game-actions{flex-wrap:wrap}.assist-action{flex:1 0 100%;order:-1}
 }

@@ -34,6 +34,7 @@
   let gesture = null;
   let pinchLength = 0;
   let pinchZoom = 1;
+  let missedTaps = 0;
 
   const clamp = (v, low, high) => Math.min(high, Math.max(low, v));
   const finite = (v, fallback) => Number.isFinite(Number(v)) ? Number(v) : fallback;
@@ -101,11 +102,16 @@
       [baseX + d[1] * wing, baseY - d[0] * wing]
     ].map(p => p.join(',')).join(' ');
     const hint = piece.id === hintId ? ' hinted' : '';
+    // The narrow visible stroke alone is almost impossible to hit on a phone.
+    // Puzzle paths never occupy the same grid cell, so cell-sized invisible
+    // targets make every arrow accessible without covering its neighbours.
+    const hitPoints = path.map(p => '<circle class="arrow-hit-point" cx="' +
+      (p.x + .5) + '" cy="' + (p.y + .5) + '" r=".47"/>').join('');
     return '<g class="cube-arrow' + hint + '" data-arrow-id="' + piece.id +
       '" role="button" aria-label="پیکان ' + piece.id +
       '" tabindex="-1"><path class="arrow-touch" d="' + shape +
       '"/><path class="arrow-stroke" d="' + shape +
-      '"/><polygon class="arrow-head" points="' + tip + '"/></g>';
+      '"/><polygon class="arrow-head" points="' + tip + '"/>' + hitPoints + '</g>';
   }
   function renderFaces() {
     const html = puzzle.faces.map((face, faceIndex) => {
@@ -118,6 +124,7 @@
         '</svg><div class="face-corner" aria-hidden="true"></div></div>';
     }).join('');
     box.innerHTML = html;
+    $('hintMoveButton').hidden = !hintId;
     paintAngle();
   }
   function beep(good) {
@@ -197,6 +204,7 @@
         score += 10 + Math.min(40, combo * 3);
         hintId = '';
         animating = false;
+        missedTaps = 0;
         renderFaces();
         if (removed.size === puzzle.total) win();
         else {
@@ -221,6 +229,7 @@
     removed.clear(); failed.clear(); combo = 0;
     hearts = MAX_LIVES; score = baseScore; won = false;
     hintId = ''; animating = false;
+    missedTaps = 0;
     closeOverlay(); renderFaces(); updateUI(); save();
     status('مکعب تازه شد؛ آن را بچرخان و مسیر باز پیدا کن.');
   }
@@ -231,6 +240,7 @@
     removed.clear(); failed.clear(); combo = 0;
     hearts = MAX_LIVES; baseScore = score; won = false;
     hintId = ''; animating = false;
+    missedTaps = 0;
     xAngle = initial.x; yAngle = initial.y; zoom = 1;
     closeOverlay(); renderFaces(); updateUI(); save();
     status('مرحلهٔ ' + FA(level) + ' آماده است. شش وجه را بررسی کن.');
@@ -249,25 +259,38 @@
     if (!candidate) { status('مکعب بررسی شد؛ برای تلاش مجدد بازنشانی کن.', 'error'); return; }
     hintId = candidate.id;
     renderFaces(); focusFace(candidate.face);
-    status('پیکان طلایی آزاد است؛ همان را لمس کن.', 'success');
-    window.setTimeout(() => {
-      if (hintId === candidate.id) { hintId = ''; renderFaces(); }
-    }, 3500);
+    // Keep the hint visible until acted on; don't expire it while scrolling.
+    status('پیکان طلایی آزاد است؛ آن را لمس کن یا دکمهٔ «برداشتن پیکان طلایی» را بزن.', 'success');
+    // An animated page scroll can move the target away during the next tap.
+    stage.scrollIntoView({ behavior: 'instant', block: 'center' });
+  }
+  function arrowAt(x, y) {
+    // A small tolerance around each tap helps with perspective, scrolling and
+    // the natural inaccuracy of fingers on smaller Android screens.
+    const offsets = [[0, 0], [0, -10], [-10, 0], [10, 0], [0, 10],
+      [-8, -8], [8, -8], [-8, 8], [8, 8]];
+    for (const [dx, dy] of offsets) {
+      const target = document.elementFromPoint(x + dx, y + dy);
+      const arrow = target && target.closest('[data-arrow-id]');
+      if (arrow && stage.contains(arrow)) return arrow.dataset.arrowId;
+    }
+    return null;
   }
   function pointerDown(event) {
     if (event.button !== undefined && event.button !== 0) return;
-    const target = event.target.closest('[data-arrow-id]');
+    const target = event.target.closest?.('[data-arrow-id]');
     touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (touches.size === 1) {
       gesture = { x: event.clientX, y: event.clientY, moved: false,
-        arrow: target?.dataset.arrowId || null };
+        pointerType: event.pointerType,
+        arrow: target?.dataset.arrowId || arrowAt(event.clientX, event.clientY) };
     } else if (touches.size === 2) {
       gesture = null;
       const points = [...touches.values()];
       pinchLength = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
       pinchZoom = zoom;
     }
-    stage.setPointerCapture(event.pointerId);
+    try { stage.setPointerCapture(event.pointerId); } catch (_) {}
   }
   function pointerMove(event) {
     if (!touches.has(event.pointerId)) return;
@@ -280,7 +303,7 @@
       paintAngle();
     } else if (gesture) {
       const distance = Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y);
-      if (distance > 7) gesture.moved = true;
+      if (distance > (gesture.pointerType === 'touch' ? 15 : 9)) gesture.moved = true;
       if (gesture.moved) {
         yAngle += (event.clientX - before.x) * .5;
         xAngle -= (event.clientY - before.y) * .5;
@@ -295,7 +318,13 @@
     const old = gesture;
     const wasSingle = touches.size === 1;
     touches.delete(event.pointerId);
-    if (wasSingle && old && !old.moved) pickArrow(old.arrow);
+    if (wasSingle && old && !old.moved) {
+      const id = old.arrow || arrowAt(event.clientX, event.clientY);
+      if (id) { missedTaps = 0; pickArrow(id); }
+      else if (++missedTaps >= 2) {
+        status('پیکان را پیدا نکردی؟ «راهنمایی» را بزن و با دکمهٔ طلایی حرکت کن.');
+      }
+    }
     gesture = null;
     if (touches.size) {
       const p = [...touches.values()][0];
@@ -306,7 +335,7 @@
     stage.addEventListener('pointerdown', pointerDown);
     stage.addEventListener('pointermove', pointerMove);
     stage.addEventListener('pointerup', pointerUp);
-    stage.addEventListener('pointercancel', pointerUp);
+    stage.addEventListener('pointercancel', e => { touches.delete(e.pointerId); gesture = null; });
     stage.addEventListener('lostpointercapture', e => { touches.delete(e.pointerId); gesture = null; });
     stage.addEventListener('wheel', e => {
       e.preventDefault(); zoom = clamp(zoom - Math.sign(e.deltaY) * .07, .64, 1.42);
@@ -329,6 +358,9 @@
       setTimeout(() => box.classList.remove('turning'), 650);
     });
     $('hintButton').addEventListener('click', hint);
+    $('hintMoveButton').addEventListener('click', () => {
+      if (hintId) pickArrow(hintId);
+    });
     $('restartButton').addEventListener('click', restart);
     $('soundButton').addEventListener('click', () => {
       soundOn = !soundOn; updateUI(); save();
