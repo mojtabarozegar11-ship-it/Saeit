@@ -40,8 +40,9 @@ jobs:
               assert (p/n).is_file() and (p/n).stat().st_size>100,n
           assert 'three.core.min.js' in (p/'three.module.js').read_text('utf-8')
           assert 'href="./nexus.html"' in (p/'nexus-upgrade.py').read_text('utf-8')
-          assert 'nexus.css?v=css3d-20261023' in (p/'nexus.html').read_text('utf-8')
+          assert 'nexus.css?v=css3d-r2-20261023' in (p/'nexus.html').read_text('utf-8')
           assert '--half:clamp(' in (p/'nexus.css').read_text('utf-8')
+          assert 'filter:drop-shadow' not in (p/'nexus.css').read_text('utf-8')
           print('NEXUS_RELEASE_CONTENT=PASS')
           PY
 
