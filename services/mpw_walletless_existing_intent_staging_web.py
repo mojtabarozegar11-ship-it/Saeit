@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from decimal import Decimal
+from html import escape
 
 from services.mpw_trx_walletless_core import PaymentHold
 from services.mpw_trx_walletless_one_tap_ui import render_one_tap_invoice
@@ -91,6 +92,7 @@ def _get_owner_invoice(request, invoice_id):
 def _show_invoice(request, invoice_id):
     from django.http import Http404,HttpResponse
     from django.utils import timezone
+    from django.middleware.csrf import get_token
     _ensure_test(request)
     intent=_get_owner_invoice(request,invoice_id)
     try:
@@ -101,6 +103,14 @@ def _show_invoice(request, invoice_id):
         raise Http404("This invoice is no longer payable")
     html,csp=render_one_tap_invoice(invoice,
         status_path=f"/commerce/trx-easy/status/{invoice_id}/")
+    # Include a same-origin, CSRF-protected POST path. The GET status endpoint
+    # stays strictly read-only; the browser never sends a payment claim.
+    token=escape(get_token(request),quote=True)
+    extra=(f'<main data-reconcile-url="/commerce/trx-easy/reconcile/{invoice_id}/" '
+           f'data-csrf-token="{token}" ')
+    if html.count(b"<main ")!=1:
+        raise Http404("Unexpected invoice markup")
+    html=html.replace(b"<main ",extra.encode("ascii"),1)
     response=HttpResponse(html,content_type="text/html; charset=utf-8")
     response["Content-Security-Policy"]=csp
     return _nocache(response)
@@ -112,6 +122,25 @@ def _invoice_status(request, invoice_id):
     _get_owner_invoice(request,invoice_id)
     state=existing_test_buyer_status(invoice_id,request.user.pk)
     return _nocache(JsonResponse(state))
+
+
+def _reconcile_invoice(request, invoice_id):
+    """POST-only buyer event. Only a configured server verifier may settle."""
+    from django.conf import settings
+    from django.http import JsonResponse
+    _ensure_test(request)
+    _get_owner_invoice(request,invoice_id)
+    backend=getattr(settings,"MPW_WALLETLESS_TRX_TEST_STATUS_RECONCILER",None)
+    if backend is not None:
+        if not callable(backend):
+            raise PaymentHold("Untrusted server-side reconciliation configuration")
+        try:
+            backend(invoice_id,request.user.pk)
+        except PaymentHold:
+            # A failed, missing or ambiguous proof is never a paid receipt.
+            pass
+    return _nocache(JsonResponse(existing_test_buyer_status(
+        invoice_id,request.user.pk)))
 
 
 def _download_paid(request, invoice_id):
@@ -136,10 +165,11 @@ def _views():
     from django.views.decorators.cache import never_cache
     from django.views.decorators.csrf import csrf_protect
     from django.views.decorators.http import require_GET,require_POST
-    global start_order,show_invoice,invoice_status,download_paid
+    global start_order,show_invoice,invoice_status,reconcile_invoice,download_paid
     start_order=never_cache(login_required(csrf_protect(require_POST(_start_order))))
     show_invoice=never_cache(login_required(require_GET(_show_invoice)))
     invoice_status=never_cache(login_required(require_GET(_invoice_status)))
+    reconcile_invoice=never_cache(login_required(csrf_protect(require_POST(_reconcile_invoice))))
     download_paid=never_cache(login_required(require_GET(_download_paid)))
 
 
@@ -150,5 +180,6 @@ STAGING_URLPATTERNS=(
     ("commerce/trx-easy/start/<int:product_id>/",start_order),
     ("commerce/trx-easy/invoice/<int:invoice_id>/",show_invoice),
     ("commerce/trx-easy/status/<int:invoice_id>/",invoice_status),
+    ("commerce/trx-easy/reconcile/<int:invoice_id>/",reconcile_invoice),
     ("commerce/trx-easy/download/<int:invoice_id>/",download_paid),
 )
