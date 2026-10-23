@@ -182,7 +182,7 @@ def sign_registry(proposal,root_private,root_public,output):
     if not openssl_verify(pub,payload,sig):raise ValueError("OWNER_ROOT_KEY_MISMATCH")
     signed=dict(d,trusted_root_public_key_pem=pub,root_signature_hex=sig)
     return save_new(output,signed)
-def install_registry(workspace,signed_file,operator_root_fingerprint):
+def install_registry(workspace,signed_file,operator_root_fingerprint,allow_additive_rotation=False):
     d=json.loads(Path(signed_file).read_text())
     if not re.fullmatch(r"[a-f0-9]{64}",operator_root_fingerprint):
         raise ValueError("NO_PINNED_OWNER_TRUST_ROOT")
@@ -200,8 +200,32 @@ def install_registry(workspace,signed_file,operator_root_fingerprint):
                 raise ValueError("INVALID_OWNER_AGENT_DELEGATION")
     out=private_dir(Path(workspace)/"quality-trust")/"trusted-reviewers.json"
     if out.exists():
+        if out.is_symlink() or not out.is_file():
+            raise ValueError("UNSAFE_TRUST_REGISTRY_TARGET")
+        old_data=out.read_bytes()
+        if old_data==canon(d)+b"\n":return out
+        if not allow_additive_rotation:
+            raise ValueError("PREVIOUS_TRUST_REGISTRY_REQUIRES_ADDITIVE_ROTATION")
+        old=json.loads(old_data)
+        old_members=old.get("reviewers")
+        if (old.get("schema")!=KEY_SCHEMA or not isinstance(old_members,dict)
+                or old.get("trusted_root_public_key_pem")!=public
+                or not openssl_verify(public,canon({"schema":KEY_SCHEMA,"reviewers":old_members}),
+                                      old.get("root_signature_hex"))):
+            raise ValueError("PREVIOUS_TRUST_REGISTRY_NOT_AUTHENTIC")
+        if any(name not in d["reviewers"] or d["reviewers"][name]!=member
+               for name,member in old_members.items()):
+            raise ValueError("EXISTING_REVIEWERS_CANNOT_BE_SILENTLY_REPLACED")
+        archive=private_dir(Path(workspace)/"quality-trust"/"versioned-backups")
+        previous=archive/("registry-"+sha(old_data)+".json")
+        if not previous.exists():save_new(previous,old)
+        if previous.is_symlink() or previous.read_bytes()!=canon(old)+b"\n":
+            raise ValueError("REGISTRY_BACKUP_INTEGRITY_FAILED")
+        staged=archive/("incoming-"+sha(canon(d))+".json")
+        save_new(staged,d)
+        os.replace(staged,out)
         if out.read_bytes()!=canon(d)+b"\n":
-            raise ValueError("PREVIOUS_TRUST_REGISTRY_REQUIRES_MANUAL_ROTATION")
+            raise ValueError("REGISTRY_ROTATION_VERIFICATION_FAILED")
         return out
     return save_new(out,d)
 def sign_decision(decision_path,private_key,reviewer_id,role,output,acknowledge,operational_policy_checked=False):
@@ -249,6 +273,7 @@ def main():
             for key in ("proposal","root-private","root-public","output"):q.add_argument("--"+key,required=True)
         if name=="install-registry":
             q.add_argument("--signed-registry",required=True);q.add_argument("--root-sha256",required=True)
+            q.add_argument("--allow-additive-rotation",action="store_true")
         if name=="sign-decision":
             for key in ("decision","private-key","reviewer-id","role","output"):q.add_argument("--"+key,required=True)
             q.add_argument("--i-personally-reviewed-all-evidence",action="store_true")
@@ -266,7 +291,8 @@ def main():
     elif a.command=="sign-registry":
         res={"signed_registry":str(sign_registry(a.proposal,a.root_private,a.root_public,a.output))}
     elif a.command=="install-registry":
-        res={"registry_installed":str(install_registry(a.workspace,a.signed_registry,a.root_sha256))}
+        res={"registry_installed":str(install_registry(a.workspace,a.signed_registry,
+              a.root_sha256,a.allow_additive_rotation))}
     elif a.command=="sign-agent-delegation":
         res={"owner_signed_agent_delegation":str(make_delegation(a.root_private,a.root_public,
               a.agent_public,a.reviewer_id,a.families,a.days,a.output))}
