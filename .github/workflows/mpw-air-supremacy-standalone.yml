@@ -5,12 +5,14 @@ on:
     paths:
       - games/air-supremacy/index.html
       - scripts/mpw_air_supremacy_standalone_publish.py
+      - scripts/mpw_air_supremacy_exact_route.py
       - .github/workflows/mpw-air-supremacy-standalone.yml
   push:
     branches: [main]
     paths:
       - games/air-supremacy/index.html
       - scripts/mpw_air_supremacy_standalone_publish.py
+      - scripts/mpw_air_supremacy_exact_route.py
       - .github/workflows/mpw-air-supremacy-standalone.yml
 permissions:
   contents: read
@@ -148,6 +150,15 @@ jobs:
           sha=$(sha256sum games/air-supremacy/index.html | awk '{print $1}')
           timeout 65s ssh -T -F "$d/config" saeit-cpanel \
             "python3 - install '$GITHUB_RUN_ID' '$sha'" < scripts/mpw_air_supremacy_standalone_publish.py
+      - name: Install one exact GET rewrite for new game after snapshot
+        id: route
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-air-standalone-ssh"
+          sha=$(sha256sum games/air-supremacy/index.html | awk '{print $1}')
+          timeout 55s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID' '$sha'" < scripts/mpw_air_supremacy_exact_route.py
       - name: Verify Air Supremacy public exact HTML and original Crown bytes
         id: smoke
         shell: bash
@@ -158,7 +169,7 @@ jobs:
           from urllib.request import Request,urlopen
           import hashlib,json,os,time
           root='https://mojplaywin.com'
-          new=root+'/design-preview-20261017/air-supremacy/'
+          new=root+'/air-supremacy/'
           expected=hashlib.sha256(Path('games/air-supremacy/index.html').read_bytes()).hexdigest()
           before=json.loads(Path(os.environ['RUNNER_TEMP']+'/air-game-baseline.json').read_text())
           ok=False
@@ -188,12 +199,16 @@ jobs:
           sha=$(sha256sum games/air-supremacy/index.html | awk '{print $1}')
           timeout 30s ssh -T -F "$d/config" saeit-cpanel \
             "python3 - status '$GITHUB_RUN_ID' '$sha'" < scripts/mpw_air_supremacy_standalone_publish.py
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - status '$GITHUB_RUN_ID' '$sha'" < scripts/mpw_air_supremacy_exact_route.py
       - name: Roll back ONLY newly-created game directory on smoke failure
         if: failure() && steps.install.outcome == 'success'
         shell: bash
         run: |
           d="$RUNNER_TEMP/mpw-air-standalone-ssh"
           sha=$(sha256sum games/air-supremacy/index.html | awk '{print $1}')
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID' '$sha'" < scripts/mpw_air_supremacy_exact_route.py
           timeout 50s ssh -T -F "$d/config" saeit-cpanel \
             "python3 - rollback '$GITHUB_RUN_ID' '$sha'" < scripts/mpw_air_supremacy_standalone_publish.py
       - name: Remove only private staged file
