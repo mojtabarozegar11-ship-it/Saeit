@@ -122,13 +122,13 @@ fi
 tmp="$master/cron-candidate.tmp"
 grep -v 'SAEIT_MASTER_AGENT_V1' "$old" > "$tmp" || true
 printf '%s\n' \
-  '*/10 * * * * /bin/bash /home/githubops/factory-runtime/operations/master-agent/run-cycle.sh >> /home/githubops/factory-runtime/operations/master-agent/cycle.log 2>&1 # SAEIT_MASTER_AGENT_V1' \
-  '23 3 * * 0 /bin/bash /home/githubops/factory-runtime/operations/master-agent/run-evolution.sh >> /home/githubops/factory-runtime/operations/master-agent/evolution.log 2>&1 # SAEIT_MASTER_AGENT_V1' >> "$tmp"
+  '*/5 * * * * /bin/bash /home/githubops/factory-runtime/operations/master-agent/run-cycle.sh >> /home/githubops/factory-runtime/operations/master-agent/cycle.log 2>&1 # SAEIT_MASTER_AGENT_V1' \
+  '37 */6 * * * /bin/bash /home/githubops/factory-runtime/operations/master-agent/run-evolution.sh >> /home/githubops/factory-runtime/operations/master-agent/evolution.log 2>&1 # SAEIT_MASTER_AGENT_V1' >> "$tmp"
 chmod 600 "$tmp"
 crontab "$tmp"
 rm -f "$tmp"
 test "$(crontab -l | grep -c 'SAEIT_MASTER_AGENT_V1')" -eq 2
-echo MASTER_CRON_TEN_MINUTE_CYCLE_VERIFIED
-echo MASTER_WEEKLY_ADAPTIVE_EVOLUTION_VERIFIED
+echo MASTER_CRON_FIVE_MINUTE_CYCLE_VERIFIED
+echo MASTER_SIX_HOUR_ADAPTIVE_EVOLUTION_VERIFIED
 echo MASTER_FACTORY_LOOP_UNMODIFIED
 echo MASTER_NO_PUBLIC_SITE_CHANGES
