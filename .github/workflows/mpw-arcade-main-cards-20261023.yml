@@ -1,0 +1,167 @@
+name: MojPlayWin guarded Arcade Lab cards on two live main pages
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-arcade-main-cards-20261023.yml"
+      - "scripts/mpw_arcade_main_cards_20261023.py"
+permissions:
+  contents: read
+concurrency:
+  group: mpw-arcade-main-cards-20261023
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate exact bounded patch and PHP syntax before touching live
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_arcade_main_cards_20261023.py
+          python3 -B scripts/mpw_arcade_main_cards_20261023.py selftest
+          python3 - <<'PY'
+          from pathlib import Path
+          lock = Path('.github/workflows/mojplaywin-main-deploy.yml').read_text()
+          assert ('if: ' + chr(36) + '{{ false }}') in lock
+          source = Path('scripts/mpw_arcade_main_cards_20261023.py').read_text()
+          assert 'HTACCESS_SHA256' in source and 'BASE_SHA256' in source and 'def php_lint' in source
+          assert source.count("MPW_ARCADE_MAIN_DISCOVERY_20261023_BEGIN") == 1
+          print('GUARDED_LIVE_DEPLOY_POLICY_TEST_PASS')
+          PY
+  publish:
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 19
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify original live versions, old routes and browser availability
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v google-chrome || command -v chromium || { echo 'HEADLESS_BROWSER_MISSING'; exit 1; }
+          python3 - <<'PY'
+          import urllib.request, json
+          host="https://mojplaywin.com"
+          for path,needle in (("/games/","First Realm"),("/products/","Digital Products")):
+              with urllib.request.urlopen(host+path,timeout=20) as r:
+                  text=r.read(1000000).decode("utf-8","replace")
+                  assert r.status==200 and r.headers.get("X-MPW-Main-Shell")=="exact-owner-only", (path,"Unexpected main runtime")
+                  assert needle in text and 'id="mpw-arcade-main-discovery-20261023"' not in text, (path,"Already installed or source changed")
+                  print("BEFORE_MAIN_200",path)
+          for path in ("/","/store/","/studio/","/mpw-editorial/index.html","/game-releases/20261021/index.html","/game-releases/20261021/pulse-forge/index.html"):
+              with urllib.request.urlopen(host+path,timeout=20) as r:
+                  assert r.status==200,path
+                  print("BEFORE_PROTECTED_200",path)
+          with urllib.request.urlopen(host+"/mpw-editorial/arcade-lab/20261022/release.json",timeout=20) as r:
+              assert json.load(r)["git_sha"]=="04ba43522db4af1762c99a5e60eb280cba1dd8b5"
+          print("BEFORE_ARCADE_VERSION_MATCH")
+          PY
+      - name: Establish VPS relay and cPanel SSH with exact pinned host fingerprints
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          CPANEL_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-main-cards-ssh"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$CPANEL_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/cpanel.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/cpanel.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n HostName 178.239.147.150\n User githubops\n IdentityFile %s/vps.key\n UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n HostName zohal.pws-dns.net\n User zomorod2\n Port 1396\n IdentityFile %s/cpanel.key\n UserKnownHostsFile %s/cpanel.known\n ProxyJump saeit-vps\nHost *\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 10\n ForwardAgent no\n RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+          echo "PINNED_CARDS_RELAY_PASS"
+      - name: Install only the versioned, backed-up PHP snippet after preflight and lint
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-main-cards-ssh/config"
+          scp -F "$d" scripts/mpw_arcade_main_cards_20261023.py "saeit-cpanel:/home/zomorod2/.mpw_arcade_cards_$GITHUB_RUN_ID.py"
+          ssh -T -F "$d" saeit-cpanel "chmod 600 /home/zomorod2/.mpw_arcade_cards_$GITHUB_RUN_ID.py && python3 /home/zomorod2/.mpw_arcade_cards_$GITHUB_RUN_ID.py install $GITHUB_RUN_ID $GITHUB_SHA"
+      - name: Verify both public cards, HTTP 200, link targets, WebP and unaffected routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,time,json
+          host="https://mojplaywin.com"
+          sha="04ba43522db4af1762c99a5e60eb280cba1dd8b5"
+          main="mpw-arcade-main-discovery-20261023"
+          required={"/games/":("circuit-courier",),"/products/":("economy-simulator","qa-matrix")}
+          for path,slugs in required.items():
+              for attempt in range(10):
+                  with urllib.request.urlopen(urllib.request.Request(host+path+"?__mpw_arcade_readback="+str(time.time_ns()),headers={"Cache-Control":"no-cache"}),timeout=20) as r:
+                      body=r.read(1100000).decode("utf-8","replace");status=r.status
+                      assert r.headers.get("X-MPW-Main-Shell")=="exact-owner-only"
+                  if status==200 and body.count('id="'+main+'"')==1 and 'data-arcade-sha="'+sha+'"' in body:break
+                  if attempt==9:raise AssertionError("Missing new live card: "+path)
+                  time.sleep(2)
+              for slug in slugs:
+                  assert "/mpw-editorial/arcade-lab/20261022/"+slug+"/index.html" in body
+                  assert "/mpw-editorial/arcade-lab/20261022/assets/"+slug+".webp" in body
+              assert body.count('id="'+main+'"')==1 and 'alt="' in body
+              assert 'data-navigation-version="mpw-arcade-navigation-v1-20261023"' in body
+              print("LIVE_ARCADE_MAIN_CARD_HTTP200",path,"cards",len(slugs),"marker_unique",True)
+          for path in ("/","/store/","/studio/","/mpw-editorial/index.html","/game-releases/20261021/index.html","/game-releases/20261021/pulse-forge/index.html"):
+              with urllib.request.urlopen(host+path,timeout=20) as r:
+                  assert r.status==200,path
+              print("UNCHANGED_ROUTE_HTTP200",path)
+          for slug in ("circuit-courier","economy-simulator","qa-matrix"):
+              with urllib.request.urlopen(host+"/mpw-editorial/arcade-lab/20261022/"+slug+"/index.html",timeout=20) as r: assert r.status==200
+              with urllib.request.urlopen(host+"/mpw-editorial/arcade-lab/20261022/assets/"+slug+".webp",timeout=20) as r:
+                  d=r.read(100000)
+                  assert r.status==200 and d[:4]==b"RIFF" and d[8:12]==b"WEBP"
+              print("EXISTING_RELEASE_LINK_AND_WEBP_HTTP200",slug)
+          with urllib.request.urlopen(host+"/mpw-editorial/arcade-lab/20261022/release.json",timeout=20) as r: assert json.load(r)["git_sha"]==sha
+          print("LIVE_ARCADE_MAIN_DISCOVERY_PUBLIC_SMOKE_PASS")
+          PY
+      - name: Check desktop and mobile DOM in Chrome without changing site
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v chromium)"
+          for mode in desktop mobile; do
+            if test "$mode" = mobile; then dims="390,844"; else dims="1440,900"; fi
+            for page in games products; do
+              echo "CHROME_DOM_TEST $mode $page"
+              timeout 35s "$chrome" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --no-first-run --window-size="$dims" --dump-dom "https://mojplaywin.com/$page/" > "$RUNNER_TEMP/mpw-$mode-$page.html" 2>/dev/null
+              grep -Fq 'id="mpw-arcade-main-discovery-20261023"' "$RUNNER_TEMP/mpw-$mode-$page.html"
+              grep -Fq 'data-arcade-sha="04ba43522db4af1762c99a5e60eb280cba1dd8b5"' "$RUNNER_TEMP/mpw-$mode-$page.html"
+            done
+          done
+          echo "CHROME_DESKTOP_AND_MOBILE_DOM_PASS"
+      - name: Restore exactly one backed-up owned file if any post-install check fails
+        if: failure() && (steps.install.outcome == 'success' || steps.install.outcome == 'failure')
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-main-cards-ssh/config"
+          if test -f "$d"; then
+            ssh -T -F "$d" saeit-cpanel "if test -f /home/zomorod2/.private_mpw_arcade_main_cards_20261023/receipt-$GITHUB_RUN_ID.json && test -f /home/zomorod2/.mpw_arcade_cards_$GITHUB_RUN_ID.py; then python3 /home/zomorod2/.mpw_arcade_cards_$GITHUB_RUN_ID.py rollback $GITHUB_RUN_ID $GITHUB_SHA; else echo NO_INSTALL_RECEIPT; fi"
+          fi
+      - name: Delete only temporary remote launcher and ephemeral SSH keys
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-main-cards-ssh/config"
+          if test -f "$d"; then
+            ssh -T -F "$d" saeit-cpanel "rm -f -- /home/zomorod2/.mpw_arcade_cards_$GITHUB_RUN_ID.py" || true
+          fi
+          if test -d "$RUNNER_TEMP/mpw-main-cards-ssh"; then
+            rm -rf -- "$RUNNER_TEMP/mpw-main-cards-ssh"
+          fi
