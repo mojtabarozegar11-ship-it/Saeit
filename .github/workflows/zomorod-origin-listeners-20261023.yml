@@ -1,0 +1,93 @@
+name: Zomorod origin listener and hosting diagnosis — read only
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-origin-listeners-20261023.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-agriculture-static
+  cancel-in-progress: false
+jobs:
+  origin:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Pinned VPS/cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Read-only socket, service ownership, host health and public network matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          for node in host vps; do
+            echo "CHECK_NODE=$node"
+            timeout 70s ssh -T -F "$d/config" "$node" 'python3 -' <<'PY'
+          import os,sys,shutil,socket,subprocess,platform,stat,time
+          from pathlib import Path
+          host="zomorodmelal.ir"
+          print("USER_CAN_RESTART_SYSTEM_SERVICES",os.geteuid()==0)
+          print("PLATFORM",platform.system())
+          for name in ("ss","netstat","ps","systemctl","curl","uapi","whmapi1","apachectl","httpd","nginx","litespeed","lshttpd"):
+              print("CMD_EXISTS",name,bool(shutil.which(name)))
+          try:
+              for proto in ("tcp","tcp6"):
+                  f=Path("/proc/net/"+proto)
+                  if not f.is_file():continue
+                  listen=set()
+                  for row in f.read_text().splitlines()[1:]:
+                      a=row.split()
+                      if a[3]!="0A":continue
+                      listen.add(int(a[1].rsplit(":",1)[1],16))
+                  for port in (80,443,2083,2087,8080,8443):
+                      print("PROC_LISTEN",proto,port,port in listen)
+          except Exception as e:print("PROC_NET_READ_ERROR",type(e).__name__)
+          try:
+              p=subprocess.run(["ps","-eo","comm="],capture_output=True,text=True,timeout=7)
+              names=p.stdout.lower().splitlines()
+              for service in ("httpd","apache2","nginx","litespeed","lshttpd","cpsrvd","php-fpm","lsphp","passenger","varnish"):
+                  print("SERVICE_PROCESS",service,any(service in n for n in names))
+          except Exception as e:print("PROCESS_LIST_ERROR",type(e).__name__)
+          try:
+              dns=socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)
+              addrs=sorted({x[4][0] for x in dns})
+              machine=sorted({x[4][0] for x in socket.getaddrinfo(socket.gethostname(),None,type=socket.SOCK_STREAM)})
+              print("DNS_ADDRESS_COUNT",len(addrs),"DNS_EQUALS_HOST_ADDRESS",bool(set(addrs)&set(machine)))
+              for port in (80,443,2083):
+                  for label,target in (("loopback","127.0.0.1"),("public-dns",addrs[0] if addrs else "127.0.0.1")):
+                      try:
+                          s=socket.create_connection((target,port),timeout=3);s.close();print("TCP_PROBE",label,port,"open")
+                      except OSError as e:print("TCP_PROBE",label,port,type(e).__name__)
+          except Exception as e:print("NETWORK_MATRIX_ERROR",type(e).__name__)
+          try:
+              v=os.statvfs(str(Path.home()))
+              print("HOME_AVAILABLE_GB",round(v.f_bavail*v.f_frsize/1e9,2))
+          except Exception as e:print("DISK_ERROR",type(e).__name__)
+          if Path.home().joinpath("public_html").is_dir():
+              print("CPANEL_PUBLIC_HTML_EXISTS",True)
+              p=Path.home()/"public_html"/"index.html"
+              print("CPANEL_ROOT_INDEX_EXISTS",p.is_file())
+          PY
+          done
+      - name: Separate runner external HTTP check without cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          for protocol in http https; do
+            status="$(curl -kLsS --connect-timeout 5 --max-time 12 -H 'Cache-Control: no-cache' -o /dev/null -w '%{http_code} %{remote_ip}' "$protocol://zomorodmelal.ir/" 2>/dev/null || true)"
+            echo "EXTERNAL_PROTOCOL_RESULT $protocol ${status%% *}"
+          done
+      - name: Remove temporary pinned relay credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/farm-v4-ssh"
