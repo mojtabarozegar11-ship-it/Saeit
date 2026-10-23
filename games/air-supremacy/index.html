@@ -17,10 +17,75 @@
 const $=id=>document.getElementById(id),canvas=$('field');let gl;
 try{gl=canvas.getContext('webgl2',{alpha:false,antialias:true,powerPreference:'high-performance'})||canvas.getContext('webgl',{alpha:false,antialias:true,powerPreference:'high-performance'});}catch{}
 const fallback=!gl,ctx2=fallback?canvas.getContext('2d'):null;if(fallback)$('support').textContent='Your browser is using a reduced-detail canvas fallback because WebGL is unavailable.';
-const VS=`attribute vec3 aPos;attribute vec3 aNormal;attribute vec3 aColor;uniform mat4 uModel,uVP;varying vec3 vN,vColor,vWorld;varying float vDepth;void main(){vec4 world=uModel*vec4(aPos,1.);vWorld=world.xyz;vN=normalize(mat3(uModel)*aNormal);vColor=aColor;vDepth=-world.z;gl_Position=uVP*world;}`;
-const FS=`precision highp float;varying vec3 vN,vColor,vWorld;varying float vDepth;uniform float uTime,uWater;uniform vec3 uCamera;void main(){vec3 sun=normalize(vec3(-.43,.78,-.54));float diff=max(.0,dot(normalize(vN),sun));vec3 color=vColor*(.38+.68*diff);float dist=length(vWorld-uCamera);if(uWater>.5){float w=sin(vWorld.x*.25+uTime*.8)+sin(vWorld.z*.11+uTime*1.2);float veins=pow(max(0.,sin(vWorld.z*.43+sin(vWorld.x*.06+uTime)*3.+uTime*.9)),12.)*.10;color=vec3(.025,.23,.30)+(w*.018+veins)*vec3(.35,.6,.57);}float fog=clamp((dist-90.)/550.,0.,.94);vec3 fogColor=vec3(.30,.59,.69);color=mix(color,fogColor,fog);gl_FragColor=vec4(color,1.);}`;
+const VS=\`attribute vec3 aPos;attribute vec3 aNormal;attribute vec3 aColor;uniform mat4 uModel,uVP;varying vec3 vN,vColor,vWorld;void main(){vec4 w=uModel*vec4(aPos,1.);vWorld=w.xyz;vN=normalize(mat3(uModel)*aNormal);vColor=aColor;gl_Position=uVP*w;}\`;
+const FS=\`precision highp float;varying vec3 vN,vColor,vWorld;uniform float uTime,uWater;uniform vec3 uCamera;
+float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+1.),f.x),f.y);}
+void main(){
+ vec3 N=normalize(vN),light=normalize(vec3(-.61,.83,-.45)),V=normalize(uCamera-vWorld);
+ float diffuse=max(0.,dot(N,light));
+ float ambient=.38+max(0.,N.y)*.16;
+ vec3 c=vColor*(ambient+diffuse*.69);
+ float spec=pow(max(0.,dot(reflect(-light,N),V)),20.)*.31;
+ c+=spec*vec3(1.0,.89,.66);
+ float d=length(uCamera-vWorld);
+ if(uWater>.5){
+   vec2 uv=vWorld.xz;
+   float n=noise(uv*.12+vec2(uTime*.65,uTime*.18));
+   float wave=sin(uv.x*.29+uTime*1.7)*sin(uv.y*.21+uTime*.8)+sin(uv.y*.063-uTime*.47);
+   float glint=pow(max(0.,dot(reflect(-light,normalize(vec3(wave*.10,1.,n*.14))),V)),52.);
+   float path=pow(max(0.,1.-abs(uv.x+uCamera.x*.2)*.0036),3.);
+   float foam=smoothstep(.78,.97,noise(uv*.075+uTime*.09))*.08;
+   c=vec3(.018,.135,.23)+(wave*.014+n*.033)*vec3(.26,.49,.64)+foam+glint*path*vec3(1.2,.67,.25);
+ }
+ float fog=clamp((d-200.)/1300.,0.,.88);
+ c=mix(c,vec3(.35,.49,.57),fog);
+ c=c/(c+vec3(.30));
+ c=pow(c,vec3(.90));
+ gl_FragColor=vec4(c,1.);}\`;
+const SKY_VS=\`attribute vec2 aXY;varying vec2 vUV;void main(){vUV=aXY*.5+.5;gl_Position=vec4(aXY,0.,1.);}\`;
+const SKY_FS=\`precision highp float;varying vec2 vUV;uniform float uTime;uniform float uRoll;uniform vec2 uResolution;
+float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+1.),f.x),f.y);}
+float fbm(vec2 p){float x=0.,a=.52;for(int i=0;i<5;i++){x+=a*noise(p);p=p*2.03+14.7;a*=.5;}return x;}
+void main(){
+ vec2 q=vUV;float aspect=uResolution.x/max(uResolution.y,1.);
+ float horizon=.42+sin(q.x*3.14+uRoll*.3)*.017;
+ float v=smoothstep(horizon-.08,1.,q.y);
+ vec3 dark=vec3(.016,.086,.18),azure=vec3(.17,.39,.55),day=vec3(.48,.67,.75);
+ vec3 col=mix(dark,azure,smoothstep(.15,.72,q.y));
+ col=mix(col,day,(1.-smoothstep(.34,.58,q.y))*.50);
+ float sky=max(0.,smoothstep(horizon-.09,horizon+.16,q.y));
+ vec2 uv=vec2(q.x*aspect*2.1,q.y*2.5)+vec2(uTime*.006,0.);
+ float n=fbm(uv*2.7+vec2(6.8,2.7));
+ float cloud=smoothstep(.52,.77,n+(.66-q.y)*.12)*sky;
+ col=mix(col,vec3(.79,.86,.88),cloud*.65);
+ float sun=length((q-vec2(.72,.70))*vec2(aspect,1.));
+ float corona=exp(-sun*11.),core=exp(-sun*72.);
+ col+=vec3(1.05,.58,.21)*corona*.57+vec3(1.,.85,.53)*core*1.4;
+ float mountain=0.;
+ float ridge=.415 +.023*sin(q.x*19.)+.012*sin(q.x*41.)+.008*sin(q.x*97.);
+ mountain=1.-smoothstep(ridge-.005,ridge+.013,q.y);
+ col=mix(col,vec3(.08,.20,.29),mountain*.52);
+ col+=vec3(.25,.23,.18)*exp(-abs(q.y-horizon)*50.)*.15;
+ float vign=1.-.27*dot(q-.5,q-.5)*1.9;
+ col*=vign;
+ col=col/(col+vec3(.26));
+ gl_FragColor=vec4(pow(col,vec3(.94)),1.);
+}\`;
 const sh=(type,source)=>{let s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s};
-let prog=null,at={},un={};if(gl){prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,VS));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FS));gl.linkProgram(prog);if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(prog));gl.useProgram(prog);at={pos:gl.getAttribLocation(prog,'aPos'),normal:gl.getAttribLocation(prog,'aNormal'),color:gl.getAttribLocation(prog,'aColor')};un={model:gl.getUniformLocation(prog,'uModel'),vp:gl.getUniformLocation(prog,'uVP'),time:gl.getUniformLocation(prog,'uTime'),water:gl.getUniformLocation(prog,'uWater'),camera:gl.getUniformLocation(prog,'uCamera')};}
+let prog=null,at={},un={},skyProgram=null,skyXY=null,skyTime=null,skyRoll=null,skyRes=null,skyBuf=null;
+if(gl){
+ prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,VS));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FS));gl.linkProgram(prog);
+ if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(prog));
+ gl.useProgram(prog);
+ at={pos:gl.getAttribLocation(prog,'aPos'),normal:gl.getAttribLocation(prog,'aNormal'),color:gl.getAttribLocation(prog,'aColor')};
+ un={model:gl.getUniformLocation(prog,'uModel'),vp:gl.getUniformLocation(prog,'uVP'),time:gl.getUniformLocation(prog,'uTime'),water:gl.getUniformLocation(prog,'uWater'),camera:gl.getUniformLocation(prog,'uCamera')};
+ skyProgram=gl.createProgram();gl.attachShader(skyProgram,sh(gl.VERTEX_SHADER,SKY_VS));gl.attachShader(skyProgram,sh(gl.FRAGMENT_SHADER,SKY_FS));gl.linkProgram(skyProgram);
+ if(!gl.getProgramParameter(skyProgram,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(skyProgram));
+ skyXY=gl.getAttribLocation(skyProgram,'aXY');skyTime=gl.getUniformLocation(skyProgram,'uTime');skyRoll=gl.getUniformLocation(skyProgram,'uRoll');skyRes=gl.getUniformLocation(skyProgram,'uResolution');
+ skyBuf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,skyBuf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
+}
 const rad=Math.PI/180,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),mix=(a,b,k)=>a+(b-a)*k,rnd=(a,b)=>a+Math.random()*(b-a),len=(x,y,z)=>Math.hypot(x,y,z),id=()=>new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]);
 function mul(a,b){let o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r<4;r++)o[c*4+r]=a[r]*b[c*4]+a[r+4]*b[c*4+1]+a[r+8]*b[c*4+2]+a[r+12]*b[c*4+3];return o}
 function model(x=0,y=0,z=0,rx=0,ry=0,rz=0,scale=1){const cx=Math.cos(rx),sx=Math.sin(rx),cy=Math.cos(ry),sy=Math.sin(ry),cz=Math.cos(rz),sz=Math.sin(rz);const rX=new Float32Array([1,0,0,0,0,cx,sx,0,0,-sx,cx,0,0,0,0,1]),rY=new Float32Array([cy,0,-sy,0,0,1,0,0,sy,0,cy,0,0,0,0,1]),rZ=new Float32Array([cz,sz,0,0,-sz,cz,0,0,0,0,1,0,0,0,0,1]),m=mul(mul(rY,rZ),rX);for(let i=0;i<12;i++)m[i]*=scale;m[12]=x;m[13]=y;m[14]=z;return m}
@@ -311,7 +376,7 @@ function drawFallback(t){
  c.strokeStyle='#b7fff488';c.lineWidth=1.5;c.setLineDash([8,8]);c.beginPath();c.moveTo(w/2,h*.50);c.lineTo(w/2,h*.60);c.stroke();c.setLineDash([]);
 }
 
-let sceneTime=0;function render(t){if(!gl){drawFallback(t);return;}const w=canvas.width,h=canvas.height,aspect=w/h;gl.viewport(0,0,w,h);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.useProgram(prog);const e=[camera[0],camera[1],31],atPos=[player.x*.15,player.y*.28,-65],proj=perspective((innerWidth<700?70:62)*rad,aspect,.35,2000),view=lookAt(e,atPos);VP=mul(proj,view);gl.uniformMatrix4fv(un.vp,false,VP);gl.uniform1f(un.time,t);gl.uniform3fv(un.camera,new Float32Array(e));gl.disable(gl.CULL_FACE);
+let sceneTime=0;function render(t){if(!gl){drawFallback(t);return;}const w=canvas.width,h=canvas.height,aspect=w/h;gl.viewport(0,0,w,h);gl.disable(gl.DEPTH_TEST);gl.depthMask(false);gl.useProgram(skyProgram);gl.bindBuffer(gl.ARRAY_BUFFER,skyBuf);gl.enableVertexAttribArray(skyXY);gl.vertexAttribPointer(skyXY,2,gl.FLOAT,false,0,0);gl.uniform1f(skyTime,t);gl.uniform1f(skyRoll,player.roll);gl.uniform2f(skyRes,w,h);gl.drawArrays(gl.TRIANGLES,0,6);gl.depthMask(true);gl.clear(gl.DEPTH_BUFFER_BIT);gl.enable(gl.DEPTH_TEST);gl.useProgram(prog);const e=[camera[0],camera[1],31],atPos=[player.x*.15,player.y*.28,-65],proj=perspective((innerWidth<700?70:62)*rad,aspect,.35,2000),view=lookAt(e,atPos);VP=mul(proj,view);gl.uniformMatrix4fv(un.vp,false,VP);gl.uniform1f(un.time,t);gl.uniform3fv(un.camera,new Float32Array(e));gl.disable(gl.CULL_FACE);
 draw('water',model(),true);for(const item of world)draw(item.shape,model(item.x,item.y,item.z,0,item.rot,0,item.scale));for(const e of enemies)draw(e.kind,model(e.x,e.y,e.z,0,Math.PI+Math.sin(e.turn)*.13,Math.sin(e.turn)*.09,e.scale));for(const m of missiles)draw('missile',model(m.x,m.y,m.z,0,0,0,m.kind==='guided'?1.3:.33));for(const p of sparks)draw('blast',model(p.x,p.y,p.z,0,0,0,p.scale*clamp(p.life,0,1)));
 // Player is modeled at a physically distinct forward combat position.
 if(player.inv===0||Math.floor(t*9)%2===0)draw('jet',model(player.x,player.y,0,player.pitch,0,player.roll,1.10));
