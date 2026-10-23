@@ -121,6 +121,33 @@ class CommercialMariaDBTest(unittest.TestCase):
             pk,42,server_lookup=lookup,pair=self.pair()),"unchanged")
         self.assertEqual(len(seen),1)
         self.assertTrue(commercial_buyer_status(pk,42)["can_download"])
+    def test_customer_post_button_creates_real_order_once_with_unique_invoice(self):
+        from django.test import RequestFactory
+        from services.mpw_trx_commercial_web import _start_order,start_order
+        factory=RequestFactory()
+        req=factory.post("/commerce/trx-easy/start/779/",
+                         secure=True,HTTP_HOST="mojplaywin.com")
+        req.user=SimpleNamespace(pk=42,is_authenticated=True,is_active=True)
+        with (patch("django.contrib.auth.get_user_model",return_value=fixture.User),
+              patch("services.mpw_trx_commercial_web._rate_provider",
+                    side_effect=lambda:(Decimal("0.30"),timezone.now())),
+              patch("services.mpw_trx_commercial_web._configured_receiver",
+                    return_value=fixture.RECIPIENT)):
+            count=fixture.Order.objects.count()
+            response=_start_order(req,779)
+            self.assertEqual(response.status_code,302)
+            self.assertEqual(fixture.Order.objects.count(),count+1)
+            self.assertIn("/commerce/trx-easy/invoice/",response["Location"])
+            again=_start_order(req,779)
+            self.assertEqual(again.status_code,302)
+            self.assertEqual(response["Location"],again["Location"])
+            self.assertEqual(fixture.Order.objects.count(),count+1)
+            self.assertEqual(PaymentIntent.objects.count(),1)
+            self.assertFalse(ExistingLedgerEntry.objects.exists())
+            no_token=start_order(factory.post("/commerce/trx-easy/start/779/",
+                                   secure=True,HTTP_HOST="mojplaywin.com"),779)
+            self.assertEqual(no_token.status_code,403)
+
     def test_public_invoice_and_file_are_buyer_only(self):
         from django.test import RequestFactory
         pk,_,_=self.reserve()
