@@ -1,0 +1,58 @@
+name: MojPlayWin read-only protected route inventory
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/mpw-readonly-route-inventory-20261023.yml]
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Read public pages without mutation
+        run: |
+          python3 - <<'PY'
+          import urllib.request,json,hashlib
+          for path in ('/games/','/products/','/mpw-editorial/index.html','/game-releases/20261021/index.html','/mpw-editorial/arcade-lab/20261022/release.json'):
+              try:
+                  with urllib.request.urlopen('https://mojplaywin.com'+path, timeout=20) as r: data=r.read(900000);status=r.status
+                  print('HTTP_PROBE', json.dumps({'path':path,'status':status,'sha256':hashlib.sha256(data).hexdigest(),'arcade_links':data.count(b'/mpw-editorial/arcade-lab/20261022/'),'release_sha':json.loads(data).get('git_sha') if path.endswith('.json') else None}))
+              except Exception as ex: print('HTTP_PROBE_ERROR',path,type(ex).__name__,str(ex)[:120])
+          PY
+      - name: Verify existing main deploy remains protected
+        uses: actions/checkout@v4
+      - name: Fail if deployment lock is absent
+        run: |
+          grep -Fq 'if: ${{ false }}' .github/workflows/mojplaywin-main-deploy.yml
+          echo MAIN_DEPLOY_SAFETY_LOCK_PRESENT
+      - name: Pinned read-only VPS relay and cPanel mapping
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-ro"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf 'Host saeit-vps\n HostName 178.239.147.150\n User githubops\n IdentityFile %s/vps.key\n UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n HostName zohal.pws-dns.net\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/host.known\n ProxyJump saeit-vps\nHost *\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 10\n ForwardAgent no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -c '\''from pathlib import Path;import json,hashlib;root=Path("/home/zomorod2/mojplaywin.com");print("ROOT",root.is_dir(),root.is_symlink());names=(".htaccess","passenger_wsgi.py","games","games/index.html","products","products/index.html","mpw-editorial/index.html");[(lambda p:print("ROUTE_FILE",json.dumps({"name":str(p.relative_to(root)),"exists":p.exists(),"symlink":p.is_symlink(),"kind":"dir" if p.is_dir() else "file" if p.is_file() else "absent","sha256":hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() and not p.is_symlink() and p.stat().st_size < 500000 else None}))))(root/n) for n in names]'\'''
+          ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' | python3 -c 'import json,sys; d=json.load(sys.stdin); stack=[d];found=0
+          while stack:
+              x=stack.pop()
+              if isinstance(x,dict):
+                  if str(x.get("domain","")).lower() in ("mojplaywin.com","www.mojplaywin.com"):print("PASSENGER_MAPPING",json.dumps({k:x.get(k) for k in ("domain","base_uri","path","app_root","app_uri","app_type") if k in x}));found+=1
+                  stack.extend(x.values())
+              elif isinstance(x,list):stack.extend(x)
+          print("PASSENGER_MATCHES",found)'
