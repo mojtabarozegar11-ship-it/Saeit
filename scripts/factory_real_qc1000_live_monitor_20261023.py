@@ -113,24 +113,23 @@ def verify_runner_signature(document, pubkey):
             "NO_PINNED_TRUSTED_RUNNER")
     signature = document.get("signature_hex")
     require(isinstance(signature, str)
-            and re.fullmatch(r"[a-f0-9]{128}", signature) is not None,
+            and re.fullmatch(r"[a-f0-9]{768}", signature) is not None,
             "RUNNER_SIGNATURE_MISSING")
     payload = dict(document)
     payload.pop("signature_hex", None)
     try:
         with tempfile.TemporaryDirectory(prefix="qc1000-verifier-") as tmp:
             base = Path(tmp)
-            # Ed25519 verifies a domain-separated 32-byte SHA256 digest.
-            # Some VPS OpenSSL builds reject large one-shot raw messages.
-            signed_digest = hashlib.sha256(
-                b"SAEIT_REAL_QC1000_ED25519_V1\x00" + canonical(payload)
-            ).digest()
-            (base / "payload").write_bytes(signed_digest)
+            # RSA-3072/PSS-SHA256 is supported by OpenSSL 1.1.1 and 3.x.
+            # Domain separation prevents cross-protocol signature reuse.
+            (base / "payload").write_bytes(
+                b"SAEIT_REAL_QC1000_RSA_PSS_V1\x00" + canonical(payload))
             (base / "signature").write_bytes(bytes.fromhex(signature))
             result = subprocess.run(
-                ["openssl", "pkeyutl", "-verify", "-pubin", "-inkey", str(pubkey),
-                 "-rawin", "-in", str(base / "payload"),
-                 "-sigfile", str(base / "signature")],
+                ["openssl", "dgst", "-sha256", "-verify", str(pubkey),
+                 "-sigopt", "rsa_padding_mode:pss",
+                 "-sigopt", "rsa_pss_saltlen:digest",
+                 "-signature", str(base / "signature"), str(base / "payload")],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 check=False, timeout=10)
         require(result.returncode == 0, "UNTRUSTED_RUNNER_SIGNATURE")
