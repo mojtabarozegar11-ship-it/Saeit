@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#071522">
+  <meta name="description" content="نکسوس سه‌بعدی زمرد ملل؛ معمای مکعب مکانیکی با پیچش واقعی لایه‌ها، فلش‌های مرتبط و مسیرهای قابل‌پیش‌بینی.">
+  <title>نکسوس سه‌بعدی | زمرد ملل</title>
+  <link rel="stylesheet" href="./nexus.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="header">
+      <a class="brand" href="/arrow-escape/" aria-label="بازگشت به بازی هزارتوی پیکان‌ها"><span class="brand-mark">✦</span><span>زمرد ملل <small>NEXUS GAME LAB</small></span></a>
+      <div class="tag"><span class="indicator"></span> آزمایشگاه سه‌بعدی</div>
+    </header>
+    <section class="hero">
+      <span class="eyebrow">ARROW NEXUS 3D · LIVING CUBE</span>
+      <h1>مکعبی که با تصمیم تو <em>تغییر می‌کند</em></h1>
+      <p>پیکان‌ها را آزاد کن، قفل‌های پیوندی را بشکن و حلقه میانی را برای بازکردن دروازه طلایی بچرخان.</p>
+    </section>
+    <section class="game" aria-label="مکعب معمایی سه‌بعدی">
+      <div class="stats">
+        <div><small>مرحله</small><strong id="stage">۱</strong></div>
+        <div><small>آزاد شده</small><strong id="progress">۰ / ۵</strong></div>
+        <div><small>چرخش باقی‌مانده</small><strong id="twists">۰</strong></div>
+        <div><small>رکورد</small><strong id="best">۱</strong></div>
+      </div>
+      <div class="viewport" id="viewport">
+        <div class="ambient-label top">DRAG TO ORBIT · TAP TO RELEASE</div>
+        <canvas id="nexusCanvas" aria-label="مکعب سه‌بعدی؛ بکشید تا دوربین بچرخد و روی یک فلش لمس کنید" tabindex="0"></canvas>
+        <div class="ambient-label bottom">◈ NEXUS ENGINE · SOLVER VERIFIED</div>
+        <div class="toast" role="status" aria-live="polite" id="message">برای چرخاندن دوربین، روی مکعب بکش؛ برای آزادکردن، فلش را لمس کن.</div>
+        <div id="victory" class="victory hidden" role="dialog" aria-modal="true" aria-labelledby="victoryHeading">
+          <div class="victory-card">
+            <span class="victory-spark">✦</span>
+            <h2 id="victoryHeading">هسته آزاد شد!</h2>
+            <p>معمای بعدی با قوانین و ارتباط‌های تازه منتظر توست.</p>
+            <button id="next" class="button primary" type="button">مرحله بعد ←</button>
+          </div>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="control-set">
+          <button id="twistLeft" class="button twist" type="button">↺ چرخش چپ</button>
+          <button id="twistRight" class="button twist" type="button">چرخش راست ↻</button>
+        </div>
+        <div class="control-set secondary">
+          <button id="hint" class="button subtle" type="button">✧ راهنمایی</button>
+          <button id="undo" class="button subtle" type="button">↶ بازگشت</button>
+          <button id="restart" class="button subtle" type="button">از نو</button>
+        </div>
+      </div>
+    </section>
+    <div class="legend">
+      <span><i class="swatch green"></i> آماده خروج</span>
+      <span><i class="swatch gold"></i> دروازه پیچشی</span>
+      <span><i class="swatch purple"></i> پیوند قفل‌شده</span>
+      <span><i class="swatch slate"></i> مسیر مسدود</span>
+    </div>
+    <details class="guide">
+      <summary>قوانین نکسوس و امکانات تازه</summary>
+      <p>فلش‌ها روی شش وجه مکعب قرار دارند. چرخاندن دوربین فقط زاویه دید را عوض می‌کند؛ دکمه‌های چرخش، حلقه مرکزی مکعب را واقعاً می‌چرخانند. فلش‌های بنفش با حذف فلش پیوندی باز می‌شوند و فلش‌های طلایی پس از هم‌راستاشدن حلقه مجاز می‌شوند. لمس طولانی، پیش‌نمایش نتیجه است. هر مرحله راه‌حل محاسبه‌شده دارد، امکان بازگشت هست و پیشرفت روی همان دستگاه ذخیره می‌شود.</p>
+    </details>
+    <footer>© شرکت کشت و صنعت زمرد ملل · نمونه قابل‌بازی نکسوس سه‌بعدی</footer>
+  </main>
+  <script src="./nexus-core.js"></script>
+  <script type="module" src="./nexus.js"></script>
+</body>
+</html>
