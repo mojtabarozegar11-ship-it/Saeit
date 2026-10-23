@@ -6,6 +6,7 @@ creates a commercial approval, a customer order, or a public site listing.
 Only an independently verifiable finished product may enter a storefront.
 """
 import argparse
+import collections
 import fcntl
 import json
 from pathlib import Path
@@ -67,6 +68,39 @@ def inventory(root, names):
     return result
 
 
+def evidence_gaps(root, names):
+    area = root / "production-instructions"
+    status_file = area / "stage-02/literature-scout-status.json"
+    result = {"unresearched_orders": 0, "missing_bibliography": 0,
+              "gap_classes": {}}
+    if status_file.is_file() and not status_file.is_symlink():
+        status = json.loads(status_file.read_text(encoding="utf8"))
+        for key in ("openalex_key_configured", "provider_cooldown_active",
+                    "external_provider_unavailable", "attempted_this_run",
+                    "still_require_manual_or_external_research"):
+            result[key] = status.get(key)
+    counts = collections.Counter()
+    for rank, name in enumerate(names, 1):
+        if (area / "stage-02/receipts" / name).is_file():
+            continue
+        result["unresearched_orders"] += 1
+        paper = area / "stage-02/literature-candidates" / (
+            "AGRI-%03d--r001.json" % rank)
+        if paper.is_symlink() or not paper.is_file():
+            result["missing_bibliography"] += 1
+            continue
+        try:
+            packet = json.loads(paper.read_text(encoding="utf8"))
+            reason = packet.get("evidence_gap_reason", "unclassified")
+            if not isinstance(reason, str) or not re.fullmatch(r"[a-z0-9_]{1,90}", reason):
+                reason = "unclassified"
+            counts[reason] += 1
+        except (OSError, ValueError, TypeError):
+            counts["unreadable_workpaper"] += 1
+    result["gap_classes"] = dict(sorted(counts.items()))
+    return result
+
+
 def worker_command(root, ops, label, filename, batch):
     py = ops.parent.parent / ".venv/bin/python"
     if not py.is_file() or not py.stat().st_mode & 0o111:
@@ -118,6 +152,7 @@ def dispatch(root, ops, *, run_workers=True):
     final = inventory(root, names)
     return {"schema": "saeit.factory.agri200.onepass-dispatch.v1",
             "before": initial, "after": final, "worker_results": outcomes,
+            "remaining_research_diagnostics": evidence_gaps(root, names),
             "automated_factory_progress_confirmed": any(
                 final[k] > initial[k] for k in initial
                 if k.startswith("stage") and isinstance(initial[k], int)),
