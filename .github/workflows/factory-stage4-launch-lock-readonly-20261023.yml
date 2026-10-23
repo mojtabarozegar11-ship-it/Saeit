@@ -1,0 +1,64 @@
+name: VPS Factory Launch Lock Readonly
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-stage4-launch-lock-readonly-20261023.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Identify holder of native launch lock without changing VPS state
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-lock-readonly"
+          install -d -m 700 "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 60s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
+          from pathlib import Path
+          import json,os,subprocess
+          ops=Path.home()/"factory-runtime/operations"
+          lock=ops/"vps-only-launch-v2.lock"
+          pidfile=ops/"vps-only-loop.pid"
+          result={"schema":"saeit.factory.launch-lock-readonly.v1","read_only":True}
+          if lock.is_file() and not lock.is_symlink():
+              try:
+                  probe=subprocess.run(["flock","-n",str(lock),"-c","true"],timeout=3,check=False)
+                  result["launch_lock_available"]=probe.returncode==0
+              except (OSError,subprocess.TimeoutExpired):
+                  result["launch_lock_available"]=None
+          if pidfile.is_file() and not pidfile.is_symlink():
+              raw=pidfile.read_text().strip()
+              if raw.isdecimal():
+                  pid=int(raw)
+                  proc=Path("/proc")/str(pid)
+                  result["loop_pid_alive"]=proc.is_dir()
+                  args=(proc/"cmdline").read_bytes().decode("utf8","replace").replace("\x00"," ") if proc.is_dir() else ""
+                  result["pid_is_expected_loop"]="vps-only-loop.sh" in args
+                  fd=proc/"fd/9"
+                  try:
+                      target=os.readlink(fd)
+                      result["loop_inherited_fd9_launch_lock"]=target==str(lock)
+                  except OSError:
+                      result["loop_inherited_fd9_launch_lock"]=False
+          result["cpu_count"]=os.cpu_count()
+          result["load_average_1m"]=os.getloadavg()[0]
+          print("FACTORY_LAUNCH_LOCK_READONLY="+json.dumps(result,sort_keys=True))
+          PY
+      - name: Destroy temporary key
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/factory-lock-readonly"
+          if test -d "$d"; then rm -f -- "$d/key" "$d/known"; rmdir "$d"; fi
