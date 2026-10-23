@@ -34,6 +34,23 @@ class Stage6Audits(unittest.TestCase):
     def obj(self, relative):
         return json.loads((self.area / relative / self.name).read_text(encoding="utf-8"))
 
+    def test_round_robin_fairness_over_batch_limit(self):
+        names = ["order-a", "order-b", "order-c"]
+        seen = []
+        for _ in range(6):
+            selected, path, state = stage6.fair_batch(self.area, names, 1, stage34)
+            seen.extend(selected)
+            stage34.atomic(path, state)
+        self.assertEqual(seen, names + names)
+        self.assertEqual(stage34.read(path)["next_index"], 0)
+        self.assertEqual(stage6.fair_batch(self.area, names, 5, stage34)[0], names)
+
+    def test_corrupt_cursor_fails_closed(self):
+        cursor = self.area / "stage-06/round-robin-cursor.json"
+        stage34.atomic(cursor, {"schema": "saeit.factory.stage6.round-robin.v1", "next_index": -1})
+        with self.assertRaisesRegex(RuntimeError, "STAGE6_CURSOR_INVALID"):
+            stage6.fair_batch(self.area, ["order-a"], 1, stage34)
+
     def test_real_bilingual_preflight_and_actionable_return(self):
         result = stage6.execute(self.root, stage34, stage5)
         self.assertEqual(result["stage6_inbox"], 1)

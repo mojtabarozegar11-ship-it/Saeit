@@ -68,6 +68,26 @@ class Stage34Tests(unittest.TestCase):
         callback(obj)
         mod.atomic(path, obj)
 
+    def test_stage3_and_4_round_robin_do_not_starve_later_orders(self):
+        for stage in (3, 4):
+            mod.private_dir(self.area / ("stage-%02d" % stage))
+            names = ["order-a", "order-b", "order-c"]
+            seen = []
+            for _ in range(6):
+                selected, path, next_state = mod.fair_batch(self.area, stage, names, 1)
+                seen.extend(selected)
+                mod.atomic(path, next_state)
+            self.assertEqual(seen, names + names)
+            self.assertEqual(mod.read(path)["next_index"], 0)
+            self.assertEqual(mod.fair_batch(self.area, stage, names, 10)[0], names)
+
+    def test_corrupted_cursor_does_not_resume_unsafely(self):
+        path = self.area / "stage-03/round-robin-cursor.json"
+        mod.atomic(path, {"schema": "saeit.factory.stage3.round-robin.v1",
+                          "next_index": "invalid"})
+        with self.assertRaisesRegex(RuntimeError, "STAGE34_CURSOR_INVALID"):
+            mod.fair_batch(self.area, 3, ["order-a"], 1)
+
     def test_both_stages_progress_with_real_evidence_and_no_public_claim(self):
         result = mod.execute(self.root)
         self.assertEqual((result["stage3_new"], result["stage4_new"]), (1, 1))
