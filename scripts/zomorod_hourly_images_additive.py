@@ -38,44 +38,54 @@ def save(base,m):
 def load(base):return json.loads((base/"manifest.json").read_text())
 
 def generate():
-    from PIL import Image,ImageDraw
+    """Render original vector designs through existing ImageMagick on cPanel.
+    No Pillow installation, shell injection or Django runtime modifications.
+    """
+    import subprocess
+    executable=shutil.which("convert")
+    if not executable:
+        raise RuntimeError("ImageMagick convert is unavailable")
+    common="fill none stroke '#d9c17f' stroke-width 4 roundrectangle 12,12 372,228 25,25"
+    scenes=[
+      [
+        "fill '#e2b76d' stroke none circle 308,49 308,71",
+        "fill '#355d36' stroke none polygon 0,182 384,147 384,240 0,240",
+        "stroke '#53915a' stroke-width 6 fill none path 'M 20,220 L 368,170 M 15,195 L 320,150'",
+        "stroke '#5bb8d0' stroke-width 15 fill none path 'M 34,91 L 350,91'",
+        "stroke '#a8e5e9' stroke-width 4 fill none path 'M 34,84 L 350,84'",
+        "stroke '#5bb8d0' stroke-width 9 fill none path 'M 83,91 L 83,140 M 151,91 L 151,130 M 219,91 L 219,120 M 286,91 L 286,110'",
+        "fill '#91ddcc' stroke none circle 83,146 83,153 circle 151,138 151,145 circle 219,128 219,135",
+      ],
+      [
+        "fill '#d5c57a' stroke none circle 318,59 318,77",
+        "fill '#325b46' stroke none polygon 13,190 371,190 371,227 13,227",
+        "stroke '#c6dbb5' stroke-width 6 fill none path 'M 48,138 L 192,47 L 336,138 M 48,138 L 48,206 L 336,206 L 336,138 M 192,47 L 192,206'",
+        "stroke '#8bb8ba' stroke-width 3 fill none path 'M 120,95 L 120,205 M 261,95 L 261,205 M 48,163 L 336,163'",
+        "fill '#6bad69' stroke none circle 120,176 120,194 circle 189,175 189,196 circle 270,176 270,195",
+        "stroke '#a4dec0' stroke-width 7 fill none path 'M 120,203 L 120,174 M 188,205 L 188,168 M 270,205 L 270,172'",
+      ],
+      [
+        "fill '#244a5b' stroke none roundrectangle 30,36 355,204 16,16",
+        "stroke '#5b96ab' stroke-width 3 fill none path 'M 30,92 L 355,92 M 30,148 L 355,148 M 95,36 L 95,204 M 160,36 L 160,204 M 225,36 L 225,204 M 290,36 L 290,204'",
+        "stroke '#77d7ed' stroke-width 15 fill none path 'M 62,120 L 126,120 L 126,64 L 192,64 L 192,178 L 258,178 L 258,120 L 323,120'",
+        "stroke '#c4f2f1' stroke-width 4 fill none path 'M 62,115 L 126,115 L 126,64 L 192,64 L 192,178 L 258,178 L 258,120 L 323,120'",
+        "fill '#91dbee' stroke none circle 60,120 60,139",
+        "fill '#e1be74' stroke none circle 323,120 323,139",
+      ]
+    ]
     assets=[]
-    themes=[("irrigation",(25,64,45)),("greenhouse",(40,74,56)),("water-path",(22,72,88))]
-    for i,(name,bg) in enumerate(themes):
-        im=Image.new("RGB",(384,240),bg);d=ImageDraw.Draw(im)
-        d.rounded_rectangle((12,12,372,228),radius=28,outline=(216,184,104),width=5)
-        if i==0:
-            for n in range(4):
-                x=38+n*85;d.line((x,180,x+60,180),fill=(129,164,90),width=7)
-                for t in range(3):
-                    xx=x+15+t*19;d.ellipse((xx,142,xx+9,151),fill=(98,190,116))
-            d.line((40,65,330,65),fill=(103,198,234),width=19)
-            for x in (75,150,225,300):
-                d.line((x,65,x,115),fill=(84,178,222),width=10)
-                d.ellipse((x-8,109,x+8,130),fill=(125,213,238))
-        elif i==1:
-            d.polygon([(48,120),(192,42),(336,120)],outline=(235,208,135))
-            d.rectangle((55,120,329,210),outline=(235,208,135),width=6)
-            for x in (100,190,280):
-                d.line((x,110,x,204),fill=(104,180,151),width=8)
-            for x in (100,280):
-                d.ellipse((x-30,125,x+30,185),outline=(130,216,220),width=5)
-                d.line((x-20,155,x+20,155),fill=(162,227,219),width=7)
-                d.line((x,132,x,177),fill=(162,227,219),width=7)
-            d.ellipse((171,160,215,204),fill=(95,151,78))
-        else:
-            for r in range(3):
-                for c in range(5):
-                    x=42+63*c;y=38+60*r
-                    d.rounded_rectangle((x,y,x+51,y+51),radius=9,outline=(108,184,198),width=3)
-                    d.line((x+5,y+25,x+46,y+25),fill=(77,186,230),width=10)
-            d.ellipse((17,100,59,142),fill=(55,169,221))
-            d.ellipse((326,100,368,142),fill=(219,175,86))
-        out=io.BytesIO()
-        im.save(out,format="WEBP",quality=62,method=6)
-        data=out.getvalue()
+    for index,scene in enumerate(scenes):
+        args=[executable,"-size","384x240",
+              "xc:#253e31" if index!=2 else "xc:#193e48"]
+        for draw in scene:
+            args.extend(["-draw",draw])
+        args.extend(["-draw",common,"-quality","70","webp:-"])
+        result=subprocess.run(args,capture_output=True,timeout=30,check=False)
+        if result.returncode:
+            raise RuntimeError("WebP conversion failed for card "+str(index))
+        data=result.stdout
         if not data.startswith(b"RIFF") or data[8:12]!=b"WEBP" or len(data)>100000:
-            raise RuntimeError("WebP invalid or oversized")
+            raise RuntimeError("Invalid or oversized WebP for card "+str(index))
         assets.append(data)
     return assets
 
@@ -120,9 +130,14 @@ def apply(runid):
         if OLDMarkMissing(old=old):raise RuntimeError("Missing release marker")
         img=('<img src="/'+DIR+'/'+name+'" alt="'+alt+'" width="384" height="240" loading="lazy" decoding="async" style="display:block;width:min(100%,360px);height:auto;border-radius:12px;border:1px solid #ae975a;margin:10px 0">').encode()
         if rel=="games/index.html":
-            needle=b'<article class="card">'
-            if old.count(needle)!=1:raise RuntimeError("Unexpected games hub markup")
-            new=old.replace(needle,needle+img,1)
+            import re
+            cards=list(re.finditer(rb"<article\b[^>]*>.*?</article>",old,re.S|re.I))
+            target=[card for card in cards if b"/games/water-path/" in card.group(0)]
+            if len(target)!=1:
+                raise RuntimeError("Water Path game card cannot be isolated safely")
+            card=target[0]
+            insert_at=old.index(b">",card.start())+1
+            new=old[:insert_at]+img+old[insert_at:]
         else:
             needle=b'<section class="zm-hourly-addon"'
             if old.count(needle)!=1:raise RuntimeError("Unexpected category card markup")
