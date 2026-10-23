@@ -1,0 +1,23 @@
+name: MojPlayWin merchant TRX deposit candidate safety tests
+on:
+  push:
+    branches: [fix/mpw-tron-provider-auth-20261022]
+    paths:
+      - .github/workflows/mpw-tron-readonly-candidate-ci-20261023.yml
+      - services/mpw_tron_readonly_deposit_candidates.py
+      - tests/test_mpw_tron_readonly_deposit_candidates.py
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  candidate-indexer-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Inspect and test public deposit discovery (no real money)
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile services/mpw_tron_readonly_deposit_candidates.py tests/test_mpw_tron_readonly_deposit_candidates.py
+          python3 -B -m unittest tests.test_mpw_tron_readonly_deposit_candidates -v
+          echo 'TRX_CANDIDATE_DISCOVERY=TESTED; FINANCIAL_WRITES=0; NO_CUSTOMER_CREDITING=TRUE'
