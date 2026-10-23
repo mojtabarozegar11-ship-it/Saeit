@@ -34,9 +34,10 @@ def live_card_check():
     assert len(rows)==1;row=rows[0]
     assert row.get('title')=='فناوری اطلاعات و خدمات دیجیتال' and row.get('index')==25
     cards=row.get('cards',[])
-    assert len(cards)==23 and cards[0].get('id')=='ZM-R25-GAME-FARM-DOMINION-20261019'
+    assert len(cards)>=24 and cards[0].get('id')=='ZM-R25-GAME-FARM-DOMINION-20261019'
     assert cards[1].get('id')==GAME_ID and cards[1].get('canonicalUrl')=='/ramadan-war/'
-    assert cards[2].get('slug')=='website-design'
+    assert cards[2].get('id')=='ZM-R25-GAME-ARROW-ESCAPE-20261022' and cards[2].get('canonicalUrl')=='/arrow-escape/'
+    assert cards[3].get('slug')=='website-design'
     return home
 
 def prepare(stage):
