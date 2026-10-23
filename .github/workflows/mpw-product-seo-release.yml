@@ -45,13 +45,26 @@ jobs:
         run: |
           set -euo pipefail
           timeout 240s ssh -T -F "$RUNNER_TEMP/mpw-seo-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - publish $GITHUB_RUN_ID" < scripts/mpw_product_seo_release_20261023.py
+      - name: Reload the verified Passenger app process
+        run: |
+          set -euo pipefail
+          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-seo-ssh/config" saeit-cpanel 'set -eu; root=/home/zomorod2/Saeit-staging; test -f "$root/passenger_wsgi.py"; mkdir -p "$root/tmp"; test ! -L "$root/tmp"; touch "$root/tmp/restart.txt"; echo PASSENGER_RELOAD_REQUESTED_FOR_PRODUCT_SCHEMA=TRUE'
       - name: Verify public product pages
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --max-time 30 https://mojplaywin.com/store/product/72/ | grep -q 'An 84-day chess improvement guide'
-          curl --fail --silent --show-error --max-time 30 https://mojplaywin.com/store/product/225/ | grep -q 'Taniya and the Little Baker Worms'
-          curl --fail --silent --show-error --max-time 30 https://mojplaywin.com/store/product/879/ | grep -q 'Atelier Interior'
-          echo 'PUBLIC_SEO_METADATA_AND_PRODUCT_SCHEMA_VERIFIED'
+          for spec in 72:7.50 225:4.00 879:6.80; do
+            id="${spec%%:*}"; price="${spec#*:}"
+            body="$(curl --fail --silent --show-error --max-time 30 -H 'Cache-Control: no-cache' "https://mojplaywin.com/store/product/$id/?__mpw_seo_audit=$GITHUB_RUN_ID")"
+            grep -q 'application/ld+json' <<<"$body"
+            grep -q '"offers"' <<<"$body"
+            grep -q "\"price\": \"$price\"" <<<"$body"
+            case "$id" in
+              72) grep -q 'An 84-day chess improvement guide' <<<"$body" ;;
+              225) grep -q 'Taniya and the Little Baker Worms' <<<"$body" ;;
+              879) grep -q 'Atelier Interior' <<<"$body" ;;
+            esac
+          done
+          echo 'PUBLIC_SEO_METADATA_PRODUCT_OFFERS_AND_PASSENGER_RELOAD_VERIFIED'
       - name: Cleanup credentials
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-seo-ssh"
