@@ -1,4 +1,3 @@
-MPW_THREE_PRODUCT_CATALOG_SELFTEST=PASS
 #!/usr/bin/env python3
 """Bounded live copy and CTA correction for MojPlayWin's three sale products."""
 from __future__ import annotations
