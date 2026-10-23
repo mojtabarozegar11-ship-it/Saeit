@@ -10,6 +10,10 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,8 +47,10 @@ jobs:
           } > "$d/config"
           chmod 600 "$d/config"
           echo SSH_BRIDGE_PIN_VERIFIED
-      - name: Stream corporate catalogue ZIP directly into encrypted CMS archive
+      - name: Stream one catalogue ZIP part directly into encrypted CMS archive
         shell: bash
+        env:
+          PART: ${{ matrix.part }}
         run: |
           set -euo pipefail
           umask 077
@@ -77,16 +83,17 @@ jobs:
           KlfO
           -----END CERTIFICATE-----
           CERT
-          timeout 280s ssh -T -F "$d/config" company python3 - < scripts/company_bundle_supplier_catalogues_private_20261023.py | openssl cms -encrypt -binary -aes256 -outform DER -out "$RUNNER_TEMP/supplier-catalogues-20261023.cms" "$d/recipient.pem"
-          test -s "$RUNNER_TEMP/supplier-catalogues-20261023.cms"
-          openssl cms -cmsout -print -inform DER -in "$RUNNER_TEMP/supplier-catalogues-20261023.cms" >/dev/null
+          timeout 660s ssh -T -F "$d/config" company env ARCHIVE_PART="$PART" python3 - < scripts/company_bundle_supplier_catalogues_private_20261023.py | openssl cms -encrypt -binary -aes256 -outform DER -out "$RUNNER_TEMP/supplier-catalogues-part${PART}.cms" "$d/recipient.pem"
+          test -s "$RUNNER_TEMP/supplier-catalogues-part${PART}.cms"
+          openssl cms -cmsout -print -inform DER -in "$RUNNER_TEMP/supplier-catalogues-part${PART}.cms" >/dev/null
           echo ENCRYPTED_CATALOGUE_ARCHIVE_READY=true
-          stat -c 'ENCRYPTED_ARCHIVE_BYTES=%s' "$RUNNER_TEMP/supplier-catalogues-20261023.cms"
+          echo "ARCHIVE_PART_NUMBER=$PART"
+          stat -c 'ENCRYPTED_ARCHIVE_BYTES=%s' "$RUNNER_TEMP/supplier-catalogues-part${PART}.cms"
       - name: Upload encrypted only (GitHub public repo, key NOT present)
         uses: actions/upload-artifact@v4
         with:
-          name: supplier-catalogues-encrypted-owner-20261023
-          path: ${{ runner.temp }}/supplier-catalogues-20261023.cms
+          name: supplier-catalogues-encrypted-owner-part-${{ matrix.part }}
+          path: ${{ runner.temp }}/supplier-catalogues-part${{ matrix.part }}.cms
           retention-days: 1
           if-no-files-found: error
           compression-level: 0
