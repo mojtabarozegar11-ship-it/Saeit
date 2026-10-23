@@ -130,7 +130,7 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-air-standalone-ssh"
           timeout 30s ssh -T -F "$d/config" saeit-cpanel \
-            'test -d /home/zomorod2/mojplaywin.com && test ! -e /home/zomorod2/mojplaywin.com/air-supremacy && test ! -L /home/zomorod2/mojplaywin.com/air-supremacy'
+            'test -d /home/zomorod2/mojplaywin.com && test ! -e /home/zomorod2/mojplaywin.com/design-preview-20261017/air-supremacy && test ! -L /home/zomorod2/mojplaywin.com/design-preview-20261017/air-supremacy'
           echo AIR_NEW_PATH_UNOCCUPIED=YES
       - name: Stage exact game HTML outside web root
         shell: bash
@@ -158,7 +158,7 @@ jobs:
           from urllib.request import Request,urlopen
           import hashlib,json,os,time
           root='https://mojplaywin.com'
-          new=root+'/air-supremacy/'
+          new=root+'/design-preview-20261017/air-supremacy/'
           expected=hashlib.sha256(Path('games/air-supremacy/index.html').read_bytes()).hexdigest()
           before=json.loads(Path(os.environ['RUNNER_TEMP']+'/air-game-baseline.json').read_text())
           ok=False
