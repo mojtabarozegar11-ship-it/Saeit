@@ -1,0 +1,101 @@
+name: MojPlayWin public TRX customer launch
+on:
+  push:
+    branches: [release/mpw-public-trx-20261023]
+    paths: [.github/workflows/mpw-trx-public-release.yml]
+permissions: {contents: read}
+concurrency:
+  group: mpw-public-trx-release
+  cancel-in-progress: false
+jobs:
+  safety-and-receipts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Compile private canary and run no-Django release safety tests
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/mpw_trx_private_canary_20261023.py tests/test_mpw_trx_private_canary_20261023.py
+          python3 -B -m unittest tests.test_mpw_trx_private_canary_20261023 tests.test_mpw_trx_commercial_gateway tests.test_mpw_tron_readonly_deposit_candidates -v
+          python3 -B -m py_compile scripts/mpw_trx_public_release.py services/mpw_trx_public_pages.py
+          echo 'PRIVATE_MAINNET_CANARY_PUBLIC_GATES_STAY_CLOSED=PASS'
+  mainnet-canary-isolated-mariadb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    services:
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_DATABASE: test_walletless_ci
+          MARIADB_USER: walletless
+          MARIADB_PASSWORD: local-only-no-money
+          MARIADB_ROOT_PASSWORD: local-root-ci-only
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install synthetic MariaDB verification dependencies
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check 'Django>=5.2,<6' 'mysqlclient>=2.2,<3' 'PyMySQL==1.1.2' 'segno==1.6.6'
+      - name: Prove private canary invoice is paid and files remain buyer-only
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest tests.test_mpw_trx_commercial_real_mariadb_e2e -v
+          echo 'PRIVATE_CANARY_SYNTHETIC_CHAIN_MARIADB=PASS; MAINNET_BROADCASTS=0'
+
+  public-customer-release:
+    needs: [safety-and-receipts, mainnet-canary-isolated-mariadb]
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Authenticate pinned GitHub-to-VPS-to-cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-gateway-contract-ssh"
+          install -d -m 700 "$d"
+          test -n "$VPS_KEY"
+          test -n "$HOST_KEY"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf 'Host saeit-vps\n HostName 178.239.147.150\n User githubops\n Port 22\n IdentityFile %s/vps.key\n UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n HostName zohal.pws-dns.net\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/host.known\n ProxyJump saeit-vps\nHost *\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 3\n ForwardAgent no\n RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          timeout 50s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+      - name: Activate owner-authorized public checkout after ordinary-buyer automated QA
+        run: |
+          set -euo pipefail
+          remote="$(timeout 40s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel 'mktemp -d /home/zomorod2/.local/share/mpw-trx-public-XXXXXXXX')"
+          [[ "$remote" =~ ^/home/zomorod2/.local/share/mpw-trx-public-[A-Za-z0-9]+$ ]] || exit 5
+          trap 'ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel "rm -rf -- $remote" >/dev/null 2>&1 || true' EXIT
+          tar -cf - services/mpw_walletless_commercial_intent.py services/mpw_trx_commercial_context.py scripts/mpw_trx_commercial_reconcile_cron.py services/mpw_trx_commercial_web.py services/mpw_trx_public_pages.py | timeout 65s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel "umask 077; tar -xf - -C $remote --no-same-owner --no-same-permissions"
+          timeout 450s ssh -T -F "$RUNNER_TEMP/mpw-gateway-contract-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - $remote" < scripts/mpw_trx_public_release.py
+      - name: Confirm live public storefront and private customer purchase access
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 40 https://mojplaywin.com/commerce/trx-easy/ | grep -q 'Buy digital products with TRX'
+          code="$(curl -s --max-time 20 -o /dev/null -w '%{http_code}' https://mojplaywin.com/commerce/trx-easy/purchases/)"
+          test "$code" = 302
+          echo 'PUBLIC_TRX_CUSTOMER_LAUNCH_VERIFIED; REAL_CUSTOMER_PAYMENT_NOT_YET_OBSERVED'
+      - name: Cleanup credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-gateway-contract-ssh"
