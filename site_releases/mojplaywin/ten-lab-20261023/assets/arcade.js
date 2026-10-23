@@ -21,7 +21,7 @@ function action(which){if(!active||paused)return;if(scene.press)scene.press(whic
 function inputKey(k){if(k==='Escape'||k==='KeyP'){pause();return}if(!active||paused)return; if(['Space','Enter','ArrowUp'].includes(k))action('action');if(k==='Digit1')action('left');if(k==='Digit2')action('action');if(k==='Digit3')action('right');if(scene.key)scene.key(k)}
 $('start').addEventListener('click',start);$('pause').addEventListener('click',()=>pause());
 for(const id of ['left','right','up','down','action']){
- const el=$(id);el.addEventListener('pointerdown',e=>{keys.add(id);action(id);el.setPointerCapture(e.pointerId);e.preventDefault()});
+ const el=$(id);el.addEventListener('pointerdown',e=>{keys.add(id);action(id);try{el.setPointerCapture(e.pointerId)}catch{}e.preventDefault()});
  for(const ev of ['pointerup','pointercancel','lostpointercapture'])el.addEventListener(ev,()=>keys.delete(id));
 }
 addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();if(!e.repeat)inputKey(e.code);keys.add(e.code)});
