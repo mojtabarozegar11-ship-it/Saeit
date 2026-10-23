@@ -98,6 +98,12 @@ assert value >= 45000, value
 print("FACTORY_SQLITE_TIMEOUT_VERIFIED_MS=" + str(value))
 print("FACTORY_SEED_CAPABILITIES_EXPECTED=" + str(len(CAPABILITIES)))
 print("FACTORY_AGENT_MASTER_PRESENT=" + str(Agent.objects.filter(code="factory-master-agent",active=True).exists()))
+from datetime import timedelta
+from django.utils import timezone
+expected_codes = {code for code, *_ in CAPABILITIES}
+threshold = timezone.now() + timedelta(hours=2)
+print("FACTORY_SEED_ACTIVE_CAPABILITY_COUNT=" + str(AgentCapability.objects.filter(code__in=expected_codes,active=True).count()))
+print("FACTORY_SEED_FRESH_GRANT_COUNT=" + str(AgentToolGrant.objects.filter(capability_code__in=expected_codes,active=True,valid_until__gt=threshold).values("capability_code").distinct().count()))
 """
     env = os.environ.copy()
     env.setdefault("SAEIT_ENV", "production")
@@ -112,8 +118,32 @@ print("FACTORY_AGENT_MASTER_PRESENT=" + str(Agent.objects.filter(code="factory-m
     for line in result.stdout.splitlines():
         if line.startswith(("FACTORY_SQLITE_TIMEOUT_VERIFIED_MS=",
                             "FACTORY_SEED_CAPABILITIES_EXPECTED=",
-                            "FACTORY_AGENT_MASTER_PRESENT=")):
+                            "FACTORY_AGENT_MASTER_PRESENT=",
+                            "FACTORY_SEED_ACTIVE_CAPABILITY_COUNT=",
+                            "FACTORY_SEED_FRESH_GRANT_COUNT=")):
             print(line, flush=True)
+
+def report_live_log(root: Path) -> None:
+    # Observes actual subsequent loop ticks; never treats process presence as production.
+    log = root.parent / "operations/vps-only-factory.log"
+    if not log.is_file():
+        print("FACTORY_POSTPATCH_LOOP_LOG_MISSING", flush=True)
+        return
+    result = subprocess.run(
+        ["tail", "-n", "500", str(log)], capture_output=True, text=True, timeout=10
+    )
+    if result.returncode != 0:
+        print("FACTORY_POSTPATCH_LOOP_LOG_UNREADABLE", flush=True)
+        return
+    data = result.stdout
+    print("FACTORY_POSTPATCH_NO_WRITE_EVENTS_LAST_500=" +
+          str(data.count("FACTORY_AGENT_SEED_HEALTHY_NO_WRITE")), flush=True)
+    print("FACTORY_POSTPATCH_REFRESH_EVENTS_LAST_500=" +
+          str(data.count("FACTORY_AGENT_SEED_REFRESHED")), flush=True)
+    print("FACTORY_POSTPATCH_SQLITE_LOCKS_LAST_500=" +
+          str(data.count("database is locked")), flush=True)
+    print("FACTORY_POSTPATCH_TICK_FAILURES_LAST_500=" +
+          str(data.count("TICK_EXIT_FAILURE")), flush=True)
 
 def apply(root: Path, backups: Path) -> None:
     paths = [
@@ -125,6 +155,7 @@ def apply(root: Path, backups: Path) -> None:
     if not need:
         print("FACTORY_SQLITE_REPAIR_ALREADY_INSTALLED", flush=True)
         validate(root)
+        report_live_log(root)
         return
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     backupdir = backups / ("sqlite-agent-contention-" + stamp + "-" + str(os.getpid()))
@@ -150,6 +181,7 @@ def apply(root: Path, backups: Path) -> None:
         print("FACTORY_SQLITE_REPAIR_ROLLED_BACK=" + type(exc).__name__, flush=True)
         raise
     print("FACTORY_SQLITE_REPAIR_INSTALLED_WITH_PRIVATE_BACKUP",flush=True)
+    report_live_log(root)
 
 def main() -> None:
     parser = argparse.ArgumentParser()
