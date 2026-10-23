@@ -593,6 +593,84 @@ jobs:
               if len(line)<180 and not re.search(r"secret|password|token|private|api.key|https?://|ssh|host|env",line,re.I):
                   print("FACTORY_LOOP_LINE="+str(i)+":"+line)
           PY
+      - name: Verify native Stage4 queue consumption and private loop activity
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/stage4-readonly"
+          timeout 100s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/factory-runtime/django-app"
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+          "$HOME/factory-runtime/.venv/bin/python" -B - <<'PY'
+          import collections,datetime,hashlib,json,os,re,shlex
+          from pathlib import Path
+          from django.utils.dateparse import parse_datetime
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.apps import apps
+          from django.utils import timezone
+          ops=Path.home()/"factory-runtime/operations"
+          log=ops/"stage4-due-dispatch.log"
+          loop=ops/"vps-only-loop.sh"
+          if log.is_symlink() or loop.is_symlink():
+              raise SystemExit("FACTORY_NATIVE_DIAG_UNSAFE_SYMLINK")
+          ticks=[]
+          failures=collections.Counter()
+          if log.is_file():
+              with log.open("rb") as f:
+                  f.seek(max(0,log.stat().st_size-300000))
+                  for row in f.read().decode("utf8","replace").splitlines():
+                      if row.startswith("STAGE4_DUE_DISPATCH="):
+                          try: ticks.append(json.loads(row.partition("=")[2]))
+                          except (TypeError,ValueError): failures["invalid_receipt"]+=1
+                      elif "Traceback (most recent call last)" in row:
+                          failures["traceback"]+=1
+          Task=apps.get_model("core","AgentTask")
+          Product=apps.get_model("core","Product")
+          Run=apps.get_model("core","FactoryRun")
+          now=timezone.now()
+          windows={}
+          for minutes in (10,30,60):
+              queryset=Task.objects.filter(action_type="product_validation",created_at__gte=now-datetime.timedelta(minutes=minutes))
+              windows[str(minutes)+"m"]=dict(collections.Counter(queryset.values_list("status",flat=True)))
+          due=collections.Counter()
+          for pk,metadata in Product.objects.values_list("pk","metadata").iterator(chunk_size=100):
+              if not isinstance(metadata,dict): continue
+              val=metadata.get("validation")
+              prog=val.get("stage4_research") if isinstance(val,dict) else None
+              if not isinstance(prog,dict): continue
+              stamp=prog.get("next_retry_at")
+              when=parse_datetime(stamp) if isinstance(stamp,str) else None
+              if not when or timezone.is_naive(when) or when>now: continue
+              due["due"]+=1
+              run=Run.objects.filter(product_id=pk).order_by("-created_at","-pk").first()
+              if run and run.status=="active":
+                  due["active"]+=1
+                  if run.tasks.filter(action_type="product_validation",status="completed",updated_at__gte=when).exists():
+                      due["validated_since_due"]+=1
+                  if run.tasks.filter(status__in=("queued","running")).exists():
+                      due["inflight"]+=1
+          commands=[]
+          if loop.is_file() and loop.stat().st_size<=10000:
+              for line in loop.read_text().splitlines():
+                  if "manage.py" in line or "python" in line or "sleep" in line:
+                      # Only a command's fixed action and flags, never raw paths,
+                      # arguments, environment values, addresses or credentials.
+                      parts=shlex.split(line.strip())
+                      safe=[v for v in parts if re.fullmatch(r"[a-z][a-z0-9_-]{3,60}",v) or re.fullmatch(r"--[a-z][a-z0-9_-]{3,60}",v)]
+                      if safe: commands.append(safe[:10])
+          print("STAGE4_NATIVE_QUEUE_AND_WORKER_READONLY="+json.dumps({
+              "schema":"saeit.factory.stage4-native-progress-readonly.v1",
+              "read_only":True,"utc":now.isoformat(),
+              "last_three_ticks":[t.get("counts",{}) for t in ticks[-3:]],
+              "ticks_in_log_tail":len(ticks),"log_errors":dict(failures),
+              "task_status_windows":windows,"due_products":dict(due),
+              "loop_action_tokens":commands[:15],
+              "budget_override":False,"commercial_approvals_changed":False},sort_keys=True))
+          PY
+          REMOTE
       - name: Destroy runner SSH key material
         if: always()
         shell: bash
