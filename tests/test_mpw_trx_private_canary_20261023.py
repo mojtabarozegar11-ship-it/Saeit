@@ -15,6 +15,35 @@ from services.mpw_walletless_commercial_intent import _commercial_db
 
 
 class PrivateCanaryIsolationTests(unittest.TestCase):
+    def test_private_watcher_reconciles_verified_candidate_before_status_read(self):
+        from unittest.mock import MagicMock
+        invoice = SimpleNamespace(recipient="receiver", amount_sun=123,
+                                  issued_at="start", expires_at="end")
+        tx = "a" * 64
+        pair = MagicMock()
+        pair.verify.return_value = (tx, "sender")
+        with patch("services.mpw_tron_readonly_deposit_candidates.find_candidate_hashes", return_value=[tx]), patch("services.mpw_trx_commercial_chain.read_only_independent_pair", return_value=pair), patch("services.mpw_walletless_commercial_intent.reconcile_commercial_intent_from_candidates", return_value="paid") as settle:
+            self.assertEqual(canary._reconcile_private_invoice(12, 17, invoice, "sender"), "paid")
+            self.assertEqual(settle.call_args.args, (12, 17))
+            self.assertEqual(settle.call_args.kwargs["server_lookup"](), [tx])
+            pair.verify.return_value = (tx, "other")
+            settle.reset_mock()
+            with self.assertRaises(PaymentHold):
+                canary._reconcile_private_invoice(12, 17, invoice, "sender")
+            settle.assert_not_called()
+
+    def test_missing_ambiguous_or_malformed_candidates_never_settle(self):
+        invoice = SimpleNamespace(recipient="receiver", amount_sun=123,
+                                  issued_at="start", expires_at="end")
+        for candidates in ([], ["a" * 64, "b" * 64], ["invalid"], ["a" * 64] * 17, {}):
+            with self.subTest(candidates=candidates), patch("services.mpw_tron_readonly_deposit_candidates.find_candidate_hashes", return_value=candidates), patch("services.mpw_walletless_commercial_intent.reconcile_commercial_intent_from_candidates") as settle:
+                if candidates == []:
+                    self.assertEqual(canary._reconcile_private_invoice(12, 17, invoice, "sender"), "awaiting")
+                else:
+                    with self.assertRaises(PaymentHold):
+                        canary._reconcile_private_invoice(12, 17, invoice, "sender")
+                settle.assert_not_called()
+
     def setUp(self):
         self.config = SimpleNamespace(
             DEBUG=False,
