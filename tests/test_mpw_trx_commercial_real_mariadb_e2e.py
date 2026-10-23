@@ -118,6 +118,26 @@ class CommercialMariaDBTest(unittest.TestCase):
                     rate_provider=lambda:(Decimal("0.30"),fixture.NOW),
                     configured_receiver=lambda:fixture.RECIPIENT,now=fixture.NOW)
 
+    def test_outstanding_invoice_still_settles_after_new_checkout_paused(self):
+        pk,invoice,_=self.reserve()
+        with patch.object(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False):
+            self.assertEqual(reconcile_commercial_intent_from_candidates(
+                pk,42,server_lookup=lambda *args:[fixture.TX_HASH],pair=self.pair()),"paid")
+            self.assertEqual(ExistingLedgerEntry.objects.count(),1)
+            self.assertEqual(PaymentWebhookEvent.objects.count(),1)
+            self.assertEqual(fixture.CommerceFulfillment.objects.count(),1)
+            self.assertTrue(commercial_buyer_status(pk,42)["can_download"])
+            with open_commercial_paid_file(pk,42) as paid:
+                self.assertTrue(paid.read().startswith(b"PK"))
+            with self.assertRaises(PaymentHold):
+                reserve_commercial_intent(
+                    self.order_id,42,rate_provider=lambda:(Decimal("0.30"),fixture.NOW),
+                    configured_receiver=lambda:fixture.RECIPIENT,now=fixture.NOW)
+            with self.assertRaises(PaymentHold):
+                reconcile_commercial_intent_from_candidates(
+                    pk,43,server_lookup=lambda *args:[fixture.TX_HASH],pair=self.pair())
+        self.assertEqual(ExistingLedgerEntry.objects.count(),1)
+
     def test_wrong_owner_and_failed_finality_never_pay(self):
         pk,_,_=self.reserve()
         with self.assertRaises(PaymentHold):
