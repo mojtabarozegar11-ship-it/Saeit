@@ -1,5 +1,5 @@
 name: MojPlayWin isolate product SEO and customer login language template read only
-# Read-only live render requested 2026-10-24 to verify active product and login templates.
+# Read-only live render requested 2026-10-24 to locate active store, product and login templates.
 on:
   push:
     branches: [main]
@@ -67,7 +67,7 @@ jobs:
           import django;django.setup()
           from django.urls import resolve
           from django.template.loader import get_template
-          for route in ('/store/product/72/','/store/product/225/','/accounts/login/','/accounts/register/'):
+          for route in ('/store/','/store/product/72/','/store/product/225/','/store/product/72/checkout/','/accounts/login/','/accounts/register/'):
               m=resolve(route);f=m.func;u=inspect.unwrap(f)
               candidates=[f,u,getattr(f,'view_class',None)]
               result={'route':route,'resolved_name':m.url_name,'module':f.__module__,'fn':getattr(f,'__name__','unnamed')}
@@ -90,8 +90,17 @@ jobs:
           roots=[app/'core/templates',app/'templates',app/'mpw_commerce/templates']
           for root in roots:
               if not root.is_dir():continue
-              names=[p.relative_to(root).as_posix() for p in root.rglob('*.html') if not p.is_symlink() and any(k in p.name.lower() for k in ('login','register','account','product','checkout'))]
+              names=[p.relative_to(root).as_posix() for p in root.rglob('*.html') if not p.is_symlink() and any(k in p.name.lower() for k in ('login','register','account','product','checkout','store'))]
               print('MPW_RELEVANT_TEMPLATE_FILENAMES='+json.dumps({'root':root.relative_to(app).as_posix(),'names':names[:70]}))
+          for root in roots:
+              if not root.is_dir():continue
+              shown=0
+              for path in root.rglob('*.html'):
+                  if path.is_symlink() or not path.is_file() or 'store' not in path.name.lower():continue
+                  text=path.read_text('utf8','replace')
+                  print('MPW_STORE_TEMPLATE='+json.dumps({'path':path.relative_to(app).as_posix(),'chars':len(text),'source':text[:12000]},ensure_ascii=False))
+                  shown+=1
+                  if shown>=6:break
           for rel in ('core/templates/brands/mojplaywin/product.html','mpw_commerce/templates/mpw_commerce/customer_login.html','mpw_commerce/templates/mpw_commerce/customer_register.html','core/templates/brands/mojplaywin/base.html','core/templates/mojplaywin/site_base.html'):
               path=app/rel
               if not path.is_file() or path.is_symlink():continue
