@@ -58,3 +58,14 @@ test('fails closed on unfunded epoch, live mode, pre-approved labels, invalid bo
   assert.throws(() => buildSyntheticEligibilityProposal(mutation(x => x.rows = [])), /rows:/);
   assert.throws(() => buildSyntheticEligibilityProposal(mutation(x => x.budgetUnits = '0')), /uint256 bounds/);
 });
+
+test('canonicalizes TVM 41-hex contract and beneficiary addresses to Base58 without changing the root', () => {
+  const data = sample();
+  const original = buildSyntheticEligibilityProposal(data);
+  data.domain.contractAddress = TronWeb.address.toHex(data.domain.contractAddress);
+  data.rows[0].account = TronWeb.address.toHex(data.rows[0].account);
+  const converted = buildSyntheticEligibilityProposal(data);
+  assert.equal(converted.root, original.root);
+  assert.deepEqual(converted.claims, original.claims);
+  assert.equal(converted.publicationAuthorized, false);
+});
