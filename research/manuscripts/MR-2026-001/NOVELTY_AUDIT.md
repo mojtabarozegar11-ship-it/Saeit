@@ -39,3 +39,13 @@ A general web-search discovery is not a substitute for database searches. Search
 - Verify identity, affiliation, contact details, funding/conflict statements, data availability, and journal-specific AI-use disclosure before submission.
 - Do not submit the manuscript or mark it as submitted on the CV until the corresponding author has approved the final files and the publisher issues a genuine receipt/manuscript ID.
 - This audit is not a manuscript, submission, acceptance, or publication.
+
+## Subsequent working appendices added on 2026-10-24
+
+The following documents are on this **draft PR branch only** and do not represent completed searches or manuscript submission:
+
+- [SEARCH_EXECUTION_PLAN.md](SEARCH_EXECUTION_PLAN.md): draft Scopus/Web of Science expressions, PCC, testable eligibility rules, execution logs, provenance labels, and review gates; **database queries not executed**.
+- [OVERLAP_COMPARISON.md](OVERLAP_COMPARISON.md): comparison against five directly relevant publisher-indexed reviews and one model review; **full review-by-review inclusion-set comparison still pending**.
+- [PILOT_SOURCE_EXTRACTION.md](PILOT_SOURCE_EXTRACTION.md): publisher-full-text narrative extraction of one Lake Urmia primary study and a source-consistency QA checklist; **not final included-study extraction**.
+
+**Updated audit judgement:** The 2026 review of IoT-enabled irrigation explicitly discusses field evidence, water/yield trade-offs and adoption barriers. This strengthens, rather than resolves, the need to demonstrate a narrow genuine gap. The study-level outcome-provenance question is a hypothesis for testing, not a warranted novelty label.
