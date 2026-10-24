@@ -106,6 +106,26 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
+      - name: Read-only audit of live store template baseline
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-store-sales-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          p=Path('/home/zomorod2/Saeit-staging/core/templates/mojplaywin/store.html')
+          if p.is_symlink() or not p.is_file(): raise SystemExit('LIVE_TEMPLATE_NOT_REGULAR')
+          raw=p.read_bytes(); data=raw.replace(bytes([13,10]),bytes([10]))
+          print('MPW_LIVE_TEMPLATE_AUDIT='+json.dumps({'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(raw)}))
+          for phrase in ('account required','Sign in or create an account','Secure purchase: sign in','DIGITAL PRODUCTS','FEATURED PICKS','Shop available books'):
+            needle=phrase.encode()
+            print('MPW_LIVE_TEMPLATE_MARKER='+json.dumps({'phrase':phrase,'count':data.count(needle)}))
+            start=0
+            for _ in range(min(3,data.count(needle))):
+              i=data.find(needle,start); start=i+len(needle)
+              snippet=data[max(0,i-160):min(len(data),i+240)].decode('utf8','replace').replace(chr(10),' ')
+              print('MPW_LIVE_TEMPLATE_CONTEXT='+json.dumps({'phrase':phrase,'snippet':snippet}))
+          PY
       - name: Stage only the reviewed store and MojPlayWin page shell
         run: |
           set -euo pipefail
