@@ -1,0 +1,80 @@
+name: Factory real book authoring capacity and output audit (private read-only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-real-authoring-capacity-probe-20261024.yml
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: factory-real-authoring-capacity-probe
+  cancel-in-progress: false
+jobs:
+  audit-vps:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[approved-factory-authoring-capacity-20261024]'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Inspect factory authoring compute and completed output without modifying VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          work="$RUNNER_TEMP/factory-authoring-capacity"
+          install -d -m 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -T -i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'python3 - <<'"'"'PY'"'"'
+          import json,os,pathlib,shutil,subprocess,urllib.request
+          root=pathlib.Path("/home/githubops/factory-runtime")
+          area=root/"private/autonomous-product-cycle/production-instructions"
+          ops=root/"operations/production-instructions"
+          def count(path,pattern="*.json"):
+              d=area/path
+              return sum(1 for x in d.glob(pattern) if x.is_file() and not x.is_symlink()) if d.is_dir() and not d.is_symlink() else 0
+          def status(name):
+              p=area/name
+              if not p.is_file() or p.is_symlink() or p.stat().st_size>200000:return "absent"
+              try:
+                  d=json.loads(p.read_text(encoding="utf8"))
+                  return {k:d.get(k) for k in ("cycle_state","worker_errors","stage_results","new_artifacts_by_stage","missing_stage2_orders") if k in d}
+              except (ValueError,OSError,UnicodeError):return "unreadable"
+          model_tags=[]
+          try:
+              with urllib.request.urlopen("http://127.0.0.1:11434/api/tags",timeout=2) as response:
+                  tags=json.loads(response.read(150000).decode("utf8"))
+              model_tags=[{"name":x.get("name"),"size_bytes":x.get("size")} for x in tags.get("models",[])[:12]]
+          except Exception:
+              pass
+          mem_kib=0
+          try:
+              mem_kib=int(next(l.split()[1] for l in pathlib.Path("/proc/meminfo").read_text().splitlines() if l.startswith("MemTotal:")))
+          except (OSError,ValueError,StopIteration):pass
+          disk=shutil.disk_usage(root)
+          out={
+              "scope":"PRIVATE_VPS_READ_ONLY_NO_PRODUCTS_CREATED",
+              "cpu_count":os.cpu_count(),
+              "ram_gib":round(mem_kib/1048576,2),
+              "factory_disk_free_gib":round(disk.free/1073741824,2),
+              "factory_disk_used_gib":round(disk.used/1073741824,2),
+              "ollama_cli_present":bool(shutil.which("ollama")),
+              "llama_server_present":bool(shutil.which("llama-server")),
+              "local_model_service_models":model_tags,
+              "nvidia_smi_present":bool(shutil.which("nvidia-smi")),
+              "stage5_workbook_worker_present":(ops/"stage5-evidence-workbook.py").is_file(),
+              "agri200_doctoral_plans":count("stage-05/doctoral-monographs-100k-v1/plans"),
+              "agri200_stage5_draft_manifests":count("stage-05/completed-drafts"),
+              "agri200_strict_qc_files":count("stage-06/strict-qc1000"),
+              "agri200_existing_monograph_markdown_files":count("stage-05/doctoral-monographs-100k-v1/manuscripts","*.md"),
+              "agri200_closed_loop":status("stage-06/autonomous-closed-loop-status.json"),
+              "note":"Artifact counts are not book completions. No independent QC1000 or customer purchase is asserted."
+          }
+          print(json.dumps(out,sort_keys=True,ensure_ascii=False))
+          PY'
