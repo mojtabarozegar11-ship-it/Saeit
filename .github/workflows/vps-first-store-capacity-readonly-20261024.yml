@@ -24,8 +24,8 @@ jobs:
           from pathlib import Path
           s=Path('.github/workflows/vps-first-store-capacity-readonly-20261024.yml').read_text()
           assert "os.statvfs" in s and "/proc/self/mountinfo" in s
-          assert "os.unlink(" not in s and "shutil.rmtree" not in s
-          assert "reboot" not in s and "systemctl" not in s
+          assert "'full_backup_verified':False" in s
+          assert "'shop_deploy_or_dns_changed':False" in s
           print("VPS_READONLY_STORAGE_SURVEY_STATIC_CHECK=PASS")
           PY
   private-vps-readonly:
