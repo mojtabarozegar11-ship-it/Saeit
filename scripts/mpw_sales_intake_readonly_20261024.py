@@ -92,6 +92,33 @@ def configured_support_mailbox():
     output("MPW_SUPPORT_ACCOUNT", info)
 
 
+
+
+def configured_support_forwarder():
+    info = {"source": "cpanel_Email_list_forwarders", "available": False,
+            "support_forwarder_present": None, "no_destinations_disclosed": True}
+    try:
+        p = subprocess.run(
+            ["uapi", "--output=json", "Email", "list_forwarders", "domain=" + DOMAIN],
+            capture_output=True, timeout=18, check=False)
+        if p.returncode == 0 and len(p.stdout) <= 3_000_000:
+            obj = json.loads(p.stdout.decode("utf-8"))
+            result = obj.get("result") or {}
+            rows = result.get("data")
+            if isinstance(rows, list) and result.get("status") in (1, True):
+                info["available"] = True
+                info["support_forwarder_present"] = any(
+                    str(row.get("email") or row.get("forward") or
+                        row.get("from") or row.get("source") or "").lower()
+                    in ("support", "support@" + DOMAIN)
+                    for row in rows if isinstance(row, dict))
+                info["forwarder_rows"] = len(rows)
+                info["source_key_names"] = sorted(
+                    set().union(*(row.keys() for row in rows if isinstance(row, dict))))[:20]
+    except (OSError, subprocess.TimeoutExpired, ValueError, UnicodeError, TypeError):
+        pass
+    output("MPW_SUPPORT_FORWARDER", info)
+
 def route_bucket(page):
     if page.startswith("/store/product/"):
         return "product_checkout" if "/checkout/" in page else "product_detail"
@@ -214,6 +241,7 @@ def visitor_logs():
 if __name__ == "__main__":
     support_maildir()
     configured_support_mailbox()
+    configured_support_forwarder()
     recent_cpanel_visitors()
     visitor_logs()
     output("MPW_INTAKE_READONLY", {"result": "completed", "production_db_writes": False,
