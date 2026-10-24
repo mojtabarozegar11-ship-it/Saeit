@@ -168,6 +168,12 @@ jobs:
               if ("support" in line.lower() and len(line)<260 and
                   ("=>" in line or "pages/" in line or "$allowed" in line)):
                   print("MPW_TEMPLATE_SUPPORT_MAPPING="+json.dumps(line.strip()))
+          shell=src.read_text(errors="replace")
+          print("MPW_SHELL_END_SOURCE_SNIPPET="+json.dumps(shell[-4700:],ensure_ascii=False))
+          print("MPW_SHELL_ROUTE_MAP_LINES="+json.dumps([
+              line.strip() for line in shell.splitlines()
+              if any(token in line for token in ("function rewrite", "function transform", "$body=", "$response=", "echo $", "$slug ==="))
+              ][:35],ensure_ascii=False))
           print("LOCAL_OLLAMA_BIN="+str(bool(shutil.which("ollama"))))
           print("LOCAL_LLAMA_SERVER_BIN="+str(bool(shutil.which("llama-server"))))
           print("LOCAL_LLAMA_PYTHON="+str(importlib.util.find_spec("llama_cpp") is not None))
