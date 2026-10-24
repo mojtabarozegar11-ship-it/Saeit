@@ -1,0 +1,72 @@
+name: Systemwide scientific evidence rework for every factory product
+on:
+  pull_request:
+    paths:
+      - scripts/factory_systemwide_science_rework_20261024.py
+      - tests/test_factory_systemwide_science_rework_20261024.py
+      - deploy/install_factory_systemwide_science_rework_20261024.sh
+      - .github/workflows/factory-systemwide-science-rework-20261024.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_systemwide_science_rework_20261024.py
+      - tests/test_factory_systemwide_science_rework_20261024.py
+      - deploy/install_factory_systemwide_science_rework_20261024.sh
+      - .github/workflows/factory-systemwide-science-rework-20261024.yml
+permissions: {contents: read}
+concurrency:
+  group: factory-systemwide-science-rework
+  cancel-in-progress: false
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify all 184 plus future orders; no forged QC or source evidence
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_factory_systemwide_science_rework_20261024.py' -v
+          bash -n deploy/install_factory_systemwide_science_rework_20261024.sh
+  private-vps-systemwide:
+    needs: regression
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-all-product-science-rework-20261024]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install immutable per-claim/source rework for all private products
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/all-product-science"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          py='/home/githubops/factory-runtime/.venv/bin/python'
+          root='/home/githubops/factory-runtime/private/autonomous-product-cycle'
+          target="/home/githubops/factory-runtime/operations/.all-product-science-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh_vps "test \"\$(id -un)\" = githubops; umask 077; test ! -e '$target'; install -d -m 700 '$target/scripts' '$target/tests' '$target/deploy'"
+          for file in scripts/factory_systemwide_science_rework_20261024.py tests/test_factory_systemwide_science_rework_20261024.py deploy/install_factory_systemwide_science_rework_20261024.sh; do
+            ssh_vps "umask 077; cat > '$target/$file'; chmod 600 '$target/$file'" < "$file"
+            expected="$(sha256sum "$file" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$target/$file' | awk '{print \$1}')\" = '$expected'"
+          done
+          ssh_vps "timeout 150s '$py' -B -m unittest discover -s '$target/tests' -p test_factory_systemwide_science_rework_20261024.py -v"
+          ssh_vps "bash -n '$target/deploy/install_factory_systemwide_science_rework_20261024.sh'"
+          ssh_vps "GITHUB_RUN_ID='$GITHUB_RUN_ID' timeout 430s bash '$target/deploy/install_factory_systemwide_science_rework_20261024.sh' '$target/scripts/factory_systemwide_science_rework_20261024.py'"
+          ssh_vps "timeout 240s '$py' -B '/home/githubops/factory-runtime/operations/production-instructions/systemwide-scientific-source-rework.py' --factory-private '$root' --batch 2000"
+          printf '%s\n' 'FACTORY_ALL_PRODUCT_SOURCE_REPAIR=ACTIVE' 'NO_QC1000_APPROVAL=ASSERTED' 'NO_LIVE_SITE_CHANGES=ASSERTED'
