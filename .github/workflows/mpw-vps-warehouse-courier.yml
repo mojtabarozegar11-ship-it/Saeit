@@ -20,7 +20,7 @@ jobs:
   courier:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -93,9 +93,23 @@ jobs:
           umask 077
           d="$RUNNER_TEMP/factory-store-preflight"
           source="$(base64 -w0 scripts/mpw_vps_warehouse_courier.py)"
-          timeout 160s ssh -T -F "$d/config" saeit-vps \
-            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-export" \
-            > "$RUNNER_TEMP/mpw-factory-stock.tgz"
+          fetch_stock() {
+            local attempt rc output="$RUNNER_TEMP/mpw-factory-stock.tgz"
+            for attempt in 1 2; do
+              if timeout 300s ssh -T -F "$d/config" saeit-vps \
+                "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-export" \
+                > "$output.tmp"; then
+                mv -f -- "$output.tmp" "$output"
+                return 0
+              else
+                rc=$?
+              fi
+              rm -f -- "$output.tmp"
+              if [ "$attempt" -eq 2 ]; then return "$rc"; fi
+              sleep 5
+            done
+          }
+          fetch_stock
           test -s "$RUNNER_TEMP/mpw-factory-stock.tgz"
           size="$(stat -c %s "$RUNNER_TEMP/mpw-factory-stock.tgz")"
           test "$size" -le 115343360
