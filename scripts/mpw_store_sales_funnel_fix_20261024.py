@@ -13,7 +13,7 @@ SITE = Path("/home/zomorod2/mojplaywin.com")
 WSGI = SITE / "passenger_wsgi.py"
 HOME = Path("/home/zomorod2")
 OLD_SHA = "1fd6222d44b90d2c849412b8432add1e16e8df8099d4217fc50b5c26703fd313"
-NEW_SHA = "874b18e8e614e3de2ece04b9183f6db126b228d9b6ad9e7096098fa7ffb1a887"
+NEW_SHA = "784cb9d754e72b910c7ab6ccb301b5954a0bdc91dbcc4a9499ea9cdf6fdbd4b2"
 
 
 def sha(data):
