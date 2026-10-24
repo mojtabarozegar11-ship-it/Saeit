@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
     paths: [".github/workflows/mpw-final-real-payment-readonly-20261020.yml"]
+# Read-only rerun requested 2026-10-24 to inspect current live checkout and order state.
+
 permissions: {contents: read}
 jobs:
   inspect:
