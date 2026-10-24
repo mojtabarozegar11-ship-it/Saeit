@@ -149,10 +149,20 @@ def install_private(factory_root):
     base = Path(factory_root).resolve() / "production-instructions"
     if not base.is_dir() or base.is_symlink():
         raise ValueError("PRIVATE_FACTORY_AREA_NOT_ACCESSIBLE")
-    dest = base / "stage-05/doctoral-monographs-150k-en-v1"
+    stage = base / "stage-05"
+    # A symlink at an intermediate directory bypasses dest.is_symlink().
+    # Refuse it before any mkdir/write, including if it points outside the factory.
+    if stage.is_symlink():
+        raise ValueError("UNSAFE_PRIVATE_DIRECTORY")
+    stage.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if stage.is_symlink() or stage.resolve() != base / "stage-05":
+        raise ValueError("UNSAFE_PRIVATE_DIRECTORY")
+    dest = stage / "doctoral-monographs-150k-en-v1"
     if dest.is_symlink():
         raise ValueError("UNSAFE_PRIVATE_DIRECTORY")
-    dest.mkdir(parents=True, exist_ok=True, mode=0o700)
+    dest.mkdir(exist_ok=True, mode=0o700)
+    if dest.is_symlink() or dest.resolve() != stage / "doctoral-monographs-150k-en-v1":
+        raise ValueError("UNSAFE_PRIVATE_DIRECTORY")
     lock = dest / ".agri150k-plan.lock"
     if lock.is_symlink():
         raise ValueError("UNSAFE_PRIVATE_LOCK")
