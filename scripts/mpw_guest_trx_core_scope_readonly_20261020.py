@@ -168,7 +168,7 @@ with tempfile.TemporaryDirectory(prefix="mpw-readonly-order-sim-") as tmp:
     fakefile.write_bytes(b"%PDF-1.4\n% SIMULATION ONLY\n%%EOF\n")
     fakefile.chmod(0o600)
     intent_calls=[]
-    def fake_reserve(*args,**kwargs): intent_calls.append({"args":len(args),"kwargs":sorted(kwargs)}); return 987652
+    def fake_reserve(*args,**kwargs): intent_calls.append({"args":len(args),"kwargs":sorted(kwargs)}); return (987652,None,None)
     patches=[
         patch.object(core_models,"Product",SimpleNamespace(objects=FakeProductManager())),
         patch.object(core_models,"Order",FakeOrder),
