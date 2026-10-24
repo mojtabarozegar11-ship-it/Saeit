@@ -62,6 +62,16 @@ class PrimarySourceTests(unittest.TestCase):
             self.assertEqual(results["new_order_claim_candidate_maps"],184)
             self.assertEqual(results["qc1000_approvals"],0)
             self.assertEqual(results["publications"],0)
+            self.assertEqual(results["products_visited"],184)
+            self.assertEqual(results["products_waiting_on_primary_sources"],0)
+            heartbeat=root/"production-instructions/stage-02/primary-source-acquisition-v1/.last-successful-acquisition.json"
+            self.assertTrue(heartbeat.is_file())
+            progress=m.evidence_status(root)
+            self.assertEqual(progress["orders"],184)
+            self.assertEqual(progress["remaining_unique_dois"],0)
+            self.assertEqual(progress["licensed_xml_hash_verified"],4)
+            self.assertEqual(progress["claim_candidate_maps"],184)
+            self.assertTrue(progress["all_orders_remain_release_blocked"])
             retry=m.execute(root,http_get=lambda *_: (_ for _ in ()).throw(AssertionError("no duplicate HTTP")))
             self.assertEqual(retry["cached"],4)
             self.assertEqual(retry["new_order_claim_candidate_maps"],0)
@@ -131,10 +141,60 @@ class PrimarySourceTests(unittest.TestCase):
             self.assertEqual(first["LICENSED_FULLTEXT_ARCHIVED"],3)
             self.assertEqual(first["remaining_unique_dois"],1)
             self.assertFalse(first["qc1000_approvals"])
+            triage=root/"production-instructions/stage-02/primary-source-acquisition-v1/stage5-scientific-rework-triage/WO-00000001--r001.json"
+            self.assertFalse(json.loads(triage.read_text())["primary_source_acquisition_complete"])
             retry=m.execute(root,batch=4,http_get=simulated)
             self.assertEqual(retry["LICENSED_FULLTEXT_ARCHIVED"],1)
             self.assertEqual(retry["remaining_unique_dois"],0)
             self.assertEqual(retry["new_order_claim_candidate_maps"],1)
+            self.assertTrue(json.loads(triage.read_text())["primary_source_acquisition_complete"])
+            self.assertFalse(json.loads(triage.read_text())["scientific_reauthoring_completed"])
+
+    def test_conflicting_rights_never_pass_and_no_false_heartbeat(self):
+        self.assertFalse(m.license_ok(
+            "https://creativecommons.org/publicdomain/zero/1.0/ "
+            "all rights reserved, non-commercial"))
+        self.assertFalse(m.license_ok(
+            "https://creativecommons.org/licenses/by/4.0/ "
+            "https://creativecommons.org/licenses/by-nd/4.0/"))
+        self.assertTrue(m.license_ok(
+            "https://creativecommons.org/licenses/by/4.0/"))
+        self.assertFalse(m.license_ok(
+            "https://evilcreativecommons.org/licenses/by/4.0/"))
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            build(root,1)
+            self.assertEqual(m.evidence_status(root)["remaining_unique_dois"],4)
+            result=m.execute(root,batch=4,http_get=simulated)
+            self.assertEqual(result["LICENSED_FULLTEXT_ARCHIVED"],4)
+            evidence=root/"production-instructions/stage-02/primary-source-acquisition-v1"
+            archived=list((evidence/"licensed-xml").glob("*.xml"))
+            archived[0].write_bytes(b"tampered")
+            with self.assertRaisesRegex(m.Blocked,"PRIMARY_XML_HASH_MISMATCH"):
+                m.evidence_status(root)
+
+    def test_legacy_archived_license_conflict_is_quarantined_in_status(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            build(root,1)
+            m.execute(root,batch=4,http_get=simulated)
+            target=root/"production-instructions/stage-02/primary-source-acquisition-v1"
+            doi="10.1000/realstudy-0"
+            key=m.key(doi)
+            xml=article(doi, "https://creativecommons.org/licenses/by/4.0/ all rights reserved")
+            (target/"licensed-xml"/(key+".xml")).write_bytes(xml)
+            path=target/"metadata"/(key+".json")
+            meta=json.loads(path.read_text())
+            meta["xml_sha256"]=m.sha(xml)
+            path.write_text(json.dumps(meta))
+            status=m.evidence_status(root)
+            self.assertEqual(status["licensed_xml_hash_verified"],3)
+            self.assertEqual(status["source_states"]["ARCHIVED_LICENSE_RECHECK_REQUIRED"],1)
+            _, orders, _=m.collect(root/"production-instructions")
+            m.route_product_rework(target,orders)
+            triage=json.loads((target/"stage5-scientific-rework-triage/WO-00000001--r001.json").read_text())
+            self.assertFalse(triage["primary_source_acquisition_complete"])
+            self.assertEqual(triage["sources"][0]["state"],"ARCHIVED_LICENSE_RECHECK_REQUIRED")
 
 if __name__=="__main__":
     unittest.main()
