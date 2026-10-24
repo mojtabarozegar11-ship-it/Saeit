@@ -1,3 +1,4 @@
+# Work-order IDs and revision filenames remain open-ended for ongoing rework.
 #!/usr/bin/env python3
 """Stage 2: independent desk-research intake, source gap remediation and handoff.
 
