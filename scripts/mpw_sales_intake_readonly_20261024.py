@@ -68,6 +68,47 @@ def support_maildir():
     output("MPW_SUPPORT_MAILBOX", report)
 
 
+
+
+def configured_support_mailbox():
+    info = {"source": "cpanel_Email_list_pops", "available": False,
+            "support_account_present": None, "mail_forwarding_unknown": True}
+    try:
+        p = subprocess.run(
+            ["uapi", "--output=json", "Email", "list_pops", "domain=" + DOMAIN],
+            capture_output=True, timeout=18, check=False)
+        if p.returncode == 0 and len(p.stdout) <= 3_000_000:
+            obj = json.loads(p.stdout.decode("utf-8"))
+            result = obj.get("result") or {}
+            rows = result.get("data")
+            if isinstance(rows, list) and result.get("status") in (1, True):
+                info["available"] = True
+                info["support_account_present"] = any(
+                    str(row.get("email") or row.get("login") or row.get("user") or "").lower()
+                    in ("support", "support@" + DOMAIN)
+                    for row in rows if isinstance(row, dict))
+    except (OSError, subprocess.TimeoutExpired, ValueError, UnicodeError, TypeError):
+        pass
+    output("MPW_SUPPORT_ACCOUNT", info)
+
+
+def route_bucket(page):
+    if page.startswith("/store/product/"):
+        return "product_checkout" if "/checkout/" in page else "product_detail"
+    if page.startswith("/store/") or page == "/store":
+        return "store"
+    if page.startswith("/commerce/trx-easy/"):
+        return "trx_invoice" if "/invoice/" in page else "trx_other"
+    if page.startswith("/accounts/"):
+        return "account"
+    if page.startswith("/ask-master/"):
+        return "support_ticket"
+    if page.startswith(("/support/", "/contact/")):
+        return "support_contact"
+    if page.startswith(("/admin/", "/wp-admin/", "/.env", "/cgi-bin/")):
+        return "scan_or_admin"
+    return "other"
+
 def recent_cpanel_visitors():
     """Legacy cPanel API has no equivalent UAPI; do not echo its raw PII."""
     result = {"source": "cpanel_Stats_lastvisitors", "available": False,
@@ -114,6 +155,7 @@ def visitor_logs():
         return
     report["available"] = True
     unique = set()
+    errors_by_bucket = Counter()
     first = last = None
     for p in files:
         try:
@@ -143,6 +185,8 @@ def visitor_logs():
                         report["likely_bot_page_hits"] += 1
                         continue
                     report["likely_human_page_hits"] += 1
+                    if status.startswith(("4", "5")):
+                        errors_by_bucket[route_bucket(page) + ":" + status] += 1
                     unique.add(ip)
                     if page.startswith("/store/") or page == "/store/":
                         report["store_page_hits"] += 1
@@ -162,10 +206,14 @@ def visitor_logs():
     report["earliest_utc"] = first.isoformat() if first else None
     report["latest_utc"] = last.isoformat() if last else None
     output("MPW_VISITOR_LOGS", report)
+    output("MPW_ERROR_BUCKETS", {"source": "same_archived_access_logs",
+                                "codes_by_route": dict(errors_by_bucket.most_common(30)),
+                                "no_url_or_ip_disclosed": True})
 
 
 if __name__ == "__main__":
     support_maildir()
+    configured_support_mailbox()
     recent_cpanel_visitors()
     visitor_logs()
     output("MPW_INTAKE_READONLY", {"result": "completed", "production_db_writes": False,
