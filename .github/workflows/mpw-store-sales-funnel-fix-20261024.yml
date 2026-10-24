@@ -117,6 +117,37 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-store-sales-ssh"
           timeout 75s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - install '$GITHUB_RUN_ID'" < scripts/mpw_store_sales_funnel_fix_20261024.py
+      - name: Gracefully refresh the isolated store template cache
+        id: refresh
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-store-sales-ssh"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          from pathlib import Path
+          import hashlib
+          H=Path('/home/zomorod2')
+          app=H/'Saeit-staging'
+          wsgi=H/'mojplaywin.com/passenger_wsgi.py'
+          store=app/'core/templates/mojplaywin/store.html'
+          if not app.is_dir() or app.is_symlink() or not wsgi.is_file() or wsgi.is_symlink():
+              raise SystemExit('SHARED_PASSENGER_ROOT_NOT_VERIFIED')
+          if "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):
+              raise SystemExit('WSGI_APP_ROOT_NOT_PINNED')
+          if store.is_symlink() or not store.is_file():
+              raise SystemExit('STORE_TEMPLATE_NOT_REGULAR')
+          digest=hashlib.sha256(store.read_bytes().replace(bytes([13,10]),bytes([10]))).hexdigest()
+          if digest!='784cb9d754e72b910c7ab6ccb301b5954a0bdc91dbcc4a9499ea9cdf6fdbd4b2':
+              raise SystemExit('STORE_TEMPLATE_HASH_NOT_PINNED')
+          directory=app/'tmp'
+          if directory.is_symlink():
+              raise SystemExit('UNSAFE_RESTART_DIRECTORY')
+          directory.mkdir(exist_ok=True)
+          marker=directory/'restart.txt'
+          if marker.is_symlink() or (marker.exists() and not marker.is_file()):
+              raise SystemExit('UNSAFE_RESTART_MARKER')
+          marker.touch()
+          print('MPW_STORE_TEMPLATE_CACHE_REFRESH_REQUESTED=1;STORE_TEMPLATE_HASH_VERIFIED=1')
+          PY
       - name: Verify live checkout links and unchanged protected routes
         id: smoke
         run: |
@@ -137,7 +168,7 @@ jobs:
             okay=(code==200 and "Shop available books" in body
               and 'id="mpw-original-books"' in body
               and "/store/product/72/" in body and "/store/product/225/" in body
-              and "View book &amp; purchase" in body
+              and "View book & purchase" in body
               and "mpw-store-ten-guides" not in body
               and "INITIAL COLLECTION" not in body)
             print("MPW_STORE_PUBLIC_ATTEMPT="+json.dumps({"attempt":attempt,"status":code,"fixed":okay}))
@@ -155,11 +186,37 @@ jobs:
           print("MPW_STORE_SALES_FIX_LIVE=PASS")
           PY
       - name: Roll back store template if post-install verification fails
+        id: rollback
         if: failure() && steps.install.outcome == 'success'
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-store-sales-ssh"
           timeout 50s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'" < scripts/mpw_store_sales_funnel_fix_20261024.py
+      - name: Refresh app template cache after exact store rollback
+        if: failure() && steps.install.outcome == 'success' && steps.rollback.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-store-sales-ssh"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          from pathlib import Path
+          import hashlib
+          H=Path('/home/zomorod2')
+          app=H/'Saeit-staging'
+          wsgi=H/'mojplaywin.com/passenger_wsgi.py'
+          store=app/'core/templates/mojplaywin/store.html'
+          if not wsgi.is_file() or wsgi.is_symlink() or "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):
+              raise SystemExit('WSGI_PIN_NOT_VERIFIED')
+          if store.is_symlink() or not store.is_file():
+              raise SystemExit('STORE_TEMPLATE_NOT_REGULAR')
+          digest=hashlib.sha256(store.read_bytes().replace(bytes([13,10]),bytes([10]))).hexdigest()
+          if digest!='8937201e5b0252cab846ab98145ee4d5570b70a11fd523804aa5815668f64c6b':
+              raise SystemExit('ROLLBACK_HASH_NOT_VERIFIED')
+          marker=app/'tmp/restart.txt'
+          if marker.is_symlink() or marker.parent.is_symlink():
+              raise SystemExit('UNSAFE_MARKER')
+          marker.touch()
+          print('MPW_POST_ROLLBACK_TEMPLATE_CACHE_REFRESH_REQUESTED=1')
+          PY
       - name: Remove temporary stage and SSH material, keep private backup
         if: always()
         run: |
