@@ -106,6 +106,15 @@ jobs:
           status = json.loads(health.read_text(encoding="utf8"))
           if status.get("scanner_health") != "RUNNING":
               raise SystemExit("QC1000_SCANNER_NOT_RUNNING")
+          from datetime import datetime, timezone, timedelta
+          recent = status.get("updated_utc")
+          if not isinstance(recent, str):
+              raise SystemExit("QC1000_NO_HEALTH_HEARTBEAT")
+          updated = datetime.fromisoformat(recent.replace("Z", "+00:00"))
+          now = datetime.now(timezone.utc)
+          if updated.tzinfo is None or not now - timedelta(minutes=5) <= updated <= now + timedelta(minutes=1):
+              raise SystemExit("QC1000_MONITOR_HEARTBEAT_STALE")
+          print("QC1000_VPS_LIVE_HEARTBEAT_UTC=" + recent)
           if status.get("professional_quality_1000_certifications_created") != 0:
               raise SystemExit("QC1000_UNEXPECTED_PRETEND_CERTIFICATE")
           print("QC1000_VPS_LIVE_MONITOR_INSTALLED=" + str(monitor.is_file()).lower())
