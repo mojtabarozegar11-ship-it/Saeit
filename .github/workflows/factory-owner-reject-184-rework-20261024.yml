@@ -1,0 +1,74 @@
+name: Owner rejection of 184 private factory products and protected rework
+on:
+  pull_request:
+    paths:
+      - scripts/factory_owner_reject_184_rework_20261024.py
+      - tests/test_factory_owner_reject_184_rework_20261024.py
+      - .github/workflows/factory-owner-reject-184-rework-20261024.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_owner_reject_184_rework_20261024.py
+      - tests/test_factory_owner_reject_184_rework_20261024.py
+      - .github/workflows/factory-owner-reject-184-rework-20261024.yml
+permissions: {contents: read}
+concurrency:
+  group: factory-owner-reject-184-private
+  cancel-in-progress: false
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Prove preflight, immutable rejection, no release, and conflict safety
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_factory_owner_reject_184_rework_20261024.py' -v
+          python3 -B -m py_compile scripts/factory_owner_reject_184_rework_20261024.py
+  private-vps-apply-owner-decision:
+    needs: regression
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-owner-reject184-20261024]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify originals, atomically reject 184, run private substantive rewrite and mechanical QC
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/owner-reject184"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          private='/home/githubops/factory-runtime/private/autonomous-product-cycle'
+          ops='/home/githubops/factory-runtime/operations/production-instructions'
+          py='/home/githubops/factory-runtime/.venv/bin/python'
+          ssh_vps "test \"\$(id -un)\" = githubops && test -x '$py' && test -d '$private/production-instructions/stage-05/downloadable-receipts' && test -f '$ops/agri200-source-grounded-v003.py' && test -f '$ops/agri200-source-grounded-v003-qc.py' && test -f '$ops/stage34-autonomous-handoff.py' && test -f '$ops/stage5-evidence-workbook.py' && test -f '$ops/research-navigator.py'"
+          target="/home/githubops/factory-runtime/operations/.owner-rework-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh_vps "umask 077; test ! -e '$target'; install -d -m 700 '$target/scripts' '$target/tests'"
+          for file in scripts/factory_owner_reject_184_rework_20261024.py tests/test_factory_owner_reject_184_rework_20261024.py; do
+            ssh_vps "umask 077; cat > '$target/$file'; chmod 600 '$target/$file'" < "$file"
+            expected="$(sha256sum "$file" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$target/$file' | awk '{print \$1}')\" = '$expected'"
+          done
+          ssh_vps "timeout 150s '$py' -B -m unittest discover -s '$target/tests' -p test_factory_owner_reject_184_rework_20261024.py -v"
+          ssh_vps "timeout 180s '$py' -B '$target/scripts/factory_owner_reject_184_rework_20261024.py' --factory-private '$private' --expected-count 184 --dry-run"
+          ssh_vps "timeout 180s '$py' -B '$target/scripts/factory_owner_reject_184_rework_20261024.py' --factory-private '$private' --expected-count 184"
+          ssh_vps "timeout 600s '$py' -B '$ops/agri200-source-grounded-v003.py' --factory-private '$private' --stage34-worker '$ops/stage34-autonomous-handoff.py' --stage5-worker '$ops/stage5-evidence-workbook.py' --candidate-worker '$ops/research-navigator.py' --batch 250"
+          ssh_vps "timeout 180s '$py' -B '$ops/agri200-source-grounded-v003-qc.py' --factory-private '$private' --stage34-worker '$ops/stage34-autonomous-handoff.py' --batch 250"
+          ssh_vps "timeout 180s '$py' -B '$target/scripts/factory_owner_reject_184_rework_20261024.py' --factory-private '$private' --expected-count 184"
+          printf '%s\n' 'OWNER_REJECT_184=RECORDED_PRIVATE' 'QC1000_APPROVAL=NOT_ASSERTED' 'PUBLIC_SITES=UNCHANGED'
