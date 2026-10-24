@@ -47,4 +47,57 @@ for rel,names in {
                 continue
             out.append(t[:155])
         print("GUEST_LOGIC="+json.dumps({"file":rel,"name":n.name,"lines":out[:75]}))
+# Current public routes are provided by services modules outside the static repo.
+# Inspect only bounded control flow and render the active GET handler with a synthetic user.
+import importlib, inspect, re
+from django.test import RequestFactory
+from types import SimpleNamespace
+for modname in ("services.mpw_trx_public_pages","services.mpw_trx_commercial_web"):
+    try:
+        mod=importlib.import_module(modname)
+        file=Path(mod.__file__)
+        code=file.read_text("utf8","replace")
+        tree=ast.parse(code)
+        funcs=[]
+        for node in tree.body:
+            if not isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):continue
+            n=node.name.lower()
+            if not any(k in n for k in ("product_checkout","trx","invoice","start","status","reconcile","purchase")):continue
+            calls=sorted({ast.unparse(c.func).split(".")[-1] for c in ast.walk(node) if isinstance(c,ast.Call)})
+            route_actions=[]
+            for stmt in ast.walk(node):
+                if isinstance(stmt,ast.If):
+                    cond=ast.unparse(stmt.test)
+                    route_actions.append(cond[:170])
+            funcs.append({"name":node.name,"line":node.lineno,"lines":node.end_lineno-node.lineno+1,
+                          "calls":calls[:28],"conditions":route_actions[:16]})
+        print("MPW_ACTIVE_SERVICE_MODULE="+json.dumps({"module":modname,"exists":True,"functions":funcs[:50]},ensure_ascii=False))
+    except Exception as e:
+        print("MPW_ACTIVE_SERVICE_MODULE="+json.dumps({"module":modname,"error":type(e).__name__}))
+for route in ("/store/product/72/checkout/","/store/product/225/checkout/",
+              "/commerce/trx-easy/start/72/","/commerce/trx-easy/invoice/1/",
+              "/commerce/checkout/order/","/commerce/checkout/challenge/",
+              "/commerce/checkout/verify/","/commerce/checkout/invoice/"):
+    try:
+        match=resolve(route); target=inspect.unwrap(match.func)
+        print("MPW_ACTIVE_SERVICE_ROUTE="+json.dumps({"path":route,"module":target.__module__,
+              "function":target.__name__,"name":match.url_name},ensure_ascii=False))
+    except Exception as e:
+        print("MPW_ACTIVE_SERVICE_ROUTE="+json.dumps({"path":route,"error":type(e).__name__}))
+for pid in (72,225):
+    request=RequestFactory().get("/store/product/%d/checkout/"%pid,secure=True,HTTP_HOST="mojplaywin.com")
+    request.user=SimpleNamespace(pk=-1000,is_authenticated=True,is_active=True,username="readonly-buyer")
+    try:
+        response=resolve(request.path).func(request,product_id=pid)
+        body=response.content.decode("utf8","replace")
+        print("MPW_ACTIVE_CHECKOUT_RENDER="+json.dumps({"product":pid,"status":response.status_code,
+             "bytes":len(response.content),"login_redirect":"login" in getattr(response,"url","").lower(),
+             "has_trx_easy_form":"/commerce/trx-easy/start/%d/"%pid in body,
+             "has_invoice_api":"/commerce/checkout/invoice/" in body,
+             "has_challenge_api":"/commerce/checkout/challenge/" in body,
+             "has_signup_return":("/accounts/register/?next=/store/product/%d/checkout/"%pid in body),
+             "read_only":True,"orders_created":False},ensure_ascii=False))
+    except Exception as e:
+        print("MPW_ACTIVE_CHECKOUT_RENDER="+json.dumps({"product":pid,"error":type(e).__name__,"read_only":True}))
 print("GUEST_READONLY=PASS")
+
