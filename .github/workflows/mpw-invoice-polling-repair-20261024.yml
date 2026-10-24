@@ -141,6 +141,34 @@ jobs:
           marker.touch()
           print('MPW_INVOICE_POLLING_SOURCE_VERIFIED=PASS;SHA256='+hashlib.sha256(raw).hexdigest())
           PY
+      - name: Read deployed invoice route wiring without changing application data
+        run: |
+          set -euo pipefail
+          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-invoice-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import re,json
+          root=Path('/home/zomorod2/Saeit-staging')
+          path_re=re.compile(r"(?:path|re_path)\\(\\s*['\\\"]([^'\\\"]+)['\\\"]\\s*,\\s*([A-Za-z0-9_.]+)")
+          routes=[];views=[]
+          for p in root.rglob('urls.py'):
+              if p.is_symlink() or not p.is_file():continue
+              try: lines=p.read_text('utf8','replace').splitlines()
+              except OSError:continue
+              for n,line in enumerate(lines,1):
+                  if re.search(r'trx|invoice|commerce',line,re.I):
+                      for m in path_re.finditer(line):routes.append({'file':str(p.relative_to(root)),'line':n,'route':m.group(1),'view':m.group(2)})
+          for base in (root/'services',root/'core'):
+              if not base.is_dir() or base.is_symlink():continue
+              for p in base.rglob('*.py'):
+                  if p.is_symlink():continue
+                  try:lines=p.read_text('utf8','replace').splitlines()
+                  except OSError:continue
+                  for n,line in enumerate(lines,1):
+                      m=re.match(r'\\s*def\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(',line)
+                      if m and re.search(r'trx|invoice|checkout|start',m.group(1),re.I):views.append({'file':str(p.relative_to(root)),'line':n,'function':m.group(1)})
+          print('MPW_DEPLOYED_INVOICE_ROUTE_MAP='+json.dumps({'routes':routes[:80],'views':views[:80]}))
+          if not routes:raise SystemExit('NO_INVOICE_ROUTE_DEFINITIONS_FOUND')
+          PY
       - name: Smoke public store product and checkout routes without creating orders or payments
         run: |
           set -euo pipefail
