@@ -22,6 +22,9 @@ Original educational notes, with current official product and company links. The
 - [Atelier Interior: a client website launch checklist](docs/marketing/atelier-interior-website-launch-checklist-20261024.md) — licensing, accessibility, SEO and reliable contact forms.
 - [راهنمای محاسبه علمی مقدار بذر گندم](docs/marketing/fa-wheat-seed-rate-field-guide-20261024.md) — محاسبه بذر، مفروضات، واحدها و تحلیل حساسیت.
 - [Research collaboration: evidence and deliverables](docs/marketing/mojtaba-roozegar-research-collaboration-brief-20261024.md) — a transparent framework for scientific and enterprise discussions.
+- [Digital-download TRX buyer safety checklist](docs/marketing/trx-digital-download-buyer-safety-guide-20261024.md) — invoice verification, wallet safety and delivery checks.
+- [ردیابی و کنترل کیفیت فرآوری محصولات کشاورزی و غذایی](docs/marketing/fa-food-processing-traceability-quality-guide-20261024.md) — شناسنامه بچ، آزادسازی محصول و ممیزی ردیابی.
+
 
 ## Runtime safety
 
