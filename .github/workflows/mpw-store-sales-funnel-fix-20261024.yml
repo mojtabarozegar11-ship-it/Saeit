@@ -151,15 +151,19 @@ jobs:
           config=ht.read_bytes()
           if config.count(b'RewriteCond %{REQUEST_URI} ^/(games|ai|')!=1 or b'RewriteCond %{REQUEST_URI} ^/(store|games|ai|' in config:
               raise SystemExit('STORE_APACHE_ROUTE_NOT_VERIFIED')
-          directory=app/'tmp'
-          if directory.is_symlink():
-              raise SystemExit('UNSAFE_RESTART_DIRECTORY')
-          directory.mkdir(exist_ok=True)
-          marker=directory/'restart.txt'
-          if marker.is_symlink() or (marker.exists() and not marker.is_file()):
-              raise SystemExit('UNSAFE_RESTART_MARKER')
-          marker.touch()
-          print('MPW_STORE_TEMPLATE_CACHE_REFRESH_REQUESTED=1;STORE_TEMPLATE_HASH_VERIFIED=1;STORE_APACHE_ROUTE_VERIFIED=1')
+          public=H/'mojplaywin.com'
+          for root in (app,public):
+              if root.is_symlink() or not root.is_dir():
+                  raise SystemExit('UNSAFE_PASSENGER_ROOT')
+              directory=root/'tmp'
+              if directory.is_symlink():
+                  raise SystemExit('UNSAFE_RESTART_DIRECTORY')
+              directory.mkdir(exist_ok=True)
+              marker=directory/'restart.txt'
+              if marker.is_symlink() or (marker.exists() and not marker.is_file()):
+                  raise SystemExit('UNSAFE_RESTART_MARKER')
+              marker.touch()
+          print('MPW_STORE_TEMPLATE_CACHE_REFRESH_REQUESTED=1;APP_AND_PASSENGER_RESTART_MARKERS_TOUCHED=1;STORE_TEMPLATE_HASH_VERIFIED=1;STORE_APACHE_ROUTE_VERIFIED=1')
           PY
       - name: Verify live checkout links and unchanged protected routes
         id: smoke
@@ -169,7 +173,7 @@ jobs:
           import json,os,time,urllib.request,urllib.error
           url="https://mojplaywin.com/store/"
           body=""
-          for attempt in range(1,7):
+          for attempt in range(1,13):
             req=urllib.request.Request(url+"?__store_sales_fix="+os.environ["GITHUB_RUN_ID"]+"-"+str(attempt),
               headers={"User-Agent":"MPWStoreSalesFixVerify/1.0","Cache-Control":"no-cache"})
             try:
@@ -186,9 +190,12 @@ jobs:
               and "site/heroes/store.webp" not in body
               and "mpw-store-ten-guides" not in body
               and "INITIAL COLLECTION" not in body)
-            print("MPW_STORE_PUBLIC_ATTEMPT="+json.dumps({"attempt":attempt,"status":code,"fixed":okay}))
+            print("MPW_STORE_PUBLIC_ATTEMPT="+json.dumps({"attempt":attempt,"status":code,"fixed":okay,
+          "has_store_hero":"mpw-store-book" in body,"has_new_catalog":"Shop available books" in body,
+          "has_old_guides":"mpw-store-ten-guides" in body,"has_old_hero":"site/heroes/store.webp" in body,
+          "english_shell":"<html lang=\\\"en\\\" dir=\\\"ltr\\\">" in body}))
             if okay:break
-            time.sleep(3)
+            time.sleep(5)
           else:raise SystemExit("Live store conversion patch not visible")
           before=json.load(open(os.environ["RUNNER_TEMP"]+"/mpw-store-sales-before.json"))
           for url,old_status in before.items():
@@ -219,6 +226,7 @@ jobs:
           app=H/'Saeit-staging'
           wsgi=H/'mojplaywin.com/passenger_wsgi.py'
           store=app/'core/templates/mojplaywin/store.html'
+          site_base=app/'core/templates/mojplaywin/site_base.html'
           ht=H/'mojplaywin.com/.htaccess'
           if not wsgi.is_file() or wsgi.is_symlink() or "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):
               raise SystemExit('WSGI_PIN_NOT_VERIFIED')
@@ -234,11 +242,19 @@ jobs:
               raise SystemExit('ROLLBACK_PAGE_SHELL_NOT_REMOVED')
           if config.count(b'RewriteCond %{REQUEST_URI} ^/(games|ai|')!=1:
               raise SystemExit('ROLLBACK_APACHE_ROUTE_NOT_VERIFIED')
-          marker=app/'tmp/restart.txt'
-          if marker.is_symlink() or marker.parent.is_symlink():
-              raise SystemExit('UNSAFE_MARKER')
-          marker.touch()
-          print('MPW_POST_ROLLBACK_TEMPLATE_CACHE_REFRESH_REQUESTED=1')
+          public=H/'mojplaywin.com'
+          for root in (app,public):
+              if root.is_symlink() or not root.is_dir():
+                  raise SystemExit('UNSAFE_PASSENGER_ROOT')
+              directory=root/'tmp'
+              if directory.is_symlink():
+                  raise SystemExit('UNSAFE_MARKER_DIRECTORY')
+              directory.mkdir(exist_ok=True)
+              marker=directory/'restart.txt'
+              if marker.is_symlink() or (marker.exists() and not marker.is_file()):
+                  raise SystemExit('UNSAFE_MARKER')
+              marker.touch()
+          print('MPW_POST_ROLLBACK_TEMPLATE_CACHE_REFRESH_REQUESTED=1;APP_AND_PASSENGER_RESTART_MARKERS_TOUCHED=1')
           PY
       - name: Remove temporary stage and SSH material, keep private backup
         if: always()
