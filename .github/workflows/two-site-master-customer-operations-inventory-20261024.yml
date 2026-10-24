@@ -100,6 +100,26 @@ jobs:
           print("MPW_SUPPORT_PUBLIC_HTML_BYTES="+str(len(content)))
           print("MPW_SUPPORT_PUBLIC_ANCHORS="+json.dumps(re.findall(r'<a\\s+[^>]*?href=[\\"\\\']([^\\"\\\']+)',content,flags=re.I)[:20]))
           print("MPW_SUPPORT_PUBLIC_END="+json.dumps(re.sub(r'\\s+',' ',content[-900:]),ensure_ascii=False))
+          mpw_root=home/"mojplaywin.com"
+          found=[]
+          for child in mpw_root.iterdir():
+              if child.is_file() and not child.is_symlink():
+                  name=child.name.lower()
+                  if ("shell" in name or "support" in name or "main" in name) and
+                     child.stat().st_size<2000000:
+                      found.append((child.name,child.stat().st_size))
+          print("MPW_MAIN_SUPPORT_CANDIDATES="+json.dumps(sorted(found)[:35]))
+          ht=mpw_root/".htaccess"
+          if ht.is_file() and not ht.is_symlink():
+              rules=[line.strip() for line in ht.read_text(errors="replace").splitlines()
+                     if line.strip().lower().startswith(("rewriterule","rewritecond")) and
+                     any(token in line.lower() for token in ("support","shell","index","php"))]
+              print("MPW_SUPPORT_ROUTE_REWRITE_HINTS="+json.dumps(rules[:12]))
+          ix=content.lower().find("<main")
+          print("MPW_SUPPORT_PUBLIC_MAIN_SNIPPET="+json.dumps(content[ix:ix+1100] if ix>=0 else "NO_MAIN",ensure_ascii=False))
+          zm=contact.read_text(errors="replace")
+          ix=zm.lower().find("<main")
+          print("ZM_CONTACT_PUBLIC_MAIN_SNIPPET="+json.dumps(zm[ix:ix+900] if ix>=0 else "NO_MAIN",ensure_ascii=False))
           print("LOCAL_OLLAMA_BIN="+str(bool(shutil.which("ollama"))))
           print("LOCAL_LLAMA_SERVER_BIN="+str(bool(shutil.which("llama-server"))))
           print("LOCAL_LLAMA_PYTHON="+str(importlib.util.find_spec("llama_cpp") is not None))
