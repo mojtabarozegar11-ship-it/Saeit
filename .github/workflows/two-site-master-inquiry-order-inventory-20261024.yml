@@ -133,6 +133,61 @@ jobs:
           fi
           echo TWO_SITE_ROUTING_INVENTORY_COMPLETE
           REMOTE
+      - name: Inspect MojPlayWin production model families and exact site runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          timeout 125s ssh -T -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          home=Path.home()
+          for label,path in (
+           ("MPW_DJANGO_APP",home/"Saeit-staging/manage.py"),
+           ("MPW_DJANGO_VENV",home/"virtualenv/Saeit-staging/3.11/bin/python"),
+           ("MPW_PASSENGER",home/"mojplaywin.com/passenger_wsgi.py"),
+           ("ZM_ROOT_WEB",home/"public_html"),
+           ("MPW_ROOT_WEB",home/"mojplaywin.com"),
+           ("ZM_BUSINESS_PHP",home/".private/zomorod-business/app.php")
+          ):
+              print(label+"_PRESENT="+str(path.exists() and not path.is_symlink()).lower())
+          for label,path in (("ZM_WEB",home/"public_html"),("MPW_WEB",home/"mojplaywin.com")):
+              if path.is_dir() and not path.is_symlink():
+                  keys=("support","help","contact","faq","order","question","chat","buyer","checkout","shop","store","business")
+                  matches=sorted(x.name for x in path.iterdir() if any(k in x.name.lower() for k in keys))
+                  print(label+"_ENTRY_CANDIDATES="+json.dumps(matches[:50]))
+          PY
+          interpreter="$HOME/virtualenv/Saeit-staging/3.11/bin/python"
+          if test -x "$interpreter" && test -f "$HOME/Saeit-staging/manage.py";then
+            cd "$HOME/Saeit-staging"
+            "$interpreter" -B - <<'PY'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          try:
+              import django
+              django.setup()
+              from django.apps import apps
+              from django.db import connection
+              from django.urls import get_resolver
+              with connection.cursor() as cursor:
+                  tables=set(connection.introspection.table_names(cursor))
+              keys=("order","invoice","payment","inquiry","support","customer","chat","question","message","cart")
+              models=[(m._meta.label,m._meta.db_table) for m in apps.get_models() if any(k in m.__name__.lower() for k in keys)]
+              print("MPW_ORDER_AND_SUPPORT_MODEL_COUNT="+str(len(models)))
+              for label,table in sorted(models)[:45]:
+                  print("MPW_RELEVANT_MODEL="+label+":db_table_present="+str(table in tables).lower())
+              names=[str(x) for x in get_resolver().reverse_dict.keys() if isinstance(x,str) and any(k in x.lower() for k in keys)]
+              print("MPW_RELEVANT_ROUTE_NAMES="+",".join(sorted(names)[:45]))
+              print("MPW_ORDER_DB_INSPECT=ok")
+          except Exception as exc:
+              print("MPW_ORDER_DB_INSPECT=failed_"+type(exc).__name__)
+          PY
+          fi
+          echo MPW_REAL_ORDER_MODEL_INVENTORY_DONE
+          REMOTE
       - name: Remove temporary SSH identity material
         if: always()
         shell: bash
