@@ -155,6 +155,19 @@ jobs:
               print("SHELL_SOURCE_KEYWORD_"+keyword.replace("_","")+"="+str(len(hits)))
               print("SHELL_SOURCE_CONTEXT_"+keyword.replace("_","")+"="+json.dumps(
                   [text[max(0,i-250):i+430] for i in hits[:3]],ensure_ascii=False))
+          source=home/"mojplaywin.com/design-preview-20261017/mpw-ten-editorials-20261018/pages/support.html"
+          print("MPW_ACTUAL_SUPPORT_PAGE_EXISTS="+str(source.is_file() and not source.is_symlink()))
+          if source.is_file() and not source.is_symlink():
+              data=source.read_bytes()
+              print("MPW_ACTUAL_SUPPORT_PAGE_SHA256="+hashlib.sha256(data).hexdigest())
+              print("MPW_ACTUAL_SUPPORT_PAGE_BYTES="+str(len(data)))
+              print("MPW_ACTUAL_SUPPORT_PAGE_ANCHOR_COUNT="+str(data.count(b"Need a direct channel?")))
+              print("MPW_ACTUAL_SUPPORT_PAGE_LINK_PRESENT="+str(b"/ask-master/index.php" in data))
+          source_text=src.read_text(errors="replace")
+          for line in source_text.splitlines():
+              if "support" in line.lower() and len(line)<260 and
+                 ("=>" in line or "pages/" in line or "$allowed" in line):
+                  print("MPW_TEMPLATE_SUPPORT_MAPPING="+json.dumps(line.strip()))
           print("LOCAL_OLLAMA_BIN="+str(bool(shutil.which("ollama"))))
           print("LOCAL_LLAMA_SERVER_BIN="+str(bool(shutil.which("llama-server"))))
           print("LOCAL_LLAMA_PYTHON="+str(importlib.util.find_spec("llama_cpp") is not None))
