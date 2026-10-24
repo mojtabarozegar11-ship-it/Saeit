@@ -105,8 +105,8 @@ jobs:
           for child in mpw_root.iterdir():
               if child.is_file() and not child.is_symlink():
                   name=child.name.lower()
-                  if ("shell" in name or "support" in name or "main" in name) and
-                     child.stat().st_size<2000000:
+                  if (("shell" in name or "support" in name or "main" in name)
+                      and child.stat().st_size<2000000):
                       found.append((child.name,child.stat().st_size))
           print("MPW_MAIN_SUPPORT_CANDIDATES="+json.dumps(sorted(found)[:35]))
           ht=mpw_root/".htaccess"
