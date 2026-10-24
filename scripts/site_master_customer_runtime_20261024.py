@@ -220,6 +220,66 @@ def master_callback(site: str, count: int) -> None:
         raise RuntimeError("ZM_LOCAL_MASTER_CALLBACK_FAILED")
 
 
+# An acknowledgment is not a verified resolution. Financial and delivery
+# cases always require review of the authoritative merchant ledger.
+REQUIRES_VERIFICATION = re.compile(
+    r"(refund|return|chargeback|payment|paid|invoice|receipt|order|purchase|"
+    r"download|delivery|missing file|wallet|trx|transaction|"
+    r"استرداد|مرجوع|بازگشت وجه|پرداخت|فاکتور|رسید|سفارش|خرید|دانلود|تحویل|فایل|کیف پول)",
+    re.IGNORECASE,
+)
+PUBLIC_DISCOUNT_GUIDANCE = re.compile(r"(discount|coupon|promo code|تخفیف|کد تخفیف)", re.IGNORECASE)
+
+
+def classify_customer_ticket(kind: str, question: str) -> str:
+    """Conservatively route requests; never interpret a receipt as case closure."""
+    if kind == "order_question" or REQUIRES_VERIFICATION.search(question):
+        return "needs_review"
+    # The public portal already gives verified *general* discount guidance:
+    # price from product page; any actual discount needs management approval.
+    if kind == "question" and PUBLIC_DISCOUNT_GUIDANCE.search(question):
+        return "handled"
+    return "needs_review"
+
+
+def update_master_heartbeat(db: sqlite3.Connection, site: str) -> dict:
+    """Private operational metrics only: no email, message, order ID or IP."""
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS master_customer_worker_health("
+        "tenant TEXT PRIMARY KEY, last_success_utc TEXT NOT NULL,"
+        "queued INTEGER NOT NULL, review INTEGER NOT NULL, guidance INTEGER NOT NULL,"
+        "review_older_than_day INTEGER NOT NULL)"
+    )
+    rows = db.execute(
+        "SELECT processing_status,COUNT(*) FROM customer_questions WHERE tenant=? "
+        "GROUP BY processing_status", (site,)
+    ).fetchall()
+    counts = {state: int(total) for state, total in rows}
+    old = db.execute(
+        "SELECT COUNT(*) FROM customer_questions WHERE tenant=? AND "
+        "processing_status='needs_review' AND created_utc < datetime('now','-1 day')",
+        (site,),
+    ).fetchone()[0]
+    metrics = {
+        "queued": counts.get("queued", 0),
+        "review": counts.get("needs_review", 0),
+        "guidance": counts.get("handled", 0),
+        "review_older_than_day": int(old),
+    }
+    db.execute(
+        "INSERT INTO master_customer_worker_health "
+        "(tenant,last_success_utc,queued,review,guidance,review_older_than_day)"
+        "VALUES(?,CURRENT_TIMESTAMP,?,?,?,?) "
+        "ON CONFLICT(tenant) DO UPDATE SET "
+        "last_success_utc=CURRENT_TIMESTAMP,queued=excluded.queued,"
+        "review=excluded.review,guidance=excluded.guidance,"
+        "review_older_than_day=excluded.review_older_than_day",
+        (site,metrics["queued"],metrics["review"],metrics["guidance"],
+         metrics["review_older_than_day"]),
+    )
+    return metrics
+
+
 def run(site: str) -> dict:
     os.umask(0o077)
     db = open_inbox(site)
@@ -235,22 +295,19 @@ def run(site: str) -> dict:
         for ticket, kind, question in pending:
             # Only deterministic advice was returned at intake. Specific order
             # status/payment questions remain for human verification.
-            needs_review = kind == "order_question" or not re.search(
-                r"(discount|coupon|download|refund|تخفیف|دانلود|استرداد|مرجوع|فایل)",
-                str(question), flags=re.IGNORECASE
-            )
-            state = "needs_review" if needs_review else "handled"
+            state = classify_customer_ticket(str(kind), str(question))
             updated += db.execute(
                 "UPDATE customer_questions SET processing_status=?,master_processed_utc=CURRENT_TIMESTAMP "
                 "WHERE id=? AND tenant=? AND processing_status='queued'",
                 (state, ticket, site)).rowcount
+        health = update_master_heartbeat(db,site)
         db.commit()
-        remaining = db.execute(
-            "SELECT COUNT(*) FROM customer_questions WHERE tenant=? AND processing_status='queued'",
-            (site,)).fetchone()[0]
         return {"tenant": site, "mode": "local_no_external_ai_api",
                 "real_site_master_invoked": True, "source": source,
-                "questions_processed": updated, "questions_pending": remaining,
+                "questions_processed": updated, "questions_pending": health["queued"],
+                "review_waiting": health["review"],
+                "review_older_than_day": health["review_older_than_day"],
+                "guidance_processed": health["guidance"],
                 "payments_mutated": False, "external_messages_sent": False,
                 "site_pages_mutated": False}
     finally:
