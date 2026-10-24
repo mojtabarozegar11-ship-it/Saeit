@@ -33,7 +33,7 @@ export async function openDeploymentJournal(path, context) {
   const manifest = context?.artifacts;
   const keys = manifest && Object.keys(manifest).sort().join(',');
   const validManifest = keys === 'MojAssets,MojCoin' || keys === 'MojPilotGovernance' ||
-    keys === 'MojCoinGuarded';
+    keys === 'MojCoinGuarded' || keys === 'MojRewardClaimsPilot,MojRewardTestToken';
   if (!context || context.network !== 'Shasta' ||
       !context.governance || !validManifest) {
     throw new Error('Invalid Shasta deployment journal identity');

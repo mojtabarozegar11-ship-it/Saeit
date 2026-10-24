@@ -133,4 +133,64 @@ contract('MOJ1 escrowed Merkle reward claims (local TVM only)', accounts => {
     assert.equal((await escrow.outstandingCommitments()).toString(), amount(3));
   });
 
+  it('generates offline 3-account Merkle proofs matching the deployed TVM claim verifier', async () => {
+    const {buildSyntheticEligibilityProposal} = await import('../../scripts/reward-eligibility-offline.mjs');
+    const {gov, token, escrow} = await setup();
+    const harness = await artifacts.require('MojRewardMerkleHarness').new();
+    const chainId = String(await harness.chainId());
+    const input = {
+      mode: 'SYNTHETIC_LOCAL_TEST_ONLY', reviewStatus: 'UNREVIEWED',
+      domain: {chainId, contractAddress: escrow.address, epoch: '71'},
+      budgetUnits: amount(12), fundedAvailableUnits: amount(40),
+      rows: [
+        {index: '2', account: accounts[8], amountUnits: amount(5), evidenceRef: 'TEST-LOCAL-003'},
+        {index: '0', account: accounts[6], amountUnits: amount(3), evidenceRef: 'TEST-LOCAL-001'},
+        {index: '1', account: accounts[7], amountUnits: amount(4), evidenceRef: 'TEST-LOCAL-002'}
+      ]
+    };
+    const proposal = buildSyntheticEligibilityProposal(input);
+    assert.equal(proposal.publicationAuthorized, false);
+    assert.equal(proposal.chainVerified, false);
+    assert.equal(proposal.claims.length, 3);
+    for (const c of proposal.claims) {
+      const localLeaf = await escrow.claimLeaf(71, c.index, c.account, c.amountUnits);
+      assert.equal(localLeaf.toLowerCase(), c.leaf, 'offline encoding must match Solidity');
+    }
+    const wrongDomain = structuredClone(input);
+    wrongDomain.domain.chainId = (BigInt(chainId) + 1n).toString();
+    assert.notEqual(buildSyntheticEligibilityProposal(wrongDomain).root, proposal.root);
+    await governed(gov, escrow, publishData(71, proposal.root, amount(12)), 0);
+    for (const c of proposal.claims) {
+      const txid = await escrow.claim(71, c.index, c.account, c.amountUnits, c.proof, {from: accounts[9]});
+      const info = await tronWeb.trx.getTransactionInfo(txid);
+      assert.equal(info?.receipt?.result, 'SUCCESS', 'proof accepted by local TVM');
+      await expectRevert(escrow.claim(71, c.index, c.account, c.amountUnits, c.proof, {from: accounts[9]}));
+    }
+    assert.equal((await escrow.outstandingCommitments()).toString(), '0');
+    assert.equal((await token.balanceOf(escrow.address)).toString(), amount(28));
+  });
+
+  it('rejects Merkle inclusion proof replay across a second escrow and another epoch', async () => {
+    const {gov, token, escrow} = await setup();
+    const otherEscrow = await Reward.new(token.address, gov.address);
+    await token.transfer(otherEscrow.address, amount(8), {from: accounts[0]});
+    const beneficiary = accounts[6];
+    const root = await escrow.claimLeaf(81, 0, beneficiary, amount(3));
+    await governed(gov, escrow, publishData(81, root, amount(3)), 0);
+    // Root byte string is deliberately copied to another legitimate funded contract.
+    await governed(gov, otherEscrow, publishData(81, root, amount(3)), 1);
+    // Root byte string is also copied to a different epoch in the original escrow.
+    await governed(gov, escrow, publishData(82, root, amount(3)), 2);
+    const balanceBefore = BigInt((await token.balanceOf(beneficiary)).toString());
+    await expectRevert(otherEscrow.claim(81, 0, beneficiary, amount(3), [], {from: accounts[8]}));
+    await expectRevert(escrow.claim(82, 0, beneficiary, amount(3), [], {from: accounts[8]}));
+    assert.equal(await otherEscrow.claimedIndex(81, 0), false);
+    assert.equal(await escrow.claimedIndex(82, 0), false);
+    assert.equal((await escrow.outstandingCommitments()).toString(), amount(6));
+    const txid = await escrow.claim(81, 0, beneficiary, amount(3), [], {from: accounts[9]});
+    const receipt = await tronWeb.trx.getTransactionInfo(txid);
+    assert.equal(receipt?.receipt?.result, 'SUCCESS');
+    assert.equal((BigInt((await token.balanceOf(beneficiary)).toString()) - balanceBefore).toString(), amount(3));
+  });
+
 });

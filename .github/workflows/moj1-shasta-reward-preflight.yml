@@ -1,0 +1,44 @@
+name: MOJ1 disposable Shasta reward deployment - keyless preflight only
+on:
+  push:
+    branches:
+      - moj1/reward-eligibility-offline-20261024
+    paths:
+      - experiments/moj1-pilot/scripts/reward-shasta-deploy-policy.mjs
+      - experiments/moj1-pilot/scripts/deploy-reward-shasta-manual.mjs
+      - experiments/moj1-pilot/scripts/reconcile-reward-shasta.mjs
+      - experiments/moj1-pilot/scripts/deployment-journal.mjs
+      - experiments/moj1-pilot/tests/reward-shasta-deploy-policy.test.mjs
+      - experiments/moj1-pilot/tests/deployment-journal.test.mjs
+      - experiments/moj1-pilot/contracts/test/MojRewardTestToken.sol
+      - experiments/moj1-pilot/contracts/MojRewardClaimsPilot.sol
+      - .github/workflows/moj1-shasta-reward-preflight.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  keyless-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: experiments/moj1-pilot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: experiments/moj1-pilot/package-lock.json
+      - name: Install pinned dependencies without lifecycle hooks
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Validate strict Shasta-only plan and non-repeating durable journal
+        run: node --test tests/reward-shasta-deploy-policy.test.mjs tests/deployment-journal.test.mjs
+      - name: Parse manual-only Shasta scripts without running or signing
+        run: |
+          node --check scripts/deploy-reward-shasta-manual.mjs
+          node --check scripts/reconcile-reward-shasta.mjs
+      - name: Compile disposable test token and reward escrow source
+        run: npm run compile
+      - name: Assert production release remains blocked
+        run: node scripts/release-readiness-offline.mjs --assert-blocked

@@ -102,3 +102,26 @@ test('Shasta journal rejects unsupported deployment manifest', async t => {
   await assert.rejects(openDeploymentJournal(path, {network: 'Shasta', governance: 'x',
     artifacts: {MojCoin: 'a'}}), /Invalid Shasta deployment journal identity/);
 });
+
+test('separate disposable reward journal blocks second deployment while first receipt is uncertain',async t=>{
+  const path=await fixture(t);
+  const rewardIdentity={network:'Shasta',governance:'41'+'a'.repeat(40),artifacts:{
+    MojRewardTestToken:'hash-test-token',MojRewardClaimsPilot:'hash-test-reward'
+  }};
+  const first=await openDeploymentJournal(path,rewardIdentity);
+  await first.markBroadcastUncertain('MojRewardTestToken',details);
+  await assert.rejects(first.markBroadcastUncertain('MojRewardClaimsPilot',{
+    ...details,txID:'d'.repeat(64)
+  }),/Cannot repeat/);
+  await first.close();
+  const second=await openDeploymentJournal(path,rewardIdentity);
+  assert.ok(second.pending('MojRewardTestToken'));
+  await second.markVerified('MojRewardTestToken',details.expectedAddress,details.txID);
+  await second.markBroadcastUncertain('MojRewardClaimsPilot',{
+    ...details,txID:'d'.repeat(64)
+  });
+  await second.close();
+  await assert.rejects(openDeploymentJournal(path,{...rewardIdentity,
+    artifacts:{...rewardIdentity.artifacts,MojRewardTestToken:'tampered'}
+  }),/identity mismatch/);
+});
