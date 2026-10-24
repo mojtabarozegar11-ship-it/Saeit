@@ -230,6 +230,39 @@ jobs:
           print('MPW_INVOICE_START_SOURCE_SHAPE='+json.dumps(sanitized))
           if not routes:raise SystemExit('NO_INVOICE_ROUTE_DEFINITIONS_FOUND')
           PY
+      - name: Read checkout readiness gates without creating an order or invoice
+        run: |
+          set -euo pipefail
+          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-invoice-ssh/config" saeit-cpanel python3 - <<'PY'
+          import os,sys,json
+          from pathlib import Path
+          app=Path('/home/zomorod2/Saeit-staging')
+          os.chdir(app);sys.path.insert(0,str(app))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          out={'product_72_approved':False,'product_225_approved':False,'database_ready':False,'receiver_valid':False,'rate_quote_valid':False}
+          try:
+              import django
+              django.setup()
+              from django.conf import settings
+              ids=getattr(settings,'MPW_TRX_PUBLIC_PRODUCT_IDS',None)
+              out['product_72_approved']=ids is None or 72 in ids
+              out['product_225_approved']=ids is None or 225 in ids
+              from django.db import connection
+              from services.mpw_walletless_commercial_intent import _commercial_db
+              connection.ensure_connection();_commercial_db(settings,connection);out['database_ready']=True
+              from services.mpw_trx_commercial_web import _configured_receiver,_rate_provider
+              from scripts.mojplaywin_native_chain_verify import tron_address_to_hex
+              receiver=_configured_receiver();tron_address_to_hex(receiver);out['receiver_valid']=True
+              quote=_rate_provider()
+              from decimal import Decimal
+              out['rate_quote_valid']=isinstance(quote,(tuple,list)) and len(quote)==2 and Decimal(str(quote[0]))>0 and quote[1] is not None
+          except Exception as exc:
+              out['error_type']=type(exc).__name__
+          print('MPW_CHECKOUT_READINESS='+json.dumps(out))
+          if not all(out[k] for k in ('product_72_approved','product_225_approved','database_ready','receiver_valid','rate_quote_valid')):
+              raise SystemExit('CHECKOUT_READINESS_GATE_FAILED')
+          print('MPW_CHECKOUT_READINESS_PASS;NO_ORDER_OR_INVOICE_CREATED')
+          PY
       - name: Smoke public store product and checkout routes without creating orders or payments
         run: |
           set -euo pipefail
