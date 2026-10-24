@@ -266,7 +266,7 @@ jobs:
           ptr_names=[x.lower().rstrip('.') for x in ptr]
           print('MAIL_DNS_SPF_RECORD_COUNT='+str(len(spf)))
           print('MAIL_DNS_DMARC_RECORD_COUNT='+str(len(dmarc)))
-          policy=re.search(r'(?i)(?:^|;)\\s*p\\s*=\\s*(none|quarantine|reject)',dmarc[0]) if dmarc else None
+          policy=re.search(r'(?i)(?:^|;)\s*p\s*=\s*(none|quarantine|reject)',dmarc[0]) if dmarc else None
           print('MAIL_DNS_DMARC_POLICY='+(policy.group(1).lower() if policy else 'not_resolved'))
           print('MAIL_DNS_MX_RECORD_COUNT='+str(len(mx)))
           print('OUTBOUND_IP_PTR_PRESENT='+str(bool(ptr)))
