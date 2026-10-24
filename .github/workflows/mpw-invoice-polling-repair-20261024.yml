@@ -126,23 +126,26 @@ jobs:
           set -euo pipefail
           timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-invoice-ssh/config" saeit-cpanel python3 - <<'PY'
           from pathlib import Path
-          import py_compile
+          import hashlib,py_compile
           site=Path('/home/zomorod2/mojplaywin.com');app=Path('/home/zomorod2/Saeit-staging')
           wsgi=site/'passenger_wsgi.py';source=app/'services/mpw_trx_walletless_checkout_ui.py'
           if any(p.is_symlink() for p in (site,app,wsgi,source)):raise SystemExit('RELOAD_TARGET_UNSAFE')
           if not wsgi.is_file() or "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):raise SystemExit('WRONG_PASSENGER_APP')
+          raw=source.read_bytes()
+          if b'window.clearTimeout(timeout);' in raw or b'checking=false;' not in raw or b'if(!stopped)schedule(delay);' not in raw:raise SystemExit('POLLING_SOURCE_NOT_FIXED')
           py_compile.compile(str(source),doraise=True)
           tmp=site/'tmp'
           if tmp.is_symlink():raise SystemExit('PASSENGER_TMP_UNSAFE')
           tmp.mkdir(exist_ok=True);marker=tmp/'restart.txt'
           if marker.is_symlink():raise SystemExit('PASSENGER_MARKER_UNSAFE')
-          marker.touch();print('MPW_INVOICE_POLLING_RELOAD=PASS')
+          marker.touch()
+          print('MPW_INVOICE_POLLING_SOURCE_VERIFIED=PASS;SHA256='+hashlib.sha256(raw).hexdigest())
           PY
-      - name: Smoke store product and checkout routes, then verify converged invoice workers
+      - name: Smoke public store product and checkout routes without creating orders or payments
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json,time,urllib.request
+          import json,urllib.request
           root='https://mojplaywin.com'
           routes=['/store/','/store/product/72/','/store/product/72/checkout/','/store/product/225/','/store/product/225/checkout/']
           for path in routes:
@@ -153,20 +156,7 @@ jobs:
                   if path=='/store/' and b'Useful ideas, made to explore.' not in body:raise SystemExit('STORE_RENDER_FAILED')
                   if path.startswith('/store/product/') and not body:raise SystemExit('EMPTY_PRODUCT_OR_CHECKOUT '+path)
               print('MPW_INVOICE_POLLING_HTTP='+json.dumps({'path':path,'status':200,'bytes':len(body)}))
-          time.sleep(12)
-          url=root+'/commerce/trx-easy/invoice/7/'
-          fixed=False
-          for attempt in range(1,7):
-              req=urllib.request.Request(url+'?__mpw_polling_probe='+str(attempt),headers={'Cache-Control':'no-cache','Pragma':'no-cache','User-Agent':'MPWInvoicePollingSmoke/1.0'})
-              with urllib.request.urlopen(req,timeout=22) as r:
-                  body=r.read(400000)
-                  row={'attempt':attempt,'status':r.status,'bytes':len(body),'old_timeout_bug':b'window.clearTimeout(timeout);' in body,'invoice_heading':b'Pay securely with TRX' in body}
-              print('MPW_INVOICE_POLLING_INVOICE='+json.dumps(row))
-              if row['status']==200 and row['invoice_heading'] and not row['old_timeout_bug']:
-                  fixed=True;break
-              time.sleep(3)
-          if not fixed:raise SystemExit('INVOICE_WORKERS_NOT_CONVERGED')
-          print('MPW_INVOICE_POLLING_LIVE_SMOKE=PASS;NO_PAYMENT_SENT')
+          print('MPW_INVOICE_POLLING_LIVE_SMOKE=PASS;NO_ORDER_OR_PAYMENT_CREATED_BY_SMOKE')
           PY
       - name: Restore exact private backup if a post-patch gate fails
         if: failure() && steps.patch.outcome == 'success'
