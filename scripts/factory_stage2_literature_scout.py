@@ -27,7 +27,7 @@ import urllib.parse
 import urllib.request
 
 SCHEMA="saeit.factory.stage2-literature-scout.v1"
-SCOUT_ALGO_VERSION="v10-complete-page-grid-source-diversity"
+SCOUT_ALGO_VERSION="v11-targeted-scholarly-vocabulary"
 EVIDENCE_SCHEMA="saeit.factory.stage2-source-evidence.v1"
 TOPIC_ID=re.compile(r"AGRI-[0-9]{3}\Z")
 WORD_RE=re.compile(r"[a-z]{3,}")
@@ -45,6 +45,46 @@ RISK=re.compile(r"(pesticid|insecticid|herbicid|fungicid|mushroom|"
                 r"forag|poison|tox|livestock|hatch|slaughter|"
                 r"food safety|food process|bee|beekeep|chicken|poultry)",
                 re.I)
+# Exact, reviewed colloquial-to-scholarly vocabulary for the 16 blocked P0
+# topics. Query expansion is not source acceptance: real indexed title/abstract
+# passages, DOI, publisher diversity and independent review remain mandatory.
+TARGETED_SCHOLAR_VOCAB = {
+    "balcony vegetable gardening": ("urban", "container", "horticulture"),
+    "productive backyard garden": ("household", "horticulture", "yield"),
+    "no-dig gardening and mulching": ("tillage", "mulch", "soil"),
+    "carrot and radish growing": ("daucus", "raphanus", "root"),
+    "zucchini and pumpkin growing": ("cucurbita", "squash", "vegetable"),
+    "container parsley and cilantro": ("petroselinum", "coriandrum", "herb"),
+    "container rosemary and thyme": ("rosmarinus", "thymus", "herb"),
+    "homegrown greens planner": ("leafy", "vegetable", "harvest"),
+    "farm-to-buyer traceability": ("supply", "chain", "food"),
+    "beekeeping for beginners": ("apiculture", "honeybee", "apis"),
+    "mobile farm recordkeeping": ("digital", "smartphone", "agriculture"),
+    "agtech roi workbook": ("investment", "adoption", "profitability"),
+    "farm resilience checklist": ("climate", "adaptation", "risk"),
+    "gardening equipment checklist": ("horticultural", "tools", "ergonomics"),
+    "illustrated gardening tools": ("horticultural", "tools", "ergonomics"),
+    "farming troubleshooting faq": ("diagnosis", "decision", "extension"),
+}
+TARGETED_SCHOLAR_SEARCHES = {
+    "balcony vegetable gardening": ("urban container vegetable cultivation", "urban horticulture containers"),
+    "productive backyard garden": ("household vegetable gardens productivity", "urban home garden food production"),
+    "no-dig gardening and mulching": ("no tillage vegetable mulching", "soil mulch conservation tillage"),
+    "carrot and radish growing": ("daucus carota root crop cultivation", "raphanus sativus agronomic growth"),
+    "zucchini and pumpkin growing": ("cucurbita pepo cultivation", "cucurbita squash yield"),
+    "container parsley and cilantro": ("petroselinum crispum cultivation", "coriandrum sativum production"),
+    "container rosemary and thyme": ("rosmarinus officinalis cultivation", "thymus vulgaris horticulture"),
+    "homegrown greens planner": ("leafy vegetable harvest scheduling", "urban leaf vegetables production"),
+    "farm-to-buyer traceability": ("agri food supply chain traceability", "farm food traceability systems"),
+    "beekeeping for beginners": ("apiculture honeybee colony management", "apis mellifera hive health"),
+    "mobile farm recordkeeping": ("mobile digital agricultural recordkeeping", "smartphone farm management data"),
+    "agtech roi workbook": ("precision agriculture technology investment adoption", "digital agriculture return investment"),
+    "farm resilience checklist": ("climate resilient farm risk management", "agricultural system adaptation resilience"),
+    "gardening equipment checklist": ("horticultural hand tools ergonomic safety", "garden equipment agricultural ergonomics"),
+    "illustrated gardening tools": ("horticultural tools ergonomics", "manual agricultural implements safety"),
+    "farming troubleshooting faq": ("agricultural diagnostic decision support", "crop extension advisory diagnosis"),
+}
+
 MAX_DOC=6_000_000
 # One machine-wide process gate for anonymous API traffic, shared by all threads.
 # Never classify a throttled provider as "no scientific references exist".
@@ -154,7 +194,10 @@ def query_variants(title):
         variants.append(" ".join(dict.fromkeys(equivalents[:2])))
     if len(topical)>=2:
         variants.append(" OR ".join(topical[:2]))
-    return list(dict.fromkeys(v for v in variants if v))
+    # Prefer high-confidence scientific formulations on the first retry,
+    # then explore the ordinary page/query grid without lowering thresholds.
+    special=TARGETED_SCHOLAR_SEARCHES.get(str(title).strip().casefold(), ())
+    return list(dict.fromkeys(v for v in (*special, *variants) if v))
 
 
 def sha(value):
@@ -213,6 +256,10 @@ def keys(title):
         "greenhouse":("protected",),
         "compost":("organic","matter"),
     }
+    for alias in TARGETED_SCHOLAR_VOCAB.get(str(title).strip().casefold(), ()):
+        term=normalize(alias)
+        if term not in unique and len(unique)<7:
+            unique.append(term)
     for term in unique[:4]:
         for alias in synonyms.get(term,()):
             # The article title/abstract tokens are normalized as well.
@@ -754,7 +801,8 @@ def sources_for_topic(root,worker,record,fetcher,backstop):
               "v6-evidence-first-fullword-query",
               "v7-multiphase-topic-specific-query",
               "v8-bounded-progressive-search",
-              "v9-paged-source-diversity",SCOUT_ALGO_VERSION)
+              "v9-paged-source-diversity",
+              "v10-complete-page-grid-source-diversity",SCOUT_ALGO_VERSION)
             and isinstance(cached,list) and 4<=len(cached)<=20
             and previous.get("candidate_sha256")==sha(cached)):
         valid=[]
