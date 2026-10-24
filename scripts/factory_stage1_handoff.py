@@ -166,6 +166,8 @@ def rank(order):
             return (0, 1, int(order.get("priority_rank", 999999)), order.get("id", ""))
         if order.get("origin") == "owner_requested_jobs300_iran_p0":
             return (0, 2, int(order.get("priority_rank", 999999)), order.get("id", ""))
+        if order.get("origin") == "owner_requested_women_home200_iran_p0":
+            return (0, 3, int(order.get("priority_rank", 999999)), order.get("id", ""))
     return (1, 0, 0, order.get("id", ""))
 
 
