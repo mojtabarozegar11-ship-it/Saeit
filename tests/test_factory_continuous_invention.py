@@ -44,16 +44,19 @@ class ContinuousInventionTests(unittest.TestCase):
         self.assertEqual(invent.propose(self.root,max_new=1)["new_technical_briefs_this_tick"],1)
         self.assertEqual(len(list((self.root/"engineering-briefs").glob("*.json"))),3)
 
-    def test_atomic_replay_and_bounded_backlog(self):
+    def test_atomic_replay_and_legacy_backlog_hint_never_stalls_intake(self):
         first=invent.propose(self.root,max_new=2,max_pending=2)
         before={p.name:hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in (self.root/"engineering-briefs").glob("*.json")}
         again=invent.propose(self.root,max_new=2,max_pending=2)
         self.assertEqual(first["new_technical_briefs_this_tick"],2)
-        self.assertEqual(again["new_technical_briefs_this_tick"],0)
-        self.assertEqual(again["pending_internal_design_briefs"],2)
-        self.assertEqual(before,{p.name:hashlib.sha256(p.read_bytes()).hexdigest()
-                                 for p in (self.root/"engineering-briefs").glob("*.json")})
+        self.assertEqual(again["new_technical_briefs_this_tick"],2)
+        self.assertEqual(again["pending_internal_design_briefs"],4)
+        after={p.name:hashlib.sha256(p.read_bytes()).hexdigest()
+               for p in (self.root/"engineering-briefs").glob("*.json")}
+        self.assertEqual(len(after),4)
+        self.assertTrue(set(before).issubset(after))
+        self.assertEqual({k:after[k] for k in before},before)
 
     def test_does_not_spoof_market_evidence_or_commercial_approval(self):
         invent.propose(self.root,max_new=1)

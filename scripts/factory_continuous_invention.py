@@ -143,10 +143,12 @@ def _signature(expression,fields,unit,family):
     return _hash({"expression":ast.dump(norm,include_attributes=False),
                   "units":[v for _,v in fields],"out":unit,"family":family})
 
-def propose(root,*,max_new=1,max_pending=5):
+def propose(root,*,max_new=1,max_pending=None):
     root=Path(root).expanduser().resolve()
     if root.is_symlink() or not root.is_dir():raise ValueError("INVENTION_ROOT_UNSAFE")
-    if type(max_new) is not int or not 1<=max_new<=5 or type(max_pending) is not int or not 1<=max_pending<=50:
+    # max_pending is accepted for callers from older releases, but is deliberately
+    # ignored: a blocked downstream stage must never stop new work from entering.
+    if type(max_new) is not int or not 1<=max_new<=5:
         raise ValueError("INVENTION_CAPACITY_INVALID")
     target=root/"engineering-briefs"
     if target.is_symlink():raise ValueError("INVENTION_BRIEF_DIR_UNSAFE")
@@ -157,7 +159,6 @@ def propose(root,*,max_new=1,max_pending=5):
     with (statusdir/".lock").open("a+b") as lock:
         fcntl.flock(lock.fileno(),fcntl.LOCK_EX)
         issued=[p for p in target.glob("auto_need_*.json") if p.is_file() and not p.is_symlink()]
-        if len(issued)>100000:raise ValueError("INVENTION_INBOX_LIMIT")
         prior={p.stem for p in issued}
         completed=set()
         tickets=root/"engineering-intake"
@@ -190,7 +191,7 @@ def propose(root,*,max_new=1,max_pending=5):
                 duplicates+=1;continue
             seen.add(key)
             if sid in prior:continue
-            if pending>=max_pending or novel>=max_new:break
+            if novel>=max_new:break
             definition={"title":title,"problem":problem,"expression":expr,
                         "inputs":[{"name":name,"unit":unit,"minimum":1,"maximum":100} for name,unit in fields],
                         "output_unit":output}
@@ -229,7 +230,7 @@ def propose(root,*,max_new=1,max_pending=5):
                 "known_design_patterns":len(builtins),
                 "duplicate_pattern_skips":duplicates,
                 "blocked_patterns":rejected[:15],
-                "awaiting_additional_verified_needs":novel==0 and pending<max_pending,
+                "awaiting_additional_verified_needs":novel==0 and pending==0,
                 "store_ready_products":0,"commercial_release":False}
         _save(statusdir/"status.json",report)
         return report
