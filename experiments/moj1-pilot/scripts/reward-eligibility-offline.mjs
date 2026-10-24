@@ -28,12 +28,24 @@ function uint(value, label, allowZero = false) {
   return parsed;
 }
 const word = n => n.toString(16).padStart(64, '0');
-function addressWord(account) {
-  if (typeof account !== 'string' || !/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(account) ||
-      !TronWeb.isAddress(account)) throw Error('Invalid canonical Base58 TRON address');
+function canonicalTronAddress(input) {
+  if (typeof input !== 'string') throw Error('Invalid TRON address');
+  let account = input;
+  // TronBox uses 41-prefixed hex addresses; user wallets commonly use Base58.
+  if (/^(?:0x)?41[0-9a-fA-F]{40}$/.test(input)) {
+    account = TronWeb.address.fromHex(input.replace(/^0x/, ''));
+  }
+  if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(account) || !TronWeb.isAddress(account)) {
+    throw Error('Invalid canonical Base58/41-hex TRON address');
+  }
   const hex = TronWeb.address.toHex(account).toLowerCase();
-  if (!/^41[0-9a-f]{40}$/.test(hex)) throw Error('Invalid TRON hex address');
-  return hex.slice(2).padStart(64, '0');
+  if (!/^41[0-9a-f]{40}$/.test(hex) || /^410{40}$/.test(hex)) {
+    throw Error('Invalid TRON hex address');
+  }
+  return {account, word: hex.slice(2).padStart(64, '0')};
+}
+function addressWord(account) {
+  return canonicalTronAddress(account).word;
 }
 function combine(a, b) {
   const values = [a.toLowerCase(), b.toLowerCase()].sort();
@@ -101,7 +113,7 @@ export function buildSyntheticEligibilityProposal(input) {
     if (sum > LIMIT) throw Error('Sum overflow');
     const encoded = [word(chainId), contract, word(epoch), word(index), beneficiary, word(amount)].join('');
     const leaf = hash(hash('0x' + encoded));
-    return {index: indexKey, account: r.account, amountUnits: amount.toString(), evidenceRef: r.evidenceRef, leaf};
+    return {index: indexKey, account: canonicalTronAddress(r.account).account, amountUnits: amount.toString(), evidenceRef: r.evidenceRef, leaf};
   });
   if (sum !== budget) throw Error('Proposed budget must equal total leaf claims (no stranded remainder)');
   rows.sort((a, b) => (BigInt(a.index) < BigInt(b.index) ? -1 : BigInt(a.index) > BigInt(b.index) ? 1 : 0));
