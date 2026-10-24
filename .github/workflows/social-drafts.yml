@@ -34,6 +34,46 @@ jobs:
               json.dumps(draft, ensure_ascii=False, indent=2), encoding="utf-8"
             )
           PY
+      - name: Enforce hard ban and non-publication policy
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          forbidden_values = ('dr.mojtaba.rozegar', '7317306')
+          destination_keys = {
+              'destination', 'destinations', 'account_handle', 'account_id',
+              'metricool_brand_id', 'brand_id', 'brandid', 'providers',
+              'social_network', 'publicationdate', 'scheduled_at',
+          }
+
+          def walk(value):
+              if isinstance(value, dict):
+                  for key, child in value.items():
+                      if key.casefold() in destination_keys:
+                          raise SystemExit('SOCIAL_POLICY_BLOCK: draft binds a destination')
+                      walk(child)
+              elif isinstance(value, list):
+                  for item in value:
+                      walk(item)
+              elif isinstance(value, str):
+                  lowered = value.casefold()
+                  if any(blocked in lowered for blocked in forbidden_values):
+                      raise SystemExit('SOCIAL_POLICY_BLOCK: prohibited identifier')
+
+          files = sorted(Path('output').glob('*.json'))
+          if not files:
+              raise SystemExit('SOCIAL_POLICY_BLOCK: missing draft artifacts')
+          for file in files:
+              draft = json.loads(file.read_text(encoding='utf-8'))
+              walk(draft)
+              if draft.get('publish') is not False or draft.get('approved') is not False:
+                  raise SystemExit('SOCIAL_POLICY_BLOCK: drafts must not publish')
+              if draft.get('status') != 'draft_requires_review':
+                  raise SystemExit('SOCIAL_POLICY_BLOCK: unexpected draft state')
+          print('SOCIAL_POLICY_PASS: drafts only, no destinations, hard ban enforced')
+          PY
       - name: Upload draft artifacts only
         uses: actions/upload-artifact@v4
         with:
