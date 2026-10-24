@@ -1,0 +1,295 @@
+name: Zomorod public health and cPanel read-only diagnosis 20261023
+on:
+  push:
+    branches: [zomorod/about-science-evidence-20261023]
+    paths: [.github/workflows/zomorod-about-health-vps-20261023.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare fingerprint-pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-public-health-relay"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo 'RELAY_PINNED=yes'
+      - name: Public routes from VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-public-health-relay"
+          ssh -T -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          from urllib.request import Request, urlopen
+          from urllib.error import HTTPError
+          for domain in ('https://zomorodmelal.ir','https://mojplaywin.com'):
+              for route in ('/','/about/') if 'zomorod' in domain else ('/',):
+                  try:
+                      with urlopen(Request(domain+route,headers={'User-Agent':'Mozilla/5.0'}),timeout=16) as res:
+                          status=res.status; prefix=res.read(80)
+                  except HTTPError as e:
+                      status=e.code; prefix=e.read(80)
+                  except Exception as e:
+                      status=type(e).__name__;prefix=b''
+                  print('VPS_PUBLIC',domain+route,status,'bytes_prefix',len(prefix))
+          PY
+      - name: cPanel local files, process and routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-public-health-relay"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          import os,shutil,subprocess
+          home=Path.home()
+          print('CPANEL_HOME_MATCH',home.name=='zomorod2')
+          for rel in ('public_html/index.html','public_html/about/index.html','public_html/company/index.html','public_html/.htaccess','public_html/passenger_wsgi.py'):
+              p=home/rel
+              print('CPANEL_FILE',rel,'exists',p.exists(),'bytes',(p.stat().st_size if p.exists() and p.is_file() else 0),'readable',os.access(p,os.R_OK))
+          p=home/'public_html/about/index.html'
+          if p.is_file():
+              b=p.read_bytes()
+              print('CPANEL_ABOUT_MARKER',b'zm-about-research-evidence-20261023' in b)
+          for rel in ('public_html/error_log','logs'):
+              p=home/rel
+              print('CPANEL_LOG_ENTRY',rel,'exists',p.exists(),'is_dir',p.is_dir())
+          for domain in ('https://zomorodmelal.ir','https://mojplaywin.com'):
+              for route in ('/','/about/') if 'zomorod' in domain else ('/',):
+                  try:
+                      with urlopen(Request(domain+route,headers={'User-Agent':'Mozilla/5.0'}),timeout=16) as res:
+                          code=res.status
+                  except HTTPError as e: code=e.code
+                  except Exception as e: code=type(e).__name__
+                  print('CPANEL_PUBLIC',domain+route,code)
+          print('CPANEL_FREE_GB',round(shutil.disk_usage(home).free/1e9,2))
+          for cmd in ('lveinfo','cloudlinux-selector','selectorctl'):
+              print('CPANEL_TOOL',cmd,bool(shutil.which(cmd)))
+          try:
+              result=subprocess.run(['ps','-u','zomorod2','-o','comm='],text=True,capture_output=True,timeout=5)
+              names=result.stdout.splitlines()
+              print('CPANEL_PROCESSES',len(names),'python',sum('python' in n.lower() for n in names),'lsphp',sum('lsphp' in n.lower() for n in names))
+          except Exception as e:print('CPANEL_PS_UNAVAILABLE',type(e).__name__)
+          PY
+      - name: Read domain error headers and sanitized rewrite directives
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-public-health-relay"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          from urllib.request import urlopen,Request
+          from urllib.error import HTTPError
+          import re
+          for route in ('/','/about/','/robots.txt'):
+              try:
+                  with urlopen(Request('https://zomorodmelal.ir'+route),timeout=15) as r: code=r.status;h=r.headers;b=r.read(200)
+              except HTTPError as e:code=e.code;h=e.headers;b=e.read(200)
+              except Exception as e:print('ROUTE_ERROR',route,type(e).__name__);continue
+              print('ROUTE',route,code,'SERVER',h.get('Server'),'TYPE',h.get('Content-Type'))
+              if code>=500: print('BODY_PREFIX',re.sub(r'\\s+',' ',re.sub(r'<[^>]+>',' ',b.decode(errors='replace')))[:150])
+          p=Path.home()/'public_html/.htaccess'
+          for n,line in enumerate(p.read_text(errors='replace').splitlines(),1):
+              x=line.strip()
+              if not x or x.startswith('#'):continue
+              d=x.split()[0]
+              if d.startswith('Passenger'): print('REWRITE',n,d,'[configured]')
+              if d in ('RewriteRule','RewriteCond','DirectoryIndex','ErrorDocument','SetHandler'):
+                  print('REWRITE',n,d,'[target_redacted]')
+          for p in (Path.home()/'logs',Path.home()/'public_html',Path.home()):
+              try:found=[q.name for q in p.iterdir() if q.is_file() and ('error' in q.name.lower() or 'passenger' in q.name.lower())]
+              except Exception:found=[]
+              print('LOG_CANDIDATES',p.name,found[:8])
+          PY
+      - name: Inspect cPanel Passenger startup causes with redacted logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-public-health-relay"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import re,os,time,subprocess
+          home=Path.home()
+          ht=(home/'public_html/.htaccess').read_text(errors='replace')
+          config={}
+          for line in ht.splitlines():
+              line=line.strip()
+              if not line or line.startswith('#'):continue
+              words=line.split()
+              if words[0].startswith('Passenger') and len(words)>1:config[words[0]]=words[1]
+          root=Path(config.get('PassengerAppRoot',''))
+          if not root.is_absolute():root=(home/'public_html'/root).resolve()
+          startup=root/config.get('PassengerStartupFile','passenger_wsgi.py')
+          interpreter=Path(config.get('PassengerPython',''))
+          print('APPROOT_EXISTS',root.is_dir(),'STARTUP_EXISTS',startup.is_file(),'STARTUP_SIZE',startup.stat().st_size if startup.is_file() else 0)
+          print('PYTHON_INTERPRETER_EXISTS',interpreter.is_file(),'PYTHON_EXECUTABLE',os.access(interpreter,os.X_OK))
+          print('APPROOT_MT',round(root.stat().st_mtime) if root.exists() else 0)
+          if startup.is_file():
+              source=startup.read_text(errors='replace')
+              print('STARTUP_IMPORT_DJANGO', 'django' in source,'STARTUP_IMPORT_FLASK','flask' in source)
+              print('STARTUP_SYNTAX_BASIC',source.count('(')>=source.count(')'))
+          p=home/'error_log'
+          if p.is_file():
+              raw=p.read_bytes()[-300000:].decode('utf-8','replace')
+              lines=raw.splitlines()
+              match=[x for x in lines if re.search(r'error|passenger|traceback|module|import|python|spawn|exception|limit|resource',x,re.I)]
+              print('ROOT_ERROR_LOG_BYTES',p.stat().st_size,'MATCH_COUNT',len(match))
+              for x in match[-18:]:
+                  clean=re.sub(r'/home/[^/\s]+','<HOME>',x)
+                  clean=re.sub(r'(?:\d{1,3}\.){3}\d{1,3}','<IP>',clean)
+                  clean=re.sub(r'[\w.+-]+@[\w.-]+','<EMAIL>',clean)
+                  clean=re.sub(r'(?i)(password|token|secret|key)\s*[:=]\s*\S+',r'\1=[REDACTED]',clean)
+                  print('ERROR_LOG_MATCH',clean[:210])
+          else:print('NO_ROOT_ERROR_LOG')
+          PY
+      - name: Confirm quoted Passenger paths and production document roots
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-public-health-relay"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import shlex,os,hashlib
+          home=Path.home()
+          directives={}
+          for raw in (home/'public_html/.htaccess').read_text().splitlines():
+              if not raw.strip() or raw.lstrip().startswith('#'):continue
+              try:t=shlex.split(raw)
+              except ValueError:continue
+              if len(t)>1 and t[0].startswith('Passenger'): directives[t[0]]=t[1]
+          for k in ('PassengerAppRoot','PassengerBaseURI','PassengerPython','PassengerAppType','PassengerStartupFile'):
+              print('PASSENGER_DIRECTIVE',k,'present',k in directives)
+          root=Path(directives.get('PassengerAppRoot',''))
+          if not root.is_absolute():root=(home/'public_html'/root).resolve()
+          pypath=Path(directives.get('PassengerPython',''))
+          sf=root/directives.get('PassengerStartupFile','passenger_wsgi.py')
+          print('ACTUAL_APPROOT_EXISTS',root.is_dir(),'ROOT_LEAF',root.name,'STARTUP',sf.name,'STARTUP_EXISTS',sf.is_file())
+          print('ACTUAL_PYTHON_EXISTS',pypath.is_file(),'PYTHON_LEAF',pypath.name,'EXECUTABLE',os.access(pypath,os.X_OK))
+          for rel in ('Saeit','Saeit/passenger_wsgi.py','Saeit/manage.py','Saeit-staging','public_html'):
+              p=home/rel
+              print('REFERENCE_PATH',rel,p.exists(),p.is_dir())
+          print('HTACCESS_SHA256',hashlib.sha256((home/'public_html/.htaccess').read_bytes()).hexdigest())
+          PY
+      - name: Inspect 503 message and application runtime state
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-public-health-relay"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          from urllib.request import urlopen
+          from urllib.error import HTTPError
+          from html.parser import HTMLParser
+          import os,subprocess,time,shlex
+          class Visible(HTMLParser):
+              def __init__(self):super().__init__();self.text=[];self.excluded=0
+              def handle_starttag(self,t,a):
+                  if t in ('script','style'):self.excluded+=1
+              def handle_endtag(self,t):
+                  if t in ('script','style') and self.excluded:self.excluded-=1
+              def handle_data(self,v):
+                  if not self.excluded and v.strip():self.text.append(v.strip())
+          try:
+              with urlopen('https://zomorodmelal.ir/',timeout=15) as x:b=x.read(15000)
+          except HTTPError as e:b=e.read(15000)
+          except Exception:b=b''
+          p=Visible();p.feed(b.decode('utf-8','replace'))
+          print('ERROR_VISIBLE_TEXT',' '.join(p.text)[:500])
+          home=Path.home()
+          for rel in ('public_html/.htaccess','Saeit/passenger_wsgi.py','Saeit/manage.py','Saeit/tmp/restart.txt'):
+              f=home/rel
+              print('FILE_AGE_HOURS',rel,round((time.time()-f.stat().st_mtime)/3600,2) if f.exists() else 'absent')
+          try:
+              out=subprocess.run(['ps','-u','zomorod2','-o','pid=,comm=,etimes='],capture_output=True,text=True,timeout=6).stdout
+              for line in out.splitlines():
+                  w=line.split()
+                  if len(w)>=3 and any(x in w[1].lower() for x in ('python','lswsgi','passenger')):
+                      print('APP_PROCESS',w[1],'RUN_SECONDS',w[-1])
+          except Exception as e:print('PS_ERROR',type(e).__name__)
+          for folder in ('logs','Saeit/logs','Saeit/tmp','Saeit'):
+              x=home/folder
+              if x.is_dir():
+                  try:
+                      logs=[f.name for f in x.iterdir() if f.is_file() and any(q in f.name.lower() for q in ('error','stderr','passenger','log'))]
+                      print('APP_LOG_ENTRIES',folder,logs[:12])
+                  except Exception as e:print('APP_LOG_READ_ERROR',folder,type(e).__name__)
+          try:
+              s=subprocess.run(['cloudlinux-selector','--help'],capture_output=True,text=True,timeout=7)
+              print('PY_SELECTOR_HELP_LINES',' | '.join(s.stdout.splitlines()[:12])[:350])
+          except Exception as e:print('SELECTOR_HELP_ERROR',type(e).__name__)
+          PY
+      - name: Read last sanitized Python application error signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-public-health-relay"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import re
+          home=Path.home()
+          for rel in ('Saeit/stderr.log','Saeit/stderr.log-1','logs/saeit-recovery.log'):
+              p=home/rel
+              if not p.is_file():continue
+              data=p.read_bytes()[-140000:].decode(errors='replace')
+              lines=data.splitlines()
+              chosen=[x for x in lines if re.search(r'error|traceback|exception|ModuleNotFound|ImportError|passenger|fatal|timed.out|restart|startup|spawn|status|503|OSError|PermissionError',x,re.I)]
+              print('RUNTIME_LOG_FILE',rel,'BYTES',p.stat().st_size,'MATCH',len(chosen))
+              for x in chosen[-22:]:
+                  x=re.sub(r'/home/[^/\s]+','<HOME>',x)
+                  x=re.sub(r'(?:\d{1,3}\.){3}\d{1,3}','<IP>',x)
+                  x=re.sub(r'[\w.+-]+@[\w.-]+','<EMAIL>',x)
+                  x=re.sub(r'(?i)(password|token|secret|api_key)\s*[:=]\s*\S+',r'\1=[REDACTED]',x)
+                  print('RUNTIME_LOG',rel,x[:200])
+          PY
+      - name: Remove runner key files
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zomorod-public-health-relay"
+          test ! -f "$d/vps.key" || shred -u "$d/vps.key"
+          test ! -f "$d/host.key" || shred -u "$d/host.key"
