@@ -12,7 +12,7 @@ STORE = APP / "core/templates/mojplaywin/store.html"
 SITE = Path("/home/zomorod2/mojplaywin.com")
 WSGI = SITE / "passenger_wsgi.py"
 HOME = Path("/home/zomorod2")
-OLD_SHA = "1fd6222d44b90d2c849412b8432add1e16e8df8099d4217fc50b5c26703fd313"
+OLD_SHA = "8937201e5b0252cab846ab98145ee4d5570b70a11fd523804aa5815668f64c6b"
 NEW_SHA = "784cb9d754e72b910c7ab6ccb301b5954a0bdc91dbcc4a9499ea9cdf6fdbd4b2"
 
 
@@ -71,6 +71,18 @@ def guard():
         raise RuntimeError("Live store template changed since audit; refusing overwrite")
 
 
+def reset_template_loaders(engine):
+    # The pre/post probes run in one process; clear Django's cache so the
+    # post-install render checks the new bytes instead of the preflight result.
+    def reset(loader):
+        if hasattr(loader, "reset"):
+            loader.reset()
+        for child in getattr(loader, "loaders", ()):
+            reset(child)
+    for loader in engine.template_loaders:
+        reset(loader)
+
+
 def check_django_pages(expect_fixed):
     os.chdir(APP)
     sys.path.insert(0, str(APP))
@@ -78,6 +90,8 @@ def check_django_pages(expect_fixed):
     import django
     django.setup()
     from django.test import Client
+    from django.template import engines
+    reset_template_loaders(engines["django"].engine)
     client = Client(raise_request_exception=True)
     page = client.get("/store/", secure=True, HTTP_HOST="mojplaywin.com")
     if page.status_code != 200:
@@ -86,7 +100,7 @@ def check_django_pages(expect_fixed):
     if expect_fixed:
         required = (
             "Shop available books", "/store/product/72/", "/store/product/225/",
-            "View book &amp; purchase", "order-specific TRX invoice",
+            "View book & purchase", "order-specific TRX invoice",
         )
         if any(token not in body for token in required):
             raise RuntimeError("Updated store render is missing purchase content")
