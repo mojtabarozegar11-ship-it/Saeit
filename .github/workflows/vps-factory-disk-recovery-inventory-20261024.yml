@@ -134,7 +134,21 @@ jobs:
                   ratio = round(len(zlib.compress(block,1))/len(block),3) if block else None
               except OSError:
                   ratio = None
-              largest.append({"suffix":suffix,"bytes":size,
+              zero_blocks = 0
+              sampled_blocks = 0
+              try:
+                  with path.open("rb") as f:
+                      for index in range(12):
+                          offset = ((max(0,size-262144))*index)//11
+                          f.seek(offset)
+                          chunk = f.read(262144)
+                          for pos in range(0,len(chunk)//4096*4096,4096):
+                              sampled_blocks += 1
+                              zero_blocks += (chunk[pos:pos+4096] == bytes(4096))
+              except OSError:
+                  sampled_blocks = 0
+              largest.append({"sample_zero_4k_fraction":round(zero_blocks/sampled_blocks,3) if sampled_blocks else None,
+                              "suffix":suffix,"bytes":size,
                               "age_days":round((time.time()-modified)/86400,1),
                               "hardlinks":links,
                               "sample_zlib_size_ratio":ratio})
