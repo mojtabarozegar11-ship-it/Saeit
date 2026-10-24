@@ -11,7 +11,7 @@ HTACCESS = SITE / ".htaccess"
 WSGI = SITE / "passenger_wsgi.py"
 HOME = Path("/home/zomorod2")
 OLD_SHA = "af09b7b17f8b3ee991893a1d9303c3df74353cd3dd179d26b95a4aea3b8cad7a"
-NEW_SHA = "109920969a77d73fbc44783f599bcf4ca049522b4012f135ad151e4c4a30de7c"
+NEW_SHA = "b44cc7df0442cf1139febd220ab2e338b7381ffb51fe1b1ab6bb9352f567d9d0"
 SITE_BASE_SHA = "70d1ff928d0660c7ba612d80796027dfc66a371918d8b779544c9d80a6a15771"
 ROUTE_OLD = b"RewriteCond %{REQUEST_URI} ^/(store|games|ai|contact|support|privacy|terms|cookies|products|blockchain|commerce|crypto-payments|global-business|research-lab|canada-vision|agro-industry|agriculture|education|weather)/$"
 ROUTE_NEW = ROUTE_OLD.replace(b"/(store|", b"/(")
@@ -109,11 +109,11 @@ def check_django_pages(expect_fixed):
     body = page.content.decode("utf8", "replace")
     if expect_fixed:
         required = ("Shop available books", "/store/product/72/", "/store/product/225/",
-                    "View book & purchase", "order-specific TRX invoice", "FEATURED PICKS", "no account required")
+                    "View book & purchase", "order-specific TRX invoice", "FEATURED PICKS", "account required")
         if any(token not in body for token in required):
             raise RuntimeError("Updated store render is missing purchase content")
-        if "Sign in or create an account" in body or "Secure purchase: sign in" in body:
-            raise RuntimeError("Guest checkout messaging still asks buyers to sign in")
+        if "Sign in or create an account" not in body or "no account required" in body:
+            raise RuntimeError("Store purchase instructions do not match account checkout")
         if "mpw-store-ten-guides" in body or "INITIAL COLLECTION" in body:
             raise RuntimeError("Low-conversion guide block or misleading heading remains")
     elif ("Shop available books" not in body or "View book & purchase" not in body
@@ -125,11 +125,8 @@ def check_django_pages(expect_fixed):
             raise RuntimeError("Existing product detail route failed: " + route)
     for route in ("/store/product/72/checkout/", "/store/product/225/checkout/"):
         response = client.get(route, secure=True, HTTP_HOST="mojplaywin.com")
-        if response.status_code != 200:
-            raise RuntimeError("Guest checkout route is not available: " + route)
-        body = response.content.decode("utf8", "replace")
-        if "Create invoice and pay with TRX" not in body:
-            raise RuntimeError("Guest checkout invoice action is missing: " + route)
+        if response.status_code != 302 or "login" not in response.get("Location", "").lower():
+            raise RuntimeError("Checkout sign-in/return route changed: " + route)
     register = client.get("/accounts/register/?next=/store/product/72/checkout/",
                           secure=True, HTTP_HOST="mojplaywin.com")
     if register.status_code != 200 or "/store/product/72/checkout/" not in register.content.decode("utf8", "replace"):
