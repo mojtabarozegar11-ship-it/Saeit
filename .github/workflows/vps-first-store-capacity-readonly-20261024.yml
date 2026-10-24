@@ -32,7 +32,7 @@ jobs:
     needs: source-check
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-vps-store-capacity-readonly-20261024]')
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 7
     steps:
       - name: Read filesystem headroom and distinguish temporary from persistent storage
         shell: bash
@@ -50,7 +50,7 @@ jobs:
           ssh-keygen -y -P '' -f "$d/key" >/dev/null
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
-          timeout 45s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
+          timeout 185s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
           import json, os, pathlib, stat
           durable={'ext2','ext3','ext4','xfs','btrfs','zfs','overlay','fuseblk','vfat'}
           monitored={'/':'root','/home':'home','/home/githubops':'factory_home','/var':'var','/mnt':'mnt','/data':'data','/backup':'backup','/srv':'srv'}
@@ -85,6 +85,37 @@ jobs:
               except OSError:pass
           best=max((x['free_bytes'] for x in by_device.values()), default=0)
           root=labeled.get('root',{})
+          # Aggregate known directory sizes without printing any private names.
+          # These are measurements, not permissions to delete anything.
+          import subprocess
+          candidate_paths={
+              'factory_operations':'/home/githubops/factory-runtime/operations',
+              'factory_private':'/home/githubops/factory-runtime/private',
+              'factory_virtualenv':'/home/githubops/factory-runtime/.venv',
+              'user_cache':'/home/githubops/.cache',
+              'temporary':'/tmp',
+              'system_logs':'/var/log',
+              'factory_runtime_total':'/home/githubops/factory-runtime'
+          }
+          usage={}
+          for label,path in candidate_paths.items():
+              item=pathlib.Path(path)
+              if not item.exists() or item.is_symlink(): continue
+              try:
+                  check=subprocess.run(['du','-sxB1',str(item)],
+                      capture_output=True,text=True,timeout=17,check=False)
+                  if check.returncode==0:
+                      usage[label]=int(check.stdout.split()[0])
+                  else:
+                      usage[label]=None
+              except (ValueError,OSError,IndexError,subprocess.TimeoutExpired):
+                  usage[label]=None
+          ops=pathlib.Path('/home/githubops/factory-runtime/operations')
+          staging=0
+          if ops.is_dir() and not ops.is_symlink():
+              for item in ops.iterdir():
+                  if item.name.startswith(('.agri200-','.strict-qc-','.private-real-qc1000-','.stage2-')) and item.is_dir() and not item.is_symlink():
+                      staging+=1
           # A reported largest mount is not a verified private, persistent
           # and write-authorized offsite recovery destination.
           print('VPS_STORAGE_SURVEY='+json.dumps({
@@ -94,6 +125,8 @@ jobs:
               'labeled_filesystem_headroom':labeled,
               'largest_accessible_durable_free_bytes':best,
               'root_free_bytes':root.get('free_bytes'),
+              'known_directory_usage_bytes':usage,
+              'transient_action_stage_directory_count':staging,
               'can_fit_16gib_uncompressed_backup_on_any_accessible_device':best>=16*1024**3,
               'full_backup_verified':False,
               'restore_test_verified':False,
