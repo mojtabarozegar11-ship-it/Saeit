@@ -58,7 +58,7 @@ class TargetedScholarlyVocabularyTests(unittest.TestCase):
                          "insufficient_independent_publishers_or_domains")
 
     def test_existing_v10_packets_can_still_be_accepted_only_after_revalidation(self):
-        self.assertTrue(S.SCOUT_ALGO_VERSION.startswith("v11-"))
+        self.assertTrue(S.SCOUT_ALGO_VERSION.startswith("v12-"))
         self.assertNotEqual(S.SCOUT_ALGO_VERSION,
                             "v10-complete-page-grid-source-diversity")
 

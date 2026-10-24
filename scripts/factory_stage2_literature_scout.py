@@ -27,7 +27,7 @@ import urllib.parse
 import urllib.request
 
 SCHEMA="saeit.factory.stage2-literature-scout.v1"
-SCOUT_ALGO_VERSION="v11-targeted-scholarly-vocabulary"
+SCOUT_ALGO_VERSION="v12-targeted-scholarly-vocabulary-gap-recovery"
 EVIDENCE_SCHEMA="saeit.factory.stage2-source-evidence.v1"
 TOPIC_ID=re.compile(r"AGRI-[0-9]{3}\Z")
 WORD_RE=re.compile(r"[a-z]{3,}")
