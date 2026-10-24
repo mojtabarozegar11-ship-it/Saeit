@@ -24,11 +24,27 @@ function masterTrackTicket(PDO $db, string $tenant, string $ticket, string $emai
     if (!$row || !hash_equals(strtolower((string)$row['email']), strtolower($email))) {
         return null;
     }
+    // Site-local staff replies are visible only after the ticket+email gate.
+    // No order ledger, payment token or reviewer identity is exposed.
+    $operatorAnswer = '';
+    $reviewedUtc = '';
+    $exists = $db->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='customer_operator_replies' LIMIT 1")->fetchColumn();
+    if ($exists) {
+        $response = $db->prepare('SELECT answer,reviewed_utc FROM customer_operator_replies WHERE tenant=? AND ticket_id=? LIMIT 1');
+        $response->execute([$tenant,$ticket]);
+        $answerRow = $response->fetch(PDO::FETCH_ASSOC);
+        if ($answerRow) {
+            $operatorAnswer = (string)$answerRow['answer'];
+            $reviewedUtc = (string)$answerRow['reviewed_utc'];
+        }
+    }
     return [
         'status' => (string)$row['processing_status'],
         'reply' => (string)$row['initial_reply'],
         'created' => (string)$row['created_utc'],
         'processed' => (string)($row['master_processed_utc'] ?? ''),
+        'operator_answer' => $operatorAnswer,
+        'operator_reviewed_utc' => $reviewedUtc,
     ];
 }
 function masterTicketStatusWeb(): void {
@@ -96,7 +112,14 @@ function masterTicketStatusWeb(): void {
             : ($status === 'needs_review'
                 ? ($fa ? 'نیازمند بررسی اختصاصی؛ پاسخ نهایی هنوز تأیید نشده است' : 'Individual review required; no final answer verified')
                 : ($fa ? 'راهنمایی خودکار بررسی شد؛ این وضعیت به معنی حل نهایی درخواست نیست' : 'Automated guidance processed; this does not mean the issue is fully resolved'));
+        if ($result['operator_answer'] !== '') {
+            $message = $fa ? 'پاسخ اختصاصی پشتیبانی ثبت شده است' : 'A support response is available';
+        }
         echo '<section role="status"><h2>'.masterEscape($message).'</h2><p>'.masterEscape($result['reply']).'</p>';
+        if ($result['operator_answer'] !== '') {
+            echo '<h3>'.($fa ? 'پاسخ اختصاصی' : 'Individual response').'</h3><p>'.
+                 masterEscape($result['operator_answer']).'</p>';
+        }
         echo '<p>'.($fa ? 'ثبت درخواست: ' : 'Request created: ').masterEscape($result['created']).' UTC</p></section>';
     }
     echo '<section><form method="post" action="/ask-master/status.php" accept-charset="utf-8">';
