@@ -74,8 +74,10 @@ def guard():
         raise RuntimeError("Django app root does not match verified app")
     if sha(STORE.read_bytes()) != OLD_SHA:
         raise RuntimeError("Live store template changed since audit; refusing overwrite")
-    if SITE_BASE.is_symlink() or SITE_BASE.exists():
-        raise RuntimeError("MojPlayWin page shell already exists; refusing overwrite")
+    if SITE_BASE.is_symlink():
+        raise RuntimeError("MojPlayWin page shell path is unsafe")
+    if SITE_BASE.exists() and (not SITE_BASE.is_file() or sha(SITE_BASE.read_bytes()) != SITE_BASE_SHA):
+        raise RuntimeError("Existing MojPlayWin page shell does not match the pinned version")
     ht=HTACCESS.read_bytes()
     if ht.count(ROUTE_NEW) != 1 or ROUTE_OLD in ht:
         raise RuntimeError("Previously repaired store route is no longer verified")
@@ -170,26 +172,28 @@ def install(run):
     save_private(destination / "htaccess.original", old_ht)
     info = {"run":run,"store_path":str(STORE),"site_base_path":str(SITE_BASE),
             "htaccess_path":str(HTACCESS),"old_sha":OLD_SHA,"new_sha":NEW_SHA,
-            "site_base_sha":SITE_BASE_SHA,"htaccess_sha":raw_sha(old_ht)}
+            "site_base_sha":SITE_BASE_SHA,"site_base_created":not SITE_BASE.exists(),"htaccess_sha":raw_sha(old_ht)}
     with open(destination / "manifest.json", "x", encoding="utf8") as stream:
         os.chmod(destination / "manifest.json", 0o600)
         json.dump(info, stream, sort_keys=True)
         stream.flush()
         os.fsync(stream.fileno())
     store_mode = stat.S_IMODE(STORE.stat().st_mode)
-    base_created = False
+    base_created = not SITE_BASE.exists()
     try:
-        with open(SITE_BASE, "xb") as stream:
-            os.fchmod(stream.fileno(), 0o644)
-            stream.write(new_base)
-            stream.flush()
-            os.fsync(stream.fileno())
-        base_created = True
-        base_dir_fd = os.open(SITE_BASE.parent, os.O_RDONLY)
-        try:
-            os.fsync(base_dir_fd)
-        finally:
-            os.close(base_dir_fd)
+        if base_created:
+            with open(SITE_BASE, "xb") as stream:
+                os.fchmod(stream.fileno(), 0o644)
+                stream.write(new_base)
+                stream.flush()
+                os.fsync(stream.fileno())
+            base_dir_fd = os.open(SITE_BASE.parent, os.O_RDONLY)
+            try:
+                os.fsync(base_dir_fd)
+            finally:
+                os.close(base_dir_fd)
+        elif SITE_BASE.is_symlink() or not SITE_BASE.is_file() or sha(SITE_BASE.read_bytes()) != SITE_BASE_SHA:
+            raise RuntimeError("Pinned MojPlayWin page shell changed during install")
         atomic_write(STORE, new, store_mode)
         if sha(STORE.read_bytes()) != NEW_SHA or sha(SITE_BASE.read_bytes()) != SITE_BASE_SHA:
             raise RuntimeError("Post-write template hashes mismatch")
@@ -228,16 +232,19 @@ def rollback(run):
         raise RuntimeError("Concurrent store template edit detected; refusing rollback")
     if raw_sha(HTACCESS.read_bytes())!=info.get("htaccess_sha"):
         raise RuntimeError("Apache route changed during store-only deployment; refusing rollback")
-    if SITE_BASE.is_file() and not SITE_BASE.is_symlink():
-        if sha(SITE_BASE.read_bytes())!=SITE_BASE_SHA:
-            raise RuntimeError("Concurrent MojPlayWin page shell edit detected; refusing rollback")
-        SITE_BASE.unlink()
-    elif SITE_BASE.is_symlink():
-        raise RuntimeError("Unsafe MojPlayWin page shell; refusing rollback")
+    if info.get("site_base_created") is True:
+        if SITE_BASE.is_file() and not SITE_BASE.is_symlink():
+            if sha(SITE_BASE.read_bytes())!=SITE_BASE_SHA:
+                raise RuntimeError("Concurrent MojPlayWin page shell edit detected; refusing rollback")
+            SITE_BASE.unlink()
+        elif SITE_BASE.is_symlink():
+            raise RuntimeError("Unsafe MojPlayWin page shell; refusing rollback")
+    elif SITE_BASE.is_symlink() or not SITE_BASE.is_file() or sha(SITE_BASE.read_bytes())!=SITE_BASE_SHA:
+        raise RuntimeError("Pre-existing MojPlayWin page shell changed; refusing rollback")
     check_django_pages(expect_fixed=False)
     print(json.dumps({"status":"MPW_STORE_SALES_FIX_ROLLED_BACK",
         "restored_store_sha":OLD_SHA,"restored_htaccess_sha":raw_sha(old_ht),
-        "removed_site_base":True,"scope":"MojPlayWin store template and previously missing page shell"},sort_keys=True))
+        "removed_site_base":info.get("site_base_created") is True,"scope":"MojPlayWin store template only; pre-existing page shell preserved"},sort_keys=True))
 
 
 if __name__ == "__main__":
