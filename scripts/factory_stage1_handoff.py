@@ -157,9 +157,14 @@ def blocked(root, name, error):
 
 
 def rank(order):
-    if order.get("priority") == "P0" and order.get("origin") == "owner_requested_agri200_p0":
-        return (0, int(order.get("priority_rank", 999999)), order.get("id", ""))
-    return (1, 0, order.get("id", ""))
+    # Preserve established agriculture P0 order, then explicitly serve all
+    # owner-directed education titles before lower-priority generic work.
+    if order.get("priority") == "P0":
+        if order.get("origin") == "owner_requested_agri200_p0":
+            return (0, 0, int(order.get("priority_rank", 999999)), order.get("id", ""))
+        if order.get("origin") == "owner_requested_education700_p0":
+            return (0, 1, int(order.get("priority_rank", 999999)), order.get("id", ""))
+    return (1, 0, 0, order.get("id", ""))
 
 
 def run(root, batch=1000):
