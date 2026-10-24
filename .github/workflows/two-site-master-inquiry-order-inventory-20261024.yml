@@ -1,0 +1,147 @@
+name: Two site customer routing private read-only inventory
+on:
+  push:
+    branches: [agents/two-sites-inquiries-orders-20261024]
+    paths: [.github/workflows/two-site-master-inquiry-order-inventory-20261024.yml]
+permissions:
+  contents: read
+concurrency:
+  group: two-site-inquiry-order-inventory
+  cancel-in-progress: false
+jobs:
+  inventory:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - name: Verify pinned VPS to cPanel SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/agents-ro.XXXXXX")"
+          echo "$d" > "$RUNNER_TEMP/agents-ro-path"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf '%s\n' \
+            "Host saeit-vps" "  HostName 178.239.147.150" "  User githubops" "  Port 22" \
+            "  IdentityFile $d/vps.key" "  UserKnownHostsFile $d/vps.known" \
+            "Host saeit-cpanel" "  HostName zohal.pws-dns.net" "  User zomorod2" "  Port 1396" \
+            "  IdentityFile $d/host.key" "  UserKnownHostsFile $d/host.known" "  ProxyJump saeit-vps" \
+            "Host *" "  StrictHostKeyChecking yes" "  IdentitiesOnly yes" "  BatchMode yes" \
+            "  ConnectTimeout 10" "  ConnectionAttempts 1" "  ForwardAgent no" \
+            > "$d/config"
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo TWO_SITES_PINNED_SSH_RELAY=PASS
+          echo SITE_AGENT_RELAY_PINNED
+      - name: Inspect deployed site inquiry and order surfaces without reading customer records
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          timeout 170s ssh -T -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.parse import quote
+          import json,sqlite3,subprocess
+          home=Path.home()
+          paths={
+           "ZM_DJANGO_APP":home/"Saeit/manage.py",
+           "ZM_DJANGO_CHAT":home/"Saeit/core/chat_runtime.py",
+           "ZM_DJANGO_CONTACT":home/"Saeit/core/company_content_views.py",
+           "ZM_DJANGO_ORDERS":home/"Saeit/core/api.py",
+           "ZM_PRIVATE_MASTER":home/".private/zomorod-business/site_agents.php",
+           "ZM_AGENT_LEDGER":home/".private/zomorod-business/site_agents.sqlite3",
+           "MPW_DOCROOT":home/"mojplaywin.com",
+           "MPW_DJANGO":home/"mojplaywin.com/manage.py",
+           "MPW_PASSENGER":home/"mojplaywin.com/passenger_wsgi.py",
+           "MPW_PRIVATE_MASTER":home/".private_mojplaywin_main_agents/v91_verified_main_port_20261018/mpw_v91_port/worker.py",
+           "MPW_PRIVATE_ROBOTS":home/".private_mojplaywin_main_agents/evolution_runtime_20261018/robots_execution_20261018.json"
+          }
+          for key,path in paths.items():
+              print(key+"="+str(path.exists() and not path.is_symlink()).lower())
+          for key,path in (("ZM",home/"Saeit"),("MPW",home/"mojplaywin.com")):
+              if path.is_dir() and not path.is_symlink():
+                  names=sorted(x.name for x in path.iterdir() if len(x.name)<85 and any(
+                    v in x.name.lower() for v in ("commerce","order","shop","store","agent","customer","contact","support","chat","payment","api","manage","passenger")))
+                  print(key+"_RELEVANT_APP_ENTRIES="+json.dumps(names[:50]))
+          db=home/".private/zomorod-business/site_agents.sqlite3"
+          if db.is_file():
+              with sqlite3.connect("file:"+quote(str(db))+"?mode=ro",uri=True,timeout=8) as connection:
+                  connection.execute("PRAGMA query_only=ON")
+                  tables=sorted(x[0] for x in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                    if any(v in x[0].lower() for v in ("agent","run","inquir","order","question","message","master","queue")))
+                  print("ZM_AGENT_LEDGER_RELEVANT_TABLES="+json.dumps(tables))
+          stage=home/".private_mojplaywin_main_agents"
+          for name in ("v91_verified_main_port_20261018","evolution_runtime_20261018"):
+              p=stage/name
+              if p.is_dir():
+                  found=sorted(x.name for x in p.iterdir() if any(v in x.name.lower() for v in
+                    ("question","order","inquir","support","message","task","queue","chat","event")))
+                  print("MPW_"+name.upper()+"_QUEUE_CANDIDATES="+json.dumps(found[:35]))
+          for name,url in (
+           ("ZM_CONTACT","https://zomorodmelal.ir/contact/"),
+           ("ZM_COMPANY","https://zomorodmelal.ir/company/"),
+           ("ZM_CHAT","https://zomorodmelal.ir/api/master-chat/"),
+           ("ZM_STORE","https://zomorodmelal.ir/store/"),
+           ("MPW_CONTACT","https://mojplaywin.com/contact/"),
+           ("MPW_AGENTS","https://mojplaywin.com/agents/"),
+           ("MPW_STORE","https://mojplaywin.com/store/"),
+           ("MPW_ORDER_API","https://mojplaywin.com/api/orders/")):
+              try:
+                  out=subprocess.run(["curl","-sS","--max-time","9","-o","/dev/null","-w","%{http_code}",url],
+                                     capture_output=True,text=True,timeout=11)
+                  print("PUBLIC_"+name+"_HTTP="+out.stdout.strip())
+              except (OSError,subprocess.TimeoutExpired):
+                  print("PUBLIC_"+name+"_HTTP=probe_unavailable")
+          PY
+          py="$HOME/Saeit/.venv/bin/python"
+          if test -x "$py" && test -f "$HOME/Saeit/manage.py";then
+            cd "$HOME/Saeit"
+            "$py" -B - <<'PY'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          try:
+              import django
+              django.setup()
+              from django.db import connection
+              from core.models import Order,ChatSession,ChatMessage
+              from core.company_inquiry_models import CompanyInquiry
+              with connection.cursor() as cur:
+                  tables=set(connection.introspection.table_names(cur))
+              for name,model in (("ORDER",Order),("CHAT_SESSION",ChatSession),
+                                 ("CHAT_MESSAGE",ChatMessage),("COMPANY_INQUIRY",CompanyInquiry)):
+                  print("ZM_DJANGO_"+name+"_TABLE_PRESENT="+str(model._meta.db_table in tables).lower())
+          except Exception as exc:
+              print("ZM_DJANGO_SCHEMA_ERROR_CLASS="+type(exc).__name__)
+          PY
+          fi
+          echo TWO_SITE_ROUTING_INVENTORY_COMPLETE
+          REMOTE
+      - name: Remove temporary SSH identity material
+        if: always()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/agents-ro-path"; then
+            d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+            if test -n "$d" && test -d "$d"; then
+              rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+              rmdir "$d" || true
+            fi
+            rm -f "$RUNNER_TEMP/agents-ro-path"
+          fi
