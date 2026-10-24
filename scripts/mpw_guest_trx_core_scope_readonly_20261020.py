@@ -270,3 +270,39 @@ for modname, wanted in {
 # Configuration presence only; never emit secret values.
 for name in sorted(k for k in os.environ if any(t in k.lower() for t in ("tron","trx","indexer","provider","rpc"))):
     print("MPW_STATUS_ENV="+json.dumps({"name":name,"configured":bool(os.environ.get(name))},ensure_ascii=False))
+
+# Resolve public support and expired-invoice UI source without modifying production.
+needles=("Support that starts with the actual problem","Game and account support will expand alongside released products","Automatic status checks paused","invoice expires","contact support with this order number")
+sensitive=re.compile(r"password|private.?key|secret|token|wallet|address|recipient|receiver|mnemonic|api.?key|authorization|credential",re.I)
+for root in (base,Path("/home/zomorod2/mojplaywin.com")):
+    if not root.is_dir() or root.is_symlink(): continue
+    hits=[]
+    for p in root.rglob("*"):
+        if p.is_symlink() or not p.is_file() or p.suffix.lower() not in (".html",".py",".js",".txt"): continue
+        try:
+            if p.stat().st_size>3_000_000: continue
+            raw=p.read_text("utf8","replace")
+        except (OSError,UnicodeError): continue
+        for needle in needles:
+            start=0
+            while True:
+                i=raw.find(needle,start)
+                if i<0: break
+                start=i+len(needle)
+                snippet=raw[max(0,i-100):min(len(raw),i+len(needle)+180)].replace("\\n"," ")
+                if sensitive.search(snippet): snippet="[REDACTED_SENSITIVE_CONTEXT]"
+                hits.append({"file":str(p.relative_to(root)),"needle":needle,"context":snippet[:360]})
+                if len(hits)>=50: break
+            if len(hits)>=50: break
+        if len(hits)>=50: break
+    print("MPW_UI_SOURCE_HITS="+json.dumps({"root":str(root),"hits":hits},ensure_ascii=False))
+# Check whether the third visible TRX product is independently marked eligible in the catalog.
+try:
+    item=Product.objects.get(pk=879); data=item.metadata or {}
+    from mpw_commerce.buyer_orders import _eligible
+    file=_private_file(SimpleNamespace(product=item))
+    print("MPW_ITEM_879="+json.dumps({"product":879,"active":item.active,"currency":item.currency,"price":str(item.price),
+        "eligible":bool(_eligible(item)),"file_present":file.is_file() and not file.is_symlink(),
+        "flags":{k:data.get(k) is True for k in ("asset_verified","license_verified","quality_approved","factory_publication_permission","rights_cleared")}},ensure_ascii=False))
+except Exception as exc:
+    print("MPW_ITEM_879="+json.dumps({"error":type(exc).__name__},ensure_ascii=False))
