@@ -1,0 +1,74 @@
+name: Zomorod scientific provenance discovery (read only)
+on:
+  push:
+    branches:
+      - credibility/evidence-register-20261024
+    paths:
+      - .github/workflows/zomorod-scientific-provenance-readonly-20261024.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-scientific-provenance-readonly-20261024
+  cancel-in-progress: false
+jobs:
+  inspect-private-project-schema:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/credibility/evidence-register-20261024'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Read-only provenance inventory (aggregate counts only)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          workdir="$RUNNER_TEMP/zm-scientific-provenance"
+          install -d -m 700 "$workdir"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$workdir/key"
+          chmod 600 "$workdir/key"
+          ssh-keygen -y -P '' -f "$workdir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$workdir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$workdir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 120s ssh -T -i "$workdir/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$workdir/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -B -' <<'PY'
+          import sqlite3
+          from pathlib import Path
+
+          private_db = Path.home() / "factory-runtime/private/factory-fresh-isolated.sqlite3"
+          if not private_db.is_file() or private_db.is_symlink():
+              raise SystemExit("PRIVATE_PROJECT_DB_UNAVAILABLE")
+          database_uri = private_db.resolve().as_uri() + "?mode=ro"
+          connection = sqlite3.connect(database_uri, uri=True, timeout=10)
+          try:
+              connection.execute("PRAGMA query_only=ON")
+              tables = {row[0] for row in connection.execute(
+                  "SELECT name FROM sqlite_master WHERE type='table'")}
+              if "core_researchproject" not in tables:
+                  raise SystemExit("PROJECT_TABLE_NOT_FOUND")
+              cols = {row[1] for row in connection.execute(
+                  "PRAGMA table_info(core_researchproject)")}
+              result = connection.execute("SELECT COUNT(*) FROM core_researchproject").fetchone()[0]
+              print("SOURCE=FACTORY_PRIVATE_VPS_NOT_COMPANY_HISTORICAL_CATALOG")
+              print("PRIVATE_RESEARCH_PROJECT_ROWS=" + str(result))
+              for name in ("id", "title", "status", "owner_id", "factory_run_id",
+                           "method", "methodology", "evidence", "source_url",
+                           "doi", "publication_permission", "public_disclosure",
+                           "created_at", "updated_at"):
+                  if name not in cols:
+                      print("FIELD_" + name.upper() + "=ABSENT")
+                      continue
+                  print("FIELD_" + name.upper() + "=PRESENT")
+                  if name != "id":
+                      checked = connection.execute(
+                          'SELECT COUNT(*) FROM core_researchproject WHERE "' +
+                          name + '" IS NOT NULL AND TRIM(CAST("' +
+                          name + '" AS TEXT)) != ?', ("",)).fetchone()[0]
+                      print("FIELD_" + name.upper() + "_NONEMPTY=" + str(checked))
+              print("COMPANY_HISTORICAL_CLAIM_RECONCILED=false")
+              print("PUBLICATION_AUTOMATION_ALLOWED=false")
+              print("PRIVATE_AGGREGATE_AUDIT_READ_ONLY_DONE=true")
+          finally:
+              connection.close()
+          PY
