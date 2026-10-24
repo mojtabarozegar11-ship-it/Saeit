@@ -52,6 +52,91 @@ LIMITS = {
 }
 
 
+
+# Operational remediation campaigns convert preliminary observations into a bounded
+# next-action queue.  They never turn filename matches into quality approvals.
+ROLE_REMEDIATION = {
+    "market_benchmark_supplier": ("P2", "external",
+        "Obtain dated, attributed market comparisons for the exact product and target region."),
+    "innovation_provenance_supplier": ("P2", "external",
+        "Request independent prior-art, authorship and chain-of-title review."),
+    "engineering_test_supplier": ("P1", "factory_engineering",
+        "Add executable, isolated contract tests for the version-pinned source and record results."),
+    "domain_specialist_supplier": ("P2", "qualified_specialist",
+        "Validate scientific assumptions and field applicability with a qualified reviewer."),
+    "customer_research_supplier": ("P2", "real_users",
+        "Collect consented usability evidence from actual target customers."),
+    "ux_accessibility_supplier": ("P1", "factory_qa",
+        "Run browser, keyboard and accessibility checks; retain reproducible evidence."),
+    "adversarial_qa_supplier": ("P1", "factory_security_qa",
+        "Run isolated negative-path and recovery tests; preserve failure reproductions."),
+    "security_rights_supplier": ("P2", "security_and_rights_review",
+        "Obtain verified license provenance, privacy review and security assessment."),
+    "commerce_operations_supplier": ("P1", "staging_operations",
+        "Test the staged order-to-delivery contract without live payments or customer data."),
+    "independent_review_supplier": ("P2", "independent_reviewer",
+        "Collect independent expert findings; this software agent cannot self-certify."),
+}
+PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2}
+
+
+def build_remediation_plan(routes, members):
+    """Deduplicate 100 workpapers into actionable, bounded evidence campaigns."""
+    campaigns = []
+    failed_parses = sorted(
+        [{"path": item["path"], "sha256": item["sha256"],
+          "reason": "static_parse_rejected"}
+         for item in members if item["static_parse"] == "invalid_or_non_utf8"],
+        key=lambda item: (item["path"], item["sha256"]))
+    if failed_parses:
+        campaigns.append({
+            "campaign_id": "parse-repair",
+            "priority": "P0",
+            "executor_class": "factory_engineering",
+            "criterion_ids": sorted(key for key, row in routes.items()
+                                   if row["possible_supplier_role"] in
+                                   ("engineering_test_supplier", "adversarial_qa_supplier")),
+            "action": "Repair or quarantine rejected source files, rerun isolated parsing and tests.",
+            "source_findings": failed_parses[:32],
+            "source_findings_total": len(failed_parses),
+            "automated_completion_means_independent_qc": False,
+            "status": "OPEN",
+        })
+    for role in sorted(ROLE_REMEDIATION):
+        priority, executor, action = ROLE_REMEDIATION[role]
+        criteria = sorted(key for key, row in routes.items()
+                          if row["possible_supplier_role"] == role)
+        if not criteria:
+            continue
+        matched = sorted({item["path"] for key in criteria
+                          for item in routes[key]["observations"][0]["candidate_members"]})
+        campaigns.append({
+            "campaign_id": "role-" + role,
+            "priority": priority,
+            "executor_class": executor,
+            "criterion_ids": criteria,
+            "action": action,
+            "filename_leads_unverified": matched[:32],
+            "filename_leads_total": len(matched),
+            "missing_filename_leads": not matched,
+            "automated_completion_means_independent_qc": False,
+            "status": "OPEN",
+        })
+    campaigns.sort(key=lambda task:
+                   (PRIORITY_ORDER[task["priority"]], task["campaign_id"]))
+    return {
+        "schema": "saeit.factory.ai-evidence-remediation.v1",
+        "campaigns": campaigns,
+        "distinct_criteria_routed": len(routes),
+        "static_parse_failures": len(failed_parses),
+        "priority_counts": {key: sum(task["priority"] == key for task in campaigns)
+                            for key in ("P0", "P1", "P2")},
+        "all_campaigns_are_preliminary": True,
+        "independent_qc_decisions_added": 0,
+        "commercial_release_allowed": False,
+    }
+
+
 def load_supplier(path):
     spec = importlib.util.spec_from_file_location("factory_quality_evidence_supplier_v1", path)
     if spec is None or spec.loader is None:
@@ -148,6 +233,7 @@ def build_dossier(root, policy, recipe, source_sha, artifact_sha, supplier):
             "professional_points_awarded": None,
             "human_or_external_approval": False,
         }
+    remediation = build_remediation_plan(routes, members)
     return {
         "schema": SCHEMA,
         "product_id": recipe,
@@ -174,6 +260,7 @@ def build_dossier(root, policy, recipe, source_sha, artifact_sha, supplier):
         },
         "criteria_total": len(routes),
         "ai_workpapers": routes,
+        "remediation_plan": remediation,
         "ai_evidence_is_not_human_or_independent_certification": True,
         "professional_quality_1000_points": None,
         "professional_quality_1000_certified": False,

@@ -30,6 +30,7 @@ class AutonomousEvidenceAgentTests(unittest.TestCase):
             with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as out:
                 out.writestr("sample_product/tests/test_sample.py",
                              "def test_ok():\n    assert True\n")
+                out.writestr("sample_product/tests/test_broken.py", "def invalid(:\n")
                 out.writestr("sample_product/README.md", "# Product\nEvidence gap.")
                 out.writestr("sample_product/LICENSE.txt", "License text requiring legal verification.")
             artifact_sha = hashlib.sha256(archive.read_bytes()).hexdigest()
@@ -73,6 +74,18 @@ class AutonomousEvidenceAgentTests(unittest.TestCase):
                                if x["path"].endswith("test_sample.py"))
             self.assertEqual(test_member["static_parse"], "python_ast_valid")
             self.assertEqual(test_member["test_function_count"], 1)
+            plan = dossier["remediation_plan"]
+            self.assertEqual(plan["distinct_criteria_routed"], 100)
+            self.assertEqual(plan["static_parse_failures"], 1)
+            self.assertEqual(plan["campaigns"][0]["campaign_id"], "parse-repair")
+            self.assertEqual(plan["campaigns"][0]["priority"], "P0")
+            self.assertEqual(plan["campaigns"][0]["source_findings_total"], 1)
+            self.assertTrue(any(row["campaign_id"] == "role-engineering_test_supplier"
+                                for row in plan["campaigns"]))
+            self.assertEqual(plan["independent_qc_decisions_added"], 0)
+            self.assertFalse(plan["commercial_release_allowed"])
+            self.assertTrue(all(not row["automated_completion_means_independent_qc"]
+                                for row in plan["campaigns"]))
 
 
 if __name__ == "__main__":
