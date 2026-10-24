@@ -69,7 +69,19 @@ def project_order(db: sqlite3.Connection, site: str, source: str, key: object, s
     status = str(state)
     if not re.fullmatch(r"[0-9]{1,17}", sid) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,45}", status):
         raise ValueError("ORDER_EVENT_UNSAFE")
-    stamp = hashlib.sha256((site + "|" + source + "|" + sid + "|" + status).encode()).hexdigest()
+    # Deduplicate identical polls, not genuine state transitions.  A paid order
+    # can legitimately return to pending; that second pending is a NEW event.
+    previous = db.execute(
+        "SELECT source_status,event_digest FROM customer_order_events "
+        "WHERE tenant=? AND source=? AND source_id=? ORDER BY id DESC LIMIT 1",
+        (site, source, sid),
+    ).fetchone()
+    if previous is not None and previous[0] == status:
+        return False
+    predecessor = previous[1] if previous is not None else ""
+    stamp = hashlib.sha256(
+        (site + "|" + source + "|" + sid + "|" + status + "|" + predecessor).encode()
+    ).hexdigest()
     changed = db.execute(
         "INSERT OR IGNORE INTO customer_order_events(tenant,source,source_id,source_status,event_digest) VALUES (?,?,?,?,?)",
         (site, source, sid, status, stamp),
