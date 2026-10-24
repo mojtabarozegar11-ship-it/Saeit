@@ -190,3 +190,65 @@ jobs:
           echo "FACTORY_QA_AND_WAREHOUSE=SEQUENTIAL"
           echo "FACTORY_CROSS_TICK_OVERLAP=LOCKED"
           echo "FACTORY_INDEPENDENT_OF_SITES=true"
+
+  live-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Inspect actual private production progress and stage failure codes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-minute"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh_vps() {
+            ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          ssh_vps 'python3 -u -' <<'PY'
+          import json, os, time
+          from pathlib import Path
+          base=Path.home()/"factory-runtime"
+          private=base/"private/autonomous-product-cycle"
+          for name in ("production-state.json","production-health.json","production-instructions/order-status.json",
+                       "production-warehouse/stock-register.json","customer-packs/status.json"):
+              path=private/name
+              if not path.is_file(): print("STATE_MISSING="+name); continue
+              data=json.loads(path.read_text())
+              print("STATE_FILE="+name+" AGE_SECONDS="+str(round(time.time()-path.stat().st_mtime)))
+              for key,value in data.items():
+                  if isinstance(value,(bool,int,float)) or key in ("cycle_status","last_action","zero_new_products_reason_code","last_cycle_finished_at_utc"):
+                      print("STATE_VALUE "+key+"="+str(value))
+              for key in ("quality_failures_this_cycle","designer_failures","research_failures"):
+                  for item in data.get(key,[])[:8]:
+                      if isinstance(item,dict):
+                          print("FAILURE_CODE="+str(item.get("code",item.get("type","unknown"))))
+          for filename in ("factory-minute-cycle.log","autonomous-product-cycle.log"):
+              path=base/"operations"/filename
+              if path.is_file():
+                  print("LOG="+filename+" AGE_SECONDS="+str(round(time.time()-path.stat().st_mtime)))
+                  with path.open("rb") as f:
+                      f.seek(max(0,path.stat().st_size-24000))
+                      lines=f.read().decode("utf8",errors="replace").splitlines()
+                  for line in lines[-50:]:
+                      if line.startswith(("VPS_FACTORY_","FACTORY_","Traceback","TimeoutError","ModuleNotFoundError","ImportError","sqlite3.OperationalError")):
+                          print("LOG_SIGNAL="+line[:240])
+          for proc in Path("/proc").iterdir():
+              if not proc.name.isdigit():continue
+              try:
+                  args=(proc/"cmdline").read_bytes().decode(errors="replace").replace("\x00"," ")
+                  if str(base) not in args or not any(x in args for x in ("run-minute-cycle","run-local-cycle","factory_vps_product_cycle","factory_build_50","factory_customer_packager","run-warehouse")): continue
+                  comm=(proc/"comm").read_text().strip()
+                  wait=(proc/"wchan").read_text().strip()
+                  print("FACTORY_PROCESS pid="+proc.name+" comm="+comm+" wait="+wait)
+              except (OSError,PermissionError):pass
+          PY
