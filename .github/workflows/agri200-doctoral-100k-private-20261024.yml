@@ -1,0 +1,71 @@
+name: AGRI200 private doctoral 100k-word per customer product authoring orders
+on:
+  pull_request:
+    paths:
+      - scripts/agri200_doctoral_books_v1_20261024.py
+      - tests/test_agri200_doctoral_books_v1_20261024.py
+      - .github/workflows/agri200-doctoral-100k-private-20261024.yml
+      - docs/agri200_p0_catalog.tsv
+  push:
+    branches: [main]
+    paths:
+      - scripts/agri200_doctoral_books_v1_20261024.py
+      - tests/test_agri200_doctoral_books_v1_20261024.py
+      - .github/workflows/agri200-doctoral-100k-private-20261024.yml
+permissions: {contents: read}
+concurrency:
+  group: agri200-doctoral-100k-private-staging
+  cancel-in-progress: false
+jobs:
+  test-doctoral-text-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Prove 200 correct languages, 20 million words minimum, no padding or fake QC
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_agri200_doctoral_books_v1_20261024.py -v
+          python3 -B scripts/agri200_doctoral_books_v1_20261024.py --selftest
+          python3 -B -c 'import ast,pathlib;ast.parse(pathlib.Path("scripts/agri200_doctoral_books_v1_20261024.py").read_text(encoding="utf-8"))'
+  private-vps-book-workorders:
+    needs: test-doctoral-text-contract
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-agri200-doctoral100k-private-20261024]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Stage 200 genuine 100k-word book authoring plans, never products or storefront data
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          stage="$RUNNER_TEMP/agri200-doctoral-books"
+          install -d -m 700 "$stage"
+          trap 'rm -rf -- "$stage"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$stage/key"
+          chmod 600 "$stage/key"
+          ssh-keygen -y -P '' -f "$stage/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$stage/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$stage/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$stage/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$stage/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          root="/home/githubops/factory-runtime/private/autonomous-product-cycle"
+          tool="/home/githubops/factory-runtime/.venv/bin/python"
+          ssh_vps "test \"\$(id -un)\" = githubops && test -d '$root/production-instructions/orders' && test -x '$tool'"
+          remote="/home/githubops/factory-runtime/operations/.doctoral100k-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh_vps "umask 077; test ! -e '$remote'; install -d -m 700 '$remote/scripts' '$remote/docs'"
+          for file in scripts/agri200_doctoral_books_v1_20261024.py docs/agri200_p0_catalog.tsv; do
+            ssh_vps "umask 077; cat > '$remote/$file'; chmod 600 '$remote/$file'" < "$file"
+            hash="$(sha256sum "$file" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$remote/$file' | awk '{print \$1}')\" = '$hash'"
+          done
+          ssh_vps "timeout 40s '$tool' -B '$remote/scripts/agri200_doctoral_books_v1_20261024.py' --selftest"
+          ssh_vps "timeout 450s '$tool' -B '$remote/scripts/agri200_doctoral_books_v1_20261024.py' --factory-private '$root' --catalog '$remote/docs/agri200_p0_catalog.tsv' > '$remote/doctoral100k-evidence.json'"
+          ssh_vps "python3 -c 'import json,sys;r=json.load(open(sys.argv[1]));assert r[\"customer_product_count\"]==200 and r[\"chapter_authoring_work_units\"]==4000;assert r[\"minimum_sale_language_corpus_words\"]==20000000;assert r[\"published_for_sale\"]==0 and r[\"independently_approved\"]==0 and r[\"discounts_created\"]==0;print(\"DOCTORAL100K_REAL_PRIVATE_PLAN_COUNT=\"+str(r[\"customer_product_count\"]));print(\"DOCTORAL100K_ENGLISH_USD=\"+str(r[\"english_usd_targets\"]));print(\"DOCTORAL100K_PERSIAN_IRR=\"+str(r[\"persian_irr_targets\"]));print(\"DOCTORAL100K_CHAPTER_WRITING_UNITS=\"+str(r[\"chapter_authoring_work_units\"]));print(\"DOCTORAL100K_VERIFIED_OLD_SOURCE_COMPANIONS=\"+str(r[\"verified_old_research_companions\"]));print(\"DOCTORAL100K_LARGEST_EXISTING_DRAFT_PROSE_WORDS=\"+str(r[\"largest_existing_research_companion_prose_words\"]));print(\"DOCTORAL100K_BOOKS_COMPLETED=\"+str(r[\"full_100k_word_monographs_completed\"]));print(\"DOCTORAL100K_PRODUCTS_PUBLISHED=\"+str(r[\"published_for_sale\"]))' '$remote/doctoral100k-evidence.json'"
