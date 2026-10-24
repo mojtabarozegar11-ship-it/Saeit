@@ -130,6 +130,21 @@ jobs:
               print("MPW_SUPPORT_RENDERER_BYTES="+str(len(raw)))
               print("MPW_SUPPORT_RENDERER_UNIQUE_ANCHOR="+str(txt.count(key)))
               print("MPW_SUPPORT_RENDERER_ANCHOR_SNIPPET="+json.dumps(txt[pos-350:pos+580] if pos>=0 else "NOT_FOUND",ensure_ascii=False))
+          design=home/"mojplaywin.com/design-preview-20261017"
+          matches=[];inspected=0
+          for candidate in design.rglob("*"):
+              if inspected>=400: break
+              if not candidate.is_file() or candidate.is_symlink() or candidate.stat().st_size>250000:
+                  continue
+              inspected+=1
+              if candidate.suffix not in (".php",".html",".htm",".json",".txt"):continue
+              data=candidate.read_bytes()
+              if b"Need a direct channel?" in data or b"Game and account support will expand" in data:
+                  matches.append({"path":str(candidate.relative_to(design)),
+                         "sha256":hashlib.sha256(data).hexdigest(),
+                         "size":len(data),"exact_anchor_count":data.count(b"Need a direct channel?")})
+          print("MPW_SUPPORT_TEMPLATE_MATCHES="+json.dumps(matches[:15]))
+          print("MPW_SUPPORT_TEMPLATE_FILES_INSPECTED="+str(inspected))
           print("LOCAL_OLLAMA_BIN="+str(bool(shutil.which("ollama"))))
           print("LOCAL_LLAMA_SERVER_BIN="+str(bool(shutil.which("llama-server"))))
           print("LOCAL_LLAMA_PYTHON="+str(importlib.util.find_spec("llama_cpp") is not None))
