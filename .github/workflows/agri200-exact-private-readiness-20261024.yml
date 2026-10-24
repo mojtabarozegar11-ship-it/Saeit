@@ -32,3 +32,44 @@ jobs:
           python3 -B -m unittest discover -s tests -p test_agri200_customer_store_allocation_20261024.py -v
       - name: Validate standalone CLI syntax
         run: python3 -B -c 'import ast,pathlib;ast.parse(pathlib.Path("scripts/agri200_exact_private_readiness_20261024.py").read_text(encoding="utf-8"))'
+  private-vps-readiness-proof:
+    needs: fail-closed-private-sku-lineage
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-agri200-private-readiness-20261024]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Audit real factory queue read-only, without touching sites or merchant state
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          stage="$RUNNER_TEMP/agri200-lineage-readiness"
+          install -d -m 700 "$stage"
+          trap 'rm -rf -- "$stage"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$stage/key"
+          chmod 600 "$stage/key"
+          ssh-keygen -y -P '' -f "$stage/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$stage/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$stage/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$stage/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$stage/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          ssh_vps 'test "$(id -un)" = githubops && test -d /home/githubops/factory-runtime/private/autonomous-product-cycle/production-instructions/orders'
+          remote="/home/githubops/factory-runtime/operations/.agri200-lineage-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh_vps "umask 077; test ! -e '$remote'; install -d -m 700 '$remote/scripts' '$remote/docs'"
+          for file in \
+            scripts/agri200_exact_private_readiness_20261024.py \
+            scripts/agri200_fair_pricing_owner_only_20261024.py \
+            scripts/agri200_customer_store_allocation_20261024.py \
+            docs/agri200_p0_catalog.tsv; do
+            ssh_vps "umask 077; cat > '$remote/$file'; chmod 600 '$remote/$file'" < "$file"
+            digest="$(sha256sum "$file" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$remote/$file' | awk '{print \$1}')\" = '$digest'"
+          done
+          ssh_vps "timeout 110s /home/githubops/factory-runtime/.venv/bin/python -B '$remote/scripts/agri200_exact_private_readiness_20261024.py' --catalog '$remote/docs/agri200_p0_catalog.tsv' --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle > '$remote/private_readiness.json'"
+          ssh_vps "python3 -c 'import json,sys;d=json.load(open(sys.argv[1],encoding=\"utf-8\"));assert d[\"factory_work_orders_mapped\"]==200;assert d[\"mojplaywin_usd\"]==100 and d[\"zomorod_irr\"]==100;assert d[\"commercially_releasable\"]==0;assert d[\"discounts_created\"]==0;print(\"AGRI200_EXACT_VPS_ORDER_MAPPING=200\");print(\"AGRI200_USD_ENGLISH=100\");print(\"AGRI200_IRR_PERSIAN=100\");print(\"AGRI200_QC_UNVERIFIED_PRODUCT_PUBLICATIONS=0\");print(\"AGRI200_BLOCKER_COUNTS=\"+json.dumps(d[\"blockers_by_type\"],sort_keys=True))' '$remote/private_readiness.json'"
