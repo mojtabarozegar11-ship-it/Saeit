@@ -249,6 +249,31 @@ jobs:
           print("GMAIL_CORPORATE_CANARY_FILES_SCANNED="+str(counts["files_scanned"]))
           print("CANARY_CONTENT_AND_ADDRESSES_NOT_EXPORTED")
           PY
+      - name: Inspect public DNS mail policy and PTR (read-only)
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import subprocess,re
+          def lookup(kind,name):
+              p=subprocess.run(['dig','+time=3','+tries=1','+short',kind,name],capture_output=True,text=True,timeout=8)
+              return [s.strip().strip('"') for s in p.stdout.splitlines() if s.strip()]
+          domain='zomorodmelal.ir'
+          spf=[s for s in lookup('TXT',domain) if s.startswith('v=spf1')]
+          dmarc=[s for s in lookup('TXT','_dmarc.'+domain) if 'v=DMARC1' in s]
+          mx=lookup('MX',domain)
+          ptr=lookup('PTR','124.147.239.178.in-addr.arpa')
+          a=lookup('A','zohal.pws-dns.net')
+          ptr_names=[x.lower().rstrip('.') for x in ptr]
+          print('MAIL_DNS_SPF_RECORD_COUNT='+str(len(spf)))
+          print('MAIL_DNS_DMARC_RECORD_COUNT='+str(len(dmarc)))
+          policy=re.search(r'(?i)(?:^|;)\\s*p\\s*=\\s*(none|quarantine|reject)',dmarc[0]) if dmarc else None
+          print('MAIL_DNS_DMARC_POLICY='+(policy.group(1).lower() if policy else 'not_resolved'))
+          print('MAIL_DNS_MX_RECORD_COUNT='+str(len(mx)))
+          print('OUTBOUND_IP_PTR_PRESENT='+str(bool(ptr)))
+          print('OUTBOUND_PTR_MATCHES_SMTP_HOST='+str('zohal.pws-dns.net' in ptr_names))
+          print('SMTP_HOST_A_MATCHES_OUTBOUND_IP='+str('178.239.147.124' in a))
+          print('PUBLIC_DNS_ONLY_NO_PRIVATE_MAIL_SCANNED')
+          PY
       - name: Remove SSH keys
         if: always()
         run: |
