@@ -1,0 +1,122 @@
+name: Zomorod research registry SEO - isolated live correction 20261025
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/zomorod_research_projects_seo_20261025.py"
+      - ".github/workflows/zomorod-research-projects-seo-live-20261025.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-research-projects-seo-live
+  cancel-in-progress: false
+jobs:
+  seo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate strictly scoped production patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_research_projects_seo_20261025.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/zomorod_research_projects_seo_20261025.py').read_text()
+          assert 'FILES = ("research/projects/index.html", "sitemap.xml")' in p
+          assert 'OLD = "https://zomorodmelal.ir/research/"' in p
+          assert 'NEW = "https://zomorodmelal.ir/research/projects/"' in p
+          assert 'ROLLBACK_BLOCKED_CONCURRENT_CHANGE_' in p
+          print('PATCH_SCOPE_AND_SYNTAX_VALID')
+          PY
+      - name: Configure pinned VPS relay and cPanel SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-research-seo-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY_VERIFIED"
+      - name: Apply, verify public response, and rollback on failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-research-seo-ssh"
+          stage="/home/zomorod2/.zm-research-seo-$GITHUB_RUN_ID"
+          installed=0
+          cleanup() {
+            rc=$?
+            trap - EXIT
+            if test "$rc" -ne 0 && test "$installed" -eq 1; then
+              echo "PUBLIC_SMOKE_FAILED_ATTEMPTING_SCOPED_ROLLBACK"
+              ssh -F "$d/config" saeit-cpanel "python3 '$stage/patch.py' rollback '$GITHUB_RUN_ID'" || echo "MANUAL_RECOVERY_REQUIRED"
+            fi
+            ssh -F "$d/config" saeit-cpanel "rm -rf -- '$stage'" || true
+            rm -rf -- "$d"
+            exit "$rc"
+          }
+          trap cleanup EXIT
+          ssh -F "$d/config" saeit-cpanel "test ! -e '$stage' && install -d -m 700 '$stage'"
+          scp -F "$d/config" scripts/zomorod_research_projects_seo_20261025.py "saeit-cpanel:$stage/patch.py"
+          ssh -F "$d/config" saeit-cpanel "python3 '$stage/patch.py' apply '$GITHUB_RUN_ID'"
+          installed=1
+          success=0
+          for attempt in 1 2 3 4 5; do
+            curl -fsSL --max-time 22 -H 'Cache-Control: no-cache' "https://zomorodmelal.ir/research/projects/?seo_run=$GITHUB_RUN_ID&attempt=$attempt" -o "$RUNNER_TEMP/zm-project.html" || true
+            curl -fsSL --max-time 22 -H 'Cache-Control: no-cache' "https://zomorodmelal.ir/sitemap.xml?seo_run=$GITHUB_RUN_ID&attempt=$attempt" -o "$RUNNER_TEMP/zm-sitemap.xml" || true
+            if python3 - "$RUNNER_TEMP/zm-project.html" "$RUNNER_TEMP/zm-sitemap.xml" <<'PY'
+          import pathlib,re,sys,xml.etree.ElementTree as ET
+          page=pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
+          tags=[m.group(0) for m in re.finditer(r'<link\b[^>]*>',page,re.I|re.S) if re.search(r'\brel\s*=\s*["\x27]canonical["\x27]',m.group(0),re.I)]
+          assert len(tags)==1,tags
+          assert 'https://zomorodmelal.ir/research/projects/' in tags[0],tags[0]
+          root=ET.parse(sys.argv[2]).getroot()
+          urls=[n.text for n in root.iter() if n.tag.endswith('loc')]
+          assert urls.count('https://zomorodmelal.ir/research/projects/')==1
+          print('LIVE_CANONICAL_AND_SITEMAP_VERIFIED')
+          PY
+            then success=1; break; fi
+            sleep 4
+          done
+          test "$success" -eq 1
+          echo "ZOMOROD_RESEARCH_PROJECTS_SEO_LIVE_SUCCESS"
