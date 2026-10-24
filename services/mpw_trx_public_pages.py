@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_GET
 from services.mpw_trx_commercial_web import _ensure_live, _nocache
 from services.mpw_trx_walletless_core import PaymentHold
+from services.mpw_trx_commercial_context import rights_cleared_for_sale
 
 
 def _checkout_csrf_referrer(response):
@@ -43,7 +44,7 @@ def public_shop(request):
     except PaymentHold: raise Http404
     cards=[]
     for p in Product.objects.filter(pk__in=getattr(settings,'MPW_TRX_PUBLIC_PRODUCT_IDS',()),active=True).order_by('pk'):
-        if not _eligible(p): continue
+        if not _eligible(p) or not rights_cleared_for_sale(p): continue
         try:
             f=_private_file(SimpleNamespace(product=p))
             if f.is_symlink() or not f.is_file() or f.stat().st_size<=0: continue
@@ -65,7 +66,8 @@ def product_checkout(request, product_id):
     if product_id not in getattr(settings,'MPW_TRX_PUBLIC_PRODUCT_IDS',()):
         raise Http404
     product=Product.objects.select_related('knowledge_article').filter(pk=product_id).first()
-    if product is None or not _eligible(product): raise Http404
+    if product is None or not _eligible(product) or not rights_cleared_for_sale(product):
+        raise Http404
     f=_private_file(SimpleNamespace(product=product))
     if f.is_symlink() or not f.is_file() or f.stat().st_size<=0: raise Http404
     response=_nocache(render(request,'mpw_commerce/product_checkout.html',{

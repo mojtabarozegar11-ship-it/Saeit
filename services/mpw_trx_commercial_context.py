@@ -15,3 +15,9 @@ def checkout_flags(request):
         and public_release_authorized(settings)
     )
     return {"mpw_trx_easy_enabled":released}
+
+
+def rights_cleared_for_sale(product):
+    """Require independently recorded explicit rights approval, never truthy strings."""
+    metadata = getattr(product, "metadata", None)
+    return type(metadata) is dict and metadata.get("rights_cleared") is True

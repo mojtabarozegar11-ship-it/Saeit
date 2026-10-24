@@ -10,6 +10,7 @@ from decimal import Decimal
 from html import escape
 
 from services.mpw_trx_walletless_core import PaymentHold
+from services.mpw_trx_commercial_context import rights_cleared_for_sale
 from services.mpw_trx_walletless_one_tap_ui import render_one_tap_invoice
 from services.mpw_walletless_commercial_intent import (
     PROVIDER, WAITING, _decode, reserve_commercial_intent,
@@ -69,7 +70,8 @@ def _select_order(product_id: int, buyer_id: int, connection):
         get_user_model().objects.select_for_update().get(pk=buyer_id)
         product=Product.objects.select_for_update().get(
             pk=product_id,active=True,currency="USD")
-        if not _eligible(product) or not Decimal("0") < Decimal(product.price) <= Decimal("1000"):
+        if (not _eligible(product) or not rights_cleared_for_sale(product)
+                or not Decimal("0") < Decimal(product.price) <= Decimal("1000")):
             raise PaymentHold("Digital product not presently eligible")
         for old in Order.objects.select_for_update().filter(
             customer_id=buyer_id,status="pending",currency="USD",
