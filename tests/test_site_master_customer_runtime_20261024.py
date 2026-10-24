@@ -108,5 +108,54 @@ class CustomerInboxTests(unittest.TestCase):
             self.assertEqual(check.execute("SELECT processing_status FROM customer_questions").fetchone()[0],"queued")
 
 
+    def test_financial_and_delivery_requests_cannot_be_marked_resolved(self):
+        cases = (
+            ("order_question", "How can I get a coupon?"),
+            ("question", "Where is my paid order?"),
+            ("question", "Please refund my purchase"),
+            ("question", "My download file is missing"),
+            ("question", "پیگیری پرداخت سفارش"),
+            ("question", "درخواست استرداد وجه"),
+            ("question", "مشکل دانلود فایل"),
+            ("question", "Please help with a delivery discount"),
+            ("question", "Can you verify my TRX transfer"),
+        )
+        for kind, question in cases:
+            with self.subTest(question=question):
+                self.assertEqual(mod.classify_customer_ticket(kind,question),"needs_review")
+        self.assertEqual(mod.classify_customer_ticket("question","What is the coupon policy?"),"handled")
+        self.assertEqual(mod.classify_customer_ticket("question","قانون تخفیف چگونه است؟"),"handled")
+        self.assertEqual(mod.classify_customer_ticket("question","Who are you?"),"needs_review")
+
+    def test_master_health_heartbeat_and_real_pending_review_counts(self):
+        db = self.make_db("zomorod")
+        for pk,question in enumerate(("Please refund my order","Coupon policy please",
+                                     "Unknown product composition"),1):
+            mod.project_question(db,"zomorod","company_inquiry",pk,"Customer","test@example.com",question)
+        db.execute(
+            "UPDATE customer_questions SET created_utc=datetime('now','-2 day') WHERE id=?",
+            ("native-company_inquiry-1",)
+        )
+        db.commit()
+        db.close()
+        with mock.patch.object(mod,"master_callback",return_value=None):
+            result=mod.run("zomorod")
+        self.assertEqual(result["questions_processed"],3)
+        self.assertEqual(result["review_waiting"],2)
+        self.assertEqual(result["review_older_than_day"],1)
+        self.assertEqual(result["guidance_processed"],1)
+        with mod.open_inbox("zomorod") as checked:
+            states=dict(checked.execute("SELECT question,processing_status FROM customer_questions"))
+            self.assertEqual(states["Please refund my order"],"needs_review")
+            self.assertEqual(states["Coupon policy please"],"handled")
+            self.assertEqual(states["Unknown product composition"],"needs_review")
+            pulse=checked.execute("SELECT queued,review,guidance,review_older_than_day FROM master_customer_worker_health WHERE tenant='zomorod'").fetchone()
+            self.assertEqual(pulse,(0,2,1,1))
+        with mock.patch.object(mod,"master_callback",return_value=None):
+            again=mod.run("zomorod")
+        self.assertEqual(again["questions_processed"],0)
+        self.assertEqual(again["review_waiting"],2)
+
+
 if __name__=="__main__":
     unittest.main()
