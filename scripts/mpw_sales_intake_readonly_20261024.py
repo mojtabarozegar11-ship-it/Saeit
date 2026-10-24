@@ -127,13 +127,20 @@ def route_bucket(page):
     if page.startswith("/commerce/trx-easy/"):
         return "trx_invoice" if "/invoice/" in page else "trx_other"
     if page.startswith("/accounts/"):
-        return "account"
+        return ("account_login" if "/login" in page else
+                "account_register" if "/register" in page else "account_other")
     if page.startswith("/ask-master/"):
         return "support_ticket"
     if page.startswith(("/support/", "/contact/")):
         return "support_contact"
     if page.startswith(("/admin/", "/wp-admin/", "/.env", "/cgi-bin/")):
         return "scan_or_admin"
+    if page == "/":
+        return "home"
+    for prefix in ("/games/", "/ai/", "/research/", "/knowledge/",
+                   "/api/", "/topics/", "/blockchain/", "/services/"):
+        if page.startswith(prefix):
+            return prefix.strip("/")
     return "other"
 
 def recent_cpanel_visitors():
@@ -183,6 +190,7 @@ def visitor_logs():
     report["available"] = True
     unique = set()
     errors_by_bucket = Counter()
+    errors_by_day = Counter()
     first = last = None
     for p in files:
         try:
@@ -214,6 +222,7 @@ def visitor_logs():
                     report["likely_human_page_hits"] += 1
                     if status.startswith(("4", "5")):
                         errors_by_bucket[route_bucket(page) + ":" + status] += 1
+                        errors_by_day[at.date().isoformat() + ":" + status[0] + "xx"] += 1
                     unique.add(ip)
                     if page.startswith("/store/") or page == "/store/":
                         report["store_page_hits"] += 1
@@ -236,6 +245,8 @@ def visitor_logs():
     output("MPW_ERROR_BUCKETS", {"source": "same_archived_access_logs",
                                 "codes_by_route": dict(errors_by_bucket.most_common(30)),
                                 "no_url_or_ip_disclosed": True})
+    output("MPW_ERROR_DAYS", {"day_and_status_class": dict(sorted(errors_by_day.items())),
+                              "source": "same_archived_access_logs"})
 
 
 if __name__ == "__main__":
