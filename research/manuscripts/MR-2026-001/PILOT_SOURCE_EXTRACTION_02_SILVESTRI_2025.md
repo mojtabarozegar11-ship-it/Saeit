@@ -36,8 +36,10 @@ Full four-row transcription, source locations, equations and standard-library ve
 
 ## Next-step verification checklist
 
-- [x] Independently transcribe Table 3 four sector-level rows and totals from PMC/publisher-indexed HTML (see linked source QA).\n- [ ] Visually inspect the publisher PDF Table 3 and confirm the status of any correction/erratum.
-- [x] Reconcile arithmetic against published Table 3; observed prose baseline is inconsistent with table.\n- [ ] Check for any publisher erratum or author response before alleging a published correction.
+- [x] Independently transcribe Table 3 four sector-level rows and totals from PMC/publisher-indexed HTML (see linked source QA).
+- [ ] Visually inspect the publisher PDF Table 3 and confirm the status of any correction/erratum.
+- [x] Reconcile arithmetic against published Table 3; observed prose baseline is inconsistent with table.
+- [ ] Check for any publisher erratum or author response before alleging a published correction.
 - [ ] Inspect Methods 5.1 and data availability for the exact observed-vs-counterfactual boundary.
 - [ ] Have a human second extractor check source passages and resolve disagreements.
 - [ ] After protocol freeze, determine if the validation-only stratum includes retrospective counterfactual DSS evaluations; do not contaminate the field-adoption denominator.
