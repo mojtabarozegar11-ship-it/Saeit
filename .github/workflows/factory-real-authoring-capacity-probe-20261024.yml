@@ -77,4 +77,4 @@ jobs:
               "note":"Artifact counts are not book completions. No independent QC1000 or customer purchase is asserted."
           }
           print(json.dumps(out,sort_keys=True,ensure_ascii=False))
-         PY
+          PY
