@@ -138,21 +138,35 @@ jobs:
           if marker.is_symlink():raise SystemExit('PASSENGER_MARKER_UNSAFE')
           marker.touch();print('MPW_INVOICE_POLLING_RELOAD=PASS')
           PY
-      - name: Smoke store products checkouts and existing invoice without payment
+      - name: Smoke store products checkouts and converged invoice workers without payment
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json,urllib.request
+          import json,time,urllib.request
           root='https://mojplaywin.com'
-          routes=['/store/','/store/product/72/','/store/product/72/checkout/','/store/product/225/','/store/product/225/checkout/','/commerce/trx-easy/invoice/7/']
+          routes=['/store/','/store/product/72/','/store/product/72/checkout/','/store/product/225/','/store/product/225/checkout/']
           for path in routes:
               req=urllib.request.Request(root+path,headers={'Cache-Control':'no-cache','Pragma':'no-cache','User-Agent':'MPWInvoicePollingSmoke/1.0'})
               with urllib.request.urlopen(req,timeout=22) as r:
-                  body=r.read(400000);record={'path':path,'status':r.status,'bytes':len(body)}
+                  body=r.read(400000)
+                  if r.status!=200:raise SystemExit('HTTP_FAILURE '+path)
                   if path=='/store/' and b'Useful ideas, made to explore.' not in body:raise SystemExit('STORE_RENDER_FAILED')
-                  if '/product/' in path and path.endswith('/') and not (b'checkout' in body.lower() or b'STORE / PRODUCT' in body):raise SystemExit('PRODUCT_OR_CHECKOUT_SMOKE_FAILED')
-                  if path=='/commerce/trx-easy/invoice/7/' and (b'window.clearTimeout(timeout);' in body or b'Pay securely with TRX' not in body):raise SystemExit('INVOICE_SMOKE_FAILED')
-              print('MPW_INVOICE_POLLING_HTTP='+json.dumps(record))
+                  if '/store/product/' in path and path.endswith('/checkout/'):
+                      if b'Create invoice and pay with TRX' not in body:raise SystemExit('CHECKOUT_RENDER_FAILED '+path)
+              print('MPW_INVOICE_POLLING_HTTP='+json.dumps({'path':path,'status':200,'bytes':len(body)}))
+          time.sleep(12)
+          root_invoice=root+'/commerce/trx-easy/invoice/7/'
+          fixed=False
+          for attempt in range(1,7):
+              req=urllib.request.Request(root_invoice+'?__mpw_polling_probe='+str(attempt),headers={'Cache-Control':'no-cache','Pragma':'no-cache','User-Agent':'MPWInvoicePollingSmoke/1.0'})
+              with urllib.request.urlopen(req,timeout=22) as r:
+                  body=r.read(400000)
+                  row={'attempt':attempt,'status':r.status,'bytes':len(body),'old_timeout_bug':b'window.clearTimeout(timeout);' in body,'invoice_heading':b'Pay securely with TRX' in body}
+              print('MPW_INVOICE_POLLING_INVOICE='+json.dumps(row))
+              if row['status']==200 and row['invoice_heading'] and not row['old_timeout_bug']:
+                  fixed=True;break
+              time.sleep(3)
+          if not fixed:raise SystemExit('INVOICE_WORKERS_NOT_CONVERGED')
           print('MPW_INVOICE_POLLING_LIVE_SMOKE=PASS;NO_PAYMENT_SENT')
           PY
       - name: Restore exact private backup if a post-patch gate fails
