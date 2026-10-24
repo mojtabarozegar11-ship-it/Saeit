@@ -1,5 +1,6 @@
 name: MojPlayWin cPanel Passenger inventory (read only)
 # Read-only verification rerun for scoped /about/ publication assessment, 2026-10-18. No host writes.
+# 2026-10-24: Recheck protected child-site and restore isolation before any new paid store release; diagnostic only.
 on:
   push:
     branches: [main]
