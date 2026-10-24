@@ -55,7 +55,7 @@ def patch_login(src):
  if src.count(TRIAL)!=1: fail("Login test-purchase link drift")
  src=src.replace(TRIAL,"",1)
  old='<p>New customer? <a href="{% url \'mpw_commerce:customer_register\' %}">Create an account</a></p>'
- new='''<p>New customer? <a href="{% url 'mpw_commerce:customer_register' %}{% if next %}?next={{ next|urlencode }}{% endif %}">Create an account</a></p>'''
+ new='''<p>New customer? <a href="{% url 'mpw_commerce:customer_register' %}{% if next %}?next={{ next|urlencode:"" }}{% endif %}">Create an account</a></p>'''
  if src.count(old)!=1: fail("Login signup link drift")
  return src.replace(old,new,1)
 def patch_register(src):
