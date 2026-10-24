@@ -80,7 +80,7 @@ def evaluate(record):
         except ValueError as exc:
             problems.append(str(exc))
     stage = record.get("stage")
-    if stage not in VALID_STAGES:
+    if not isinstance(stage, str) or stage not in VALID_STAGES:
         problems.append("stage:invalid")
     try:
         updated = iso_date(record.get("updated_at"), "updated_at")
@@ -94,7 +94,7 @@ def evaluate(record):
         problems.append("evidence:empty")
     else:
         for idx, item in enumerate(references[:100]):
-            if not isinstance(item, dict) or item.get("kind") not in PUBLIC_EVIDENCE_TYPES:
+            if not isinstance(item, dict) or not isinstance(item.get("kind"), str) or item["kind"] not in PUBLIC_EVIDENCE_TYPES:
                 problems.append(f"evidence[{idx}]:kind_invalid")
                 continue
             if item.get("visibility") != "public" or item.get("disclosure_permission") is not True:
@@ -203,7 +203,9 @@ def self_test():
     bad_private = dict(good, evidence=[dict(good["evidence"][0], disclosure_permission=False)])
     assert audit_records([bad_private])["candidate_count"] == 0
     assert not public_https("https://127.0.0.1/x")
-    print("7 evidence-gate checks passed", file=sys.stderr)
+    assert audit_records([dict(good, stage=[])])["rejected_count"] == 1
+    assert audit_records([dict(good, evidence=[dict(good["evidence"][0], kind=[])])])["rejected_count"] == 1
+    print("9 evidence-gate checks passed", file=sys.stderr)
 
 
 def main():
