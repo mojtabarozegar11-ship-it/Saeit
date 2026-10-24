@@ -110,7 +110,8 @@ async function deployOnce(name,params,remaining){
   if(!signed?.signature?.length||!/^[a-f0-9]{64}$/i.test(signed.txID??'')||
      signed.txID.toLowerCase()!==unsigned.txID?.toLowerCase()||
      signed.raw_data_hex!==unsigned.raw_data_hex||
-     !unsigned.contract_address||typeof signed.raw_data?.expiration!=='number'||\n     signed.raw_data.expiration<=Date.now()){
+     !unsigned.contract_address||typeof signed.raw_data?.expiration!=='number'||
+     signed.raw_data.expiration<=Date.now()){
     throw new Error('SHASTA_SIGNED_TX_ATTESTATION_FAILED_'+name);
   }
   const expectedAddress=normalizedTronAddress(unsigned.contract_address,web);
