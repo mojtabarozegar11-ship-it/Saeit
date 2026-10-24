@@ -54,6 +54,72 @@ class CustomerInboxTests(unittest.TestCase):
         self.assertEqual(b.execute("SELECT COUNT(*) FROM customer_order_events").fetchone()[0], 1)
         a.close();b.close()
 
+    def test_order_status_reversal_is_a_new_event_but_repeated_polls_are_not(self):
+        db = self.make_db("zomorod")
+        states = ("pending", "pending", "paid", "paid", "pending", "pending")
+        results = [mod.project_order(db, "zomorod", "orders", 101, state) for state in states]
+        self.assertEqual(results, [True, False, True, False, True, False])
+        self.assertEqual(
+            [row[0] for row in db.execute(
+                "SELECT source_status FROM customer_order_events ORDER BY id")],
+            ["pending", "paid", "pending"],
+        )
+        db.close()
+
+    def test_claimed_order_reference_is_only_an_inquiry_not_a_sale(self):
+        db = self.make_db("zomorod")
+        with sqlite3.connect(str(self.zm / "site_store.sqlite3")) as store:
+            store.execute("CREATE TABLE products(id INTEGER PRIMARY KEY,name TEXT)")
+            store.execute("INSERT INTO products VALUES(7,'A listed product')")
+        self.assertTrue(mod.project_question(
+            db, "zomorod", "company_inquiry", 7, "Buyer", "buyer@example.com",
+            "Please check my order"))
+        db.execute(
+            "UPDATE customer_questions SET kind='order_question',"
+            "claimed_order_ref='unverified-123' WHERE id='native-company_inquiry-7'")
+        db.commit()
+        db.close()
+        with mock.patch.object(mod, "master_callback") as callback:
+            result = mod.run("zomorod")
+        callback.assert_called_once_with("zomorod", 1)
+        self.assertEqual(result["source"], {"source": "no_orders_table", "orders": 0})
+        self.assertEqual(result["questions_processed"], 1)
+        self.assertEqual(result["review_waiting"], 1)
+        with mod.open_inbox("zomorod") as checked:
+            self.assertEqual(
+                checked.execute("SELECT COUNT(*) FROM customer_order_events").fetchone()[0], 0)
+            self.assertEqual(
+                checked.execute("SELECT processing_status FROM customer_questions").fetchone()[0],
+                "needs_review")
+        # No authoritative order, payment or delivery was synthesized.
+
+    def test_authoritative_ledger_changes_project_readonly_and_route_to_master(self):
+        db = self.make_db("zomorod")
+        ledger = self.zm / "site_store.sqlite3"
+        with sqlite3.connect(str(ledger)) as store:
+            store.execute("CREATE TABLE orders(id INTEGER PRIMARY KEY,status TEXT)")
+            store.execute("INSERT INTO orders VALUES(12,'pending')")
+        db.close()
+        with mock.patch.object(mod, "master_callback") as callback:
+            first = mod.run("zomorod")
+            callback.assert_called_once_with("zomorod", 1)
+        self.assertEqual(first["source"]["orders"], 1)
+        with sqlite3.connect(str(ledger)) as store:
+            store.execute("UPDATE orders SET status='paid' WHERE id=12")
+        with mock.patch.object(mod, "master_callback") as callback:
+            second = mod.run("zomorod")
+            callback.assert_called_once_with("zomorod", 1)
+        self.assertEqual(second["source"]["orders"], 1)
+        with mod.open_inbox("zomorod") as checked:
+            self.assertEqual(
+                [row[0] for row in checked.execute(
+                    "SELECT source_status FROM customer_order_events ORDER BY id")],
+                ["pending", "paid"])
+        with sqlite3.connect(str(ledger)) as store:
+            self.assertEqual(store.execute("SELECT status FROM orders WHERE id=12").fetchone()[0],
+                             "paid")
+        # Only the merchant's ledger can validate payment; the inbox cannot.
+
     def test_orders_cannot_supply_untrusted_source_or_status(self):
         db=self.make_db("zomorod")
         for source,key,state in (("other.site",1,"paid"),("orders","bad;drop","paid"),("orders",2,"paid; DELETE")):
