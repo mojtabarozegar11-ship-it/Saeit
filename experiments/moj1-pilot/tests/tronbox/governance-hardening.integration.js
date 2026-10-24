@@ -20,11 +20,12 @@ contract('MOJ1 2-of-3 signer rotation and recovery guard', accounts => {
     const rotate = encodeRotation(1, accounts[3]);
     await gov.approve(gov.address, rotate, 0, {from: accounts[0]});
     await expectRevert(gov.execute(gov.address, rotate, 0, {from: accounts[2]}));
-    await gov.approve(gov.address, rotate, 0, {from: accounts[2]});
+    await gov.approve(gov.address, rotate, 0, {from: accounts[1]});
     const op = await gov.operationHash(gov.address, rotate, 0);
     assert.equal((await gov.currentApprovalCount(op)).toString(), '2');
-    await gov.execute(gov.address, rotate, 0, {from: accounts[0]});
+    await gov.execute(gov.address, rotate, 0, {from: accounts[2]});
     assert.equal(normalize(await gov.owners(1)), normalize(accounts[3]));
+    assert.equal((await gov.currentApprovalCount(op)).toString(), '1', 'rotated-out signer approval must be discarded');
     assert.equal((await gov.nonce()).toString(), '1');
     await expectRevert(gov.execute(gov.address, rotate, 0, {from: accounts[0]}));
     const next = encodeRotation(2, accounts[4]);
