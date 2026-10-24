@@ -69,8 +69,17 @@ for modname in ("services.mpw_trx_public_pages","services.mpw_trx_commercial_web
                 if isinstance(stmt,ast.If):
                     cond=ast.unparse(stmt.test)
                     route_actions.append(cond[:170])
+            if node.name=="_select_order": calls=sorted(set(calls)|{"_select_order"})
+            sensitive=re.compile(r"password|private.?key|secret|token|wallet|address|recipient|receiver|mnemonic|api.?key|authorization|credential",re.I)
+            source_lines=[]
+            for line in ast.unparse(node).splitlines()[:75]:
+                source_lines.append("[REDACTED_SENSITIVE_LINE]" if sensitive.search(line) else line[:230])
+            mutators=sorted({ast.unparse(c.func).split(".")[-1] for c in ast.walk(node)
+                             if isinstance(c,ast.Call) and ast.unparse(c.func).split(".")[-1] in
+                             ("create","save","update","delete","get_or_create","update_or_create","bulk_create")})
             funcs.append({"name":node.name,"line":node.lineno,"lines":node.end_lineno-node.lineno+1,
-                          "calls":calls[:28],"conditions":route_actions[:16]})
+                          "calls":calls[:28],"mutators":mutators,"conditions":route_actions[:16],
+                          "source_lines":source_lines})
         print("MPW_ACTIVE_SERVICE_MODULE="+json.dumps({"module":modname,"exists":True,"functions":funcs[:50]},ensure_ascii=False))
     except Exception as e:
         print("MPW_ACTIVE_SERVICE_MODULE="+json.dumps({"module":modname,"error":type(e).__name__}))
@@ -96,6 +105,8 @@ for pid in (72,225):
              "has_invoice_api":"/commerce/checkout/invoice/" in body,
              "has_challenge_api":"/commerce/checkout/challenge/" in body,
              "has_signup_return":("/accounts/register/?next=/store/product/%d/checkout/"%pid in body),
+             "forms":re.findall(r'<form\\b[^>]{0,500}>',body,re.I)[:5],
+             "trx_button":bool(re.search(r"Pay securely with TRX",body,re.I)),
              "read_only":True,"orders_created":False},ensure_ascii=False))
     except Exception as e:
         print("MPW_ACTIVE_CHECKOUT_RENDER="+json.dumps({"product":pid,"error":type(e).__name__,"read_only":True}))
