@@ -1,0 +1,162 @@
+name: Publish evidence-based Mojtaba scholarly CV on existing personal site
+
+on:
+  pull_request:
+    paths:
+      - "content/mojtaba_scholarly_cv_20261024.json"
+      - "scripts/mojtaba_scholarly_cv_safe_install.py"
+      - "tests/test_mojtaba_scholarly_cv.py"
+      - ".github/workflows/mojtaba-scholarly-cv-publish-20261024.yml"
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojplaywin-mojtaba-scholar-cv-private-v17
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issues' &&
+       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+       github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+       github.event.issue.title == 'Ops: Publish Mojtaba evidence-based scholarly CV 2026-10-24')
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test author identity, publication evidence and additive scope
+        run: python3 -m unittest discover -s tests -p test_mojtaba_scholarly_cv.py -v
+      - name: Parse installation script without side effects
+        run: python3 -m py_compile scripts/mojtaba_scholarly_cv_safe_install.py
+
+  publish:
+    needs: verify
+    if: >-
+      github.event_name == 'issues' &&
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Publish Mojtaba evidence-based scholarly CV 2026-10-24'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned SSH relay to pre-existing personal site
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mojtaba-scholar-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+
+      - name: Transfer two strictly scoped text files
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mr-scholar-$GITHUB_RUN_ID"
+          timeout 25s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 70s scp -F "$SSH_CONFIG" scripts/mojtaba_scholarly_cv_safe_install.py "saeit-host:$stage/install.py"
+          timeout 70s scp -F "$SSH_CONFIG" content/mojtaba_scholarly_cv_20261024.json "saeit-host:$stage/cv.json"
+
+      - name: Back up, install, test Django and verify live URL or auto-rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 560s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          id="$1"
+          stage="/home/zomorod2/.mr-scholar-$id"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          backup="$HOME/.backups/mojtaba-scholarly-cv/$id"
+          installer="$stage/install.py"
+          data="$stage/cv.json"
+          installed=0
+          finish() {
+            rc=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$rc" != 0; then
+              python3 "$installer" rollback --app "$app" --backup "$backup" || echo "ROLLBACK_REQUIRES_ATTENTION=yes"
+            fi
+            exit "$rc"
+          }
+          trap finish EXIT
+          test -f "$app/manage.py" && test ! -L "$app"
+          python3 "$installer" check --app "$app" --content "$data" --backup "$backup"
+          python3 "$installer" install --app "$app" --content "$data" --backup "$backup"
+          installed=1
+          py="$app/../.venv_personal_test/bin/python"
+          test -x "$py"
+          cd "$app"
+          "$py" - <<'PY'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.template.loader import get_template
+          from django.test import RequestFactory
+          request=RequestFactory().get("/mojtaba.roozegar/resume/",HTTP_HOST="mojplaywin.com")
+          doc=get_template("personal_site/core/resume.html").render({"items":[],"stories":[],"profile":None},request)
+          assert 'id="mr-scholarly-cv-20261024"' in doc
+          assert "Mojtaba Roozegar" in doc
+          assert "No journal-submission receipt" in doc
+          print("MR_SCHOLARLY_CV_DJANGO_RENDER_PASS=yes",flush=True)
+          PY
+          code=$(curl --max-time 30 -sSL -o "$stage/live.html" -w '%{http_code}' "https://mojplaywin.com/mojtaba.roozegar/resume/?scholarly_cv_probe=$id")
+          test "$code" = 200
+          grep -Fq 'id="mr-scholarly-cv-20261024"' "$stage/live.html"
+          echo "MR_SCHOLARLY_CV_LIVE_CONFIRMED=yes"
+          REMOTE
+
+      - name: Remove temporary relay credentials
+        if: always()
+        run: |
+          if test -n "${{ github.run_id }}"; then
+            test -d "$RUNNER_TEMP/mojtaba-scholar-relay" && find "$RUNNER_TEMP/mojtaba-scholar-relay" -type f -exec shred -u {} + || true
+          fi
