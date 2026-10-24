@@ -42,6 +42,17 @@ These five **published, editable companions** provide practical value without re
 **Access and measurement:** Public GitHub links show published source artifacts. UTM parameters on the official destinations permit source attribution if the websites' analytics are configured; no clicks, conversions, purchases or successful checkout are asserted without observed analytics.
 
 
+## Free offline interactive tools — 25 October 2026
+
+Four original, standalone HTML tools. Download the HTML file from GitHub (Raw → Save As) and open it locally in a browser. GitHub's code viewer does **not** execute HTML; these are not deployed to the commercial websites. No personal data is transmitted, no prices or stock claims are made, and the examples are illustrative.
+
+- **MojPlayWin / Atelier:** [SEO title, description, canonical and social-tag generator](docs/marketing/tools/atelier-seo-meta-generator-20261025.html) — HTML escaping, HTTPS checks, copyable markup.
+- **MojPlayWin / Taniya:** [Family storytime studio](docs/marketing/tools/taniya-storytime-studio-20261025.html) — original child-friendly prompts, reflection questions, text download.
+- **MojPlayWin / Chess:** [84-day calendar CSV builder](docs/marketing/tools/chess-84-day-calendar-builder-20261025.html) — dated practice plan, six phases, downloadable CSV.
+- **Zomorod Melal:** [محاسبه‌گر اقتصادی نقطه سربه‌سر مزرعه](docs/marketing/tools/fa-farm-break-even-calculator-20261025.html) — برآورد سود/زیان، عملکرد و قیمت سربه‌سر، حساسیت عملکرد.
+
+These are free educational utilities, not independent proof of product availability, a successful checkout, or commercial results.
+
 ## Runtime safety
 
 The execution path is governed by capability, risk, owner-approval, execution-identity, retry-budget, and audit controls. Production-changing or other sensitive actions must pass the approval gate before execution.
