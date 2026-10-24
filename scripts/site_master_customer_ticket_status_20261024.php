@@ -6,7 +6,10 @@ declare(strict_types=1);
  * payment, wallet, message body or another tenant's record is exposed.
  */
 define('MASTER_CUSTOMER_TEST_MODE', true);
-require __DIR__ . '/index.php';
+// The production endpoint is co-located with index.php; offline CI uses the source filename.
+$source = (PHP_SAPI === 'cli' && defined('MASTER_TICKET_STATUS_TEST_MODE'))
+    ? __DIR__ . '/site_master_customer_portal_20261024.php' : __DIR__ . '/index.php';
+require $source;
 
 function masterTrackTicket(PDO $db, string $tenant, string $ticket, string $email): ?array {
     if (!in_array($tenant, ['zomorod','mojplaywin'], true) ||
