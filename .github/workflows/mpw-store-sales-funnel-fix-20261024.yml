@@ -20,7 +20,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile scripts/mpw_store_sales_funnel_fix_20261024.py
-          actual_sha="$(sha256sum core/templates/mojplaywin/store.html | awk '{print $1}')"
+          actual_sha="$(python3 -c 'import hashlib,pathlib; data=pathlib.Path("core/templates/mojplaywin/store.html").read_bytes().replace(b"\\r\\n",b"\\n"); print(hashlib.sha256(data).hexdigest())')"
           echo "MPW_STORE_SOURCE_SHA=$actual_sha"
           echo "MPW_STORE_MARKERS=$(grep -cE 'mpw-store-ten-guides|Explore this collection' core/templates/mojplaywin/store.html || true)"
           test "$actual_sha" = "874b18e8e614e3de2ece04b9183f6db126b228d9b6ad9e7096098fa7ffb1a887"
