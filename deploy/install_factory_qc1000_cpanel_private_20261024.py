@@ -22,6 +22,21 @@ FILES = (
 )
 TARGET = Path("/home/zomorod2/.saeit-factory-inbox/bin")
 PUBLISHER = "publish_verified_factory_store_listing.py"
+LIVE_PUBLISHER_SHA = "e598544fce0f30783973e2b529549fed5d4b4457192db23e482304655963395e"
+ANCHOR = '    body = release.read_text(encoding="utf-8")\n'
+HOOK = (
+    '    package_manifest=inbox/"packages"/RECIPE/(digest+".json")\n'
+    '    if not package_manifest.is_file() or package_manifest.is_symlink():\n'
+    '        raise ValueError("FACTORY_PRIVATE_RECIPE_MANIFEST_MISSING")\n'
+    '    source_manifest=json.loads(package_manifest.read_text(encoding="utf8"))\n'
+    '    if not isinstance(source_manifest,dict):\n'
+    '        raise ValueError("FACTORY_PRIVATE_RECIPE_MANIFEST_INVALID")\n'
+    '    if source_manifest.get("professional_quality_standard")=="100_groups_x_10":\n'
+    '        quality=loaded("factory_premium_commercial_guard",\n'
+    '                       "factory_commercial_quality_release_guard_v1.py")\n'
+    '        quality.require_quality_clearance(inbox,RECIPE,digest,source_manifest,package)\n'
+)
+
 
 
 def digest(data):
@@ -69,10 +84,26 @@ def install(staging, expected):
             or not (TARGET / PUBLISHER).is_file()
             or (TARGET / PUBLISHER).is_symlink()):
         raise RuntimeError("QC1000_PRIVATE_PUBLISHER_NOT_VERIFIED")
-    publisher = checked_file(TARGET / PUBLISHER).decode("utf-8")
-    if ("factory_commercial_quality_release_guard_v1.py" not in publisher
-            or "require_quality_clearance" not in publisher):
-        raise RuntimeError("QC1000_RELEASE_NOT_WIRED_TO_GUARD")
+    publisher_raw = checked_file(TARGET / PUBLISHER)
+    publisher = publisher_raw.decode("utf-8")
+    if digest(publisher_raw) == LIVE_PUBLISHER_SHA:
+        if publisher.count(ANCHOR) != 1 or "factory_commercial_quality_release_guard_v1.py" in publisher:
+            raise RuntimeError("QC1000_PUBLISHER_PATCH_ANCHOR_UNTRUSTED")
+        patched_publisher = publisher.replace(ANCHOR, HOOK + ANCHOR)
+    else:
+        # Idempotence only if exact original publisher was backed up and the
+        # currently installed version is precisely the one surgical insertion.
+        archived = TARGET / ".qc1000-versioned-backups" / LIVE_PUBLISHER_SHA / PUBLISHER
+        original = checked_file(archived)
+        if digest(original) != LIVE_PUBLISHER_SHA:
+            raise RuntimeError("QC1000_LIVE_PUBLISHER_CHANGED_ABORT")
+        original_text = original.decode("utf-8")
+        if original_text.count(ANCHOR) != 1:
+            raise RuntimeError("QC1000_ORIGINAL_PUBLISHER_ANCHOR_MISSING")
+        patched_publisher = original_text.replace(ANCHOR, HOOK + ANCHOR)
+        if publisher != patched_publisher:
+            raise RuntimeError("QC1000_LIVE_PUBLISHER_CHANGED_ABORT")
+    compile(patched_publisher, str(TARGET / PUBLISHER), "exec")
     stage = Path(staging)
     if stage.is_symlink() or not stage.is_dir():
         raise RuntimeError("QC1000_STAGING_MISSING")
@@ -86,6 +117,7 @@ def install(staging, expected):
         if dest.exists() or dest.is_symlink():
             checked_file(dest)
         bytes_by_name[name] = value
+    bytes_by_name[PUBLISHER] = patched_publisher.encode("utf-8")
     lockfile = TARGET / ".qc1000-modules-install.lock"
     if lockfile.is_symlink():
         raise RuntimeError("QC1000_UNSAFE_LOCK")
@@ -93,7 +125,7 @@ def install(staging, expected):
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
         old_files = {
             name: checked_file(TARGET / name) if (TARGET / name).exists() else None
-            for name in FILES
+            for name in bytes_by_name
         }
         backup_root = TARGET / ".qc1000-versioned-backups"
         if backup_root.is_symlink():
@@ -135,8 +167,8 @@ def install(staging, expected):
                 finally:
                     if os.path.exists(temp):
                         os.unlink(temp)
-            for name in FILES:
-                if digest(checked_file(TARGET / name)) != expected[name]:
+            for name, correct in bytes_by_name.items():
+                if digest(checked_file(TARGET / name)) != digest(correct):
                     raise RuntimeError("QC1000_INSTALLED_BYTES_DIFFER")
             verify_negative_controls(TARGET)
         except BaseException:
@@ -159,6 +191,7 @@ def install(staging, expected):
             print("QC1000_MODULE_INSTALL_ROLLED_BACK=1", flush=True)
             raise
     print("QC1000_CPANEL_LIVE_GUARD_READBACK=PASS")
+    print("QC1000_SURGICAL_PUBLISHER_HOOK_INSTALLED=PASS")
     print("QC1000_NO_FAKE_PREMIUM_CERTIFICATION=PASS")
     print("QC1000_FILES_INSTALLED=" + str(len(FILES)))
     print("QC1000_COMMERCIAL_PRODUCTS_MUTATED=0")
