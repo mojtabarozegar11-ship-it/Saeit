@@ -1,4 +1,5 @@
 name: MojPlayWin guest TRX main-only scope and wallet readiness
+# Exercise live create-order and start-invoice handlers with in-memory fixtures only.
 # Include order-selection code and exact live TRX form in read-only review 2026-10-24.
 # Rerun read-only production route mapping after buyer-path repair 2026-10-24.
 on:
