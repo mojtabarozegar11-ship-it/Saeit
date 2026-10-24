@@ -82,7 +82,7 @@ class ManagerialReworkTests(unittest.TestCase):
 
     def test_unrelated_preexisting_return_file_is_preserved_and_blocks(self):
         target=self.area/p.REWORK
-        target.mkdir()
+        target.mkdir(mode=0o700)
         (target/"not-owned.txt").write_text("valuable")
         with self.assertRaisesRegex(RuntimeError,"FOREIGN_REWORK_TICKETS"):
             p.execute(self.root,2)
