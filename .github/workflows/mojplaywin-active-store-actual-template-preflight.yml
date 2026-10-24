@@ -79,5 +79,41 @@ jobs:
                'has_existing_guides':'store_ten_buyer_guides_20261018' in s,
                'first_450':s[:450], 'last_900':s[-900:],
                'starts_django_base':s.lstrip().startswith('{% extends "base.html" %}')})
+          docroot=Path('/home/zomorod2/mojplaywin.com')
+          for rel in ('store/index.html','store/index.htm','store.html','index.html'):
+            q=docroot/rel
+            item={'path':rel,'exists':q.exists(),'is_dir':q.is_dir(),'is_file':q.is_file(),'is_symlink':q.is_symlink()}
+            if q.is_file() and not q.is_symlink():
+              raw=q.read_bytes()
+              item.update({'size':len(raw),'sha':hashlib.sha256(raw).hexdigest(),
+                'has_old_store_marker':b'mpw-store-ten-guides' in raw or b'INITIAL COLLECTION' in raw,
+                'has_new_store_marker':b'Shop available books' in raw})
+            print("MPW_STORE_DOCROOT_CANDIDATE="+json.dumps(item))
+          ht=docroot/'.htaccess'
+          if ht.is_file() and not ht.is_symlink():
+            safe=[]
+            for line in ht.read_text('utf8','replace').splitlines():
+              if any(x in line.lower() for x in ('rewrite','passenger','directoryindex','request_filename')):
+                if not any(x in line.lower() for x in ('password','secret','token','authorization','api_key')):
+                  safe.append(line.strip()[:240])
+            print("MPW_STORE_HTTP_ROUTING_RULES="+json.dumps(safe[:35]))
           print("MPW_STORE_ACTUAL_TEMPLATE_STATE="+json.dumps(m))
+          PY
+      - name: Read public store cache headers without cookies
+        run: |
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error
+          url="https://mojplaywin.com/store/?__cache_probe=20261024"
+          req=urllib.request.Request(url,headers={"Cache-Control":"no-cache","Pragma":"no-cache","User-Agent":"MPWStoreCacheProbe/1.0"})
+          try:
+            with urllib.request.urlopen(req,timeout=20) as r:
+              body=r.read(400000)
+              headers={k:v for k,v in r.headers.items() if k.lower() in ("age","cache-control","cf-cache-status","x-cache","via","etag","last-modified","server","vary")}
+              print("MPW_STORE_PUBLIC_CACHE_PROBE="+json.dumps({"status":r.status,"headers":headers,
+                "has_old_marker":b"mpw-store-ten-guides" in body,
+                "has_old_catalog":b"INITIAL COLLECTION" in body,
+                "has_new_marker":b"Shop available books" in body,
+                "bytes":len(body)}))
+          except urllib.error.HTTPError as exc:
+            print("MPW_STORE_PUBLIC_CACHE_PROBE="+json.dumps({"status":exc.code,"headers":dict(exc.headers)}))
           PY
