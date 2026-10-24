@@ -85,6 +85,101 @@ jobs:
           if len(matches)!=1 or matches[0]['line_count']!=1:
               raise SystemExit('EXPECTED_ONE_EXACT_INVOICE_POLLING_SOURCE')
           PY
+      - name: Back up and remove only the undefined invoice timeout cleanup
+        id: patch
+        run: |
+          set -euo pipefail
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-invoice-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,stat,tempfile
+          app=Path('/home/zomorod2/Saeit-staging');site=Path('/home/zomorod2/mojplaywin.com')
+          target=app/'services/mpw_trx_walletless_checkout_ui.py'
+          for p in (app,site,app/'services',target):
+              if p.is_symlink():raise SystemExit('UNSAFE_SYMLINK')
+          if not app.is_dir() or not site.is_dir() or not target.is_file():raise SystemExit('APP_OR_SOURCE_MISSING')
+          raw=target.read_bytes();needle=b'window.clearTimeout(timeout);'
+          if raw.count(needle)!=1 or b'async function check()' not in raw or b'checking=false;' not in raw or b'if(!stopped)schedule(delay);' not in raw:raise SystemExit('SOURCE_DRIFT_OR_PATCH_NOT_UNIQUE')
+          lines=raw.splitlines(keepends=True);indexes=[i for i,line in enumerate(lines) if line.strip()==needle]
+          if len(indexes)!=1 or not lines[indexes[0]].endswith(b'\n'):raise SystemExit('POLLING_CLEANUP_NOT_UNIQUE')
+          i=indexes[0];updated=b''.join(lines[:i]+lines[i+1:]);compile(updated.decode('utf8'),str(target),'exec')
+          backup_dir=Path('/home/zomorod2/.private_mojplaywin_main_agents')
+          if backup_dir.is_symlink() or not backup_dir.is_dir():raise SystemExit('PRIVATE_BACKUP_DIR_UNSAFE')
+          run_id=os.environ.get('GITHUB_RUN_ID','')
+          if not run_id.isdigit():raise SystemExit('INVALID_RUN_ID')
+          backup=backup_dir/('mpw-invoice-polling-'+run_id+'.py')
+          fd=os.open(str(backup),os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+          with os.fdopen(fd,'wb') as f:f.write(raw);f.flush();os.fsync(f.fileno())
+          os.chmod(backup,0o600);mode=stat.S_IMODE(target.stat().st_mode)
+          fd,tmp=tempfile.mkstemp(prefix='.mpw-invoice-polling-',dir=str(target.parent))
+          try:
+              with os.fdopen(fd,'wb') as f:f.write(updated);f.flush();os.fsync(f.fileno())
+              os.chmod(tmp,mode);os.replace(tmp,target)
+          finally:
+              if os.path.exists(tmp):os.unlink(tmp)
+          actual=target.read_bytes()
+          if actual!=updated or needle in actual or hashlib.sha256(backup.read_bytes()).hexdigest()!=hashlib.sha256(raw).hexdigest():raise SystemExit('PATCH_POSTCONDITION_FAILED')
+          print('MPW_INVOICE_POLLING_PATCH='+json.dumps({'status':'PATCHED','source':str(target),'removed_exact_lines':1,'before_sha256':hashlib.sha256(raw).hexdigest(),'after_sha256':hashlib.sha256(actual).hexdigest(),'backup':str(backup)}))
+          PY
+      - name: Compile and reload only the verified MojPlayWin main app
+        id: reload
+        run: |
+          set -euo pipefail
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-invoice-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import py_compile
+          site=Path('/home/zomorod2/mojplaywin.com');app=Path('/home/zomorod2/Saeit-staging')
+          wsgi=site/'passenger_wsgi.py';source=app/'services/mpw_trx_walletless_checkout_ui.py'
+          if any(p.is_symlink() for p in (site,app,wsgi,source)):raise SystemExit('RELOAD_TARGET_UNSAFE')
+          if not wsgi.is_file() or "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):raise SystemExit('WRONG_PASSENGER_APP')
+          py_compile.compile(str(source),doraise=True)
+          tmp=site/'tmp'
+          if tmp.is_symlink():raise SystemExit('PASSENGER_TMP_UNSAFE')
+          tmp.mkdir(exist_ok=True);marker=tmp/'restart.txt'
+          if marker.is_symlink():raise SystemExit('PASSENGER_MARKER_UNSAFE')
+          marker.touch();print('MPW_INVOICE_POLLING_RELOAD=PASS')
+          PY
+      - name: Smoke store products checkouts and existing invoice without payment
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,urllib.request
+          root='https://mojplaywin.com'
+          routes=['/store/','/store/product/72/','/store/product/72/checkout/','/store/product/225/','/store/product/225/checkout/','/commerce/trx-easy/invoice/7/']
+          for path in routes:
+              req=urllib.request.Request(root+path,headers={'Cache-Control':'no-cache','Pragma':'no-cache','User-Agent':'MPWInvoicePollingSmoke/1.0'})
+              with urllib.request.urlopen(req,timeout=22) as r:
+                  body=r.read(400000);record={'path':path,'status':r.status,'bytes':len(body)}
+                  if path=='/store/' and b'Useful ideas, made to explore.' not in body:raise SystemExit('STORE_RENDER_FAILED')
+                  if '/product/' in path and path.endswith('/') and not (b'checkout' in body.lower() or b'STORE / PRODUCT' in body):raise SystemExit('PRODUCT_OR_CHECKOUT_SMOKE_FAILED')
+                  if path=='/commerce/trx-easy/invoice/7/' and (b'window.clearTimeout(timeout);' in body or b'Pay securely with TRX' not in body):raise SystemExit('INVOICE_SMOKE_FAILED')
+              print('MPW_INVOICE_POLLING_HTTP='+json.dumps(record))
+          print('MPW_INVOICE_POLLING_LIVE_SMOKE=PASS;NO_PAYMENT_SENT')
+          PY
+      - name: Restore exact private backup if a post-patch gate fails
+        if: failure() && steps.patch.outcome == 'success'
+        run: |
+          set -euo pipefail
+          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-invoice-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,stat,tempfile
+          run_id=os.environ.get('GITHUB_RUN_ID','')
+          if not run_id.isdigit():raise SystemExit('INVALID_RUN_ID')
+          app=Path('/home/zomorod2/Saeit-staging');site=Path('/home/zomorod2/mojplaywin.com')
+          target=app/'services/mpw_trx_walletless_checkout_ui.py'
+          backup=Path('/home/zomorod2/.private_mojplaywin_main_agents')/('mpw-invoice-polling-'+run_id+'.py')
+          if any(p.is_symlink() for p in (app,site,target,backup)) or not backup.is_file():raise SystemExit('ROLLBACK_SOURCE_UNSAFE')
+          raw=backup.read_bytes()
+          if raw.count(b'window.clearTimeout(timeout);')!=1:raise SystemExit('ROLLBACK_CONTENT_INVALID')
+          fd,tmp=tempfile.mkstemp(prefix='.mpw-invoice-rollback-',dir=str(target.parent));mode=stat.S_IMODE(target.stat().st_mode)
+          try:
+              with os.fdopen(fd,'wb') as f:f.write(raw);f.flush();os.fsync(f.fileno())
+              os.chmod(tmp,mode);os.replace(tmp,target)
+          finally:
+              if os.path.exists(tmp):os.unlink(tmp)
+          marker=site/'tmp'/'restart.txt'
+          if marker.is_symlink():raise SystemExit('ROLLBACK_RESTART_UNSAFE')
+          marker.touch();print('MPW_INVOICE_POLLING_ROLLBACK=RESTORED')
+          PY
       - name: Remove temporary relay keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-invoice-ssh"
