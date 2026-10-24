@@ -97,3 +97,5 @@ jobs:
             fi
             rm -f "$RUNNER_TEMP/agents-ro-path"
           fi
+
+# Re-check unattended progress after live conservative discount repair.
