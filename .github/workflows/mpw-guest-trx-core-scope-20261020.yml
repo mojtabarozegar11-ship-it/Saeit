@@ -1,4 +1,5 @@
 name: MojPlayWin guest TRX main-only scope and wallet readiness
+# Capture the guarded start endpoint response in isolated simulation 2026-10-24.
 # Simulate active invoice reservation tuple contract without external payment 2026-10-24.
 # Continue in-memory buyer checkout simulation with corrected fixture 2026-10-24.
 # Rerun after corrected in-memory ORM fixture; no production record writes.
