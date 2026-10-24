@@ -24,7 +24,7 @@ jobs:
           actual_sha="$(python3 -c 'import hashlib,pathlib; data=pathlib.Path("core/templates/mojplaywin/store.html").read_bytes().replace(bytes([13,10]),bytes([10])); print(hashlib.sha256(data).hexdigest())')"
           echo "MPW_STORE_SOURCE_SHA=$actual_sha"
           echo "MPW_STORE_MARKERS=$(grep -cE 'mpw-store-ten-guides|Explore this collection' core/templates/mojplaywin/store.html || true)"
-          test "$actual_sha" = "5a8cf2c625853c3289846d0ad42099ff94675eb18afef9ed1311d161fe8e961c"
+          test "$actual_sha" = "79dcc7c38d8724426e6c70ff90df32eaf7f30dbf9a8a57871a02411bc6925bf5"
           test "$(grep -cE 'mpw-store-ten-guides|Explore this collection' core/templates/mojplaywin/store.html || true)" = "0"
           echo MPW_STORE_SOURCE_VALID=true
       - name: Capture baseline storefront and protected-route health
@@ -137,7 +137,7 @@ jobs:
           if store.is_symlink() or not store.is_file():
               raise SystemExit('STORE_TEMPLATE_NOT_REGULAR')
           digest=hashlib.sha256(store.read_bytes().replace(bytes([13,10]),bytes([10]))).hexdigest()
-          if digest!='5a8cf2c625853c3289846d0ad42099ff94675eb18afef9ed1311d161fe8e961c':
+          if digest!='79dcc7c38d8724426e6c70ff90df32eaf7f30dbf9a8a57871a02411bc6925bf5':
               raise SystemExit('STORE_TEMPLATE_HASH_NOT_PINNED')
           if ht.is_symlink() or not ht.is_file():
               raise SystemExit('HTACCESS_NOT_REGULAR')
