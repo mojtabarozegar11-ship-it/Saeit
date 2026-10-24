@@ -280,6 +280,39 @@ jobs:
               print('MPW_INVOICE_POLLING_HTTP='+json.dumps({'path':path,'status':200,'bytes':len(body)}))
           print('MPW_INVOICE_POLLING_LIVE_SMOKE=PASS;NO_ORDER_OR_PAYMENT_CREATED_BY_SMOKE')
           PY
+      - name: Inspect sanitized start-route server log evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-invoice-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          from datetime import datetime,timedelta
+          import re,json
+          roots=[Path('/home/zomorod2/logs'),Path('/home/zomorod2/mojplaywin.com/logs'),Path('/home/zomorod2/Saeit-staging/logs'),Path('/home/zomorod2/mojplaywin.com/tmp')]
+          files=[]
+          for root in roots:
+              if root.is_symlink() or not root.is_dir():continue
+              for p in root.iterdir():
+                  if p.is_symlink() or not p.is_file() or not re.search(r'error|passenger|stderr|django|access',p.name,re.I):continue
+                  try:
+                      if p.stat().st_size>50_000_000 or datetime.fromtimestamp(p.stat().st_mtime)<datetime.now()-timedelta(days=2):continue
+                  except OSError:continue
+                  files.append(p)
+          out=[]
+          for p in files[:80]:
+              try:lines=p.read_text('utf8','replace').splitlines()[-5000:]
+              except OSError:continue
+              for i,line in enumerate(lines):
+                  if '/commerce/trx-easy/start/72/' not in line:continue
+                  context='\n'.join(lines[max(0,i-2):min(len(lines),i+22)])
+                  types=sorted(set(re.findall(r'\b(PaymentHold|ValueError|Http404|IntegrityError|OperationalError|DatabaseError|TypeError|KeyError|TimeoutError|ConnectionError|RateUnavailable)\b',context)))
+                  out.append({'log':p.name,'exception_types':types})
+          summary={}
+          for row in out:
+              key=(row['log'],tuple(row['exception_types']))
+              summary[str(key)]=summary.get(str(key),0)+1
+          print('MPW_START_ROUTE_LOG_EVIDENCE='+json.dumps({'matched_entries':len(out),'groups':summary}))
+          PY
       - name: Restore exact private backup if a post-patch gate fails
         if: failure() && steps.patch.outcome == 'success'
         run: |
