@@ -1,0 +1,66 @@
+name: QC-only doctoral depth content screening and rework of actual v003 ZIPs
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/factory_qc_v003_doctoral_depth_gate_20261024.py
+      - deploy/install_factory_qc_v003_doctoral_depth_gate_20261024.sh
+      - .github/workflows/factory-qc-v003-doctoral-depth-gate-20261024.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_qc_v003_doctoral_depth_gate_20261024.py
+      - deploy/install_factory_qc_v003_doctoral_depth_gate_20261024.sh
+      - .github/workflows/factory-qc-v003-doctoral-depth-gate-20261024.yml
+permissions: {contents: read}
+concurrency:
+  group: saeit-qc-only-v003-doctoral-depth
+  cancel-in-progress: false
+jobs:
+  fail-closed-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test immutability, forged approval rejection and bounded installer
+        run: |
+          set -euo pipefail
+          python3 -B scripts/factory_qc_v003_doctoral_depth_gate_20261024.py --selftest
+          python3 -B -m py_compile scripts/factory_qc_v003_doctoral_depth_gate_20261024.py
+          bash -n deploy/install_factory_qc_v003_doctoral_depth_gate_20261024.sh
+  private-qc-install-and-execute:
+    needs: fail-closed-regression
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-qc-doctoral-depth-20261024]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install QC-only doctoral-depth QC gate, run on actual 184 revised archives
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/private-qc1000"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          opts=(-T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2)
+          target="/home/githubops/factory-runtime/operations/.qc-v003-depth-$GITHUB_RUN_ID"
+          ssh "${opts[@]}" githubops@178.239.147.150 "set -eu; test \"\$(id -un)\" = githubops; umask 077; test ! -e '$target'; install -d -m 700 '$target/scripts' '$target/deploy'"
+          for file in scripts/factory_qc_v003_doctoral_depth_gate_20261024.py deploy/install_factory_qc_v003_doctoral_depth_gate_20261024.sh; do
+            ssh "${opts[@]}" githubops@178.239.147.150 "umask 077; cat > '$target/$file'; chmod 600 '$target/$file'" < "$file"
+            expected="$(sha256sum "$file" | awk '{print $1}')"
+            ssh "${opts[@]}" githubops@178.239.147.150 "test \"\$(sha256sum '$target/$file' | awk '{print \$1}')\" = '$expected'"
+          done
+          ssh "${opts[@]}" githubops@178.239.147.150 "timeout 40s /home/githubops/factory-runtime/.venv/bin/python -B '$target/scripts/factory_qc_v003_doctoral_depth_gate_20261024.py' --selftest"
+          ssh "${opts[@]}" githubops@178.239.147.150 "timeout 260s bash '$target/deploy/install_factory_qc_v003_doctoral_depth_gate_20261024.sh' '$target/scripts/factory_qc_v003_doctoral_depth_gate_20261024.py'"
+          ssh "${opts[@]}" githubops@178.239.147.150 "crontab -l | grep -F SAEIT_QC_V003_DOCTORAL_DEPTH_GATE_20261024"
