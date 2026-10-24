@@ -1,0 +1,99 @@
+name: Verify post-upgrade site masters autonomously refresh health
+on:
+  push:
+    branches: [agents/two-sites-inquiries-orders-20261024]
+    paths: [.github/workflows/site-masters-post-triage-real-cron-20261024.yml]
+permissions: {contents: read}
+jobs:
+  verify:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Verify pinned VPS to cPanel SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/agents-ro.XXXXXX")"
+          echo "$d" > "$RUNNER_TEMP/agents-ro-path"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf '%s\n' \
+            "Host saeit-vps" "  HostName 178.239.147.150" "  User githubops" "  Port 22" \
+            "  IdentityFile $d/vps.key" "  UserKnownHostsFile $d/vps.known" \
+            "Host saeit-cpanel" "  HostName zohal.pws-dns.net" "  User zomorod2" "  Port 1396" \
+            "  IdentityFile $d/host.key" "  UserKnownHostsFile $d/host.known" "  ProxyJump saeit-vps" \
+            "Host *" "  StrictHostKeyChecking yes" "  IdentitiesOnly yes" "  BatchMode yes" \
+            "  ConnectTimeout 10" "  ConnectionAttempts 1" "  ForwardAgent no" \
+            > "$d/config"
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo TWO_SITES_PINNED_SSH_RELAY=PASS
+          echo SITE_AGENT_RELAY_PINNED
+      - name: Prove real unattended Cron advances each private master health heartbeat
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          timeout 140s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import json,sqlite3,subprocess,time
+          from pathlib import Path
+          home=Path.home()
+          targets=(
+            ("zomorod",home/".private/zomorod-business/master_customer_inbox.sqlite3","ZM_MASTER_CUSTOMER_INBOX_20261024"),
+            ("mojplaywin",home/".private_mojplaywin_main_agents/master_customer_inbox.sqlite3","MPW_MASTER_CUSTOMER_INBOX_20261024"))
+          def read(site,path):
+              with sqlite3.connect("file:"+str(path)+"?mode=ro",uri=True,timeout=12) as db:
+                  return db.execute(
+                     "SELECT last_success_utc,queued,review,guidance,review_older_than_day "
+                     "FROM master_customer_worker_health WHERE tenant=?",(site,)
+                  ).fetchone()
+          cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=12,check=True).stdout
+          baseline={}
+          for site,path,marker in targets:
+              assert path.is_file() and not path.is_symlink()
+              matches=[line for line in cron.splitlines() if marker in line and
+                       not line.lstrip().startswith("#")]
+              assert len(matches)==1,"SITE_MASTER_CRON_MISSING_OR_DUPLICATED:"+site
+              baseline[site]=read(site,path)
+              assert baseline[site] and baseline[site][0],"MASTER_HEALTH_NOT_INITIALIZED:"+site
+          changed={}
+          deadline=time.monotonic()+100
+          while time.monotonic()<deadline:
+              changed={}
+              for site,path,marker in targets:
+                  now=read(site,path)
+                  changed[site]=bool(now and now[0]>baseline[site][0])
+              if all(changed.values()):break
+              time.sleep(6)
+          assert all(changed.values()),"MASTER_AUTONOMOUS_HEARTBEAT_STALE:"+json.dumps(changed)
+          for site,path,marker in targets:
+              counts=read(site,path)
+              assert all(isinstance(v,int) and v>=0 for v in counts[1:]),"INVALID_HEALTH_METRICS:"+site
+              print("LIVE_UNATTENDED_PRIVATE_MASTER_HEALTH="+site+":PASS")
+          print("BOTH_POST_UPGRADE_SITE_MASTERS_AUTONOMOUS=PASS")
+          PY
+      - name: Remove temporary SSH identity material
+        if: always()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/agents-ro-path"; then
+            d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+            if test -n "$d" && test -d "$d"; then
+              rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+              rmdir "$d" || true
+            fi
+            rm -f "$RUNNER_TEMP/agents-ro-path"
+          fi
