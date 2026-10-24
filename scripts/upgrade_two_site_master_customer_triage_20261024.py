@@ -120,7 +120,7 @@ def main():
                 for question,state in (
                     ("QA-TRIAGE Please refund my order","needs_review"),
                     ("QA-TRIAGE My download is missing","needs_review"),
-                    ("QA-TRIAGE General coupon policy","handled")):
+                    ("General coupon policy","handled")):
                     ticket=secrets.token_hex(12)
                     db.execute("INSERT INTO customer_questions(id,tenant,kind,full_name,email,question,"
                                "claimed_order_ref,initial_reply,processing_status)"
