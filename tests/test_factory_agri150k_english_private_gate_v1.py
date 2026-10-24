@@ -37,6 +37,18 @@ class Agri150kPrivateGateTests(unittest.TestCase):
         self.assertIn("P0_REPETITION_OR_PADDING", result["mechanical_findings"])
         self.assertFalse(result["qc1000_approved"])
 
+    def test_intermediate_symlink_cannot_escape_private_factory(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "factory"
+            private = root / "production-instructions"
+            private.mkdir(parents=True)
+            external = Path(d) / "external"
+            external.mkdir()
+            (private / "stage-05").symlink_to(external, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "UNSAFE_PRIVATE_DIRECTORY"):
+                gate.install_private(root)
+            self.assertEqual(list(external.iterdir()), [])
+
     def test_no_private_factory_no_side_effect(self):
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaisesRegex(ValueError, "PRIVATE_FACTORY_AREA_NOT_ACCESSIBLE"):
