@@ -22,10 +22,10 @@ class Agri150kPrivateGateTests(unittest.TestCase):
         self.assertTrue(p["requires_independent_qc1000"])
 
     def test_existing_100k_contract_cannot_pass(self):
-        chunks = ["## Chapter\n\n" + ("Distinct diagnosis terms " * 1700) for _ in range(20)]
+        chunks = ["## Chapter\n\n" + ("Distinct diagnosis terms " * 1200) for _ in range(20)]
         with self.assertRaisesRegex(ValueError, "REQUIRE_30"):
             gate.audit(chunks)
-        chunks += ["Different diagnostic scope " * 1700 for _ in range(10)]
+        chunks += ["Different diagnostic scope " * 1200 for _ in range(10)]
         result = gate.audit(chunks)
         self.assertIn("P0_UNDER_150001_ORIGINAL_WORDS", result["mechanical_findings"])
         self.assertFalse(result["publication_allowed"])
