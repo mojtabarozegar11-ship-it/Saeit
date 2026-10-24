@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-10-24",
+  "identity": {
+    "display_name": "Mojtaba Roozegar",
+    "persian_name": "مجتبی روزگار",
+    "alternate_spelling": "Mojtaba Rozegar",
+    "affiliation": "Zomorod Melal Agro-Industry Company",
+    "role": "Founder and CEO",
+    "personal_site": "https://mojplaywin.com/mojtaba.roozegar/"
+  },
+  "education": [
+    {
+      "degree": "PhD in Agricultural Economics",
+      "institution": "Universiti Putra Malaysia (UPM)",
+      "concentration": "Production Economics and Farm Management",
+      "verification": "Self-reported; independent credential verification not supplied",
+      "year": null
+    }
+  ],
+  "research_interests": [
+    "Agricultural production economics",
+    "Farm management and resource allocation",
+    "Water scarcity and farm decisions",
+    "Applied agricultural risk analysis",
+    "Evidence-based decision-support systems"
+  ],
+  "researcher_ids": {
+    "ORCID": null,
+    "Scopus Author ID": null,
+    "Web of Science ResearcherID": null,
+    "Google Scholar Profile": null
+  },
+  "verified_peer_reviewed_publications": [],
+  "verified_journal_submissions": [],
+  "research_pipeline": [
+    {
+      "id": "MR-2026-001",
+      "title": "Economic Decision-Making under Irrigation Water Scarcity: A Scoping Review Protocol for Farm-Level Decision-Support Methods",
+      "type": "Proposed scoping review",
+      "status": "Protocol design; no journal submission",
+      "next_gate": "Define registered review question, search strategy, screening and extractable evidence; author must review and approve.",
+      "doi": null
+    }
+  ],
+  "accuracy_policy": "Only publisher-confirmed submissions with manuscript IDs count as submitted. Only article DOI or publisher records count as accepted/published. Public website essays are not counted as peer-reviewed journal papers."
+}
