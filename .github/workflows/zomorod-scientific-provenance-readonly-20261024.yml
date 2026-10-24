@@ -33,6 +33,7 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$workdir/known" 2>/dev/null
           test "$(ssh-keygen -lf "$workdir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           timeout 120s ssh -T -i "$workdir/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$workdir/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -B -' <<'PY'
+          import json
           import sqlite3
           from pathlib import Path
 
@@ -136,6 +137,29 @@ jobs:
                   print("SOURCE_HTTPS_AND_SHA256_ROWS=" + str(source_both))
                   print("FINDINGS_WITH_SUBSTANTIVE_LIMITATION_ROWS=" + str(finding_limitation))
                   print("PROJECTS_WITH_VALID_SOURCE_EVIDENCE_AND_REPORT=" + str(source_candidate))
+                  # Only count whitelisted JSON keys inside private reports; values stay on VPS.
+                  known_keys = ("method", "methods", "methodology", "limitations", "limitation",
+                                "caveats", "uncertainty", "references", "sources", "protocol",
+                                "data", "results", "claims", "review")
+                  field_counts = {key: 0 for key in known_keys}
+                  report_total = 0
+                  report_json_dict = 0
+                  for (raw_content,) in connection.execute(
+                          "SELECT content FROM core_report LIMIT 10000"):
+                      report_total += 1
+                      try:
+                          payload = json.loads(raw_content) if isinstance(raw_content, str) else raw_content
+                      except (TypeError, ValueError):
+                          continue
+                      if not isinstance(payload, dict):
+                          continue
+                      report_json_dict += 1
+                      for key in known_keys:
+                          if payload.get(key):
+                              field_counts[key] += 1
+                  print("REPORT_JSON_OBJECTS=" + str(report_json_dict))
+                  for key in known_keys:
+                      print("REPORT_FIELD_" + key.upper() + "_POPULATED=" + str(field_counts[key]))
                   print("PROJECTS_RELEASED_BY_THIS_AUDIT=0")
               print("PRIVATE_RELATIONSHIPS_NOT_PROOF_OF_INDEPENDENT_PEER_REVIEW=true")
               print("COMPANY_HISTORICAL_CLAIM_RECONCILED=false")
