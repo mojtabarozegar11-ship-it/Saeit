@@ -263,8 +263,11 @@ jobs:
           if ht.is_symlink() or not ht.is_file():
               raise SystemExit('HTACCESS_NOT_REGULAR')
           config=ht.read_bytes()
-          if site_base.exists() or site_base.is_symlink():
-              raise SystemExit('ROLLBACK_PAGE_SHELL_NOT_REMOVED')
+          if site_base.is_symlink() or not site_base.is_file():
+              raise SystemExit('ROLLBACK_PAGE_SHELL_NOT_REGULAR')
+          site_base_digest=hashlib.sha256(site_base.read_bytes().replace(bytes([13,10]),bytes([10]))).hexdigest()
+          if site_base_digest!='70d1ff928d0660c7ba612d80796027dfc66a371918d8b779544c9d80a6a15771':
+              raise SystemExit('ROLLBACK_PAGE_SHELL_HASH_NOT_VERIFIED')
           if config.count(b'RewriteCond %{REQUEST_URI} ^/(games|ai|')!=1:
               raise SystemExit('ROLLBACK_APACHE_ROUTE_NOT_VERIFIED')
           public=H/'mojplaywin.com'
