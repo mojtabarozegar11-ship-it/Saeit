@@ -116,7 +116,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-store-sales-ssh"
-          timeout 75s ssh -T -F "$d/config" saeit-cpanel "python3 - install '$GITHUB_RUN_ID'" < scripts/mpw_store_sales_funnel_fix_20261024.py
+          timeout 75s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - install '$GITHUB_RUN_ID'" < scripts/mpw_store_sales_funnel_fix_20261024.py
       - name: Verify live checkout links and unchanged protected routes
         id: smoke
         run: |
@@ -159,7 +159,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-store-sales-ssh"
-          timeout 50s ssh -T -F "$d/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_store_sales_funnel_fix_20261024.py
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'" < scripts/mpw_store_sales_funnel_fix_20261024.py
       - name: Remove temporary stage and SSH material, keep private backup
         if: always()
         run: |
