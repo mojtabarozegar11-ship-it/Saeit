@@ -52,7 +52,14 @@ def save_reply(db: sqlite3.Connection, tenant: str, ticket: str,
         (tenant,ticket),
     ).fetchone()
     require(row is not None, "REQUEST_NOT_FOUND_IN_THIS_SITE")
-    ensure_table(db)
+    if row[0] == "needs_review":
+        ensure_table(db)
+    else:
+        exists = db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' "
+            "AND name='customer_operator_replies' LIMIT 1",
+        ).fetchone()
+        require(exists is not None, "REQUEST_NOT_QUEUED_FOR_PERSONAL_REVIEW")
     old = db.execute(
         "SELECT answer,reviewer_code FROM customer_operator_replies "
         "WHERE tenant=? AND ticket_id=?", (tenant,ticket),
