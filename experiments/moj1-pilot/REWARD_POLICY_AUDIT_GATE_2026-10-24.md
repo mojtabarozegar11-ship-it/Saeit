@@ -41,7 +41,7 @@ Send the **immutable audited commit SHA** to a genuine independent, TVM/TRON-cap
 
 ## 4. Shasta integration gate
 
-The existing `shasta-deployment.json` names **previously deployed pilot governance/token/NFT/genesis contracts**, **not** a published rewards Merkle escrow. The new reward claim escrow has **no verified Shasta deployment address or transaction receipt in this branch**. Do not treat the prior token deployment as a reward-claims integration pass.
+The legacy `shasta-deployment.json` identifies the V1 governance/token/NFT/genesis pilot, including known F08 limitations. The separate `shasta-v2-deployment.json` identifies a guarded V2 token/genesis candidate deployed on Shasta. **Neither manifest identifies a deployed Merkle reward-claims escrow**; no reward escrow address or receipt has been independently attested. `scripts/shasta-pilot-observe-readonly.mjs` probes only V2 public contract bytecode, with no key or transaction. Do not mistake its read-only observation for a reward-claims integration pass.
 
 Before any *testnet-only*, irreversible reward transaction, gather and independently check:
 
