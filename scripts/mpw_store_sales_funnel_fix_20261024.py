@@ -17,7 +17,8 @@ NEW_SHA = "874b18e8e614e3de2ece04b9183f6db126b228d9b6ad9e7096098fa7ffb1a887"
 
 
 def sha(data):
-    return hashlib.sha256(data).hexdigest()
+    # Git checkout may normalize line endings; compare template content canonically.
+    return hashlib.sha256(data.replace(b"\r\n", b"\n")).hexdigest()
 
 
 def run_id(value):
