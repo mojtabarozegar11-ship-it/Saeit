@@ -1,4 +1,5 @@
 name: MojPlayWin store purchase path cleanup
+# Exact production template SHA verified by the store-only preflight.
 on:
   push:
     branches: [main]
