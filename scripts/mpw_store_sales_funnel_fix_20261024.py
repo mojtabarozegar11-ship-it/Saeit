@@ -12,7 +12,7 @@ WSGI = SITE / "passenger_wsgi.py"
 HOME = Path("/home/zomorod2")
 OLD_SHA = "2025d63cb3fc1a92d41468e270cdbbe17585dfb13775f64d9cdaf02b7f15ab29"
 NEW_SHA = "af09b7b17f8b3ee991893a1d9303c3df74353cd3dd179d26b95a4aea3b8cad7a"
-SITE_BASE_SHA = "3c5d12901f4b1ebb54c60e5be01f7764131e479b6c16c1f6cac6848284adbba2"
+SITE_BASE_SHA = "70d1ff928d0660c7ba612d80796027dfc66a371918d8b779544c9d80a6a15771"
 ROUTE_OLD = b"RewriteCond %{REQUEST_URI} ^/(store|games|ai|contact|support|privacy|terms|cookies|products|blockchain|commerce|crypto-payments|global-business|research-lab|canada-vision|agro-industry|agriculture|education|weather)/$"
 ROUTE_NEW = ROUTE_OLD.replace(b"/(store|", b"/(")
 
