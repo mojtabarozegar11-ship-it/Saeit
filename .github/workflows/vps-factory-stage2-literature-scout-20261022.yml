@@ -8,6 +8,7 @@ on:
       - tests/test_factory_verify_openalex_activation.py
       - tests/test_factory_enroll_openalex.py
       - tests/test_factory_stage2_literature_scout.py
+      - tests/test_agri200_targeted_scholarly_vocabulary_20261024.py
       - deploy/install_factory_stage2_literature_scout.sh
       - .github/workflows/vps-factory-stage2-literature-scout-20261022.yml
   push:
@@ -37,6 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -B -m unittest discover -s tests -p test_factory_stage2_literature_scout.py -v
+          python3 -B -m unittest discover -s tests -p test_agri200_targeted_scholarly_vocabulary_20261024.py -v
           python3 -B -m unittest discover -s tests -p test_factory_enroll_openalex.py -v
           python3 -B -m unittest discover -s tests -p test_factory_verify_openalex_activation.py -v
           python3 -B -m unittest discover -s tests -p test_factory_stage2_research.py -v
