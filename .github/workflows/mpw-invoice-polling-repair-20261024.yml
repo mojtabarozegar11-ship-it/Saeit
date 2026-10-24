@@ -233,13 +233,13 @@ jobs:
       - name: Read checkout readiness gates without creating an order or invoice
         run: |
           set -euo pipefail
-          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-invoice-ssh/config" saeit-cpanel python3 - <<'PY'
+          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-invoice-ssh/config" saeit-cpanel 'set -e; for p in /home/zomorod2/virtualenv/Saeit-staging/*/bin/python; do if [ -x "$p" ]; then exec "$p" -; fi; done; exec python3 -' <<'PY'
           import os,sys,json
           from pathlib import Path
           app=Path('/home/zomorod2/Saeit-staging')
           os.chdir(app);sys.path.insert(0,str(app))
           os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
-          out={'product_72_approved':False,'product_225_approved':False,'database_ready':False,'receiver_valid':False,'rate_quote_valid':False}
+          out={'python':sys.executable,'product_72_approved':False,'product_225_approved':False,'database_ready':False,'receiver_valid':False,'rate_quote_valid':False}
           try:
               import django
               django.setup()
