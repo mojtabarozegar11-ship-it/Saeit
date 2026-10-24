@@ -14,9 +14,23 @@ test -f "$staged" && test ! -L "$staged"
 test -d "$root/production-instructions/stage-02/primary-fulltext-repair-inbox"
 test -x "$py"
 test -d "$ops" && test ! -L "$ops"
+backup_dir='/home/githubops/factory-runtime/operations/backups'
+install -d -m 700 "$backup_dir"
 if test -e "$worker"; then
-  test ! -L "$worker"
-  test "$(sha256sum "$worker" | awk '{print $1}')" = "$(sha256sum "$staged" | awk '{print $1}')"
+  test ! -L "$worker" && test -f "$worker"
+  oldhash="$(sha256sum "$worker" | awk '{print $1}')"
+  newhash="$(sha256sum "$staged" | awk '{print $1}')"
+  if test "$oldhash" != "$newhash"; then
+    backup_worker="$backup_dir/primary-acquisition-worker-$GITHUB_RUN_ID-$oldhash.py"
+    test ! -e "$backup_worker"
+    cp -p "$worker" "$backup_worker"
+    test "$(sha256sum "$backup_worker" | awk '{print $1}')" = "$oldhash"
+    newer="$(mktemp "$ops/.primary-worker.XXXXXX")"
+    trap 'rm -f -- "$newer"' EXIT
+    install -m 600 "$staged" "$newer"
+    test "$(sha256sum "$newer" | awk '{print $1}')" = "$newhash"
+    mv -f -- "$newer" "$worker"
+  fi
 else
   install -m 600 "$staged" "$worker"
 fi

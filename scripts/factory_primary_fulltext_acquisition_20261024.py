@@ -323,6 +323,23 @@ def map_claim_candidates(target, orders):
             mapped += 1
     return mapped
 
+
+def replace_cursor(path, obj):
+    """The only mutable state is a small recoverable scheduling cursor."""
+    ensure(not path.is_symlink(), "CURSOR_SYMLINK")
+    safe_dir(path.parent)
+    fd, tmp = tempfile.mkstemp(prefix=".cursor-",dir=path.parent)
+    try:
+        os.fchmod(fd,0o600)
+        with os.fdopen(fd,"wb") as out:
+            out.write(canonical(obj))
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(tmp,path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
 def execute(factory_private, batch=20, dry_run=False, http_get=live_get):
     ensure(1 <= batch <= 100, "BATCH_OUT_OF_RANGE")
     area = Path(factory_private).resolve()/"production-instructions"
@@ -338,10 +355,27 @@ def execute(factory_private, batch=20, dry_run=False, http_get=live_get):
     lock = target/".primary-acquisition.lock"
     ensure(not lock.is_symlink(), "LOCK_SYMLINK")
     counts = Counter()
+    cursor = target/".rotation-cursor.json"
     with lock.open("a+b") as stream:
         os.fchmod(stream.fileno(),0o600)
         fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
-        for doi in unique:
+        ensure(not cursor.is_symlink(), "UNSAFE_ROTATION_CURSOR")
+        dois = list(unique)
+        if cursor.exists():
+            position = json.loads(safe_read(cursor, 2048))
+            ensure(position.get("schema") == SCHEMA and
+                   type(position.get("next_index")) is int and
+                   position["next_index"] >= 0, "CURSOR_INVALID")
+            start = position["next_index"] % len(dois)
+        else:
+            start = 0
+        next_index = start
+        for offset in range(len(dois)):
+            if counts["attempted"] >= batch:
+                break
+            index = (start+offset) % len(dois)
+            next_index = (index+1) % len(dois)
+            doi = dois[index]
             k = key(doi)
             p = target/"metadata"/(k+".json")
             if p.exists():
@@ -356,8 +390,7 @@ def execute(factory_private, batch=20, dry_run=False, http_get=live_get):
                            "PRIMARY_XML_HASH_MISMATCH")
                 counts["cached"] += 1
                 continue
-            if counts["attempted"] >= batch:
-                break
+            counts["attempted"] += 1
             try:
                 result, raw, _ = evaluate(doi, http_get)
                 if raw is not None:
@@ -371,21 +404,23 @@ def execute(factory_private, batch=20, dry_run=False, http_get=live_get):
                           "independent_scientific_review_completed":False}
                 once(p,canonical(record))
                 counts[result["state"]] += 1
-                counts["attempted"] += 1
             except (TemporaryFailure, OSError) as exc:
+                # One broken publisher/provider lookup must NEVER starve the rest.
+                # Rotation postpones this DOI while independent sources continue.
                 counts["transient_retry_pending"] += 1
                 counts["last_network_error"] = str(exc)[:90]
-                break
+                continue
             except (ValueError, TypeError, KeyError, ET.ParseError) as exc:
-                # A malformed response cannot be silently recorded as an OA denial.
                 counts["blocked_source"] += 1
                 counts["last_blocked"] = type(exc).__name__+":"+str(exc)[:80]
-                break
+                continue
+        replace_cursor(cursor, {"schema":SCHEMA,"next_index":next_index})
     counts["new_order_claim_candidate_maps"] = map_claim_candidates(target, orders)
     counts["orders"] = len(orders)
     counts["source_tasks"] = total
     counts["unique_dois"] = len(unique)
-    counts["remaining_unique_dois"] = len(unique)-counts["cached"]-counts["attempted"]
+    counts["remaining_unique_dois"] = sum(
+        not (target/"metadata"/(key(doi)+".json")).exists() for doi in unique)
     counts["qc1000_approvals"] = 0
     counts["publications"] = 0
     return dict(counts)

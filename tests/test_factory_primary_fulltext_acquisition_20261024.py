@@ -111,10 +111,30 @@ class PrimarySourceTests(unittest.TestCase):
             root=Path(d)
             build(root,1)
             r=m.execute(root,batch=4,http_get=lambda *_: (_ for _ in ()).throw(m.TemporaryFailure("429")))
-            self.assertEqual(r["transient_retry_pending"],1)
+            self.assertEqual(r["transient_retry_pending"],4)
             self.assertEqual(r["remaining_unique_dois"],4)
             r2=m.execute(root,batch=4,http_get=simulated)
             self.assertEqual(r2["LICENSED_FULLTEXT_ARCHIVED"],4)
+
+    def test_one_transient_http_500_does_not_starve_remaining_sources(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            build(root,1)
+            calls=[]
+            def provider(url,limit):
+                if "/search?" in url and "realstudy-0" in url:
+                    calls.append("http500")
+                    raise m.TemporaryFailure("SOURCE_HTTP_500")
+                return simulated(url,limit)
+            first=m.execute(root,batch=4,http_get=provider)
+            self.assertEqual(first["transient_retry_pending"],1)
+            self.assertEqual(first["LICENSED_FULLTEXT_ARCHIVED"],3)
+            self.assertEqual(first["remaining_unique_dois"],1)
+            self.assertFalse(first["qc1000_approvals"])
+            retry=m.execute(root,batch=4,http_get=simulated)
+            self.assertEqual(retry["LICENSED_FULLTEXT_ARCHIVED"],1)
+            self.assertEqual(retry["remaining_unique_dois"],0)
+            self.assertEqual(retry["new_order_claim_candidate_maps"],1)
 
 if __name__=="__main__":
     unittest.main()
