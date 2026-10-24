@@ -10,7 +10,7 @@ HTACCESS = SITE / ".htaccess"
 WSGI = SITE / "passenger_wsgi.py"
 HOME = Path("/home/zomorod2")
 OLD_SHA = "8937201e5b0252cab846ab98145ee4d5570b70a11fd523804aa5815668f64c6b"
-NEW_SHA = "2025d63cb3fc1a92d41468e270cdbbe17585dfb13775f64d9cdaf02b7f15ab29"
+NEW_SHA = "58aa592a98c917d1864d2afe984286b3a1ee3e95c553be5ffca6ee97b3d82b6d"
 ROUTE_OLD = b"RewriteCond %{REQUEST_URI} ^/(store|games|ai|contact|support|privacy|terms|cookies|products|blockchain|commerce|crypto-payments|global-business|research-lab|canada-vision|agro-industry|agriculture|education|weather)/$"
 ROUTE_NEW = ROUTE_OLD.replace(b"/(store|", b"/(")
 
