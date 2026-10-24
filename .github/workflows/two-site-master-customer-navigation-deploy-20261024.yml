@@ -26,7 +26,7 @@ jobs:
           spec=importlib.util.spec_from_file_location("nav","scripts/link_two_site_customer_masters_into_support_20261024.py")
           mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
           z=b'<html><main><h2>Contact</h2></main><footer>Other content</footer></html>'
-          m=b"<?php\\n$slug=$_GET['__mpw_template_route']??null;\\n$rendered='';\\necho $rendered;\\n"
+          m=b"<?php\n$slug=$_GET['__mpw_template_route']??null;\n$rendered='';\necho $rendered;\n"
           for site,original in (("zomorod",z),("mojplaywin",m)):
               changed=mod.change(site,original)
               assert changed!=original and original in (z,m)
