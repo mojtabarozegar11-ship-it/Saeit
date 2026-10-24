@@ -199,6 +199,34 @@ class CustomerInboxTests(unittest.TestCase):
         self.assertEqual(mod.classify_customer_ticket("question","QA-TRIAGE General coupon policy"),"needs_review")
         self.assertEqual(mod.classify_customer_ticket("question","Who are you?"),"needs_review")
 
+    def test_staff_reply_completion_is_not_counted_as_automated_guidance(self):
+        db=self.make_db("zomorod")
+        for pk,question in enumerate(("Please refund my paid order",
+                                      "Unknown product composition",
+                                      "Coupon policy please"),1):
+            mod.project_question(db,"zomorod","company_inquiry",pk,"Customer",
+                                 "customer@example.com",question)
+        db.execute("UPDATE customer_questions SET processing_status='needs_review' WHERE id=?",
+                   ("native-company_inquiry-1",))
+        db.execute("UPDATE customer_questions SET processing_status='handled' WHERE id=?",
+                   ("native-company_inquiry-2",))
+        db.execute("UPDATE customer_questions SET processing_status='handled' WHERE id=?",
+                   ("native-company_inquiry-3",))
+        db.execute(
+            "CREATE TABLE customer_operator_replies(tenant TEXT,ticket_id TEXT,answer TEXT)")
+        db.execute(
+            "INSERT INTO customer_operator_replies VALUES(?,?,?)",
+            ("zomorod","native-company_inquiry-2","Individually reviewed."))
+        db.commit()
+        metrics=mod.update_master_heartbeat(db,"zomorod")
+        self.assertEqual(metrics["review"],1)
+        self.assertEqual(metrics["guidance"],1)
+        self.assertEqual(metrics["operator_answered"],1)
+        self.assertEqual(db.execute(
+            "SELECT review,guidance FROM master_customer_worker_health "
+            "WHERE tenant='zomorod'").fetchone(),(1,1))
+        db.close()
+
     def test_master_health_heartbeat_and_real_pending_review_counts(self):
         db = self.make_db("zomorod")
         for pk,question in enumerate(("Please refund my order","Coupon policy please",
