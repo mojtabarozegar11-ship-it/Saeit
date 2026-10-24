@@ -88,6 +88,23 @@ def once(path, data):
 def key(doi):
     return sha(doi.lower().encode("utf-8"))
 
+def read_verified_evidence(target, doi):
+    """Revalidate archived evidence; derived status never rewrites history."""
+    path = target / "metadata" / (key(doi) + ".json")
+    row = json.loads(safe_read(path))
+    ensure(row.get("doi") == doi and row.get("schema") == SCHEMA
+           and row.get("qc1000_approved") is False
+           and row.get("public_distribution_allowed") is False,
+           "EVIDENCE_RECORD_INVALID")
+    if row.get("state") == "LICENSED_FULLTEXT_ARCHIVED":
+        raw = safe_read(target / "licensed-xml" / (key(doi) + ".xml"), MAX_XML+1)
+        ensure(sha(raw) == row.get("xml_sha256"), "PRIMARY_XML_HASH_MISMATCH")
+        license_info, _ = xml_parts(raw, doi, row.get("pmcid"))
+        if not license_ok(license_info):
+            return {**row, "state": "ARCHIVED_LICENSE_RECHECK_REQUIRED",
+                    "commercial_reuse_allowed": False}
+    return row
+
 def normalize_doi(value):
     ensure(isinstance(value, str), "DOI_NOT_STRING")
     d = value.lower().replace("https://doi.org/", "", 1).strip()
@@ -160,12 +177,14 @@ def live_get(url, max_bytes):
 
 def license_ok(license_info):
     s = license_info.lower().replace("https://", "http://")
-    if "creativecommons.org/publicdomain/zero/" in s:
-        return True
     if any(x in s for x in ("/by-nc", "/by-nd", "noncommercial", "non-commercial", "no derivatives", "all rights reserved")):
         return False
-    return ("creativecommons.org/licenses/by/" in s
-            or "creativecommons.org/licenses/by-sa/" in s)
+    # A named Creative Commons URL must be a real domain token, not a
+    # publisher's substring or a vague "open access" description.
+    return bool(re.search(
+        r"(?<![a-z0-9.\-])(?:http://)?creativecommons\.org/"
+        r"(?:publicdomain/zero|licenses/(?:by|by-sa))/[1-9][0-9]*\.[0-9]+"
+        r"(?:/|\b)", s))
 
 def xml_parts(raw, doi, pmcid):
     ensure(raw is not None and b"<!ENTITY" not in raw.upper(), "UNSAFE_OR_EMPTY_XML")
@@ -276,7 +295,7 @@ def map_claim_candidates(target, orders):
             if not metadata_path.exists():
                 completed = False
                 break
-            evidence[task["source_id"]] = json.loads(safe_read(metadata_path))
+            evidence[task["source_id"]] = read_verified_evidence(target, doi)
         if not completed:
             continue
         claim_rows = []
@@ -339,6 +358,121 @@ def replace_cursor(path, obj):
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
+
+def evidence_status(factory_private):
+    """Read back actual private evidence. No network, product edits or approvals."""
+    area = Path(factory_private).resolve() / "production-instructions"
+    unique, orders, total = collect(area)
+    target = area / "stage-02/primary-source-acquisition-v1"
+    states = Counter()
+    complete = 0
+    verified_xml = 0
+    unmapped = 0
+    for doi in unique:
+        metadata_path = target / "metadata" / (key(doi) + ".json")
+        if not metadata_path.exists():
+            unmapped += 1
+            continue
+        row = read_verified_evidence(target, doi)
+        if row.get("state") == "LICENSED_FULLTEXT_ARCHIVED":
+            verified_xml += 1
+        states[row["state"]] += 1
+        complete += 1
+    packets = 0
+    if target.exists():
+        map_dir = target / "claim-candidate-maps"
+        if map_dir.is_dir() and not map_dir.is_symlink():
+            for order in orders:
+                p = map_dir / order["order_file"]
+                if p.exists():
+                    item = json.loads(safe_read(p, 4_000_000))
+                    ensure(item.get("order_file") == order["order_file"]
+                           and item.get("qc1000_approved") is False
+                           and item.get("all_scientific_claims_verified") is False
+                           and item.get("commercial_release") is False,
+                           "STATUS_CLAIM_MAP_INVALID")
+                    packets += 1
+    result = {"schema": "saeit.factory.primary-evidence-status.v1",
+              "observed_utc": datetime.now(timezone.utc).isoformat(),
+              "orders": len(orders), "source_tasks": total,
+              "unique_dois": len(unique), "metadata_inspected": complete,
+              "remaining_unique_dois": unmapped,
+              "licensed_xml_hash_verified": verified_xml,
+              "claim_candidate_maps": packets,
+              "source_states": dict(sorted(states.items())),
+              "independent_scientific_approvals_created": 0,
+              "qc1000_approvals_created": 0,
+              "publications_created": 0,
+              "all_orders_remain_release_blocked": True}
+    ensure(complete + unmapped == len(unique), "SOURCE_ACCOUNTING_INVALID")
+    return result
+
+def route_product_rework(target, orders):
+    """Continuously reconcile ALL rejected products into an actionable private queue.
+
+    This is a mutable status projection, never a new edition or scientific verdict.
+    It lets the next production stage work on independent products while others
+    await a provider; no source is silently treated as verified.
+    """
+    directory = target / "stage5-scientific-rework-triage"
+    safe_dir(directory)
+    changed = 0
+    waiting = 0
+    for order in orders:
+        rows = []
+        for task in order["tasks"]:
+            doi = task["doi"]
+            if doi is None:
+                state = "DOI_NOT_AVAILABLE"
+            else:
+                path = target / "metadata" / (key(doi) + ".json")
+                if not path.exists():
+                    state = "FETCH_PENDING_OR_TRANSIENT_ERROR"
+                else:
+                    metadata = read_verified_evidence(target, doi)
+                    state = metadata["state"]
+            rows.append({"source_id": task["source_id"],
+                         "doi": doi, "state": state,
+                         "licensed_fulltext_for_review":
+                         state == "LICENSED_FULLTEXT_ARCHIVED"})
+        all_licensed = bool(rows) and all(
+            row["licensed_fulltext_for_review"] for row in rows)
+        if not all_licensed:
+            waiting += 1
+        status = {
+            "schema": "saeit.factory.184-scientific-rework-triage.v1",
+            "order_file": order["order_file"],
+            "updated_utc": datetime.now(timezone.utc).isoformat(),
+            "required_original_sources": len(rows),
+            "licensed_sources_available": sum(
+                row["licensed_fulltext_for_review"] for row in rows),
+            "sources": rows,
+            "primary_source_acquisition_complete": all_licensed,
+            "next_action": ("QUALIFIED_CLAIM_BY_CLAIM_FULLTEXT_REVIEW"
+                            if all_licensed else
+                            "RECOVER_SOURCES_OR_DOCUMENT_UNRESOLVABLE_GAPS"),
+            "scientific_reauthoring_completed": False,
+            "independent_scientific_review_completed": False,
+            "qc1000_approved": False,
+            "commercial_release": False,
+            "public_distribution_allowed": False}
+        path = directory / order["order_file"]
+        # Ignore volatile timestamp when deciding whether to issue a new packet.
+        if path.exists():
+            prior = json.loads(safe_read(path))
+            ensure(prior.get("order_file") == order["order_file"]
+                   and prior.get("qc1000_approved") is False
+                   and prior.get("public_distribution_allowed") is False,
+                   "TRIAGE_EXISTING_RECORD_UNSAFE")
+            if {k:v for k,v in prior.items() if k != "updated_utc"} == {
+                    k:v for k,v in status.items() if k != "updated_utc"}:
+                continue
+        replace_cursor(path, status)
+        changed += 1
+    return {"products_visited": len(orders),
+            "updated_triage_packets": changed,
+            "products_waiting_on_primary_sources": waiting,
+            "all_products_unreleased": True}
 
 def execute(factory_private, batch=20, dry_run=False, http_get=live_get):
     ensure(1 <= batch <= 100, "BATCH_OUT_OF_RANGE")
@@ -423,6 +557,14 @@ def execute(factory_private, batch=20, dry_run=False, http_get=live_get):
         not (target/"metadata"/(key(doi)+".json")).exists() for doi in unique)
     counts["qc1000_approvals"] = 0
     counts["publications"] = 0
+    # Only a mutable telemetry snapshot: source/XML/claim evidence stays immutable.
+    status = evidence_status(factory_private)
+    counts.update(route_product_rework(target, orders))
+    replace_cursor(target / ".last-successful-acquisition.json",
+                   {"schema": "saeit.factory.primary-acquisition-heartbeat.v1",
+                    "completed_utc": datetime.now(timezone.utc).isoformat(),
+                    "last_cycle": dict(counts),
+                    "observed": status})
     return dict(counts)
 
 if __name__ == "__main__":
@@ -430,9 +572,12 @@ if __name__ == "__main__":
     arg.add_argument("--factory-private",required=True)
     arg.add_argument("--batch",type=int,default=20)
     arg.add_argument("--dry-run",action="store_true")
+    arg.add_argument("--status-only",action="store_true")
     args=arg.parse_args()
     try:
-        print(json.dumps(execute(args.factory_private,args.batch,args.dry_run),
+        result = (evidence_status(args.factory_private) if args.status_only else
+                  execute(args.factory_private,args.batch,args.dry_run))
+        print(json.dumps(result,
                          sort_keys=True,ensure_ascii=False),flush=True)
     except Exception as exc:
         print("PRIMARY_FULLTEXT_ACQUISITION_ERROR:"+type(exc).__name__+":"+str(exc)[:160],
