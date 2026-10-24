@@ -91,6 +91,30 @@ class RecoveryCanaryTests(unittest.TestCase):
             handler.redirect_request(request, None, 302, "moved", {},
                                      "https://mojplaywin.com/store/")
 
+    def test_store_canonical_passthrough_is_narrowly_allowlisted(self):
+        request = urllib.request.Request("https://mojplaywin.com/store/")
+        handler = RestrictedRedirect("mojplaywin.com", "/store/")
+        canonical = "https://mojplaywin.com/store/?__mpw_canon_passthru=1"
+        redirected = handler.redirect_request(request, None, 302, "canonical", {}, canonical)
+        self.assertEqual(redirected.full_url, canonical)
+        page = b"<html><title>MojPlayWin Digital Store</title>" + b"x" * 110
+        self.assertEqual(examine("mojplaywin.com", "/store/", 200, page, canonical), "")
+        for bad in ("https://mojplaywin.com/store/?token=1",
+                    "https://mojplaywin.com/store/?__mpw_canon_passthru=0",
+                    "https://mojplaywin.com/store/?__mpw_canon_passthru=1&token=1",
+                    "https://mojplaywin.com/store/?__mpw_canon_passthru=1#fragment",
+                    "https://evil.example/store/?__mpw_canon_passthru=1"):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ValueError):
+                    RestrictedRedirect("mojplaywin.com", "/store/").redirect_request(
+                        request, None, 302, "canonical", {}, bad)
+                self.assertEqual(examine("mojplaywin.com", "/store/", 200, page, bad),
+                                 "wrong_origin_or_route")
+        with self.assertRaises(ValueError):
+            RestrictedRedirect("mojplaywin.com", "/products/").redirect_request(
+                urllib.request.Request("https://mojplaywin.com/products/"),
+                None, 302, "canonical", {}, "https://mojplaywin.com/products/?__mpw_canon_passthru=1")
+
     def test_unapproved_paths_refuse_network(self):
         for host, path in (("mojplaywin.com", "/store/checkout/"),
                            ("zomorodmelal.ir", "/admin/"), ("attacker.example", "/")):
