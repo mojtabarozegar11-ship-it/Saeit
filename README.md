@@ -24,6 +24,8 @@ Original educational notes, with current official product and company links. The
 - [Research collaboration: evidence and deliverables](docs/marketing/mojtaba-roozegar-research-collaboration-brief-20261024.md) — a transparent framework for scientific and enterprise discussions.
 - [Digital-download TRX buyer safety checklist](docs/marketing/trx-digital-download-buyer-safety-guide-20261024.md) — invoice verification, wallet safety and delivery checks.
 - [ردیابی و کنترل کیفیت فرآوری محصولات کشاورزی و غذایی](docs/marketing/fa-food-processing-traceability-quality-guide-20261024.md) — شناسنامه بچ، آزادسازی محصول و ممیزی ردیابی.
+- [Browser game playtest protocol](docs/marketing/browser-game-playtest-protocol-20261024.md) — usability, accessibility, reliability and evidence gates.
+- [راهنمای حاشیه مشارکت و ریسک اقتصادی مزرعه](docs/marketing/fa-farm-contribution-margin-decision-guide-20261024.md) — هزینه‌های متغیر، محدودیت منابع و سناریوهای تصمیم.
 
 
 ## Runtime safety
