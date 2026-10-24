@@ -1,4 +1,5 @@
 name: Safely upgrade two live site masters with customer ticket progress
+# Second attempt: offline PHP fixture correctly mirrors public index.php co-location.
 on:
   push:
     branches: [agents/two-sites-inquiries-orders-20261024]
