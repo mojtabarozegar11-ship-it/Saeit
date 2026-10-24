@@ -297,11 +297,58 @@ def visitor_logs():
                                    "source": "same_archived_access_logs"})
 
 
+
+def domain_mail_delivery_readiness():
+    """Check mail-exchanger role and public DNS without mutating mail service."""
+    report = {"source": "cpanel_Email_getmxcheck", "available": False,
+              "routing_type": "unknown", "accepts_locally": None,
+              "dns_mx": [], "dns_available": False, "readonly": True}
+    try:
+        p = subprocess.run(
+            ["cpapi2", "--user=zomorod2", "--output=json", "Email",
+             "getmxcheck", "domain=" + DOMAIN],
+            capture_output=True, timeout=18, check=False)
+        if p.returncode == 0 and len(p.stdout) < 100000:
+            obj = json.loads(p.stdout.decode("utf-8"))
+            rows = (obj.get("cpanelresult") or {}).get("data")
+            if isinstance(rows, list):
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    if str(row.get("domain") or DOMAIN).lower() != DOMAIN:
+                        continue
+                    kind = str(row.get("mxcheck") or "").lower()
+                    if kind in ("auto", "local", "secondary", "remote"):
+                        report["available"] = True
+                        report["routing_type"] = kind
+                    always = row.get("alwaysaccept")
+                    if always in ("0", "1", 0, 1):
+                        report["accepts_locally"] = str(always) == "1"
+                    break
+    except (OSError, subprocess.TimeoutExpired, ValueError, UnicodeError, TypeError):
+        pass
+    try:
+        p = subprocess.run(["dig", "+short", "+time=3", "+tries=1",
+                            "MX", DOMAIN], capture_output=True,
+                           timeout=10, check=False)
+        if p.returncode == 0 and len(p.stdout) < 8000:
+            lines = p.stdout.decode("utf-8", "replace").splitlines()
+            report["dns_available"] = True
+            report["dns_mx"] = [
+                " ".join(line.split()[:2])[:190]
+                for line in lines[:12]
+                if len(line.split()) == 2 and line.split()[0].isdigit()
+            ]
+    except (OSError, subprocess.TimeoutExpired, UnicodeError, TypeError):
+        pass
+    output("MPW_MAIL_ROUTING", report)
+
 if __name__ == "__main__":
     support_maildir()
     configured_support_mailbox()
     configured_support_forwarder()
     domain_catchall()
+    domain_mail_delivery_readiness()
     recent_cpanel_visitors()
     visitor_logs()
     output("MPW_INTAKE_READONLY", {"result": "completed", "production_db_writes": False,
