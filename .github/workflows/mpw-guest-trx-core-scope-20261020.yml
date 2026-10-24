@@ -1,4 +1,5 @@
 name: MojPlayWin guest TRX main-only scope and wallet readiness
+# Continue in-memory buyer checkout simulation with corrected fixture 2026-10-24.
 # Rerun after corrected in-memory ORM fixture; no production record writes.
 # Exercise live create-order and start-invoice handlers with in-memory fixtures only.
 # Include order-selection code and exact live TRX form in read-only review 2026-10-24.
