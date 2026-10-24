@@ -119,6 +119,10 @@ class CustomerInboxTests(unittest.TestCase):
             ("question", "مشکل دانلود فایل"),
             ("question", "Please help with a delivery discount"),
             ("question", "Can you verify my TRX transfer"),
+            ("question", "My coupon code does not work"),
+            ("question", "Please apply a discount for me"),
+            ("question", "کد تخفیف من کار نمی‌کند"),
+            ("question", "تخفیف من اعمال نشده"),
         )
         for kind, question in cases:
             with self.subTest(question=question):
