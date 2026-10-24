@@ -1,4 +1,4 @@
-name: Guarded live repair of two independent site-master customer workers
+name: Guarded site-master order event transition correction
 on:
   push:
     branches: [agents/two-sites-inquiries-orders-20261024]
@@ -16,6 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Offline safety regression and hash-verified private worker manifest
         shell: bash
         run: |
@@ -24,11 +25,15 @@ jobs:
           python3 -m unittest discover -s tests -p test_site_master_customer_runtime_20261024.py -v
           python3 - <<'PY'
           from pathlib import Path
-          import hashlib,io,json,os,tarfile
-          old=Path("tests/fixtures/site_master_customer_runtime_pretriage_20261024.py").read_bytes()
+          import hashlib,io,json,os,subprocess,tarfile
+          # Pin exactly the previously reviewed worker; refuse unrelated live bytes.
+          old=subprocess.check_output([
+              "git","show",
+              "5c217f1bd43ef34d3c38d8d651c2d3ddbc494be6:scripts/site_master_customer_runtime_20261024.py"
+          ])
           new=Path("scripts/site_master_customer_runtime_20261024.py").read_bytes()
-          assert old!=new and b"master_customer_worker_health" not in old
-          assert b"master_customer_worker_health" in new
+          assert old!=new and b"master_customer_worker_health" in old
+          assert b"master_customer_worker_health" in new and b"predecessor" in new
           meta={"scope":"two_private_site_master_truthful_triage","sites":["zomorod","mojplaywin"],
                 "old_sha256":hashlib.sha256(old).hexdigest(),
                 "new_sha256":hashlib.sha256(new).hexdigest()}
