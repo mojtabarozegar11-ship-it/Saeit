@@ -13,6 +13,15 @@ These are external public-facing websites associated with the broader work; thei
 - **Zomorod Melal — Iranian agricultural research and industry:** [Official Persian website](https://zomorodmelal.ir/?utm_source=github&utm_medium=referral&utm_campaign=saeit_official_sites_20261024) · [Public research-project register](https://zomorodmelal.ir/research/projects/?utm_source=github&utm_medium=referral&utm_campaign=saeit_official_sites_20261024). The register currently lists no independently approved public project records.
 - **Mojtaba Roozegar — independent professional and research profile:** [Public profile](https://mojplaywin.com/mojtaba.roozegar/resume/?utm_source=github&utm_medium=referral&utm_campaign=saeit_official_sites_20261024). Owner-reported credentials are distinguished from independently verified publications.
 
+## Free public learning and research guides
+
+Original educational notes, with current official product and company links. These are public resources, not claims of independently verified sales, journal publications or production deployments.
+
+- [Chess: an 84-day measurable study companion](docs/marketing/chess-84-day-study-companion-20261024.md) — decision logs, critical-position review and progress measurement.
+- [Taniya: read-aloud and early-years activity guide](docs/marketing/taniya-read-aloud-activity-guide-20261024.md) — rhythm, story sequencing and family activities.
+- [راهنمای محاسبه علمی مقدار بذر گندم](docs/marketing/fa-wheat-seed-rate-field-guide-20261024.md) — محاسبه بذر، مفروضات، واحدها و تحلیل حساسیت.
+- [Research collaboration: evidence and deliverables](docs/marketing/mojtaba-roozegar-research-collaboration-brief-20261024.md) — a transparent framework for scientific and enterprise discussions.
+
 ## Runtime safety
 
 The execution path is governed by capability, risk, owner-approval, execution-identity, retry-budget, and audit controls. Production-changing or other sensitive actions must pass the approval gate before execution.
