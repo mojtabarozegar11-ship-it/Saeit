@@ -144,7 +144,7 @@ jobs:
           if site_base.is_symlink() or not site_base.is_file():
               raise SystemExit('MOJPLAYWIN_PAGE_SHELL_NOT_REGULAR')
           base_digest=hashlib.sha256(site_base.read_bytes().replace(bytes([13,10]),bytes([10]))).hexdigest()
-          if base_digest!='3c5d12901f4b1ebb54c60e5be01f7764131e479b6c16c1f6cac6848284adbba2':
+          if base_digest!='70d1ff928d0660c7ba612d80796027dfc66a371918d8b779544c9d80a6a15771':
               raise SystemExit('MOJPLAYWIN_PAGE_SHELL_HASH_NOT_PINNED')
           if ht.is_symlink() or not ht.is_file():
               raise SystemExit('HTACCESS_NOT_REGULAR')
