@@ -1,6 +1,85 @@
-{% extends "mojplaywin/site_base.html" %}
+{% extends "base.html" %}
 {% load static %}
+{% load mpw_main %}
 {% block title %}Digital Store | MojPlayWin{% endblock %}
-{% block meta_description %}Explore MojPlayWin books, learning resources, original games, and practical digital tools.{% endblock %}
+{% block meta_description %}Buy MojPlayWin digital books and client-ready tools. See current prices, TRX checkout steps, and private delivery details.{% endblock %}
 {% block body_class %}mojplaywin-store{% endblock %}
-{% block content %}<div class="mw-shell"><section class="mw-hero"><div><span class="mw-kicker">MOJPLAYWIN · DIGITAL STORE</span><h1>Useful ideas, made to explore.</h1><p>A curated starting catalog of books, courses, games, research tools, and professional services. Product pages and checkout options are shown only when available.</p><a class="mw-button primary" href="#catalog">Browse the catalog</a></div><img src="{% static 'site/heroes/store.webp' %}" alt="MojPlayWin digital catalog"></section><section class="mw-section" id="catalog"><span class="mw-kicker">INITIAL COLLECTION · {{ products|length }} PICKS</span><h2>Books, learning, games & tools</h2><div class="mw-grid">{% for product in products %}<article class="mw-card">{% if product.image_url %}<img loading="lazy" decoding="async" src="{{ product.image_url }}" alt="{{ product.title }}">{% else %}<img loading="lazy" decoding="async" src="{% static product.image %}" alt="{{ product.title }}">{% endif %}<div class="mw-card-copy"><span class="mw-kicker">{{ product.category }}</span><h3>{{ product.title }}</h3><p>{{ product.text }}</p><a href="{{ product.url }}"{% if product.external %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ product.action_label|default:"Explore this collection ↗" }}</a>{% if product.availability_note %}<p class="mw-note">{{ product.availability_note }}</p>{% endif %}</div></article>{% endfor %}</div></section><p class="mw-note">Catalog links lead to the relevant MojPlayWin section. A purchase button appears only for an item with a verified active checkout.</p>{% if mpw_data.mpw_managed_offers %}{% include "mojplaywin/mpw_managed_offers.html" %}{% endif %}{% include "mojplaywin/store_ten_buyer_guides_20261018.html" %}</div>{% endblock %}
+{% block content %}{% include "mojplaywin/theme.html" %}<div class="mw-shell"><section class="mw-hero"><div><span class="mw-kicker">MOJPLAYWIN · DIGITAL STORE</span><h1>Useful ideas, made to explore.</h1><p>Choose a digital book or tool, review its contents and price, then pay through an order-specific TRX invoice. Your private download unlocks after payment is independently confirmed.</p><a class="mw-button primary" href="#mpw-original-books">Shop available books</a></div><img src="{% static 'site/heroes/store.webp' %}" alt="MojPlayWin digital catalog"></section><section class="mw-section" id="catalog"><span class="mw-kicker">EXPLORE MOJPLAYWIN · {{ products|length }} DESTINATIONS</span><h2>Explore our books, learning, games & tools</h2><div class="mw-grid">{% for product in products %}<article class="mw-card"><img src="{% static product.image %}" alt="{{ product.title }}"><div class="mw-card-copy"><span class="mw-kicker">{{ product.category }}</span><h3>{{ product.title }}</h3><p>{{ product.text }}</p>{% if product.title == "The Science and Practice of Chess Improvement" %}<a class="mw-button primary" href="/store/product/72/">View book & purchase ↗</a>{% elif product.title == "Taniya and the Little Baker Worms" %}<a class="mw-button primary" href="/store/product/225/">View book & purchase ↗</a>{% else %}<a href="{{ product.url }}">Explore this section ↗</a>{% endif %}</div></article>{% endfor %}</div></section><!-- MPW_TWO_BOOKS_PUBLIC_CATALOG_V1_START --><style id="mpw-book-links-style-20261019">
+.mpw-two-books .mpw-book-cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}
+.mpw-two-books .mpw-book-cta a{display:inline-flex;min-height:42px;align-items:center;padding:9px 13px;border-radius:10px;border:1px solid #dbb971;background:rgba(224,180,86,.13);color:#f4d99b;text-decoration:none;font-size:.84rem;font-weight:700}
+.mpw-two-books .mpw-book-cta a:hover{background:rgba(224,180,86,.24)}
+.mpw-two-books .mpw-book-cta a:focus-visible{outline:3px solid #f4d99b;outline-offset:3px}
+</style>
+
+<section class="mpw-two-books" id="mpw-original-books" aria-label="Original MojPlayWin books">
+<style>
+.mpw-two-books{margin:32px 0 36px;padding:clamp(16px,3vw,32px);border:1px solid rgba(186,204,230,.24);border-radius:26px;background:linear-gradient(145deg,rgba(20,42,69,.64),rgba(18,26,48,.42));box-shadow:0 16px 48px rgba(0,0,0,.15);color:#f3f6fc}
+.mpw-two-books .mpw-book-intro{max-width:760px;margin:0 0 22px;color:#d5dfed;line-height:1.75}
+.mpw-two-books h2{font-size:clamp(1.5rem,2.4vw,2.1rem);margin:6px 0 14px;color:#fff}
+.mpw-two-books .mpw-book-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+.mpw-two-books .mpw-sale-book{min-width:0;display:grid;grid-template-columns:minmax(110px,34%) 1fr;gap:18px;padding:20px;border:1px solid rgba(255,255,255,.17);border-radius:22px;background:linear-gradient(130deg,rgba(255,255,255,.12),rgba(255,255,255,.035));box-shadow:0 10px 22px rgba(0,0,0,.13)}
+.mpw-two-books .mpw-book-cover{aspect-ratio:3/4;display:flex;flex-direction:column;justify-content:space-between;gap:12px;padding:18px 14px;border-radius:8px 14px 14px 8px;box-shadow:inset 5px 0 9px rgba(0,0,0,.25),5px 9px 20px rgba(0,0,0,.25);overflow-wrap:anywhere}
+.mpw-two-books .mpw-book-cover span{font-size:.71rem;letter-spacing:.12em;text-transform:uppercase;opacity:.85}
+.mpw-two-books .mpw-book-cover strong{font-size:clamp(1.0rem,1.6vw,1.5rem);line-height:1.27}
+.mpw-two-books .mpw-chess-cover{background:linear-gradient(150deg,#22324d 4%,#455675 48%,#a78b52 100%);color:#fff1ca}
+.mpw-two-books .mpw-taniya-cover{background:linear-gradient(155deg,#3b4c87 2%,#7259a7 43%,#edac75 100%);color:#fff7ed}
+.mpw-two-books .mpw-book-body{min-width:0}
+.mpw-two-books .mpw-book-body h3{font-size:1.16rem;color:#fff;line-height:1.4;margin:5px 0 9px}
+.mpw-two-books .mpw-book-body p{font-size:.9rem;line-height:1.65;color:#e0e7f2;margin:8px 0}
+.mpw-two-books .mpw-book-meta{font-size:.83rem;color:#c8d7e6}
+.mpw-two-books .mpw-book-price{font-weight:750;font-size:1.3rem;color:#f4d99b;margin-top:10px}
+.mpw-two-books .mpw-book-state{display:inline-block;color:#f4e4bb;border:1px solid rgba(244,228,187,.5);border-radius:999px;font-size:.76rem;padding:4px 11px}
+.mpw-two-books .mpw-book-pay-note{font-size:.83rem;color:#d9e3ef;border-top:1px solid rgba(255,255,255,.18);margin:18px 0 0;padding-top:14px}
+@media(max-width:890px){.mpw-two-books .mpw-book-list{grid-template-columns:1fr}}
+@media(max-width:480px){.mpw-two-books .mpw-sale-book{grid-template-columns:1fr}.mpw-two-books .mpw-book-cover{aspect-ratio:4/3}}
+@media(prefers-reduced-motion:reduce){.mpw-two-books *{animation:none!important;transition:none!important}}
+</style>
+<span class="mw-kicker">ORIGINAL DIGITAL BOOKS · MOJPLAYWIN</span>
+<h2>Books by Mojtaba Roozegar</h2>
+<p class="mpw-book-intro">Browse the available English digital books. Each item page shows its current price and leads to a unique TRX invoice. The private PDF unlocks after independent payment confirmation.</p>
+<div class="mpw-book-list">
+<article class="mpw-sale-book" id="mpw-sale-book72">
+<div class="mpw-book-cover mpw-chess-cover" role="img" aria-label="Typographic cover preview: The Science and Practice of Chess Improvement">
+<span>Chess · Research Edition</span><strong>The Science and Practice of Chess Improvement</strong><span>Mojtaba Roozegar · 2026</span>
+</div>
+<div class="mpw-book-body"><span class="mpw-book-state">Secure TRX invoice · account required</span>
+<h3>The Science and Practice of Chess Improvement</h3>
+<p>A research-informed training guide on chess decisions, game analysis, strategic understanding, and deliberate practice.</p>
+<p class="mpw-book-meta">English · 415 pages · Digital PDF · Grandmaster Analytical Research Edition (2026)</p>
+<p class="mpw-book-price">US $7.50</p>
+<!-- MPW_BOOK_LINKS_20261019_START -->
+<p class="mpw-book-cta"><a href="/store/product/72/">View book details ↗</a> <a href="/store/product/72/checkout/">Buy securely with TRX ↗</a></p>
+<!-- MPW_BOOK_LINKS_20261019_END -->
+</div>
+
+
+</article>
+<article class="mpw-sale-book" id="mpw-sale-book225">
+<div class="mpw-book-cover mpw-taniya-cover" role="img" aria-label="Typographic cover preview: Taniya and the Little Baker Worms">
+<span>Illustrated Story · Ages 3–8</span><strong>Taniya and the Little Baker Worms</strong><span>Mojtaba Roozegar</span>
+</div>
+<div class="mpw-book-body"><span class="mpw-book-state">TRX checkout available · account required</span>
+<h3>Taniya and the Little Baker Worms</h3>
+<p>An original illustrated children's storybook for young readers and families, created in a colorful landscape-format edition.</p>
+<p class="mpw-book-meta">English · 40 pages · Illustrated digital PDF · Suggested ages 3–8</p>
+<p class="mpw-book-price">US $4.00</p>
+<!-- MPW_BOOK_LINKS_20261019_START -->
+<p class="mpw-book-cta"><a href="/store/product/225/">View book details ↗</a> <a href="/store/product/225/checkout/">Buy securely with TRX ↗</a></p>
+<!-- MPW_BOOK_LINKS_20261019_END -->
+</div>
+
+
+</article>
+</div>
+<p class="mpw-book-pay-note">Sign in or create an account to open your order-specific TRX invoice. Pay only the exact amount shown. The private file unlocks after verified payment.</p>
+
+<p class="mpw-book-pay-note">Secure purchase: sign in or create an account, open the invoice for your order, and send only the exact amount shown there. Your private download appears after the network confirms payment.</p>
+</section>
+<!-- MPW_TWO_BOOKS_PUBLIC_CATALOG_V1_END -->
+
+<p class="mw-note">Open a product page to see its current price, active payment method, and delivery details.</p></div>{% include "mojplaywin/footer.html" %}
+<!-- MPW_FIVE_MAIN_20261019 -->
+{% mpw_main_data request as mpw_data %}
+{% if mpw_data.mpw_managed_blocks %}{% include "mojplaywin/mpw_managed_blocks.html" %}{% endif %}
+{% if mpw_data.mpw_managed_offers %}{% include "mojplaywin/mpw_managed_offers.html" %}{% endif %}
+{% endblock %}
