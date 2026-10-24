@@ -28,7 +28,7 @@ function masterOpenDb(string $root):PDO {
     ]);
     $db->exec('PRAGMA busy_timeout=8000;PRAGMA journal_mode=WAL;PRAGMA foreign_keys=ON');
     $db->exec('CREATE TABLE IF NOT EXISTS customer_questions(
-      id TEXT PRIMARY KEY, tenant TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ("question","order_question")),
+      id TEXT PRIMARY KEY, tenant TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN (\'question\',\'order_question\')),
       full_name TEXT NOT NULL, email TEXT NOT NULL, question TEXT NOT NULL,
       claimed_order_ref TEXT NOT NULL DEFAULT "", initial_reply TEXT NOT NULL,
       processing_status TEXT NOT NULL DEFAULT "queued" CHECK(processing_status IN ("queued","handled","needs_review")),
