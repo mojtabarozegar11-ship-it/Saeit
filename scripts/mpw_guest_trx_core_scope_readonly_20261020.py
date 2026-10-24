@@ -306,3 +306,25 @@ try:
         "flags":{k:data.get(k) is True for k in ("asset_verified","license_verified","quality_approved","factory_publication_permission","rights_cleared")}},ensure_ascii=False))
 except Exception as exc:
     print("MPW_ITEM_879="+json.dumps({"error":type(exc).__name__},ensure_ascii=False))
+
+# Exact product-879 public-sale eligibility and UI wording, still read-only.
+from core.models import Product
+from mpw_commerce.buyer_orders import _eligible
+from mpw_commerce.downloads import _private_file
+from types import SimpleNamespace
+try:
+    item=Product.objects.get(pk=879); data=item.metadata or {}; file=_private_file(SimpleNamespace(product=item))
+    print("MPW_ITEM_879="+json.dumps({"active":item.active,"currency":item.currency,"price":str(item.price),
+        "eligible":bool(_eligible(item)),"file_present":file.is_file() and not file.is_symlink(),
+        "flags":{k:data.get(k) is True for k in ("asset_verified","license_verified","quality_approved","factory_publication_permission","rights_cleared")}},ensure_ascii=False))
+except Exception as exc: print("MPW_ITEM_879="+json.dumps({"error":type(exc).__name__},ensure_ascii=False))
+try:
+    import core.brand_views as b
+    block=getattr(b,"PAGES",{}).get("support",{})
+    print("MPW_SUPPORT_COPY="+json.dumps({k:block.get(k) for k in ("headline","body","cards")},ensure_ascii=False))
+except Exception as exc: print("MPW_SUPPORT_COPY="+json.dumps({"error":type(exc).__name__},ensure_ascii=False))
+try:
+    import services.mpw_trx_walletless_checkout_ui as ui
+    p=Path(ui.__file__); raw=p.read_text("utf8","replace")
+    print("MPW_INVOICE_UI_SOURCE="+json.dumps({"sha":hashlib.sha256(raw.encode()).hexdigest(),"lines":[{"n":i+1,"text":line[:1200]} for i,line in enumerate(raw.splitlines()) if "Automatic status checks paused" in line or "status_path" in line or "invoice expires" in line]},ensure_ascii=False))
+except Exception as exc: print("MPW_INVOICE_UI_SOURCE="+json.dumps({"error":type(exc).__name__},ensure_ascii=False))
