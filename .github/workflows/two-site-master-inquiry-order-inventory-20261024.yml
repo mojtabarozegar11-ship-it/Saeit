@@ -305,6 +305,38 @@ jobs:
           PY
           echo SUPPORT_HANDLER_SOURCE_INSPECT_COMPLETE
           REMOTE
+      - name: Check safe additive physical support route and Zomorod store database handles
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          timeout 85s ssh -T -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,subprocess,json
+          home=Path.home()
+          for label,path,limit in (
+           ("ZM_STORE",home/"public_html/store/index.php",20),
+           ("ZM_REWRITE",home/"public_html/.htaccess",24),
+           ("MPW_REWRITE",home/"mojplaywin.com/.htaccess",22)):
+              if path.is_file() and not path.is_symlink():
+                  lines=path.read_text("utf8","replace").splitlines()
+                  for n,line in enumerate(lines[:limit],1):
+                      if "StoreDb" in line or "require" in line or "include" in line or "Rewrite" in line or "Passenger" in line or "DirectoryIndex" in line:
+                          print(label+"_RULE="+str(n)+":"+line[:250])
+          base=home/".private"
+          if base.is_dir():
+              names=sorted(p.name for p in base.rglob("*.sqlite3") if len(p.parts)<=len(base.parts)+4 and
+                           any(k in p.name.lower() for k in ("store","order","commerce","agent","sales")))
+              print("ZM_PRIVATE_DB_FILE_NAMES="+json.dumps(names[:40]))
+          for name in ("zomorodmelal.ir","mojplaywin.com"):
+              url="https://"+name+"/ask-master/"
+              r=subprocess.run(["curl","-sS","--max-time","8","-o","/dev/null","-w","%{http_code}",url],capture_output=True,text=True,timeout=12)
+              print("SUPPORT_NEW_ROUTE_BASELINE="+name+":"+r.stdout.strip())
+          PY
+          echo SUPPORT_ADDITIVE_ROUTE_BASELINE_DONE
+          REMOTE
       - name: Remove temporary SSH identity material
         if: always()
         shell: bash
