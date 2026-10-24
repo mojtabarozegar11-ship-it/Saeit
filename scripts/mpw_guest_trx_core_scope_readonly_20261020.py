@@ -168,7 +168,7 @@ with tempfile.TemporaryDirectory(prefix="mpw-readonly-order-sim-") as tmp:
     intent_calls=[]
     def fake_reserve(**kwargs): intent_calls.append(kwargs); return 987652
     patches=[
-        patch.object(core_models,"Product",FakeProductModel),
+        patch.object(core_models,"Product",SimpleNamespace(objects=FakeProductManager())),
         patch.object(core_models,"Order",FakeOrder),
         patch.object(core_models,"OrderItem",FakeItemModel),
         patch.object(core_models,"PaymentIntent",FakeIntentModel),
