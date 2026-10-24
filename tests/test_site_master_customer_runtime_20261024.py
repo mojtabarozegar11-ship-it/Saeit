@@ -195,6 +195,8 @@ class CustomerInboxTests(unittest.TestCase):
                 self.assertEqual(mod.classify_customer_ticket(kind,question),"needs_review")
         self.assertEqual(mod.classify_customer_ticket("question","What is the coupon policy?"),"handled")
         self.assertEqual(mod.classify_customer_ticket("question","قانون تخفیف چگونه است؟"),"handled")
+        self.assertEqual(mod.classify_customer_ticket("question","General coupon policy"),"handled")
+        self.assertEqual(mod.classify_customer_ticket("question","QA-TRIAGE General coupon policy"),"needs_review")
         self.assertEqual(mod.classify_customer_ticket("question","Who are you?"),"needs_review")
 
     def test_master_health_heartbeat_and_real_pending_review_counts(self):
