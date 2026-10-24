@@ -14,7 +14,7 @@ const manifest = () => ({
 const client = () => ({
   trx: {
     getCurrentBlock: async () => ({blockID:'a'.repeat(64), block_header:{raw_data:{number:123456}}}),
-    getContract: async () => ({bytecode:'6080604052'})
+    getContractInfo: async () => ({runtimecode:'6080604052'})
   }
 });
 test('reads three guarded V2 candidate contracts without authorizing reward payout or Mainnet', async () => {
@@ -39,7 +39,7 @@ test('rejects invalid chain observations, missing code and malformed manifest ad
   const c=client();c.trx.getCurrentBlock=async()=>({block_header:{raw_data:{number:100}}});
   await assert.rejects(observe(manifest(),c),/block/);
   c.trx.getCurrentBlock=client().trx.getCurrentBlock;
-  c.trx.getContract=async()=>({bytecode:''});
+  c.trx.getContractInfo=async()=>({runtimecode:''});
   await assert.rejects(observe(manifest(),c),/bytecode/);
   const m=manifest();m.pilot_governance_contract='not-an-address';
   await assert.rejects(observe(m,client()),/pilot_governance_contract/);

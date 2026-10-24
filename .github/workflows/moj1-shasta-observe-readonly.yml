@@ -31,7 +31,11 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Offline safety and mocked RPC regression
         run: node --test tests/shasta-pilot-observe-readonly.test.mjs
-      - name: Observe V2 candidate contracts on Shasta (no signing, no funds)
+      - name: Compile exact pinned source for runtime attestation
+        run: npm run compile
+      - name: Attest V2 source and deployed bytecode with public read-only RPC
+        run: node scripts/verify-v2-shasta-readonly.mjs
+      - name: Observe V2 candidate runtime code on Shasta (no signing, no funds)
         run: node scripts/shasta-pilot-observe-readonly.mjs --read-only
       - name: Assert Mainnet and payout remain blocked
         run: node scripts/release-readiness-offline.mjs --assert-blocked

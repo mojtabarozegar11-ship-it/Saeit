@@ -18,7 +18,7 @@ export async function observeExistingShastaPilot(manifest, client) {
     throw new Error('Unsafe manifest: Shasta-only no-distribution invariants required');
   }
   if (!client?.trx || typeof client.trx.getCurrentBlock !== 'function' ||
-      typeof client.trx.getContract !== 'function') throw new Error('Read-only RPC client required');
+      typeof client.trx.getContractInfo !== 'function') throw new Error('Read-only RPC client required');
   for (const field of CONTRACT_FIELDS) {
     if (typeof manifest[field] !== 'string' || !TronWeb.isAddress(manifest[field])) {
       throw new Error('Missing or invalid ' + field);
@@ -35,15 +35,15 @@ export async function observeExistingShastaPilot(manifest, client) {
   }
   const contracts = [];
   for (const field of CONTRACT_FIELDS) {
-    const deployed = await client.trx.getContract(manifest[field]);
-    const raw = typeof deployed?.bytecode === 'string' ? deployed.bytecode.replace(/^0x/, '') : '';
+    const deployed = await client.trx.getContractInfo(manifest[field]);
+    const raw = typeof deployed?.runtimecode === 'string' ? deployed.runtimecode.replace(/^0x/, '') : '';
     if (!/^(?:[0-9a-fA-F]{2})+$/.test(raw) || raw.length < 4) {
       throw new Error(field + ': deployed bytecode unavailable on Shasta');
     }
     contracts.push({
       role: field, address: manifest[field],
-      observedBytecodeSha256: createHash('sha256').update(Buffer.from(raw, 'hex')).digest('hex'),
-      observedByteLength: raw.length / 2
+      observedRuntimeSha256: createHash('sha256').update(Buffer.from(raw, 'hex')).digest('hex'),
+      observedRuntimeByteLength: raw.length / 2
     });
   }
   return {
