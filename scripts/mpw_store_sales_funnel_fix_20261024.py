@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Install the store-only conversion cleanup and restore its Django route."""
+"""Install the reviewed MojPlayWin store presentation and its missing page shell."""
 from pathlib import Path
 import hashlib, json, os, re, stat, sys, tempfile
 
 APP = Path("/home/zomorod2/Saeit-staging")
 STORE = APP / "core/templates/mojplaywin/store.html"
+SITE_BASE = APP / "core/templates/mojplaywin/site_base.html"
 SITE = Path("/home/zomorod2/mojplaywin.com")
 HTACCESS = SITE / ".htaccess"
 WSGI = SITE / "passenger_wsgi.py"
 HOME = Path("/home/zomorod2")
-OLD_SHA = "8937201e5b0252cab846ab98145ee4d5570b70a11fd523804aa5815668f64c6b"
-NEW_SHA = "58aa592a98c917d1864d2afe984286b3a1ee3e95c553be5ffca6ee97b3d82b6d"
+OLD_SHA = "2025d63cb3fc1a92d41468e270cdbbe17585dfb13775f64d9cdaf02b7f15ab29"
+NEW_SHA = "af09b7b17f8b3ee991893a1d9303c3df74353cd3dd179d26b95a4aea3b8cad7a"
+SITE_BASE_SHA = "3c5d12901f4b1ebb54c60e5be01f7764131e479b6c16c1f6cac6848284adbba2"
 ROUTE_OLD = b"RewriteCond %{REQUEST_URI} ^/(store|games|ai|contact|support|privacy|terms|cookies|products|blockchain|commerce|crypto-payments|global-business|research-lab|canada-vision|agro-industry|agriculture|education|weather)/$"
 ROUTE_NEW = ROUTE_OLD.replace(b"/(store|", b"/(")
 
@@ -72,9 +74,11 @@ def guard():
         raise RuntimeError("Django app root does not match verified app")
     if sha(STORE.read_bytes()) != OLD_SHA:
         raise RuntimeError("Live store template changed since audit; refusing overwrite")
+    if SITE_BASE.is_symlink() or SITE_BASE.exists():
+        raise RuntimeError("MojPlayWin page shell already exists; refusing overwrite")
     ht=HTACCESS.read_bytes()
-    if ht.count(ROUTE_OLD) != 1 or ROUTE_NEW in ht:
-        raise RuntimeError("Expected one exact old store route in Apache config; refusing edit")
+    if ht.count(ROUTE_NEW) != 1 or ROUTE_OLD in ht:
+        raise RuntimeError("Previously repaired store route is no longer verified")
 
 
 def reset_template_loaders(engine):
@@ -108,8 +112,9 @@ def check_django_pages(expect_fixed):
             raise RuntimeError("Updated store render is missing purchase content")
         if "mpw-store-ten-guides" in body or "INITIAL COLLECTION" in body:
             raise RuntimeError("Low-conversion guide block or misleading heading remains")
-    elif "mpw-store-ten-guides" not in body or "INITIAL COLLECTION" not in body:
-        raise RuntimeError("Pre-change store baseline does not match audit")
+    elif ("Shop available books" not in body or "View book & purchase" not in body
+          or "mpw-store-ten-guides" in body):
+        raise RuntimeError("Current deployed store baseline does not match audit")
     for route in ("/store/product/72/", "/store/product/225/"):
         response = client.get(route, secure=True, HTTP_HOST="mojplaywin.com")
         if response.status_code != 200:
@@ -138,49 +143,65 @@ def install(run):
     check_django_pages(expect_fixed=False)
     incoming_dir = stage(run)
     incoming = incoming_dir / "store.html"
-    if not incoming_dir.is_dir() or incoming_dir.is_symlink() or not incoming.is_file() or incoming.is_symlink():
+    incoming_base = incoming_dir / "site_base.html"
+    if (not incoming_dir.is_dir() or incoming_dir.is_symlink() or not incoming.is_file()
+        or incoming.is_symlink() or not incoming_base.is_file() or incoming_base.is_symlink()):
         raise RuntimeError("Private stage is missing or unsafe")
     new = incoming.read_bytes()
-    if sha(new) != NEW_SHA or b"mpw-store-ten-guides" in new or b"Explore this collection" in new:
-        raise RuntimeError("Staged template failed pinned content checks")
+    new_base = incoming_base.read_bytes()
+    if (sha(new) != NEW_SHA or sha(new_base) != SITE_BASE_SHA
+        or b"mpw-store-ten-guides" in new or b"Explore this collection" in new
+        or b"site/heroes/store.webp" in new):
+        raise RuntimeError("Staged templates failed pinned content checks")
     old = STORE.read_bytes()
     old_ht = HTACCESS.read_bytes()
-    new_ht = old_ht.replace(ROUTE_OLD, ROUTE_NEW, 1)
-    if new_ht.count(ROUTE_NEW) != 1 or ROUTE_OLD in new_ht:
-        raise RuntimeError("Exact Apache route substitution failed")
+    if old_ht.count(ROUTE_NEW) != 1 or ROUTE_OLD in old_ht:
+        raise RuntimeError("Previously repaired Apache store route is not intact")
     destination = backup(run)
     if destination.exists() or destination.is_symlink():
         raise RuntimeError("Backup collision; refusing overwrite")
     destination.mkdir(mode=0o700)
     save_private(destination / "store.original.html", old)
     save_private(destination / "htaccess.original", old_ht)
-    info = {"run":run,"store_path":str(STORE),"htaccess_path":str(HTACCESS),
-            "old_sha":OLD_SHA,"new_sha":NEW_SHA,
-            "htaccess_old_sha":raw_sha(old_ht),"htaccess_new_sha":raw_sha(new_ht)}
+    info = {"run":run,"store_path":str(STORE),"site_base_path":str(SITE_BASE),
+            "htaccess_path":str(HTACCESS),"old_sha":OLD_SHA,"new_sha":NEW_SHA,
+            "site_base_sha":SITE_BASE_SHA,"htaccess_sha":raw_sha(old_ht)}
     with open(destination / "manifest.json", "x", encoding="utf8") as stream:
         os.chmod(destination / "manifest.json", 0o600)
         json.dump(info, stream, sort_keys=True)
         stream.flush()
         os.fsync(stream.fileno())
     store_mode = stat.S_IMODE(STORE.stat().st_mode)
-    ht_mode = stat.S_IMODE(HTACCESS.stat().st_mode)
+    base_created = False
     try:
+        with open(SITE_BASE, "xb") as stream:
+            os.fchmod(stream.fileno(), 0o644)
+            stream.write(new_base)
+            stream.flush()
+            os.fsync(stream.fileno())
+        base_created = True
+        base_dir_fd = os.open(SITE_BASE.parent, os.O_RDONLY)
+        try:
+            os.fsync(base_dir_fd)
+        finally:
+            os.close(base_dir_fd)
         atomic_write(STORE, new, store_mode)
-        atomic_write(HTACCESS, new_ht, ht_mode)
-        if sha(STORE.read_bytes()) != NEW_SHA or raw_sha(HTACCESS.read_bytes()) != raw_sha(new_ht):
-            raise RuntimeError("Post-write hashes mismatch")
+        if sha(STORE.read_bytes()) != NEW_SHA or sha(SITE_BASE.read_bytes()) != SITE_BASE_SHA:
+            raise RuntimeError("Post-write template hashes mismatch")
+        if raw_sha(HTACCESS.read_bytes()) != raw_sha(old_ht):
+            raise RuntimeError("Apache route changed during isolated template install")
         check_django_pages(expect_fixed=True)
     except BaseException:
         if STORE.is_file() and not STORE.is_symlink() and sha(STORE.read_bytes()) == NEW_SHA:
             atomic_write(STORE, old, store_mode)
-        if HTACCESS.is_file() and not HTACCESS.is_symlink() and raw_sha(HTACCESS.read_bytes()) == raw_sha(new_ht):
-            atomic_write(HTACCESS, old_ht, ht_mode)
+        if base_created and SITE_BASE.is_file() and not SITE_BASE.is_symlink() and sha(SITE_BASE.read_bytes()) == SITE_BASE_SHA:
+            SITE_BASE.unlink()
         raise
     print(json.dumps({"status":"MPW_STORE_SALES_FIX_INSTALLED",
         "old_sha":OLD_SHA,"new_sha":NEW_SHA,
-        "htaccess_old_sha":raw_sha(old_ht),"htaccess_new_sha":raw_sha(new_ht),
-        "scope":"MojPlayWin /store route and store template only",
-        "other_apache_routes_changed":0,"order_payment_product_database_changes":0,
+        "site_base_sha":SITE_BASE_SHA,"htaccess_sha":raw_sha(old_ht),
+        "scope":"MojPlayWin store template and missing page shell only",
+        "apache_routes_changed":0,"order_payment_product_database_changes":0,
         "backup":str(destination)}, sort_keys=True))
 
 
@@ -193,22 +214,25 @@ def rollback(run):
     old=(destination/"store.original.html").read_bytes()
     old_ht=(destination/"htaccess.original").read_bytes()
     if (info.get("run")!=run or info.get("old_sha")!=OLD_SHA or sha(old)!=OLD_SHA
-        or raw_sha(old_ht)!=info.get("htaccess_old_sha")):
+        or info.get("site_base_sha")!=SITE_BASE_SHA or raw_sha(old_ht)!=info.get("htaccess_sha")):
         raise RuntimeError("Store-only backup integrity failure")
     current_store=sha(STORE.read_bytes())
     if current_store==NEW_SHA:
         atomic_write(STORE,old,stat.S_IMODE(STORE.stat().st_mode))
     elif current_store!=OLD_SHA:
         raise RuntimeError("Concurrent store template edit detected; refusing rollback")
-    current_ht=HTACCESS.read_bytes()
-    if raw_sha(current_ht)==info.get("htaccess_new_sha"):
-        atomic_write(HTACCESS,old_ht,stat.S_IMODE(HTACCESS.stat().st_mode))
-    elif raw_sha(current_ht)!=info.get("htaccess_old_sha"):
-        raise RuntimeError("Concurrent Apache config edit detected; refusing rollback")
+    if raw_sha(HTACCESS.read_bytes())!=info.get("htaccess_sha"):
+        raise RuntimeError("Apache route changed during store-only deployment; refusing rollback")
+    if SITE_BASE.is_file() and not SITE_BASE.is_symlink():
+        if sha(SITE_BASE.read_bytes())!=SITE_BASE_SHA:
+            raise RuntimeError("Concurrent MojPlayWin page shell edit detected; refusing rollback")
+        SITE_BASE.unlink()
+    elif SITE_BASE.is_symlink():
+        raise RuntimeError("Unsafe MojPlayWin page shell; refusing rollback")
     check_django_pages(expect_fixed=False)
     print(json.dumps({"status":"MPW_STORE_SALES_FIX_ROLLED_BACK",
         "restored_store_sha":OLD_SHA,"restored_htaccess_sha":raw_sha(old_ht),
-        "scope":"MojPlayWin /store route and store template only"},sort_keys=True))
+        "removed_site_base":True,"scope":"MojPlayWin store template and previously missing page shell"},sort_keys=True))
 
 
 if __name__ == "__main__":
