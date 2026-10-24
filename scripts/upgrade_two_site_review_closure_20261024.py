@@ -47,6 +47,30 @@ def run(args, timeout=95, cwd=None):
     return subprocess.run(args, timeout=timeout, cwd=cwd, capture_output=True,
                           text=True, check=False)
 
+def review_smoke_source():
+    return """import importlib.util
+import sqlite3
+import sys
+
+p,site=sys.argv[1],sys.argv[2]
+spec=importlib.util.spec_from_file_location("review_smoke",p)
+m=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+d=sqlite3.connect(":memory:")
+d.execute("PRAGMA foreign_keys=ON")
+d.execute("CREATE TABLE customer_questions(id TEXT PRIMARY KEY,tenant TEXT,processing_status TEXT,master_processed_utc TEXT,kind TEXT,created_utc TEXT)")
+ticket="9"*24
+d.execute("INSERT INTO customer_questions(id,tenant,processing_status,master_processed_utc,kind,created_utc) VALUES(?,?,?,?,?,?)",
+          (ticket,site,"needs_review",None,"question","2026-10-24"))
+assert len(m.list_pending_reviews(d,site))==1
+assert m.save_reply(d,site,ticket,"Confirmed individual support response.","operator")=="stored"
+assert m.save_reply(d,site,ticket,"Confirmed individual support response.","operator")=="already_recorded"
+assert not m.list_pending_reviews(d,site)
+assert d.execute("SELECT processing_status FROM customer_questions").fetchone()[0]=="handled"
+print("PRIVATE_REVIEW_CLOSURE_SMOKE="+site+":PASS")
+"""
+
+
 def validate(site, root, python):
     for fname in (OP, WORKER):
         p = root/fname
@@ -56,25 +80,7 @@ def validate(site, root, python):
                     str(p)], timeout=20)
         require(lint.returncode == 0, "DEPLOYED_PYTHON_SYNTAX_FAIL:"+site)
     # Exercise the real module against synthetic, isolated memory only.
-    smoke = (
-      "import importlib.util,sqlite3,sys;"
-      "p=sys.argv[1];site=sys.argv[2];"
-      "spec=importlib.util.spec_from_file_location('review_smoke',p);"
-      "m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);"
-      "d=sqlite3.connect(':memory:');d.execute('PRAGMA foreign_keys=ON');"
-      "d.execute('CREATE TABLE customer_questions(id TEXT PRIMARY KEY,tenant TEXT,"
-      "processing_status TEXT,master_processed_utc TEXT,kind TEXT DEFAULT 'question',"
-      "created_utc TEXT DEFAULT CURRENT_TIMESTAMP)');"
-      "ticket='9'*24;"
-      "d.execute('INSERT INTO customer_questions(id,tenant,processing_status,master_processed_utc) VALUES(?,?,?,?)',"
-      "(ticket,site,'needs_review',None));"
-      "assert len(m.list_pending_reviews(d,site))==1;"
-      "assert m.save_reply(d,site,ticket,'Confirmed individual support response.','operator')=='stored';"
-      "assert m.save_reply(d,site,ticket,'Confirmed individual support response.','operator')=='already_recorded';"
-      "assert not m.list_pending_reviews(d,site);"
-      "assert d.execute('SELECT processing_status FROM customer_questions').fetchone()[0]=='handled';"
-      "print('PRIVATE_REVIEW_CLOSURE_SMOKE='+site+':PASS')"
-    )
+    smoke = review_smoke_source()
     test = run([python,"-B","-c",smoke,str(root/OP),site],timeout=25,cwd=str(root))
     require(test.returncode==0 and "PRIVATE_REVIEW_CLOSURE_SMOKE="+site+":PASS" in test.stdout,
             "PRIVATE_REVIEW_CLOSURE_SMOKE_FAILED:"+site+":"+test.stderr[-160:])
