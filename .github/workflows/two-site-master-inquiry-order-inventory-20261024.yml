@@ -255,6 +255,56 @@ jobs:
           fi
           echo CUSTOMER_ROUTE_MAPPING_COMPLETE
           REMOTE
+      - name: Inspect live support handler and static contact source without secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          timeout 100s ssh -T -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          home=Path.home()
+          for label,path in (("ZM_CONTACT_PAGE",home/"public_html/contact/index.html"),
+                             ("ZM_STORE_PAGE",home/"public_html/store/index.php"),
+                             ("ZM_HTACCESS",home/"public_html/.htaccess"),
+                             ("MPW_HTACCESS",home/"mojplaywin.com/.htaccess")):
+              if not path.is_file() or path.is_symlink() or path.stat().st_size>180000:
+                  print(label+"_SOURCE=unavailable");continue
+              lines=path.read_text("utf8","replace").splitlines()
+              print(label+"_TOTAL_LINES="+str(len(lines)))
+              import re
+              keys=("form","action=","api/","master","order","question","support","contact","RewriteRule","Passenger","payment","checkout","index.php")
+              matching=[(i+1,line.strip()) for i,line in enumerate(lines) if any(k.lower() in line.lower() for k in keys)]
+              matching=[(i,re.sub(r'(?i)(password|secret|token|key)\s*[=:]\s*[^ ]+',r'\1=[redacted]',line)) for i,line in matching]
+              print(label+"_RELEVANT_LINE_COUNT="+str(len(matching)))
+              for num,line in matching[:15]:
+                  print(label+"_LINE="+str(num)+":"+line[:210])
+          PY
+          py="$HOME/virtualenv/Saeit-staging/3.11/bin/python"
+          cd "$HOME/Saeit-staging"
+          "$py" -B - <<'PY'
+          import os,inspect,hashlib
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.urls import resolve
+          for url in ("/support/","/api/master-chat/","/api/orders/"):
+              try:
+                  func=resolve(url).func
+                  cls=getattr(func,"cls",None)
+                  source=inspect.getsource(func if cls is None else cls)
+                  print("MPW_HANDLER="+url+" module="+func.__module__+" src_length="+str(len(source))+" src_sha256="+hashlib.sha256(source.encode()).hexdigest())
+                  if url=="/support/":
+                      for i,line in enumerate(source.splitlines()[:65]):
+                          if any(k in line.lower() for k in ("def ","request.method","get(","post","render(","redirect","companyinquiry","message","form","csrf","support","response")):
+                              print("MPW_SUPPORT_CODE="+str(i+1)+":"+line[:200])
+              except Exception as exc:
+                  print("MPW_HANDLER_ERROR="+url+":"+type(exc).__name__)
+          PY
+          echo SUPPORT_HANDLER_SOURCE_INSPECT_COMPLETE
+          REMOTE
       - name: Remove temporary SSH identity material
         if: always()
         shell: bash
