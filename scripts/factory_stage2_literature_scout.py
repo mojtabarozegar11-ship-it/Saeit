@@ -62,9 +62,9 @@ TARGETED_SCHOLAR_VOCAB = {
     "mobile farm recordkeeping": ("digital", "smartphone", "agriculture"),
     "agtech roi workbook": ("investment", "adoption", "profitability"),
     "farm resilience checklist": ("climate", "adaptation", "risk"),
-    "gardening equipment checklist": ("horticultural", "tools", "ergonomics"),
+    "gardening equipment checklist": ("agricultural", "tools", "ergonomics", "safety"),
     "illustrated gardening tools": ("horticultural", "tools", "ergonomics"),
-    "farming troubleshooting faq": ("diagnosis", "decision", "extension"),
+    "farming troubleshooting faq": ("diagnosis", "decision", "disease", "crop", "agriculture"),
 }
 TARGETED_SCHOLAR_SEARCHES = {
     "balcony vegetable gardening": ("urban container vegetable cultivation", "urban horticulture containers"),
@@ -80,9 +80,9 @@ TARGETED_SCHOLAR_SEARCHES = {
     "mobile farm recordkeeping": ("mobile digital agricultural recordkeeping", "smartphone farm management data"),
     "agtech roi workbook": ("precision agriculture technology investment adoption", "digital agriculture return investment"),
     "farm resilience checklist": ("climate resilient farm risk management", "agricultural system adaptation resilience"),
-    "gardening equipment checklist": ("horticultural hand tools ergonomic safety", "garden equipment agricultural ergonomics"),
+    "gardening equipment checklist": ("agricultural hand tools ergonomic design safety", "gardening trowel wrist posture ergonomics", "farm tool injury discomfort hand tool design", "agricultural equipment ergonomic assessment"),
     "illustrated gardening tools": ("horticultural tools ergonomics", "manual agricultural implements safety"),
-    "farming troubleshooting faq": ("agricultural diagnostic decision support", "crop extension advisory diagnosis"),
+    "farming troubleshooting faq": ("crop disease diagnosis decision support system", "field based crop disease diagnostic advisory system farmers", "plant disease pest diagnosis evidence based decision support", "agricultural extension troubleshooting diagnostic decision support"),
 }
 
 MAX_DOC=6_000_000

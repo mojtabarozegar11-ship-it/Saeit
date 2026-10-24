@@ -27,6 +27,17 @@ class TargetedScholarlyVocabularyTests(unittest.TestCase):
             self.assertTrue(all("http" not in q and ":" not in q
                                 for q in variants), title)
 
+    def test_unresolved_agri200_gaps_have_topic_specific_scholar_queries(self):
+        gardening = S.query_variants("Gardening Equipment Checklist")
+        self.assertEqual(gardening[:4], list(S.TARGETED_SCHOLAR_SEARCHES[
+            "gardening equipment checklist"]))
+        self.assertIn(S.normalize("agricultural"), S.keys("Gardening Equipment Checklist"))
+        troubleshooting = S.query_variants("Farming Troubleshooting FAQ")
+        self.assertEqual(troubleshooting[:4], list(S.TARGETED_SCHOLAR_SEARCHES[
+            "farming troubleshooting faq"]))
+        self.assertIn(S.normalize("disease"), S.keys("Farming Troubleshooting FAQ"))
+        self.assertIn(S.normalize("decision"), S.keys("Farming Troubleshooting FAQ"))
+
     def test_only_exact_title_gets_special_searches(self):
         self.assertFalse(any("cucurbita" in q for q in
                              S.query_variants("Houseplant Rescue Guide")))
