@@ -1,4 +1,5 @@
 name: MojPlayWin active store template exact safety inspection
+# Read-only hash refresh requested 2026-10-24 after source mismatch gate.
 on:
   push:
     branches: [main]
