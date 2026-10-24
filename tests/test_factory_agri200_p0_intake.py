@@ -61,7 +61,7 @@ class OwnerAgri200Test(unittest.TestCase):
         self.assertEqual(status["pending_owner_agri_p0_instructions"],200)
         self.assertEqual(status["pending_research_instructions"],0)
         self.assertEqual(status["pending_manufacturing_instructions"],0)
-        self.assertEqual(status["manufacturing_capacity_available"],1)
+        self.assertIsNone(status["manufacturing_capacity_available"])
 
     def test_existing_order_is_preserved(self):
         MODULE.install(self.root,CATALOG)

@@ -232,7 +232,7 @@ def run(root, batch=1000):
                         or item.get("target_stage") != 1
                         or item.get("source_stage") not in range(2, 11)
                         or not isinstance(version, int) or isinstance(version, bool)
-                        or not 2 <= version <= 999
+                        or version < 2
                         or not isinstance(item.get("reason"), str)
                         or not item["reason"].strip()
                         or not isinstance(order, dict)
