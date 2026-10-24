@@ -152,12 +152,42 @@ jobs:
                               "age_days":round((time.time()-modified)/86400,1),
                               "hardlinks":links,
                               "sample_zlib_size_ratio":ratio})
+          # Check exact byte identity only among large same-length backups.
+          # No names, hashes or database content leave the VPS.
+          import hashlib
+          sizes = collections.Counter(size for size,_,_,_,_ in backup_files)
+          hashes = collections.defaultdict(list)
+          for size, path, modified, links, suffix in backup_files:
+              if sizes[size] < 2 or links != 1:
+                  continue
+              digest = hashlib.sha256()
+              try:
+                  with path.open("rb") as handle:
+                      for block in iter(lambda:handle.read(1048576),b""):
+                          digest.update(block)
+              except OSError:
+                  continue
+              hashes[(size,digest.hexdigest())].append((path,modified))
+          dupe_sets = [group for group in hashes.values() if len(group)>1]
+          dedupe_summary = {
+              "exact_duplicate_groups":len(dupe_sets),
+              "duplicate_paths":sum(len(group) for group in dupe_sets),
+              "potential_reclaimable_bytes":sum((len(group)-1)*group[0][0].stat().st_size for group in dupe_sets),
+              "groups_all_older_than_48h":sum(all(time.time()-modified>48*3600 for _,modified in group) for group in dupe_sets),
+              "backup_files_modified":0,
+          }
+          try:
+              fs_kind = subprocess.run(["stat","-f","-c","%T",str(backup_root)],check=True,capture_output=True,text=True,timeout=5).stdout.strip()
+          except (OSError,subprocess.SubprocessError):
+              fs_kind = "unknown"
           backup_breakdown = {
               "files_inspected":inspected,
               "inventory_truncated":truncated,
               "large_files_count":len(backup_files),
               "by_suffix":dict(sorted(backup_types.items())),
               "top_twelve_without_names":largest,
+              "exact_duplicate_analysis":dedupe_summary,
+              "filesystem_type":fs_kind,
               "samples_read_only":True,
           }
           status = {
