@@ -13,6 +13,7 @@ import hashlib
 import io
 import json
 import os
+import pwd
 from pathlib import Path
 import re
 import subprocess
@@ -35,7 +36,7 @@ EXPECTED = {"portal.php", "runtime.py", "manifest.json"}
 
 
 def run(args, *, data=None, timeout=35, cwd=None, env=None):
-    return subprocess.run(args, input=data, text=data is not None, capture_output=True,
+    return subprocess.run(args, input=data, text=True, capture_output=True,
                           timeout=timeout, check=False, cwd=cwd, env=env)
 
 
@@ -124,8 +125,7 @@ def site_http(name):
 
 def install():
     require(sys.argv[1:]==["install"],"INSTALL_ONLY_ONE_SHOT")
-    require(os.geteuid()!=0 and os.getlogin if False else True,"")  # host user checked below
-    require(str(HOME)==str(Path.home()) and os.environ.get("USER")=="zomorod2",
+    require(str(HOME)==str(Path.home()) and pwd.getpwuid(os.geteuid()).pw_name=="zomorod2",
             "NOT_EXPECTED_CPANEL_ACCOUNT")
     safe_existing_dir(ROOT,True)
     files,meta=payload()
