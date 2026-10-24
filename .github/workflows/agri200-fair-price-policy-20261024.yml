@@ -1,0 +1,42 @@
+name: AGRI200 Fair Price and Owner-Only Discount Policy
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/agri200_fair_pricing_owner_only_20261024.py"
+      - "scripts/agri200_customer_store_allocation_20261024.py"
+      - "docs/agri200_p0_catalog.tsv"
+      - "tests/test_agri200_fair_price_policy_20261024.py"
+      - ".github/workflows/agri200-fair-price-policy-20261024.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/agri200_fair_pricing_owner_only_20261024.py"
+      - "scripts/agri200_customer_store_allocation_20261024.py"
+      - "docs/agri200_p0_catalog.tsv"
+      - "tests/test_agri200_fair_price_policy_20261024.py"
+      - ".github/workflows/agri200-fair-price-policy-20261024.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check-fair-pricing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify 200 private products, 100 USD + 100 IRR, and reject unapproved discounts
+        run: python3 -m unittest discover -s tests -p test_agri200_fair_price_policy_20261024.py -v
+      - name: Export all proposed list prices (no public listings, no discounts)
+        run: python3 scripts/agri200_fair_pricing_owner_only_20261024.py > "$RUNNER_TEMP/agri200_private_price_proposals.json"
+      - name: Save audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agri200-private-base-price-proposals
+          path: ${{ runner.temp }}/agri200_private_price_proposals.json
+          retention-days: 7
