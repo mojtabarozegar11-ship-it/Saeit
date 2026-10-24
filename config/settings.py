@@ -128,3 +128,33 @@ SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
 # the separately verified cPanel TLS termination layer.
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+
+# Crown Defender — fail-closed dedicated native TRX checkout (NOT USDT).
+# All financial release switches are false until documented mainnet acceptance.
+# Never put keys, wallet seeds, or customer payment data in GitHub.
+CROWN_STORE_ENABLED = env.bool("CROWN_STORE_ENABLED", default=False)
+CROWN_PAYMENT_GATEWAY_APPROVED = env.bool("CROWN_PAYMENT_GATEWAY_APPROVED", default=False)
+CROWN_TRX_INDEPENDENT_OPERATORS_REVIEWED = env.bool(
+    "CROWN_TRX_INDEPENDENT_OPERATORS_REVIEWED", default=False)
+CROWN_TRX_DEDICATED_RECEIVER_ATTESTED = env.bool(
+    "CROWN_TRX_DEDICATED_RECEIVER_ATTESTED", default=False)
+CROWN_TRX_PAID_END_TO_END_ACCEPTED = env.bool(
+    "CROWN_TRX_PAID_END_TO_END_ACCEPTED", default=False)
+CROWN_TRX_MERCHANT_RECEIVER = env("CROWN_TRX_MERCHANT_RECEIVER", default="")
+CROWN_TRX_AUTO_DISCOVERY_ENABLED = env.bool("CROWN_TRX_AUTO_DISCOVERY_ENABLED", default=False)
+CROWN_TRX_INDEXER_KEY = env("CROWN_TRX_INDEXER_KEY", default="")
+CROWN_TRX_RPC_PROVIDERS = [
+    {"source_id": "crown_rpc_a", "operator_id": env("CROWN_TRX_RPC_A_OPERATOR", default=""),
+     "endpoint": env("CROWN_TRX_RPC_A_ORIGIN", default=""),
+     "api_key": env("CROWN_TRX_RPC_A_KEY", default=""),
+     "api_key_header": env("CROWN_TRX_RPC_A_KEY_HEADER", default="TRON-PRO-API-KEY")},
+    {"source_id": "crown_rpc_b", "operator_id": env("CROWN_TRX_RPC_B_OPERATOR", default=""),
+     "endpoint": env("CROWN_TRX_RPC_B_ORIGIN", default=""),
+     "api_key": env("CROWN_TRX_RPC_B_KEY", default=""),
+     "api_key_header": env("CROWN_TRX_RPC_B_KEY_HEADER", default="X-API-KEY")},
+]
+from services.mpw_crown_price_quotes import (
+    coingecko_usd_per_trx as CROWN_TRX_RATE_SOURCE_A,
+    kraken_usd_per_trx as CROWN_TRX_RATE_SOURCE_B,
+)

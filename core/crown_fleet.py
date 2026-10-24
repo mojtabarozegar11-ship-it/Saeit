@@ -13,7 +13,7 @@ from django.urls import NoReverseMatch, reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 
-from .models import LedgerEntry, OrderItem, Product
+from .models import LedgerEntry, OrderItem, PaymentIntent, Product
 from .crown_tron_receipts import PROVIDER as WALLETLESS_PROVIDER, verified_walletless_credit
 from .crown_checkout import gateway_ready
 
@@ -29,11 +29,17 @@ def owned_skus(user):
         product__product_type="game_cosmetic", quantity=1,
     ).select_related("order__payment_intent", "product")
     for item in items:
-        sku = (item.product.metadata or {}).get("crown_sku")
+        md = item.product.metadata if isinstance(item.product.metadata, dict) else {}
+        sku = md.get("crown_sku")
         if sku not in SKUS:
             continue
         order = item.order
-        intent = order.payment_intent
+        try:
+            intent = order.payment_intent
+        except PaymentIntent.DoesNotExist:
+            # A legacy/manual paid order without a verified payment intent is
+            # not proof of ownership and must never break the entire fleet API.
+            continue
         if (order.total <= 0 or intent.amount != order.total
                 or order.currency != "USD" or intent.currency != order.currency
                 or item.currency != order.currency or item.unit_price <= 0
