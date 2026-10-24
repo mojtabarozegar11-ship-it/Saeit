@@ -23,7 +23,7 @@ jobs:
           actual_sha="$(python3 -c 'import hashlib,pathlib; data=pathlib.Path("core/templates/mojplaywin/store.html").read_bytes().replace(bytes([13,10]),bytes([10])); print(hashlib.sha256(data).hexdigest())')"
           echo "MPW_STORE_SOURCE_SHA=$actual_sha"
           echo "MPW_STORE_MARKERS=$(grep -cE 'mpw-store-ten-guides|Explore this collection' core/templates/mojplaywin/store.html || true)"
-          test "$actual_sha" = "874b18e8e614e3de2ece04b9183f6db126b228d9b6ad9e7096098fa7ffb1a887"
+          test "$actual_sha" = "784cb9d754e72b910c7ab6ccb301b5954a0bdc91dbcc4a9499ea9cdf6fdbd4b2"
           test "$(grep -cE 'mpw-store-ten-guides|Explore this collection' core/templates/mojplaywin/store.html || true)" = "0"
           echo MPW_STORE_SOURCE_VALID=true
       - name: Capture baseline storefront and protected-route health
