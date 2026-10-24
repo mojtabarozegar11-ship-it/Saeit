@@ -76,24 +76,26 @@ jobs:
               raise SystemExit('MPW_WSGI_UNSAFE')
           raw=app.read_bytes()
           rawht=ht.read_bytes()
-          prefix=b'RewriteCond %{REQUEST_URI} ^/(store|games|ai|'
-          matches=[line.decode('utf8','replace').strip() for line in rawht.splitlines() if prefix in line]
+          old_prefix=b'RewriteCond %{REQUEST_URI} ^/(store|games|ai|'
+          new_prefix=b'RewriteCond %{REQUEST_URI} ^/(games|ai|'
+          old_matches=[line.decode('utf8','replace').strip() for line in rawht.splitlines() if old_prefix in line]
+          new_matches=[line.decode('utf8','replace').strip() for line in rawht.splitlines() if new_prefix in line]
           print('MPW_STORE_TEMPLATE='+json.dumps({'sha':hashlib.sha256(raw).hexdigest(),'size':len(raw)}))
-          print('MPW_STORE_HTACCESS='+json.dumps({'sha':hashlib.sha256(rawht).hexdigest(),'size':len(rawht),'route_count':len(matches),'route_lines':matches}))
+          print('MPW_STORE_HTACCESS='+json.dumps({'sha':hashlib.sha256(rawht).hexdigest(),'old_route_count':len(old_matches),'new_route_count':len(new_matches),'route_lines':(old_matches+new_matches)}))
           print('MPW_STORE_WSGI='+json.dumps({'uses_app':"APP='/home/zomorod2/Saeit-staging'" in wsgi.read_text('utf8','replace')}))
-          if len(matches)!=1:
-              raise SystemExit('EXPECTED_EXACTLY_ONE_STORE_ROUTE_RULE')
+          if not ((len(old_matches)==1 and len(new_matches)==0) or (len(old_matches)==0 and len(new_matches)==1)):
+              raise SystemExit('STORE_ROUTE_RULE_NOT_UNIQUE')
           PY
       - name: Confirm public store currently follows the old route
         run: |
           python3 - <<'PY'
           import json,urllib.request,urllib.error
           url='https://mojplaywin.com/store/?__route_audit=20261024'
-          req=urllib.request.Request(url,headers={'Cache-Control':'no-cache','Pragma':'no-cache','User-Agent':'MPWRouteAudit/1.0'})
+          req=urllib.request.Request(url,headers={'Cache-Control':'no-cache','Pragma':'no-cache','User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'})
           try:
             with urllib.request.urlopen(req,timeout=20) as r:
               body=r.read(400000)
-              print('MPW_STORE_PUBLIC='+json.dumps({'status':r.status,'bytes':len(body),'has_old_catalog':b'INITIAL COLLECTION' in body,'has_new_catalog':b'Shop available books' in body,'cache_control':r.headers.get('Cache-Control')}))
+              print('MPW_STORE_PUBLIC='+json.dumps({'status':r.status,'bytes':len(body),'has_old_catalog':b'INITIAL COLLECTION' in body,'has_new_catalog':b'Shop available books' in body,'has_guides':b'mpw-store-ten-guides' in body,'cache_control':r.headers.get('Cache-Control'),'vary':r.headers.get('Vary'),'age':r.headers.get('Age'),'cf_cache':r.headers.get('CF-Cache-Status'),'server':r.headers.get('Server')}))
           except urllib.error.HTTPError as e:
             print('MPW_STORE_PUBLIC='+json.dumps({'status':e.code}))
             raise
