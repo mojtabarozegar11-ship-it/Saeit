@@ -31,7 +31,7 @@ jobs:
           ssh-keygen -y -P '' -f "$work/key" >/dev/null
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
           test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
-          ssh -T -i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'python3 - <<'"'"'PY'"'"'
+          ssh -T -i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
           import json,os,pathlib,shutil,subprocess,urllib.request
           root=pathlib.Path("/home/githubops/factory-runtime")
           area=root/"private/autonomous-product-cycle/production-instructions"
