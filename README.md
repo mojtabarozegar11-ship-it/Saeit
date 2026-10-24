@@ -44,12 +44,15 @@ These five **published, editable companions** provide practical value without re
 
 ## Free offline interactive tools — 25 October 2026
 
-Four original, standalone HTML tools. Download the HTML file from GitHub (Raw → Save As) and open it locally in a browser. GitHub's code viewer does **not** execute HTML; these are not deployed to the commercial websites. No personal data is transmitted, no prices or stock claims are made, and the examples are illustrative.
+Seven original, standalone HTML tools. Download the HTML file from GitHub (Raw → Save As) and open it locally in a browser. GitHub's code viewer does **not** execute HTML; these are not deployed to the commercial websites. No personal data is transmitted, no prices or stock claims are made, and the examples are illustrative.
 
 - **MojPlayWin / Atelier:** [SEO title, description, canonical and social-tag generator](docs/marketing/tools/atelier-seo-meta-generator-20261025.html) — HTML escaping, HTTPS checks, copyable markup.
 - **MojPlayWin / Taniya:** [Family storytime studio](docs/marketing/tools/taniya-storytime-studio-20261025.html) — original child-friendly prompts, reflection questions, text download.
 - **MojPlayWin / Chess:** [84-day calendar CSV builder](docs/marketing/tools/chess-84-day-calendar-builder-20261025.html) — dated practice plan, six phases, downloadable CSV.
 - **Zomorod Melal:** [محاسبه‌گر اقتصادی نقطه سربه‌سر مزرعه](docs/marketing/tools/fa-farm-break-even-calculator-20261025.html) — برآورد سود/زیان، عملکرد و قیمت سربه‌سر، حساسیت عملکرد.
+- **MojPlayWin / Atelier:** [WCAG 2.2 text contrast checker](docs/marketing/tools/atelier-wcag-contrast-checker-20261025.html) — exact sRGB luminance, AA/AAA text thresholds.
+- **MojPlayWin / Browser games:** [Release-readiness evidence worksheet](docs/marketing/tools/browser-game-qa-evidence-20261025.html) — untested checks never count as passing, JSON export.
+- **Mojtaba Roozegar / Research:** [Scientific evidence appraisal worksheet](docs/marketing/tools/mojtaba-research-evidence-appraisal-20261025.html) — traceable source limitations and Markdown export, no fictitious peer-review score.
 
 These are free educational utilities, not independent proof of product availability, a successful checkout, or commercial results.
 
