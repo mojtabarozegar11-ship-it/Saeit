@@ -4,14 +4,19 @@ on:
     branches:
       - moj1/internal-hardening-20261024
       - moj1/reward-claims-pilot-20261024
+      - moj1/reward-eligibility-offline-20261024
   pull_request:
     branches:
       - moj1/shasta-pilot-20261021
       - moj1/internal-hardening-20261024
+      - moj1/reward-claims-pilot-20261024
     paths:
       - experiments/moj1-pilot/contracts/MojPilotGovernance.sol
       - experiments/moj1-pilot/contracts/MojRewardClaimsPilot.sol
       - experiments/moj1-pilot/contracts/test/MojRewardTestToken.sol
+      - experiments/moj1-pilot/contracts/test/MojRewardMerkleHarness.sol
+      - experiments/moj1-pilot/scripts/reward-eligibility-offline.mjs
+      - experiments/moj1-pilot/tests/reward-eligibility-offline.test.mjs
       - experiments/moj1-pilot/tests/tronbox/**
       - experiments/moj1-pilot/package.json
       - .github/workflows/moj1-governance-hardening.yml
@@ -35,6 +40,8 @@ jobs:
           cache-dependency-path: experiments/moj1-pilot/package-lock.json
       - name: Install pinned test dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Test offline synthetic eligibility input and Merkle proofs
+        run: npm run test:reward:offline
       - name: Start disposable local TRON TVM (no network wallet)
         run: |
           docker pull tronbox/tre:2.0.0
