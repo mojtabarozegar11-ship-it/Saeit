@@ -12,7 +12,7 @@ import hashlib
 import json
 import re
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -37,7 +37,7 @@ def iso_date(value, name):
         parsed = date.fromisoformat(value)
     except ValueError:
         raise ValueError(f"{name}:not_iso_date") from None
-    if parsed > date.today():
+    if parsed > datetime.now(timezone.utc).date():
         raise ValueError(f"{name}:future_date")
     return value
 
