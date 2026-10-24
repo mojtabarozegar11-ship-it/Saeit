@@ -17,7 +17,7 @@ class LegalEvidenceIntakeTests(unittest.TestCase):
                 "sha256": digest,
             }
         return {
-            "identity": {"legal_name": "Example Company", "national_id": "14008746024"},
+            "identity": {"legal_name": "Example Company", "national_id": "00000000000"},
             "evidence": {
                 "national_identity": entry("https://ilenc.ssaa.ir/"),
                 "incorporation_notice": entry("https://www.rrk.ir/News/NewsList.aspx"),
