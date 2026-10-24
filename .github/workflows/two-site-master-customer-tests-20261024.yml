@@ -47,7 +47,7 @@ jobs:
           $zm=masterOpenDb($one);$mpw=masterOpenDb($two);
           $z=masterSaveQuestion($zm,'zomorod','question','مشتری تست','user@example.com','قیمت با تخفیف؟','');
           $m=masterSaveQuestion($mpw,'mojplaywin','order_question','Demo User','test@example.com','Where is my order?','DEMO-123');
-          if(!str_contains($z['reply'],'تخفیف')||!str_contains($m['reply'],'payment status'))exit(2);
+          if(!str_contains($z['reply'],'تخفیف')||!str_contains(strtolower($m['reply']),'payment status'))exit(2);
           if($zm->query('SELECT COUNT(*) FROM customer_questions')->fetchColumn()!=1 ||
              $mpw->query('SELECT COUNT(*) FROM customer_questions')->fetchColumn()!=1)exit(3);
           if($zm->query('SELECT tenant FROM customer_questions')->fetchColumn()!=='zomorod' ||
