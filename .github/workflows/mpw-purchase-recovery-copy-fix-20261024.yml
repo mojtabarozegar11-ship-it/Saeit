@@ -29,11 +29,11 @@ jobs:
           umask 077
           d="$RUNNER_TEMP/mpw-purchase-ux-ssh"
           install -d -m 700 "$d"
-          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),\"\").replace(chr(92)+\"n\",chr(10)).rstrip()+chr(10),end=\"\")' > "$d/vps.key"
-          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),\"\").replace(chr(92)+\"n\",chr(10)).rstrip()+chr(10),end=\"\")' > "$d/host.key"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
           chmod 600 "$d/"*
-          ssh-keygen -y -P \"\" -f "$d/vps.key" >/dev/null
-          ssh-keygen -y -P \"\" -f "$d/host.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           cat > "$d/config" <<EOF
