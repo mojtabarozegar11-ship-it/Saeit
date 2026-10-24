@@ -90,6 +90,31 @@ jobs:
                                   field + '" IS NOT NULL AND TRIM(CAST("' +
                                   field + '" AS TEXT)) != ?', ("",)).fetchone()[0]
                               print("SOURCE_" + field.upper() + "_NONEMPTY=" + str(nonempty))
+              required_tables = {"core_researchproject", "core_researchsource",
+                                 "core_evidence", "core_finding", "core_report"}
+              if required_tables.issubset(tables):
+                  chain = connection.execute("""
+                      SELECT COUNT(*) FROM core_researchproject p
+                      WHERE EXISTS (SELECT 1 FROM core_researchsource s
+                                    JOIN core_evidence e ON e.source_id = s.id
+                                    WHERE s.project_id = p.id AND e.project_id = p.id)
+                        AND EXISTS (SELECT 1 FROM core_finding f WHERE f.project_id = p.id)
+                        AND EXISTS (SELECT 1 FROM core_report r WHERE r.project_id = p.id)
+                  """).fetchone()[0]
+                  chain_with_limits = connection.execute("""
+                      SELECT COUNT(*) FROM core_researchproject p
+                      WHERE EXISTS (SELECT 1 FROM core_researchsource s
+                                    JOIN core_evidence e ON e.source_id = s.id
+                                    WHERE s.project_id = p.id AND e.project_id = p.id
+                                      AND s.url LIKE 'https://%'
+                                      AND LENGTH(TRIM(s.content_hash)) = 64)
+                        AND EXISTS (SELECT 1 FROM core_finding f WHERE f.project_id = p.id
+                                    AND LENGTH(TRIM(f.limitation)) >= 20)
+                        AND EXISTS (SELECT 1 FROM core_report r WHERE r.project_id = p.id)
+                  """).fetchone()[0]
+                  print("PROJECTS_LINKED_SOURCE_EVIDENCE_FINDING_REPORT=" + str(chain))
+                  print("PROJECTS_STRICT_STRUCTURAL_REVIEW_CANDIDATES=" + str(chain_with_limits))
+                  print("PROJECTS_RELEASED_BY_THIS_AUDIT=0")
               print("PRIVATE_RELATIONSHIPS_NOT_PROOF_OF_INDEPENDENT_PEER_REVIEW=true")
               print("COMPANY_HISTORICAL_CLAIM_RECONCILED=false")
               print("PUBLICATION_AUTOMATION_ALLOWED=false")
