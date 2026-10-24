@@ -1,0 +1,167 @@
+name: MojPlayWin store purchase path cleanup
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-store-sales-funnel-fix-20261024.yml"]
+permissions: {contents: read}
+concurrency:
+  group: mojplaywin-store-sales-funnel-onefile
+  cancel-in-progress: false
+jobs:
+  publish-store-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[MPW_STORE_SALES_FIX_20261024]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate exact reviewed source
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_store_sales_funnel_fix_20261024.py
+          test "$(sha256sum core/templates/mojplaywin/store.html | awk '{print $1}')" = "874b18e8e614e3de2ece04b9183f6db126b228d9b6ad9e7096098fa7ffb1a887"
+          ! grep -q 'mpw-store-ten-guides\|Explore this collection' core/templates/mojplaywin/store.html
+          echo MPW_STORE_SOURCE_VALID=true
+      - name: Capture baseline storefront and protected-route health
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          urls=[
+            "https://mojplaywin.com/",
+            "https://mojplaywin.com/store/",
+            "https://mojplaywin.com/store/product/72/",
+            "https://mojplaywin.com/store/product/225/",
+            "https://mojplaywin.com/store/product/879/",
+            "https://mojplaywin.com/taniya/",
+            "https://mojplaywin.com/farnaz/",
+            "https://mojplaywin.com/saman/",
+            "https://zomorodmelal.ir/",
+          ]
+          status={}
+          for url in urls:
+            req=urllib.request.Request(url,headers={"User-Agent":"MPWStoreSalesFix/1.0","Cache-Control":"no-cache"})
+            try:
+              with urllib.request.urlopen(req,timeout=20) as response:
+                code=response.status
+                body=response.read(400000).decode("utf8","replace") if url.endswith("/store/") else ""
+            except urllib.error.HTTPError as exc:
+              code=exc.code;body=""
+            print("MPW_STORE_BEFORE="+json.dumps({"url":url,"status":code}))
+            if code!=200:raise SystemExit("PROTECTED_ROUTE_NOT_HEALTHY: "+url)
+            if url.endswith("/store/") and ('id="catalog"' not in body or 'id="mpw-store-ten-guides"' not in body):
+              raise SystemExit("LIVE_STORE_BASELINE_NOT_MATCHED")
+            status[url]=code
+          with open(os.environ["RUNNER_TEMP"]+"/mpw-store-sales-before.json","w") as stream:
+            json.dump(status,stream)
+          PY
+      - name: Establish pinned SSH relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-store-sales-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Stage only the reviewed store template
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-store-sales-ssh"
+          remote="/home/zomorod2/.mpw-store-sales-stage-$GITHUB_RUN_ID"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$remote' && install -d -m 700 '$remote'"
+          timeout 50s scp -q -F "$d/config" core/templates/mojplaywin/store.html "saeit-cpanel:$remote/store.html"
+          timeout 50s scp -q -F "$d/config" scripts/mpw_store_sales_funnel_fix_20261024.py "saeit-cpanel:$remote/install.py"
+      - name: Atomically install and test the isolated store template
+        id: install
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-store-sales-ssh"
+          timeout 75s ssh -T -F "$d/config" saeit-cpanel "python3 - install '$GITHUB_RUN_ID'" < scripts/mpw_store_sales_funnel_fix_20261024.py
+      - name: Verify live checkout links and unchanged protected routes
+        id: smoke
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,time,urllib.request,urllib.error
+          url="https://mojplaywin.com/store/"
+          body=""
+          for attempt in range(1,7):
+            req=urllib.request.Request(url+"?__store_sales_fix="+os.environ["GITHUB_RUN_ID"]+"-"+str(attempt),
+              headers={"User-Agent":"MPWStoreSalesFixVerify/1.0","Cache-Control":"no-cache"})
+            try:
+              with urllib.request.urlopen(req,timeout=22) as response:
+                code=response.status
+                body=response.read(400000).decode("utf8","replace")
+            except urllib.error.HTTPError as exc:
+              code=exc.code;body=exc.read(100000).decode("utf8","replace")
+            okay=(code==200 and "Shop available books" in body
+              and 'id="mpw-original-books"' in body
+              and "/store/product/72/" in body and "/store/product/225/" in body
+              and "View book &amp; purchase" in body
+              and "mpw-store-ten-guides" not in body
+              and "INITIAL COLLECTION" not in body)
+            print("MPW_STORE_PUBLIC_ATTEMPT="+json.dumps({"attempt":attempt,"status":code,"fixed":okay}))
+            if okay:break
+            time.sleep(3)
+          else:raise SystemExit("Live store conversion patch not visible")
+          before=json.load(open(os.environ["RUNNER_TEMP"]+"/mpw-store-sales-before.json"))
+          for url,old_status in before.items():
+            req=urllib.request.Request(url,headers={"User-Agent":"MPWStoreSalesFixVerify/1.0","Cache-Control":"no-cache"})
+            try:
+              with urllib.request.urlopen(req,timeout=20) as response: code=response.status
+            except urllib.error.HTTPError as exc: code=exc.code
+            print("MPW_STORE_PROTECTED_ROUTE="+json.dumps({"url":url,"status":code}))
+            if code!=old_status:raise SystemExit("Protected route status changed: "+url)
+          print("MPW_STORE_SALES_FIX_LIVE=PASS")
+          PY
+      - name: Roll back store template if post-install verification fails
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-store-sales-ssh"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_store_sales_funnel_fix_20261024.py
+      - name: Remove temporary stage and SSH material, keep private backup
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-store-sales-ssh"
+          remote="/home/zomorod2/.mpw-store-sales-stage-$GITHUB_RUN_ID"
+          if test -f "$d/config"; then
+            ssh -T -F "$d/config" saeit-cpanel "test -d '$remote' && test ! -L '$remote' && rm -f '$remote/store.html' '$remote/install.py' && rmdir '$remote'" || true
+          fi
+          rm -rf -- "$d"
