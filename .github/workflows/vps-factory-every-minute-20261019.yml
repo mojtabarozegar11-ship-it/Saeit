@@ -101,21 +101,59 @@ jobs:
           PY
           # Run the same scheduled runner once to confirm production and QA
           # without waiting for or altering any website.
-          ssh_vps 'timeout 180s bash "$HOME/factory-runtime/operations/production-warehouse/run-minute-cycle.sh"; python3 -' <<'PY'
+          ssh_vps 'python3 -' <<'PY'
           from pathlib import Path
-          import json,time
-          ops=Path.home()/"factory-runtime"/"operations"
+          import json, subprocess, time
+          home=Path.home()/"factory-runtime"
+          ops=home/"operations"
+          private=home/"private/autonomous-product-cycle"
           log=ops/"factory-minute-cycle.log"
-          if not log.is_file():raise SystemExit("MINUTE_WORKER_LOG_MISSING")
-          text=log.read_text(errors="replace")
-          if "FACTORY_MINUTE_START_UTC=" not in text or "FACTORY_MINUTE_WAREHOUSE_FINISHED=true" not in text:
-              raise SystemExit("MINUTE_WORKER_STOCK_STAGE_NOT_VERIFIED")
-          inventory=Path.home()/"factory-runtime"/"private"/"autonomous-product-cycle"/"production-warehouse"/"stock-register.json"
+          offset=log.stat().st_size if log.exists() else 0
+          started=time.time()
+          deadline=time.monotonic()+240
+          fresh=""
+          while time.monotonic()<deadline:
+              result=subprocess.run(["timeout","180s","bash",str(ops/"production-warehouse/run-minute-cycle.sh")],
+                                    stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+              if result.returncode:
+                  raise SystemExit("FRESH_MINUTE_RUNNER_FAILED="+str(result.returncode))
+              if log.exists():
+                  with log.open("rb") as stream:
+                      stream.seek(offset)
+                      fresh=stream.read().decode("utf8",errors="replace")
+              blocks=fresh.split("FACTORY_MINUTE_START_UTC=")[1:]
+              complete=[b for b in blocks if "FACTORY_MINUTE_END_UTC=" in b]
+              if complete:
+                  latest=complete[-1]
+                  if "FACTORY_MINUTE_MANUFACTURING_FAILED=" in latest or "FACTORY_MINUTE_WAREHOUSE_FAILED=" in latest:
+                      raise SystemExit("FRESH_MINUTE_STAGE_FAILED")
+                  if all(k in latest for k in ("FACTORY_MINUTE_MANUFACTURING_FINISHED=true",
+                                               "FACTORY_MINUTE_WAREHOUSE_FINISHED=true")):
+                      break
+              time.sleep(3)
+          else:
+              raise SystemExit("FRESH_MINUTE_COMPLETION_NOT_OBSERVED")
+          state=private/"production-state.json"
+          inventory=private/"production-warehouse/stock-register.json"
+          # A runner can skip a busy inner lock. Require fresh durable maker output too.
+          if not state.is_file() or state.stat().st_mtime < started:
+              raise SystemExit("FRESH_MANUFACTURING_STATE_NOT_OBSERVED")
+          if inventory.stat().st_mtime < started:
+              raise SystemExit("FRESH_WAREHOUSE_STATE_NOT_OBSERVED")
+          production=json.loads(state.read_text())
           reg=json.loads(inventory.read_text())
-          if reg["sites_contacted"]!=0 or reg["distribution_enabled"] is not False:raise SystemExit("SITES_CONTACTED")
+          assert isinstance(production,dict)
+          assert reg["sites_contacted"]==0 and reg["distribution_enabled"] is False
+          assert reg["finished_goods_versions"]>=1
+          print("FACTORY_FRESH_MANUFACTURING_STATE=PASS")
+          print("FACTORY_FRESH_WAREHOUSE_STATE=PASS")
           print("FACTORY_MINUTE_MANUAL_CYCLE=PASS")
           print("FACTORY_MINUTE_STOCK_VERSIONS="+str(reg["finished_goods_versions"]))
           print("FACTORY_MINUTE_NO_SITE_TRANSFER=PASS")
+          # Report only aggregate fields; never task payloads or credentials.
+          for key,value in sorted(production.items()):
+              if isinstance(value,(int,bool)) and not any(x in key.lower() for x in ("secret","token","key")):
+                  print("FACTORY_PRODUCTION_"+key.upper()+"="+str(value))
           PY
           # Only the existing private VPS factory is modified; no sites.
           order_stage="/home/githubops/factory-runtime/operations/.workorders-source-$GITHUB_RUN_ID"
