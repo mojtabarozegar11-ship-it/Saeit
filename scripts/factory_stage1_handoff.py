@@ -164,6 +164,8 @@ def rank(order):
             return (0, 0, int(order.get("priority_rank", 999999)), order.get("id", ""))
         if order.get("origin") == "owner_requested_education700_p0":
             return (0, 1, int(order.get("priority_rank", 999999)), order.get("id", ""))
+        if order.get("origin") == "owner_requested_jobs300_iran_p0":
+            return (0, 2, int(order.get("priority_rank", 999999)), order.get("id", ""))
     return (1, 0, 0, order.get("id", ""))
 
 
@@ -187,7 +189,13 @@ def run(root, batch=1000):
             if order.get("status") != "issued":
                 continue  # downstream engineering/rework/completion is NOT stage 1
             sources.append(order)
-        sources.sort(key=rank)
+        # Previously forwarded 'issued' orders retain their stage-one receipts.
+        # Move them behind orders without a receipt, or >1000 older P0 items
+        # could starve every newly approved owner P0 order indefinitely.
+        receipts = area / "stage-01" / "receipts"
+        sources.sort(key=lambda order: (
+            (receipts / (str(order.get("id", "")) + "--r001.json")).exists(),
+            rank(order)))
         sent = 0
         bad = 0
         attempted = 0
