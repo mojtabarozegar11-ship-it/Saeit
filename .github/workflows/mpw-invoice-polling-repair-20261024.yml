@@ -173,7 +173,7 @@ jobs:
           print('MPW_DEPLOYED_INVOICE_ROUTE_MAP='+json.dumps({'routes':routes[:80],'views':views[:80]}))
           policies=[]
           targets={root/'config/urls.py',root/'services/mpw_trx_public_pages.py',root/'services/mpw_trx_commercial_web.py',root/'mpw_commerce/buyer_orders.py'}
-          wanted={'_mpw_trx_start','_trx_product','product_checkout','_start_order','_select_order','select_order','_eligible'}
+          wanted={'_mpw_trx_start','_trx_product','product_checkout','_start_order','_select_order','select_order','_eligible','reserve_commercial_intent','_rate_provider','_configured_receiver'}
           for p in targets:
               if p.is_symlink() or not p.is_file():continue
               try:source=p.read_text('utf8','replace');tree=ast.parse(source)
@@ -207,6 +207,13 @@ jobs:
                   branch_audit.append({'file':str(p.relative_to(root)),'function':node.name,'branches':branches[:50],'terminals':terminals[:50]})
           print('MPW_INVOICE_START_BRANCH_AUDIT='+json.dumps(branch_audit))
           sanitized=[]
+          for p in root.rglob('*.py'):
+              if p.is_symlink() or not p.is_file() or p in targets:continue
+              try:
+                  if p.stat().st_size>1000000:continue
+                  raw=p.read_bytes()
+              except OSError:continue
+              if b'reserve_commercial_intent' in raw or b'def _rate_provider' in raw or b'def _configured_receiver' in raw:targets.add(p)
           for p in targets:
               if p.is_symlink() or not p.is_file():continue
               try:source=p.read_text('utf8','replace');tree=ast.parse(source)
