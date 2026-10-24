@@ -57,12 +57,19 @@ def set_metadata(values,expected=None):
   if expected is not None and any(md.get(k)!=expected.get(k) for k in FIELDS): fail("Concurrent metadata edit")
   updated=dict(md)
   for k in FIELDS:
-   if values is None:
-    v=expected[k]
-    if v is None: updated.pop(k,None)
-    else: updated[k]=v
-   else: updated[k]=DESCRIPTION
+   if k not in values: updated.pop(k,None)
+   else: updated[k]=values[k]
   p.metadata=updated;p.save(update_fields=["metadata","updated_at"])
+def restart_markers():
+ for root in (APP,SITE):
+  if root.is_symlink() or not root.is_dir():fail("Restart root changed")
+  d=root/"tmp"
+  if d.is_symlink():fail("Restart directory symlink")
+  d.mkdir(exist_ok=True)
+  p=d/"restart.txt"
+  if p.is_symlink() or (p.exists() and not p.is_file()):fail("Restart marker unsafe")
+  p.touch()
+
 def atomic_write(p,data):
  fd,tmp=tempfile.mkstemp(prefix=".mpw-store-copy-",dir=p.parent)
  try:
@@ -81,16 +88,18 @@ def install(run):
   with (d/(k+".bak")).open("xb") as f:os.fchmod(f.fileno(),0o600);f.write(old[k]);f.flush();os.fsync(f.fileno())
   manifest["files"][k]={"path":str(p),"before":digest(old[k]),"after":digest(new[k])}
  with (d/"manifest.json").open("x") as f:os.fchmod(f.fileno(),0o600);json.dump(manifest,f,sort_keys=True);f.flush();os.fsync(f.fileno())
- changed=[]
+ changed=[];meta_written=False
  try:
   for k,p in FILES.items():
    if digest(p.read_bytes())!=manifest["files"][k]["before"]:fail("Concurrent template edit: "+k)
    atomic_write(p,new[k]);changed.append(k)
    if digest(p.read_bytes())!=manifest["files"][k]["after"]:fail("Template write mismatch: "+k)
-  set_metadata(True,expected=before)
+  set_metadata({k:DESCRIPTION for k in FIELDS},expected=before);meta_written=True
   from django.template import Template
   for b in new.values():Template(b.decode("utf8"))
+  restart_markers()
  except BaseException:
+  if meta_written:set_metadata(before,expected={k:DESCRIPTION for k in FIELDS})
   for k in reversed(changed):
    if digest(FILES[k].read_bytes())==manifest["files"][k]["after"]:atomic_write(FILES[k],old[k])
   raise
@@ -105,8 +114,9 @@ def rollback(run):
   info=m["files"][k];old=(d/(k+".bak")).read_bytes()
   if str(p)!=info["path"] or digest(old)!=info["before"] or digest(p.read_bytes())!=info["after"]:fail("Concurrent template change")
   olds[k]=old
- expected={k:DESCRIPTION for k in FIELDS};set_metadata(None,expected=expected)
+ expected={k:DESCRIPTION for k in FIELDS};set_metadata(m["metadata_before"],expected=expected)
  for k,p in FILES.items():atomic_write(p,olds[k])
+ restart_markers()
  from django.db import transaction
  from core.models import Product
  with transaction.atomic():
