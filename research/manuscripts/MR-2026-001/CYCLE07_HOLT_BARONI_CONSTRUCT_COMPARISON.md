@@ -1,0 +1,10 @@
+# MR-2026-001 | Cycle 07 | Cross-source construct and novelty comparison
+Date: 2026-10-25. Targeted examples only; not systematic synthesis.
+| Study | Farm context | Observed or source-reported physical outcomes | Farmer adoption evidence | Inference forbidden |
+|---|---|---|---|---|
+| Holt et al. 2025, 10/9/6 Utah farms by year | Field comparison of scheduling tools vs grower practice | Authors report applied irrigation and 47 measured alfalfa cuttings; metering method unknown | Abstract does not report recommendation adherence or independent repeat use | 'Measured crop/water comparison proves long-term farmer adoption' |
+| Baroni et al. 2019, German scheduling users | Interviews + comparison of six methods | Seasonal irrigation estimates compared; no metered savings established in abstract | Positive feedback but advice rarely implemented, from interviews | 'Positive attitude proves actual uptake' |
+| Monteiro et al. 2025, 131 South African irrigators (prior cycle) | WST intention survey | No DSS-specific metered water outcomes | Intention only | 'Intention equals adoption' |
+| Amini et al. 2025, eight field sites (prior cycle) | Participatory on-farm DSS pilot | Source-reported field water/yield comparisons | Supervised participation; sustained independent adoption not proven | 'Short pilot equals multi-season autonomous uptake' |
+**Distinct research implication:** physical validation and actual human uptake are separate axes; Holt informs the former, Baroni informs an attitude-to-use gap. This supports a *hypothesis* for a useful evidence map, not a claim of globally novel scoping review. Need database-level overlap against prior reviews and full-text confirmation.
+Sources: https://acsess.onlinelibrary.wiley.com/doi/abs/10.1002/saj2.70101 ; https://onlinelibrary.wiley.com/doi/10.1002/ird.2337 ; https://www.nature.com/articles/s41598-025-04775-x ; https://www.nature.com/articles/s41598-025-26567-z
