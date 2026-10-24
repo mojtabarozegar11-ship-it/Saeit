@@ -111,7 +111,7 @@ class PrimarySourceTests(unittest.TestCase):
             root=Path(d)
             build(root,1)
             r=m.execute(root,batch=4,http_get=lambda *_: (_ for _ in ()).throw(m.TemporaryFailure("429")))
-            self.assertEqual(r["transient_retry_pending"],1)
+            self.assertEqual(r["transient_retry_pending"],4)
             self.assertEqual(r["remaining_unique_dois"],4)
             r2=m.execute(root,batch=4,http_get=simulated)
             self.assertEqual(r2["LICENSED_FULLTEXT_ARCHIVED"],4)
