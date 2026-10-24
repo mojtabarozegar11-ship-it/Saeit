@@ -1,4 +1,5 @@
 name: Factory owner-delegate autonomous private production coordination
+# Owner-requested continuous bounded execution across private factory stages.
 on:
   pull_request:
     paths:
