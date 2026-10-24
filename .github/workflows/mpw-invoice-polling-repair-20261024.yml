@@ -89,7 +89,7 @@ jobs:
         id: patch
         run: |
           set -euo pipefail
-          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-invoice-ssh/config" saeit-cpanel python3 - <<'PY'
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-invoice-ssh/config" saeit-cpanel "GITHUB_RUN_ID=$GITHUB_RUN_ID python3 -" <<'PY'
           from pathlib import Path
           import hashlib,json,os,stat,tempfile
           app=Path('/home/zomorod2/Saeit-staging');site=Path('/home/zomorod2/mojplaywin.com')
@@ -159,7 +159,7 @@ jobs:
         if: failure() && steps.patch.outcome == 'success'
         run: |
           set -euo pipefail
-          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-invoice-ssh/config" saeit-cpanel python3 - <<'PY'
+          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-invoice-ssh/config" saeit-cpanel "GITHUB_RUN_ID=$GITHUB_RUN_ID python3 -" <<'PY'
           from pathlib import Path
           import os,stat,tempfile
           run_id=os.environ.get('GITHUB_RUN_ID','')
