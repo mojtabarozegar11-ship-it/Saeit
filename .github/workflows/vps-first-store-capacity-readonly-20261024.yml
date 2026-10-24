@@ -1,0 +1,102 @@
+name: VPS-first store and backup capacity inventory (read only)
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/vps-first-store-capacity-readonly-20261024.yml]
+  pull_request:
+    paths: [.github/workflows/vps-first-store-capacity-readonly-20261024.yml]
+permissions: {contents: read}
+concurrency:
+  group: saeit-vps-store-capacity-readonly
+  cancel-in-progress: false
+jobs:
+  source-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Ensure storage survey cannot mutate customer or factory files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('.github/workflows/vps-first-store-capacity-readonly-20261024.yml').read_text()
+          assert "os.statvfs" in s and "/proc/self/mountinfo" in s
+          assert "'full_backup_verified':False" in s
+          assert "'shop_deploy_or_dns_changed':False" in s
+          print("VPS_READONLY_STORAGE_SURVEY_STATIC_CHECK=PASS")
+          PY
+  private-vps-readonly:
+    needs: source-check
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-vps-store-capacity-readonly-20261024]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Read filesystem headroom and distinguish temporary from persistent storage
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/vps-capacity"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 45s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
+          import json, os, pathlib, stat
+          durable={'ext2','ext3','ext4','xfs','btrfs','zfs','overlay','fuseblk','vfat'}
+          monitored={'/':'root','/home':'home','/home/githubops':'factory_home','/var':'var','/mnt':'mnt','/data':'data','/backup':'backup','/srv':'srv'}
+          by_device={}
+          count=0
+          for row in pathlib.Path('/proc/self/mountinfo').read_text().splitlines():
+              sections=row.split(' - ',1)
+              if len(sections)!=2: continue
+              left,right=sections
+              a=left.split()
+              b=right.split()
+              if len(a)<5 or not b or b[0] not in durable: continue
+              count+=1
+              path=a[4]
+              try:
+                  v=os.statvfs(path)
+                  dev=os.stat(path).st_dev
+              except (OSError, ValueError): continue
+              free=v.f_bavail*v.f_frsize
+              total=v.f_blocks*v.f_frsize
+              prior=by_device.get(dev)
+              if prior is None or free>prior['free_bytes']:
+                  by_device[dev]={'free_bytes':free,'total_bytes':total,'filesystem_type':b[0]}
+          labeled={}
+          for target,label in monitored.items():
+              p=pathlib.Path(target)
+              if not p.exists():continue
+              try:
+                  v=os.statvfs(p)
+                  labeled[label]={'free_bytes':v.f_bavail*v.f_frsize,
+                                  'total_bytes':v.f_blocks*v.f_frsize}
+              except OSError:pass
+          best=max((x['free_bytes'] for x in by_device.values()), default=0)
+          root=labeled.get('root',{})
+          # A reported largest mount is not a verified private, persistent
+          # and write-authorized offsite recovery destination.
+          print('VPS_STORAGE_SURVEY='+json.dumps({
+              'schema':'saeit.vps.backup-capacity-readonly.v1',
+              'durable_mount_count_seen':count,
+              'distinct_durable_devices_accessible':len(by_device),
+              'labeled_filesystem_headroom':labeled,
+              'largest_accessible_durable_free_bytes':best,
+              'root_free_bytes':root.get('free_bytes'),
+              'can_fit_16gib_uncompressed_backup_on_any_accessible_device':best>=16*1024**3,
+              'full_backup_verified':False,
+              'restore_test_verified':False,
+              'shop_deploy_or_dns_changed':False
+          },sort_keys=True))
+          PY
