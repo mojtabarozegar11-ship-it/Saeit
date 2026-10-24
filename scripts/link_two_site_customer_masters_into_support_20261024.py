@@ -61,10 +61,9 @@ def change(site: str, original: bytes) -> bytes:
         output = html[:pos.start()] + ZM_ELEMENT + "\n" + html[pos.start():]
     elif site == "mojplaywin":
         require(MPW_MARKER not in html and html.count("Need a direct channel?")==1, "MPW_SUPPORT_NOT_UNIQUE")
-        pattern = r'<a\\s+class=["\\\']primary["\\\']\\s+href=["\\\']mailto:support@mojplaywin\\.com["\\\']>[^<]*</a>'
-        matches = list(re.finditer(pattern, html, re.I))
-        require(len(matches)==1, "MPW_MAIL_CTA_NOT_UNIQUE")
-        pos=matches[0].end()
+        needle = '<a class="primary" href="mailto:support@mojplaywin.com">support@mojplaywin.com</a>'
+        require(html.count(needle)==1, "MPW_MAIL_CTA_NOT_UNIQUE")
+        pos=html.find(needle)+len(needle)
         output=html[:pos]+MPW_ELEMENT+html[pos:]
     else:
         raise ValueError("UNKNOWN_TENANT")
