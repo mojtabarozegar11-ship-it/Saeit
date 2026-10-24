@@ -24,24 +24,20 @@ Silvestri R, Vecchio M, Pincheira M, Antonelli F. *Smart Irrigation with Fuzzy D
 
 **Coding rule:** A study can use authentic field data and still have **simulated treatment outcomes**. Do not let the phrases “field-based” or “real-world” substitute for observed implementation. This study should be evaluated for a **validation-only / counterfactual stratum** under the draft eligibility rules, not automatically counted as a field intervention or adoption study.
 
-## Critical internal numeric-consistency flag (requires verification, NOT an allegation)
+## Resolved Table 3 source reconciliation (2026-10-24; manuscript still on hold)
 
-The publisher-indexed Results paragraph around **Table 3** states an observed average of **1,663 L/row**, simulated Mamdani **6,175 L/row**, and simulated ANFIS **5,444 L/row**, yet reports **51.25%** and **57.03%** savings relative to the observed baseline. Taken literally, both simulated volumes **exceed** 1,663 L/row; they cannot represent savings against that denominator.
+A second source read of the NLM/PMC **Table 3** and the publisher-indexed full text has now established that the four observed sector volumes are **4,479; 11,486; 10,931; 23,757 L/row**. Their sum is **50,653** and mean is **12,663.25 L/row** (the published table rounds to **12,663**). The paragraph immediately before Table 3 instead prints **1,663 L/row**. **This is a confirmed inconsistency between published prose and the published table**, not a verified publisher erratum.
 
-Reproducible arithmetic using *only the numbers printed in that paragraph*:
+The same table's four-sector totals are **24,700 L/row** (Mamdani counterfactual) and **21,775 L/row** (ANFIS counterfactual). Independent arithmetic using the table totals yields **51.24%** and **57.01%** model-implied reductions, respectively; the narrative's **51.25%** and **57.03%** differ slightly. Do not claim this establishes a numerical correction without original precision and any publisher response.
 
-- `100 * (1 - 6175/1663) = -271.3%` (negative saving = increased use).
-- `100 * (1 - 5444/1663) = -227.4%`.
-- Implied observed baselines if the stated positive savings percentages were correct: `6175/(1-0.5125) ≈ 12666.7 L/row` and `5444/(1-0.5703) ≈ 12669.3 L/row`.
+**Most important:** Section 5.1 labels the DSS scenarios retrospective **counterfactual simulations**, not irrigation reductions directly measured after actual farmer adoption. The field-observed baseline is provenance **M**, but simulated DSS effects are **P**; farmer adherence and sustained uptake remain **U**. Sector 4 also shows **33 modeled critical days for ANFIS versus 29 observed**, which must be retained as a possible adverse modeled trade-off.
 
-These are **internal reconciliation calculations, not empirical estimates**. The indexed paragraph may contain a missing digit, an aggregation/unit mismatch, or a publisher rendering issue. **Do not silently replace 1,663 with a guessed value.** Retrieve and compare the publisher PDF Table 3, table notes and any erratum, and if necessary request clarification from the original authors before transcribing any water-saving percentage into MR-2026-001.
-
-The study also reports that in one sector the more conservative ANFIS schedule had **more critical dry days than observed management**. Preserve potential adverse outcomes and model assumptions in any future evidence map.
+Full four-row transcription, source locations, equations and standard-library verification script: [TABLE3_SOURCE_QA_RECONCILIATION_2026-10-24.md](TABLE3_SOURCE_QA_RECONCILIATION_2026-10-24.md) and [verify_silvestri_table3.py](verify_silvestri_table3.py). Publisher PDF visual inspection, human second extraction and erratum check remain pending. This source QA is not a formal inclusion decision or a journal submission.
 
 ## Next-step verification checklist
 
-- [ ] Open publisher PDF and independently transcribe all four sector-level rows of Table 3, including units, baseline, and denominators.
-- [ ] Reconcile the baseline arithmetic with original Table 3; log any erratum or author response; do not publish a correction allegation without evidence.
+- [x] Independently transcribe Table 3 four sector-level rows and totals from PMC/publisher-indexed HTML (see linked source QA).\n- [ ] Visually inspect the publisher PDF Table 3 and confirm the status of any correction/erratum.
+- [x] Reconcile arithmetic against published Table 3; observed prose baseline is inconsistent with table.\n- [ ] Check for any publisher erratum or author response before alleging a published correction.
 - [ ] Inspect Methods 5.1 and data availability for the exact observed-vs-counterfactual boundary.
 - [ ] Have a human second extractor check source passages and resolve disagreements.
 - [ ] After protocol freeze, determine if the validation-only stratum includes retrospective counterfactual DSS evaluations; do not contaminate the field-adoption denominator.
