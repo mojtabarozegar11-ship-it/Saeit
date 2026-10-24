@@ -2,6 +2,8 @@
 import hashlib
 import importlib.util
 import json
+import io
+import zipfile
 from pathlib import Path
 import tempfile
 import unittest
@@ -117,6 +119,81 @@ class ExactLineageTests(unittest.TestCase):
         path.symlink_to(target)
         with self.assertRaisesRegex(ValueError, "UNSAFE_EVIDENCE_FILE"):
             G.evaluate(CATALOG, self.root)
+
+
+    def _install_test_zip(self, kind="navigator", payload_name="guide.md"):
+        order = self.ids[0]
+        folder_name = order + "--r001"
+        base = ("stage-05/downloadable-candidates" if kind == "navigator"
+                else "stage-05/source-grounded-v003")
+        receipt_base = ("stage-05/downloadable-receipts" if kind == "navigator"
+                        else "stage-05/source-grounded-v003-manifests")
+        target = self.area / base / folder_name / "edition.zip"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(payload_name, "An actual research draft, not a product approval.")
+        raw = buffer.getvalue()
+        target.write_bytes(raw)
+        receipt = {
+            "order_id": order,
+            "archive_relative_path": str(target.relative_to(self.area)),
+            "zip_sha256": hashlib.sha256(raw).hexdigest(),
+            "zip_bytes": len(raw),
+            "quality1000_approved": True,  # Forged field must never cause release.
+        }
+        receipt_path = self.area / receipt_base / folder_name
+        receipt_path.parent.mkdir(parents=True, exist_ok=True)
+        receipt_path = receipt_path.with_suffix(".json")
+        receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+        return target, receipt_path, receipt
+
+    def test_verified_bytes_are_per_order_and_not_a_qc_approval(self):
+        original, _, _ = self._install_test_zip("navigator")
+        revised, _, _ = self._install_test_zip("source_grounded_v003")
+        result = G.evaluate(CATALOG, self.root)
+        inventory = result["physical_zip_inventory"]
+        self.assertEqual(inventory["navigator"]["verified_archives"], 1)
+        self.assertEqual(inventory["source_grounded_v003"]["verified_archives"], 1)
+        self.assertEqual(inventory["total_verified_zip_bytes"],
+                         original.stat().st_size + revised.stat().st_size)
+        self.assertFalse(inventory["capacity_anomaly"])
+        self.assertFalse(inventory["commercial_quality_inferred_from_size"])
+        self.assertEqual(result["commercially_releasable"], 0)
+        self.assertFalse(result["products"][0]["qc1000_approved"])
+        self.assertEqual(result["products"][0]["physical_artifacts"]["navigator"]["status"],
+                         "VERIFIED_TECHNICAL_ZIP")
+
+    def test_tampered_bytes_are_not_counted_as_product(self):
+        target, _, _ = self._install_test_zip("navigator")
+        target.write_bytes(target.read_bytes() + b"TAMPER")
+        result = G.evaluate(CATALOG, self.root)
+        self.assertEqual(result["physical_zip_inventory"]["total_verified_zip_bytes"], 0)
+        self.assertEqual(result["products"][0]["physical_artifacts"]["navigator"]["status"],
+                         "INVALID")
+        self.assertIn("STORED_PRODUCT_ARCHIVE_NOT_VERIFIED",
+                      result["products"][0]["blockers"])
+
+    def test_path_traversal_and_symlink_are_not_verified(self):
+        target, receipt_path, receipt = self._install_test_zip("navigator")
+        receipt["archive_relative_path"] = "../../unauthorized.zip"
+        receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+        self.assertEqual(G.evaluate(CATALOG, self.root)["physical_zip_inventory"]
+                         ["navigator"]["verified_archives"], 0)
+        receipt["archive_relative_path"] = str(target.relative_to(self.area))
+        receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+        target.rename(target.with_suffix(".old"))
+        target.symlink_to(target.with_suffix(".old"))
+        result = G.evaluate(CATALOG, self.root)
+        self.assertEqual(result["physical_zip_inventory"]["navigator"]["verified_archives"], 0)
+
+    def test_zip_member_traversal_invalidates_bytes(self):
+        target, receipt_path, receipt = self._install_test_zip("navigator", "../evil.txt")
+        result = G.evaluate(CATALOG, self.root)
+        self.assertEqual(result["physical_zip_inventory"]["navigator"]["verified_archives"], 0)
+        self.assertEqual(result["products"][0]["physical_artifacts"]["navigator"]["status"],
+                         "INVALID")
+
 
 
 if __name__ == "__main__":
