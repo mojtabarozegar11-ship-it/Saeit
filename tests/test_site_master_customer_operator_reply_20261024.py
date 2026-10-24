@@ -14,13 +14,13 @@ class OperatorReviewTests(unittest.TestCase):
     def make_db(self):
         db = sqlite3.connect(":memory:")
         db.execute("PRAGMA foreign_keys=ON")
-        db.execute("CREATE TABLE customer_questions(id TEXT PRIMARY KEY,tenant TEXT,processing_status TEXT,master_processed_utc TEXT)")
+        db.execute("CREATE TABLE customer_questions(id TEXT PRIMARY KEY,tenant TEXT,processing_status TEXT,master_processed_utc TEXT,kind TEXT DEFAULT 'question',question TEXT DEFAULT 'Sample question',claimed_order_ref TEXT DEFAULT '',created_utc TEXT DEFAULT CURRENT_TIMESTAMP)")
         return db
 
     def test_only_real_review_ticket_can_receive_reply(self):
         db=self.make_db()
         a="a"*24
-        db.execute("INSERT INTO customer_questions VALUES(?,?,?,?)",(a,"zomorod","needs_review",None))
+        db.execute("INSERT INTO customer_questions(id,tenant,processing_status,master_processed_utc) VALUES(?,?,?,?)",(a,"zomorod","needs_review",None))
         self.assertEqual(mod.save_reply(db,"zomorod",a,"Staff has reviewed your request.","operator"),"stored")
         self.assertEqual(mod.save_reply(db,"zomorod",a,"Staff has reviewed your request.","operator"),"already_recorded")
         self.assertEqual(db.execute("SELECT COUNT(*) FROM customer_operator_replies").fetchone()[0],1)
@@ -35,7 +35,7 @@ class OperatorReviewTests(unittest.TestCase):
     def test_reject_unverified_queued_tenant_and_invalid_input(self):
         db=self.make_db()
         a="b"*24
-        db.execute("INSERT INTO customer_questions VALUES(?,?,?,?)",(a,"zomorod","queued",None))
+        db.execute("INSERT INTO customer_questions(id,tenant,processing_status,master_processed_utc) VALUES(?,?,?,?)",(a,"zomorod","queued",None))
         for site,ticket,answer,reviewer in (
             ("zomorod",a,"Staff response awaits verification.","operator"),
             ("mojplaywin",a,"Staff response awaits verification.","operator"),
@@ -54,7 +54,7 @@ class OperatorReviewTests(unittest.TestCase):
         db=self.make_db()
         a,b,c="1"*24,"2"*24,"3"*24
         for ticket,tenant in ((a,"zomorod"),(b,"zomorod"),(c,"mojplaywin")):
-            db.execute("INSERT INTO customer_questions VALUES(?,?,?,?)",
+            db.execute("INSERT INTO customer_questions(id,tenant,processing_status,master_processed_utc) VALUES(?,?,?,?)",
                        (ticket,tenant,"needs_review",None))
         self.assertEqual([row[0] for row in mod.list_pending_reviews(db,"zomorod")],[a,b])
         self.assertEqual(mod.save_reply(db,"zomorod",a,
@@ -72,7 +72,7 @@ class OperatorReviewTests(unittest.TestCase):
         db.execute("CREATE TABLE native_order(id INTEGER PRIMARY KEY,status TEXT)")
         db.execute("INSERT INTO native_order VALUES(99,'paid')")
         ticket="f"*24
-        db.execute("INSERT INTO customer_questions VALUES(?,?,?,?)",(ticket,"mojplaywin","needs_review",None))
+        db.execute("INSERT INTO customer_questions(id,tenant,processing_status,master_processed_utc) VALUES(?,?,?,?)",(ticket,"mojplaywin","needs_review",None))
         self.assertEqual(mod.save_reply(db,"mojplaywin",ticket,"We have your question and will respond.","operator"),"stored")
         self.assertEqual(db.execute("SELECT status FROM native_order WHERE id=99").fetchone()[0],"paid")
         db.close()
