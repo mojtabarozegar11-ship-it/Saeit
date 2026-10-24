@@ -6,6 +6,12 @@ on:
     branches: [main]
     paths: [.github/workflows/vps-master-agent-activate.yml, scripts/vps_master_evolution_cycle.py, tests/test_vps_master_evolution_cycle.py]
   workflow_dispatch:
+    inputs:
+      confirm_activate:
+        description: 'Owner-approved private VPS master activation (backup, seed, run, cron)'
+        required: true
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -23,9 +29,67 @@ jobs:
           set -euo pipefail
           python3 -B -m unittest discover -s tests -p 'test_vps_master_evolution_cycle.py' -v
           python3 -m py_compile scripts/vps_master_evolution_cycle.py
+  preflight:
+    needs: verify
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Read-only private VPS master runtime inventory
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/master-preflight.XXXXXX")"
+          trap 'rm -f "$d/key" "$d/known"; rmdir "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          ssh "${opts[@]}" githubops@178.239.147.150 bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = githubops
+          root="$HOME/factory-runtime/operations/master-agent"
+          if test -s "$root/evolution.py" && test -x "$root/run-evolution.sh"; then
+            test ! -L "$root/evolution.py"
+            echo MASTER_PRIVATE_EVOLUTION_RUNTIME_PRESENT
+            sha256sum "$root/evolution.py" | awk '{print "MASTER_PRIVATE_EVOLUTION_SHA256=" $1}'
+          else
+            echo MASTER_PRIVATE_EVOLUTION_RUNTIME_MISSING
+          fi
+          if crontab -l >/dev/null 2>&1; then
+            count="$(crontab -l | grep -c 'SAEIT_MASTER_AGENT_V1' || true)"
+            printf 'MASTER_CRON_MARKERS=%s\n' "$count"
+          else
+            echo MASTER_CRON_UNREADABLE
+          fi
+          python3 - "$HOME/factory-runtime/private/master-agent/evolution.json" <<'PY'
+          import json, sys
+          from pathlib import Path
+          p = Path(sys.argv[1])
+          if p.is_symlink():
+              raise SystemExit("MASTER_PRIVATE_STATE_SYMLINK_REJECTED")
+          if not p.exists():
+              print("MASTER_PRIVATE_STATE_MISSING")
+          elif not p.is_file() or p.stat().st_size > 2000000:
+              raise SystemExit("MASTER_PRIVATE_STATE_INVALID")
+          else:
+              state = json.loads(p.read_text(encoding="utf-8"))
+              valid = (isinstance(state, dict)
+                       and state.get("schema") == "saeit.master.evolution.v1"
+                       and state.get("max_steps") in (1, 2, 3))
+              print("MASTER_PRIVATE_STATE_SCHEMA_VALID=" + str(valid).lower())
+          PY
+          echo MASTER_PREFLIGHT_READ_ONLY_COMPLETE
+          REMOTE
   activate:
     needs: verify
-    if: github.event_name != 'pull_request' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: github.event_name == 'workflow_dispatch' && inputs.confirm_activate == true && github.repository == 'mojtabarozegar11-ship-it/Saeit'
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
