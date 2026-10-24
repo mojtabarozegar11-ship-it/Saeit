@@ -1,4 +1,5 @@
 name: MojPlayWin isolate product SEO and customer login language template read only
+# Read-only live render requested 2026-10-24 to verify active product and login templates.
 on:
   push:
     branches: [main]
