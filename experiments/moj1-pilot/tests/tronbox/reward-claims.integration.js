@@ -109,4 +109,28 @@ contract('MOJ1 escrowed Merkle reward claims (local TVM only)', accounts => {
     await expectRevert(gov.execute(escrow.address, repeat, 2, {from: accounts[2]}));
     assert.equal((await gov.nonce()).toString(), '2');
   });
+  it('validates two-leaf proofs and rejects duplicate beneficiary entries even with valid proofs', async () => {
+    const {gov, token, escrow} = await setup();
+    const oracle = await artifacts.require('MojRewardMerkleHarness').new();
+    const a = await escrow.claimLeaf(19, 0, accounts[6], amount(10));
+    const b = await escrow.claimLeaf(19, 1, accounts[7], amount(5));
+    const root = await oracle.pair(a, b);
+    await governed(gov, escrow, publishData(19, root, amount(15)), 0);
+    await expectRevert(escrow.claim(19, 0, accounts[8], amount(10), [b], {from: accounts[9]}));
+    await escrow.claim(19, 0, accounts[6], amount(10), [b], {from: accounts[9]});
+    await escrow.claim(19, 1, accounts[7], amount(5), [a], {from: accounts[8]});
+    assert.equal((await escrow.outstandingCommitments()).toString(), '0');
+    assert.equal((await token.balanceOf(escrow.address)).toString(), amount(25));
+    assert.equal((await escrow.availableToCommit()).toString(), amount(25));
+
+    const c = await escrow.claimLeaf(20, 0, accounts[6], amount(2));
+    const d = await escrow.claimLeaf(20, 1, accounts[6], amount(3));
+    const repeatedRoot = await oracle.pair(c, d);
+    await governed(gov, escrow, publishData(20, repeatedRoot, amount(5)), 1);
+    await escrow.claim(20, 0, accounts[6], amount(2), [d], {from: accounts[8]});
+    await expectRevert(escrow.claim(20, 1, accounts[6], amount(3), [c], {from: accounts[8]}));
+    assert.equal(await escrow.claimedIndex(20, 1), false, 'rejected entry must remain unclaimed');
+    assert.equal((await escrow.outstandingCommitments()).toString(), amount(3));
+  });
+
 });
