@@ -1,6 +1,6 @@
 # MR-2026-001 — Scoping Review Protocol (working draft)
 
-**Provisional title:** Economic Decision-Making under Irrigation Water Scarcity: A Scoping Review of Farm-Level Decision-Support Methods
+**Provisional title:** Field Validation and Farmer Adoption of Irrigation Decision-Support Tools under Water Scarcity: A Scoping Review
 
 **Intended author:** Mojtaba Roozegar (مجتبی روزگار) — proposed authorship subject to documented substantive contribution, critical revision, final approval and responsibility for the work.
 
@@ -10,33 +10,39 @@
 
 ## 1. Research question
 
-What farm-level economic decision-support methods have been applied to crop planning and irrigation-water allocation under scarcity, and how do they address uncertainty in crop yields, prices and water availability?
+How have irrigation decision-support tools for water-constrained crop farms been validated using observed farm decisions, irrigation outcomes or economic outcomes, and what empirical evidence explains their uptake or non-adoption by farmers?
 
 ### Subquestions
 
-1. What unit of analysis (plot, crop enterprise, farm, irrigation district) is modelled?
-2. Which methods are used (gross-margin and partial budget; linear/stochastic programming; multi-criteria decisions; dynamic optimization; robust optimization; agent-based approaches)?
-3. What constraints are explicit (water quantity, timing, capital, land, energy, labor, regulation)?
-4. How are uncertainty, scenario sensitivity, reproducibility and external validation handled?
-5. What decision outcomes are reported, and how transferable are they?
+1. What on-farm or farmer-facing decisions do these tools claim to support, and what comparators are used?
+2. How often are predictions or recommendations tested against measured irrigation use, yields, farm income or farmer behaviour rather than simulations alone?
+3. What user involvement, implementation support, affordability, accessibility and trust barriers shape adoption?
+4. What aspects of model uncertainty and decision risk are communicated to the farmer?
+5. Which evaluations report use over multiple seasons or independent farms, and what methodological limitations remain?
 
-## 2. Scope and eligibility (proposed; finalize and register before screening)
+## 2. Novelty screen and distinction from existing reviews
 
-- **Population/context:** Crop-producing farms or irrigated crop enterprises with water scarcity as a meaningful decision constraint.
-- **Concept:** An explicit economic assessment or optimization method supporting decisions at farm or crop-enterprise level.
-- **Evidence:** Peer-reviewed original empirical, simulation or methodological studies in English published between 2010 and search execution date. These choices are provisional and must be justified.
-- **Exclude:** Pure hydrologic forecasts with no farmer-level economic decision; opinion pieces without a reproducible method; livestock-only studies; duplicate reports of the same underlying analysis.
-- **Geographic scope:** Global; subgroup by climate and production system where sufficient evidence exists.
+A closely related systematic review already exists: Belfiore E and Viaggi D, "Mathematical Programming Models for Agricultural Water: A Systematic Review", Water (2026) 18(17):2174, doi:10.3390/w18172174. It reviewed 42 mathematical-programming studies in agricultural water management, emphasizing model features, economic objectives and policy orientation.
 
-## 3. Search strategy (proposed, not yet executed)
+**This proposed study must not repeat that model-classification exercise.** Its distinct target is empirical field validation, farmer adoption and actual decision use of irrigation decision-support tools. Whether that gap remains sufficiently novel must be assessed by a documented prior-review search; do not claim novelty solely from this protocol.
 
-Search at least two subject-appropriate bibliographic databases available to the research team; candidate sources include Scopus, Web of Science Core Collection, CAB Abstracts, AGRICOLA and relevant bibliographies. Archive exact query, date, export and screening decision log for each source. An initial text query to adapt to each syntax:
+## 3. Scope and eligibility (proposed; finalize and register before screening)
 
-(irrigat* OR "water scarcity" OR "water allocation" OR "water constraint") AND (farm* OR crop* OR "agricultural enterprise") AND ("economic optimization" OR "farm planning" OR "gross margin" OR "stochastic programming" OR "robust optimization" OR "decision support")
+- **Population/context:** Irrigated crop farms, farmers, advisers or farm-management programs operating under water scarcity or irrigation constraints.
+- **Concept:** Computer-based or analytically structured decision-support for irrigation scheduling, crop-water allocation, or crop planning, with measurable validation or farmer engagement.
+- **Evidence:** Peer-reviewed original evaluations reporting at least one of field validation, farmer-facing pilot deployment, user adoption, longitudinal use, measured costs/income or observed irrigation effects. Date range 2010–actual search date is provisional and requires justification.
+- **Exclude:** Pure mathematical optimization simulations without any empirical implementation or independent field validation; generic hydrology without farmer decisions; protocol-only papers; duplicates.
+- **Geographic scope:** Global, interpreted against irrigation setting and farmer access conditions.
+
+## 4. Search strategy (proposed, not yet executed)
+
+Search at least two relevant bibliographic databases, where available, such as Scopus, Web of Science Core Collection, CAB Abstracts and AGRICOLA; cross-check relevant reviews and citations. Archive exact queries, dates, exports and screening logs. Pilot search and adjust for sensitivity before finalization. A provisional text query:
+
+(irrigat* OR "agricultural water" OR "water scarcity") AND (farm* OR farmer* OR crop*) AND ("decision support" OR "advisory tool" OR "irrigation scheduler") AND (adopt* OR "field validation" OR evaluat* OR implement* OR "farmer behavior" OR "farmer behaviour")
 
 Conduct backward and forward citation searching after establishing the included evidence. Deduplicate with normalized DOI and title/year matching plus manual conflict checks.
 
-## 4. Screening and extraction
+## 5. Screening and extraction
 
 - Before screening, write and test eligibility rules on a pilot sample.
 - Two genuine independent human screeners, if available, screen title/abstract and full texts; log conflicts and resolutions. If only one screener is available, disclose the limitation transparently; do not invent a second reviewer.
@@ -44,13 +50,13 @@ Conduct backward and forward citation searching after establishing the included 
 - Link each extracted result to an exact source page/section. Do not extract numbers from abstracts alone when a full-text comparison is required.
 - Present PRISMA-ScR flow counts only after performing the search and screening.
 
-## 5. Synthesis and reporting
+## 6. Synthesis and reporting
 
-Descriptive evidence map by method class, region, crop, scale and uncertainty treatment. Narrative synthesis compares assumptions, decision applicability, external validation and evidence gaps. No causal, superiority or economic-benefit claims without supporting studies. Meta-analysis only if effect measures and designs are sufficiently compatible and a separate analysis plan is justified.
+Descriptive evidence map by validation method, observed outcome, type of user engagement, adoption stage, region, crop and uncertainty treatment. Narrative synthesis compares studies that actually measure field outcomes with those reporting only pilot feasibility. No causal, superiority or economic-benefit claims without supporting studies. Meta-analysis only if effect measures and designs are sufficiently compatible and a separate analysis plan is justified.
 
 Follow **PRISMA-ScR** reporting guidance: https://www.prisma-statement.org/scoping and the original checklist (doi:10.7326/M18-0850). Consider openly registering the *final* protocol before data extraction, and record the registration identifier only after confirmation.
 
-## 6. Authorship, integrity and transparency gates
+## 7. Authorship, integrity and transparency gates
 
 - The person named on the article must contribute substantially to the scientific work, critically revise it, approve its final form, and accept responsibility for integrity, consistent with relevant journal policies and ICMJE authorship principles: https://icmje.org/recommendations/browse/roles-and-responsibilities/defining-the-role-of-authors-and-contributors.html
 - Declare any AI assistance to the target journal as it requires. ChatGPT must not be listed as a human coauthor.
@@ -58,8 +64,9 @@ Follow **PRISMA-ScR** reporting guidance: https://www.prisma-statement.org/scopi
 - Keep public website essays distinct from peer-reviewed scholarly outputs.
 - Never submit to more than one journal simultaneously without explicit publisher permission and appropriate withdrawal.
 
-## 7. Required evidence before journal selection/submission
+## 8. Required evidence before journal selection/submission
 
+- [ ] Search for overlapping field-validation/adoption reviews and document novelty in relation to doi:10.3390/w18172174
 - [ ] Author confirms final scientific question and manuscript contribution
 - [ ] Verify English institutional affiliation and contact email
 - [ ] ORCID linked after owner-controlled registration / verification
