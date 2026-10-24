@@ -1,0 +1,102 @@
+name: AGRI200 targeted Stage2 research gap recovery (private only)
+on:
+  pull_request:
+    paths:
+      - .github/workflows/agri200-stage2-gap-recovery-20261024.yml
+      - scripts/factory_stage2_literature_scout.py
+      - tests/test_factory_stage2_literature_scout.py
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/agri200-stage2-gap-recovery-20261024.yml
+permissions: {contents: read}
+concurrency:
+  group: saeit-agri200-stage2-gap-recovery
+  cancel-in-progress: false
+jobs:
+  stage2-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify source relevance, API cooldown, and provenance contracts
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_stage2_literature_scout.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_stage2_research.py -v
+  private-vps-source-gap-cycle:
+    needs: stage2-regression
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-agri200-stage2-gap-recovery-20261024]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Restore bounded incomplete source discovery without changing commerce
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          work="$RUNNER_TEMP/agri200-source-gaps"
+          install -d -m 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          root="/home/githubops/factory-runtime/private/autonomous-product-cycle"
+          ops="/home/githubops/factory-runtime/operations/production-instructions"
+          py="/home/githubops/factory-runtime/.venv/bin/python"
+          ssh_vps "test \"\$(id -un)\" = githubops && test -f '$ops/stage2-literature-scout.py' && test -f '$ops/stage2-research.py' && test -f '$root/production-instructions/owner-agri200-p0-index.json' && test -x '$py'"
+          ssh_vps "python3 - '$root/production-instructions' <<'PY'
+          import collections,json,sys
+          from pathlib import Path
+          a=Path(sys.argv[1]); i=json.loads((a/'owner-agri200-p0-index.json').read_text())
+          assert len(i['order_ids_ranked'])==200
+          counts=collections.Counter(); missing=[]
+          for rank,work in enumerate(i['order_ids_ranked'],1):
+              key='AGRI-%03d'%rank+'--r001.json'
+              if (a/'stage-02/source-evidence'/key).is_file():continue
+              f=a/'stage-02/literature-candidates'/key
+              row=json.loads(f.read_text()) if f.is_file() else {}
+              reason=row.get('evidence_gap_reason') or row.get('last_error') or row.get('status','no_workpaper')
+              counts[str(reason)]+=1;missing.append('AGRI-%03d'%rank)
+          print('AGRI200_PRE_GAP_COUNT='+str(len(missing)))
+          print('AGRI200_PRE_GAP_IDS='+','.join(missing))
+          print('AGRI200_PRE_GAP_REASONS='+json.dumps(counts,sort_keys=True))
+          PY"
+          # The installed worker already preserves provider cooldowns, immutable
+          # literature evidence, publisher diversity and per-topic retry state.
+          # This is one bounded extra discovery pass, not an approval bypass.
+          ssh_vps "timeout 440s '$py' -B '$ops/stage2-literature-scout.py' --factory-private '$root' --stage2-program '$ops/stage2-research.py' --batch 32 --workers 1 --query-burst 2 --expedite-gap-research"
+          ssh_vps "timeout 125s '$py' -B '$ops/stage2-research.py' --factory-private '$root' --batch 250"
+          ssh_vps "python3 - '$root/production-instructions' <<'PY'
+          import collections,json,sys
+          from pathlib import Path
+          a=Path(sys.argv[1]);i=json.loads((a/'owner-agri200-p0-index.json').read_text())
+          counts=collections.Counter();missing=[];ready=0
+          for rank,work in enumerate(i['order_ids_ranked'],1):
+              key='AGRI-%03d'%rank+'--r001.json'
+              if (a/'stage-02/source-evidence'/key).is_file():
+                  ready+=1;continue
+              f=a/'stage-02/literature-candidates'/key
+              row=json.loads(f.read_text()) if f.is_file() else {}
+              reason=row.get('evidence_gap_reason') or row.get('last_error') or row.get('status','no_workpaper')
+              counts[str(reason)]+=1;missing.append('AGRI-%03d'%rank)
+          assert ready+len(missing)==200
+          print('AGRI200_POST_SOURCE_EVIDENCE_COUNT='+str(ready))
+          print('AGRI200_POST_GAP_COUNT='+str(len(missing)))
+          print('AGRI200_POST_GAP_IDS='+','.join(missing))
+          print('AGRI200_POST_GAP_REASONS='+json.dumps(counts,sort_keys=True))
+          print('AGRI200_INDEPENDENT_QC1000_CREATED=0')
+          print('AGRI200_NEW_SHOP_PUBLICATIONS=0')
+          PY"
+          ssh_vps "crontab -l | grep -F SAEIT_FACTORY_STAGE2_SOURCE_DISCOVERY_V1"
