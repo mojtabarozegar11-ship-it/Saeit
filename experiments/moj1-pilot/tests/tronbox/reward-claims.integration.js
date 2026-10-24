@@ -170,4 +170,27 @@ contract('MOJ1 escrowed Merkle reward claims (local TVM only)', accounts => {
     assert.equal((await token.balanceOf(escrow.address)).toString(), amount(28));
   });
 
+  it('rejects Merkle inclusion proof replay across a second escrow and another epoch', async () => {
+    const {gov, token, escrow} = await setup();
+    const otherEscrow = await Reward.new(token.address, gov.address);
+    await token.transfer(otherEscrow.address, amount(8), {from: accounts[0]});
+    const beneficiary = accounts[6];
+    const root = await escrow.claimLeaf(81, 0, beneficiary, amount(3));
+    await governed(gov, escrow, publishData(81, root, amount(3)), 0);
+    // Root byte string is deliberately copied to another legitimate funded contract.
+    await governed(gov, otherEscrow, publishData(81, root, amount(3)), 1);
+    // Root byte string is also copied to a different epoch in the original escrow.
+    await governed(gov, escrow, publishData(82, root, amount(3)), 2);
+    const balanceBefore = BigInt((await token.balanceOf(beneficiary)).toString());
+    await expectRevert(otherEscrow.claim(81, 0, beneficiary, amount(3), [], {from: accounts[8]}));
+    await expectRevert(escrow.claim(82, 0, beneficiary, amount(3), [], {from: accounts[8]}));
+    assert.equal(await otherEscrow.claimedIndex(81, 0), false);
+    assert.equal(await escrow.claimedIndex(82, 0), false);
+    assert.equal((await escrow.outstandingCommitments()).toString(), amount(6));
+    const txid = await escrow.claim(81, 0, beneficiary, amount(3), [], {from: accounts[9]});
+    const receipt = await tronWeb.trx.getTransactionInfo(txid);
+    assert.equal(receipt?.receipt?.result, 'SUCCESS');
+    assert.equal((BigInt((await token.balanceOf(beneficiary)).toString()) - balanceBefore).toString(), amount(3));
+  });
+
 });

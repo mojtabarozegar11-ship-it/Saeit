@@ -9,7 +9,7 @@
     "test:onchain:local": "tronbox test --network development tests/tronbox/vesting.integration.js tests/tronbox/genesis-guarded.integration.js tests/tronbox/governance-hardening.integration.js tests/tronbox/reward-claims.integration.js",
     "deploy:shasta": "node scripts/deploy-shasta.mjs",
     "reconcile:shasta": "node scripts/reconcile-shasta.mjs",
-    "test:reward:offline": "node --test tests/reward-eligibility-offline.test.mjs"
+    "test:reward:offline": "node --test tests/reward-eligibility-offline.test.mjs tests/reward-policy-review-offline.test.mjs"
   },
   "dependencies": {
     "@openzeppelin/tron-contracts": "5.6.0",

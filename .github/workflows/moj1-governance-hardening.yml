@@ -16,7 +16,10 @@ on:
       - experiments/moj1-pilot/contracts/test/MojRewardTestToken.sol
       - experiments/moj1-pilot/contracts/test/MojRewardMerkleHarness.sol
       - experiments/moj1-pilot/scripts/reward-eligibility-offline.mjs
+      - experiments/moj1-pilot/scripts/reward-policy-review-offline.mjs
+      - experiments/moj1-pilot/scripts/release-readiness-offline.mjs
       - experiments/moj1-pilot/tests/reward-eligibility-offline.test.mjs
+      - experiments/moj1-pilot/tests/reward-policy-review-offline.test.mjs
       - experiments/moj1-pilot/tests/tronbox/**
       - experiments/moj1-pilot/package.json
       - .github/workflows/moj1-governance-hardening.yml
