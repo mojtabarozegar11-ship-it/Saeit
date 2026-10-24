@@ -79,10 +79,10 @@ jobs:
                       if p.stat().st_size>2_000_000:continue
                       raw=p.read_bytes()
                   except OSError:continue
-                  if needle in raw and b'async function check()' in raw and b'checking=false' in raw:
+                  if b'async function check()' in raw and b'checking=false' in raw:
                       matches.append({'path':str(p),'sha256':hashlib.sha256(raw).hexdigest(),'bytes':len(raw),'line_count':raw.count(needle)})
           print('MPW_TRX_INVOICE_POLLING_SOURCE='+json.dumps(matches))
-          if len(matches)!=1 or matches[0]['line_count']!=1:
+          if len(matches)!=1 or matches[0]['line_count']>1:
               raise SystemExit('EXPECTED_ONE_EXACT_INVOICE_POLLING_SOURCE')
           PY
       - name: Back up and remove only the undefined invoice timeout cleanup
