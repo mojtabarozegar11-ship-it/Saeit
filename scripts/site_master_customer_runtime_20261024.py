@@ -291,10 +291,21 @@ def update_master_heartbeat(db: sqlite3.Connection, site: str) -> dict:
         "processing_status='needs_review' AND created_utc < datetime('now','-1 day')",
         (site,),
     ).fetchone()[0]
+    tables = {row[0] for row in db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    answered = 0
+    if "customer_operator_replies" in tables:
+        answered = int(db.execute(
+            "SELECT COUNT(*) FROM customer_operator_replies r "
+            "JOIN customer_questions q ON q.tenant=r.tenant AND q.id=r.ticket_id "
+            "WHERE q.tenant=? AND q.processing_status='handled'",
+            (site,),
+        ).fetchone()[0])
     metrics = {
         "queued": counts.get("queued", 0),
         "review": counts.get("needs_review", 0),
-        "guidance": counts.get("handled", 0),
+        "guidance": max(0, counts.get("handled", 0) - answered),
+        "operator_answered": answered,
         "review_older_than_day": int(old),
     }
     db.execute(
@@ -339,6 +350,7 @@ def run(site: str) -> dict:
                 "review_waiting": health["review"],
                 "review_older_than_day": health["review_older_than_day"],
                 "guidance_processed": health["guidance"],
+                "staff_replies_completed": health["operator_answered"],
                 "payments_mutated": False, "external_messages_sent": False,
                 "site_pages_mutated": False}
     finally:
