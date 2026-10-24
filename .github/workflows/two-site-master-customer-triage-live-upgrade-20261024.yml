@@ -78,7 +78,7 @@ jobs:
           mv "$d/host.candidate" "$d/host.known"
           echo TWO_SITES_PINNED_SSH_RELAY=PASS
           echo SITE_AGENT_RELAY_PINNED
-      - name: Upgrade only tenant-private masters and run real ticket tests with rollback
+      - name: Guarded customer-master update and verified guidance test with rollback
         shell: bash
         run: |
           set -euo pipefail
