@@ -92,3 +92,5 @@ jobs:
             fi
             rm -f "$RUNNER_TEMP/agents-ro-path"
           fi
+
+# Re-trigger guarded install only after installer and source were committed.
