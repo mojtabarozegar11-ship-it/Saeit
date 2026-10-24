@@ -1,0 +1,12 @@
+# MR-2026-001 | Cycle 07 | Holt et al. (2025) source extraction
+**Source level:** publisher abstract only; full text, tables and methods were not independently retrieved. NOT a systematic included study.
+Version of record: https://acsess.onlinelibrary.wiley.com/doi/abs/10.1002/saj2.70101
+DOI (publisher-verified): 10.1002/saj2.70101. Jonathan Holt et al., *Soil Science Society of America Journal* 89(4), e70101, first published 2 July 2025.
+Title: Impact of three irrigation scheduling tools on irrigation and alfalfa productivity under center pivots.
+Source location: publisher abstract (no table/page verification).
+**Design reported by authors:** cooperative growers and four scheduling methods: soil moisture sensors, commercial irrigation scheduler, water balance program, and grower-selected irrigation depths. Central Utah alfalfa under center pivots. Trials: 10 farms in 2019, 9 of the same farms in 2020, 6 in 2021. Across these fields, 47 alfalfa cuttings were measured over 3 years.
+**Publisher-abstract outcomes:** alfalfa mass was affected in 5 of 47 cuttings (3 positive, 2 negative), not consistently; applied irrigation lower for most tool methods than grower control in 2019 and 2021, not in 2020; conditional water reductions of 6–25% in some settings were reported without corresponding deterioration in alfalfa mass or nutritive value.
+**Provenance:** authors report field-applied water and harvested alfalfa outcomes, but instrument calibration, independent meter status, randomization and uncertainty cannot be verified from abstract. Mark water as field-applied *reported*, M-qualification pending full text; crop harvest field measurement reported. No evidence in abstract of farmer adherence to each recommendation, voluntary independent repeat use or sustained adoption.
+**Eligibility:** relevant field comparator for irrigation scheduling tools, but not automatically farmer-facing DSS adoption. Retrieve full text and clarify which interventions issue actionable advice; do not classify sensor-only observations as DSS without proof.
+**Bias/limits:** cooperating farms, changing farm counts across years, drought restrictions and year effects, within-farm correlated repeated cuttings. No causal or population-generalized 6–25% estimate is supported by this extraction. No independent statistical reanalysis.
+**Unresolved:** pages/tables, irrigation volume unit and instruments, allocation procedure, farm attrition, adherence, exact effect uncertainty. Do not assert those are verified.
