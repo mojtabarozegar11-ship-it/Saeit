@@ -1,5 +1,5 @@
 name: MojPlayWin active store route safety inspection
-# Read-only exact Apache and template hashes for the narrowly scoped store repair.
+# Read-only post-deployment audit 2026-10-24: verify route and public origin after store update.
 on:
   push:
     branches: [main]
