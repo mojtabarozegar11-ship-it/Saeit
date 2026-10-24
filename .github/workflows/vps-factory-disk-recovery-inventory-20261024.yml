@@ -152,28 +152,14 @@ jobs:
                               "age_days":round((time.time()-modified)/86400,1),
                               "hardlinks":links,
                               "sample_zlib_size_ratio":ratio})
-          # Check exact byte identity only among large same-length backups.
-          # No names, hashes or database content leave the VPS.
-          import hashlib
+          # Same-length files are *not* proven identical. Never hash multi-GB
+          # snapshots in the live service health probe (bounded I/O budget).
           sizes = collections.Counter(size for size,_,_,_,_ in backup_files)
-          hashes = collections.defaultdict(list)
-          for size, path, modified, links, suffix in backup_files:
-              if sizes[size] < 2 or links != 1:
-                  continue
-              digest = hashlib.sha256()
-              try:
-                  with path.open("rb") as handle:
-                      for block in iter(lambda:handle.read(1048576),b""):
-                          digest.update(block)
-              except OSError:
-                  continue
-              hashes[(size,digest.hexdigest())].append((path,modified))
-          dupe_sets = [group for group in hashes.values() if len(group)>1]
           dedupe_summary = {
-              "exact_duplicate_groups":len(dupe_sets),
-              "duplicate_paths":sum(len(group) for group in dupe_sets),
-              "potential_reclaimable_bytes":sum((len(group)-1)*group[0][0].stat().st_size for group in dupe_sets),
-              "groups_all_older_than_48h":sum(all(time.time()-modified>48*3600 for _,modified in group) for group in dupe_sets),
+              "same_size_candidate_paths":sum(count for count in sizes.values() if count>1),
+              "exact_duplicate_groups":None,
+              "potential_reclaimable_bytes_proven":0,
+              "content_identity_not_established":True,
               "backup_files_modified":0,
           }
           try:
