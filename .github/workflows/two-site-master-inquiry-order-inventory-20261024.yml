@@ -188,6 +188,73 @@ jobs:
           fi
           echo MPW_REAL_ORDER_MODEL_INVENTORY_DONE
           REMOTE
+      - name: Map actual contact form hooks and MojPlayWin support handler
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          timeout 95s ssh -T -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          from html.parser import HTMLParser
+          home=Path.home()
+          class Forms(HTMLParser):
+              def __init__(self):super().__init__();self.forms=[];self.current=None
+              def handle_starttag(self,tag,attrs):
+                  attrs=dict(attrs)
+                  if tag=="form":
+                      self.current={"method":attrs.get("method","GET"),"action":attrs.get("action",""),"fields":[]}
+                      self.forms.append(self.current)
+                  if tag in ("input","textarea","select") and self.current:
+                      self.current["fields"].append((attrs.get("name",""),attrs.get("type","")))
+              def handle_endtag(self,tag):
+                  if tag=="form":self.current=None
+          for label,path in (("ZM_CONTACT",home/"public_html/contact"),
+                             ("ZM_STORE",home/"public_html/store"),
+                             ("MPW_CHECKOUT",home/"mojplaywin.com/checkout")):
+              if path.is_dir() and not path.is_symlink():
+                  files=[x for x in path.iterdir() if x.is_file() and x.suffix.lower() in (".php",".html",".htm") and x.stat().st_size<180000]
+                  print(label+"_FORM_FILES="+json.dumps(sorted(x.name for x in files)[:18]))
+                  for file in files[:3]:
+                      if file.suffix.lower() in (".html",".htm"):
+                          p=Forms()
+                          p.feed(file.read_text("utf8","replace"))
+                          print(label+"_FORM_META="+json.dumps(p.forms[:5])[:1000])
+          PY
+          py="$HOME/virtualenv/Saeit-staging/3.11/bin/python"
+          if test -x "$py";then
+            cd "$HOME/Saeit-staging"
+            "$py" -B - <<'PY'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.urls import reverse,resolve
+          from django.apps import apps
+          names=("mpw_support","mpw_crypto_order","order-list","master-agent-chat-list")
+          for name in names:
+              try:
+                  path=reverse(name)
+                  func=resolve(path).func
+                  cls=getattr(func,"cls",None)
+                  print("MPW_ROUTE="+name+" path="+path+" module="+str(func.__module__)+" class="+str(getattr(cls,"__name__","none")))
+              except Exception as e:
+                  print("MPW_ROUTE="+name+" ERROR="+type(e).__name__)
+          for label in ("mpw_commerce.CommerceOrderRequest","mpw_commerce.CommerceInvoice","core.CompanyInquiry","core.ChatSession","core.Order"):
+              try:
+                  model=apps.get_model(label)
+                  fields=[f.name for f in model._meta.fields]
+                  print("MPW_MODEL_FIELDS="+label+":"+",".join(fields[:35]))
+                  print("MPW_MODEL_RECORDS="+label+":"+str(model.objects.count()))
+              except Exception as e:
+                  print("MPW_MODEL_ERROR="+label+":"+type(e).__name__)
+          PY
+          fi
+          echo CUSTOMER_ROUTE_MAPPING_COMPLETE
+          REMOTE
       - name: Remove temporary SSH identity material
         if: always()
         shell: bash
