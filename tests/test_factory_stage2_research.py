@@ -46,6 +46,12 @@ class StageTwoTests(unittest.TestCase):
         STAGE2.atomic(path, original)
         return original
 
+    def test_order_and_revision_ids_expand(self):
+        self.assertIsNotNone(STAGE2.ORDER_ID.fullmatch("WO-100000000"))
+        match = STAGE2.INBOX_FILE.fullmatch("WO-100000000--r1000.json")
+        self.assertIsNotNone(match)
+        self.assertEqual((match.group(1), int(match.group(2))), ("WO-100000000", 1000))
+
     def test_missing_sources_stay_in_stage2_and_cannot_fake_completion(self):
         self.stage1()
         report = STAGE2.stage2_loop(self.root)

@@ -58,12 +58,13 @@ class ProductionOrderGeneratorTests(unittest.TestCase):
             self.assertEqual(r["pending"],n)
         self.assertEqual(len(self.get()[1]),60)
         self.assertEqual(len({x["source_product_id"] for x in self.get()[1]}),4)
-    def test_cap_prevents_unbounded_task_spam(self):
+    def test_pending_argument_cannot_cap_valid_work(self):
         self.seed([base_entry(1,["FIVE_DISTINCT_PUBLIC_SOURCES_WITH_LINKED_EVIDENCE_REQUIRED"])])
-        self.assertEqual(orders.generate(self.root,2)["action"],"issued")
-        self.assertEqual(orders.generate(self.root,2)["action"],"issued")
-        self.assertEqual(orders.generate(self.root,2)["action"],"capacity_hold")
-        self.assertEqual(len(self.get()[1]),2)
+        for _ in range(5):
+            self.assertEqual(orders.generate(self.root,max_backlog=1)["action"],"issued")
+        self.assertEqual(orders.generate(self.root,max_backlog=1)["action"],"no_new_meaningful_input")
+        self.assertEqual(len(self.get()[1]),5)
+        self.assertTrue(self.get()[0]["unbounded_intake"])
     def test_resuming_after_verified_completion(self):
         self.seed([base_entry(10,["FIVE_DISTINCT_PUBLIC_SOURCES_WITH_LINKED_EVIDENCE_REQUIRED"])])
         orders.generate(self.root,1)
@@ -75,6 +76,18 @@ class ProductionOrderGeneratorTests(unittest.TestCase):
         self.assertEqual(state["action"],"issued")
         self.assertEqual(state["pending"],1)
         self.assertEqual(len(self.get()[1]),2)
+    def test_work_order_serial_expands_past_eight_digits(self):
+        self.seed([base_entry(9,["FIVE_DISTINCT_PUBLIC_SOURCES_WITH_LINKED_EVIDENCE_REQUIRED"])])
+        queue=self.root/"production-instructions"/"orders"
+        queue.mkdir(parents=True)
+        ident="WO-99999999"
+        old={"schema":orders.SCHEMA,"id":ident,"status":"completed_verified",
+             "fingerprint":"%064x"%99999999,"public_distribution_allowed":False}
+        orders.atomic_json(queue/(ident+".json"),old)
+        state=orders.generate(self.root)
+        self.assertEqual(state["id"],"WO-100000000")
+        self.assertEqual(len(self.get()[1]),2)
+
     def test_four_offline_channels_do_not_need_live_sites(self):
         self.seed([])
         inp=self.root/"production-order-inputs"
@@ -139,24 +152,24 @@ class ProductionOrderGeneratorTests(unittest.TestCase):
         self.assertEqual(len(entries),301)
         self.assertEqual(report["pending_research_instructions"],300)
         self.assertEqual(report["pending_manufacturing_instructions"],1)
-        self.assertEqual(report["research_capacity_available"],0)
-        self.assertEqual(report["manufacturing_capacity_available"],299)
+        self.assertIsNone(report["research_capacity_available"])
+        self.assertIsNone(report["manufacturing_capacity_available"])
         self.assertEqual(entries[-1]["phase"],"engineering_specification")
         self.assertFalse(entries[-1]["publication_approved"])
         for order_id,digest in old_hashes.items():
             self.assertEqual(orders.checksum(json.loads((queue/(order_id+".json")).read_text())),digest)
-        self.assertEqual(orders.generate(self.root)["action"],"capacity_hold")
-        self.assertEqual(len(self.get()[1]),301)
+        self.assertEqual(orders.generate(self.root)["action"],"issued")
+        self.assertEqual(len(self.get()[1]),302)
 
-    def test_research_cap_alone_does_not_bypass_qa(self):
+    def test_legacy_limit_argument_does_not_cap_queue_or_bypass_qa(self):
         self.seed([base_entry(1,["FIVE_DISTINCT_PUBLIC_SOURCES_WITH_LINKED_EVIDENCE_REQUIRED"])])
-        orders.generate(self.root,max_backlog=2)
-        orders.generate(self.root,max_backlog=2)
-        stat=orders.generate(self.root,max_backlog=2)
-        self.assertEqual(stat["action"],"capacity_hold")
-        report,_=self.get()
-        self.assertEqual(report["pending_research_instructions"],2)
+        for _ in range(5):
+            self.assertEqual(orders.generate(self.root,max_backlog=1)["action"],"issued")
+        report,records=self.get()
+        self.assertEqual(report["pending_research_instructions"],5)
         self.assertEqual(report["pending_manufacturing_instructions"],0)
+        self.assertIsNone(report["research_capacity_available"])
         self.assertFalse(report["distribution_enabled"])
+        self.assertTrue(all(x["public_distribution_allowed"] is False for x in records))
 
 if __name__=="__main__":unittest.main()

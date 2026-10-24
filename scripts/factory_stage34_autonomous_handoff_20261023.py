@@ -21,7 +21,7 @@ HANDOFF = "saeit.factory.stage-handoff.v1"
 RESEARCH = "saeit.factory.stage2-desk-research.v1"
 DESIGN = "saeit.factory.stage3-bilingual-design.v1"
 PROTOTYPE = "saeit.factory.stage4-learning-prototype.v1"
-NAME = re.compile(r"WO-[0-9]{8}--r[0-9]{3}\.json\Z")
+NAME = re.compile(r"WO-[0-9]+--r([0-9]+)\.json\Z")
 SHA = re.compile(r"[a-f0-9]{64}\Z")
 LOCALES = ("fa-IR", "en-US")
 MAX_BYTES = 1_000_000
@@ -89,7 +89,7 @@ def verified_stage2(area, name):
             or not isinstance(inbox.get("order_id"), str)
             or not name.startswith(inbox["order_id"] + "--")
             or type(inbox.get("revision")) is not int
-            or inbox["revision"] != int(name[-8:-5])
+            or inbox["revision"] != int(NAME.fullmatch(name).group(1))
             or inbox.get("desk_research_sha256") != digest(research)
             or research.get("schema") != RESEARCH
             or research.get("order_id") != inbox["order_id"]

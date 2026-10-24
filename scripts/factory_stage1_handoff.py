@@ -16,8 +16,8 @@ import re
 import sys
 import tempfile
 
-ORDER_RE = re.compile(r"WO-[0-9]{8}\.json\Z")
-ID_RE = re.compile(r"WO-[0-9]{8}\Z")
+ORDER_RE = re.compile(r"WO-[0-9]+\.json\Z")
+ID_RE = re.compile(r"WO-[0-9]+\Z")
 HASH_RE = re.compile(r"[a-f0-9]{64}\Z")
 SCHEMA = "saeit.factory.production-instructions.v1"
 HANDOFF_SCHEMA = "saeit.factory.stage-handoff.v1"

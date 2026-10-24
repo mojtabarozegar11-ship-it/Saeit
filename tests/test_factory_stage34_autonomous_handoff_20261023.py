@@ -68,6 +68,11 @@ class Stage34Tests(unittest.TestCase):
         callback(obj)
         mod.atomic(path, obj)
 
+    def test_expanding_order_and_revision_identifiers_parse(self):
+        match = mod.NAME.fullmatch("WO-100000000--r1000.json")
+        self.assertIsNotNone(match)
+        self.assertEqual(int(match.group(1)), 1000)
+
     def test_stage3_and_4_round_robin_do_not_starve_later_orders(self):
         for stage in (3, 4):
             mod.private_dir(self.area / ("stage-%02d" % stage))

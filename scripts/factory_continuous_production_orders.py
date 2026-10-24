@@ -18,8 +18,6 @@ import sys
 import tempfile
 
 SCHEMA="saeit.factory.production-instructions.v1"
-MAX_BACKLOG=300
-MAX_ORDERS=15000
 BLOCKER_ACTIONS={
  "FIVE_DISTINCT_PUBLIC_SOURCES_WITH_LINKED_EVIDENCE_REQUIRED":
   ("Document independently verifiable source",5,
@@ -48,9 +46,8 @@ BLOCKER_ACTIONS={
 }
 SOURCES=("site-topic-snapshot","customer-intake-snapshot",
          "market-research-snapshot","factory-invention-snapshot")
-ORDER_RE=re.compile(r"^WO-([0-9]{8})\.json$")
+ORDER_RE=re.compile(r"^WO-([0-9]+)\.json$")
 HASH_RE=re.compile(r"^[a-f0-9]{64}$")
-SNAP_LIMIT=1000
 
 def stamp():
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
@@ -89,7 +86,7 @@ def local_research_tasks(root):
     if not path.exists():return []
     portfolio=read_json(path)
     entries=portfolio.get("entries",[])
-    if not isinstance(entries,list) or len(entries)>1000:raise RuntimeError("ORDERS_INVALID_RESEARCH_ENTRIES")
+    if not isinstance(entries,list):raise RuntimeError("ORDERS_INVALID_RESEARCH_ENTRIES")
     tasks=[]
     for item in entries:
         if not isinstance(item,dict):raise RuntimeError("ORDERS_BAD_RESEARCH_ENTRY")
@@ -137,7 +134,7 @@ def local_input_tasks(root):
         if not file.exists():continue
         snapshot=read_json(file,max_bytes=2_000_000)
         records=snapshot.get("items",[])
-        if snapshot.get("schema")!=SCHEMA or not isinstance(records,list) or len(records)>SNAP_LIMIT:
+        if snapshot.get("schema")!=SCHEMA or not isinstance(records,list):
             raise RuntimeError("ORDERS_INVALID_OFFLINE_INPUT:"+kind)
         for item in records:
             if not isinstance(item,dict):raise RuntimeError("ORDERS_INVALID_SOURCE_ITEM")
@@ -211,7 +208,8 @@ def stage1_handed_off(area, item):
     return True
 
 
-def generate(root,max_backlog=MAX_BACKLOG):
+def generate(root,max_backlog=None):
+    # Keep the legacy argument for old callers; intake no longer has a backlog cap.
     root=Path(root).expanduser().resolve()
     if not root.is_dir() or root.is_symlink():raise RuntimeError("ORDERS_FACTORY_ROOT_MISSING")
     area=root/"production-instructions"
@@ -227,13 +225,8 @@ def generate(root,max_backlog=MAX_BACKLOG):
             if file.is_symlink() or not file.is_file() or not ORDER_RE.fullmatch(file.name):
                 raise RuntimeError("ORDERS_UNEXPECTED_FILE")
             old.append(validate_old(file))
-            if len(old)>MAX_ORDERS:raise RuntimeError("ORDERS_TOO_MANY_RECORDS")
-        # Do not let 300 blocked research tasks starve genuinely distinct
-        # product specifications. Each lane has its own bounded quota.
-        # Unknown and unsourced work counts against the manufacturing lane.
-        # Intake quota belongs to stage 1 alone. Once an order has a valid
-        # handoff receipt (or is already in a downstream/rework state), it
-        # CANNOT continue consuming stage-1 capacity.
+        # Keep lane counts for observability only. Intake is intentionally unbounded;
+        # later stages advance work independently on their recurring cadence.
         pending=[x for x in old if x["status"]=="issued" and not stage1_handed_off(area,x)]
         research_pending=sum(consumes_research_capacity(x) for x in pending)
         owner_p0_pending=sum(is_owner_agri_p0(x) for x in pending)
@@ -245,18 +238,13 @@ def generate(root,max_backlog=MAX_BACKLOG):
         candidates=local_input_tasks(root)+local_research_tasks(root)
         seen={x["fingerprint"] for x in old}
         selected=None
-        blocked_by_capacity=False
         for task in candidates:
             key=fingerprint(task)
             if key in seen:continue
             research=consumes_research_capacity(task)
-            if (research_pending if research else manufacturing_pending)>=max_backlog:
-                blocked_by_capacity=True
-                continue
             selected=(task,key,research)
             break
-        action="issued" if selected else ("capacity_hold" if blocked_by_capacity
-                                          else "no_new_meaningful_input")
+        action="issued" if selected else "no_new_meaningful_input"
         order_id=None
         if selected:
             task,key,is_research=selected
@@ -284,8 +272,9 @@ def generate(root,max_backlog=MAX_BACKLOG):
                 "pending_research_instructions":research_pending,
                 "pending_manufacturing_instructions":manufacturing_pending,
                 "pending_owner_agri_p0_instructions":owner_p0_pending,
-                "research_capacity_available":max(0,max_backlog-research_pending),
-                "manufacturing_capacity_available":max(0,max_backlog-manufacturing_pending),
+                "research_capacity_available":None,
+                "manufacturing_capacity_available":None,
+                "unbounded_intake":True,
                 "candidate_instructions":len(candidates),
                 "site_connection_required":False,"customer_order_required":False,
                 "distribution_enabled":False,"production_warehouse_unmodified":True}
@@ -295,10 +284,8 @@ def generate(root,max_backlog=MAX_BACKLOG):
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--factory-private",required=True)
-    ap.add_argument("--max-pending",type=int,default=MAX_BACKLOG)
     args=ap.parse_args()
-    if not 1<=args.max_pending<=MAX_BACKLOG:raise RuntimeError("ORDERS_CAP_INVALID")
-    state=generate(args.factory_private,args.max_pending)
+    state=generate(args.factory_private)
     print("FACTORY_PRODUCTION_INSTRUCTION_ACTION="+state["action"])
     print("FACTORY_PRODUCTION_INSTRUCTION_ID="+str(state.get("id") or "none"))
     print("FACTORY_PRODUCTION_INSTRUCTIONS_PENDING="+str(state["pending"]))

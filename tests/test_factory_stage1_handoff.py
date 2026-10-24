@@ -45,6 +45,12 @@ class IndependentStageOneTests(unittest.TestCase):
         GEN.atomic_json(self.orders / (ident + ".json"), obj)
         return obj
 
+    def test_order_ids_expand_past_eight_digits(self):
+        self.input_order("WO-100000000")
+        stat = STAGE.run(self.root)
+        self.assertEqual(stat["new_handoffs"], 1)
+        self.assertTrue((self.root / "production-instructions/stage-02/inbox/WO-100000000--r001.json").is_file())
+
     def test_valid_order_handoff_no_research_qa_or_website(self):
         order = self.input_order()
         stat = STAGE.run(self.root)
@@ -94,7 +100,7 @@ class IndependentStageOneTests(unittest.TestCase):
         revised = dict(orig, instruction=orig["instruction"] + " Add provenance checks.")
         work = {
             "schema": STAGE.RETURN_SCHEMA, "order_id": orig["id"],
-            "target_stage": 1, "source_stage": 2, "revision": 2,
+            "target_stage": 1, "source_stage": 2, "revision": 1000,
             "reason": "Missing provenance requirements",
             "corrected_work_order": revised
         }
@@ -102,10 +108,10 @@ class IndependentStageOneTests(unittest.TestCase):
         GEN.atomic_json(returns / "correction.json", work)
         s = STAGE.run(self.root)
         self.assertEqual(s["returned_handoffs"], 1)
-        self.assertTrue((self.root / "production-instructions/stage-02/inbox/WO-00000001--r002.json").is_file())
+        self.assertTrue((self.root / "production-instructions/stage-02/inbox/WO-00000001--r1000.json").is_file())
         self.assertEqual(STAGE.run(self.root)["returned_handoffs"], 0)
 
-    def test_stage1_handoff_releases_capacity_without_stage2_completion(self):
+    def test_unbounded_backlog_and_independent_stage1_handoff(self):
         entries = [{"product_id": 10, "sha256": "c"*64,
                     "research_quality_gate": {
                         "schema": "saeit.factory.research-readiness.v1",
@@ -114,7 +120,6 @@ class IndependentStageOneTests(unittest.TestCase):
         (self.root / "research-dossiers/autonomous-portfolio.json").write_text(
             json.dumps({"entries": entries}))
         self.assertEqual(GEN.generate(self.root, max_backlog=1)["action"], "issued")
-        self.assertEqual(GEN.generate(self.root, max_backlog=1)["action"], "capacity_hold")
         self.assertEqual(STAGE.run(self.root)["new_handoffs"], 1)
         resumed = GEN.generate(self.root, max_backlog=1)
         self.assertEqual(resumed["action"], "issued")

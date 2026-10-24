@@ -25,7 +25,7 @@ import zipfile
 SCHEMA="saeit.factory.lifecycle.v1"
 REVIEW_SCHEMA="saeit.factory.stage-review.v1"
 SPEC_SCHEMA="saeit.factory.product-passport.v1"
-ORDER_RE=re.compile(r"^WO-[0-9]{8}$")
+ORDER_RE=re.compile(r"^WO-[0-9]+$")
 SHA_RE=re.compile(r"^[0-9a-f]{64}$")
 STAGES=(
     "idea_assessment","research","design","prototype","complete_manufacture",
