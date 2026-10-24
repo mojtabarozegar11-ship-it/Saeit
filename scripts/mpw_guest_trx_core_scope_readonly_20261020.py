@@ -121,6 +121,40 @@ for label,model in (("Order",Order),("PaymentIntent",PaymentIntent)):
         aggregate["status_counts"]={str(row["status"]):row["n"] for row in model.objects.values("status").annotate(n=Count("pk"))}
     print("MPW_LIVE_ORDER_AGGREGATE="+json.dumps(aggregate,ensure_ascii=False))
 
+# Privacy-preserving product-level funnel counts; never emit customer identifiers.
+from django.db.models import Sum,Min,Max
+from core.models import OrderItem,LedgerEntry,PaymentWebhookEvent
+for pid in (72,225):
+    rows=OrderItem.objects.filter(product_id=pid).values(
+        "order__status","order__payment_intent__status","order__payment_intent__provider",
+        "order__payment_intent__provider_reference"
+    ).annotate(
+        order_count=Count("order_id",distinct=True),
+        units=Sum("quantity"),
+        distinct_buyers=Count("order__customer_id",distinct=True),
+        first_order=Min("order__created_at"),
+        last_order=Max("order__created_at"),
+    ).order_by("order__status","order__payment_intent__status")
+    safe_rows=[]
+    for row in rows:
+        safe_rows.append({
+            "order_status":row["order__status"],
+            "payment_status":row["order__payment_intent__status"],
+            "payment_provider":row["order__payment_intent__provider"],
+            "provider_reference_present":bool(row["order__payment_intent__provider_reference"]),
+            "orders":row["order_count"],"units":row["units"],
+            "distinct_buyers":row["distinct_buyers"],
+            "first_order":row["first_order"].isoformat() if row["first_order"] else None,
+            "last_order":row["last_order"].isoformat() if row["last_order"] else None,
+        })
+    print("MPW_BOOK_ORDER_FUNNEL="+json.dumps({"product":pid,"rows":safe_rows},ensure_ascii=False))
+    ledger=LedgerEntry.objects.filter(order__items__product_id=pid).values("entry_type").annotate(count=Count("pk")).order_by("entry_type")
+    print("MPW_BOOK_LEDGER="+json.dumps({"product":pid,"entry_counts":list(ledger)},ensure_ascii=False))
+    hooks=PaymentWebhookEvent.objects.filter(payment_intent__order__items__product_id=pid).values(
+        "provider","event_type","status"
+    ).annotate(count=Count("pk")).order_by("provider","event_type","status")
+    print("MPW_BOOK_WEBHOOKS="+json.dumps({"product":pid,"event_counts":list(hooks)},ensure_ascii=False))
+
 # In-memory execution of the real order selector; production ORM writes are replaced.
 import contextlib, tempfile
 from unittest.mock import patch
