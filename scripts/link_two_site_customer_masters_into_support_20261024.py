@@ -25,8 +25,8 @@ TARGETS = {
         "9361c329df7cea36e604db137b39cddbcf5e6971f2d9dbc843ca4ddad898b22c",
         "https://zomorodmelal.ir/contact/"),
     "mojplaywin": (
-        HOME / "mojplaywin.com/design-preview-20261017/support.html",
-        "9e8dcfb1d024a3d1a495ed5099819b0bdba7d4cdc726ab38bc25f079ad193654",
+        HOME / "mojplaywin.com/design-preview-20261017/_mpw_dynamic_main_shell_20261019.php",
+        "0cc05393516e62d4bd263fbc3a121acf84ad912672edd800f06fefd634e325db",
         "https://mojplaywin.com/support/"),
 }
 ZM_ELEMENT = """
@@ -40,8 +40,25 @@ ZM_ELEMENT = """
 </section>
 """.strip()
 MPW_ELEMENT = """
- <a class="primary" href="/ask-master/index.php">Ask a question or request order help</a>
- <a href="/ask-master/status.php">Track your support ticket</a>""".rstrip()
+// MPW_MASTER_SUPPORT_NAV_20261024_BEGIN
+// Agent entry affects only the existing GET /support/ page, never store or checkout.
+if ($slug === 'support' &&
+    strpos($rendered, 'id="mpw-master-support-entry-20261024"') === false &&
+    strpos($rendered, 'Need a direct channel?') !== false &&
+    substr_count($rendered, '</main>') === 1) {
+    $masterSupportCard = <<<'MPW_MASTER_SUPPORT_CARD'
+<section id="mpw-master-support-entry-20261024" aria-label="Customer questions and orders" style="margin:22px auto;padding:22px;border:1px solid #449f9b;border-radius:17px;background:#102c37;color:#e6f8fa">
+ <h2 style="color:#ffe3a7">Ask the MojPlayWin site master</h2>
+ <p>Questions, downloads and order-help requests: submit securely and track the result with your ticket ID.</p>
+ <p><a href="/ask-master/index.php" style="display:inline-block;padding:12px 18px;border-radius:8px;background:#f7d18b;color:#163039;font-weight:800;text-decoration:none">Ask a question or request order help</a></p>
+ <p><a href="/ask-master/status.php" style="color:#9bfce2">Track a support request</a></p>
+</section>
+MPW_MASTER_SUPPORT_CARD;
+    $rendered = str_replace('</main>', "\\n" . $masterSupportCard . "\\n</main>", $rendered);
+}
+// MPW_MASTER_SUPPORT_NAV_20261024_END
+
+""".rstrip()
 ZM_MARKER = "zm-master-customer-entry-20261024"
 MPW_MARKER = 'href="/ask-master/index.php"'
 
@@ -60,14 +77,16 @@ def change(site: str, original: bytes) -> bytes:
         require(pos is not None, "ZM_MAIN_MISSING")
         output = html[:pos.start()] + ZM_ELEMENT + "\n" + html[pos.start():]
     elif site == "mojplaywin":
-        require(MPW_MARKER not in html and html.count("Need a direct channel?")==1, "MPW_SUPPORT_NOT_UNIQUE")
-        needle = '<a class="primary" href="mailto:support@mojplaywin.com">support@mojplaywin.com</a>'
-        require(html.count(needle)==1, "MPW_MAIL_CTA_NOT_UNIQUE")
-        pos=html.find(needle)+len(needle)
-        output=html[:pos]+MPW_ELEMENT+html[pos:]
+        hook_marker = "// MPW_MASTER_SUPPORT_NAV_20261024_BEGIN"
+        needle = "\\necho $rendered;"
+        require(hook_marker not in html and html.count(needle)==1, "MPW_SHARED_SHELL_ENTRY_NOT_UNIQUE")
+        require(html.strip().endswith("echo $rendered;"), "MPW_SHARED_SHELL_UNEXPECTED_TAIL")
+        require("$slug=$_GET['__mpw_template_route']??null;" in html, "MPW_SUPPORT_ROUTE_GUARD_MISSING")
+        pos=html.find(needle)
+        output=html[:pos]+"\\n"+MPW_ELEMENT+html[pos:]
     else:
         raise ValueError("UNKNOWN_TENANT")
-    require(len(output)>len(html) and len(output)-len(html)<2600, "UNEXPECTED_CHANGE_SIZE")
+    require(len(output)>len(html) and len(output)-len(html)<3600, "UNEXPECTED_CHANGE_SIZE")
     require(output.count('href="/ask-master/index.php"')>=1 and
             output.count('href="/ask-master/status.php"')>=1, "MISSING_SUPPORT_LINK")
     return output.encode("utf-8")
@@ -121,12 +140,14 @@ def install():
         require(not backup.exists() and not backup.is_symlink(),"BACKUP_COLLISION")
         os.mkdir(backup,0o700)
         for site,(path,old,url) in TARGETS.items():
-            write_new(backup/(site+".original.html"),originals[site],0o600)
+            write_new(backup/(site+".original"+path.suffix),originals[site],0o600)
         for site,(path,old,url) in TARGETS.items():
-            tmp=path.parent/(".master_customer_nav_"+str(os.getpid())+".html")
+            tmp=path.parent/(".master_customer_nav_"+str(os.getpid())+path.suffix)
             require(not tmp.exists() and not tmp.is_symlink(), "TEMP_EXISTS:"+site)
             write_new(tmp,patched[site],0o644)
             stages.append(tmp)
+            if site=="mojplaywin":
+                require(run(["php","-l",str(tmp)],18).returncode==0,"MPW_PHP_LINT_FAILED")
             require(digest(path.read_bytes())==old,"CONCURRENT_PAGE_EDIT:"+site)
             os.replace(tmp,path)
             changed.append((site,path,patched[site],originals[site]))
@@ -142,7 +163,7 @@ def install():
         for site,path,new,old in reversed(changed):
             try:
                 if path.is_file() and not path.is_symlink() and digest(path.read_bytes())==digest(new):
-                    temp=path.parent/(".master_nav_restore_"+str(os.getpid())+".html")
+                    temp=path.parent/(".master_nav_restore_"+str(os.getpid())+path.suffix)
                     write_new(temp,old,0o644)
                     stages.append(temp)
                     os.replace(temp,path)
