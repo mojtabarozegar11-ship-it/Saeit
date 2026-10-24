@@ -213,8 +213,12 @@ jobs:
               except (OSError,SyntaxError):continue
               for node in ast.walk(tree):
                   if not isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) or node.name not in wanted:continue
-                  segment=ast.get_source_segment(source,node) or ''
-                  segment=re.sub(r"""(?i)(?:[rubf]{0,2})?(['"])(?:\\.|(?!\\1).)*\\1""","'<literal>'",segment)
+                  class RedactStrings(ast.NodeTransformer):
+                      def visit_Constant(self,item):
+                          if isinstance(item.value,str):return ast.copy_location(ast.Constant(value='<literal>'),item)
+                          return item
+                  clean=RedactStrings().visit(node);ast.fix_missing_locations(clean)
+                  segment=ast.unparse(clean)
                   sanitized.append({'file':str(p.relative_to(root)),'function':node.name,'source_without_literals':segment[:5000]})
           print('MPW_INVOICE_START_SOURCE_SHAPE='+json.dumps(sanitized))
           if not routes:raise SystemExit('NO_INVOICE_ROUTE_DEFINITIONS_FOUND')
