@@ -1,14 +1,14 @@
 // MOJ1 experimental reward eligibility — OFFLINE SYNTHETIC PROPOSALS ONLY.
 // No keys, network access, deployment, external identity assertions or payouts.
 // This is NOT an anti-Sybil service. A Merkle inclusion proof cannot establish a real person.
-import {TronWeb} from 'tronweb';
+import {TronWeb, utils as TronWebUtils} from 'tronweb';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const LIMIT = (1n << 256n) - 1n;
-const hash = hex => TronWeb.utils.ethersUtils.keccak256(hex).toLowerCase();
+const hash = hex => TronWebUtils.ethersUtils.keccak256(hex).toLowerCase();
 
 function exactKeys(value, allowed, name) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error(name + ': expected object');
