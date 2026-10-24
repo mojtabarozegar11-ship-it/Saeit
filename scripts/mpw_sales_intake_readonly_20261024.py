@@ -119,6 +119,36 @@ def configured_support_forwarder():
         pass
     output("MPW_SUPPORT_FORWARDER", info)
 
+
+
+def domain_catchall():
+    info = {"source": "cpanel_Email_list_default_address",
+            "available": False, "catchall_delivery": "unknown",
+            "destinations_hidden": True}
+    try:
+        p = subprocess.run(
+            ["uapi", "--output=json", "Email", "list_default_address",
+             "domain=" + DOMAIN], capture_output=True, timeout=18, check=False)
+        if p.returncode == 0 and len(p.stdout) <= 3_000_000:
+            obj = json.loads(p.stdout.decode("utf-8"))
+            result = obj.get("result") or {}
+            data = result.get("data")
+            if result.get("status") in (1, True):
+                info["available"] = True
+                info["data_type"] = type(data).__name__
+                info["field_names"] = sorted(data.keys()) if isinstance(data, dict) else []
+                # Never publish routing destinations; classification is conservative.
+                if isinstance(data, dict):
+                    route = str(data.get("forward") or data.get("dest") or
+                                data.get("address") or data.get("default") or "").strip()
+                    if route.startswith((":fail:", ":blackhole:")):
+                        info["catchall_delivery"] = "rejected_or_discarded"
+                    elif route and "@" in route:
+                        info["catchall_delivery"] = "address_configured_unverified"
+    except (OSError, subprocess.TimeoutExpired, ValueError, UnicodeError, TypeError):
+        pass
+    output("MPW_DOMAIN_CATCHALL", info)
+
 def route_bucket(page):
     if page.startswith("/store/product/"):
         return "product_checkout" if "/checkout/" in page else "product_detail"
@@ -253,6 +283,7 @@ if __name__ == "__main__":
     support_maildir()
     configured_support_mailbox()
     configured_support_forwarder()
+    domain_catchall()
     recent_cpanel_visitors()
     visitor_logs()
     output("MPW_INTAKE_READONLY", {"result": "completed", "production_db_writes": False,
