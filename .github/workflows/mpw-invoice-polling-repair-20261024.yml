@@ -263,6 +263,36 @@ jobs:
               raise SystemExit('CHECKOUT_READINESS_GATE_FAILED')
           print('MPW_CHECKOUT_READINESS_PASS;NO_ORDER_OR_INVOICE_CREATED')
           PY
+      - name: Rollback-only live order and invoice reservation smoke
+        run: |
+          set -euo pipefail
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-invoice-ssh/config" saeit-cpanel 'set -e; for p in /home/zomorod2/virtualenv/Saeit-staging/*/bin/python; do if [ -x "$p" ]; then exec "$p" -; fi; done; exec python3 -' <<'PY'
+          import os,sys,secrets,json
+          from pathlib import Path
+          app=Path('/home/zomorod2/Saeit-staging');os.chdir(app);sys.path.insert(0,str(app))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.contrib.auth import get_user_model
+          from django.db import connection,transaction
+          from services.mpw_trx_commercial_web import _select_order
+          class RollbackSmoke(Exception):pass
+          result={'status':'UNKNOWN'}
+          try:
+              with transaction.atomic(using=connection.alias):
+                  User=get_user_model();manager=User._default_manager.db_manager(connection.alias)
+                  nonce=secrets.token_hex(10);field=User.USERNAME_FIELD
+                  kwargs={field:(nonce+'@example.invalid' if field=='email' else 'mpw-smoke-'+nonce)}
+                  user=manager.create_user(**kwargs)
+                  intent_id=_select_order(72,user.pk,connection)
+                  if type(intent_id) is not int or intent_id<=0:raise RuntimeError('INVALID_INTENT_RESULT')
+                  raise RollbackSmoke()
+          except RollbackSmoke:
+              result={'status':'PASS_ROLLED_BACK'}
+          except Exception as exc:
+              result={'status':'FAIL','exception_type':type(exc).__name__}
+          print('MPW_ROLLBACK_ONLY_CHECKOUT_SMOKE='+json.dumps(result))
+          if result['status']!='PASS_ROLLED_BACK':raise SystemExit('ROLLBACK_ONLY_CHECKOUT_FAILED')
+          PY
       - name: Smoke public store product and checkout routes without creating orders or payments
         run: |
           set -euo pipefail
