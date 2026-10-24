@@ -18,6 +18,8 @@ import sys
 import tempfile
 
 SCHEMA="saeit.factory.production-instructions.v1"
+# Compatibility sentinel for older callers; the queue has no total-order ceiling.
+MAX_ORDERS=float("inf")
 BLOCKER_ACTIONS={
  "FIVE_DISTINCT_PUBLIC_SOURCES_WITH_LINKED_EVIDENCE_REQUIRED":
   ("Document independently verifiable source",5,

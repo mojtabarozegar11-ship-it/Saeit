@@ -48,14 +48,14 @@ class BridgeTests(unittest.TestCase):
   next_=bridge.orders_once(self.root,orders,self.families,"2026-10-20")
   self.assertEqual(next_["new"],3)
   self.assertEqual(len(list((self.root/"production-instructions"/"orders").glob("WO-*.json"))),6)
- def test_capacity_blocks_without_fake_orders(self):
-  with self.assertRaisesRegex(RuntimeError,"CAPACITY"):
-   bridge.orders_once(self.root,orders,self.families,"2026-10-19",max_active=2)
-  self.assertEqual(len(list((self.root/"production-instructions"/"orders").glob("WO-*.json"))),0)
+ def test_legacy_active_limit_does_not_stop_valid_orders(self):
+  issued=bridge.orders_once(self.root,orders,self.families,"2026-10-19",max_active=0)
+  self.assertEqual(issued["new"],3)
+  self.assertEqual(len(list((self.root/"production-instructions"/"orders").glob("WO-*.json"))),3)
  def test_wrong_cycle_or_unverified_family(self):
   with self.assertRaises(ValueError):bridge.orders_once(self.root,orders,self.families,"../../etc")
   with self.assertRaises(ValueError):bridge.registry(self.root/"missing")
- def test_native_queue_300_full_stages_three_then_promotes_after_real_capacity(self):
+ def test_native_queue_300_does_not_block_next_valid_orders(self):
   area=self.root/"production-instructions"
   queue=area/"orders"
   for number in range(1,301):
@@ -73,17 +73,8 @@ class BridgeTests(unittest.TestCase):
   again,created=bridge.stage_three_requests(self.root,orders,self.families,day)
   self.assertFalse(created)
   self.assertEqual(again["requests"],manifest["requests"])
-  blocked=bridge.reconcile_site_intake(self.root,orders,self.families)
-  self.assertTrue(blocked["capacity_blocked"])
-  self.assertEqual(blocked["orders"],[])
-  self.assertEqual(len(list(queue.glob("WO-*.json"))),300)
-  # Native capacity is freed only by recorded completed work, not deletion.
-  for number in range(1,4):
-   p=queue/(f"WO-{number:08d}.json")
-   data=json.loads(p.read_text())
-   data["status"]="completed_verified"
-   p.write_text(json.dumps(data))
-  admitted=bridge.reconcile_site_intake(self.root,orders,self.families)
+  admitted=bridge.reconcile_site_intake(self.root,orders,self.families,max_active=0)
+  self.assertFalse(admitted["capacity_blocked"])
   self.assertEqual(admitted["orders"],["WO-00000301","WO-00000302","WO-00000303"])
   self.assertEqual(admitted["admitted_cycles"],1)
   self.assertEqual(len(list(queue.glob("WO-*.json"))),303)

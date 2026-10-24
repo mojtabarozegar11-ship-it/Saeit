@@ -752,7 +752,6 @@ def triage_factory_stage1(root=VPS):
 PRODUCT_ORDER_SCHEMA="mpw.factory.three-product-requests.v1"
 PRODUCT_ORDER_ID=re.compile(r"^MPWREQ-[a-f0-9]{20}$")
 PRODUCT_ORDER_CYCLE=re.compile(r"^20[0-9]{6}(?:-r1)?$")
-SITE_PENDING_WORK_ORDER_LIMIT=9
 SITE_TRIAGE_SCHEMA="mpw.factory.native-site-order-technical-triage.v1"
 
 def three_site_product_requests(root=DEST,cycle=None,*,require_fresh=False):
@@ -807,7 +806,6 @@ def three_site_product_requests(root=DEST,cycle=None,*,require_fresh=False):
     private_new(outbound)
     path=outbound/(cycle+".json")
     history=sorted(outbound.glob("*.json"))
-    require(len(history)<=2000,"THREE_ORDERS_HISTORY_CAPACITY")
     historical_sources=set()
     for previous_path in history[-180:]:
         if (not PRODUCT_ORDER_CYCLE.fullmatch(previous_path.stem) or
@@ -989,7 +987,6 @@ def triage_site_work_orders(root=VPS,engine_path=None):
     with locked.open("a+b") as fd:
         fcntl.flock(fd.fileno(),fcntl.LOCK_EX)
         rows=[p for p in sorted(orders.iterdir())]
-        require(len(rows)<=engine.MAX_ORDERS,"SITE_ORDER_TRIAGE_CATALOG_LIMIT")
         for p in rows:
             require(p.is_file() and not p.is_symlink()
                     and engine.ORDER_RE.fullmatch(p.name),"SITE_ORDER_TRIAGE_UNSAFE_FILENAME")
@@ -1122,7 +1119,6 @@ def receive_three_product_requests(raw,root=VPS,engine_path=None,max_active=300)
                     and bool(engine.ORDER_RE.fullmatch(file.name)),
                     "THREE_ORDERS_NATIVE_ENTRY_UNSAFE")
             entries.append(engine.validate_old(file))
-            require(len(entries)<=engine.MAX_ORDERS,"THREE_ORDERS_NATIVE_CATALOG_LIMIT")
         same=[x for x in entries if x.get("requesting_site")=="mojplaywin.com"
               and x.get("bridge_cycle")==cycle]
         require(len(same) in (0,3),"THREE_ORDERS_PARTIAL_NATIVE_BATCH")
@@ -1144,15 +1140,8 @@ def receive_three_product_requests(raw,root=VPS,engine_path=None,max_active=300)
                           for x in other_active}
             overlap=any((x["product_id"],x["source_sha256"]) in distinct_old
                         for x in validated)
-            if other_active and not all(
-                _prior_site_order_has_real_triage(root,x) for x in other_active):
-                action="waiting_for_prior_three_to_complete";order_ids=[]
-            elif len(other_active)+3>SITE_PENDING_WORK_ORDER_LIMIT:
-                action="waiting_for_bounded_site_capacity";order_ids=[]
-            elif overlap:
+            if overlap:
                 action="waiting_for_distinct_site_sources";order_ids=[]
-            elif pending+3>max_active or len(entries)+3>engine.MAX_ORDERS:
-                action="waiting_for_native_capacity";order_ids=[]
             else:
                 serial=max((int(x["id"][3:]) for x in entries),default=0)
                 order_ids=[]

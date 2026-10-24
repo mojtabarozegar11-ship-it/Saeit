@@ -18,7 +18,7 @@ import tempfile
 
 SCHEMA="saeit.factory.production-instructions.v1"
 CYCLE=re.compile(r"^(?P<day>[0-9]{4}-[0-9]{2}-[0-9]{2})(?:-r(?P<run>[0-9]{5,20}))?$")
-ID=re.compile(r"^WO-[0-9]{8}$")
+ID=re.compile(r"^WO-[0-9]+$")
 FAMILY=re.compile(r"^F(?:0[1-9]|[1-3][0-9]|40)$")
 SHA=re.compile(r"^[a-f0-9]{64}$")
 
@@ -94,8 +94,6 @@ def orders_once(root,engine,profiles,cycle,*,dry_run=False,max_active=300):
             return not evidence_only
         active=sum(production_capacity_used(item) for item in existing)
         missing=3-len(ours)
-        if active+missing>max_active or len(existing)+missing>engine.MAX_ORDERS:
-            raise RuntimeError("FACTORY_PENDING_CAPACITY_REACHED")
         # Select different real registered product families, rotate daily.
         day=dt.date.fromisoformat(found.group("day")).toordinal() + (int(found.group("run") or 0) % 40)
         selected=[profiles[((day*3)+(i-1))%40] for i in (1,2,3)]
@@ -177,7 +175,6 @@ def stage_three_requests(root,engine,profiles,cycle,*,max_cycles=120):
             doc=json.loads(path.read_text(encoding="utf8"))
             _verify_site_intake(doc,path.stem)
             return doc,False
-        if len(valid_files)>=max_cycles:raise RuntimeError("SITE_INTAKE_BACKLOG_LIMIT")
         day=dt.date.fromisoformat(match.group("day")).toordinal()+(int(match.group("run") or 0)%40)
         chosen=[profiles[((day*3)+(i-1))%40] for i in (1,2,3)]
         requests=[]
@@ -206,7 +203,7 @@ def _verify_site_intake(doc,cycle):
         if not isinstance(v,dict) or not re.fullmatch(r"ZMREQ-[0-9a-f]{20}",str(v.get("request_id",""))) or not FAMILY.fullmatch(str(v.get("family_id",""))):
             raise RuntimeError("SITE_INTAKE_REQUEST_INVALID")
         if v.get("state") not in ("awaiting_native_capacity","admitted") or (
-          v.get("state")=="admitted" and (not isinstance(v.get("native_work_order"),str) or not re.fullmatch(r"WO-[0-9]{8}",v["native_work_order"]))):
+          v.get("state")=="admitted" and (not isinstance(v.get("native_work_order"),str) or not re.fullmatch(r"WO-[0-9]+",v["native_work_order"]))):
             raise RuntimeError("SITE_INTAKE_REQUEST_STATE_INVALID")
     if doc.get("is_native_order") is not False or doc.get("public_distribution") is not False:
         raise RuntimeError("SITE_INTAKE_PRIVACY_INVALID")
@@ -450,7 +447,6 @@ if __name__=="__main__":
             "ORDERS_EXISTING_RECORD_INVALID","ORDERS_EXISTING_RECORD_UNSAFE",
             "ORDERS_BAD_WORK_STATE","ORDERS_BAD_RECORD_FINGERPRINT",
             "ORDERS_UNSAFE_DIRECTORY","ORDERS_SYMLINK_PARENT",
-            "SITE_INTAKE_BACKLOG_LIMIT","SITE_INTAKE_UNSAFE_ENTRY",
             "SITE_INTAKE_SCHEMA_INVALID","SITE_INTAKE_THREE_REQUESTS_INVALID",
             "SITE_INTAKE_REQUEST_INVALID","SITE_INTAKE_REQUEST_STATE_INVALID",
             "SITE_INTAKE_PRIVACY_INVALID","SITE_INTAKE_NOT_READY",
