@@ -1,4 +1,5 @@
 name: VPS factory coordinated one-minute cadence
+# Owner-requested continuous factory production activation.
 on:
   pull_request:
     paths:
