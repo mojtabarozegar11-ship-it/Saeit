@@ -280,7 +280,7 @@ def run(args):
         parts = existing_parts(bookdir, args.product)
         chapter, part = next_part(parts)
         if chapter is not None:
-            attempted = re.compile(r"chapter-%02d-part-([0-9]{3})\\.md(?:\\.rejected)?\\Z" % chapter)
+            attempted = re.compile(r"chapter-%02d-part-([0-9]{3})\.md(?:\.rejected)?\Z" % chapter)
             previous_ids = [int(m.group(1)) for child in folder.iterdir()
                             if child.is_file() and not child.is_symlink()
                             for m in [attempted.fullmatch(child.name)] if m]
