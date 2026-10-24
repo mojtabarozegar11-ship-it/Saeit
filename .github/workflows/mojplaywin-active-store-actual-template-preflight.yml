@@ -1,5 +1,5 @@
-name: MojPlayWin active store template exact safety inspection
-# Read-only hash refresh requested 2026-10-24 after source mismatch gate.
+name: MojPlayWin active store route safety inspection
+# Read-only exact Apache and template hashes for the narrowly scoped store repair.
 on:
   push:
     branches: [main]
@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
-      - name: Establish host-pinned private relay without disclosing keys
+      - name: Establish host-pinned private relay
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
@@ -22,8 +22,8 @@ jobs:
           umask 077
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           install -d -m 700 "$d"
-          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
-          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
           chmod 600 "$d/"*
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
@@ -56,105 +56,45 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
-      - name: Inspect active staging store template without mutations
+      - name: Read exact active template and Apache route hashes
         run: |
+          set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 60s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
           from pathlib import Path
-          import os,json,hashlib
+          import hashlib,json
           root=Path('/home/zomorod2/Saeit-staging')
-          path=root/'core/templates/mojplaywin/store.html'
-          incoming=root/'core/templates/mojplaywin/store_ten_buyer_guides_20261018.html'
-          wsgi=Path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py')
-          if not root.is_dir() or root.is_symlink():raise SystemExit("APP_NOT_SAFE")
-          m={'active_app_exists':True,
-            'store_exists':path.is_file(),'store_symlink':path.is_symlink(),
-            'guide_exists':incoming.exists(),'guide_symlink':incoming.is_symlink(),
-            'app_manage_py':(root/'manage.py').is_file(),
-            'wsgi_uses_app':"APP='/home/zomorod2/Saeit-staging'" in wsgi.read_text('utf8','replace')}
-          if path.is_file() and not path.is_symlink():
-            s=path.read_text('utf-8','replace')
-            m.update({'store_sha':hashlib.sha256(path.read_bytes()).hexdigest(),
-               'store_chars':len(s),'expected_mw_catalog':'INITIAL COLLECTION' in s,
-               'has_existing_guides':'store_ten_buyer_guides_20261018' in s,
-               'first_450':s[:450], 'last_900':s[-900:],
-               'starts_django_base':s.lstrip().startswith('{% extends "base.html" %}')})
-          docroot=Path('/home/zomorod2/mojplaywin.com')
-          for rel in ('store/index.html','store/index.htm','store.html','index.html'):
-            q=docroot/rel
-            item={'path':rel,'exists':q.exists(),'is_dir':q.is_dir(),'is_file':q.is_file(),'is_symlink':q.is_symlink()}
-            if q.is_file() and not q.is_symlink():
-              raw=q.read_bytes()
-              item.update({'size':len(raw),'sha':hashlib.sha256(raw).hexdigest(),
-                'has_old_store_marker':b'mpw-store-ten-guides' in raw or b'INITIAL COLLECTION' in raw,
-                'has_new_store_marker':b'Shop available books' in raw})
-            print("MPW_STORE_DOCROOT_CANDIDATE="+json.dumps(item))
-          ht=docroot/'.htaccess'
-          route_prefix=b"RewriteCond %{REQUEST_URI} ^/(store|games|ai|"
-          if ht.is_file() and not ht.is_symlink():
-            rawht=ht.read_bytes()
-            matching=[line.decode('utf8','replace').strip() for line in rawht.splitlines() if route_prefix in line]
-            print("MPW_STORE_HTACCESS_STATE="+json.dumps({"size":len(rawht),
-              "sha":hashlib.sha256(rawht).hexdigest(),"store_route_count":len(matching),
-              "route_lines":matching[:3]}))
-            safe=[]
-            for line in rawht.decode('utf8','replace').splitlines():
-              if any(x in line.lower() for x in ('rewrite','passenger','directoryindex','request_filename')):
-                if not any(x in line.lower() for x in ('password','secret','token','authorization','api_key')):
-                  safe.append(line.strip()[:240])
-            print("MPW_STORE_HTTP_ROUTING_RULES="+json.dumps(safe[:35]))
-          print("MPW_STORE_ACTUAL_TEMPLATE_STATE="+json.dumps(m))
+          site=Path('/home/zomorod2/mojplaywin.com')
+          app=root/'core/templates/mojplaywin/store.html'
+          ht=site/'.htaccess'
+          wsgi=site/'passenger_wsgi.py'
+          if root.is_symlink() or not root.is_dir() or site.is_symlink() or not site.is_dir():
+              raise SystemExit('MPW_ROOT_UNSAFE')
+          if not app.is_file() or app.is_symlink() or not ht.is_file() or ht.is_symlink():
+              raise SystemExit('MPW_TEMPLATE_OR_HTACCESS_UNSAFE')
+          if not wsgi.is_file() or wsgi.is_symlink():
+              raise SystemExit('MPW_WSGI_UNSAFE')
+          raw=app.read_bytes()
+          rawht=ht.read_bytes()
+          prefix=b'RewriteCond %{REQUEST_URI} ^/(store|games|ai|'
+          matches=[line.decode('utf8','replace').strip() for line in rawht.splitlines() if prefix in line]
+          print('MPW_STORE_TEMPLATE='+json.dumps({'sha':hashlib.sha256(raw).hexdigest(),'size':len(raw)}))
+          print('MPW_STORE_HTACCESS='+json.dumps({'sha':hashlib.sha256(rawht).hexdigest(),'size':len(rawht),'route_count':len(matches),'route_lines':matches}))
+          print('MPW_STORE_WSGI='+json.dumps({'uses_app':"APP='/home/zomorod2/Saeit-staging'" in wsgi.read_text('utf8','replace')}))
+          if len(matches)!=1:
+              raise SystemExit('EXPECTED_EXACTLY_ONE_STORE_ROUTE_RULE')
           PY
-      - name: Read public store cache headers without cookies
+      - name: Confirm public store currently follows the old route
         run: |
           python3 - <<'PY'
           import json,urllib.request,urllib.error
-          url="https://mojplaywin.com/store/?__cache_probe=20261024"
-          req=urllib.request.Request(url,headers={"Cache-Control":"no-cache","Pragma":"no-cache","User-Agent":"MPWStoreCacheProbe/1.0"})
+          url='https://mojplaywin.com/store/?__route_audit=20261024'
+          req=urllib.request.Request(url,headers={'Cache-Control':'no-cache','Pragma':'no-cache','User-Agent':'MPWRouteAudit/1.0'})
           try:
             with urllib.request.urlopen(req,timeout=20) as r:
               body=r.read(400000)
-              headers={k:v for k,v in r.headers.items() if k.lower() in ("age","cache-control","cf-cache-status","x-cache","via","etag","last-modified","server","vary")}
-              print("MPW_STORE_PUBLIC_CACHE_PROBE="+json.dumps({"status":r.status,"headers":headers,
-                "has_old_marker":b"mpw-store-ten-guides" in body,
-                "has_old_catalog":b"INITIAL COLLECTION" in body,
-                "has_new_marker":b"Shop available books" in body,
-                "bytes":len(body)}))
-          except urllib.error.HTTPError as exc:
-            print("MPW_STORE_PUBLIC_CACHE_PROBE="+json.dumps({"status":exc.code,"headers":dict(exc.headers)}))
-          PY
-
-          if ht.is_file() and not ht.is_symlink():
-            rawht=ht.read_bytes()
-            matching=[line.decode('utf8','replace').strip() for line in rawht.splitlines() if b'RewriteCond %{REQUEST_URI} ^/(store|' in line]
-            print("MPW_STORE_HTACCESS_STATE="+json.dumps({"is_regular":True,"size":len(rawht),
-              "sha":hashlib.sha256(rawht).hexdigest(),"store_route_count":len(matching),
-              "exact_route_count":rawht.count(route_prefix),"route_lines":matching[:3]}))
-
-          if ht.is_file() and not ht.is_symlink():
-            safe=[]
-            for line in ht.read_text('utf8','replace').splitlines():
-              if any(x in line.lower() for x in ('rewrite','passenger','directoryindex','request_filename')):
-                if not any(x in line.lower() for x in ('password','secret','token','authorization','api_key')):
-                  safe.append(line.strip()[:240])
-            print("MPW_STORE_HTTP_ROUTING_RULES="+json.dumps(safe[:35]))
-          print("MPW_STORE_ACTUAL_TEMPLATE_STATE="+json.dumps(m))
-          PY
-      - name: Read public store cache headers without cookies
-        run: |
-          python3 - <<'PY'
-          import json,urllib.request,urllib.error
-          url="https://mojplaywin.com/store/?__cache_probe=20261024"
-          req=urllib.request.Request(url,headers={"Cache-Control":"no-cache","Pragma":"no-cache","User-Agent":"MPWStoreCacheProbe/1.0"})
-          try:
-            with urllib.request.urlopen(req,timeout=20) as r:
-              body=r.read(400000)
-              headers={k:v for k,v in r.headers.items() if k.lower() in ("age","cache-control","cf-cache-status","x-cache","via","etag","last-modified","server","vary")}
-              print("MPW_STORE_PUBLIC_CACHE_PROBE="+json.dumps({"status":r.status,"headers":headers,
-                "has_old_marker":b"mpw-store-ten-guides" in body,
-                "has_old_catalog":b"INITIAL COLLECTION" in body,
-                "has_new_marker":b"Shop available books" in body,
-                "bytes":len(body)}))
-          except urllib.error.HTTPError as exc:
-            print("MPW_STORE_PUBLIC_CACHE_PROBE="+json.dumps({"status":exc.code,"headers":dict(exc.headers)}))
+              print('MPW_STORE_PUBLIC='+json.dumps({'status':r.status,'bytes':len(body),'has_old_catalog':b'INITIAL COLLECTION' in body,'has_new_catalog':b'Shop available books' in body,'cache_control':r.headers.get('Cache-Control')}))
+          except urllib.error.HTTPError as e:
+            print('MPW_STORE_PUBLIC='+json.dumps({'status':e.code}))
+            raise
           PY
