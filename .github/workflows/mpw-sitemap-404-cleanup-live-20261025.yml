@@ -1,0 +1,134 @@
+name: MojPlayWin SEO - remove 13 confirmed 404 revenue URLs from sitemap
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/mpw_sitemap_exclude_13_broken_revenue_urls_20261025.py"
+      - ".github/workflows/mpw-sitemap-404-cleanup-live-20261025.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-main-sitemap-404-cleanup
+  cancel-in-progress: false
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate patch and live 404 preconditions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_sitemap_exclude_13_broken_revenue_urls_20261025.py
+          curl -fsSL --max-time 25 -H 'Cache-Control: no-cache' https://mojplaywin.com/sitemap.xml -o "$RUNNER_TEMP/before.xml"
+          python3 - "$RUNNER_TEMP/before.xml" "$RUNNER_TEMP/broken.txt" <<'PY'
+          import pathlib,sys,xml.etree.ElementTree as ET
+          root=ET.parse(sys.argv[1]).getroot()
+          urls=[n.text for n in root.iter() if n.tag.endswith('loc')]
+          bad=[x for x in urls if x.startswith('https://mojplaywin.com/mpw-editorial/revenue/')]
+          assert len(urls)==46,(len(urls),len(bad))
+          assert len(bad)==13 and len(bad)==len(set(bad))
+          pathlib.Path(sys.argv[2]).write_text('\n'.join(bad)+'\n')
+          print('SITEMAP_BEFORE=46;REVENUE_CANDIDATES=13')
+          PY
+          while IFS= read -r url; do
+            code="$(curl -L --silent --show-error --max-time 20 -o /dev/null -w '%{http_code}' "$url")"
+            echo "BROKEN_URL_HTTP=$code $url"
+            test "$code" = 404
+          done < "$RUNNER_TEMP/broken.txt"
+          echo "ALL_13_REVENUE_URLS_CONFIRMED_404"
+      - name: Configure pinned VPS and cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-sitemap-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY_VERIFIED"
+      - name: Apply one-line PHP patch and verify sitemap set difference
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-sitemap-ssh"
+          stage="/home/zomorod2/.mpw-sitemap-cleanup-$GITHUB_RUN_ID"
+          installed=0
+          cleanup() {
+            rc=$?
+            trap - EXIT
+            if test "$rc" -ne 0 && test "$installed" -eq 1; then
+              echo "SMOKE_FAILED_ATTEMPTING_MAIN_SITEMAP_ROLLBACK"
+              ssh -F "$d/config" saeit-cpanel "python3 '$stage/patch.py' rollback '$GITHUB_RUN_ID'" || echo "MANUAL_RECOVERY_REQUIRED"
+            fi
+            ssh -F "$d/config" saeit-cpanel "rm -rf -- '$stage'" || true
+            rm -rf -- "$d"
+            exit "$rc"
+          }
+          trap cleanup EXIT
+          ssh -F "$d/config" saeit-cpanel "test ! -e '$stage' && install -d -m 700 '$stage'"
+          scp -F "$d/config" scripts/mpw_sitemap_exclude_13_broken_revenue_urls_20261025.py "saeit-cpanel:$stage/patch.py"
+          ssh -F "$d/config" saeit-cpanel "python3 '$stage/patch.py' apply '$GITHUB_RUN_ID'"
+          installed=1
+          success=0
+          for attempt in 1 2 3 4 5; do
+            curl -fsSL --max-time 25 -H 'Cache-Control: no-cache' "https://mojplaywin.com/sitemap.xml?seo_cleanup=$GITHUB_RUN_ID&attempt=$attempt" -o "$RUNNER_TEMP/after.xml" || true
+            if python3 - "$RUNNER_TEMP/before.xml" "$RUNNER_TEMP/after.xml" <<'PY'
+          import sys,xml.etree.ElementTree as ET
+          def locs(p):
+              return [n.text for n in ET.parse(p).getroot().iter() if n.tag.endswith('loc')]
+          before=locs(sys.argv[1]);after=locs(sys.argv[2])
+          removed=[x for x in before if x.startswith('https://mojplaywin.com/mpw-editorial/revenue/')]
+          assert len(removed)==13
+          assert len(after)==33 and len(set(after))==33
+          assert set(before)-set(after)==set(removed)
+          assert not set(after)-set(before)
+          print('MAIN_SITEMAP_13_BROKEN_URLS_REMOVED;OTHER_33_PRESERVED')
+          PY
+            then success=1; break; fi
+            sleep 4
+          done
+          test "$success" -eq 1
+          for path in / /store/ /store/product/72/ /store/product/225/ /store/product/879/; do
+            code="$(curl -L --silent --show-error --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path")"
+            test "$code" = 200
+          done
+          echo "MPW_MAIN_DOMAIN_SITEMAP_CLEANUP_LIVE_SUCCESS"
