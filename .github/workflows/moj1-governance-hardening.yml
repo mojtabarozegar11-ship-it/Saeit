@@ -1,0 +1,58 @@
+name: MOJ1 governance hardening - isolated TVM
+on:
+  push:
+    branches:
+      - moj1/internal-hardening-20261024
+  pull_request:
+    branches:
+      - moj1/shasta-pilot-20261021
+    paths:
+      - experiments/moj1-pilot/contracts/MojPilotGovernance.sol
+      - experiments/moj1-pilot/tests/tronbox/**
+      - experiments/moj1-pilot/package.json
+      - .github/workflows/moj1-governance-hardening.yml
+permissions:
+  contents: read
+jobs:
+  local-tvm-governance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: experiments/moj1-pilot
+    steps:
+      - name: Checkout test-only source
+        uses: actions/checkout@v4
+      - name: Configure Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: experiments/moj1-pilot/package-lock.json
+      - name: Install pinned test dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Start disposable local TRON TVM (no network wallet)
+        run: |
+          docker pull tronbox/tre:2.0.0
+          docker run -d --rm --name moj1-governance-local -p 127.0.0.1:9090:9090 -e useDefaultPrivateKey=true tronbox/tre:2.0.0
+          ready=0
+          for i in $(seq 1 60); do
+            if curl -fsS -m 3 http://127.0.0.1:9090/admin/accounts | grep -q 'Available Accounts'; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then
+            docker logs --tail 80 moj1-governance-local
+            exit 1
+          fi
+      - name: Run original and new TVM regression tests
+        env:
+          LOCAL_PRIVATE_KEY: '0000000000000000000000000000000000000000000000000000000000000001'
+        run: npm run test:onchain:local
+      - name: Confirm Mainnet remains blocked
+        run: node scripts/release-readiness-offline.mjs --assert-blocked
+      - name: Remove disposable TVM
+        if: always()
+        run: docker rm -f moj1-governance-local || true
