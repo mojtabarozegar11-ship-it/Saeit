@@ -242,3 +242,31 @@ print("MPW_ACTIVE_START_POST_SIMULATION="+json.dumps({"status":response.status_c
       "redirect":location,"selection_mocked":True,"production_db_writes":False},ensure_ascii=False))
 print("GUEST_READONLY=PASS")
 
+
+# Read-only source inspection for the live invoice status-polling pause.
+import importlib
+for modname, wanted in {
+    "mpw_commerce.invoicing":("render_one_tap_invoice",),
+    "services.mpw_trx_commercial_chain":("read_only_independent_pair",),
+    "services.mpw_tron_readonly_deposit_candidates":("find_candidate_hashes",),
+    "mpw_commerce.buyer_orders":("commercial_buyer_status","reconcile_commercial_intent_from_candidates"),
+}.items():
+    try:
+        mod=importlib.import_module(modname)
+        path=Path(mod.__file__)
+        raw=path.read_text("utf8","replace")
+        tree=ast.parse(raw)
+        selected=[]
+        for node in tree.body:
+            if not isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)) or node.name not in wanted: continue
+            lines=[]
+            sensitive=re.compile(r"password|private.?key|secret|token|wallet|address|recipient|receiver|mnemonic|api.?key|authorization|credential",re.I)
+            for line in ast.unparse(node).splitlines()[:180]:
+                lines.append("[REDACTED_SENSITIVE_LINE]" if sensitive.search(line) else line[:240])
+            selected.append({"name":node.name,"line":node.lineno,"calls":sorted({ast.unparse(c.func).split(".")[-1] for c in ast.walk(node) if isinstance(c,ast.Call)})[:40],"conditions":[ast.unparse(n.test)[:200] for n in ast.walk(node) if isinstance(n,ast.If)][:30],"source_lines":lines})
+        print("MPW_STATUS_SOURCE="+json.dumps({"module":modname,"exists":True,"functions":selected},ensure_ascii=False))
+    except Exception as exc:
+        print("MPW_STATUS_SOURCE="+json.dumps({"module":modname,"error":type(exc).__name__},ensure_ascii=False))
+# Configuration presence only; never emit secret values.
+for name in sorted(k for k in os.environ if any(t in k.lower() for t in ("tron","trx","indexer","provider","rpc"))):
+    print("MPW_STATUS_ENV="+json.dumps({"name":name,"configured":bool(os.environ.get(name))},ensure_ascii=False))
