@@ -26,11 +26,11 @@ class OwnerOnlyFairPriceTests(unittest.TestCase):
             if index <= 100:
                 self.assertEqual(product["storefront"], "mojplaywin.com")
                 self.assertEqual(product["currency"], "USD")
-                self.assertRegex(product["suggested_base_price"]["amount"], r"^\\d+\\.\\d{2}$")
+                self.assertRegex(product["suggested_base_price"]["amount"], r"^\d+\.\d{2}$")
             else:
                 self.assertEqual(product["storefront"], "zomorodmelal.ir")
                 self.assertEqual(product["currency"], "IRR")
-                self.assertRegex(product["suggested_base_price"]["amount"], r"^\\d+$")
+                self.assertRegex(product["suggested_base_price"]["amount"], r"^\d+$")
             self.assertEqual(product["suggested_base_price"]["currency"], product["currency"])
 
     def test_prices_in_fair_curated_bands(self):
@@ -39,7 +39,7 @@ class OwnerOnlyFairPriceTests(unittest.TestCase):
             self.assertTrue(product["suggested_base_price"]["conditional_on_real_qc1000_and_checkout"])
         self.assertEqual(self.products[0]["suggested_base_price"]["amount"], "4.99")
         self.assertEqual(self.products[99]["suggested_base_price"]["amount"], "11.99")
-        self.assertEqual(self.products[100]["suggested_base_price"]["amount"], "6" + "90000")
+        self.assertEqual(self.products[100]["suggested_base_price"]["amount"], "690000")
         self.assertEqual(self.products[-1]["suggested_base_price"]["amount"], "990000")
 
     def test_owner_alone_controls_discount_and_no_campaign(self):
