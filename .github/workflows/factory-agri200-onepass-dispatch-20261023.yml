@@ -1,4 +1,5 @@
 name: Factory 200 agricultural orders one-pass safe advancement
+# Bounded internal advancement is allowed after new evidence arrives; release gates remain closed.
 on:
   workflow_dispatch:
   schedule:
