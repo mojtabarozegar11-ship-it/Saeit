@@ -42,6 +42,7 @@ jobs:
           "stage-05/source-grounded-v003-manifests","stage-05/source-grounded-v003-blocked",
           "stage-06/strict-qc1000","stage-06/strict-qc-blocked",
           "stage-06/source-grounded-v003-qc","stage-06/real-qc1000-verdicts",
+          "stage-06/doctoral-depth-rework-v003","stage-06/scientific-review-inbox-v003",
           ]
           def count(label):
            p=area/label
@@ -52,16 +53,17 @@ jobs:
            if not p.is_file() or p.is_symlink() or p.stat().st_size > 300000: return {"present":False}
            try:
             v=json.loads(p.read_text(encoding="utf8"))
-            allowed=("cycle_state","stage_results","worker_errors","consecutive_no_progress_ticks","missing_stage2_orders","missing_v003_orders","stage5_products_seen","strict_qc1000_audits_total","returned_to_rework_total","source_specific_revision_briefs_total","blocked_this_run","private_v003_total","input_rework_tickets","v003_candidate_editions_seen","v003_mechanical_integrity_pass","invalid_v003_editions","indexed_candidates","scanner_health","trusted_execution_runner_enrolled","verdict_counts")
+            allowed=("cycle_state","stage_results","worker_errors","consecutive_no_progress_ticks","missing_stage2_orders","missing_v003_orders","stage5_products_seen","strict_qc1000_audits_total","returned_to_rework_total","source_specific_revision_briefs_total","blocked_this_run","private_v003_total","input_rework_tickets","v003_candidate_editions_seen","v003_mechanical_integrity_pass","invalid_v003_editions","indexed_candidates","scanner_health","trusted_execution_runner_enrolled","verdict_counts","real_content_rework_verdicts_total","new_rework_packets","verified_existing_rework_packets","rechecked_this_tick","commercial_releases","quality1000_approvals_created","updated_utc")
             return {"present":True,"age_seconds":int(datetime.now(timezone.utc).timestamp()-p.stat().st_mtime),"fields":{k:v[k] for k in allowed if k in v}}
            except (ValueError,UnicodeError,OSError) as exc:return {"present":True,"read_error":type(exc).__name__}
           statuses=[
           "stage-06/autonomous-closed-loop-status.json","stage-06/strict-qc-status.json",
           "stage-05/substantive-revision-status.json","stage-05/source-grounded-v003-status.json",
           "stage-06/source-grounded-v003-qc-status.json","stage-06/real-qc1000-health.json",
+          "stage-06/doctoral-depth-health.json","stage-06/scientific-review-handoff-health.json",
           ]
           c=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=8)
-          markers=["SAEIT_PRIVATE_REAL_QC1000_MONITOR_20261023","AGRI200","STRICT_QC","AUTONOMOUS"]
+          markers=["SAEIT_PRIVATE_REAL_QC1000_MONITOR_20261023","AGRI200","STRICT_QC","AUTONOMOUS","SAEIT_QC_V003_DOCTORAL_DEPTH_GATE_20261024","SAEIT_QC_V003_SCIENTIFIC_REVIEW_HANDOFF_20261024"]
           result={"folders":{x:count(x) for x in folders},"statuses":{x:state(x) for x in statuses},
           "cron_marker_lines":{m:sum(m in ln for ln in c.stdout.splitlines()) for m in markers},
           "qc_code_files_installed":{x:(ops/x).is_file() and not (ops/x).is_symlink() for x in
@@ -92,5 +94,11 @@ jobs:
            "critical_findings":dict(issue_counts.most_common(18)),
            "duplication_range":[min(dupes),max(dupes)] if dupes else None,
            "read_errors":errors[:3]}
+          depth=state("stage-06/doctoral-depth-health.json")
+          result["doctoral_depth_minute_tick_verified"]=bool(depth.get("present") and depth.get("age_seconds",999999)<180 and depth.get("fields",{}).get("verified_existing_rework_packets",0)>0)
           print("QC_REWORK_LIVE_DIAGNOSTIC="+json.dumps(result,ensure_ascii=False,sort_keys=True),flush=True)
+          if not (result["doctoral_depth_minute_tick_verified"] and
+                  result["folders"].get("stage-06/doctoral-depth-rework-v003")==184 and
+                  result["cron_marker_lines"].get("SAEIT_QC_V003_DOCTORAL_DEPTH_GATE_20261024")==1):
+           raise SystemExit("QC_DOCTORAL_DEPTH_PERIODIC_HEALTH_NOT_PROVEN")
           PY
