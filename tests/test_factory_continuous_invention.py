@@ -71,7 +71,8 @@ class ContinuousInventionTests(unittest.TestCase):
         self.assertEqual(intake.cycle(self.root)["enqueued"],1)
         evidence.write_text("altered")
         # Same proposal is never silently rewritten after evidence corruption.
-        self.assertEqual(invent.propose(self.root,max_pending=1)["total_issued_briefs"],1)
+        self.assertEqual(invent.propose(self.root,max_pending=1)["total_issued_briefs"],2)
+        self.assertEqual(evidence.read_text(),"altered")
 
     def test_extension_pack_rejects_invalid_schema_and_accepts_real_need(self):
         folder=self.root/"invention-pattern-packs";folder.mkdir()
