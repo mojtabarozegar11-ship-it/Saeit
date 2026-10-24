@@ -27,11 +27,13 @@ jobs:
         with:
           php-version: '8.3'
           extensions: pdo_sqlite,sqlite3,mbstring
-      - name: Syntax and offline Python 6 regression tests
+      - name: Syntax, customer status and offline order-routing regressions
         shell: bash
         run: |
           set -euo pipefail
           php -l scripts/site_master_customer_portal_20261024.php
+          php -l scripts/site_master_customer_ticket_status_20261024.php
+          php tests/test_master_customer_status_20261024.php
           python3 -m py_compile scripts/site_master_customer_runtime_20261024.py scripts/install_two_site_master_customer_cpanel_20261024.py
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_site_master_customer_runtime_20261024.py -v
       - name: Prove two separate PHP inboxes, validated inquiries and rate-limit
