@@ -31,11 +31,13 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path('scripts/mpw_vps_warehouse_courier.py').read_text()
-          assert 'SITE_PENDING_WORK_ORDER_LIMIT=9' in s
+          assert 'SITE_PENDING_WORK_ORDER_LIMIT' not in s
           assert 'work_orders_completed_verified' in s
           assert 'substantive_source_rebuild_verified' in s
           assert 'customer_sale_authorized' in s
-          assert 'waiting_for_bounded_site_capacity' in s
+          assert 'waiting_for_bounded_site_capacity' not in s
+          assert 'waiting_for_prior_three_to_complete' not in s
+          assert 'engine.MAX_ORDERS' not in s
           assert 'SITE_TRIAGE_SCHEMA' in s
           assert 'publish_verified_factory_store_listing' not in s
           print('FACTORY_SITE_ORDER_REAL_PROVENANCE_AND_LIMIT_GATE=PASS')
