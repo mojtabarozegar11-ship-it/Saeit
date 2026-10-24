@@ -27,9 +27,9 @@ MODEL_ENDPOINT = "https://api.openai.com/v1/responses"
 CHAPTER_COUNT = 20
 CHAPTER_TARGET = 5250
 BOOK_MINIMUM = 100000
-WORD = re.compile(r"[^\\W\\d_][\\w\\u200c'-]*", re.UNICODE)
-BOOK_ID = re.compile(r"AGRI-[0-9]{3}\\Z")
-CHUNK_NAME = re.compile(r"chapter-([0-9]{2})-part-([0-9]{3})\\.md\\Z")
+WORD = re.compile(r"[^\W\d_][\w\u200c'-]*", re.UNICODE)
+BOOK_ID = re.compile(r"AGRI-[0-9]{3}\Z")
+CHUNK_NAME = re.compile(r"chapter-([0-9]{2})-part-([0-9]{3})\.md\Z")
 
 
 def require(ok, reason):
@@ -53,7 +53,7 @@ def tokens(prose):
             refs = bool(re.search(r"(references|bibliography|منابع|کتابنامه)", v, re.I))
         if refs or v.startswith(("#", "|", ">", "---", "http://", "https://")):
             continue
-        v = re.sub(r"https?://\\S+", " ", v)
+        v = re.sub(r"https?://\S+", " ", v)
         lines.append(v)
     return [w.casefold() for w in WORD.findall(" ".join(lines))]
 
@@ -215,7 +215,7 @@ def prepare_prompt(plan, unit, previous, evidence, chapter, part):
     # Stage2 is metadata/abstract research; no secret orders or private buyers
     # enter the external prompt. Do not pass entire source files.
     safe_evidence = {}
-    for k in ("topic_id", "source_ids", "bibliography", "source_doi", "publisher_diversity"):
+    for k in ("topic_id", "source_ids", "bibliography", "source_doi", "publisher_diversity", "sources", "claims"):
         if k in evidence:
             safe_evidence[k] = evidence[k]
     context = json.dumps(safe_evidence, ensure_ascii=False)[:3500]
@@ -247,8 +247,11 @@ def assemble_if_complete(bookdir, plan, parts):
         body += "\n\n".join(x for _, x in parts[i]) + "\n"
     all_words = len(tokens(body))
     require(all_words >= BOOK_MINIMUM, "AUTHOR_ASSEMBLY_INSUFFICIENT_WORDS")
-    good, reason = distinct_enough(body[:150000], "")
-    require(good, "AUTHOR_ASSEMBLY_" + reason)
+    words = tokens(body)
+    shingles = [tuple(words[i:i+12]) for i in range(0, len(words)-11, 6)]
+    require(len(set(shingles)) / max(1, len(shingles)) >= .87,
+            "AUTHOR_ASSEMBLY_REPETITIVE")
+    require(len(set(words)) >= 1000, "AUTHOR_ASSEMBLY_LEXICAL_PADDING")
     output = bookdir / "authored-books" / (plan["id"] + ".md")
     require(not output.exists() and not output.is_symlink(), "AUTHOR_COMPLETED_BOOK_EXISTS")
     save_once(output, body.encode("utf8"))
@@ -276,6 +279,13 @@ def run(args):
         fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
         parts = existing_parts(bookdir, args.product)
         chapter, part = next_part(parts)
+        if chapter is not None:
+            attempted = re.compile(r"chapter-%02d-part-([0-9]{3})\\.md(?:\\.rejected)?\\Z" % chapter)
+            previous_ids = [int(m.group(1)) for child in folder.iterdir()
+                            if child.is_file() and not child.is_symlink()
+                            for m in [attempted.fullmatch(child.name)] if m]
+            part = max(previous_ids, default=0) + 1
+            require(part <= 999, "AUTHOR_PART_LIMIT")
         n = sum(len(tokens(text)) for group in parts.values() for _, text in group)
         key_path = Path(args.api_key_file)
         api_ready = bool(secret_key(key_path))
