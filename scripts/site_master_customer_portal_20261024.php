@@ -147,11 +147,11 @@ function masterWeb():void {
     $dir=$fa?'rtl':'ltr';$lang=$fa?'fa':'en';$title=$fa?'پرسش از مسترایجنت زمرد ملل':'Ask MojPlayWin Master Agent';
     echo '<!doctype html><html lang="'.$lang.'" dir="'.$dir.'"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.masterEscape($title).'</title>';
     echo '<style>body{margin:0;background:#10291f;color:#f6efd9;font:16px/1.8 system-ui,Tahoma,Arial,sans-serif}main{max-width:740px;margin:auto;padding:36px 18px}a{color:#f1d28b}h1{color:#f1d28b;font-size:clamp(25px,5vw,36px)}section{background:#1b3b2b;border:1px solid #bda16c;border-radius:18px;padding:24px;margin:20px 0}label{display:block;margin:13px 0 4px}input,select,textarea,button{box-sizing:border-box;width:100%;padding:12px;border-radius:9px;border:1px solid #9aaf96;font:inherit}input,textarea,select{background:#fafbf8;color:#12251b}button{background:#e5ca85;border:0;color:#1c271c;font-weight:700;cursor:pointer;margin-top:16px}.notice{border-inline-start:4px solid #e5ca85;padding:12px}.error{color:#ffb8a7}.honeypot{position:absolute;left:-99999px}</style></head><body><main>';
-    echo '<p><a href="/">'.($fa?'بازگشت به سایت':'Back to website').'</a></p><h1>'.masterEscape($title).'</h1>';
+    echo '<p><a href="/">'.($fa?'بازگشت به سایت':'Back to website').'</a> · <a href="/ask-master/status.php">'.($fa?'پیگیری درخواست قبلی':'Track a previous request').'</a></p><h1>'.masterEscape($title).'</h1>';
     echo '<p>'.($fa?'پاسخ‌های عمومی بدون API خارجی ارائه می‌شوند. پرسش‌های اختصاصی برای بررسی ثبت خواهند شد.':'General guidance works without an external AI API. Specific questions are queued for review.').'</p>';
     if($error!=='')echo '<p class="error" role="alert">'.masterEscape($error).'</p>';
     if($result!==null){
-        echo '<section role="status"><h2>'.($fa?'درخواست ثبت شد':'Request received').'</h2><p>'.masterEscape($result['reply']).'</p><p>'.($fa?'شناسه پیگیری: ':'Ticket: ').masterEscape($result['id']).'</p></section>';
+        echo '<section role="status"><h2>'.($fa?'درخواست ثبت شد':'Request received').'</h2><p>'.masterEscape($result['reply']).'</p><p>'.($fa?'شناسه پیگیری: ':'Ticket: ').masterEscape($result['id']).'</p><p><a href="/ask-master/status.php">'.($fa?'پیگیری نتیجه با شناسه و ایمیل':'Check progress with your ticket ID and email').'</a></p></section>';
     }else{
         echo '<section><form method="post" action="/ask-master/index.php" accept-charset="utf-8">';
         echo '<input type="hidden" name="csrf" value="'.masterEscape((string)$_SESSION['master_csrf']).'">';
