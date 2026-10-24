@@ -206,6 +206,17 @@ jobs:
                           terminals.append({'line':child.lineno,'kind':'raise','call':getattr(getattr(child.exc,'func',None),'id',None) or getattr(child.exc,'id',None) or type(child.exc).__name__})
                   branch_audit.append({'file':str(p.relative_to(root)),'function':node.name,'branches':branches[:50],'terminals':terminals[:50]})
           print('MPW_INVOICE_START_BRANCH_AUDIT='+json.dumps(branch_audit))
+          sanitized=[]
+          for p in targets:
+              if p.is_symlink() or not p.is_file():continue
+              try:source=p.read_text('utf8','replace');tree=ast.parse(source)
+              except (OSError,SyntaxError):continue
+              for node in ast.walk(tree):
+                  if not isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) or node.name not in wanted:continue
+                  segment=ast.get_source_segment(source,node) or ''
+                  segment=re.sub(r"""(?i)(?:[rubf]{0,2})?(['"])(?:\\.|(?!\\1).)*\\1""","'<literal>'",segment)
+                  sanitized.append({'file':str(p.relative_to(root)),'function':node.name,'source_without_literals':segment[:5000]})
+          print('MPW_INVOICE_START_SOURCE_SHAPE='+json.dumps(sanitized))
           if not routes:raise SystemExit('NO_INVOICE_ROUTE_DEFINITIONS_FOUND')
           PY
       - name: Smoke public store product and checkout routes without creating orders or payments
