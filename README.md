@@ -4,6 +4,15 @@ Production-oriented Django foundation for the research, knowledge, data, agent o
 
 Repository scope: this project only.
 
+
+## Official public websites
+
+These are external public-facing websites associated with the broader work; their availability, commercial checkout and deployments are verified separately from this source repository.
+
+- **MojPlayWin — international digital store:** [Storefront](https://mojplaywin.com/store/?utm_source=github&utm_medium=referral&utm_campaign=saeit_official_sites_20261024) · [Chess improvement digital book (US $7.50)](https://mojplaywin.com/store/product/72/?utm_source=github&utm_medium=referral&utm_campaign=saeit_official_sites_20261024&utm_content=chess) · [Taniya illustrated digital book (US $4.00)](https://mojplaywin.com/store/product/225/?utm_source=github&utm_medium=referral&utm_campaign=saeit_official_sites_20261024&utm_content=taniya). Prices are the listed prices verified on 24 October 2026; checkout requires an account and an order-specific TRX invoice, and file access follows independently confirmed payment. This is not a claim that a complete paid purchase was tested.
+- **Zomorod Melal — Iranian agricultural research and industry:** [Official Persian website](https://zomorodmelal.ir/?utm_source=github&utm_medium=referral&utm_campaign=saeit_official_sites_20261024) · [Public research-project register](https://zomorodmelal.ir/research/projects/?utm_source=github&utm_medium=referral&utm_campaign=saeit_official_sites_20261024). The register currently lists no independently approved public project records.
+- **Mojtaba Roozegar — independent professional and research profile:** [Public profile](https://mojplaywin.com/mojtaba.roozegar/resume/?utm_source=github&utm_medium=referral&utm_campaign=saeit_official_sites_20261024). Owner-reported credentials are distinguished from independently verified publications.
+
 ## Runtime safety
 
 The execution path is governed by capability, risk, owner-approval, execution-identity, retry-budget, and audit controls. Production-changing or other sensitive actions must pass the approval gate before execution.
