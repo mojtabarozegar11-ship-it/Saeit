@@ -1,0 +1,115 @@
+name: Execute owner's 184 exact private-content returns without QC fabrication
+on:
+  pull_request:
+    paths:
+      - scripts/factory_owner_managerial_rework_184_20261024.py
+      - tests/test_factory_owner_managerial_rework_184_20261024.py
+      - .github/workflows/factory-owner-managerial-rework-184-20261024.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_owner_managerial_rework_184_20261024.py
+      - tests/test_factory_owner_managerial_rework_184_20261024.py
+      - .github/workflows/factory-owner-managerial-rework-184-20261024.yml
+permissions:
+  contents: read
+concurrency:
+  group: owner-private-agri184-return-order
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run immutable 184-verdict regression
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_factory_owner_managerial_rework_184_20261024.py -v
+          python3 -m py_compile scripts/factory_owner_managerial_rework_184_20261024.py
+  execute-private-verdict:
+    needs: test
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Establish owner-specific pinned VPS relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-owner-184"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ServerAliveInterval 15
+            ServerAliveCountMax 3
+            RequestTTY no
+            ForwardAgent no
+          EOF
+          chmod 600 "$d/config"
+      - name: Prove exactly 184 real bad source revisions before writing any return ticket
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-owner-184"
+          run="/home/githubops/factory-runtime/operations/.owner-rework-184-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          echo "REMOTE_REWORK_EXECUTION_STAGE=$run"
+          timeout 25s ssh -T -F "$d/config" saeit-vps "umask 077; test ! -e '$run' && install -d -m 700 '$run'"
+          file="scripts/factory_owner_managerial_rework_184_20261024.py"
+          timeout 45s ssh -T -F "$d/config" saeit-vps "umask 077; cat > '$run/rework.py'; chmod 600 '$run/rework.py'" < "$file"
+          sha="$(sha256sum "$file" | awk '{print $1}')"
+          timeout 25s ssh -T -F "$d/config" saeit-vps "test \"\$(sha256sum '$run/rework.py' | awk '{print \$1}')\" = '$sha'"
+          timeout 150s ssh -T -F "$d/config" saeit-vps "/home/githubops/factory-runtime/.venv/bin/python -B '$run/rework.py' --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --audit-only"
+      - name: Execute all 184 immutable returns and independently re-read receipts
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-owner-184"
+          run="/home/githubops/factory-runtime/operations/.owner-rework-184-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          timeout 180s ssh -T -F "$d/config" saeit-vps "/home/githubops/factory-runtime/.venv/bin/python -B '$run/rework.py' --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle"
+          timeout 45s ssh -T -F "$d/config" saeit-vps python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          base=Path("/home/githubops/factory-runtime/private/autonomous-product-cycle/production-instructions")
+          folder=base/"stage-05/managerial-content-rework-20261024"
+          originals=base/"stage-05/downloadable-receipts"
+          names={p.name for p in originals.iterdir() if p.is_file() and not p.is_symlink() and re.fullmatch(r"WO-[0-9]{8}--r[0-9]{3}\.json",p.name)}
+          returned={p.name for p in folder.iterdir() if p.is_file() and not p.is_symlink() and re.fullmatch(r"WO-[0-9]{8}--r[0-9]{3}\.json",p.name)}
+          assert len(names)==184 and returned==names
+          for name in names:
+              d=json.loads((folder/name).read_text())
+              assert d["original_archive_sha256"]==json.loads((originals/name).read_text())["zip_sha256"]
+              assert d["quality1000_approved"] is False and d["commercial_release"] is False and d["must_create_new_version"] is True
+          qc=base/"stage-05/strict-qc-rework"
+          standard=sum((qc/name).is_file() and not (qc/name).is_symlink() for name in names) if qc.is_dir() and not qc.is_symlink() else 0
+          print("OWNER_184_ALL_REWORK_RECEIPTS_VERIFIED=true")
+          print("OWNER_184_ALREADY_IN_STRICT_QC_REWORK="+str(standard))
+          print("OWNER_184_QC1000_APPROVALS_CREATED=0")
+          print("OWNER_184_PUBLIC_SITE_CHANGES=0")
+          PY
+      - name: Remove ephemeral CI SSH key
+        if: always()
+        run: |
+          rm -rf -- "$RUNNER_TEMP/factory-owner-184"
