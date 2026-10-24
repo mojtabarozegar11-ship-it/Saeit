@@ -43,10 +43,14 @@ def patch_auth(src):
  fn=fn.replace(old,'return render(request, "mpw_commerce/customer_register.html", {"form": form, "next": next_url})',1)
  return src[:start]+fn+src[end:]
 def patch_product(src):
+ start=src.find("{% elif product.pk == 72 or product.pk == 225 %}")
+ end=src.find("{% else %}",start+1) if start>=0 else -1
+ if start<0 or end<0: fail("Active book CTA branch drift")
+ branch=src[start:end]
  old='<a href="/accounts/register/">New customer? Create an account</a>'
  new='<a href="/accounts/register/?next=/store/product/{{ product.pk }}/checkout/">New customer? Create an account</a>'
- if src.count(old)!=1 or "Secure checkout for this book" not in src: fail("Active book CTA drift")
- return src.replace(old,new,1)
+ if branch.count(old)!=1 or branch.count("Secure checkout for this book")!=1: fail("Active book CTA drift")
+ return src[:start]+branch.replace(old,new,1)+src[end:]
 def patch_login(src):
  if src.count(TRIAL)!=1: fail("Login test-purchase link drift")
  src=src.replace(TRIAL,"",1)
@@ -83,7 +87,7 @@ def selftest():
  assert out.count('return redirect(next_url)')==2
  assert out.count('url_has_allowed_host_and_scheme(')==2
  assert 'require_https=request.is_secure()' in out and '"next": next_url' in out
- product='<a href="/accounts/register/">New customer? Create an account</a> Secure checkout for this book'
+ product='{% elif product.pk == 72 or product.pk == 225 %}<a href="/accounts/register/">New customer? Create an account</a> Secure checkout for this book{% else %}other'
  assert '/checkout/' in patch_product(product)
  login=TRIAL+'<p>New customer? <a href="{% url \'mpw_commerce:customer_register\' %}">Create an account</a></p>'
  assert TRIAL not in patch_login(login) and 'next|urlencode' in patch_login(login)
