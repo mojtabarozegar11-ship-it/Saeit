@@ -248,7 +248,7 @@ def is_public_discount_policy_question(question: str) -> bool:
     Customer-specific coupon failures, discount requests and unclear tickets
     require actual owner review. No external model or unsupported assumption.
     """
-    normalized = re.sub(r"\\s+", " ", question.casefold()).strip(" .!?؟،\t\r\n")
+    normalized = re.sub(r"\s+", " ", question.casefold()).strip(" .!?؟،\t\r\n")
     return normalized in PUBLIC_DISCOUNT_POLICY_QUESTIONS
 
 
