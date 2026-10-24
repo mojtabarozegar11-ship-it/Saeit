@@ -343,12 +343,49 @@ def domain_mail_delivery_readiness():
         pass
     output("MPW_MAIL_ROUTING", report)
 
+
+def email_dns_authentication():
+    """Only report public DNS posture, never dump TXT records or DKIM keys."""
+    names = ((DOMAIN, "spf"), ("default._domainkey." + DOMAIN, "dkim"),
+             ("_dmarc." + DOMAIN, "dmarc"))
+    findings = {"source": "public_dns_readonly", "readonly": True}
+    for name, kind in names:
+        found = False
+        available = False
+        policy = "unknown"
+        try:
+            p = subprocess.run(
+                ["dig", "+short", "+time=3", "+tries=1", "TXT", name],
+                capture_output=True, timeout=10, check=False)
+            if p.returncode == 0 and len(p.stdout) < 16000:
+                available = True
+                txt = " ".join(p.stdout.decode("utf-8", "replace").splitlines())
+                normalized = txt.replace('"', '').lower()
+                if kind == "spf":
+                    found = "v=spf1" in normalized
+                elif kind == "dkim":
+                    found = "v=dkim1" in normalized or "p=" in normalized
+                else:
+                    found = "v=dmarc1" in normalized
+                    for option in ("reject", "quarantine", "none"):
+                        if "p=" + option in normalized:
+                            policy = option
+                            break
+        except (OSError, subprocess.TimeoutExpired, UnicodeError, TypeError):
+            pass
+        findings[kind + "_resolver_available"] = available
+        findings[kind + "_record_present"] = found
+        if kind == "dmarc":
+            findings["dmarc_policy"] = policy
+    output("MPW_EMAIL_AUTH_DNS", findings)
+
 if __name__ == "__main__":
     support_maildir()
     configured_support_mailbox()
     configured_support_forwarder()
     domain_catchall()
     domain_mail_delivery_readiness()
+    email_dns_authentication()
     recent_cpanel_visitors()
     visitor_logs()
     output("MPW_INTAKE_READONLY", {"result": "completed", "production_db_writes": False,
