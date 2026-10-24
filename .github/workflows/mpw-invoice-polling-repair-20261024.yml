@@ -150,7 +150,7 @@ jobs:
           set -euo pipefail
           timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-invoice-ssh/config" saeit-cpanel python3 - <<'PY'
           from pathlib import Path
-          import re,json
+          import re,json,ast
           root=Path('/home/zomorod2/Saeit-staging')
           path_re=re.compile(r"""(?:path|re_path)\(\s*['"]([^'"]+)['"]\s*,\s*([A-Za-z0-9_.]+)""")
           routes=[];views=[]
@@ -171,6 +171,19 @@ jobs:
                       m=re.match(r'\s*def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(',line)
                       if m and re.search(r'trx|invoice|checkout|start',m.group(1),re.I):views.append({'file':str(p.relative_to(root)),'line':n,'function':m.group(1)})
           print('MPW_DEPLOYED_INVOICE_ROUTE_MAP='+json.dumps({'routes':routes[:80],'views':views[:80]}))
+          policies=[]
+          targets={root/'config/urls.py',root/'services/mpw_trx_public_pages.py',root/'services/mpw_trx_commercial_web.py'}
+          wanted={'_mpw_trx_start','_trx_product','product_checkout','_start_order'}
+          for p in targets:
+              if p.is_symlink() or not p.is_file():continue
+              try:source=p.read_text('utf8','replace');tree=ast.parse(source)
+              except (OSError,SyntaxError):continue
+              for node in ast.walk(tree):
+                  if not isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) or node.name not in wanted:continue
+                  body=ast.get_source_segment(source,node) or ''
+                  names=set(re.findall(r'[A-Za-z_][A-Za-z0-9_]*',body))
+                  policies.append({'file':str(p.relative_to(root)),'function':node.name,'line':node.lineno,'auth_gate':bool({'is_authenticated','login_required','login_url'}&names),'user_access':bool({'user','request'}&names),'not_found_branch':bool({'Http404','HttpResponseNotFound','NotFound'}&names),'login_redirect':('login' in names and bool({'redirect','RedirectView'}&names)),'invoice_or_order_calls':sorted(n for n in names if re.search(r'invoice|order|checkout|create',n,re.I))[:20]})
+          print('MPW_INVOICE_START_POLICY='+json.dumps(policies))
           if not routes:raise SystemExit('NO_INVOICE_ROUTE_DEFINITIONS_FOUND')
           PY
       - name: Smoke public store product and checkout routes without creating orders or payments
