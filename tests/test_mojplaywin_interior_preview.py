@@ -1,4 +1,4 @@
-"""Preview-only storefront contract for the interior design website kit."""
+"""Preview-only commercial contract with safe live product discovery."""
 import json
 from pathlib import Path
 from decimal import Decimal
@@ -12,13 +12,12 @@ MANIFEST = Path(__file__).resolve().parents[1] / "catalog" / "mojplaywin" / "ate
 
 
 class AtelierPreviewTests(SimpleTestCase):
-    def test_card_is_an_external_demo_not_a_checkout(self):
+    def test_card_is_a_product_detail_link_not_a_checkout(self):
         matching = [p for p in PRODUCTS if p["title"].startswith("Atelier Interior")]
         self.assertEqual(len(matching), 1)
         card = matching[0]
-        self.assertTrue(card["url"].startswith("https://atelier-interior-kit-demo."))
-        self.assertEqual(card["external"], True)
-        self.assertIn("preview", card["availability_note"].lower())
+        self.assertEqual(card["url"], "/store/product/879/")
+        self.assertIn("current availability and terms", card["text"].lower())
         self.assertNotIn("checkout_url", card)
         self.assertNotIn("price", card)
 
