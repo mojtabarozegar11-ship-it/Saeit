@@ -1,6 +1,8 @@
 from datetime import timedelta
 
 from django.test import TestCase
+from django.core.management import call_command
+from io import StringIO
 from django.utils import timezone
 
 from core.autonomous_brain import AutonomousBrain
@@ -76,3 +78,21 @@ class VerifiedEconomicCycleTests(TestCase):
         state = brain.observe()
         self.assertTrue(state["market_research_complete"])
         self.assertTrue(state["opportunity_scored"])
+
+    def test_blocked_task_is_not_duplicate_work_or_verified_progress(self):
+        AgentTask.objects.create(
+            agent=self.agent,
+            capability_code="income_market_research",
+            action_type="income_market_research",
+            status="blocked",
+        )
+        brain = AutonomousBrain()
+        state = brain.observe()
+        self.assertEqual(state["unfinished_tasks"], 0)
+        self.assertEqual(state["blocked_tasks"], 1)
+        self.assertEqual(brain.candidates(state)[0].action, "await_owner_or_evidence")
+
+        out = StringIO()
+        call_command("online_income_cycle", stdout=out)
+        self.assertIn("BRAIN_PENDING_APPROVAL", out.getvalue())
+        self.assertEqual(AgentTask.objects.filter(agent=self.agent).count(), 1)
