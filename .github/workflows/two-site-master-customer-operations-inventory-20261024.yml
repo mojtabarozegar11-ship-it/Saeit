@@ -165,8 +165,8 @@ jobs:
               print("MPW_ACTUAL_SUPPORT_PAGE_LINK_PRESENT="+str(b"/ask-master/index.php" in data))
           source_text=src.read_text(errors="replace")
           for line in source_text.splitlines():
-              if "support" in line.lower() and len(line)<260 and
-                 ("=>" in line or "pages/" in line or "$allowed" in line):
+              if ("support" in line.lower() and len(line)<260 and
+                  ("=>" in line or "pages/" in line or "$allowed" in line)):
                   print("MPW_TEMPLATE_SUPPORT_MAPPING="+json.dumps(line.strip()))
           print("LOCAL_OLLAMA_BIN="+str(bool(shutil.which("ollama"))))
           print("LOCAL_LLAMA_SERVER_BIN="+str(bool(shutil.which("llama-server"))))
