@@ -1,0 +1,252 @@
+name: MojPlayWin private worker and live panel diagnostics only
+on:
+  push:
+    branches: [fix/mpw-onepass-private-agent-evolution-20261019]
+    paths: [.github/workflows/mpw-worker-panel-inspect-readonly-20261019.yml]
+permissions:
+  contents: read
+concurrency:
+  group: mpw-worker-panel-readonly-scope
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/fix/mpw-onepass-private-agent-evolution-20261019'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect only MojPlayWin private worker provenance, schema and panel source
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel 'python3 -B -' <<'PY'
+          import os,json,subprocess,hashlib
+          from pathlib import Path
+          base=Path('/home/zomorod2/.private_mojplaywin_main_agents')
+          root=Path('/home/zomorod2/Saeit-staging')
+          assert base.is_dir() and not base.is_symlink() and base.stat().st_mode & 0o077==0
+          entries={}
+          for slug in ('quality_review_agent_20261018','management_intelligence_20261018'):
+              target=base/slug
+              found=[]
+              if target.is_dir() and not target.is_symlink():
+                  for p in sorted(target.iterdir()):
+                      if p.is_symlink() or not p.is_file(): continue
+                      if p.suffix not in ('.json','.log','.py'): continue
+                      row={'filename':p.name,'size':p.stat().st_size}
+                      if p.suffix=='.json' and 0<p.stat().st_size<250000:
+                          try:
+                              j=json.loads(p.read_bytes())
+                              if isinstance(j,dict):
+                                  row['schema_keys']=sorted(j.keys())[:38]
+                                  row['tenant_valid']=j.get('tenant')=='mojplaywin-main'
+                                  row['timestamp_fields']={k:str(j.get(k))[:45] for k in ('observed_utc','timestamp','last_run_utc','last_review_utc','status') if k in j}
+                          except Exception: pass
+                      if p.suffix=='.log' and p.stat().st_size<250000:
+                          row['line_count']=len(p.read_text('utf8','replace').splitlines())
+                          row['last_line_length']=len(p.read_text('utf8','replace').splitlines()[-1]) if p.read_text('utf8','replace').splitlines() else 0
+                      if p.suffix=='.py' and p.stat().st_size<200000:
+                          import ast
+                          try:
+                              asttree=ast.parse(p.read_text('utf8','replace'))
+                              row['functions']=[n.name for n in asttree.body if isinstance(n,ast.FunctionDef)][:25]
+                          except Exception: pass
+                      found.append(row)
+              entries[slug]=found[:30]
+          cr=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=15)
+          assert cr.returncode==0
+          cron=[]
+          for ln in cr.stdout.splitlines():
+              if ln.lstrip().startswith('#'):continue
+              if any(t in ln for t in ('MPW_ZOMOROD_QUALITY_REVIEW_MAIN_ONLY_20261018','MPW_ZOMOROD_MANAGEMENT_INTELLIGENCE_MAIN_ONLY_20261018')):
+                  cron.append({'schedule':ln.split()[:5],'python_files':[x for x in ln.split() if x.endswith('.py')],'has_lock':'flock' in ln})
+          modules=base/'evolution_runtime_20261018/all_77_modules_last_run.json'
+          rows=[]
+          if modules.is_file() and not modules.is_symlink():
+              j=json.loads(modules.read_text('utf8'))
+              for item in j.get('per_module_capability_registry',[])[:77]:
+                  rows.append({'module':item.get('module'),'kind':item.get('kind'),'callables':item.get('exported_callables',[])[:25]})
+          panel=root/'command_center/templates/command_center/mpw_agent_monitor.html'
+          telemetry=root/'command_center/mpw_private_telemetry.py'
+          details={'panel_present':panel.is_file(),'panel_quality_section_on_disk':panel.is_file() and 'id="quality"' in panel.read_text('utf8','replace'),
+                    'telemetry_evidence_on_disk':telemetry.is_file() and '"evidence": evidence' in telemetry.read_text('utf8','replace')}
+          # Inspect only safe telemetry shape and bounded clock age, never log text.
+          for slug, log in (('quality_review_agent_20261018','last_review.log'),
+                            ('management_intelligence_20261018','last_run.log')):
+              p=base/slug/log
+              if not p.is_file() or p.is_symlink() or p.stat().st_size>100000: continue
+              raw=p.read_text('utf8','replace').strip()
+              vals=[]
+              for cand in (raw, raw[raw.find('{'):] if '{' in raw else ''):
+                  try:
+                      obj=json.loads(cand)
+                      if isinstance(obj,dict): vals.append(obj)
+                  except (ValueError,TypeError): pass
+              if vals:
+                  v=vals[0]
+                  entries[slug+'_log_contract']={'parseable_json':True,'keys':sorted(v.keys())[:45],
+                      'status':v.get('status') if isinstance(v.get('status'),str) else None,
+                      'tenant_present':v.get('tenant')=='mojplaywin-main',
+                      'timestamp_fields':{k:str(v[k])[:45] for k in ('observed_utc','checked_at','completed_at','status') if k in v}}
+              else:
+                  entries[slug+'_log_contract']={'parseable_json':False,'last_line_bounded_char_count':len(raw)}
+          for slug,script in (('quality_review_agent_20261018','review_private_drafts.py'),
+                              ('management_intelligence_20261018','worker.py')):
+              p=base/slug/script
+              if not p.is_file() or p.is_symlink(): continue
+              import ast
+              t=ast.parse(p.read_text('utf8','replace'))
+              methods=[]
+              for n in t.body:
+                  if isinstance(n,ast.If) and '__name__' in ast.unparse(n.test):
+                      methods.append(ast.unparse(n)[:1000])
+              entries[slug+'_main_flow']=methods
+          for slug,log in (('quality_review_agent_20261018','last_review.log'),
+                           ('management_intelligence_20261018','last_run.log')):
+              p=base/slug/log
+              if not p.is_file() or p.is_symlink() or p.stat().st_size>100000: continue
+              j=json.loads(p.read_text('utf8','replace'))
+              view={}
+              for k,v in j.items():
+                  if k in ('source_hashes_verified','actual_private_drafts_scored','factory_or_zomorod_modified',
+                           'website_published','public_content_published','shared_Django_changed',
+                           'financial_actions_executed','validated_private_drafts','source_modules_hash_verified',
+                           'zomorod_or_factory_modified','status'):
+                      view[k]=v if isinstance(v,(str,bool,int,float)) else {'type':type(v).__name__,'length':len(v) if hasattr(v,'__len__') else None}
+                  elif k in ('quality_review_results','knowledge_quality_gates'):
+                      view[k]={'type':type(v).__name__,'length':len(v) if hasattr(v,'__len__') else None}
+              entries[slug+'_verified_fields']=view
+              entries[slug+'_mode']=oct(p.stat().st_mode & 0o777)
+          state=base/'evolution_runtime_20261018/onepass_agent_quality/onepass_status.json'
+          status=json.loads(state.read_text()) if state.is_file() and not state.is_symlink() else {}
+          management=base/'management_intelligence_20261018/latest_company_operations.json'
+          m=json.loads(management.read_text()) if management.is_file() and not management.is_symlink() else {}
+          print('MPW_WORKER_GATES='+json.dumps({
+              'current_states':[(x.get('id'),x.get('state')) for x in status.get('components',[])
+                                 if x.get('id') in ('worker_quality','worker_management')],
+              'evidence':status.get('worker_execution_evidence'),
+              'management_flags':{k:m.get(k) for k in ('factory_connected','financial_account_data_consulted',
+                                   'observed_utc')},
+          },sort_keys=True))
+          print('MPW_WORKER_DIAGNOSTICS='+json.dumps({'tenant':'mojplaywin-main','worker_files':entries,'cron':cron,'panel':details,
+                'module_registry_size':len(rows),'module_capability_sample':rows[:77]},ensure_ascii=False,sort_keys=True))
+          PY
+      - name: Verify real MojPlayWin Django staff panel in fresh app worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 85s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel 'cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' <<'PY'
+          import os,json
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from django.contrib.auth import get_user_model
+          from django.test import RequestFactory
+          from django.urls import reverse
+          from command_center.mpw_monitor_views import dashboard, telemetry_api
+          user=get_user_model()(username='ephemeral-mpw-test-staff',is_active=True,is_staff=True)
+          factory=RequestFactory()
+          path=reverse('mpw_agent_monitor')
+          api=reverse('mpw_agent_monitor_api')
+          assert path.endswith('/mpw-agents/') and api.endswith('/api/mpw-agents/')
+          page=factory.get(path,secure=True,HTTP_HOST='mojplaywin.com');page.user=user
+          result=dashboard(page)
+          assert result.status_code==200
+          content=result.content.decode('utf8')
+          assert 'id="quality"' in content
+          assert 'اجرای سالم' in content
+          request=factory.get(api,secure=True,HTTP_HOST='mojplaywin.com');request.user=user
+          response=telemetry_api(request)
+          info=json.loads(response.content)
+          assert response.status_code==200
+          assert info['tenant']=='mojplaywin-main'
+          assert info['summary']['total']==103
+          assert info['summary']['loaded_only']==77
+          assert info['evidence']['open_rework_items']==0
+          assert info['evidence']['worker_execution_receipts_verified']==2
+          assert 'no-store' in response['Cache-Control']
+          print('MPW_PRIVATE_PANEL_FRESH_DJANGO='+json.dumps({
+              'render_200':True,'api_200':True,
+              'worker_receipts':info['evidence']['worker_execution_receipts_verified'],
+              'open_rework':info['evidence']['open_rework_items'],
+              'module_imports_not_claimed_functional':info['summary']['loaded_only']==77,
+              'shared_passenger_restarted':False},sort_keys=True))
+          PY
+      - name: Inspect scoped Passenger app roots and restart marker safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel 'python3 -B -' <<'PY'
+          from pathlib import Path
+          import json,os
+          root=Path('/home/zomorod2/mojplaywin.com')
+          assert root.is_dir() and not root.is_symlink()
+          paths=['.htaccess','farnaz/.htaccess','taniya/.htaccess',
+                 'saman/.htaccess','picm/.htaccess','zahra/.htaccess',
+                 'mojtaba.roozegar/.htaccess']
+          found={}
+          for rel in paths:
+              p=root/rel
+              if p.is_symlink() or not p.is_file(): continue
+              lines=p.read_text('utf8','replace').splitlines()
+              found[rel]=[line.strip()[:220] for line in lines if line.strip().startswith(
+                   ('PassengerAppRoot','PassengerAppGroupName','PassengerBaseURI','PassengerEnabled',
+                    'PassengerAppType','PassengerStartupFile'))]
+          tmp=root/'tmp'
+          marker=tmp/'restart.txt'
+          print('MPW_PASSENGER_ISOLATION='+json.dumps({
+              'roots':found, 'main_tmp_exists':tmp.is_dir() and not tmp.is_symlink(),
+              'main_marker_symlink':marker.is_symlink(),
+              'main_marker_exists':marker.is_file(),
+              'wsgi_inside_main_root':(root/'passenger_wsgi.py').is_file(),
+              'live_restart_executed':False},sort_keys=True))
+          PY
+      - name: Erase temporary SSH keys
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/mojplaywin-inventory-ssh"

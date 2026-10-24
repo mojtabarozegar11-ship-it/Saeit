@@ -200,9 +200,61 @@ def snapshot(root=BASE, now=None, with_history=True):
                     history_available = history_available or bool(item["history"])
     counts = {name: sum(x["state"] == name for x in items)
               for name in ("healthy", "loaded_only", "stale", "unknown", "failed", "degraded")}
+    # Distinct MPW-owned QA evidence, never an inferred product or generation.
+    quality = _read(root,
+        EVO + "/onepass_agent_quality/onepass_status.json", 200_000)
+    evidence = {
+        "source": "mpw_tenant_only_onepass_quality",
+        "state": "unknown", "open_rework_items": None,
+        "functional_modules_verified": None, "legacy_probes": None,
+        "generation_promoted": None, "product_produced_verified": None,
+        "product_published_verified": None,
+    }
+    if isinstance(quality, dict) and quality.get("schema") == "mpw.onepass.agent_quality.v1":
+        captured = _date(quality.get("captured_utc"))
+        if captured is not None and -60 <= (now - captured).total_seconds() <= 3600:
+            value = quality.get("open_rework_items")
+            modules = quality.get("module_independent_functional_proof_count")
+            probes = quality.get("legacy_curated_functional_probes")
+            if (type(value) is int and 0 <= value <= 103 and
+                type(modules) is int and 0 <= modules <= 77 and
+                type(probes) is int and 0 <= probes <= 77):
+                evidence.update({
+                    "state": "reported", "open_rework_items": value,
+                    "functional_modules_verified": modules, "legacy_probes": probes,
+                    "generation_promoted": quality.get("evolution_generation_promoted") is True,
+                    "product_produced_verified": quality.get("product_produced_count_verified"),
+                    "product_published_verified": quality.get("product_published_count_verified"),
+                })
+    if evidence["state"] == "reported":
+        worker_receipts = quality.get("worker_execution_evidence")
+        if isinstance(worker_receipts, dict):
+            for slug in ("quality", "management"):
+                entry = worker_receipts.get(slug)
+                valid = (
+                    isinstance(entry, dict)
+                    and entry.get("verified") is True
+                    and entry.get("source") == (
+                        "private_quality_cron_stdout" if slug == "quality"
+                        else "private_management_cron_and_tenant_json")
+                )
+                target = next((i for i in items if i["id"] == "worker_" + slug), None)
+                if target is not None and valid:
+                    target["state"] = "healthy"
+                    target["reported_at"] = quality["captured_utc"]
+                    target["metrics"] = {
+                        "worker_receipt_verified": True,
+                        "private_source": entry["source"],
+                    }
+        evidence["worker_execution_receipts_verified"] = sum(
+            item["state"] == "healthy" for item in items
+            if item["id"] in ("worker_quality", "worker_management")
+        )
+    counts = {name: sum(x["state"] == name for x in items)
+              for name in ("healthy", "loaded_only", "stale", "unknown", "failed", "degraded")}
     return {"tenant": TENANT, "captured_at": now.isoformat(),
             "source": "private_cpanel_reports", "items": items,
-            "summary": {"total": len(items), **counts},
+            "summary": {"total": len(items), **counts}, "evidence": evidence,
             "history_available": history_available}
 
 
