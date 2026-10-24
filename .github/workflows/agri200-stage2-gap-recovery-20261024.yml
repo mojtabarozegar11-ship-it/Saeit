@@ -1,4 +1,5 @@
 name: AGRI200 targeted Stage2 research gap recovery (private only)
+# Bounded private retry; never relaxes research evidence or quality gates.
 on:
   pull_request:
     paths:
