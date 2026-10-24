@@ -116,6 +116,43 @@ jobs:
               for item in ops.iterdir():
                   if item.name.startswith(('.agri200-','.strict-qc-','.private-real-qc1000-','.stage2-')) and item.is_dir() and not item.is_symlink():
                       staging+=1
+          # Measure actual AGRI200 candidate deliverables rather than
+          # mistaking the entire VPS or cPanel database for product size.
+          stage=pathlib.Path('/home/githubops/factory-runtime/private/autonomous-product-cycle/production-instructions')
+          archive_groups={
+              'first_candidate_zip':'stage-05/downloadable-candidates',
+              'revised_candidate_zip':'stage-05/source-grounded-v003'
+          }
+          archive_sizes={}
+          for label,subdir in archive_groups.items():
+              folder=stage/subdir
+              count=0
+              total=0
+              largest=0
+              overflow=False
+              if folder.is_dir() and not folder.is_symlink():
+                  for item in folder.rglob('*.zip'):
+                      if item.is_symlink() or not item.is_file():continue
+                      count+=1
+                      if count>2000:
+                          overflow=True
+                          break
+                      size=item.stat().st_size
+                      total+=size
+                      largest=max(largest,size)
+              archive_sizes[label]={
+                  'zip_count':min(count,2000),
+                  'total_bytes':total,
+                  'largest_zip_bytes':largest,
+                  'scan_complete':not overflow
+              }
+          print('VPS_AGRI200_CANDIDATE_ARCHIVES='+json.dumps({
+              'schema':'saeit.agri200.actual-candidate-zip-usage.v1',
+              'groups':archive_sizes,
+              'candidate_archives_are_not_qc1000_approved_sale_assets':True,
+              'cPanel_database_bytes_are_not_agri200_product_bytes':True,
+              'customer_download_or_store_published':False
+          },sort_keys=True))
           # A reported largest mount is not a verified private, persistent
           # and write-authorized offsite recovery destination.
           print('VPS_STORAGE_SURVEY='+json.dumps({
