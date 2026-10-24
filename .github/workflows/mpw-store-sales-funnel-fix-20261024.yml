@@ -3,7 +3,10 @@ name: MojPlayWin store purchase path cleanup
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/mpw-store-sales-funnel-fix-20261024.yml"]
+    paths:
+      - ".github/workflows/mpw-store-sales-funnel-fix-20261024.yml"
+      - "core/templates/mojplaywin/store.html"
+      - "scripts/mpw_store_sales_funnel_fix_20261024.py"
 permissions: {contents: read}
 concurrency:
   group: mojplaywin-store-sales-funnel-onefile
@@ -24,7 +27,7 @@ jobs:
           actual_sha="$(python3 -c 'import hashlib,pathlib; data=pathlib.Path("core/templates/mojplaywin/store.html").read_bytes().replace(bytes([13,10]),bytes([10])); print(hashlib.sha256(data).hexdigest())')"
           echo "MPW_STORE_SOURCE_SHA=$actual_sha"
           echo "MPW_STORE_MARKERS=$(grep -cE 'mpw-store-ten-guides|Explore this collection' core/templates/mojplaywin/store.html || true)"
-          test "$actual_sha" = "af09b7b17f8b3ee991893a1d9303c3df74353cd3dd179d26b95a4aea3b8cad7a"
+          test "$actual_sha" = "35ce23af1d40fa75eaebcb8e53a7c7461ea860210ff3ad0dcc5fb6c5dc0e32f4"
           test "$(grep -cE 'mpw-store-ten-guides|Explore this collection' core/templates/mojplaywin/store.html || true)" = "0"
           echo MPW_STORE_SOURCE_VALID=true
       - name: Capture baseline storefront and protected-route health
@@ -139,7 +142,7 @@ jobs:
           if store.is_symlink() or not store.is_file():
               raise SystemExit('STORE_TEMPLATE_NOT_REGULAR')
           digest=hashlib.sha256(store.read_bytes().replace(bytes([13,10]),bytes([10]))).hexdigest()
-          if digest!='af09b7b17f8b3ee991893a1d9303c3df74353cd3dd179d26b95a4aea3b8cad7a':
+          if digest!='35ce23af1d40fa75eaebcb8e53a7c7461ea860210ff3ad0dcc5fb6c5dc0e32f4':
               raise SystemExit('STORE_TEMPLATE_HASH_NOT_PINNED')
           if site_base.is_symlink() or not site_base.is_file():
               raise SystemExit('MOJPLAYWIN_PAGE_SHELL_NOT_REGULAR')
@@ -189,7 +192,8 @@ jobs:
               and "<html lang=\"en\" dir=\"ltr\">" in body
               and "site/heroes/store.webp" not in body
               and "mpw-store-ten-guides" not in body
-              and "INITIAL COLLECTION" not in body)
+              and "INITIAL COLLECTION" not in body
+              and "FEATURED PICKS" in body and "no account required" in body)
             print("MPW_STORE_PUBLIC_ATTEMPT="+json.dumps({"attempt":attempt,"status":code,"fixed":okay,
           "has_store_hero":"mpw-store-book" in body,"has_new_catalog":"Shop available books" in body,
           "has_old_guides":"mpw-store-ten-guides" in body,"has_old_hero":"site/heroes/store.webp" in body,
