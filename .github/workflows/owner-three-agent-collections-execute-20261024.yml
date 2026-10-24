@@ -1,0 +1,56 @@
+name: Owner execute all three independent agent collections and verify live runs
+on:
+  pull_request:
+    paths:
+      - scripts/owner_three_agent_collections_execute_20261024.sh
+      - .github/workflows/owner-three-agent-collections-execute-20261024.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/owner_three_agent_collections_execute_20261024.sh
+      - .github/workflows/owner-three-agent-collections-execute-20261024.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: owner-three-agent-collections-real-execution
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate exact cross-tenant scope and syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/owner_three_agent_collections_execute_20261024.sh
+          bash scripts/owner_three_agent_collections_execute_20261024.sh --selftest
+  execute:
+    needs: validate
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 23
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - vps-master-agent-activate.yml
+          - mpw-all-agents-private-activation.yml
+          - zomorod-site-agent-cycle.yml
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Dispatch existing protected worker cycle and require success receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AGENT_TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/owner_three_agent_collections_execute_20261024.sh --execute "$AGENT_TARGET"
