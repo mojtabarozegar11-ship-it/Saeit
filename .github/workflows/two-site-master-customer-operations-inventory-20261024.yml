@@ -120,6 +120,16 @@ jobs:
           zm=contact.read_text(errors="replace")
           ix=zm.lower().find("<main")
           print("ZM_CONTACT_PUBLIC_MAIN_SNIPPET="+json.dumps(zm[ix:ix+900] if ix>=0 else "NO_MAIN",ensure_ascii=False))
+          src=home/"mojplaywin.com/design-preview-20261017/_mpw_dynamic_main_shell_20261019.php"
+          if src.is_file() and not src.is_symlink():
+              raw=src.read_bytes()
+              txt=raw.decode("utf8","replace")
+              key="Need a direct channel?"
+              pos=txt.find(key)
+              print("MPW_SUPPORT_RENDERER_SHA256="+hashlib.sha256(raw).hexdigest())
+              print("MPW_SUPPORT_RENDERER_BYTES="+str(len(raw)))
+              print("MPW_SUPPORT_RENDERER_UNIQUE_ANCHOR="+str(txt.count(key)))
+              print("MPW_SUPPORT_RENDERER_ANCHOR_SNIPPET="+json.dumps(txt[pos-350:pos+580] if pos>=0 else "NOT_FOUND",ensure_ascii=False))
           print("LOCAL_OLLAMA_BIN="+str(bool(shutil.which("ollama"))))
           print("LOCAL_LLAMA_SERVER_BIN="+str(bool(shutil.which("llama-server"))))
           print("LOCAL_LLAMA_PYTHON="+str(importlib.util.find_spec("llama_cpp") is not None))
