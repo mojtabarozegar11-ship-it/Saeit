@@ -1,0 +1,27 @@
+name: QC forbid fake 1000 release without 1000 real executed receipts
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/factory_commercial_quality_release_guard_v1.py
+      - tests/test_factory_commercial_quality_release_guard_real1000_20261024.py
+      - .github/workflows/factory-qc-commercial-real1000-20261024.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_commercial_quality_release_guard_v1.py
+      - tests/test_factory_commercial_quality_release_guard_real1000_20261024.py
+      - .github/workflows/factory-qc-commercial-real1000-20261024.yml
+permissions: {contents: read}
+jobs:
+  fail-closed-real-1000:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify fake QC1000 / fake signer / arbitrary key cannot release
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_factory_commercial_quality_release_guard_real1000_20261024.py' -v
+          python3 -B -m py_compile scripts/factory_commercial_quality_release_guard_v1.py
