@@ -78,12 +78,12 @@ def change(site: str, original: bytes) -> bytes:
         output = html[:pos.start()] + ZM_ELEMENT + "\n" + html[pos.start():]
     elif site == "mojplaywin":
         hook_marker = "// MPW_MASTER_SUPPORT_NAV_20261024_BEGIN"
-        needle = "\\necho $rendered;"
+        needle = "\necho $rendered;"
         require(hook_marker not in html and html.count(needle)==1, "MPW_SHARED_SHELL_ENTRY_NOT_UNIQUE")
         require(html.strip().endswith("echo $rendered;"), "MPW_SHARED_SHELL_UNEXPECTED_TAIL")
         require("$slug=$_GET['__mpw_template_route']??null;" in html, "MPW_SUPPORT_ROUTE_GUARD_MISSING")
         pos=html.find(needle)
-        output=html[:pos]+"\\n"+MPW_ELEMENT+html[pos:]
+        output=html[:pos]+"\n"+MPW_ELEMENT+html[pos:]
     else:
         raise ValueError("UNKNOWN_TENANT")
     require(len(output)>len(html) and len(output)-len(html)<3600, "UNEXPECTED_CHANGE_SIZE")
