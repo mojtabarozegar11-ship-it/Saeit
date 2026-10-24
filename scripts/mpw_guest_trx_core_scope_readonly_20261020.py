@@ -106,6 +106,8 @@ for pid in (72,225):
              "has_challenge_api":"/commerce/checkout/challenge/" in body,
              "has_signup_return":("/accounts/register/?next=/store/product/%d/checkout/"%pid in body),
              "forms":re.findall(r'<form\b[^>]{0,500}>',body,re.I)[:5],
+             "form_excerpt":re.sub(r"\s+"," ",re.sub(r"<[^>]+>"," ",(re.findall(r'<form\b[^>]*>.*?</form>',body,re.I|re.S) or [""])[0]))[:400],
+             "submit_buttons":re.findall(r'<button\b[^>]*>.*?</button>',body,re.I|re.S)[:8],
              "trx_button":bool(re.search(r"Pay securely with TRX",body,re.I)),
              "read_only":True,"orders_created":False},ensure_ascii=False))
     except Exception as e:
@@ -166,7 +168,7 @@ with tempfile.TemporaryDirectory(prefix="mpw-readonly-order-sim-") as tmp:
     fakefile.write_bytes(b"%PDF-1.4\n% SIMULATION ONLY\n%%EOF\n")
     fakefile.chmod(0o600)
     intent_calls=[]
-    def fake_reserve(**kwargs): intent_calls.append(kwargs); return 987652
+    def fake_reserve(*args,**kwargs): intent_calls.append({"args":len(args),"kwargs":sorted(kwargs)}); return 987652
     patches=[
         patch.object(core_models,"Product",SimpleNamespace(objects=FakeProductManager())),
         patch.object(core_models,"Order",FakeOrder),
