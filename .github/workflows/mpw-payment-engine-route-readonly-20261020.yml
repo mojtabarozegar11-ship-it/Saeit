@@ -1,4 +1,5 @@
 name: MojPlayWin actual payment engine and active route mismatch diagnosis
+# Current active buyer order-to-invoice path audit 2026-10-24 (read-only).
 on:
   push:
     branches: [main]
