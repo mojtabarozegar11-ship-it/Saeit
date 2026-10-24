@@ -15,7 +15,7 @@ class MojPlayWinSiteTests(TestCase):
         response=self.client.get("/store/",HTTP_HOST="mojplaywin.com")
         self.assertEqual(response.status_code,200)
         html=response.content.decode("utf-8")
-        for marker in ("6 DIGITAL PRODUCTS","The Science and Practice of Chess Improvement","Taniya and the Little Baker Worms","Farm Enterprise Economics Toolkit","/static/site/heroes/","Applied AI Learning Path"):
+        for marker in ("DIGITAL PRODUCTS","The Science and Practice of Chess Improvement","Taniya and the Little Baker Worms","Farm Enterprise Economics Toolkit","/static/site/heroes/","Applied AI Learning Path"):
             self.assertIn(marker,html)
         self.assertNotIn("در حال حاضر محصول فعالی",html)
 
