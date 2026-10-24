@@ -1,4 +1,4 @@
-name: Zomorod scientific provenance discovery (read only)
+name: Zomorod provenance and private review queue
 on:
   push:
     branches:
@@ -167,4 +167,116 @@ jobs:
               print("PRIVATE_AGGREGATE_AUDIT_READ_ONLY_DONE=true")
           finally:
               connection.close()
+          PY
+
+  build-private-review-queue:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/credibility/evidence-register-20261024'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Create immutable private review queue from read-only SQLite
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          temp="$RUNNER_TEMP/zm-review-queue"
+          install -d -m 700 "$temp"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$temp/key"
+          chmod 600 "$temp/key"
+          ssh-keygen -y -P '' -f "$temp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$temp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 120s ssh -T -i "$temp/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -B -' <<'PY'
+          import hashlib
+          import json
+          import os
+          import sqlite3
+          from pathlib import Path
+
+          source = Path.home() / "factory-runtime/private/factory-fresh-isolated.sqlite3"
+          target = Path.home() / "factory-runtime/private/scientific-credibility"
+          if not source.is_file() or source.is_symlink():
+              raise SystemExit("RESEARCH_SOURCE_MISSING_OR_SYMLINK")
+          if target.exists() and (target.is_symlink() or not target.is_dir()):
+              raise SystemExit("PRIVATE_QUEUE_TARGET_UNSAFE")
+          connection = sqlite3.connect(source.resolve().as_uri() + "?mode=ro",
+                                       uri=True, timeout=10)
+          try:
+              connection.execute("PRAGMA query_only=ON")
+              tables = {row[0] for row in connection.execute(
+                  "SELECT name FROM sqlite_master WHERE type='table'")}
+              required = {"core_researchproject", "core_researchsource",
+                          "core_evidence", "core_finding", "core_report"}
+              if not required.issubset(tables):
+                  raise SystemExit("RESEARCH_EVIDENCE_SCHEMA_INCOMPLETE")
+              projects = [row[0] for row in connection.execute(
+                  "SELECT id FROM core_researchproject ORDER BY id")]
+              if len(projects) > 100000:
+                  raise SystemExit("UNBOUNDED_REVIEW_QUEUE")
+              records = []
+              for project_id in projects:
+                  metrics = {}
+                  for label, table in (
+                      ("sources", "core_researchsource"),
+                      ("evidence", "core_evidence"),
+                      ("findings", "core_finding"),
+                      ("reports", "core_report"),
+                  ):
+                      metrics[label] = connection.execute(
+                          "SELECT COUNT(*) FROM " + table + " WHERE project_id = ?",
+                          (project_id,)).fetchone()[0]
+                  metrics["findings_with_documented_limitations"] = connection.execute(
+                      "SELECT COUNT(*) FROM core_finding WHERE project_id = ? "
+                      "AND LENGTH(TRIM(limitation)) >= 20",
+                      (project_id,)).fetchone()[0]
+                  blockers = []
+                  if not all(metrics[name] > 0 for name in
+                             ("sources", "evidence", "findings", "reports")):
+                      blockers.append("incomplete_related_evidence_chain")
+                  if not metrics["findings_with_documented_limitations"]:
+                      blockers.append("scientific_limitations_not_documented")
+                  blockers.append("project_level_publication_permission_not_verified")
+                  blockers.append("independent_scientific_review_not_verified")
+                  records.append({
+                      "private_project_id": project_id,
+                      "evidence_relationship_counts": metrics,
+                      "review_blockers": blockers,
+                      "release_allowed": False,
+                      "independent_scientific_certification": False,
+                  })
+          finally:
+              connection.close()
+
+          payload = {
+              "schema": "zomorod.private.scientific-review-queue.v1",
+              "source": "FACTORY_PRIVATE_VPS_NOT_COMPANY_HISTORICAL_CATALOG",
+              "records": records,
+              "project_count": len(records),
+              "publicly_approved_count": 0,
+              "publication_automatically_allowed": False,
+              "never_substitute_for_1457_historical_claim": True,
+          }
+          raw = (json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                            separators=(",", ":")) + "\n").encode("utf-8")
+          checksum = hashlib.sha256(raw).hexdigest()
+          target.mkdir(mode=0o700, parents=True, exist_ok=True)
+          os.chmod(target, 0o700)
+          output = target / ("review-queue-" + checksum[:24] + ".json")
+          if output.exists():
+              if output.is_symlink() or output.read_bytes() != raw:
+                  raise SystemExit("REVIEW_QUEUE_CONTENT_CONFLICT")
+          else:
+              with output.open("xb") as file:
+                  file.write(raw)
+                  file.flush()
+                  os.fsync(file.fileno())
+              os.chmod(output, 0o600)
+          print("PRIVATE_REVIEW_QUEUE_CREATED_OR_REUSED=true")
+          print("PRIVATE_REVIEW_QUEUE_PROJECT_COUNT=" + str(len(records)))
+          print("PRIVATE_REVIEW_QUEUE_OWNED_BY_PUBLIC_SITE=false")
+          print("PRIVATE_REVIEW_QUEUE_PUBLIC_RELEASE_ALLOWED=false")
+          print("PRIVATE_REVIEW_QUEUE_SHA256=" + checksum)
           PY
