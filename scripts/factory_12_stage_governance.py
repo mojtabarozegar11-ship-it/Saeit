@@ -1,3 +1,4 @@
+# Accept unbounded factory work-order serials throughout governance intake.
 #!/usr/bin/env python3
 """VPS-local 12-stage digital factory governance and release gate.
 
