@@ -75,6 +75,18 @@ jobs:
               print("ZM_AGENT_TASK_RUNNING=" + str(states.get("running", 0)))
           except Exception as e:
               print("ZM_AGENT_REGISTRY_QUERY=failed_" + type(e).__name__)
+              message = str(e).lower()
+              if "no such table" in message:
+                  kind = "missing_table"
+              elif "no such column" in message:
+                  kind = "missing_column"
+              elif "locked" in message:
+                  kind = "locked"
+              elif "unable to open" in message:
+                  kind = "open_failed"
+              else:
+                  kind = "other_database_error"
+              print("ZM_AGENT_REGISTRY_ERROR_CATEGORY=" + kind)
           PY
           else
             echo ZM_AGENT_DJANGO_RUNTIME_MISSING
@@ -99,6 +111,41 @@ jobs:
                   print("MPW_AGENT_TELEMETRY=invalid_" + type(exc).__name__)
           else:
               print("MPW_AGENT_TELEMETRY=missing")
+          from urllib.parse import quote
+          import sqlite3
+          private=Path.home()/".private/zomorod-business"
+          required=("site_agents.php","site_agent_workforce.php","site_agent_cycle_cli.php")
+          for name in required:
+              p=private/name
+              print("ZM_PHP_MODULE_"+name.upper().replace(".","_")+"_PRESENT="+str(p.is_file() and not p.is_symlink()).lower())
+          ledger=private/"site_agents.sqlite3"
+          if ledger.is_file() and not ledger.is_symlink():
+              try:
+                  with sqlite3.connect("file:"+quote(str(ledger))+"?mode=ro",uri=True,timeout=12) as db:
+                      db.execute("PRAGMA query_only=ON")
+                      tables={x[0] for x in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                      required_tables={"agents","runs","site_work_outputs","site_work_state","site_work_generation_evidence"}
+                      print("ZM_PHP_LEDGER_SCHEMA_COMPLETE="+str(required_tables.issubset(tables)).lower())
+                      if required_tables.issubset(tables):
+                          for table in ("agents","runs","site_work_outputs"):
+                              number=db.execute('SELECT COUNT(*) FROM "'+table+'"').fetchone()[0]
+                              print("ZM_PHP_LEDGER_"+table.upper()+"="+str(number))
+                          roles=db.execute("SELECT COUNT(DISTINCT agent_code) FROM runs").fetchone()[0]
+                          print("ZM_PHP_LEDGER_DISTINCT_RUN_ROLES="+str(roles))
+                          latest=db.execute("SELECT occurred_at FROM runs ORDER BY id DESC LIMIT 1").fetchone()
+                          if latest and latest[0]:
+                              try:
+                                  stamp=datetime.fromisoformat(str(latest[0]).replace("Z","+00:00"))
+                                  if stamp.tzinfo is None:
+                                      stamp=stamp.replace(tzinfo=timezone.utc)
+                                  age=int((datetime.now(timezone.utc)-stamp).total_seconds())
+                                  print("ZM_PHP_AGENT_LATEST_RUN_AGE_SECONDS="+str(age))
+                              except (ValueError,TypeError):
+                                  print("ZM_PHP_AGENT_LATEST_RUN_TIMESTAMP_INVALID=true")
+              except sqlite3.Error as exc:
+                  print("ZM_PHP_LEDGER_QUERY=failed_"+type(exc).__name__)
+          else:
+              print("ZM_PHP_LEDGER_MISSING=true")
           cron=subprocess.run(["crontab","-l"], capture_output=True,text=True,timeout=15)
           if cron.returncode == 0:
               tags={"MPW_MAIN_AGENT":"MPW_V91_MAIN_ONLY_20261018",
@@ -112,6 +159,10 @@ jobs:
               zm=sum(("knowledge_agent_" in line or "company_activity_agent" in line)
                      for line in cron.stdout.splitlines() if not line.lstrip().startswith("#"))
               print("ZM_SITE_AGENT_CRON_MARKERS="+str(zm))
+              enabled=[line for line in cron.stdout.splitlines()
+                       if not line.lstrip().startswith("#") and "zm-site-agents-only-v100" in line
+                       and line.split()[:5]==["*/10","*","*","*","*"]]
+              print("ZM_PHP_SITE_AGENTS_TEN_MINUTE_CRON="+str(len(enabled)))
           else:
               print("SITE_AGENT_CRON=unreadable")
           PY
