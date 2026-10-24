@@ -5,6 +5,10 @@ import {Hashes} from "@openzeppelin/tron-contracts/utils/cryptography/Hashes.sol
 
 /// @notice Test-only Merkle node oracle for disposable local TVM tests; not a production dependency.
 contract MojRewardMerkleHarness {
+    function chainId() external view returns (uint256) {
+        return block.chainid;
+    }
+
     function pair(bytes32 a, bytes32 b) external pure returns (bytes32) {
         return Hashes.commutativeKeccak256(a, b);
     }
