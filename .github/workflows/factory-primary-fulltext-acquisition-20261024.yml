@@ -1,0 +1,70 @@
+name: Factory licensed original-source acquisition for all 184 products
+on:
+  pull_request:
+    paths:
+      - scripts/factory_primary_fulltext_acquisition_20261024.py
+      - tests/test_factory_primary_fulltext_acquisition_20261024.py
+      - deploy/install_factory_primary_fulltext_acquisition_20261024.sh
+      - .github/workflows/factory-primary-fulltext-acquisition-20261024.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_primary_fulltext_acquisition_20261024.py
+      - tests/test_factory_primary_fulltext_acquisition_20261024.py
+      - deploy/install_factory_primary_fulltext_acquisition_20261024.sh
+      - .github/workflows/factory-primary-fulltext-acquisition-20261024.yml
+permissions: {contents: read}
+concurrency:
+  group: factory-primary-fulltext-acquisition
+  cancel-in-progress: false
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Confirm 184 product coverage, authentic XML, license gates, zero fake QC approvals
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_factory_primary_fulltext_acquisition_20261024.py' -v
+          bash -n deploy/install_factory_primary_fulltext_acquisition_20261024.sh
+  live-private-factory:
+    needs: regression
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-live-primary-fulltext-all-184-20261024]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install guarded primary-fulltext retrieval; public site remains untouched
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-primary-acquisition"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          py='/home/githubops/factory-runtime/.venv/bin/python'
+          target="/home/githubops/factory-runtime/operations/.primary-acquisition-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh_vps "test \"\$(id -un)\" = githubops; umask 077; test ! -e '$target'; install -d -m 700 '$target/scripts' '$target/tests' '$target/deploy'"
+          for file in scripts/factory_primary_fulltext_acquisition_20261024.py tests/test_factory_primary_fulltext_acquisition_20261024.py deploy/install_factory_primary_fulltext_acquisition_20261024.sh; do
+            ssh_vps "umask 077; cat > '$target/$file'; chmod 600 '$target/$file'" < "$file"
+            expected="$(sha256sum "$file" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$target/$file' | awk '{print \$1}')\" = '$expected'"
+          done
+          ssh_vps "timeout 100s '$py' -B -m unittest discover -s '$target/tests' -p test_factory_primary_fulltext_acquisition_20261024.py -v"
+          ssh_vps "bash -n '$target/deploy/install_factory_primary_fulltext_acquisition_20261024.sh'"
+          ssh_vps "GITHUB_RUN_ID='$GITHUB_RUN_ID' timeout 440s bash '$target/deploy/install_factory_primary_fulltext_acquisition_20261024.sh' '$target/scripts/factory_primary_fulltext_acquisition_20261024.py'"
+          printf '%s\n' 'FACTORY_PRIMARY_FULLTEXT=PRIVATE_RUN_ACTIVE' 'NO_SCIENTIFIC_OR_QC1000_APPROVAL_CLAIMED' 'NO_LIVE_SITE_RELEASE'
