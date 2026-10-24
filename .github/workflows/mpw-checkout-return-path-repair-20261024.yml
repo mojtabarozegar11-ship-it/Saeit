@@ -1,0 +1,169 @@
+name: MojPlayWin preserve checkout destination through account creation
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-checkout-return-path-repair-20261024.yml"
+      - "scripts/mpw_checkout_return_path_repair_20261024.py"
+permissions: {contents: read}
+concurrency:
+  group: mpw-checkout-return-path-main-only
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate fail-closed patch and safe-redirect contract
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_checkout_return_path_repair_20261024.py
+          python3 scripts/mpw_checkout_return_path_repair_20261024.py selftest
+      - name: Record public route status baseline
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          paths=['/','/store/','/store/product/72/','/store/product/225/','/accounts/login/','/accounts/register/','/taniya/','/farnaz/','/saman/','/picm/']
+          states={}
+          for path in paths:
+              try:
+                  with urllib.request.urlopen(urllib.request.Request('https://mojplaywin.com'+path,headers={'Cache-Control':'no-cache'}),timeout=20) as r:states[path]=r.status
+              except urllib.error.HTTPError as e:states[path]=e.code
+          if any(states[p]!=200 for p in paths if p!='/zahra/'):raise RuntimeError('Public buyer-path baseline is unhealthy: '+str(states))
+          with open(os.environ['RUNNER_TEMP']+'/mpw-return-path-before.json','w') as f:json.dump(states,f)
+          print('MPW_RETURN_PATH_BASELINE='+json.dumps(states))
+          PY
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-return-path-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Preview exact main-site handler and three customer templates
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-return-path-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - preview" < scripts/mpw_checkout_return_path_repair_20261024.py
+      - name: Install backed-up checkout return-path repair
+        id: install
+        run: |
+          set -euo pipefail
+          timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-return-path-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - publish '$GITHUB_RUN_ID'" < scripts/mpw_checkout_return_path_repair_20261024.py
+      - name: Reload only the verified MojPlayWin Passenger template cache
+        run: |
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-return-path-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          site=Path('/home/zomorod2/mojplaywin.com')
+          wsgi=site/'passenger_wsgi.py'
+          app=Path('/home/zomorod2/Saeit-staging')
+          if any(p.is_symlink() for p in (site,wsgi,app)) or not wsgi.is_file():
+              raise RuntimeError('Main app identity unsafe')
+          if "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):
+              raise RuntimeError('Passenger app root changed')
+          auth=app/'mpw_commerce/customer_auth.py'
+          login=app/'mpw_commerce/templates/mpw_commerce/customer_login.html'
+          reg=app/'mpw_commerce/templates/mpw_commerce/customer_register.html'
+          prod=app/'core/templates/brands/mojplaywin/product.html'
+          if any(p.is_symlink() or not p.is_file() for p in (auth,login,reg,prod)):
+              raise RuntimeError('Buyer patch targets are unsafe')
+          if "url_has_allowed_host_and_scheme" not in auth.read_text('utf8') or 'next|urlencode' not in login.read_text('utf8') or 'name="next"' not in reg.read_text('utf8'):
+              raise RuntimeError('Buyer return-path patch missing')
+          tmp=site/'tmp'
+          if tmp.is_symlink():raise RuntimeError('Unsafe Passenger tmp')
+          tmp.mkdir(exist_ok=True)
+          marker=tmp/'restart.txt'
+          if marker.is_symlink():raise RuntimeError('Unsafe Passenger restart marker')
+          marker.touch()
+          print('MPW_RETURN_PATH_PASSENGER_RELOAD_REQUESTED=1')
+          PY
+      - name: Verify Django form rendering and safe registration redirect code
+        run: |
+          set -euo pipefail
+          timeout 95s ssh -T -F "$RUNNER_TEMP/mpw-return-path-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify" < scripts/mpw_checkout_return_path_repair_20261024.py
+      - name: Verify public product, login and account-creation flow
+        run: |
+          python3 - <<'PY'
+          import json,os,time,urllib.parse,urllib.request
+          from urllib.error import HTTPError
+          root='https://mojplaywin.com'
+          target='/store/product/72/checkout/'
+          routes=['/store/product/72/','/store/product/225/','/accounts/login/?next='+urllib.parse.quote(target,safe=''),' /accounts/register/?next='+urllib.parse.quote(target,safe='')]
+          routes=[x.strip() for x in routes]
+          for route in routes:
+              with urllib.request.urlopen(urllib.request.Request(root+route,headers={'Cache-Control':'no-cache'}),timeout=22) as r:
+                  html=r.read(250000).decode('utf8','replace')
+                  if r.status!=200:raise RuntimeError('Buyer flow route unhealthy: '+route)
+              if route.startswith('/store/product/'):
+                  if '/accounts/register/?next=/store/product/'+route.split('/')[3]+'/checkout/' not in html or '/store/product/'+route.split('/')[3]+'/checkout/' not in html:
+                      raise RuntimeError('Product checkout/signup destination missing: '+route)
+              elif route.startswith('/accounts/login/'):
+                  if 'low-value TRX test purchase' in html or 'mpw-trx-trial-return' in html or '/accounts/register/?next=%2Fstore%2Fproduct%2F72%2Fcheckout%2F' not in html:
+                      raise RuntimeError('Login page still shows test SKU or loses intended destination')
+              else:
+                  if 'low-value TRX test purchase' in html or 'mpw-trx-trial-return' in html or 'name="next" value="/store/product/72/checkout/"' not in html:
+                      raise RuntimeError('Registration page still shows test SKU or loses intended destination')
+              print('MPW_RETURN_PATH_PUBLIC_ROUTE='+json.dumps({'route':route,'status':200,'test_sku_link_removed':True}))
+          with open(os.environ['RUNNER_TEMP']+'/mpw-return-path-before.json') as f:before=json.load(f)
+          after={}
+          for route in before:
+              with urllib.request.urlopen(urllib.request.Request(root+route,headers={'Cache-Control':'no-cache'}),timeout=20) as r:after[route]=r.status
+          if before!=after:raise RuntimeError('Protected public routes changed')
+          print('MPW_RETURN_PATH_PUBLIC_SMOKE=PASS;ORDER_OR_PAYMENT_CREATED=NO')
+          PY
+      - name: Restore exact four prior files if any post-install validation fails
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          set -euo pipefail
+          timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-return-path-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'" < scripts/mpw_checkout_return_path_repair_20261024.py
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-return-path-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          root=Path('/home/zomorod2/mojplaywin.com')
+          if root.is_symlink() or (root/'passenger_wsgi.py').is_symlink() or "APP='/home/zomorod2/Saeit-staging'" not in (root/'passenger_wsgi.py').read_text('utf8','replace'):
+              raise RuntimeError('Main app identity changed during rollback')
+          marker=root/'tmp/restart.txt'
+          if marker.parent.is_symlink() or marker.is_symlink():raise RuntimeError('Unsafe rollback reload target')
+          marker.touch()
+          print('MPW_RETURN_PATH_ROLLBACK_RELOAD_REQUESTED=1')
+          PY
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-return-path-ssh"
