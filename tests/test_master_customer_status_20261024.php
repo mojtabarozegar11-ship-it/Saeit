@@ -15,6 +15,14 @@ verify(masterTrackTicket($db,'zomorod',$ticket,'wrong@example.com') === null,'EM
 verify(masterTrackTicket($db,'mojplaywin',$ticket,'Customer@example.com') === null,'TENANT_ISOLATION_BROKEN');
 verify(masterTrackTicket($db,'zomorod','garbage','Customer@example.com') === null,'BAD_TICKET_ACCEPTED');
 verify(masterTrackTicket($db,'zomorod',$ticket,'not-an-email') === null,'BAD_EMAIL_ACCEPTED');
+verify($row['operator_answer']==='','MISSING_TABLE_MUST_HAVE_NO_REPLY');
+$db->exec('CREATE TABLE customer_operator_replies(tenant TEXT,ticket_id TEXT,answer TEXT,reviewer_code TEXT,reviewed_utc TEXT,PRIMARY KEY(tenant,ticket_id))');
+$db->prepare('INSERT INTO customer_operator_replies VALUES(?,?,?,?,?)')->execute(['zomorod',$ticket,'پاسخ اختصاصی آزمایشی <script>','operator','2026-10-24 01:05:00']);
+$review = masterTrackTicket($db,'zomorod',$ticket,'customer@example.com');
+verify($review!==null && $review['operator_answer']==='پاسخ اختصاصی آزمایشی <script>','VERIFIED_RESPONSE_MISSING');
+verify(masterEscape($review['operator_answer'])==='پاسخ اختصاصی آزمایشی &lt;script&gt;','REVIEW_RESPONSE_HTML_ESCAPE_FAILED');
+verify(masterTrackTicket($db,'zomorod',$ticket,'wrong@example.com') === null,'REVIEW_PRIVACY_GATE_BROKEN');
+verify(masterTrackTicket($db,'mojplaywin',$ticket,'Customer@example.com') === null,'REVIEW_TENANT_ISOLATION_BROKEN');
 verify(masterEscape('<script>')==='&lt;script&gt;','HTML_ESCAPE_BROKEN');
 verify((int)$db->query('SELECT COUNT(*) FROM customer_questions')->fetchColumn()===1,'LOOKUP_MUTATED_CUSTOMER_RECORD');
 echo "CUSTOMER_STATUS_TENANT_ISOLATION=PASS\n";
