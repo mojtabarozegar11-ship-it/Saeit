@@ -102,7 +102,7 @@ def commands(ops, root, python, batch):
          ["--batch", str(min(1000, max(600, batch * 3)))]),
         ("stage2_scout", base + [str(paths["stage2_scout"])] + shared +
          ["--stage2-program", str(paths["stage2"]), "--batch", str(min(12, batch)),
-          "--workers", "1", "--query-burst", "1"]),
+          "--workers", "1", "--query-burst", "1", "--expedite-gap-research"]),
         ("stage2", base + [str(paths["stage2"])] + shared +
          ["--batch", str(max(300, batch))]),
         ("stage34", base + [str(paths["stage34"])] + shared +

@@ -23,6 +23,7 @@ parser.add_argument('--batch')
 parser.add_argument('--stage2-program')
 parser.add_argument('--workers')
 parser.add_argument('--query-burst')
+parser.add_argument('--expedite-gap-research', action='store_true')
 args=parser.parse_args()
 directory=Path(args.factory_private)/'production-instructions'
 name=Path(__file__).name
@@ -54,6 +55,13 @@ class OwnerDelegatedAutonomy(unittest.TestCase):
         self.ops.mkdir()
         for _, name, _ in agent.STEPS:
             (self.ops / name).write_text(GOOD_WORKER, encoding="utf-8")
+
+    def test_stage2_scout_automatically_explores_remaining_source_gap_pages(self):
+        commands = dict(agent.commands(
+            self.ops, self.private, Path(sys.executable), batch=200))
+        scout = commands["stage2_scout"]
+        self.assertIn("--expedite-gap-research", scout)
+        self.assertEqual("1", scout[scout.index("--query-burst") + 1])
 
     def cycle(self):
         return agent.execute(self.private, self.ops, sys.executable, batch=2, timeout=10)
