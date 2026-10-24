@@ -95,6 +95,57 @@ jobs:
               logs["bytes"] += item.stat().st_size
               if item.stat().st_mtime < time.time()-7*86400:
                   logs["older_7d_bytes"] += item.stat().st_size
+          # Inventory backup types without printing private paths or file contents.
+          import collections
+          import zlib
+          backup_root = ops / "backups"
+          backup_types = collections.defaultdict(lambda: {"count":0,"bytes":0})
+          backup_files = []
+          inspected = 0
+          truncated = False
+          if backup_root.is_dir() and not backup_root.is_symlink():
+              for base, dirs, names in os.walk(backup_root, followlinks=False):
+                  dirs[:] = [name for name in dirs if not (Path(base)/name).is_symlink()]
+                  for name in names:
+                      inspected += 1
+                      if inspected > 30000:
+                          truncated = True
+                          break
+                      path = Path(base)/name
+                      if path.is_symlink() or not path.is_file():
+                          continue
+                      info = path.stat()
+                      suffix = path.suffix.lower()[:14] or "(none)"
+                      kind = backup_types[suffix]
+                      kind["count"] += 1
+                      kind["bytes"] += info.st_size
+                      if info.st_size >= 32*1024*1024:
+                          backup_files.append((info.st_size, path, info.st_mtime, info.st_nlink, suffix))
+                  if truncated:
+                      break
+          largest = []
+          for size, path, modified, links, suffix in sorted(backup_files,reverse=True)[:12]:
+              try:
+                  with path.open("rb") as f:
+                      block = f.read(min(size,262144))
+                      if size > 524288:
+                          f.seek(max(0,size//2-131072))
+                          block += f.read(262144)
+                  ratio = round(len(zlib.compress(block,1))/len(block),3) if block else None
+              except OSError:
+                  ratio = None
+              largest.append({"suffix":suffix,"bytes":size,
+                              "age_days":round((time.time()-modified)/86400,1),
+                              "hardlinks":links,
+                              "sample_zlib_size_ratio":ratio})
+          backup_breakdown = {
+              "files_inspected":inspected,
+              "inventory_truncated":truncated,
+              "large_files_count":len(backup_files),
+              "by_suffix":dict(sorted(backup_types.items())),
+              "top_twelve_without_names":largest,
+              "samples_read_only":True,
+          }
           status = {
               "schema": "saeit.factory.disk-pressure-inventory.v1",
               "observed_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -103,6 +154,7 @@ jobs:
               "mount_used_bytes": disk.used,
               "reserve_2048_mib_met": disk.free >= 2048*1024*1024,
               "fixed_groups_bytes": groups,
+              "backup_composition": backup_breakdown,
               "known_transient_staging": transient,
               "operation_logs": logs,
               "products_or_backups_deleted": 0,
