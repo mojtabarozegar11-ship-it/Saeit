@@ -1,0 +1,90 @@
+name: Inspect real two-site master pending work and offline response capacity
+on:
+  push:
+    branches: [agents/two-sites-inquiries-orders-20261024]
+    paths: [.github/workflows/two-site-master-customer-operations-inventory-20261024.yml]
+permissions: {contents: read}
+jobs:
+  inventory:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Verify pinned VPS to cPanel SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/agents-ro.XXXXXX")"
+          echo "$d" > "$RUNNER_TEMP/agents-ro-path"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf '%s\n' \
+            "Host saeit-vps" "  HostName 178.239.147.150" "  User githubops" "  Port 22" \
+            "  IdentityFile $d/vps.key" "  UserKnownHostsFile $d/vps.known" \
+            "Host saeit-cpanel" "  HostName zohal.pws-dns.net" "  User zomorod2" "  Port 1396" \
+            "  IdentityFile $d/host.key" "  UserKnownHostsFile $d/host.known" "  ProxyJump saeit-vps" \
+            "Host *" "  StrictHostKeyChecking yes" "  IdentitiesOnly yes" "  BatchMode yes" \
+            "  ConnectTimeout 10" "  ConnectionAttempts 1" "  ForwardAgent no" \
+            > "$d/config"
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo TWO_SITES_PINNED_SSH_RELAY=PASS
+          echo SITE_AGENT_RELAY_PINNED
+      - name: Count unanswered questions, order events and offline engine without exposing customer data
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          timeout 85s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import json,sqlite3,shutil,importlib.util,subprocess,urllib.request
+          from pathlib import Path
+          home=Path.home()
+          targets=(
+            ("zomorod",home/".private/zomorod-business/master_customer_inbox.sqlite3","zomorodmelal.ir"),
+            ("mojplaywin",home/".private_mojplaywin_main_agents/master_customer_inbox.sqlite3","mojplaywin.com"))
+          for name,file,domain in targets:
+              assert file.is_file() and not file.is_symlink()
+              with sqlite3.connect("file:"+str(file)+"?mode=ro",uri=True,timeout=10) as db:
+                  q=db.execute("SELECT processing_status,kind,COUNT(*) FROM customer_questions WHERE tenant=? GROUP BY processing_status,kind",(name,)).fetchall()
+                  events=db.execute("SELECT source,COUNT(*) FROM customer_order_events WHERE tenant=? GROUP BY source",(name,)).fetchall()
+                  schema=db.execute("PRAGMA table_info(customer_questions)").fetchall()
+              print("MASTER_TICKET_COUNTS_"+name.upper()+"="+json.dumps(q))
+              print("MASTER_ORDER_SOURCE_COUNTS_"+name.upper()+"="+json.dumps(events))
+              print("MASTER_QUESTION_COLUMNS_"+name.upper()+"="+json.dumps([row[1] for row in schema]))
+              for route in ("/contact/","/support/","/ask-master/"):
+                  try:
+                      url="https://"+domain+route
+                      with urllib.request.urlopen(url,timeout=15) as resp:
+                          text=resp.read(180000).decode("utf8","replace").lower()
+                      print("SITE_NAV_LINK_"+name+"_"+route.replace("/","_")+"="+str("ask-master" in text))
+                  except Exception as error:
+                      print("SITE_NAV_LINK_"+name+"_"+route.replace("/","_")+"=unavailable")
+          print("LOCAL_OLLAMA_BIN="+str(bool(shutil.which("ollama"))))
+          print("LOCAL_LLAMA_SERVER_BIN="+str(bool(shutil.which("llama-server"))))
+          print("LOCAL_LLAMA_PYTHON="+str(importlib.util.find_spec("llama_cpp") is not None))
+          print("CUSTOMER_TICKET_OPERATIONAL_INVENTORY=PASS")
+          PY
+      - name: Remove temporary SSH identity material
+        if: always()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/agents-ro-path"; then
+            d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+            if test -n "$d" && test -d "$d"; then
+              rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+              rmdir "$d" || true
+            fi
+            rm -f "$RUNNER_TEMP/agents-ro-path"
+          fi
