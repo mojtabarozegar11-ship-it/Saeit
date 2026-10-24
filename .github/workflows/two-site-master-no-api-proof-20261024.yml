@@ -1,0 +1,174 @@
+name: Two site master local no-API proof
+on:
+  push:
+    branches: [agents/two-sites-api-free-master-20261024]
+    paths: [.github/workflows/two-site-master-no-api-proof-20261024.yml]
+permissions:
+  contents: read
+concurrency:
+  group: two-site-master-no-api-proof
+  cancel-in-progress: false
+jobs:
+  proof:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Verify pinned VPS to cPanel SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/agents-ro.XXXXXX")"
+          echo "$d" > "$RUNNER_TEMP/agents-ro-path"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf '%s\n' \
+            "Host saeit-vps" "  HostName 178.239.147.150" "  User githubops" "  Port 22" \
+            "  IdentityFile $d/vps.key" "  UserKnownHostsFile $d/vps.known" \
+            "Host saeit-cpanel" "  HostName zohal.pws-dns.net" "  User zomorod2" "  Port 1396" \
+            "  IdentityFile $d/host.key" "  UserKnownHostsFile $d/host.known" "  ProxyJump saeit-vps" \
+            "Host *" "  StrictHostKeyChecking yes" "  IdentitiesOnly yes" "  BatchMode yes" \
+            "  ConnectTimeout 10" "  ConnectionAttempts 1" "  ForwardAgent no" \
+            > "$d/config"
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo TWO_SITES_PINNED_SSH_RELAY=PASS
+          echo SITE_AGENT_RELAY_PINNED
+      - name: Test both deployed local master engines with no API credentials and zero network
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          timeout 200s ssh -T -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          export PYTHONDONTWRITEBYTECODE=1
+          phpbin="$(command -v php || true)"
+          test -n "$phpbin"
+          "$phpbin" -d display_errors=0 <<'PHP'
+          <?php
+          declare(strict_types=1);
+          $file='/home/zomorod2/.private/zomorod-business/site_agents.php';
+          if(!is_file($file)||is_link($file))throw new RuntimeException('UNTRUSTED_ZM_MASTER_FILE');
+          require $file;
+          $db=new PDO('sqlite::memory:',null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
+          $db->exec('CREATE TABLE agents(code TEXT PRIMARY KEY,check_path TEXT,enabled INTEGER)');
+          $db->exec('CREATE TABLE runs(id INTEGER PRIMARY KEY,agent_code TEXT,status TEXT,http_code INTEGER,duration_ms INTEGER,detail TEXT,occurred_at TEXT DEFAULT CURRENT_TIMESTAMP)');
+          $roles=['master'=>'/','agriculture'=>'/agriculture/','commerce'=>'/store/',
+            'content'=>'/knowledge/','economic'=>'/economy/','media'=>'/news/',
+            'quality'=>'/about/','research'=>'/research/','security'=>'/business/',
+            'seo'=>'/search/','weather'=>'/weather/'];
+          $insert=$db->prepare('INSERT INTO agents(code,check_path,enabled) VALUES(?,?,1)');
+          foreach($roles as $code=>$path)$insert->execute([$code,$path]);
+          $calls=0;
+          $transport=static function(string $url)use(&$calls):array{
+            if(!str_starts_with($url,'https://zomorodmelal.ir/'))throw new RuntimeException('EXTERNAL_API_REFUSED');
+            ++$calls;
+            return ['http'=>200,'bytes'=>250,'content_type'=>'text/html','error'=>''];
+          };
+          $one=zmAgentCycle($db,null,$transport);
+          if(count($one)!==11||$calls!==11||count(array_filter($one,fn($x)=>$x[1]==='ok'))!==11)throw new RuntimeException('LOCAL_CYCLE_FAILED');
+          $calls=0;
+          $fault=static function(string $url)use(&$calls):array{
+            if(!str_starts_with($url,'https://zomorodmelal.ir/'))throw new RuntimeException('EXTERNAL_API_REFUSED');
+            ++$calls;
+            return $url==='https://zomorodmelal.ir/research/'?
+              ['http'=>0,'bytes'=>0,'content_type'=>'','error'=>'injected_fault']:
+              ['http'=>200,'bytes'=>250,'content_type'=>'text/html','error'=>''];
+          };
+          $two=zmAgentCycle($db,null,$fault);$by=[];
+          foreach($two as $item)$by[$item[0]]=$item[1];
+          if(count($two)!==11||$calls!==11||$by['research']!=='error'||$by['master']!=='warning')
+            throw new RuntimeException('MASTER_DEGRADATION_NOT_DETECTED');
+          if((int)$db->query('SELECT COUNT(*) FROM runs')->fetchColumn()!==22)
+            throw new RuntimeException('LOCAL_RUN_EVIDENCE_MISSING');
+          echo "ZM_MASTER_REAL_SOURCE_NO_API=PASS\n";
+          echo "ZM_MASTER_FAILURE_DETECTION=PASS\n";
+          echo "ZM_MASTER_OFFLINE_NETWORK_CALLS=0\n";
+          echo "ZM_MASTER_LIVE_DATABASE_WRITES=0\n";
+          PHP
+          python3 - <<'PY'
+          import os,sys,json,socket,sqlite3,subprocess
+          from pathlib import Path
+          from datetime import datetime,timezone
+          from urllib.parse import quote
+          zm=Path.home()/".private/zomorod-business/site_agents.sqlite3"
+          assert zm.is_file() and not zm.is_symlink(),"ZM_SITE_AGENT_LEDGER_MISSING"
+          with sqlite3.connect("file:"+quote(str(zm))+"?mode=ro",uri=True,timeout=10) as db:
+              db.execute("PRAGMA query_only=ON")
+              count=db.execute("SELECT COUNT(*) FROM agents WHERE enabled=1").fetchone()[0]
+              last=db.execute("SELECT agent_code,status,occurred_at FROM runs ORDER BY id DESC LIMIT 11").fetchall()
+              assert count==11 and len(last)==11,"ZM_AGENT_REGISTRY_INVALID"
+              stamp=datetime.fromisoformat(last[0][2].replace("Z","+00:00"))
+              if stamp.tzinfo is None:stamp=stamp.replace(tzinfo=timezone.utc)
+              age=int((datetime.now(timezone.utc)-stamp).total_seconds())
+              assert 0<=age<=1800,"ZM_MASTER_CRON_STALE"
+              print("ZM_LIVE_AGENTS="+str(count))
+              print("ZM_LIVE_RUN_AGE_SECONDS="+str(age))
+              print("ZM_LIVE_LAST_RUN_OK="+str(sum(r[1]=="ok" for r in last)))
+          root=Path.home()/".private_mojplaywin_main_agents/v91_verified_main_port_20261018"
+          assert root.is_dir() and not root.is_symlink(),"MPW_PRIVATE_MASTER_MISSING"
+          sys.path.insert(0,str(root))
+          for key in tuple(os.environ):
+              if any(word in key.upper() for word in ("OPENAI","ANTHROPIC","GEMINI","DEEPSEEK","COHERE","GROQ","API_KEY","ACCESS_TOKEN")):
+                  os.environ.pop(key,None)
+          network=[]
+          def network_denied(*args,**kwargs):
+              network.append("blocked")
+              raise RuntimeError("MASTER_EXTERNAL_NETWORK_DISABLED")
+          socket.socket=network_denied
+          socket.create_connection=network_denied
+          from mpw_v91_port.worker import origin_ok
+          assert origin_ok(),"MPW_SHA_VERIFIED_MASTER_SOURCE_INVALID"
+          from mpw_v91_port.legacy.site_master.bridge import route_once
+          called=[]
+          def callback():
+              called.append(1)
+              return {"tenant":"mojplaywin-main","mode":"private-review-only","state":"ready"}
+          result=route_once("master-no-api-20261024",callback)
+          assert result=={"tenant":"mojplaywin-main","mode":"private-review-only","state":"ready"},"MPW_MASTER_RESULT_INVALID"
+          assert len(called)==1 and not network,"MPW_MASTER_NEEDS_EXTERNAL_NETWORK"
+          print("MPW_MASTER_GEN64_REAL_CONTROLLER_NO_API=PASS")
+          print("MPW_MASTER_LOCAL_CALLBACK=PASS")
+          print("MPW_MASTER_NETWORK_CALLS=0")
+          heartbeat=root/"operator_state/heartbeat.json"
+          assert heartbeat.is_file() and not heartbeat.is_symlink(),"MPW_HEARTBEAT_MISSING"
+          data=json.loads(heartbeat.read_text("utf8"))
+          assert data.get("tenant")=="mojplaywin-main" and data.get("status")=="active_private","MPW_HEARTBEAT_INVALID"
+          date=datetime.fromisoformat(data["last_master_callback_utc"].replace("Z","+00:00"))
+          age=int((datetime.now(timezone.utc)-date).total_seconds())
+          assert 0<=age<=3600,"MPW_MASTER_NOT_RECENT"
+          print("MPW_LIVE_MASTER_RUN_AGE_SECONDS="+str(age))
+          cron=subprocess.run(["crontab","-l"],text=True,capture_output=True,check=True,timeout=15).stdout
+          for name,marker in (("ZM","zm-site-agents-only-v100"),("MPW","MPW_V91_MAIN_ONLY_20261018")):
+              num=sum(marker in row for row in cron.splitlines() if not row.lstrip().startswith("#"))
+              assert num==1,"MASTER_SCHEDULE_NOT_UNIQUE:"+name
+              print(name+"_SCHEDULE_UNIQUE=PASS")
+          print("TWO_SITE_MASTER_REAL_API_FREE_PROOF=PASS")
+          print("TWO_SITE_MASTER_DATA_AND_SCHEDULE_UNCHANGED=PASS")
+          PY
+          REMOTE
+      - name: Remove temporary SSH identity material
+        if: always()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/agents-ro-path"; then
+            d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+            if test -n "$d" && test -d "$d"; then
+              rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+              rmdir "$d" || true
+            fi
+            rm -f "$RUNNER_TEMP/agents-ro-path"
+          fi
