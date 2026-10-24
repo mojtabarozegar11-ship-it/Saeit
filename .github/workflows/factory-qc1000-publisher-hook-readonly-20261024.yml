@@ -1,0 +1,81 @@
+name: QC1000 private live publisher hook - read-only structural diagnosis
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-qc1000-publisher-hook-readonly-20261024.yml
+permissions: {contents: read}
+jobs:
+  qc-only-live-structure:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Host pinned private read-only publisher QC gate inspection
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/private-qc1000-relay"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/vps.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 9 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import hashlib
+          src=Path("/home/zomorod2/.saeit-factory-inbox/bin/publish_verified_factory_store_listing.py")
+          assert src.is_file() and not src.is_symlink()
+          body=src.read_text(encoding="utf8")
+          print("QC_PUBLISHER_LIVE_SHA256="+hashlib.sha256(src.read_bytes()).hexdigest())
+          print("QC_PUBLISHER_LIVE_BYTES="+str(src.stat().st_size))
+          print("QC_PUBLISHER_HAS_STRICT_REAL1000_HOOK="+str("factory_commercial_quality_release_guard_v1.py" in body).lower())
+          rows=body.splitlines()
+          markers=("package_manifest","source_manifest","professional_quality_standard",
+                   "body = release.read_text","return digest","def verify_live_release_gate")
+          seen=set()
+          for i,row in enumerate(rows):
+              if any(key in row for key in markers):
+                  low=max(0,i-2);high=min(len(rows),i+5)
+                  for lineno in range(low,high):
+                      text=rows[lineno]
+                      if lineno in seen:continue
+                      seen.add(lineno)
+                      if any(x in text.lower() for x in ("password", "secret", "private_key", "authorization", "token")):
+                          text="[REDACTED]"
+                      print("QC_PUBLISHER_CONTEXT "+str(lineno+1)+" "+text[:240])
+          assert len(seen) > 0,"QC_PUBLISHER_UNKNOWN_STRUCTURE"
+          PY
