@@ -98,7 +98,11 @@ jobs:
               if p.is_symlink():raise SystemExit('UNSAFE_SYMLINK')
           if not app.is_dir() or not site.is_dir() or not target.is_file():raise SystemExit('APP_OR_SOURCE_MISSING')
           raw=target.read_bytes();needle=b'window.clearTimeout(timeout);'
-          if raw.count(needle)!=1 or b'async function check()' not in raw or b'checking=false;' not in raw or b'if(!stopped)schedule(delay);' not in raw:raise SystemExit('SOURCE_DRIFT_OR_PATCH_NOT_UNIQUE')
+          if b'async function check()' not in raw or b'checking=false;' not in raw or b'if(!stopped)schedule(delay);' not in raw:raise SystemExit('SOURCE_DRIFT_OR_PATCH_NOT_UNIQUE')
+          if raw.count(needle)==0:
+              print('MPW_INVOICE_POLLING_PATCH=ALREADY_PATCHED;NO_SOURCE_CHANGE')
+              raise SystemExit(0)
+          if raw.count(needle)!=1:raise SystemExit('SOURCE_DRIFT_OR_PATCH_NOT_UNIQUE')
           lines=raw.splitlines(keepends=True);indexes=[i for i,line in enumerate(lines) if line.strip()==needle]
           if len(indexes)!=1 or not lines[indexes[0]].endswith(b'\n'):raise SystemExit('POLLING_CLEANUP_NOT_UNIQUE')
           i=indexes[0];updated=b''.join(lines[:i]+lines[i+1:]);compile(updated.decode('utf8'),str(target),'exec')
@@ -164,7 +168,7 @@ jobs:
                   try:lines=p.read_text('utf8','replace').splitlines()
                   except OSError:continue
                   for n,line in enumerate(lines,1):
-                      m=re.match(r'\\s*def\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(',line)
+                      m=re.match(r'\s*def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(',line)
                       if m and re.search(r'trx|invoice|checkout|start',m.group(1),re.I):views.append({'file':str(p.relative_to(root)),'line':n,'function':m.group(1)})
           print('MPW_DEPLOYED_INVOICE_ROUTE_MAP='+json.dumps({'routes':routes[:80],'views':views[:80]}))
           if not routes:raise SystemExit('NO_INVOICE_ROUTE_DEFINITIONS_FOUND')
@@ -198,7 +202,10 @@ jobs:
           app=Path('/home/zomorod2/Saeit-staging');site=Path('/home/zomorod2/mojplaywin.com')
           target=app/'services/mpw_trx_walletless_checkout_ui.py'
           backup=Path('/home/zomorod2/.private_mojplaywin_main_agents')/('mpw-invoice-polling-'+run_id+'.py')
-          if any(p.is_symlink() for p in (app,site,target,backup)) or not backup.is_file():raise SystemExit('ROLLBACK_SOURCE_UNSAFE')
+          if any(p.is_symlink() for p in (app,site,target,backup)):raise SystemExit('ROLLBACK_SOURCE_UNSAFE')
+          if not backup.is_file():
+              print('MPW_INVOICE_POLLING_ROLLBACK=SKIPPED_NO_CHANGE_BY_THIS_RUN')
+              raise SystemExit(0)
           raw=backup.read_bytes()
           if raw.count(b'window.clearTimeout(timeout);')!=1:raise SystemExit('ROLLBACK_CONTENT_INVALID')
           fd,tmp=tempfile.mkstemp(prefix='.mpw-invoice-rollback-',dir=str(target.parent));mode=stat.S_IMODE(target.stat().st_mode)
