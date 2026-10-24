@@ -6,7 +6,7 @@
     "test": "node --test tests/*.test.mjs",
     "compile": "tronbox compile",
     "preflight": "node scripts/preflight-offline.mjs",
-    "test:onchain:local": "tronbox test --network development tests/tronbox/vesting.integration.js tests/tronbox/genesis-guarded.integration.js",
+    "test:onchain:local": "tronbox test --network development tests/tronbox/vesting.integration.js tests/tronbox/genesis-guarded.integration.js tests/tronbox/governance-hardening.integration.js",
     "deploy:shasta": "node scripts/deploy-shasta.mjs",
     "reconcile:shasta": "node scripts/reconcile-shasta.mjs"
   },
