@@ -10,6 +10,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import pwd
 from pathlib import Path
 import sys
 import tempfile
@@ -169,7 +170,7 @@ def main():
     for name in FILES:
         parser.add_argument("--sha-" + name.replace(".py", "").replace("_", "-"), required=True)
     args = parser.parse_args()
-    if os.environ.get("USER") != "zomorod2":
+    if pwd.getpwuid(os.getuid()).pw_name != "zomorod2":
         raise RuntimeError("QC1000_EXPECTED_ACCOUNT_ONLY")
     checks = {
         name: getattr(args, "sha_" + name.replace(".py", ""))
