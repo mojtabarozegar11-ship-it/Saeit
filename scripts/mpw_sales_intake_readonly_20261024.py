@@ -137,6 +137,9 @@ def domain_catchall():
                 info["available"] = True
                 info["data_type"] = type(data).__name__
                 info["field_names"] = sorted(data.keys()) if isinstance(data, dict) else []
+                if isinstance(data, list):
+                    info["row_count"] = len(data)
+                    info["field_names"] = sorted(set().union(*(r.keys() for r in data if isinstance(r, dict))))[:20]
                 # Never publish routing destinations; classification is conservative.
                 if isinstance(data, dict):
                     route = str(data.get("forward") or data.get("dest") or
@@ -221,6 +224,7 @@ def visitor_logs():
     unique = set()
     errors_by_bucket = Counter()
     errors_by_day = Counter()
+    login_errors_by_day = Counter()
     first = last = None
     for p in files:
         try:
@@ -253,6 +257,8 @@ def visitor_logs():
                     if status.startswith(("4", "5")):
                         errors_by_bucket[route_bucket(page) + ":" + status] += 1
                         errors_by_day[at.date().isoformat() + ":" + status[0] + "xx"] += 1
+                        if status == "403" and page.startswith("/accounts/"):
+                            login_errors_by_day[at.date().isoformat() + ":" + route_bucket(page)] += 1
                     unique.add(ip)
                     if page.startswith("/store/") or page == "/store/":
                         report["store_page_hits"] += 1
@@ -277,6 +283,8 @@ def visitor_logs():
                                 "no_url_or_ip_disclosed": True})
     output("MPW_ERROR_DAYS", {"day_and_status_class": dict(sorted(errors_by_day.items())),
                               "source": "same_archived_access_logs"})
+    output("MPW_ACCOUNT_403_DAYS", {"day_and_route": dict(sorted(login_errors_by_day.items())),
+                                   "source": "same_archived_access_logs"})
 
 
 if __name__ == "__main__":
