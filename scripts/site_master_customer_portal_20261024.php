@@ -78,7 +78,6 @@ function masterLocalReply(string $site,string $kind,string $message):string {
 function masterSaveQuestion(PDO $db,string $tenant,string $kind,string $name,string $email,string $message,string $order):array {
     if(!in_array($tenant,['zomorod','mojplaywin'],true)||
        !in_array($kind,['question','order_question'],true))throw new InvalidArgumentException('Invalid request kind');
-    foreach([$name=>$name] as $unused){} // no-op for PHP 7-compatible scalar validation
     if(masterTextLength($name)<2||masterTextLength($name)>120||
        !filter_var($email,FILTER_VALIDATE_EMAIL)||strlen($email)>250||
        masterTextLength($message)<5||masterTextLength($message)>2500||
