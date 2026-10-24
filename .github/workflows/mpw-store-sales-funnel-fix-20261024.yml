@@ -27,7 +27,7 @@ jobs:
           actual_sha="$(python3 -c 'import hashlib,pathlib; data=pathlib.Path("core/templates/mojplaywin/store.html").read_bytes().replace(bytes([13,10]),bytes([10])); print(hashlib.sha256(data).hexdigest())')"
           echo "MPW_STORE_SOURCE_SHA=$actual_sha"
           echo "MPW_STORE_MARKERS=$(grep -cE 'mpw-store-ten-guides|Explore this collection' core/templates/mojplaywin/store.html || true)"
-          test "$actual_sha" = "109920969a77d73fbc44783f599bcf4ca049522b4012f135ad151e4c4a30de7c"
+          test "$actual_sha" = "b44cc7df0442cf1139febd220ab2e338b7381ffb51fe1b1ab6bb9352f567d9d0"
           test "$(grep -cE 'mpw-store-ten-guides|Explore this collection' core/templates/mojplaywin/store.html || true)" = "0"
           echo MPW_STORE_SOURCE_VALID=true
       - name: Capture baseline storefront and protected-route health
@@ -162,7 +162,7 @@ jobs:
           if store.is_symlink() or not store.is_file():
               raise SystemExit('STORE_TEMPLATE_NOT_REGULAR')
           digest=hashlib.sha256(store.read_bytes().replace(bytes([13,10]),bytes([10]))).hexdigest()
-          if digest!='109920969a77d73fbc44783f599bcf4ca049522b4012f135ad151e4c4a30de7c':
+          if digest!='b44cc7df0442cf1139febd220ab2e338b7381ffb51fe1b1ab6bb9352f567d9d0':
               raise SystemExit('STORE_TEMPLATE_HASH_NOT_PINNED')
           if site_base.is_symlink() or not site_base.is_file():
               raise SystemExit('MOJPLAYWIN_PAGE_SHELL_NOT_REGULAR')
@@ -213,8 +213,8 @@ jobs:
               and "site/heroes/store.webp" not in body
               and "mpw-store-ten-guides" not in body
               and "INITIAL COLLECTION" not in body
-              and "FEATURED PICKS" in body and "no account required" in body
-              and "Sign in or create an account" not in body and "Secure purchase: sign in" not in body)
+              and "FEATURED PICKS" in body and "account required" in body
+              and "Sign in or create an account" in body and "no account required" not in body)
             print("MPW_STORE_PUBLIC_ATTEMPT="+json.dumps({"attempt":attempt,"status":code,"fixed":okay,
           "has_store_hero":"mpw-store-book" in body,"has_new_catalog":"Shop available books" in body,
           "has_old_guides":"mpw-store-ten-guides" in body,"has_old_hero":"site/heroes/store.webp" in body,
