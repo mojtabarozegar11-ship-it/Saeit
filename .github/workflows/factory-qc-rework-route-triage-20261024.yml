@@ -52,7 +52,7 @@ jobs:
            if not p.is_file() or p.is_symlink() or p.stat().st_size > 300000: return {"present":False}
            try:
             v=json.loads(p.read_text(encoding="utf8"))
-            allowed=("cycle_state","stage_results","worker_errors","consecutive_no_progress_ticks","missing_stage2_orders","missing_v003_orders","stage5_products_seen","strict_qc1000_audits_total","returned_to_rework_total","source_specific_revision_briefs_total","blocked_this_run","private_v003_total","input_rework_tickets","indexed_candidates","scanner_health","trusted_execution_runner_enrolled","verdict_counts")
+            allowed=("cycle_state","stage_results","worker_errors","consecutive_no_progress_ticks","missing_stage2_orders","missing_v003_orders","stage5_products_seen","strict_qc1000_audits_total","returned_to_rework_total","source_specific_revision_briefs_total","blocked_this_run","private_v003_total","input_rework_tickets","v003_candidate_editions_seen","v003_mechanical_integrity_pass","invalid_v003_editions","indexed_candidates","scanner_health","trusted_execution_runner_enrolled","verdict_counts")
             return {"present":True,"age_seconds":int(datetime.now(timezone.utc).timestamp()-p.stat().st_mtime),"fields":{k:v[k] for k in allowed if k in v}}
            except (ValueError,UnicodeError,OSError) as exc:return {"present":True,"read_error":type(exc).__name__}
           statuses=[
@@ -67,5 +67,30 @@ jobs:
           "qc_code_files_installed":{x:(ops/x).is_file() and not (ops/x).is_symlink() for x in
           ["agri200-strict-qc1000.py","agri200-source-grounded-v003.py","agri200-source-grounded-v003-qc.py","real-qc1000-live-monitor.py","agri200-autonomous-closed-loop.py"]},
           "sites_modified":False}
+          from collections import Counter
+          revised=area/"stage-06/source-grounded-v003-qc"
+          issue_counts=Counter()
+          pass_count=0
+          checked=0
+          dupes=[]
+          errors=[]
+          if revised.is_dir() and not revised.is_symlink():
+           for p in sorted(revised.iterdir()):
+            if not p.is_file() or p.is_symlink() or not re.fullmatch(r"WO-\d{8}--r001\.json",p.name):continue
+            try:
+             d=json.loads(p.read_text(encoding="utf8"))
+             checked+=1
+             pass_count+=int(d.get("mechanical_integrity_pass") is True)
+             for i in d.get("critical_findings",[]):
+              if isinstance(i,str):issue_counts[i[:100]]+=1
+             for loc in ("fa-IR","en-US"):
+              v=d.get("measurements",{}).get(loc,{}).get("duplicate_fraction")
+              if isinstance(v,(int,float)):dupes.append(v)
+            except (OSError,ValueError,TypeError) as exc:
+             errors.append(p.name+":"+type(exc).__name__)
+          result["v003_qc_actual"]={"reports_inspected":checked,"mechanical_passed":pass_count,
+           "critical_findings":dict(issue_counts.most_common(18)),
+           "duplication_range":[min(dupes),max(dupes)] if dupes else None,
+           "read_errors":errors[:3]}
           print("QC_REWORK_LIVE_DIAGNOSTIC="+json.dumps(result,ensure_ascii=False,sort_keys=True),flush=True)
           PY
