@@ -228,16 +228,35 @@ REQUIRES_VERIFICATION = re.compile(
     r"استرداد|مرجوع|بازگشت وجه|پرداخت|فاکتور|رسید|سفارش|خرید|دانلود|تحویل|فایل|کیف پول)",
     re.IGNORECASE,
 )
-PUBLIC_DISCOUNT_GUIDANCE = re.compile(r"(discount|coupon|promo code|تخفیف|کد تخفیف)", re.IGNORECASE)
+PUBLIC_DISCOUNT_POLICY_QUESTIONS = frozenset((
+    "what is the coupon policy",
+    "what is your discount policy",
+    "how do discounts work",
+    "do you offer discounts",
+    "general coupon policy",
+    "coupon policy please",
+    "قانون تخفیف چگونه است",
+    "شرایط تخفیف چیست",
+    "سیاست تخفیف چیست",
+    "آیا تخفیف دارید",
+))
+
+
+def is_public_discount_policy_question(question: str) -> bool:
+    """Only explicit general policy questions get terminal guidance.
+
+    Customer-specific coupon failures, discount requests and unclear tickets
+    require actual owner review. No external model or unsupported assumption.
+    """
+    normalized = re.sub(r"\\s+", " ", question.casefold()).strip(" .!?؟،\t\r\n")
+    return normalized in PUBLIC_DISCOUNT_POLICY_QUESTIONS
 
 
 def classify_customer_ticket(kind: str, question: str) -> str:
-    """Conservatively route requests; never interpret a receipt as case closure."""
+    """An acknowledgment is never a verified personal-case resolution."""
     if kind == "order_question" or REQUIRES_VERIFICATION.search(question):
         return "needs_review"
-    # The public portal already gives verified *general* discount guidance:
-    # price from product page; any actual discount needs management approval.
-    if kind == "question" and PUBLIC_DISCOUNT_GUIDANCE.search(question):
+    if kind == "question" and is_public_discount_policy_question(question):
         return "handled"
     return "needs_review"
 
