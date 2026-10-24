@@ -215,6 +215,40 @@ jobs:
               print(k+"="+str(v))
           print("AGGREGATES_ONLY_NO_SENSITIVE_CONTENT")
           PY
+      - name: Confirm Gmail to corporate mailbox canary from message headers only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/company-mail-inspect"
+          cat <<'PY' | timeout 45s ssh -T -F "$d/config" company python3 -
+          from pathlib import Path
+          from email.parser import BytesParser
+          from email.policy import default
+          from email.utils import parseaddr
+          import datetime as dt
+          root=Path.home()/"mail"/"zomorodmelal.ir"/"moj_1ro_1"
+          subject="ZM-MAIL-INBOUND-CANARY-20261024-1105"
+          cutoff=dt.datetime(2026,10,24,tzinfo=dt.timezone.utc).timestamp()
+          counts={"matches":0,"files_scanned":0}
+          for folder in ("new","cur"):
+              sub=root/folder
+              if not sub.is_dir(): continue
+              for file in sub.iterdir():
+                  if not file.is_file(): continue
+                  if file.stat().st_mtime < cutoff: continue
+                  counts["files_scanned"]+=1
+                  with file.open("rb") as fp:
+                      data=fp.read(65536)
+                  if b"\r\n\r\n" in data: data=data.split(b"\r\n\r\n",1)[0]+b"\r\n\r\n"
+                  elif b"\n\n" in data: data=data.split(b"\n\n",1)[0]+b"\n\n"
+                  msg=BytesParser(policy=default).parsebytes(data,headersonly=True)
+                  sender=parseaddr(str(msg.get("From","")))[1].lower()
+                  if str(msg.get("Subject","")).strip()==subject and sender.endswith("@gmail.com"):
+                      counts["matches"]+=1
+          print("GMAIL_CORPORATE_CANARY_HEADER_MATCHES="+str(counts["matches"]))
+          print("GMAIL_CORPORATE_CANARY_FILES_SCANNED="+str(counts["files_scanned"]))
+          print("CANARY_CONTENT_AND_ADDRESSES_NOT_EXPORTED")
+          PY
       - name: Remove SSH keys
         if: always()
         run: |
