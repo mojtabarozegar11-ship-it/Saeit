@@ -84,6 +84,22 @@ jobs:
               for file in (web/"contact.php",web/"support.php",web/".htaccess",web/"index.php"):
                   if file.is_file() and not file.is_symlink() and file.stat().st_size<400000:
                       print("LIVE_SUPPORT_ROOT_ENTRY_"+site+"_"+file.name+"=present")
+          # Examine only public HTML safe insertion points, without private files.
+          import hashlib,re
+          contact=home/"public_html/contact/index.html"
+          if contact.is_file() and not contact.is_symlink():
+              raw=contact.read_bytes()
+              html=raw.decode("utf8","replace")
+              print("ZM_CONTACT_HTML_SHA256="+hashlib.sha256(raw).hexdigest())
+              print("ZM_CONTACT_HTML_BYTES="+str(len(raw)))
+              print("ZM_CONTACT_MAIN_END="+str(html.lower().count("</main>")))
+              print("ZM_CONTACT_BODY_END="+str(html.lower().count("</body>")))
+              print("ZM_CONTACT_FINAL_PUBLIC_MARKUP="+json.dumps(html[-1000:],ensure_ascii=False))
+          with urllib.request.urlopen("https://mojplaywin.com/support/",timeout=18) as response:
+              content=response.read(120000).decode("utf8","replace")
+          print("MPW_SUPPORT_PUBLIC_HTML_BYTES="+str(len(content)))
+          print("MPW_SUPPORT_PUBLIC_ANCHORS="+json.dumps(re.findall(r'<a\\s+[^>]*?href=[\\"\\\']([^\\"\\\']+)',content,flags=re.I)[:20]))
+          print("MPW_SUPPORT_PUBLIC_END="+json.dumps(re.sub(r'\\s+',' ',content[-900:]),ensure_ascii=False))
           print("LOCAL_OLLAMA_BIN="+str(bool(shutil.which("ollama"))))
           print("LOCAL_LLAMA_SERVER_BIN="+str(bool(shutil.which("llama-server"))))
           print("LOCAL_LLAMA_PYTHON="+str(importlib.util.find_spec("llama_cpp") is not None))
