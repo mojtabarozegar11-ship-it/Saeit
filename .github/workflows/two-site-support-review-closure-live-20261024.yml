@@ -1,0 +1,100 @@
+name: Close reviewed customer cases for two private site master agents without external API
+on:
+  push:
+    branches: [agents/two-sites-inquiries-orders-20261024]
+    paths: [.github/workflows/two-site-support-review-closure-live-20261024.yml]
+permissions: {contents: read}
+jobs:
+  verify:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run Python regressions and create source-hash protected package
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/site_master_customer_operator_reply_20261024.py scripts/site_master_customer_runtime_20261024.py scripts/upgrade_two_site_review_closure_20261024.py
+          python3 -m unittest discover -s tests -p test_site_master_customer_operator_reply_20261024.py -v
+          python3 -m unittest discover -s tests -p test_site_master_customer_runtime_20261024.py -v
+          php tests/test_master_customer_status_20261024.php
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,io,json,os,tarfile
+          items={
+            "operator.py":("scripts/site_master_customer_operator_reply_20261024.py",
+                           "tests/fixtures/site_master_customer_operator_preclosure_20261024.py"),
+            "worker.py":("scripts/site_master_customer_runtime_20261024.py",
+                         "tests/fixtures/site_master_customer_runtime_preclosure_20261024.py")}
+          new={key:Path(paths[0]).read_bytes() for key,paths in items.items()}
+          old={key:Path(paths[1]).read_bytes() for key,paths in items.items()}
+          assert all(old[name]!=new[name] for name in items)
+          assert b"list_pending_reviews" in new["operator.py"]
+          assert b"staff_replies_completed" in new["worker.py"]
+          meta={"scope":"two_private_master_review_closure_v1",
+                "sites":["zomorod","mojplaywin"],
+                "old":{name:hashlib.sha256(body).hexdigest() for name,body in old.items()},
+                "new":{name:hashlib.sha256(body).hexdigest() for name,body in new.items()}}
+          files={**new,"manifest.json":json.dumps(meta,sort_keys=True).encode()}
+          dst=Path(os.environ["RUNNER_TEMP"])/"two_site_review_closure.tgz"
+          with tarfile.open(dst,"w:gz") as tgz:
+              for name,blob in files.items():
+                  info=tarfile.TarInfo(name);info.size=len(blob);info.mode=0o600
+                  tgz.addfile(info,io.BytesIO(blob))
+          assert 800<dst.stat().st_size<120000
+          print("TWO_SITE_REVIEW_CLOSURE_SHA_MANIFEST=PASS")
+          PY
+      - name: Verify pinned VPS to cPanel SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/agents-ro.XXXXXX")"
+          echo "$d" > "$RUNNER_TEMP/agents-ro-path"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf '%s\n' \
+            "Host saeit-vps" "  HostName 178.239.147.150" "  User githubops" "  Port 22" \
+            "  IdentityFile $d/vps.key" "  UserKnownHostsFile $d/vps.known" \
+            "Host saeit-cpanel" "  HostName zohal.pws-dns.net" "  User zomorod2" "  Port 1396" \
+            "  IdentityFile $d/host.key" "  UserKnownHostsFile $d/host.known" "  ProxyJump saeit-vps" \
+            "Host *" "  StrictHostKeyChecking yes" "  IdentitiesOnly yes" "  BatchMode yes" \
+            "  ConnectTimeout 10" "  ConnectionAttempts 1" "  ForwardAgent no" \
+            > "$d/config"
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo TWO_SITES_PINNED_SSH_RELAY=PASS
+          echo SITE_AGENT_RELAY_PINNED
+      - name: Upgrade two private master review queues and closure with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          controller="$(base64 -w0 scripts/upgrade_two_site_review_closure_20261024.py)"
+          timeout 350s ssh -T -F "$d/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$controller\"))' upgrade" < "$RUNNER_TEMP/two_site_review_closure.tgz"
+      - name: Remove temporary SSH identity material
+        if: always()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/agents-ro-path"; then
+            d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+            if test -n "$d" && test -d "$d"; then
+              rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+              rmdir "$d" || true
+            fi
+            rm -f "$RUNNER_TEMP/agents-ro-path"
+          fi
