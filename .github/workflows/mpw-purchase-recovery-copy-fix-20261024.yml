@@ -1,0 +1,103 @@
+name: MojPlayWin purchase recovery copy fix
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-purchase-recovery-copy-fix-20261024.yml"
+      - "scripts/mpw_purchase_recovery_copy_fix_20261024.py"
+permissions: {contents: read}
+concurrency:
+  group: mpw-purchase-recovery-copy-fix
+  cancel-in-progress: false
+jobs:
+  deploy-copy-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[MPW_PURCHASE_UX_COPY_FIX_20261024]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate installer
+        run: python3 -m py_compile scripts/mpw_purchase_recovery_copy_fix_20261024.py
+      - name: Establish pinned SSH relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-purchase-ux-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),\"\").replace(chr(92)+\"n\",chr(10)).rstrip()+chr(10),end=\"\")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),\"\").replace(chr(92)+\"n\",chr(10)).rstrip()+chr(10),end=\"\")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P \"\" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P \"\" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Apply guarded copy-only patch
+        id: patch
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-purchase-ux-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - install '$GITHUB_RUN_ID'" < scripts/mpw_purchase_recovery_copy_fix_20261024.py
+      - name: Verify live support and storefront routes
+        run: |
+          python3 - <<'PY'
+          import json,time,urllib.request,urllib.error,os
+          checks={
+            "https://mojplaywin.com/support/":("For login, order status, invoice expiry, or digital download help","Orders &amp; Account Help","Never share your wallet recovery phrase"),
+            "https://mojplaywin.com/store/":("Two English digital books are available to buy now","/store/product/72/checkout/","/store/product/225/checkout/"),
+            "https://mojplaywin.com/store/product/72/":("7.50 USD","Secure order path."),
+            "https://mojplaywin.com/store/product/225/":("4.00 USD","Secure order path."),
+          }
+          for url,needles in checks.items():
+            body="";code=0
+            for attempt in range(8):
+              req=urllib.request.Request(url+"?__mpw_purchase_ux="+os.environ["GITHUB_RUN_ID"]+"-"+str(attempt),headers={"Cache-Control":"no-cache","User-Agent":"MPWPurchasesRecoveryVerify/1.0"})
+              try:
+                with urllib.request.urlopen(req,timeout=20) as r: code=r.status;body=r.read(500000).decode("utf8","replace")
+              except urllib.error.HTTPError as e: code=e.code;body=e.read(50000).decode("utf8","replace")
+              if code==200 and all(x in body for x in needles): break
+              time.sleep(4)
+            print("MPW_PURCHASE_UX_ROUTE="+json.dumps({"url":url,"status":code,"copy_ok":code==200 and all(x in body for x in needles)}))
+            if code!=200 or any(x not in body for x in needles): raise SystemExit("Live purchase UX verification failed: "+url)
+          print("MPW_PURCHASE_UX_COPY_FIX_LIVE=PASS")
+          PY
+      - name: Roll back if live verification fails
+        if: failure() && steps.patch.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-purchase-ux-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'" < scripts/mpw_purchase_recovery_copy_fix_20261024.py
+      - name: Remove SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-purchase-ux-ssh"
