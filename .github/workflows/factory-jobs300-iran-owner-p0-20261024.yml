@@ -1,0 +1,84 @@
+name: Owner Iran 300 real professions P0 private VPS factory intake
+on:
+  pull_request:
+    paths:
+      - scripts/factory_jobs300_iran_p0_intake_20261024.py
+      - scripts/factory_stage1_handoff.py
+      - tests/test_factory_jobs300_iran_p0_20261024.py
+      - .github/workflows/factory-jobs300-iran-owner-p0-20261024.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_jobs300_iran_p0_intake_20261024.py
+      - scripts/factory_stage1_handoff.py
+      - tests/test_factory_jobs300_iran_p0_20261024.py
+      - .github/workflows/factory-jobs300-iran-owner-p0-20261024.yml
+permissions: {contents: read}
+concurrency:
+  group: factory-jobs300-iran-p0-intake
+  cancel-in-progress: false
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify 300 distinctive trades, prior 900 P0 unchanged, handoff and 100k word contract
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_jobs300_iran_p0_20261024.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_stage1_handoff.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_agri200_p0_intake.py -v
+          python3 -B scripts/factory_jobs300_iran_p0_intake_20261024.py --selftest
+  private-vps-admission:
+    needs: regression
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-jobs300-iran-p0-20261024]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Issue 300 IRR / Persian business manuals and prove private stage 1 to stage 2 receipts
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          secure="$RUNNER_TEMP/iran-jobs300-identity"
+          install -d -m 700 "$secure"
+          trap 'rm -rf -- "$secure"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$secure/key"
+          chmod 600 "$secure/key"
+          ssh-keygen -y -P '' -f "$secure/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$secure/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$secure/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$secure/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$secure/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          root="/home/githubops/factory-runtime/private/autonomous-product-cycle"
+          ops="/home/githubops/factory-runtime/operations/production-instructions"
+          python="/home/githubops/factory-runtime/.venv/bin/python"
+          ssh_vps "test \"\$(id -un)\" = githubops && test -x '$python' && test -d '$root/production-instructions/orders' && test -f '$root/production-instructions/owner-education700-p0-index.json' && test -f '$root/production-instructions/owner-agri200-p0-index.json' && test -f '$ops/stage1-handoff.py' && test ! -L '$ops/stage1-handoff.py'"
+          stage="/home/githubops/factory-runtime/operations/.jobs300-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh_vps "umask 077; test ! -e '$stage'; install -d -m 700 '$stage/scripts'"
+          for src in scripts/factory_jobs300_iran_p0_intake_20261024.py scripts/factory_stage1_handoff.py; do
+            file="$(basename "$src")"
+            ssh_vps "umask 077; cat > '$stage/scripts/$file'; chmod 600 '$stage/scripts/$file'" < "$src"
+            hash="$(sha256sum "$src" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$stage/scripts/$file' | awk '{print \$1}')\" = '$hash'"
+          done
+          ssh_vps "timeout 40s '$python' -B '$stage/scripts/factory_jobs300_iran_p0_intake_20261024.py' --selftest"
+          ssh_vps "timeout 180s '$python' -B '$stage/scripts/factory_jobs300_iran_p0_intake_20261024.py' --factory-private '$root' > '$stage/intake-evidence.json'"
+          # Existing cron, old work orders, other factory lines, sites and warehouse remain unchanged.
+          ssh_vps "cp -p '$ops/stage1-handoff.py' '$stage/stage1-handoff.before.py' && install -m 600 '$stage/scripts/factory_stage1_handoff.py' '$stage/stage1-handoff.new.py' && mv -f '$stage/stage1-handoff.new.py' '$ops/stage1-handoff.py'"
+          ssh_vps "timeout 420s '$python' -B '$ops/stage1-handoff.py' --factory-private '$root' --batch 2000 > '$stage/stage1-evidence.log'"
+          ssh_vps "python3 -c 'import json,pathlib;a=pathlib.Path(\"$root/production-instructions\");i=json.loads((a/\"owner-jobs300-ir-p0-index.json\").read_text());ids=i[\"order_ids_ranked\"];assert i[\"book_goal_count\"]==300 and i[\"sector_count\"]==15 and len(set(ids))==300;assert i[\"minimum_total_original_prose_words\"]==30000000;missing=[];bad=[];
+          for oid in ids:
+              o=json.loads((a/\"orders\"/(oid+\".json\")).read_text());p=a/\"stage-01/receipts\"/(oid+\"--r001.json\");q=a/\"stage-02/inbox\"/(oid+\"--r001.json\");
+              if not p.is_file() or not q.is_file(): missing.append(oid); continue
+              proof=json.loads(p.read_text());inbox=json.loads(q.read_text());
+              if proof.get(\"stage_1_completed\") is not True or proof.get(\"research_completed\") is not False or inbox.get(\"quality1000_approved\") is not False or inbox.get(\"public_distribution_allowed\") is not False or o.get(\"minimum_original_prose_words\")!=100000 or o.get(\"priority\")!=\"P0\": bad.append(oid)
+          assert not missing and not bad,(missing[:5],bad[:5]);print(\"JOBS300_IRAN_PRIVATE_P0_ORDERS=300\");print(\"JOBS300_IRAN_STAGE1_TO_STAGE2_RECEIPTS=300\");print(\"JOBS300_IRAN_DISTINCT_BUSINESS_FAMILIES=15\");print(\"JOBS300_IRAN_MINIMUM_PROSE_WORDS=30000000\");print(\"JOBS300_IRAN_BOOKS_FINISHED=0\");print(\"JOBS300_IRAN_PUBLICATIONS=0\")'"
