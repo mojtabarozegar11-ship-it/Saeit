@@ -17,7 +17,8 @@ class TargetedScholarlyVocabularyTests(unittest.TestCase):
         for title, aliases in S.TARGETED_SCHOLAR_VOCAB.items():
             variants = S.query_variants(title.title())
             self.assertGreaterEqual(len(variants), 3)
-            self.assertEqual(variants[:2], list(S.TARGETED_SCHOLAR_SEARCHES[title]))
+            special = S.TARGETED_SCHOLAR_SEARCHES[title]
+            self.assertEqual(variants[:len(special)], list(special))
             self.assertEqual(len(set(variants)), len(variants))
             terms = S.keys(title.title())
             self.assertGreaterEqual(len(terms), 3, title)
