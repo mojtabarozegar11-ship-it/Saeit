@@ -1,0 +1,38 @@
+name: Agriculture customer store split 100 USD plus 100 IRR
+on:
+  pull_request:
+    paths:
+      - docs/agri200_p0_catalog.tsv
+      - scripts/agri200_customer_store_allocation_20261024.py
+      - tests/test_agri200_customer_store_allocation_20261024.py
+      - .github/workflows/agri200-customer-store-split-20261024.yml
+  push:
+    branches: [main]
+    paths:
+      - docs/agri200_p0_catalog.tsv
+      - scripts/agri200_customer_store_allocation_20261024.py
+      - tests/test_agri200_customer_store_allocation_20261024.py
+      - .github/workflows/agri200-customer-store-split-20261024.yml
+permissions: {contents: read}
+jobs:
+  allocation-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate the 100+100 paid catalog split without publishing
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_agri200_customer_store_allocation_20261024.py -v
+          python3 -B scripts/agri200_customer_store_allocation_20261024.py --catalog docs/agri200_p0_catalog.tsv > "$RUNNER_TEMP/agri200-private-split.json"
+          python3 - "$RUNNER_TEMP/agri200-private-split.json" <<'PY'
+          import json,sys
+          p=json.load(open(sys.argv[1],encoding="utf-8"))
+          assert p["product_count"]==200
+          assert sum(x["currency"]=="USD" for x in p["products"])==100
+          assert sum(x["currency"]=="IRR" for x in p["products"])==100
+          assert all(x["sales_enabled"] is False and x["price_minor_units"] is None for x in p["products"])
+          print("AGRI200_PRIVATE_MERCHANT_ALLOCATION_100_100=PASS")
+          print("NO_FAKE_PUBLICATION_OR_QC_APPROVAL=PASS")
+          PY
