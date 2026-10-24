@@ -108,7 +108,7 @@ for pid in (72,225):
              "forms":re.findall(r'<form\b[^>]{0,500}>',body,re.I)[:5],
              "form_excerpt":re.sub(r"\s+"," ",re.sub(r"<[^>]+>"," ",(re.findall(r'<form\b[^>]*>.*?</form>',body,re.I|re.S) or [""])[0]))[:400],
              "submit_buttons":re.findall(r'<button\b[^>]*>.*?</button>',body,re.I|re.S)[:8],
-             "trx_button":bool(re.search(r"Pay securely with TRX",body,re.I)),
+             "trx_button":bool(re.search(r"Create invoice and pay with TRX",body,re.I)),
              "read_only":True,"orders_created":False},ensure_ascii=False))
     except Exception as e:
         print("MPW_ACTIVE_CHECKOUT_RENDER="+json.dumps({"product":pid,"error":type(e).__name__,"read_only":True}))
@@ -188,7 +188,16 @@ with tempfile.TemporaryDirectory(prefix="mpw-readonly-order-sim-") as tmp:
           "production_db_writes":False,"money_transferred":False},ensure_ascii=False))
 
 # Exercise the real start endpoint and decorators with order selection mocked.
-request=RequestFactory().post("/commerce/trx-easy/start/72/",secure=True,HTTP_HOST="mojplaywin.com")
+from django.conf import settings as django_settings
+from django.middleware.csrf import _get_new_csrf_string, _mask_cipher_secret
+csrf_secret=_get_new_csrf_string()
+csrf_token=_mask_cipher_secret(csrf_secret)
+request=RequestFactory().post("/commerce/trx-easy/start/72/",{"csrfmiddlewaretoken":csrf_token},
+    secure=True,HTTP_HOST="mojplaywin.com",
+    HTTP_REFERER="https://mojplaywin.com/store/product/72/checkout/",
+    HTTP_ORIGIN="https://mojplaywin.com")
+request.COOKIES[django_settings.CSRF_COOKIE_NAME]=csrf_secret
+request.META["CSRF_COOKIE"]=csrf_secret
 request.user=SimpleNamespace(pk=987654,is_authenticated=True,is_active=True)
 with patch.object(commercial,"_ensure_live",return_value=connection), patch.object(commercial,"_select_order",return_value=987652):
     response=resolve("/commerce/trx-easy/start/72/").func(request,product_id=72)
