@@ -140,6 +140,16 @@ def domain_catchall():
                 if isinstance(data, list):
                     info["row_count"] = len(data)
                     info["field_names"] = sorted(set().union(*(r.keys() for r in data if isinstance(r, dict))))[:20]
+                    scoped = [r for r in data if isinstance(r, dict)
+                              and str(r.get("domain") or "").lower() == DOMAIN]
+                    if scoped:
+                        value = str(scoped[0].get("defaultaddress") or "").strip()
+                        if value.startswith((":fail:", ":blackhole:")):
+                            info["catchall_delivery"] = "rejected_or_discarded"
+                        elif value and "@" in value:
+                            info["catchall_delivery"] = "mailbox_or_forward_target_configured"
+                        elif value:
+                            info["catchall_delivery"] = "other_unverified_configuration"
                 # Never publish routing destinations; classification is conservative.
                 if isinstance(data, dict):
                     route = str(data.get("forward") or data.get("dest") or
