@@ -1,0 +1,129 @@
+name: MojPlayWin align book purchase copy and chess specifications
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-store-copy-coherence-release-20261024.yml"
+      - "scripts/mpw_store_copy_coherence_release_20261024.py"
+permissions:
+  contents: read
+concurrency:
+  group: mpw-store-copy-coherence-production
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate bounded release source
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_store_copy_coherence_release_20261024.py
+          python3 - <<'PY'
+          from pathlib import Path
+          store=Path("core/templates/mojplaywin/store.html").read_text("utf8")
+          required=("Sign in or create an account, then open the product checkout",
+                    "exact TRX amount and receiving address",
+                    "415-page English digital PDF (2026 edition)",
+                    "84-day structured chess training plan",
+                    "No wallet connection or sender-address registration")
+          missing=[item for item in required if item not in store]
+          if missing: raise SystemExit("Source copy missing: "+repr(missing))
+          print("MPW_STORE_COPY_SOURCE=READY")
+          PY
+      - name: Establish pinned SSH relay to cPanel
+        env:
+          VPS_KEY: \${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: \${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-store-copy-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d"/*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Install reversible storefront and product copy patch
+        id: install
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-store-copy-ssh"
+          timeout 100s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - install '$GITHUB_RUN_ID'" < scripts/mpw_store_copy_coherence_release_20261024.py
+      - name: Verify public buyer pages
+        run: |
+          python3 - <<'PY'
+          import time, urllib.request, urllib.error
+          checks={
+            "https://mojplaywin.com/store/":(
+              "Sign in or create an account, then open the product checkout",
+              "exact TRX amount and receiving address",
+              "No wallet connection or sender-address registration is needed",
+              "415-page English digital PDF (2026 edition)",
+              "84-day structured chess training plan"),
+            "https://mojplaywin.com/store/product/72/":(
+              "415-page English digital PDF",
+              "84-day structured chess training plan",
+              "Sign in to create an order-specific TRX invoice linked to your account"),
+            "https://mojplaywin.com/store/product/225/":("4.00 USD","Secure order path."),
+          }
+          for url,needles in checks.items():
+            body="";code=0
+            for attempt in range(8):
+              req=urllib.request.Request(url+"?__mpw_copy_release="+str(time.time_ns()),headers={"Cache-Control":"no-cache","Pragma":"no-cache"})
+              try:
+                with urllib.request.urlopen(req,timeout=20) as response:
+                  code=response.status;body=response.read(500000).decode("utf8","replace")
+              except urllib.error.HTTPError as exc:
+                code=exc.code;body=exc.read(50000).decode("utf8","replace")
+              if code==200 and all(x in body for x in needles):break
+              time.sleep(2)
+            ok=code==200 and all(x in body for x in needles)
+            print("MPW_COPY_ROUTE url=%s status=%s markers=%s"%(url,code,ok))
+            if not ok:raise SystemExit("Buyer copy check failed: "+url)
+          print("MPW_STORE_COPY_LIVE=PASS;ORDER_OR_PAYMENT_CREATED=NO")
+          PY
+      - name: Roll back on failed live verification
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-store-copy-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'" < scripts/mpw_store_copy_coherence_release_20261024.py
+      - name: Remove SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-store-copy-ssh"
