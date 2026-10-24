@@ -114,6 +114,28 @@ jobs:
                   """).fetchone()[0]
                   print("PROJECTS_LINKED_SOURCE_EVIDENCE_FINDING_REPORT=" + str(chain))
                   print("PROJECTS_STRICT_STRUCTURAL_REVIEW_CANDIDATES=" + str(chain_with_limits))
+                  source_http = connection.execute(
+                      "SELECT COUNT(*) FROM core_researchsource WHERE url LIKE 'https://%'").fetchone()[0]
+                  source_hash = connection.execute(
+                      "SELECT COUNT(*) FROM core_researchsource WHERE LENGTH(TRIM(content_hash)) = 64").fetchone()[0]
+                  source_both = connection.execute(
+                      "SELECT COUNT(*) FROM core_researchsource WHERE url LIKE 'https://%' AND LENGTH(TRIM(content_hash)) = 64").fetchone()[0]
+                  finding_limitation = connection.execute(
+                      "SELECT COUNT(*) FROM core_finding WHERE LENGTH(TRIM(limitation)) >= 20").fetchone()[0]
+                  source_candidate = connection.execute("""
+                      SELECT COUNT(*) FROM core_researchproject p
+                      WHERE EXISTS (SELECT 1 FROM core_researchsource s
+                                    JOIN core_evidence e ON e.source_id = s.id
+                                    WHERE s.project_id = p.id AND e.project_id = p.id
+                                      AND s.url LIKE 'https://%'
+                                      AND LENGTH(TRIM(s.content_hash)) = 64)
+                        AND EXISTS (SELECT 1 FROM core_report r WHERE r.project_id = p.id)
+                  """).fetchone()[0]
+                  print("SOURCE_HTTPS_ROWS=" + str(source_http))
+                  print("SOURCE_SHA256_FORMAT_ROWS=" + str(source_hash))
+                  print("SOURCE_HTTPS_AND_SHA256_ROWS=" + str(source_both))
+                  print("FINDINGS_WITH_SUBSTANTIVE_LIMITATION_ROWS=" + str(finding_limitation))
+                  print("PROJECTS_WITH_VALID_SOURCE_EVIDENCE_AND_REPORT=" + str(source_candidate))
                   print("PROJECTS_RELEASED_BY_THIS_AUDIT=0")
               print("PRIVATE_RELATIONSHIPS_NOT_PROOF_OF_INDEPENDENT_PEER_REVIEW=true")
               print("COMPANY_HISTORICAL_CLAIM_RECONCILED=false")
