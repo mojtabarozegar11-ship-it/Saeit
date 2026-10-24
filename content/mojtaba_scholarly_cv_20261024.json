@@ -36,10 +36,10 @@
   "research_pipeline": [
     {
       "id": "MR-2026-001",
-      "title": "Economic Decision-Making under Irrigation Water Scarcity: A Scoping Review Protocol for Farm-Level Decision-Support Methods",
-      "type": "Proposed scoping review",
+      "title": "Field Validation and Farmer Adoption of Irrigation Decision-Support Tools under Water Scarcity: A Scoping Review Protocol",
+      "type": "Proposed implementation-focused scoping review",
       "status": "Protocol design; no journal submission",
-      "next_gate": "Define registered review question, search strategy, screening and extractable evidence; author must review and approve.",
+      "next_gate": "Test originality against the September 2026 systematic review DOI 10.3390/w18172174; define field-validation and adoption eligibility, then undertake documented searches and author review.",
       "doi": null
     }
   ],
