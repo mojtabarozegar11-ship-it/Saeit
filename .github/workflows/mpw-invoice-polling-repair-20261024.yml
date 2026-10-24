@@ -184,6 +184,28 @@ jobs:
                   names=set(re.findall(r'[A-Za-z_][A-Za-z0-9_]*',body))
                   policies.append({'file':str(p.relative_to(root)),'function':node.name,'line':node.lineno,'auth_gate':bool({'is_authenticated','login_required','login_url'}&names),'user_access':bool({'user','request'}&names),'not_found_branch':bool({'Http404','HttpResponseNotFound','NotFound'}&names),'login_redirect':('login' in names and bool({'redirect','RedirectView'}&names)),'invoice_or_order_calls':sorted(n for n in names if re.search(r'invoice|order|checkout|create',n,re.I))[:20]})
           print('MPW_INVOICE_START_POLICY='+json.dumps(policies))
+          branch_audit=[]
+          for p in targets:
+              if p.is_symlink() or not p.is_file():continue
+              try:tree=ast.parse(p.read_text('utf8','replace'))
+              except (OSError,SyntaxError):continue
+              for node in ast.walk(tree):
+                  if not isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) or node.name not in wanted:continue
+                  branches=[]
+                  for child in ast.walk(node):
+                      if isinstance(child,ast.If):
+                          names=sorted({x.id for x in ast.walk(child.test) if isinstance(x,ast.Name)}|{x.attr for x in ast.walk(child.test) if isinstance(x,ast.Attribute)})
+                          operators=sorted(type(x).__name__ for x in ast.walk(child.test) if isinstance(x,(ast.Eq,ast.NotEq,ast.Is,ast.IsNot,ast.In,ast.NotIn,ast.Gt,ast.GtE,ast.Lt,ast.LtE,ast.And,ast.Or,ast.Not)))
+                          branches.append({'line':child.lineno,'names':names,'operators':operators,'literal_types':sorted({type(x.value).__name__ for x in ast.walk(child.test) if isinstance(x,ast.Constant)})})
+                  terminals=[]
+                  for child in ast.walk(node):
+                      if isinstance(child,ast.Return):
+                          value=child.value
+                          terminals.append({'line':child.lineno,'kind':'return','call':getattr(getattr(value,'func',None),'id',None) or getattr(getattr(value,'func',None),'attr',None) or type(value).__name__})
+                      elif isinstance(child,ast.Raise):
+                          terminals.append({'line':child.lineno,'kind':'raise','call':getattr(getattr(child.exc,'func',None),'id',None) or getattr(child.exc,'id',None) or type(child.exc).__name__})
+                  branch_audit.append({'file':str(p.relative_to(root)),'function':node.name,'branches':branches[:50],'terminals':terminals[:50]})
+          print('MPW_INVOICE_START_BRANCH_AUDIT='+json.dumps(branch_audit))
           if not routes:raise SystemExit('NO_INVOICE_ROUTE_DEFINITIONS_FOUND')
           PY
       - name: Smoke public store product and checkout routes without creating orders or payments
