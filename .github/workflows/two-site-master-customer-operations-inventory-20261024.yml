@@ -71,6 +71,19 @@ jobs:
                       print("SITE_NAV_LINK_"+name+"_"+route.replace("/","_")+"="+str("ask-master" in text))
                   except Exception as error:
                       print("SITE_NAV_LINK_"+name+"_"+route.replace("/","_")+"=unavailable")
+          # Only enumerate the exact customer-support entry paths (no file contents or secrets).
+          for site,web in (("zomorod",home/"public_html"),("mojplaywin",home/"mojplaywin.com")):
+              for segment in ("contact","support","help","ask-master"):
+                  directory=web/segment
+                  if directory.is_dir() and not directory.is_symlink():
+                      names=[e.name for e in directory.iterdir() if e.is_file() and
+                             e.name in ("index.php","index.html","index.htm","support.php","contact.php",".htaccess")]
+                      print("LIVE_SUPPORT_ROUTE_FILES_"+site+"_"+segment+"="+json.dumps(sorted(names)))
+                  else:
+                      print("LIVE_SUPPORT_ROUTE_FILES_"+site+"_"+segment+"=not_a_directory")
+              for file in (web/"contact.php",web/"support.php",web/".htaccess",web/"index.php"):
+                  if file.is_file() and not file.is_symlink() and file.stat().st_size<400000:
+                      print("LIVE_SUPPORT_ROOT_ENTRY_"+site+"_"+file.name+"=present")
           print("LOCAL_OLLAMA_BIN="+str(bool(shutil.which("ollama"))))
           print("LOCAL_LLAMA_SERVER_BIN="+str(bool(shutil.which("llama-server"))))
           print("LOCAL_LLAMA_PYTHON="+str(importlib.util.find_spec("llama_cpp") is not None))
