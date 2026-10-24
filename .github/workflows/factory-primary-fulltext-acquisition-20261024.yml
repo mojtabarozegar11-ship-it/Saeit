@@ -67,4 +67,7 @@ jobs:
           ssh_vps "timeout 100s '$py' -B -m unittest discover -s '$target/tests' -p test_factory_primary_fulltext_acquisition_20261024.py -v"
           ssh_vps "bash -n '$target/deploy/install_factory_primary_fulltext_acquisition_20261024.sh'"
           ssh_vps "GITHUB_RUN_ID='$GITHUB_RUN_ID' timeout 440s bash '$target/deploy/install_factory_primary_fulltext_acquisition_20261024.sh' '$target/scripts/factory_primary_fulltext_acquisition_20261024.py'"
+          # Verify private evidence, all-order triage and the live worker directly
+          # after installation. This never certifies the manuscripts or publishes.
+          ssh_vps "timeout 90s '$py' -B '/home/githubops/factory-runtime/operations/production-instructions/license-safe-primary-fulltext-acquisition.py' --factory-private '/home/githubops/factory-runtime/private/autonomous-product-cycle' --status-only"
           printf '%s\n' 'FACTORY_PRIMARY_FULLTEXT=PRIVATE_RUN_ACTIVE' 'NO_SCIENTIFIC_OR_QC1000_APPROVAL_CLAIMED' 'NO_LIVE_SITE_RELEASE'
