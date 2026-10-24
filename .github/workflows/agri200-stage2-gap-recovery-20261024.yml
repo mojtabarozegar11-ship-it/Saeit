@@ -75,8 +75,9 @@ jobs:
           PY"
           # The installed worker already preserves provider cooldowns, immutable
           # literature evidence, publisher diversity and per-topic retry state.
-          # This is one bounded extra discovery pass, not an approval bypass.
-          ssh_vps "timeout 440s '$py' -B '$ops/stage2-literature-scout.py' --factory-private '$root' --stage2-program '$ops/stage2-research.py' --batch 32 --workers 1 --query-burst 2 --expedite-gap-research"
+          # This is one bounded extra discovery pass (max three searches per due
+          # source gap) on the installed vetted v11; not an approval bypass.
+          ssh_vps "timeout 440s '$py' -B '$ops/stage2-literature-scout.py' --factory-private '$root' --stage2-program '$ops/stage2-research.py' --batch 16 --workers 1 --query-burst 3 --expedite-gap-research"
           ssh_vps "timeout 125s '$py' -B '$ops/stage2-research.py' --factory-private '$root' --batch 250"
           ssh_vps "python3 - '$root/production-instructions' <<'PY'
           import collections,json,sys
