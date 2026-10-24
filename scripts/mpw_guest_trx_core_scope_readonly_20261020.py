@@ -62,7 +62,7 @@ for modname in ("services.mpw_trx_public_pages","services.mpw_trx_commercial_web
         for node in tree.body:
             if not isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):continue
             n=node.name.lower()
-            if not any(k in n for k in ("product_checkout","trx","invoice","start","status","reconcile","purchase")):continue
+            if not any(k in n for k in ("product_checkout","trx","invoice","start","status","reconcile","purchase","select_order")):continue
             calls=sorted({ast.unparse(c.func).split(".")[-1] for c in ast.walk(node) if isinstance(c,ast.Call)})
             route_actions=[]
             for stmt in ast.walk(node):
