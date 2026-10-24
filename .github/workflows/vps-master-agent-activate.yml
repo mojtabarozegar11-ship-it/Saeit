@@ -6,6 +6,12 @@ on:
     branches: [main]
     paths: [.github/workflows/vps-master-agent-activate.yml, scripts/vps_master_evolution_cycle.py, tests/test_vps_master_evolution_cycle.py]
   workflow_dispatch:
+    inputs:
+      confirm_activate:
+        description: 'Owner-approved private VPS master activation (backup, seed, run, cron)'
+        required: true
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -25,7 +31,7 @@ jobs:
           python3 -m py_compile scripts/vps_master_evolution_cycle.py
   activate:
     needs: verify
-    if: github.event_name != 'pull_request' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: github.event_name == 'workflow_dispatch' && inputs.confirm_activate == true && github.repository == 'mojtabarozegar11-ship-it/Saeit'
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:

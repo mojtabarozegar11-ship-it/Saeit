@@ -1,0 +1,49 @@
+name: VPS Master Evolution One-shot Verified Hotfix
+on:
+  push:
+    branches: [agents/master-completion-watermark-20261024]
+    paths: [.github/workflows/vps-master-evolution-verified-hotfix-20261024.yml]
+permissions:
+  contents: read
+concurrency:
+  group: vps-master-evolution-hotfix-20261024
+  cancel-in-progress: false
+jobs:
+  one_shot_hotfix:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it' && github.ref == 'refs/heads/agents/master-completion-watermark-20261024'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact private-only hotfix sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/vps_master_evolution_hotfix_20261024.sh
+          python3 -B -m unittest discover -s tests -p 'test_vps_master_evolution_cycle.py' -v
+          test "$(sha256sum deploy/vps_master_evolution_hotfix_20261024.sh | awk '{print $1}')" = 'd1a1e84e5f8f53bceafc6be8b38825aaf9003a66d78da65c8d2f709ede6eb1d5'
+          test "$(sha256sum scripts/vps_master_evolution_cycle.py | awk '{print $1}')" = 'ce31cd527cf59f5b7666124d2f975c6328829a8746843edb85bf01113be79e42'
+      - name: Install only the verified master evolution module via pinned VPS SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/master-hotfix.XXXXXX")"
+          trap 'rm -f "$d/key" "$d/known"; rmdir "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          root=/home/githubops/factory-runtime/operations/master-agent
+          ssh "${opts[@]}" githubops@178.239.147.150 'test "$(id -un)" = githubops && test -d /home/githubops/factory-runtime/operations/master-agent'
+          scp "${opts[@]}" scripts/vps_master_evolution_cycle.py githubops@178.239.147.150:$root/.master-evolution-hotfix-candidate-20261024.py
+          scp "${opts[@]}" deploy/vps_master_evolution_hotfix_20261024.sh githubops@178.239.147.150:$root/.master-evolution-hotfix-installer-20261024.sh
+          ssh "${opts[@]}" githubops@178.239.147.150 bash "$root/.master-evolution-hotfix-installer-20261024.sh" \
+            'c836cb6949da721cce33ab2efc50c1bbe0b5b50e7c5af8dc1ea2ce88f695cec0' \
+            'ce31cd527cf59f5b7666124d2f975c6328829a8746843edb85bf01113be79e42' \
+            "$root/.master-evolution-hotfix-candidate-20261024.py"

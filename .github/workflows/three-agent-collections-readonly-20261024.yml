@@ -1,0 +1,215 @@
+name: Three independent agent collections private read-only health 2026-10-24
+on:
+  push:
+    branches: [agents/master-completion-watermark-20261024]
+    paths: [.github/workflows/three-agent-collections-readonly-20261024.yml]
+permissions:
+  contents: read
+concurrency:
+  group: three-agent-collections-readonly-20261024
+  cancel-in-progress: false
+jobs:
+  site_agents_health:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Verify pinned VPS to cPanel SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/agents-ro.XXXXXX")"
+          echo "$d" > "$RUNNER_TEMP/agents-ro-path"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf '%s\n' \
+            "Host saeit-vps" "  HostName 178.239.147.150" "  User githubops" "  Port 22" \
+            "  IdentityFile $d/vps.key" "  UserKnownHostsFile $d/vps.known" \
+            "Host saeit-cpanel" "  HostName zohal.pws-dns.net" "  User zomorod2" "  Port 1396" \
+            "  IdentityFile $d/host.key" "  UserKnownHostsFile $d/host.known" "  ProxyJump saeit-vps" \
+            "Host *" "  StrictHostKeyChecking yes" "  IdentitiesOnly yes" "  BatchMode yes" \
+            "  ConnectTimeout 10" "  ConnectionAttempts 1" "  ForwardAgent no" \
+            > "$d/config"
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          ssh -F "$d/config" saeit-vps bash -se <<'REMOTE_VPS'
+          set -euo pipefail
+          root="$HOME/factory-runtime/operations/master-agent"
+          state="$HOME/factory-runtime/private/master-agent/evolution.json"
+          test -f "$root/evolution.py" && test ! -L "$root/evolution.py"
+          test "$(sha256sum "$root/evolution.py" | awk '{print $1}')" = 'ce31cd527cf59f5b7666124d2f975c6328829a8746843edb85bf01113be79e42'
+          test "$(crontab -l | grep -c 'SAEIT_MASTER_AGENT_V1')" -eq 2
+          python3 - "$state" <<'PY'
+          import json,sys
+          from pathlib import Path
+          p=Path(sys.argv[1])
+          assert p.is_file() and not p.is_symlink()
+          state=json.loads(p.read_text(encoding="utf8"))
+          assert state.get("schema")=="saeit.master.evolution.v1"
+          assert state.get("max_steps") in (1,2,3)
+          assert isinstance(state.get("completion_watermark"),dict)
+          print("VPS_MASTER_HOTFIX_SHA_AND_WATERMARK=PASS")
+          print("VPS_MASTER_EXISTING_CRON_TWO=PASS")
+          PY
+          REMOTE_VPS
+          echo SITE_AGENT_RELAY_PINNED
+      - name: Read-only Zomorod and MojPlayWin agent statuses
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          timeout 150s ssh -T -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          py="$HOME/virtualenv/Saeit/3.10/bin/python"
+          if test -x "$py" && test -f "$HOME/Saeit/manage.py"; then
+            cd "$HOME/Saeit"
+            "$py" -B - <<'PY'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+          try:
+              import django
+              django.setup()
+              from core.models import Agent, AgentTask
+              from django.db.models import Count
+              agents = list(Agent.objects.values("code", "active"))
+              states = dict(AgentTask.objects.values("status").annotate(n=Count("pk")).values_list("status", "n"))
+              print("ZM_AGENT_REGISTRY_QUERY=ok")
+              print("ZM_AGENT_COUNT=" + str(len(agents)))
+              print("ZM_AGENT_ACTIVE_COUNT=" + str(sum(bool(a["active"]) for a in agents)))
+              print("ZM_AGENT_TASK_BLOCKED=" + str(states.get("blocked", 0)))
+              print("ZM_AGENT_TASK_FAILED=" + str(states.get("failed", 0)))
+              print("ZM_AGENT_TASK_RUNNING=" + str(states.get("running", 0)))
+          except Exception as e:
+              print("ZM_AGENT_REGISTRY_QUERY=failed_" + type(e).__name__)
+              message = str(e).lower()
+              if "no such table" in message:
+                  kind = "missing_table"
+              elif "no such column" in message:
+                  kind = "missing_column"
+              elif "locked" in message:
+                  kind = "locked"
+              elif "unable to open" in message:
+                  kind = "open_failed"
+              else:
+                  kind = "other_database_error"
+              print("ZM_AGENT_REGISTRY_ERROR_CATEGORY=" + kind)
+          PY
+          else
+            echo ZM_AGENT_DJANGO_RUNTIME_MISSING
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          from datetime import datetime, timezone
+          import json, subprocess
+          root = Path.home() / ".private_mojplaywin_main_agents/evolution_runtime_20261018"
+          print("MPW_PRIVATE_EVOLUTION_ROOT_PRESENT=" + str(root.is_dir() and not root.is_symlink()).lower())
+          history = root / "agent_dashboard_telemetry.json"
+          if history.is_file() and not history.is_symlink():
+              try:
+                  doc=json.loads(history.read_text(encoding="utf8"))
+                  print("MPW_AGENT_TELEMETRY_TENANT_MATCH=" + str(doc.get("tenant")=="mojplaywin-main").lower())
+                  stamp=datetime.fromisoformat(doc["collected_at"].replace("Z","+00:00"))
+                  age=int((datetime.now(timezone.utc)-stamp).total_seconds())
+                  print("MPW_AGENT_TELEMETRY_AGE_SECONDS=" + str(age))
+                  print("MPW_AGENT_TELEMETRY_FRESH=" + str(0 <= age <= 1800).lower())
+                  series = len(doc.get("points",{}))
+                  print("MPW_AGENT_TELEMETRY_SERIES=" + str(series))
+                  assert doc.get("tenant") == "mojplaywin-main" and 0 <= age <= 1800 and series >= 90, "MPW_TELEMETRY_HEALTH_FAILED"
+              except (ValueError, TypeError, KeyError, OSError) as exc:
+                  print("MPW_AGENT_TELEMETRY=invalid_" + type(exc).__name__)
+          else:
+              print("MPW_AGENT_TELEMETRY=missing")
+              raise SystemExit("MPW_TELEMETRY_MISSING")
+          from urllib.parse import quote
+          import sqlite3
+          private=Path.home()/".private/zomorod-business"
+          required=("site_agents.php","site_agent_workforce.php","site_agent_cycle_cli.php")
+          for name in required:
+              p=private/name
+              present = p.is_file() and not p.is_symlink()
+              print("ZM_PHP_MODULE_"+name.upper().replace(".","_")+"_PRESENT="+str(present).lower())
+              assert present, "ZM_PHP_REQUIRED_MODULE_MISSING"
+          ledger=private/"site_agents.sqlite3"
+          if ledger.is_file() and not ledger.is_symlink():
+              try:
+                  with sqlite3.connect("file:"+quote(str(ledger))+"?mode=ro",uri=True,timeout=12) as db:
+                      db.execute("PRAGMA query_only=ON")
+                      tables={x[0] for x in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                      required_tables={"agents","runs","site_work_outputs","site_work_state","site_work_generation_evidence"}
+                      complete = required_tables.issubset(tables)
+                      print("ZM_PHP_LEDGER_SCHEMA_COMPLETE="+str(complete).lower())
+                      assert complete, "ZM_PHP_LEDGER_SCHEMA_INCOMPLETE"
+                      if required_tables.issubset(tables):
+                          for table in ("agents","runs","site_work_outputs"):
+                              number=db.execute('SELECT COUNT(*) FROM "'+table+'"').fetchone()[0]
+                              print("ZM_PHP_LEDGER_"+table.upper()+"="+str(number))
+                          roles=db.execute("SELECT COUNT(DISTINCT agent_code) FROM runs").fetchone()[0]
+                          print("ZM_PHP_LEDGER_DISTINCT_RUN_ROLES="+str(roles))
+                          assert roles == 11, "ZM_PHP_RUN_ROLES_NOT_ELEVEN"
+                          latest=db.execute("SELECT occurred_at FROM runs ORDER BY id DESC LIMIT 1").fetchone()
+                          if latest and latest[0]:
+                              try:
+                                  stamp=datetime.fromisoformat(str(latest[0]).replace("Z","+00:00"))
+                                  if stamp.tzinfo is None:
+                                      stamp=stamp.replace(tzinfo=timezone.utc)
+                                  age=int((datetime.now(timezone.utc)-stamp).total_seconds())
+                                  print("ZM_PHP_AGENT_LATEST_RUN_AGE_SECONDS="+str(age))
+                                  assert 0 <= age <= 1500, "ZM_PHP_AGENT_RUN_STALE"
+                              except (ValueError,TypeError):
+                                  print("ZM_PHP_AGENT_LATEST_RUN_TIMESTAMP_INVALID=true")
+              except sqlite3.Error as exc:
+                  print("ZM_PHP_LEDGER_QUERY=failed_"+type(exc).__name__)
+          else:
+              print("ZM_PHP_LEDGER_MISSING=true")
+              raise SystemExit("ZM_PHP_LEDGER_MISSING")
+          cron=subprocess.run(["crontab","-l"], capture_output=True,text=True,timeout=15)
+          if cron.returncode == 0:
+              tags={"MPW_MAIN_AGENT":"MPW_V91_MAIN_ONLY_20261018",
+                    "MPW_SITE_HEALTH":"MPW_V11_MAIN_ONLY_SITE_HEALTH_20261018",
+                    "MPW_EVOLUTION":"MPW_PRIVATE_EVOLUTION_MAIN_ONLY_20261018",
+                    "MPW_MODULE_77":"MPW_77_MODULES_MAIN_ONLY_20261018",
+                    "MPW_ROBOTS":"MPW_MAIN_PRIVATE_EXECUTION_ROBOTS_20261018"}
+              for label, tag in tags.items():
+                  matches=sum(tag in line for line in cron.stdout.splitlines() if not line.lstrip().startswith("#"))
+                  print(label + "_CRON_MARKERS=" + str(matches))
+                  assert matches == 1, label + "_CRON_INVALID"
+              zm=sum(("knowledge_agent_" in line or "company_activity_agent" in line)
+                     for line in cron.stdout.splitlines() if not line.lstrip().startswith("#"))
+              print("ZM_SITE_AGENT_CRON_MARKERS="+str(zm))
+              enabled=[line for line in cron.stdout.splitlines()
+                       if not line.lstrip().startswith("#") and "zm-site-agents-only-v100" in line
+                       and line.split()[:5]==["*/10","*","*","*","*"]]
+              print("ZM_PHP_SITE_AGENTS_TEN_MINUTE_CRON="+str(len(enabled)))
+              assert len(enabled) == 1, "ZM_PHP_AGENT_CRON_INVALID"
+          else:
+              print("SITE_AGENT_CRON=unreadable")
+              raise SystemExit("SITE_AGENT_CRON_UNREADABLE")
+          PY
+          echo THREE_AGENT_SITE_PRIVATE_READONLY_PROBE_COMPLETE
+          REMOTE
+      - name: Remove temporary SSH identity material
+        if: always()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/agents-ro-path"; then
+            d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+            if test -n "$d" && test -d "$d"; then
+              rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+              rmdir "$d" || true
+            fi
+            rm -f "$RUNNER_TEMP/agents-ro-path"
+          fi
