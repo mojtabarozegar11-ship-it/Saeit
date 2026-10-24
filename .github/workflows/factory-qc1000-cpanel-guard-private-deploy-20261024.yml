@@ -1,0 +1,126 @@
+name: QC1000 genuine executions - private cPanel verifier install
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - deploy/install_factory_qc1000_cpanel_private_20261024.py
+      - tests/test_factory_qc1000_cpanel_install_20261024.py
+      - .github/workflows/factory-qc1000-cpanel-guard-private-deploy-20261024.yml
+  push:
+    branches: [main]
+    paths:
+      - deploy/install_factory_qc1000_cpanel_private_20261024.py
+      - tests/test_factory_qc1000_cpanel_install_20261024.py
+      - .github/workflows/factory-qc1000-cpanel-guard-private-deploy-20261024.yml
+permissions: {contents: read}
+concurrency:
+  group: factory-qc1000-private-cpanel-guard-only
+  cancel-in-progress: false
+jobs:
+  scoped-guard-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify fail-closed QC1000 and rollback installer
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_commercial_quality_release_guard_real1000_20261024.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_qc1000_cpanel_install_20261024.py -v
+          python3 -B -m py_compile deploy/install_factory_qc1000_cpanel_private_20261024.py
+  install-only-qc-private-executables:
+    needs: scoped-guard-regression
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-qc1000-cpanel-relay-20261024]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Pinned SSH install three QC scripts only; prove live server reject
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/private-qc1000-relay"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/vps.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 9 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          target="/home/zomorod2/.saeit-factory-inbox/.qc1000-stage-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh -T -F "$d/config" saeit-cpanel "set -eu; test \"\$(id -un)\" = zomorod2; umask 077; test ! -e '$target'; mkdir -m 700 '$target'; test -f /home/zomorod2/.saeit-factory-inbox/bin/publish_verified_factory_store_listing.py"
+          scp -q -F "$d/config" deploy/install_factory_qc1000_cpanel_private_20261024.py saeit-cpanel:"$target/installer.py"
+          for name in factory_commercial_quality_release_guard_v1.py factory_quality_signed_approval_v1.py factory_real_qc1000_live_monitor_20261023.py; do
+            scp -q -F "$d/config" "scripts/$name" saeit-cpanel:"$target/$name"
+          done
+          s1="$(sha256sum scripts/factory_commercial_quality_release_guard_v1.py | awk '{print $1}')"
+          s2="$(sha256sum scripts/factory_quality_signed_approval_v1.py | awk '{print $1}')"
+          s3="$(sha256sum scripts/factory_real_qc1000_live_monitor_20261023.py | awk '{print $1}')"
+          installer_sha="$(sha256sum deploy/install_factory_qc1000_cpanel_private_20261024.py | awk '{print $1}')"
+          ssh -T -F "$d/config" saeit-cpanel "test \"\$(sha256sum '$target/installer.py' | awk '{print \$1}')\" = '$installer_sha'"
+          timeout 120s ssh -T -F "$d/config" saeit-cpanel "python3 -B '$target/installer.py' --staging '$target' --sha-factory-commercial-quality-release-guard-v1 '$s1' --sha-factory-quality-signed-approval-v1 '$s2' --sha-factory-real-qc1000-live-monitor-20261023 '$s3'"
+          echo 'QC1000_CPANEL_DEPLOYED_FROM_VERIFIED_SOURCE=PASS'
+          timeout 35s ssh -T -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("/home/githubops/factory-runtime")
+          stage = root / "private/autonomous-product-cycle/production-instructions/stage-06"
+          health = stage / "real-qc1000-health.json"
+          pubkey = root / "operations/production-instructions/real-qc1000-trusted-runner.pub"
+          monitor = root / "operations/production-instructions/real-qc1000-live-monitor.py"
+          if not health.is_file() or health.is_symlink():
+              raise SystemExit("QC1000_LIVE_HEALTH_NOT_AVAILABLE")
+          status = json.loads(health.read_text(encoding="utf8"))
+          if status.get("scanner_health") != "RUNNING":
+              raise SystemExit("QC1000_SCANNER_NOT_RUNNING")
+          from datetime import datetime, timezone, timedelta
+          recent = status.get("updated_utc")
+          if not isinstance(recent, str):
+              raise SystemExit("QC1000_NO_HEALTH_HEARTBEAT")
+          updated = datetime.fromisoformat(recent.replace("Z", "+00:00"))
+          now = datetime.now(timezone.utc)
+          if updated.tzinfo is None or not now - timedelta(minutes=5) <= updated <= now + timedelta(minutes=1):
+              raise SystemExit("QC1000_MONITOR_HEARTBEAT_STALE")
+          print("QC1000_VPS_LIVE_HEARTBEAT_UTC=" + recent)
+          if status.get("professional_quality_1000_certifications_created") != 0:
+              raise SystemExit("QC1000_UNEXPECTED_PRETEND_CERTIFICATE")
+          print("QC1000_VPS_LIVE_MONITOR_INSTALLED=" + str(monitor.is_file()).lower())
+          print("QC1000_VPS_SCANNER_HEALTH=" + status["scanner_health"])
+          print("QC1000_VPS_INDEXED_PRODUCTS=" + str(status.get("indexed_candidates")))
+          print("QC1000_VPS_TRUSTED_RUNNER_ENROLLED=" + str(pubkey.is_file() and not pubkey.is_symlink()).lower())
+          print("QC1000_VPS_REAL_EXECUTED_SCENARIOS_LATEST_TICK=" + str(status.get("actual_execution_scenarios_evidence_verified_this_tick")))
+          print("QC1000_VPS_FALSE_CERTIFICATIONS=0")
+          PY
