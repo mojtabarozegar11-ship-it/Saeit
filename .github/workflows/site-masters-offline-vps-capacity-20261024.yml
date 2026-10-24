@@ -1,0 +1,92 @@
+name: Inspect VPS capacity for offline site master intelligence
+on:
+  push:
+    branches: [agents/two-sites-inquiries-orders-20261024]
+    paths: [.github/workflows/site-masters-offline-vps-capacity-20261024.yml]
+permissions: {contents: read}
+jobs:
+  inventory:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Verify pinned VPS to cPanel SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/agents-ro.XXXXXX")"
+          echo "$d" > "$RUNNER_TEMP/agents-ro-path"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf '%s\n' \
+            "Host saeit-vps" "  HostName 178.239.147.150" "  User githubops" "  Port 22" \
+            "  IdentityFile $d/vps.key" "  UserKnownHostsFile $d/vps.known" \
+            "Host saeit-cpanel" "  HostName zohal.pws-dns.net" "  User zomorod2" "  Port 1396" \
+            "  IdentityFile $d/host.key" "  UserKnownHostsFile $d/host.known" "  ProxyJump saeit-vps" \
+            "Host *" "  StrictHostKeyChecking yes" "  IdentitiesOnly yes" "  BatchMode yes" \
+            "  ConnectTimeout 10" "  ConnectionAttempts 1" "  ForwardAgent no" \
+            > "$d/config"
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo TWO_SITES_PINNED_SSH_RELAY=PASS
+          echo SITE_AGENT_RELAY_PINNED
+      - name: Read-only VPS CPU RAM disk binaries and in-use inference capability
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          timeout 90s ssh -T -F "$d/config" saeit-vps python3 - <<'PY'
+          import json,platform,os,shutil,subprocess,importlib.util
+          from pathlib import Path
+          mem={}
+          for line in Path("/proc/meminfo").read_text().splitlines():
+              key,sep,value=line.partition(":")
+              if key in ("MemTotal","MemAvailable","SwapTotal","SwapFree"):
+                  mem[key]=int(value.strip().split()[0])//1024
+          disks={}
+          for path in ("/","/var"):
+              usage=shutil.disk_usage(path)
+              disks[path]={"free_gib":round(usage.free/1073741824,2),"total_gib":round(usage.total/1073741824,2)}
+          bins={name:bool(shutil.which(name)) for name in
+              ("ollama","llama-server","llama-cli","python3","gcc","g++","cmake","docker","podman")}
+          models={}
+          for path in ("/opt/llama.cpp/build/bin/llama-cli",
+                       "/opt/llama.cpp/build/bin/llama-server",
+                       "/usr/local/bin/llama-cli","/usr/local/bin/ollama",
+                       "/var/lib/ollama/models","/opt/models"):
+              p=Path(path);models[path]={"exists":p.exists(),"is_directory":p.is_dir()}
+          gpu={name:Path(name).exists() for name in ("/dev/nvidia0","/dev/dri/renderD128")}
+          importable={}
+          for module in ("llama_cpp","torch","transformers"):
+              try: importable[module]=importlib.util.find_spec(module) is not None
+              except (ImportError,ValueError):importable[module]=False
+          print("VPS_OFFLINE_MODEL_CAPACITY="+json.dumps({
+            "machine":platform.machine(),"cpu_count":os.cpu_count(),"memory_mib":mem,
+            "disk":disks,"binaries":bins,"model_candidates":models,
+            "gpu_devices":gpu,"local_python_modules":importable},sort_keys=True))
+          print("VPS_AGENT_CAPACITY_READ_ONLY=PASS")
+          PY
+      - name: Remove temporary SSH identity material
+        if: always()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/agents-ro-path"; then
+            d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+            if test -n "$d" && test -d "$d"; then
+              rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+              rmdir "$d" || true
+            fi
+            rm -f "$RUNNER_TEMP/agents-ro-path"
+          fi
