@@ -90,9 +90,13 @@ jobs:
                 'has_new_store_marker':b'Shop available books' in raw})
             print("MPW_STORE_DOCROOT_CANDIDATE="+json.dumps(item))
           ht=docroot/'.htaccess'
-          route_prefix=b'RewriteCond %{REQUEST_URI} ^/(store|games|ai|contact|support|privacy|terms|cookies|products|blockchain|commerce|crypto-payments|global-business|research-lab|canada-vision|agro-industry|agriculture|education|weather)/
           if ht.is_file() and not ht.is_symlink():
-            safe=[]
+            rawht=ht.read_bytes()
+            matching=[line.decode('utf8','replace').strip() for line in rawht.splitlines() if route_prefix in line]
+            print("MPW_STORE_HTACCESS_STATE="+json.dumps({"size":len(rawht),
+              "sha":hashlib.sha256(rawht).hexdigest(),"store_route_count":len(matching),
+              "route_lines":matching[:3]}))
+          route_prefix=b"RewriteCond %{REQUEST_URI} ^/(store|games|ai|"
             for line in ht.read_text('utf8','replace').splitlines():
               if any(x in line.lower() for x in ('rewrite','passenger','directoryindex','request_filename')):
                 if not any(x in line.lower() for x in ('password','secret','token','authorization','api_key')):
