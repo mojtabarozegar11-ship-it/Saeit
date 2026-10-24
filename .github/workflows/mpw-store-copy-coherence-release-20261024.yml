@@ -37,8 +37,8 @@ jobs:
           PY
       - name: Establish pinned SSH relay to cPanel
         env:
-          VPS_KEY: \${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          HOST_KEY: \${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         shell: bash
         run: |
           set -euo pipefail
