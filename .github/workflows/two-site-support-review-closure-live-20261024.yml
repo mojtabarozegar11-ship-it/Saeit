@@ -100,3 +100,5 @@ jobs:
           fi
 
 # Schema-parity regression rerun after fixture correction.
+
+# Installer canary schema parity correction rerun.
