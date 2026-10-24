@@ -25,9 +25,11 @@ class ScopedPrivateQC1000Install(unittest.TestCase):
             dest, staged = base / "bin", base / "stage"
             dest.mkdir()
             staged.mkdir()
-            (dest / mod.PUBLISHER).write_text(
-                "quality.require_quality_clearance(...) "
-                "factory_commercial_quality_release_guard_v1.py")
+            publisher = ('def verify_sources(inbox, docroot):\n'
+                         '    body = release.read_text(encoding="utf-8")\n'
+                         '    return body\n')
+            (dest / mod.PUBLISHER).write_text(publisher)
+            mod.LIVE_PUBLISHER_SHA = hashlib.sha256(publisher.encode()).hexdigest()
             old = b"print('older guard')\n"
             (dest / mod.FILES[0]).write_bytes(old)
             expected = {}
@@ -44,8 +46,10 @@ class ScopedPrivateQC1000Install(unittest.TestCase):
             backup = (dest / ".qc1000-versioned-backups" /
                       hashlib.sha256(old).hexdigest() / mod.FILES[0])
             self.assertEqual(backup.read_bytes(), old)
-            self.assertIn("require_quality_clearance",
-                          (dest / mod.PUBLISHER).read_text())
+            self.assertIn("quality.require_quality_clearance", (dest / mod.PUBLISHER).read_text())
+            original_publisher_backup = (dest / ".qc1000-versioned-backups" /
+                       hashlib.sha256(publisher.encode()).hexdigest() / mod.PUBLISHER)
+            self.assertEqual(original_publisher_backup.read_text(), publisher)
             # Idempotent re-execution must preserve exact bytes.
             mod.install(staged, expected)
             self.assertEqual(backup.read_bytes(), old)
@@ -57,8 +61,11 @@ class ScopedPrivateQC1000Install(unittest.TestCase):
             dest, staged = base / "bin", base / "stage"
             dest.mkdir()
             staged.mkdir()
-            (dest / mod.PUBLISHER).write_text(
-                "require_quality_clearance factory_commercial_quality_release_guard_v1.py")
+            publisher = ('def verify_sources(inbox, docroot):\n'
+                         '    body = release.read_text(encoding="utf-8")\n'
+                         '    return body\n')
+            (dest / mod.PUBLISHER).write_text(publisher)
+            mod.LIVE_PUBLISHER_SHA = hashlib.sha256(publisher.encode()).hexdigest()
             expected = {}
             for name in mod.FILES:
                 raw = (REPO / "scripts" / name).read_bytes()
