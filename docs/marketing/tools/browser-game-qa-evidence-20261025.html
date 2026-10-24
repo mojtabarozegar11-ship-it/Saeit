@@ -1,0 +1,21 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Browser game quality evidence worksheet</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:820px;margin:2rem auto;padding:0 1rem;background:#f6f8fb;color:#173042}main{background:white;border:1px solid #dce5ee;border-radius:16px;padding:1.5rem}label{display:block;margin-top:1rem;font-weight:650}input,select,textarea{width:100%;box-sizing:border-box;padding:.65rem;font:inherit;border:1px solid #8396a3;border-radius:7px}button{padding:.7rem 1rem;border:0;background:#14506b;color:white;border-radius:7px;margin:1rem .4rem 0 0;font:inherit;cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid orange}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#e9f2f5;padding:1rem;border-radius:8px}small{color:#4c5f6a}a{color:#006c9b}</style></head><body><main><h1>Browser game release-readiness worksheet</h1><p>Evidence-based quality review for mobile and desktop browser games. Mark <strong>Pass</strong> only after an actual test; an untested item never receives credit.</p><section id="items"></section><button id="score" type="button">Generate evidence report</button><button id="save" type="button">Download JSON report</button><pre id="out" role="status" aria-live="polite"></pre><small>Self-assessment is not independent certification. This tool does not access or alter any game.</small></main><p><small>Free offline tool. No data is uploaded. Review all results before use. <a href="https://mojplaywin.com/?utm_source=github&utm_medium=free_tool&utm_campaign=game_quality_20261025">MojPlayWin</a></small></p><script>
+const $=id=>document.getElementById(id);
+const checks=[
+['First input','Primary interaction responds on first attempt'],
+['Keyboard','Essential controls are keyboard accessible'],
+['Mobile','No clipped UI at 320px viewport'],
+['Recovery','Player can restart without reloading the page'],
+['Progress','Level completion and next-step feedback are clear'],
+['Pause','Gameplay can pause or stop when needed'],
+['Performance','Frame pacing and input response are acceptable on target devices'],
+['Audio','Sound can be muted and does not autoplay unexpectedly'],
+['Privacy','No unneeded tracking or personal-data collection'],
+['Rights','Assets and music have documented usage rights']];
+for(let i=0;i<checks.length;i++){const row=document.createElement('label');row.textContent=(i+1)+'. '+checks[i][0]+' — '+checks[i][1];const s=document.createElement('select');s.id='q'+i;for(const [v,t] of [['unverified','Not tested'],['pass','Pass with evidence'],['fail','Fail']]){const o=document.createElement('option');o.value=v;o.textContent=t;s.append(o)}row.append(s);$('items').append(row)}
+function report(){const vals=checks.map((c,i)=>({area:c[0],criterion:c[1],status:$('q'+i).value}));const pass=vals.filter(v=>v.status==='pass').length,fail=vals.filter(v=>v.status==='fail').length,untested=10-pass-fail;
+ $('out').textContent='Verified pass: '+pass+'/10; Fail: '+fail+'; Untested: '+untested+'\n'+(fail||untested?'NOT READY FOR QUALITY SIGN-OFF':'All listed checks passed; independent end-to-end testing still required.')+'\n\n'+vals.map(v=>v.status.toUpperCase()+' — '+v.area+': '+v.criterion).join('\n');
+ return {checkedAtUTC:new Date().toISOString(),verifiedPass:pass,fail,untested,checks:vals,releaseApproved:false}
+}
+$('score').addEventListener('click',report);
+$('save').addEventListener('click',()=>{const b=new Blob([JSON.stringify(report(),null,2)],{type:'application/json'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='browser-game-qa-evidence.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)});
+</script></body></html>
