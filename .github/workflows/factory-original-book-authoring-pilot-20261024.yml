@@ -1,0 +1,64 @@
+name: Factory genuine original-book authoring pilot (private, spending disabled)
+on:
+  pull_request:
+    paths:
+      - scripts/factory_real_book_authoring_pilot_20261024.py
+      - tests/test_factory_real_book_authoring_pilot_20261024.py
+      - .github/workflows/factory-original-book-authoring-pilot-20261024.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_real_book_authoring_pilot_20261024.py
+      - tests/test_factory_real_book_authoring_pilot_20261024.py
+      - .github/workflows/factory-original-book-authoring-pilot-20261024.yml
+permissions: {contents: read}
+concurrency:
+  group: factory-original-book-authoring-pilot-v1
+  cancel-in-progress: false
+jobs:
+  local-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test authentic authoring contracts and prove no paid request in preflight
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_real_book_authoring_pilot_20261024.py -v
+          python3 -B -m py_compile scripts/factory_real_book_authoring_pilot_20261024.py
+  private-vps-install-and-readonly-preflight:
+    needs: local-regression
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-external-book-authoring-pilot-20261024]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install original-writing engine driver on private VPS; no model request or charge
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          work="$RUNNER_TEMP/private-original-authoring"
+          install -d -m 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 "$@"
+          }
+          ops="/home/githubops/factory-runtime/operations/production-instructions"
+          worker="$ops/book-original-author-pilot.py"
+          test -f scripts/factory_real_book_authoring_pilot_20261024.py
+          ssh_vps "test \"\$(id -un)\" = githubops && test -d '$ops' && test -x '/home/githubops/factory-runtime/.venv/bin/python'"
+          ssh_vps "umask 077; cat > '$worker'; chmod 600 '$worker'" < scripts/factory_real_book_authoring_pilot_20261024.py
+          expected="$(sha256sum scripts/factory_real_book_authoring_pilot_20261024.py | awk '{print $1}')"
+          ssh_vps "test \"\$(sha256sum '$worker' | awk '{print \$1}')\" = '$expected'"
+          ssh_vps "timeout 30s /home/githubops/factory-runtime/.venv/bin/python -B '$worker' --factory-private '/home/githubops/factory-runtime/private/autonomous-product-cycle' --product AGRI-001"
