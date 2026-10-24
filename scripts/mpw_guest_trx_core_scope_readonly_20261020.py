@@ -105,10 +105,93 @@ for pid in (72,225):
              "has_invoice_api":"/commerce/checkout/invoice/" in body,
              "has_challenge_api":"/commerce/checkout/challenge/" in body,
              "has_signup_return":("/accounts/register/?next=/store/product/%d/checkout/"%pid in body),
-             "forms":re.findall(r'<form\\b[^>]{0,500}>',body,re.I)[:5],
+             "forms":re.findall(r'<form\b[^>]{0,500}>',body,re.I)[:5],
              "trx_button":bool(re.search(r"Pay securely with TRX",body,re.I)),
              "read_only":True,"orders_created":False},ensure_ascii=False))
     except Exception as e:
         print("MPW_ACTIVE_CHECKOUT_RENDER="+json.dumps({"product":pid,"error":type(e).__name__,"read_only":True}))
+# Read-only aggregate of active buyer records; no customer identity fields.
+from django.db.models import Count
+from core.models import Order, PaymentIntent
+for label,model in (("Order",Order),("PaymentIntent",PaymentIntent)):
+    aggregate={"model":label,"count":model.objects.count()}
+    if any(field.name=="status" for field in model._meta.fields):
+        aggregate["status_counts"]={str(row["status"]):row["n"] for row in model.objects.values("status").annotate(n=Count("pk"))}
+    print("MPW_LIVE_ORDER_AGGREGATE="+json.dumps(aggregate,ensure_ascii=False))
+
+# In-memory execution of the real order selector; production ORM writes are replaced.
+import contextlib, tempfile
+from unittest.mock import patch
+from django.db import transaction
+import core.models as core_models
+import mpw_commerce.downloads as download_module
+import services.mpw_trx_commercial_web as commercial
+class EmptyQuery:
+    def select_for_update(self): return self
+    def filter(self,**kwargs): return self
+    def order_by(self,*args): return self
+    def first(self): return None
+    def __getitem__(self,item): return []
+class FakeUserManager:
+    def select_for_update(self): return self
+    def get(self,**kwargs): return SimpleNamespace(pk=987654)
+class FakeUserModel: objects=FakeUserManager()
+class FakeProductManager:
+    def select_for_update(self): return self
+    def get(self,**kwargs): return actual_product
+class FakeOrder:
+    objects=None
+    def __init__(self,pk=987650,**kwargs): self.pk=pk; self.__dict__.update(kwargs)
+class FakeOrderManager:
+    creates=[]
+    def select_for_update(self): return self
+    def filter(self,**kwargs): return EmptyQuery()
+    def create(self,**kwargs):
+        item=FakeOrder(**kwargs); self.creates.append(item); return item
+FakeOrder.objects=FakeOrderManager()
+class FakeItemManager:
+    creates=[]
+    def create(self,**kwargs):
+        item=SimpleNamespace(pk=987651,id=987651,**kwargs); self.creates.append(item); return item
+class FakeItemModel: objects=FakeItemManager()
+class FakeIntentQuery:
+    def filter(self,**kwargs): return self
+    def first(self): return None
+class FakeIntentManager:
+    def filter(self,**kwargs): return FakeIntentQuery()
+class FakeIntentModel: objects=FakeIntentManager()
+actual_product=Product.objects.select_related("knowledge_article").get(pk=72)
+with tempfile.TemporaryDirectory(prefix="mpw-readonly-order-sim-") as tmp:
+    fakefile=Path(tmp)/"product.pdf"
+    fakefile.write_bytes(b"%PDF-1.4\n% SIMULATION ONLY\n%%EOF\n")
+    fakefile.chmod(0o600)
+    intent_calls=[]
+    def fake_reserve(**kwargs): intent_calls.append(kwargs); return 987652
+    patches=[
+        patch.object(core_models,"Product",FakeProductModel),
+        patch.object(core_models,"Order",FakeOrder),
+        patch.object(core_models,"OrderItem",FakeItemModel),
+        patch.object(core_models,"PaymentIntent",FakeIntentModel),
+        patch("django.contrib.auth.get_user_model",return_value=FakeUserModel),
+        patch.object(transaction,"atomic",side_effect=lambda **kwargs:contextlib.nullcontext()),
+        patch.object(download_module,"_private_file",return_value=fakefile),
+        patch.object(commercial,"reserve_commercial_intent",side_effect=fake_reserve),
+    ]
+    with contextlib.ExitStack() as stack:
+        for item in patches: stack.enter_context(item)
+        produced=commercial._select_order(72,987654,connection)
+    assert produced==987652 and len(FakeOrderManager.creates)==1 and len(FakeItemManager.creates)==1 and len(intent_calls)==1
+    print("MPW_ACTIVE_ORDER_INTENT_SIMULATION="+json.dumps({"product":72,"order_created_in_memory":True,
+          "item_created_in_memory":True,"payment_intent_created_in_memory":True,"intent_id_returned":produced,
+          "production_db_writes":False,"money_transferred":False},ensure_ascii=False))
+
+# Exercise the real start endpoint and decorators with order selection mocked.
+request=RequestFactory().post("/commerce/trx-easy/start/72/",secure=True,HTTP_HOST="mojplaywin.com")
+request.user=SimpleNamespace(pk=987654,is_authenticated=True,is_active=True)
+with patch.object(commercial,"_ensure_live",return_value=connection), patch.object(commercial,"_select_order",return_value=987652):
+    response=resolve("/commerce/trx-easy/start/72/").func(request,product_id=72)
+assert response.status_code in (301,302,303,307,308) and response["Location"]=="/commerce/trx-easy/invoice/987652/"
+print("MPW_ACTIVE_START_POST_SIMULATION="+json.dumps({"status":response.status_code,
+      "redirect":response["Location"],"selection_mocked":True,"production_db_writes":False},ensure_ascii=False))
 print("GUEST_READONLY=PASS")
 
