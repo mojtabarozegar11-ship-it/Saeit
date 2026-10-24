@@ -1,0 +1,112 @@
+name: VPS factory bounded disk recovery inventory
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/vps-factory-disk-recovery-inventory-20261024.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-factory-disk-recovery-inventory
+  cancel-in-progress: false
+jobs:
+  read-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Measure only fixed VPS factory storage roots
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-disk-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 150s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
+          import datetime
+          import json
+          import os
+          from pathlib import Path
+          import shutil
+          import subprocess
+          import time
+
+          root = Path.home() / "factory-runtime"
+          ops = root / "operations"
+          private = root / "private" / "autonomous-product-cycle"
+          if root.is_symlink() or not root.is_dir() or ops.is_symlink() or not ops.is_dir():
+              raise SystemExit("FACTORY_STORAGE_ROOT_UNSAFE")
+          disk = shutil.disk_usage(root)
+          allowed = {
+              "runtime_operations": ops,
+              "runtime_backups": ops / "backups",
+              "factory_private": private,
+              "private_warehouse": private / "production-warehouse",
+              "private_research": private / "research",
+              "runtime_python": root / ".venv",
+              "runtime_django": root / "django-app",
+              "pip_download_cache": Path.home() / ".cache" / "pip",
+              "user_cache": Path.home() / ".cache",
+          }
+          def usage(path):
+              if path.is_symlink() or not path.exists():
+                  return None
+              try:
+                  result = subprocess.run(["du", "-s", "-B1", "--", str(path)],
+                                          check=True, capture_output=True, text=True,
+                                          timeout=22)
+                  return int(result.stdout.split()[0])
+              except (OSError, ValueError, subprocess.SubprocessError):
+                  return None
+          groups = {name: usage(path) for name,path in allowed.items()}
+          # Candidate directories are *only* classified here, never removed.
+          prefixes = (".qa1000-supply-", ".stage4-due-", ".primary-acquisition-",
+                      ".stage4-readonly-", ".factory-audit-")
+          cutoff = time.time() - 48 * 3600
+          transient = {"count": 0, "bytes": 0, "older_48h_count": 0,
+                       "older_48h_bytes": 0}
+          for item in ops.iterdir():
+              if not item.name.startswith(prefixes) or item.is_symlink() or not item.is_dir():
+                  continue
+              size = usage(item)
+              if size is None:
+                  continue
+              transient["count"] += 1
+              transient["bytes"] += size
+              if item.stat().st_mtime < cutoff:
+                  transient["older_48h_count"] += 1
+                  transient["older_48h_bytes"] += size
+          logs = {"count": 0, "bytes": 0, "older_7d_bytes": 0}
+          for item in ops.iterdir():
+              if item.is_symlink() or not item.is_file() or not item.name.endswith(".log"):
+                  continue
+              if item.stat().st_size > 10**11:
+                  raise SystemExit("FACTORY_LOG_UNEXPECTED_SIZE")
+              logs["count"] += 1
+              logs["bytes"] += item.stat().st_size
+              if item.stat().st_mtime < time.time()-7*86400:
+                  logs["older_7d_bytes"] += item.stat().st_size
+          status = {
+              "schema": "saeit.factory.disk-pressure-inventory.v1",
+              "observed_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "read_only": True,
+              "mount_free_bytes": disk.free,
+              "mount_used_bytes": disk.used,
+              "reserve_2048_mib_met": disk.free >= 2048*1024*1024,
+              "fixed_groups_bytes": groups,
+              "known_transient_staging": transient,
+              "operation_logs": logs,
+              "products_or_backups_deleted": 0,
+              "factory_services_restarted": False,
+          }
+          print("FACTORY_STORAGE_INVENTORY="+json.dumps(status, sort_keys=True))
+          PY
