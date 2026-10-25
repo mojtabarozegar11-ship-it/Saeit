@@ -13,6 +13,7 @@ from .story_image_suggestions import suggestions as story_images
 from .mpw_monitor_views import dashboard as mpw_monitor, telemetry_api as mpw_monitor_api
 from .mpw_operations import desk as mpw_operations
 from .mpw_two_books_panel import dashboard as mpw_two_books_dashboard
+from .business_review_views import business_review
 
 urlpatterns = [
     path("", dashboard, name="command_center_dashboard"),
@@ -21,6 +22,7 @@ urlpatterns = [
     path("mpw-two-books/", mpw_two_books_dashboard, name="mpw_two_books_dashboard"),
     path("api/mpw-agents/", mpw_monitor_api, name="mpw_agent_monitor_api"),
     path("api/overview/", overview_api, name="command_center_overview_api"),
+    path("api/business-operating/", business_review, name="command_center_business_operating_api"),
     path("api/agents/", metrics, name="command_center_agent_metrics_api"),
     path("api/agents/directory/", directory, name="command_center_agent_directory_api"),
     path("api/agents/proposals/", propose, name="command_center_agent_proposals_api"),
