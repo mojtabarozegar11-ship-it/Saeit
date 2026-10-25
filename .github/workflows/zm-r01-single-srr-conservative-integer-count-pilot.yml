@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/zm-r01-single-srr-conservative-integer-count-pilot.yml
       - research/manuscripts/ZM-R01/analysis/unique_fragment_transcriptome_gene_counts.py
+      - research/manuscripts/ZM-R01/analysis/verified_resumable_ena_pair_download.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -43,31 +44,7 @@ jobs:
           cd "$RUNNER_TEMP/zm_counts"
           curl -fL --retry 2 --connect-timeout 30 --max-time 600 "$REFERENCE_URL" -o wheat_cdna.fa.gz
           gzip -t wheat_cdna.fa.gz
-          python - <<'PY'
-          import csv,os,shutil,subprocess
-          from pathlib import Path
-          src=Path(os.environ["GITHUB_WORKSPACE"])/"research/manuscripts/ZM-R01/ENA_PRJNA1249400_OFFICIAL_24_RUN_PAIRED_FASTQ_MD5_2026-10-25.tsv"
-          rows=list(csv.DictReader(src.open(),delimiter="\t"))
-          hits=[r for r in rows if r["run_accession"]==os.environ["SRR"]]
-          assert len(hits)==1
-          x=hits[0]
-          expected=int(x["fastq1_bytes"])+int(x["fastq2_bytes"])
-          free=shutil.disk_usage(os.environ["RUNNER_TEMP"]).free
-          # A conservative 3 GB extra for index/tools/report, never begin
-          # on insufficient ephemeral scratch disk.
-          assert free > expected + 3_000_000_000,(free,expected)
-          for k in (1,2):
-              url=x[f"fastq{k}_url"]; out=f"R{k}.fastq.gz"
-              subprocess.run(["curl","-fL","--retry","2","--connect-timeout","30",
-                              "--max-time","12000",url,"-o",out],check=True)
-              assert Path(out).stat().st_size==int(x[f"fastq{k}_bytes"])
-              import hashlib
-              h=hashlib.md5()
-              with open(out,"rb") as f:
-                  while v:=f.read(2**20):h.update(v)
-              assert h.hexdigest()==x[f"fastq{k}_md5"],(out,h.hexdigest())
-              print("ORIGINAL ENA MD5 VERIFIED",out,h.hexdigest())
-          PY
+          python research/manuscripts/ZM-R01/analysis/verified_resumable_ena_pair_download.py
       - name: Transcriptome alignment and genuine conservative integer fragment counts
         shell: bash
         run: |
@@ -103,5 +80,6 @@ jobs:
             ${{ runner.temp }}/zm_counts/conservative_one_sample_integer_counts.tsv
             ${{ runner.temp }}/zm_counts/provenance.json
             ${{ runner.temp }}/zm_counts/alignment_summary.txt
+            ${{ runner.temp }}/zm_counts/verified_ena_download_provenance.json
           retention-days: 7
           if-no-files-found: error
