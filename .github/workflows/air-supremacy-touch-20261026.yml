@@ -1,0 +1,22 @@
+name: Air Supremacy bilingual mobile controls
+on:
+  pull_request:
+    paths:
+      - 'games/air-supremacy/index.html'
+      - 'games/air-supremacy-fa/index.html'
+      - 'scripts/verify_air_supremacy_touch_20261026.cjs'
+      - '.github/workflows/air-supremacy-touch-20261026.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  controls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify bilingual mobile joystick behavior
+        run: node scripts/verify_air_supremacy_touch_20261026.cjs
