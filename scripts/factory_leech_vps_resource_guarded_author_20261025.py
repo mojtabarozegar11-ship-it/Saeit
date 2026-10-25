@@ -179,7 +179,8 @@ def main():
             return
         mem_before = available_memory_mib()
         env = {**os.environ, "LD_LIBRARY_PATH": str(ENGINE / "bin"),
-               "PYTHONDONTWRITEBYTECODE": "1"}
+               "PYTHONDONTWRITEBYTECODE": "1",
+               "LEECH_OFFLINE_INFERENCE_BACKEND": "owner-vps-qwen3-1.7b-q4km"}
         cmd = [str(SERVER), "-m", str(MODEL), "--host", "127.0.0.1",
                "--port", str(PORT), "-c", "4096", "-t", "1", "-ngl", "0", "--parallel", "1"]
         with open(os.devnull, "wb") as sink:
