@@ -1,0 +1,97 @@
+name: Leech completion receipt writer QC and guarded VPS install
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-leech-completion-writer-guarded-deploy-20261026.yml
+      - scripts/factory_leech_free_offline_original_author_20261025.py
+      - tests/test_factory_leech_stream_reasoning_gate_20261026.py
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-leech-completion-writer-guarded-deploy-20261026.yml
+      - scripts/factory_leech_free_offline_original_author_20261025.py
+permissions: {contents: read}
+concurrency:
+  group: owner-leech-writer-completion-receipt-20261026
+  cancel-in-progress: false
+jobs:
+  offline-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate private writer receipt and operator contract offline
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/factory_leech_free_offline_original_author_20261025.py
+          python3 -B -m unittest discover -s tests -p test_factory_leech_stream_reasoning_gate_20261026.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_leech_free_offline_original_author_20261025.py -v
+  guarded-writer-install:
+    needs: [offline-regression]
+    if: github.event_name == 'push' && github.repository == 'mojtabarozegar11-ship-it/Saeit' && contains(github.event.head_commit.message, '[owner-leech-writer-receipt-20261026]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Preserve old private writer and atomically install validated completion receipt
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/leech-writer-receipt-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 "$@"
+          }
+          ops="/home/githubops/factory-runtime/operations/production-instructions"
+          file="$ops/leech-professional-author.py"
+          stage="$ops/.leech-professional-author-receipt-next-20261026.py"
+          backup="$ops/.leech-professional-author-receipt-rollback-20261026.py"
+          ssh_vps "test \"\$(id -un)\" = githubops && test -d '$ops' && test ! -L '$ops' && test -f '$file' && test ! -L '$file' && test ! -e '$stage' && test ! -e '$backup'"
+          ssh_vps "umask 077; cat > '$stage'; chmod 600 '$stage'" < scripts/factory_leech_free_offline_original_author_20261025.py
+          expected="$(sha256sum scripts/factory_leech_free_offline_original_author_20261025.py | awk '{print $1}')"
+          ssh_vps "EXPECTED_SHA=$expected bash -se" <<'REMOTE'
+          set -euo pipefail
+          ops="/home/githubops/factory-runtime/operations/production-instructions"
+          file="$ops/leech-professional-author.py"
+          stage="$ops/.leech-professional-author-receipt-next-20261026.py"
+          backup="$ops/.leech-professional-author-receipt-rollback-20261026.py"
+          trap 'rm -f -- "$stage"' EXIT
+          test "$(id -un)" = githubops
+          test -f "$file" && test ! -L "$file" && test -f "$stage" && test ! -L "$stage"
+          test ! -e "$backup"
+          test "$(stat -c %U "$file")" = githubops
+          # Fail closed if the deployed writer is not the known previous receipt contract.
+          grep -Fq 'return {"complete_length_only": total >= MIN_WORDS' "$file"
+          test "$(sha256sum "$stage" | awk '{print $1}')" = "$EXPECTED_SHA"
+          /usr/bin/python3 -B -m py_compile "$stage"
+          old_sha="$(sha256sum "$file" | awk '{print $1}')"
+          cp -p -- "$file" "$backup"
+          chmod 600 "$backup"
+          test -s "$backup"
+          test "$(sha256sum "$backup" | awk '{print $1}')" = "$old_sha"
+          mv -- "$stage" "$file"
+          chmod 700 "$file"
+          if ! test "$(sha256sum "$file" | awk '{print $1}')" = "$EXPECTED_SHA"; then
+            cp -p -- "$backup" "$file"
+            chmod 700 "$file"
+            echo LEECH_PRIVATE_WRITER_ROLLBACK_RESTORED=true
+            exit 1
+          fi
+          echo "LEECH_PRIVATE_WRITER_SOURCE_SHA256=$EXPECTED_SHA"
+          echo LEECH_PRIVATE_WRITER_PREVIOUS_VERSION_RECOVERABLE=true
+          echo LEECH_MANUSCRIPT_CRON_LOCK_MODEL_AND_SITE_UNCHANGED=true
+          REMOTE
+          echo LEECH_PRIVATE_COMPLETION_RECEIPT_FIX_INSTALLED=true
