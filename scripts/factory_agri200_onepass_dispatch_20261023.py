@@ -200,6 +200,7 @@ def dispatch(root, ops, *, run_workers=True):
         safe_next_action = "investigate_evidence_rework_and_approval_gates"
     return {"schema": "saeit.factory.agri200.onepass-dispatch.v1",
             "before": initial, "after": final, "worker_results": outcomes,
+            "intake_integrity": intake,
             "production_outcome": production_outcome,
             "safe_next_action": safe_next_action,
             "workers_success_does_not_mean_products_completed": True,
