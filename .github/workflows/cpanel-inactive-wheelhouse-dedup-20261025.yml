@@ -1,8 +1,5 @@
 name: cPanel inactive bundle unpacked wheel deduplication
 on:
-  push:
-    branches: [main]
-    paths: [".github/workflows/cpanel-inactive-wheelhouse-dedup-20261025.yml"]
   workflow_dispatch:
 permissions:
   contents: read
