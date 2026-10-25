@@ -203,6 +203,49 @@ jobs:
                       result['last_settled']=v.get('settled') if type(v.get('settled')) is int else None
           print('MPW_TRX_LIVE_CRON_HEARTBEAT='+json.dumps(result,sort_keys=True))
           PY
+      - name: Classify nine pending invoice lookup holds without touching settlement
+        run: |
+          set -euo pipefail
+          timeout 105s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import json,os,sys,collections
+          from pathlib import Path
+          app=Path('/home/zomorod2/Saeit-staging')
+          if app.is_symlink() or not app.is_dir():raise SystemExit('BAD_APP_ROOT')
+          os.chdir(app);sys.path.insert(0,str(app))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from core.models import PaymentIntent
+          from services.mpw_walletless_commercial_intent import _decode,PROVIDER,WAITING
+          from services.mpw_tron_readonly_deposit_candidates import find_candidate_hashes
+          from services.mpw_trx_walletless_core import PaymentHold
+          reasons=set(('Invalid server-owned TRX recipient','Invalid atomic amount',
+              'Expected aware invoice times','Invalid invoice interval','Invalid invoice issue time',
+              'Read-only indexer unavailable','Unexpected incoming transfer index response',
+              'Indexer JSON overflow','Unreadable indexer response','Malformed incoming transaction page',
+              'Untrusted candidate listing','Unbounded candidate listing','Ambiguous matching incoming transfers',
+              'Unsafe indexer pagination','Read-only indexer page limit reached'))
+          counts=collections.Counter()
+          intents=list(PaymentIntent.objects.filter(provider=PROVIDER,status=WAITING).order_by('pk')[:30])
+          for intent in intents:
+              try:invoice=_decode(intent)
+              except PaymentHold:
+                  counts['invoice_contract_held']+=1
+                  continue
+              try:
+                  txs=find_candidate_hashes(invoice.recipient,invoice.amount_sun,
+                                            invoice.issued_at,invoice.expires_at)
+              except PaymentHold as exc:
+                  key=str(exc)
+                  counts[key if key in reasons else 'unclassified_payment_hold']+=1
+              except Exception as exc:
+                  counts['technical_'+type(exc).__name__]+=1
+              else:
+                  counts['zero_candidates' if not txs else ('one_candidate' if len(set(txs))==1 else 'multiple_candidates')]+=1
+          print('MPW_TRX_PENDING_LOOKUP_CLASSIFICATION='+json.dumps({
+              'read_only':True,'financial_writes':0,'scanned':len(intents),
+              'categories':dict(counts)},sort_keys=True))
+          PY
       - name: Remove temporary SSH relay keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
