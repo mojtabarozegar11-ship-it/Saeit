@@ -81,15 +81,19 @@ jobs:
           # is kept, whether its completion is known or not. No contents are read.
           referenced=set()
           id_re=re.compile(r'WO-[0-9]{8}')
+          references_by_tree={}
           for base_root in protected_roots:
+              refs_here=set()
               for base,dirs,names in os.walk(base_root,followlinks=False):
                   base_path=Path(base)
                   if base_path.is_symlink():raise SystemExit('SYMLINK_IN_PROTECTED_TREE')
                   for name in dirs+names:
                       p=base_path/name
                       if p.is_symlink():raise SystemExit('SYMLINK_IN_PROTECTED_TREE')
-                      referenced.update(id_re.findall(name))
-                  referenced.update(id_re.findall(base_path.name))
+                      refs_here.update(id_re.findall(name))
+                  refs_here.update(id_re.findall(base_path.name))
+              references_by_tree[base_root.name]=len(set(candidate)&refs_here)
+              referenced.update(refs_here)
           keep_referenced=set(candidate)&referenced
           eligible=[p for ident,p in candidate.items() if ident not in referenced]
           # Two-pass revalidation before irreversible mutation
@@ -101,6 +105,6 @@ jobs:
           # Revalidate sites' and customer records are outside target directory.
           if any(not str(p).startswith(str(orders)+'/') for p in eligible):
               raise SystemExit('TARGET_ESCAPE')
-          print('OWNER_ORPHAN_ORDER_PREFLIGHT='+json.dumps({'all_orders':len(all_files),'protected_site_origin':len(site_kept),'internally_generated':len(candidate),'protected_tree_referenced':len(keep_referenced),'orphan_delete_candidates':len(eligible),'mutations':0},sort_keys=True))
+          print('OWNER_ORPHAN_ORDER_PREFLIGHT='+json.dumps({'all_orders':len(all_files),'protected_site_origin':len(site_kept),'internally_generated':len(candidate),'protected_tree_referenced':len(keep_referenced),'per_protected_tree':references_by_tree,'orphan_delete_candidates':len(eligible),'mutations':0},sort_keys=True))
           PY
           echo OWNER_ORDER_PREFLIGHT_READONLY=PASS
