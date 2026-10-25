@@ -59,7 +59,7 @@ jobs:
           for k in (1,2):
               url=x[f"fastq{k}_url"]; out=f"R{k}.fastq.gz"
               subprocess.run(["curl","-fL","--retry","2","--connect-timeout","30",
-                              "--max-time","1800",url,"-o",out],check=True)
+                              "--max-time","12000",url,"-o",out],check=True)
               assert Path(out).stat().st_size==int(x[f"fastq{k}_bytes"])
               import hashlib
               h=hashlib.md5()
