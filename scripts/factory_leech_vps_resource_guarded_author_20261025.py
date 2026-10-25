@@ -174,7 +174,7 @@ def call_model(doc, process, error, retry=0):
                        if line.strip() and not line.lstrip().startswith(("#", "|"))]
         word_list = token_word.findall(" ".join(prose_lines))
         return (len(word_list) >= minimum and
-                len({w.casefold() for w in word_list}) >= 145 and
+                len({w.casefold() for w in word_list}) >= 135 and
                 body.rstrip().endswith((".", "!", "?")))
 
     with urllib.request.urlopen(req, timeout=300) as response:
@@ -221,7 +221,7 @@ def call_model(doc, process, error, retry=0):
                 continue
             body = "".join(chunks).strip()
             last_checked_bytes = len(body)
-            if good_segment(body, 315):
+            if good_segment(body, 300):
                 return body
     if error:
         raise RuntimeError("LOW_MEMORY_ABORT")
