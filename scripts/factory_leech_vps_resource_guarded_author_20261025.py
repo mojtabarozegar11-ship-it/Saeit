@@ -135,7 +135,17 @@ def low_priority_preexec():
 
 
 def call_model(doc, process, error, retry=0):
-    prompt = build_prompt(doc, retry)
+    """Stream owner-VPS text and stop at a complete, substantial paragraph.
+
+    On very old SSE2-only CPUs full 1500+ token responses can exceed the safe
+    execution window. Streaming lets us preserve substantive original prose
+    as soon as a self-contained segment passes diversity/length checks.
+    """
+    import re
+    prompt = build_prompt(doc, retry).replace(
+        "Write 650 to 950 new substantive English words",
+        "Write 450 to 650 new substantive English words"
+    )
     payload = {
         "model": "local-owner-vps-qwen3-1.7b",
         "messages": [
@@ -144,23 +154,62 @@ def call_model(doc, process, error, retry=0):
                 "OPERATOR prose. Never invent empirical thresholds or approvals. "
                 "Write ONLY substantive textbook text, without internal reasoning.")},
             {"role": "user", "content": prompt}],
-        "max_tokens": 2300, "temperature": round(0.69 + retry * 0.05, 2),
+        "max_tokens": 1450, "temperature": round(0.69 + retry * 0.05, 2),
         "top_p": 0.9, "chat_template_kwargs": {"enable_thinking": False},
-        "stream": False,
+        "stream": True,
     }
     req = urllib.request.Request(
         "http://127.0.0.1:%d/v1/chat/completions" % PORT,
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(req, timeout=820) as response:
-        obj = json.load(response)
+    chunks = []
+    last_checked_bytes = 0
+    start = time.monotonic()
+    token_word = re.compile(r"[A-Za-z][A-Za-z'-]*")
+
+    def good_segment(body, minimum):
+        prose_lines = [line.strip() for line in body.splitlines()
+                       if line.strip() and not line.lstrip().startswith(("#", "|"))]
+        word_list = token_word.findall(" ".join(prose_lines))
+        return (len(word_list) >= minimum and
+                len({w.casefold() for w in word_list}) >= 145 and
+                body.rstrip().endswith((".", "!", "?")))
+
+    with urllib.request.urlopen(req, timeout=120) as response:
+        if response.status != 200:
+            raise RuntimeError("INFERENCE_HTTP_NOT_OK")
+        for line in response:
+            if error or process.poll() is not None:
+                raise RuntimeError("LOW_MEMORY_OR_MODEL_EXIT_ABORT")
+            if time.monotonic() - start > 775:
+                break
+            if not line.startswith(b"data: "):
+                continue
+            raw = line[6:].strip()
+            if raw == b"[DONE]":
+                break
+            try:
+                event = json.loads(raw)
+                delta = event.get("choices", [{}])[0].get("delta", {}).get("content", "")
+            except (ValueError, IndexError, KeyError, TypeError):
+                continue
+            if not isinstance(delta, str) or not delta:
+                continue
+            chunks.append(delta)
+            if sum(map(len, chunks)) - last_checked_bytes < 120:
+                continue
+            body = "".join(chunks).strip()
+            last_checked_bytes = len(body)
+            if good_segment(body, 410):
+                return body
     if error:
         raise RuntimeError("LOW_MEMORY_ABORT")
-    body = str(obj.get("choices", [{}])[0].get("message", {}).get("content") or "").strip()
+    body = "".join(chunks).strip()
     if not body or "<think>" in body or "</think>" in body:
         raise RuntimeError("UNSAFE_MODEL_RESPONSE")
+    if not good_segment(body, 300):
+        raise RuntimeError("STREAMED_SEGMENT_BELOW_QC_SUBSTANCE")
     return body
-
 
 def main():
     ENGINE.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -215,6 +264,7 @@ def main():
                         time.sleep(2)
                 else:
                     raise RuntimeError("MODEL_START_TIMEOUT")
+                record(result="private_original_prose_generation_running", next_chapter=doc["next_chapter"], next_part=doc["next_part"], verified_words=doc["global_verified_draft_words"], start_available_mib=mem_before)
                 errors = []
                 for retry in range(2):
                     body = call_model(doc, proc, pressured, retry=retry)
