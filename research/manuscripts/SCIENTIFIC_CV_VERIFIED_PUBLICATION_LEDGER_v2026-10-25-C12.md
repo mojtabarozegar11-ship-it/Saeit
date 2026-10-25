@@ -1,11 +1,13 @@
 # Mojtaba Roozegar — research portfolio and verified publication status ledger
-Version 2026-10-25/C12-v1. **This is a ledger for these TWO active projects only, not a statement that the author has no other prior publications.** Do not publish as a credential without verifying identity, authorship and actual status.
+Version 2026-10-25/C12-v2 (sole authorship and MR article type corrected). **This is a ledger for these TWO active projects only, not a statement that the author has no other prior publications.** Do not publish as a credential without verifying identity, authorship and actual status.
+
+**Programme authorship decision:** the author explicitly approved a **single-human-author policy for all research papers (Mojtaba Roozegar)**, with MR-2026-001 moving from proposed scoping review to critical narrative review. The change applies to prospective manuscripts; it does not establish verified identity, scientific contribution, publication or submission. See [master authorship policy](SOLO_AUTHORSHIP_POLICY_ALL_PROJECTS_2026-10-25.md). ChatGPT is an AI assistant, never an author or an independent human reviewer. If a human collaborator makes a qualifying authorship contribution, it must be acknowledged/credited per journal policy rather than omitted.
 
 ## Project status
 | Project | Working title | Actual state | Journal | Submission evidence | Peer-review / acceptance / publication evidence |
 |---|---|---|---|---|---|
-| MR-2026-001 | Field Validation and Farmer Adoption of Irrigation Decision-Support Tools under Water Scarcity: A Scoping Review | **In preparation** (scope approved; public discovery and pilot extraction; indexed search/screening incomplete) | Agricultural Water Management / Discover Agriculture = **candidates**, neither chosen | NONE; no publisher Manuscript ID | NONE |
-| ZM-R01 | Wheat drought-response transcriptomic signatures across genotypes and stages (working theme) | **In preparation / research design**; public accession metadata checked; no new analysis run | Frontiers in Plant Science = **candidate**, not chosen | NONE | NONE |
+| MR-2026-001 | From Irrigation Recommendations to Field Outcomes: A Critical Review of Validation Evidence and Farmer Uptake under Water Scarcity (working title; former scoping-review plan retained historically) | **In preparation** (critical narrative review route approved, single human author planned; source verification, author scientific synthesis and journal-ready manuscript incomplete; no dual-screened scoping evidence asserted) | Agricultural Water Management / Discover Agriculture = **candidates**, neither chosen | NONE; no publisher Manuscript ID | NONE |
+| ZM-R01 | Wheat drought-response transcriptomic signatures across genotypes and stages (working theme) | **In preparation / research design** (single human author planned); GEO accession metadata checked; no new analysis run | Frontiers in Plant Science = **candidate**, not chosen | NONE | NONE |
 
 **Counts for these two projects**: completed publishable manuscripts 0; official submissions 0; in peer review 0; accepted 0; published 0; verified indexed publications 0. Do NOT generalize these counts to the author's lifetime CV.
 
