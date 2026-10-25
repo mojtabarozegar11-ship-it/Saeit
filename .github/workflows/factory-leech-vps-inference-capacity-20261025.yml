@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/factory-leech-vps-inference-capacity-20261025.yml
+  workflow_dispatch:
 permissions: {contents: read}
 jobs:
   inspect-own-vps-without-model-load:
@@ -11,6 +12,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
       - name: Read only VPS memory, swap, disk and toolchain capacity
         shell: bash
         env:
@@ -27,12 +29,4 @@ jobs:
           ssh-keygen -y -P '' -f "$d/key" >/dev/null
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
-          ssh -T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -c '"'"'import json,os,pathlib,shutil
-m={}
-for line in pathlib.Path("/proc/meminfo").read_text().splitlines():
- parts=line.split()
- if len(parts)>1 and parts[0].rstrip(":") in ("MemTotal","MemAvailable","SwapTotal","SwapFree"):
-  m[parts[0].rstrip(":")]=round(int(parts[1])/1024)
-p="/home/githubops/factory-runtime"
-v=os.statvfs(p)
-print("LEECH_VPS_CAPACITY="+json.dumps({"mem_mib":m,"disk_free_gib":round(v.f_bavail*v.f_frsize/1024**3,2),"cpu_count":os.cpu_count(),"has_cmake":bool(shutil.which("cmake")),"has_git":bool(shutil.which("git")),"has_gpp":bool(shutil.which("g++")),"has_curl":bool(shutil.which("curl")),"user":os.getlogin() if os.isatty(0) else "githubops"},sort_keys=True))'"'"''
+          ssh -T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' < scripts/factory_leech_vps_capacity_probe_20261025.py
