@@ -1,0 +1,21 @@
+name: MPW production TRON bounded head parser regression 2026-10-25
+on:
+  push:
+    branches: [fix/mpw-tron-bounded-finalized-head-20261025]
+    paths:
+      - services/mpw_trx_commercial_chain.py
+      - tests/test_mpw_tron_bounded_finalized_head_20261025.py
+      - .github/workflows/mpw-tron-bounded-header-tests-20261025.yml
+permissions: {contents: read}
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Compile and regress bounded source and independent confirmations
+        run: |
+          set -euo pipefail
+          python3 -m py_compile services/mpw_trx_commercial_chain.py
+          python3 -m unittest discover -s tests -p test_mpw_tron_bounded_finalized_head_20261025.py -v
