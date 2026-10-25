@@ -1,0 +1,138 @@
+name: Register eighteen already-live free resources in two public sitemaps
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/mpw_zm_free_resources_sitemap_20261025.py"
+      - ".github/workflows/mpw-zm-free-resources-sitemap-20261025.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-zm-free-resources-sitemap-20261025
+  cancel-in-progress: false
+jobs:
+  sitemap-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate exact public canonical pages and current sitemaps
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_zm_free_resources_sitemap_20261025.py
+          python3 - <<'PY'
+          import importlib.util, urllib.request, xml.etree.ElementTree as ET
+          spec=importlib.util.spec_from_file_location("sitemap", "scripts/mpw_zm_free_resources_sitemap_20261025.py")
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          for host,paths in (("https://mojplaywin.com",m.MPW_PATHS),("https://zomorodmelal.ir",m.ZM_PATHS)):
+              for path in paths:
+                  url=host+path
+                  with urllib.request.urlopen(urllib.request.Request(url,headers={"Cache-Control":"no-cache"}),timeout=20) as r:
+                      body=r.read(180000).decode("utf8","replace")
+                      assert r.status==200,url
+                      assert '<link rel="canonical" href="'+url+'"' in body,url
+                      assert 'name="robots" content="index,follow' in body,url
+                  print("CANONICAL_INDEXABLE_PUBLIC",url)
+              with urllib.request.urlopen(host+"/sitemap.xml",timeout=25) as r:
+                  root=ET.fromstring(r.read(2000000))
+                  locs=[x.text for x in root.iter() if x.tag.endswith("loc")]
+                  assert len(locs)==len(set(locs)),host
+                  print("BEFORE_SITEMAP_UNIQUE",host,len(locs))
+          for url in ("https://mojplaywin.com/store/product/72/","https://mojplaywin.com/store/product/225/","https://mojplaywin.com/store/product/879/"):
+              with urllib.request.urlopen(url,timeout=20) as r:assert r.status==200,url
+          print("PREDEPLOY_TWO_SITE_GUARD_PASS")
+          PY
+      - name: Establish SSH relay with pinned host identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/free-resources-ssh";install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY_READY"
+      - name: Apply only two isolated sitemap patches with private rollback
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/free-resources-ssh"
+          ssh -T -F "$d/config" saeit-cpanel "python3 - apply mpw '$GITHUB_RUN_ID'" < scripts/mpw_zm_free_resources_sitemap_20261025.py
+          ssh -T -F "$d/config" saeit-cpanel "python3 - apply zm '$GITHUB_RUN_ID'" < scripts/mpw_zm_free_resources_sitemap_20261025.py
+      - name: Independently verify eighteen unique sitemap URLs and protected sites
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import importlib.util, urllib.request, xml.etree.ElementTree as ET, time
+          spec=importlib.util.spec_from_file_location("sitemap","scripts/mpw_zm_free_resources_sitemap_20261025.py")
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          for host,paths in (("https://mojplaywin.com",m.MPW_PATHS),("https://zomorodmelal.ir",m.ZM_PATHS)):
+              with urllib.request.urlopen(host+"/sitemap.xml?verify="+str(time.time_ns()),timeout=25) as r:
+                  root=ET.fromstring(r.read(2000000))
+                  locs=[x.text for x in root.iter() if x.tag.endswith("loc")]
+                  assert len(locs)==len(set(locs)),host
+              for path in paths:
+                  url=host+path
+                  assert locs.count(url)==1,url
+                  print("NEW_INDEXABLE_RESOURCE_IN_LIVE_SITEMAP",url)
+          for url in ("https://mojplaywin.com/","https://mojplaywin.com/store/",
+                      "https://mojplaywin.com/store/product/72/",
+                      "https://mojplaywin.com/store/product/225/",
+                      "https://mojplaywin.com/store/product/879/",
+                      "https://zomorodmelal.ir/","https://zomorodmelal.ir/contact/"):
+              with urllib.request.urlopen(url,timeout=20) as r:assert r.status==200,url
+          print("EIGHTEEN_FREE_RESOURCE_URLS_AND_PROTECTED_COMMERCE_PASS")
+          PY
+      - name: Restore only own unchanged patches if any stage fails
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/free-resources-ssh"
+          if test -f "$d/config"; then
+            ssh -T -F "$d/config" saeit-cpanel "python3 - rollback zm '$GITHUB_RUN_ID'" < scripts/mpw_zm_free_resources_sitemap_20261025.py || echo "ZM_ROLLBACK_MANUAL_REVIEW_REQUIRED"
+            ssh -T -F "$d/config" saeit-cpanel "python3 - rollback mpw '$GITHUB_RUN_ID'" < scripts/mpw_zm_free_resources_sitemap_20261025.py || echo "MPW_ROLLBACK_MANUAL_REVIEW_REQUIRED"
+          fi
+      - name: Remove ephemeral SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/free-resources-ssh"
