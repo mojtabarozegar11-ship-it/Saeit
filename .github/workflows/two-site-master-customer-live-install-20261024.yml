@@ -1,0 +1,175 @@
+name: Safely install two independent site master customer inboxes
+on:
+  push:
+    branches: [agents/two-sites-inquiries-orders-20261024]
+    paths:
+      - .github/workflows/two-site-master-customer-live-install-20261024.yml
+permissions:
+  contents: read
+concurrency:
+  group: two-site-master-customer-install-20261024
+  cancel-in-progress: false
+jobs:
+  install:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite,sqlite3,mbstring
+      - name: Test and manifest-pin exactly the two customer master sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l scripts/site_master_customer_portal_20261024.php
+          python3 -m py_compile scripts/site_master_customer_runtime_20261024.py scripts/install_two_site_master_customer_cpanel_20261024.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_site_master_customer_runtime_20261024.py -v
+          python3 - <<'PY'
+          import hashlib,io,json,os,tarfile
+          from pathlib import Path
+          sources={"portal.php":Path("scripts/site_master_customer_portal_20261024.php").read_bytes(),
+                   "runtime.py":Path("scripts/site_master_customer_runtime_20261024.py").read_bytes()}
+          meta={"scope":"two_independent_no_api_site_master_inboxes","sites":["zomorod","mojplaywin"],
+                "sha256":{name:hashlib.sha256(raw).hexdigest() for name,raw in sources.items()}}
+          sources["manifest.json"]=json.dumps(meta,sort_keys=True).encode()
+          target=Path(os.environ["RUNNER_TEMP"])/"master_customer_20261024.tgz"
+          with tarfile.open(target,"w:gz") as archive:
+              for name,data in sources.items():
+                  item=tarfile.TarInfo(name);item.size=len(data);item.mode=0o600;item.mtime=0
+                  archive.addfile(item,io.BytesIO(data))
+          assert target.stat().st_size<150000
+          print("TWO_SITE_MASTER_CUSTOMER_SHA_MANIFEST=PASS")
+          PY
+      - name: Verify pinned VPS to cPanel SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/agents-ro.XXXXXX")"
+          echo "$d" > "$RUNNER_TEMP/agents-ro-path"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf '%s\n' \
+            "Host saeit-vps" "  HostName 178.239.147.150" "  User githubops" "  Port 22" \
+            "  IdentityFile $d/vps.key" "  UserKnownHostsFile $d/vps.known" \
+            "Host saeit-cpanel" "  HostName zohal.pws-dns.net" "  User zomorod2" "  Port 1396" \
+            "  IdentityFile $d/host.key" "  UserKnownHostsFile $d/host.known" "  ProxyJump saeit-vps" \
+            "Host *" "  StrictHostKeyChecking yes" "  IdentitiesOnly yes" "  BatchMode yes" \
+            "  ConnectTimeout 10" "  ConnectionAttempts 1" "  ForwardAgent no" \
+            > "$d/config"
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo TWO_SITES_PINNED_SSH_RELAY=PASS
+          echo SITE_AGENT_RELAY_PINNED
+      - name: Install only additive public support and tenant-private customer master modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          controller="$(base64 -w0 scripts/install_two_site_master_customer_cpanel_20261024.py)"
+          timeout 390s ssh -T -F "$d/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$controller\"))' install" \
+             < "$RUNNER_TEMP/master_customer_20261024.tgz"
+      - name: Test real customer GET and POST end to end then remove synthetic tickets only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          timeout 210s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import http.cookiejar,json,re,sqlite3,subprocess,urllib.parse,urllib.request
+          from pathlib import Path
+          home=Path.home()
+          setups=(("zomorod","zomorodmelal.ir",home/".private/zomorod-business",
+                   "/usr/bin/python3"),
+                  ("mojplaywin","mojplaywin.com",home/".private_mojplaywin_main_agents",
+                   str(home/"virtualenv/Saeit-staging/3.11/bin/python")))
+          for site,host,private,interpreter in setups:
+              opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+              url="https://"+host+"/ask-master/index.php"
+              html=opener.open(urllib.request.Request(url,headers={"Cache-Control":"no-cache"}),timeout=20).read().decode("utf8")
+              match=re.search(r'name="csrf" value="([a-f0-9]{48})"',html)
+              assert match,"PUBLIC_CUSTOMER_CSRF_NOT_RENDERED:"+site
+              question="QA-SYNTHETIC-20261024 download guide request"
+              data=urllib.parse.urlencode({"csrf":match.group(1),"website":"","kind":"question",
+                   "name":"Synthetic Reviewer","email":"qa-no-reply@example.com","question":question,"order":""}).encode()
+              response=opener.open(urllib.request.Request(url,data=data,headers={
+                   "Content-Type":"application/x-www-form-urlencoded",
+                   "Origin":"https://"+host}),timeout=25).read().decode("utf8")
+              marker="شناسه پیگیری: " if site=="zomorod" else "Ticket: "
+              match=re.search(re.escape(marker)+r'([a-f0-9]{24})',response)
+              assert match,"CUSTOMER_POST_NOT_ACCEPTED:"+site
+              ticket=match.group(1)
+              dbpath=private/"master_customer_inbox.sqlite3"
+              with sqlite3.connect(dbpath,timeout=12) as db:
+                  row=db.execute("SELECT processing_status,tenant FROM customer_questions WHERE id=?",(ticket,)).fetchone()
+                  assert row==("queued",site),"TICKET_NOT_IN_CORRECT_MASTER_QUEUE:"+site
+              cmd=[interpreter,"-B",str(private/"master_customer_runtime_20261024.py"),
+                   "--site",site,"--once"]
+              env=__import__("os").environ.copy();env["PYTHONDONTWRITEBYTECODE"]="1"
+              result=subprocess.run(cmd,text=True,capture_output=True,timeout=88,
+                  cwd=str(home/"Saeit-staging") if site=="mojplaywin" else str(private),env=env)
+              assert result.returncode==0,"MASTER_NOT_PROCESSING_CUSTOMER_TICKET:"+site+":"+result.stderr[-250:]
+              with sqlite3.connect(dbpath,timeout=12) as db:
+                  row=db.execute("SELECT processing_status,master_processed_utc FROM customer_questions WHERE id=?",(ticket,)).fetchone()
+                  assert row and row[0] in ("handled","needs_review") and row[1],"MASTER_TICKET_NOT_ACKNOWLEDGED:"+site
+                  # Exact synthetic, newly created ticket only; preserve every real customer record.
+                  deletion=db.execute("DELETE FROM customer_questions WHERE id=? AND email=? AND question=?",
+                         (ticket,"qa-no-reply@example.com",question))
+                  assert deletion.rowcount==1,"SYNTHETIC_TICKET_CLEANUP_FAILED"
+                  db.commit()
+              print("LIVE_CUSTOMER_QA_TO_ACTUAL_SITE_MASTER="+site+":PASS")
+              if site=="mojplaywin":
+                  with sqlite3.connect(dbpath,timeout=10) as db:
+                      total=db.execute("SELECT COUNT(*) FROM customer_order_events WHERE source='core_order'").fetchone()[0]
+                      assert total>=4,"MPW_FOUR_NATIVE_ORDERS_NOT_OBSERVED"
+                      print("MPW_NATIVE_ORDER_EVENTS_BOUND_TO_MASTER="+str(total))
+              else:
+                  print("ZM_ORDER_SOURCE=absent_from_native_store")
+          print("BOTH_LIVE_SITE_CUSTOMER_POST_AND_MASTER_ACK=PASS")
+          PY
+      - name: Verify existing site routes and unique independent customer crons
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+          timeout 55s ssh -T -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          cron="$(crontab -l)"
+          for marker in ZM_MASTER_CUSTOMER_INBOX_20261024 MPW_MASTER_CUSTOMER_INBOX_20261024; do
+            count="$(printf '%s\n' "$cron" | grep -c "# $marker" || true)"
+            test "$count" -eq 1
+          done
+          for site in zomorodmelal.ir mojplaywin.com; do
+            test "$(curl -sS --max-time 12 -o /dev/null -w '%{http_code}' "https://$site/ask-master/index.php")" = 200
+            test "$(curl -sS --max-time 12 -o /dev/null -w '%{http_code}' "https://$site/store/")" = 200
+          done
+          echo TWO_SITE_MASTER_CUSTOMER_ORDER_QUESTION_PUBLIC_INTEGRATION=PASS
+          echo TWO_SITE_EXISTING_STORES_UNCHANGED_AND_RESPONDING=PASS
+          REMOTE
+      - name: Remove temporary SSH identity material
+        if: always()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/agents-ro-path"; then
+            d="$(cat "$RUNNER_TEMP/agents-ro-path")"
+            if test -n "$d" && test -d "$d"; then
+              rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+              rmdir "$d" || true
+            fi
+            rm -f "$RUNNER_TEMP/agents-ro-path"
+          fi
