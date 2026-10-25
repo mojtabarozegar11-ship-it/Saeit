@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/ae-2026-001-archive-backed-sensitivity.yml
       - research/manuscripts/AE-2026-001/analysis/wdi_geographic_robustness_from_archived_real_panel.py
+      - research/manuscripts/AE-2026-001/analysis/official_wdi_2024_vs_2026_vintage_audit.py
       - research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv
   workflow_dispatch:
 permissions:
@@ -27,5 +28,28 @@ jobs:
         with:
           name: AE-2026-001-WDI-geographical-robustness
           path: research/manuscripts/AE-2026-001/AE-2026-001_REAL_WDI_REGION_EXCLUSION_SENSITIVITY_2026-10-25.json
+          retention-days: 7
+          if-no-files-found: error
+
+  official-cross-vintage-revision-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install open-source XLSX reader
+        run: python -m pip install --disable-pip-version-check openpyxl==3.1.5
+      - name: Compare original World Bank 2024-10-24 archive against genuine archived 2026 source
+        run: |
+          python research/manuscripts/AE-2026-001/analysis/official_wdi_2024_vs_2026_vintage_audit.py
+      - name: Preserve source SHA256 and observed historical revision statistics
+        uses: actions/upload-artifact@v4
+        with:
+          name: AE-2026-001-official-2024-versus-2026-historical-vintage-audit
+          path: research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_2024_VS_2026_WDI_VINTAGE_EMPIRICAL_AUDIT_2026-10-26.json
           retention-days: 7
           if-no-files-found: error
