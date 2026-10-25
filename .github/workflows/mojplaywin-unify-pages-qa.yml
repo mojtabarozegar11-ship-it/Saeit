@@ -1,0 +1,67 @@
+name: MojPlayWin main-only theme unification QA (no deploy)
+on:
+  pull_request:
+    paths:
+      - "core/templatetags/mpw_shell.py"
+      - "core/templatetags/__init__.py"
+      - "core/templates/base.html"
+      - "core/templates/brands/mojplaywin/base.html"
+      - "core/static/site/mojplaywin-inner-unified.css"
+      - "tests/test_mpw_page_skin_safety.py"
+      - ".github/workflows/mojplaywin-unify-pages-qa.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-presentation-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Django template engine for isolated checks
+        run: python3 -m pip install 'Django>=5.2,<6.0'
+      - name: Run main-site and subsite route boundary tests
+        run: |
+          python3 -m compileall -q core/templatetags/mpw_shell.py
+          python3 -m unittest discover -s tests -p 'test_mpw_page_skin_safety.py' -v
+      - name: Enforce presentation-only diff (products/payments untouched)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import subprocess
+          allowed = {
+            "core/templatetags/__init__.py",
+            "core/templatetags/mpw_shell.py",
+            "core/templates/base.html",
+            "core/templates/brands/mojplaywin/base.html",
+            "core/static/site/mojplaywin-inner-unified.css",
+            "tests/test_mpw_page_skin_safety.py",
+            ".github/workflows/mojplaywin-unify-pages-qa.yml",
+          }
+          common = subprocess.check_output(
+            ["git", "merge-base", os.environ["BASE_SHA"], os.environ["HEAD_SHA"]], text=True
+          ).strip()
+          changed = set(subprocess.check_output(
+            ["git", "diff", "--name-only", common, os.environ["HEAD_SHA"]], text=True
+          ).splitlines())
+          unexpected = sorted(changed - allowed)
+          assert not unexpected, f"Protected files touched: {unexpected}"
+          assert "core/templates/mojplaywin/home.html" not in changed
+          assert "core/templates/mojplaywin/store.html" not in changed
+          assert "core/api.py" not in changed
+          assert "core/urls.py" not in changed
+          assert "core/models.py" not in changed
+          assert "core/commerce_views.py" not in changed
+          assert "config/urls.py" not in changed
+          print("MAIN_SITE_PRESENTATION_ONLY_DIFF_CONFIRMED=yes")
+          print("PRODUCT_ORDER_CRYPTO_PAYMENT_ROUTES_AND_LOGIC_UNCHANGED=yes")
+          PY
