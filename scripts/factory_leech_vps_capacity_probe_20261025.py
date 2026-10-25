@@ -99,6 +99,49 @@ def main():
         )) & flags)
     except OSError:
         result["cpu_relevant_flags"] = []
+    # Inspect only this leech operator's processes; never report other VPS jobs or arguments.
+    try:
+        import subprocess
+        ps = subprocess.run(["ps", "-eo", "pid=,etimes=,time=,stat=,comm="],
+                            capture_output=True, text=True, timeout=5)
+        active = []
+        if ps.returncode == 0:
+            for row in ps.stdout.splitlines():
+                fields = row.strip().split(None, 4)
+                if len(fields) != 5:
+                    continue
+                pid, elapsed, cpu_time, state, name = fields
+                if name not in ("llama-server", "python3"):
+                    continue
+                if name == "python3":
+                    try:
+                        cmdline = (Path("/proc") / pid / "cmdline").read_bytes()
+                        if b"leech-vps-resource-guarded-author.py" not in cmdline:
+                            continue
+                    except OSError:
+                        continue
+                active.append({"program": "llama-server" if name == "llama-server" else "leech-author",
+                               "elapsed_seconds": int(elapsed), "cpu_time": cpu_time,
+                               "state": state[:8]})
+        result["selfhosted_active_workers"] = active
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        result["selfhosted_active_workers"] = "unavailable"
+    # Determine actual accepted words even if the operator status only updates at completion.
+    try:
+        author = operations / "leech-professional-author.py"
+        if author.is_file() and not author.is_symlink():
+            checkpoint = subprocess.run(["/usr/bin/python3", "-B", str(author), "status"],
+                            capture_output=True, text=True, timeout=15,
+                            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+            if checkpoint.returncode == 0:
+                progress = json.loads(checkpoint.stdout)
+                result["selfhosted_verified_private_manuscript"] = {
+                    k: progress.get(k) for k in ("order_id", "verified_unreviewed_prose_words",
+                                                "next_chapter", "next_part", "quality1000_approved")}
+            else:
+                result["selfhosted_verified_private_manuscript"] = "readonly_status_unavailable"
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        result["selfhosted_verified_private_manuscript"] = "readonly_status_unavailable"
     print("LEECH_VPS_CAPACITY=" + json.dumps(result, sort_keys=True))
 
 
