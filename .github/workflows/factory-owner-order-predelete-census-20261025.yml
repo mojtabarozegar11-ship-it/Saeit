@@ -87,6 +87,10 @@ jobs:
               for base,dirs,names in os.walk(base_root,followlinks=False):
                   base_path=Path(base)
                   if base_path.is_symlink():raise SystemExit('SYMLINK_IN_PROTECTED_TREE')
+                  # Lifecycle records/WO-ID.json are exact paired cleanup targets.
+                  # Other lifecycle paths remain protected references.
+                  if base_root.name=='product-lifecycle' and base_path==base_root:
+                      dirs[:]=[d for d in dirs if d!='records']
                   for name in dirs+names:
                       p=base_path/name
                       if p.is_symlink():raise SystemExit('SYMLINK_IN_PROTECTED_TREE')
