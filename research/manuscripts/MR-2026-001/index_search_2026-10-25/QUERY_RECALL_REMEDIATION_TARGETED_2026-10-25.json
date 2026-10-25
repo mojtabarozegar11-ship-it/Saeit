@@ -1,0 +1,1120 @@
+{
+  "run_time_utc": "2026-10-25T03:12:11.595Z",
+  "objective": "Diagnostic sensitivity expansion, not protocol-frozen systematic search; do not count as a PRISMA inclusion set.",
+  "platform": "OpenAlex search.title_and_abstract",
+  "queries": [
+    {
+      "query": "irrigation AND \"human-machine\" AND scheduling",
+      "url": "https://api.openalex.org/works?search.title_and_abstract=irrigation%20AND%20%22human-machine%22%20AND%20scheduling&per_page=200&select=id,doi,title,publication_year,type",
+      "reported_hit_count": 13,
+      "returned_record_count": 13,
+      "records": [
+        {
+          "id": "https://openalex.org/W4389817986",
+          "doi": "https://doi.org/10.1029/2023wr035810",
+          "title": "Real‐Time Irrigation Scheduling Based on Weather Forecasts, Field Observations, and Human‐Machine Interactions",
+          "publication_year": 2023,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4310020613",
+          "doi": "https://doi.org/10.1016/j.agwat.2022.108059",
+          "title": "Simulation-optimization based real-time irrigation scheduling: A human-machine interactive method enhanced by data assimilation",
+          "publication_year": 2022,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7211869990",
+          "doi": "https://doi.org/10.3390/w18172210",
+          "title": "Development Trends and Challenges of Smart Irrigation and Scheduling Optimization in Irrigation Districts",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4402929147",
+          "doi": "https://doi.org/10.3390/su16198402",
+          "title": "Design and Evaluation of a Precision Irrigation Tool’s Human–Machine Interaction to Bring Water- and Energy-Efficient Irrigation to Resource-Constrained Farmers",
+          "publication_year": 2024,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7127576030",
+          "doi": "https://doi.org/10.3390/agriengineering8020056",
+          "title": "Design and User-Centered Field Evaluation of an Accessible Precision Irrigation Tool and Its Human–Machine Interaction on a Jordanian Farm",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7196997832",
+          "doi": "https://doi.org/10.1038/s41598-026-65758-0",
+          "title": "Optimizing irrigation scheduling in apple orchards: soil moisture thresholds balance yield, fruit quality, and water use efficiency",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4400959888",
+          "doi": "https://doi.org/10.2166/ws.2024.170",
+          "title": "Coupled weather and crop simulation modeling for smart irrigation planning: a review",
+          "publication_year": 2024,
+          "type": "review"
+        },
+        {
+          "id": "https://openalex.org/W4399392598",
+          "doi": "https://doi.org/10.1007/s10098-024-02909-9",
+          "title": "A human machine interface (HMI) assisted portable device for measuring soil efflux using low-cost sensors: design, development and field evaluation",
+          "publication_year": 2024,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4416397977",
+          "doi": "https://doi.org/10.1007/s44279-025-00430-1",
+          "title": "Smart drip irrigation systems using IoT: a review of architectures, machine learning models, and emerging trends",
+          "publication_year": 2025,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7215615935",
+          "doi": null,
+          "title": "XÂY DỰNG HỆ THỐNG TƯỚI TỰ ĐỘNG DẠNG FARMBOT CÓ SỬ DỤNG CAMERA ĐỂ PHÁT HIỆN RAU",
+          "publication_year": 2024,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2023465332",
+          "doi": "https://doi.org/10.1109/itaic.2014.7065081",
+          "title": "Service oriented approach for decision support systems",
+          "publication_year": 2014,
+          "type": "conference-paper"
+        },
+        {
+          "id": "https://openalex.org/W3090482405",
+          "doi": "https://doi.org/10.30880/ijie.2020.12.06.007",
+          "title": "Internet of Things: A Monitoring and Control System for Rockmelon Farming",
+          "publication_year": 2020,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7220869357",
+          "doi": "https://doi.org/10.33545/2618060x.2026.v9.i10sc.6817",
+          "title": "Artificial intelligence, blockchain and IoT in agribusiness management: Emerging applications, opportunities and challenges",
+          "publication_year": 2026,
+          "type": "article"
+        }
+      ]
+    },
+    {
+      "query": "irrigation AND \"field scale\" AND \"review\"",
+      "url": "https://api.openalex.org/works?search.title_and_abstract=irrigation%20AND%20%22field%20scale%22%20AND%20%22review%22&per_page=200&select=id,doi,title,publication_year,type",
+      "reported_hit_count": 143,
+      "returned_record_count": 143,
+      "records": [
+        {
+          "id": "https://openalex.org/W4392465872",
+          "doi": "https://doi.org/10.1016/j.agwat.2024.108758",
+          "title": "Towards efficient irrigation management at field scale using new technologies: A systematic literature review",
+          "publication_year": 2024,
+          "type": "review"
+        },
+        {
+          "id": "https://openalex.org/W3006040236",
+          "doi": "https://doi.org/10.1016/j.agwat.2020.106062",
+          "title": "Field scale quantification indicates potential for variability in return flows from flood irrigation in the high altitude western US",
+          "publication_year": 2020,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7135241884",
+          "doi": "https://doi.org/10.5194/egusphere-egu26-6881",
+          "title": "An adaptive and unsupervised approach for irrigation detection at field scale from high-resolution soil moisture maps",
+          "publication_year": 2026,
+          "type": "conference-abstract"
+        },
+        {
+          "id": "https://openalex.org/W4255966860",
+          "doi": "https://doi.org/10.1016/j.agrformet.2015.08.121",
+          "title": "Peer review report 1 On “Mapping daily evapotranspiration at field scales over rainfed and irrigated agricultural areas using remote sensing data fusion”",
+          "publication_year": 2015,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4391708122",
+          "doi": "https://doi.org/10.1016/j.agwat.2024.108710",
+          "title": "Application of machine learning approaches in supporting irrigation decision making: A review",
+          "publication_year": 2024,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4249662385",
+          "doi": "https://doi.org/10.1016/j.agrformet.2015.08.122",
+          "title": "Peer review report 2 On “Mapping daily evapotranspiration at field scales over rainfed and irrigated agricultural areas using remote sensing data fusion”",
+          "publication_year": 2015,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4408208427",
+          "doi": "https://doi.org/10.47278/journal.ijab/2024.019",
+          "title": "Development of Geophysical Moisture Measurement Methods for Soil Moisture Mapping at Agricultural Field Scale within the Framework of Digital Irrigation",
+          "publication_year": 2025,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2593373178",
+          "doi": "https://doi.org/10.1016/j.scitotenv.2017.02.136",
+          "title": "Simplifying field-scale assessment of spatiotemporal changes of soil salinity",
+          "publication_year": 2017,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4396934626",
+          "doi": "https://doi.org/10.58532/v2bs9ch29",
+          "title": "ENHANCING AGRICULTURAL WATER PRODUCTIVITY OF CROPS AT FIELD SCALE",
+          "publication_year": 2022,
+          "type": "book-chapter"
+        },
+        {
+          "id": "https://openalex.org/W4386069642",
+          "doi": "https://doi.org/10.4081/ija.2023.2166",
+          "title": "Salt-affected soils: field-scale strategies for prevention, mitigation, and adaptation to salt accumulation",
+          "publication_year": 2023,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2020395766",
+          "doi": "https://doi.org/10.2113/jeeg18.1.1",
+          "title": "Protocols and Guidelines for Field-scale Measurement of Soil Salinity Distribution with ECa-Directed Soil Sampling",
+          "publication_year": 2013,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2592194291",
+          "doi": "https://doi.org/10.3390/su9030353",
+          "title": "Advanced Monitoring and Management Systems for Improving Sustainability in Precision Irrigation",
+          "publication_year": 2017,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W1963611513",
+          "doi": "https://doi.org/10.13031/2013.35847",
+          "title": "Development of Irrigation Management Techniques for Rice Under Mechanized Irrigation",
+          "publication_year": 2010,
+          "type": "conference-paper"
+        },
+        {
+          "id": "https://openalex.org/W4416862546",
+          "doi": "https://doi.org/10.1007/s12230-025-10029-3",
+          "title": "Remote Sensing and Machine Learning for Irrigation Management in Potato Cultivation: A Systematic Review",
+          "publication_year": 2025,
+          "type": "review"
+        },
+        {
+          "id": "https://openalex.org/W4393393698",
+          "doi": "https://doi.org/10.52151/jae2024611.1827",
+          "title": "Impact of Concepts and Spatial Scales on Irrigation Efficiency for Sustainable Water Resources Management: A Review",
+          "publication_year": 2024,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2134093592",
+          "doi": "https://doi.org/10.2134/jeq2013.07.0299",
+          "title": "Field-Scale Monitoring of Pharmaceutical Compounds Applied to Active Golf Courses by Recycled Water",
+          "publication_year": 2014,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7148694453",
+          "doi": "https://doi.org/10.1007/s41745-026-00497-9",
+          "title": "Temperature as an Indicator of Water Stress in Leaves and Plants: Leaf-Scale to Field-Scale",
+          "publication_year": 2025,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7211869990",
+          "doi": "https://doi.org/10.3390/w18172210",
+          "title": "Development Trends and Challenges of Smart Irrigation and Scheduling Optimization in Irrigation Districts",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2951088101",
+          "doi": "https://doi.org/10.1007/978-981-13-5832-6_9",
+          "title": "Causes and Management of Root-zone Salinity and Sodicity in the Arid West Texas: Field-scale Experience",
+          "publication_year": 2019,
+          "type": "book-chapter"
+        },
+        {
+          "id": "https://openalex.org/W2009834500",
+          "doi": "https://doi.org/10.1016/s0378-3774(97)00031-0",
+          "title": "Salinization and crop transpiration of irrigated fields in Pakistan's Punjab",
+          "publication_year": 1997,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7127057930",
+          "doi": "https://doi.org/10.63697/jeshs.2026.10054",
+          "title": "Mitigating nitrous oxide emissions through iron amendments in water-saving irrigated paddy fields: A review",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7165041942",
+          "doi": "https://doi.org/10.3390/horticulturae12060733",
+          "title": "Applied Heat-Stress Mitigation Strategies in Vegetable Crops: Toward Integrated Field-Scale Approaches",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W1552713948",
+          "doi": "https://doi.org/10.26192/q0y4z",
+          "title": "Improved irrigation of cotton via real-time, adaptive control of large mobile irrigation machines",
+          "publication_year": 2026,
+          "type": "dissertation"
+        },
+        {
+          "id": "https://openalex.org/W7217118569",
+          "doi": null,
+          "title": "Development of an Automation System for Site-Specific Irrigation and Nitrogen Application Using a Center Pivot Irrigation System",
+          "publication_year": 2026,
+          "type": "dissertation"
+        },
+        {
+          "id": "https://openalex.org/W7149884123",
+          "doi": null,
+          "title": "Computer Models and Decision-Support Platforms for Precision Irrigation Management",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4402750783",
+          "doi": "https://doi.org/10.36346/sarjet.2024.v06i05.001",
+          "title": "Innovation in Agriculture Advantages of a Remote Irrigation Monitoring and Control System",
+          "publication_year": 2024,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7162794236",
+          "doi": "https://doi.org/10.3390/w18111315",
+          "title": "The Irrigation Efficiency Paradox in Transboundary Aquifers: Implications for Groundwater Recharge and Sustainability",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7203677745",
+          "doi": "https://doi.org/10.3390/agronomy16161590",
+          "title": "Resilience of Agricultural Water Resource Systems in Yellow River Irrigation Districts",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2011110609",
+          "doi": "https://doi.org/10.2134/jeq1996.00472425002500010005x",
+          "title": "Experimental Evidence of Transport of Pesticides through Field Soils—A Review",
+          "publication_year": 1996,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4391283799",
+          "doi": "https://doi.org/10.1016/bs.agron.2023.12.001",
+          "title": "Dealing with the impact of climate change-induced drought on the management of soil salinity under irrigated agriculture",
+          "publication_year": 2024,
+          "type": "book-chapter"
+        },
+        {
+          "id": "https://openalex.org/W7167794692",
+          "doi": "https://doi.org/10.5276/jswtm/iswmaw/522-1/2026.691",
+          "title": "Smart irrigation technologies for greenhouse gas mitigation in climate-smart agriculture: Application potential in Vietnam",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2281822794",
+          "doi": "https://doi.org/10.1007/s13593-015-0341-y",
+          "title": "Addressing the yield gap in rainfed crops: a review",
+          "publication_year": 2016,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2592710641",
+          "doi": "https://doi.org/10.1016/s1002-0160(17)60310-2",
+          "title": "Remediation of Heavy Metal-Polluted Agricultural Soils Using Clay Minerals: A Review",
+          "publication_year": 2017,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2788770783",
+          "doi": "https://doi.org/10.2136/vzj2017.06.0119",
+          "title": "Review and Evaluation of Root Respiration and of Natural and Agricultural Processes of Soil Aeration",
+          "publication_year": 2018,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7204134186",
+          "doi": "https://doi.org/10.25675/3.027451",
+          "title": "Sustainable water management across the agricultural life cycle and reuse of oilfield produced water for irrigation",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W3026711175",
+          "doi": "https://doi.org/10.1016/j.agwat.2020.106241",
+          "title": "Deep blade loosening and two-dimensional infiltration theory make furrow irrigation predictable, simpler and more efficient",
+          "publication_year": 2020,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2426095228",
+          "doi": "https://doi.org/10.1094/fg-2013-0002-rv",
+          "title": "The Alfalfa Yield Gap: A Review of the Evidence",
+          "publication_year": 2013,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2585651320",
+          "doi": "https://doi.org/10.1007/s11356-017-8462-2",
+          "title": "Arsenic uptake, accumulation and toxicity in rice plants: Possible remedies for its detoxification: A review",
+          "publication_year": 2017,
+          "type": "review"
+        },
+        {
+          "id": "https://openalex.org/W7220849949",
+          "doi": "https://doi.org/10.1007/s44274-026-01119-y",
+          "title": "Wastewater irrigation effects on contaminant fate soil quality nutritional traits and human health risks in rice agroecosystems with emphasis on microplastics",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2973006923",
+          "doi": "https://doi.org/10.1016/bs.agron.2019.07.001",
+          "title": "Review of soil salinity assessment for agriculture across multiple scales using proximal and/or remote sensors",
+          "publication_year": 2019,
+          "type": "book-chapter"
+        },
+        {
+          "id": "https://openalex.org/W7204928982",
+          "doi": "https://doi.org/10.14719/pst.15945",
+          "title": "Balancing crop productivity, soil health and heavy metal dynamics in industrial effluent irrigation of okra (Abelmoschus esculentus (L.) Moench)",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2379329303",
+          "doi": null,
+          "title": "Review on Simulation Study of Surface Flow and Solute Transport for Basin Fertigation",
+          "publication_year": 2011,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W3104599768",
+          "doi": "https://doi.org/10.5194/bg-18-3701-2021",
+          "title": "Reviews and syntheses: Gaining insights into evapotranspiration partitioning with novel isotopic monitoring methods",
+          "publication_year": 2021,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7213935116",
+          "doi": "https://doi.org/10.3390/agriculture16182017",
+          "title": "Migration, Implications and Reduction of Sodium Ions in Soil: A Review",
+          "publication_year": 2026,
+          "type": "review"
+        },
+        {
+          "id": "https://openalex.org/W4311771518",
+          "doi": "https://doi.org/10.1016/j.agwat.2022.108102",
+          "title": "Paddy water managements for diffuse nitrogen and phosphorus pollution control in China: A comprehensive review and emerging prospects",
+          "publication_year": 2022,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7212603417",
+          "doi": "https://doi.org/10.3389/fpls.2026.1951701",
+          "title": "Root system architecture remodeling under oxygen-mediated subsurface drip irrigation: a mechanistic hypothesis framework linking multiphase mass transfer to root foraging decisions",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4416894816",
+          "doi": "https://doi.org/10.65523/gjst.2025.v1.i2.05",
+          "title": "Use of Drones In Crop Health Monitoring: A Comprehensive Review (2014–2025)",
+          "publication_year": 2025,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W1523369022",
+          "doi": "https://doi.org/10.56454/oovc6073",
+          "title": "Development and Application of Process-based Simulation Models for Cotton Production: A Review of Past, Present, and Future Directions",
+          "publication_year": 2014,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7143453967",
+          "doi": "https://doi.org/10.9734/jabb/2026/v29i43817",
+          "title": "Hydrogels as an Emerging Water Management Tool for Sustainable Vegetable Production: A Review",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7168179979",
+          "doi": "https://doi.org/10.9734/ijpss/2026/v38i76185",
+          "title": "Microplastic Contamination in Agricultural Soil: Sources, Distribution, Impact and Management: A Review",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7171732317",
+          "doi": "https://doi.org/10.1002/jctb.70248",
+          "title": "The hidden burden of microplastics in soils: sources, impacts, and sustainable solutions – a review",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4408116227",
+          "doi": "https://doi.org/10.1007/978-3-031-80520-2_6",
+          "title": "Evapotranspiration Dynamics: A Comprehensive Review Amidst Water Challenges and Scope of Research in Egypt",
+          "publication_year": 2025,
+          "type": "book-chapter"
+        },
+        {
+          "id": "https://openalex.org/W7160281196",
+          "doi": "https://doi.org/10.1016/j.pedsph.2026.05.005",
+          "title": "Oxygen nanobubbles for improving soil biogeochemical processes and sustainable crop production: A review",
+          "publication_year": 2026,
+          "type": "review"
+        },
+        {
+          "id": "https://openalex.org/W7155183057",
+          "doi": "https://doi.org/10.1016/j.agwat.2026.110368",
+          "title": "A review of integrated crop growth and hydrological models for sustainable agriculture in the midwest: Challenges and opportunities",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7213325831",
+          "doi": "https://doi.org/10.1007/s10791-026-10549-4",
+          "title": "A systematic literature review of artificial intelligence and internet of things enabled crop farming",
+          "publication_year": 2026,
+          "type": "review"
+        },
+        {
+          "id": "https://openalex.org/W7222830545",
+          "doi": "https://doi.org/10.2139/ssrn.7620540",
+          "title": "Recent Advances in Environmental Management, Soil-Water Modeling, Agricultural Sustainability, and Precision Agriculture: A Multidisciplinary Review",
+          "publication_year": 2026,
+          "type": "preprint"
+        },
+        {
+          "id": "https://openalex.org/W7161108598",
+          "doi": "https://doi.org/10.22271/27889289.2026.v6.i5a.288",
+          "title": "Harnessing biostimulants for sustainable ‘cavendish’ banana production under abiotic stress conditions: A narrative review",
+          "publication_year": 2026,
+          "type": "review"
+        },
+        {
+          "id": "https://openalex.org/W3080906774",
+          "doi": "https://doi.org/10.1117/12.2570780",
+          "title": "Remote sensing methods to estimate evapotranspiration incorporating MODIS derived data and applications over Greece: a review",
+          "publication_year": 2020,
+          "type": "conference-paper"
+        },
+        {
+          "id": "https://openalex.org/W7164996978",
+          "doi": "https://doi.org/10.1016/j.csag.2026.100125",
+          "title": "Novel fertilisers for climate-smart nitrogen management in croplands: A review of mechanisms, performance and adoption challenges",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7163693615",
+          "doi": "https://doi.org/10.1016/j.compag.2026.111983",
+          "title": "Advances in remote sensing techniques for surface soil moisture estimation: A systematic review of recent developments (2019–2024)",
+          "publication_year": 2026,
+          "type": "review"
+        },
+        {
+          "id": "https://openalex.org/W2138084471",
+          "doi": null,
+          "title": "Agricultural Water Management Technology Expansion and Impact on Crop Yields in Northern Burkina Faso (1980-2010): A Review",
+          "publication_year": 2014,
+          "type": "report"
+        },
+        {
+          "id": "https://openalex.org/W7202180773",
+          "doi": "https://doi.org/10.17605/osf.io/nxpzm",
+          "title": "The lab-to-field gap in hydrocarbon bioremediation of soils: a critical scoping review with a priori operational scale thresholds",
+          "publication_year": 2026,
+          "type": "preprint"
+        },
+        {
+          "id": "https://openalex.org/W7214635615",
+          "doi": "https://doi.org/10.9734/ajee/2026/v25i91025",
+          "title": "A Critical Review of Microplastic Contamination in Agricultural Soils and its Potential Risks to Crops and Human Health",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7221948764",
+          "doi": "https://doi.org/10.5281/zenodo.23384188",
+          "title": "GREEN REVOLUTION, NATIONAL FOOD SECURITY AND THE CHALLENGE OF PESTICIDE DEPENDENCE IN INDIA: A CRITICAL REVIEW WITH AN APPRAISAL OF AGROHOMOEOPATHY AS A COMPLEMENTARY SUSTAINABLE APPROACH",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7221986054",
+          "doi": "https://doi.org/10.5281/zenodo.23384219",
+          "title": "GREEN REVOLUTION, NATIONAL FOOD SECURITY AND THE CHALLENGE OF PESTICIDE DEPENDENCE IN INDIA: A CRITICAL REVIEW WITH AN APPRAISAL OF AGROHOMOEOPATHY AS A COMPLEMENTARY SUSTAINABLE APPROACH",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2185012657",
+          "doi": null,
+          "title": "AGRONOMY & SOILS Development and Application of Process-based Simulation Models for Cotton Production: A Review of Past, Present, and Future Directions",
+          "publication_year": 2014,
+          "type": "review"
+        },
+        {
+          "id": "https://openalex.org/W7202392922",
+          "doi": "https://doi.org/10.17605/osf.io/qb3d9",
+          "title": "Microbial-mediated phosphate rock solubilization under saline and arid conditions: a systematic review of mechanisms, inoculant efficacy, and organic amendment interactions",
+          "publication_year": 2026,
+          "type": "preprint"
+        },
+        {
+          "id": "https://openalex.org/W7162516524",
+          "doi": "https://doi.org/10.17605/osf.io/m5f2b",
+          "title": "Postharvest agricultural waste-derived biochar for immobilization of potentially toxic elements in contaminated agricultural soils: Implications for leafy vegetable safety and human health—A systematic review",
+          "publication_year": 2026,
+          "type": "preprint"
+        },
+        {
+          "id": "https://openalex.org/W3039984893",
+          "doi": "https://doi.org/10.3390/agriculture10070256",
+          "title": "Prospects of Improving Agricultural and Water Productivity through Unmanned Aerial Vehicles",
+          "publication_year": 2020,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2046927613",
+          "doi": "https://doi.org/10.1016/j.compag.2004.10.005",
+          "title": "Apparent soil electrical conductivity measurements in agriculture",
+          "publication_year": 2004,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2028357987",
+          "doi": "https://doi.org/10.13031/2013.23964",
+          "title": "Remote Sensing Based Energy Balance Algorithms for Mapping ET: Current Status and Future Challenges",
+          "publication_year": 2007,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W117361590",
+          "doi": null,
+          "title": "Applications of microwave remote sensing of soil moisture for agricultural applications",
+          "publication_year": 2009,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4410431194",
+          "doi": "https://doi.org/10.1007/s10653-025-02508-7",
+          "title": "Agronomic solutions to decrease arsenic concentrations in rice",
+          "publication_year": 2025,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W165154121",
+          "doi": "https://doi.org/10.2134/agronj2001.932271x",
+          "title": "Managing Soils to Achieve Greater Water Use Efficiency",
+          "publication_year": 2001,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2015088397",
+          "doi": "https://doi.org/10.1016/j.envint.2014.11.010",
+          "title": "Integrated phytobial remediation for sustainable management of arsenic in soil and water",
+          "publication_year": 2014,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2002071141",
+          "doi": "https://doi.org/10.1007/s00271-007-0088-6",
+          "title": "ET mapping for agricultural water management: present status and challenges",
+          "publication_year": 2007,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7220856035",
+          "doi": "https://doi.org/10.3390/agronomy16191979",
+          "title": "Root Water Uptake Modeling: Current Approaches and Future Directions",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7222342675",
+          "doi": "https://doi.org/10.3390/antiox15101332",
+          "title": "Nanobubble-Driven Precision Aeration: Deciphering Abiotic Hypoxia Responses via Multi-Omics for Next-Generation Smart Agriculture",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W3160784172",
+          "doi": "https://doi.org/10.1088/1748-9326/ac002c",
+          "title": "Nitrogen dynamics in cropping systems under Mediterranean climate: a systemic analysis",
+          "publication_year": 2021,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W126938820",
+          "doi": null,
+          "title": "Decision support tools to reduce the risk of groundwater nitrate contamination at land treatment systems : a thesis presented in partial fulfilment of the requirements for the degree of Doctor of Philosophy in Process and Environmental Engineering at School of Engineering and Advanced Technology, Massey University, Palmerston North, New Zealand",
+          "publication_year": 2013,
+          "type": "dissertation"
+        },
+        {
+          "id": "https://openalex.org/W2016457222",
+          "doi": "https://doi.org/10.1080/10643389309388452",
+          "title": "Movement of nonionic organic chemicals in agricultural soils",
+          "publication_year": 1993,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7222964236",
+          "doi": "https://doi.org/10.1155/aess/8743911",
+          "title": "Hydrogels in Agricultural Applications: Recent Advances, Challenges, and Future Prospects",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4415402509",
+          "doi": "https://doi.org/10.3390/agriculture15202179",
+          "title": "From Contamination to Mitigation: Addressing Cadmium Pollution in Agricultural Soils",
+          "publication_year": 2025,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4411698201",
+          "doi": "https://doi.org/10.1016/j.scitotenv.2025.179976",
+          "title": "Harnessing Cannabis sativa L. for integrated environmental remediation and circular biomass use",
+          "publication_year": 2025,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4413093518",
+          "doi": "https://doi.org/10.22214/ijraset.2025.73152",
+          "title": "Biostimulatory Effects of Plasma on Seeds and Plants",
+          "publication_year": 2025,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7214366415",
+          "doi": "https://doi.org/10.1016/j.eti.2026.105247",
+          "title": "Salicornia europaea–microbiome engineering for salt-degraded land rehabilitation: From phytoremediation mechanisms to bioinoculant technology",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7214676578",
+          "doi": "https://doi.org/10.1016/j.ages.2026.100046",
+          "title": "Nanotechnology-based strategies for saline–alkaline soil management in arid agroecosystems: From mechanisms to field application and commercialization",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7133228971",
+          "doi": "https://doi.org/10.3389/fpls.2026.1770941",
+          "title": "Rice growth and yield formation in heterogeneous sodic and saline-sodic soils: challenges and management strategies",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4387521787",
+          "doi": "https://doi.org/10.1016/j.envres.2023.117381",
+          "title": "Plummeting toxic contaminates from water through phycoremediation: Mechanism, influencing factors and future outlook to enhance the capacity of living and non-living algae",
+          "publication_year": 2023,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2056141389",
+          "doi": "https://doi.org/10.4141/cjss96-035",
+          "title": "Usage of soil moisture models in agronomic research",
+          "publication_year": 1996,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2884780662",
+          "doi": "https://doi.org/10.1029/2009gm000882",
+          "title": "The effects of drought on Amazonian rain forests",
+          "publication_year": 2009,
+          "type": "book-chapter"
+        },
+        {
+          "id": "https://openalex.org/W4413345965",
+          "doi": "https://doi.org/10.32628/ijsrset2512526",
+          "title": "Impacts of Microplastic Pollution on Soil Ecosystems and Agricultural Productivity",
+          "publication_year": 2025,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7124123241",
+          "doi": null,
+          "title": "Nitrogen dynamics in cropping systems under Mediterranean climate: a systemic analysis",
+          "publication_year": 2021,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2171466715",
+          "doi": "https://doi.org/10.1016/j.agwat.2006.06.011",
+          "title": "Assessing crop water productivity from field to regional scale",
+          "publication_year": 2006,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7214947675",
+          "doi": "https://doi.org/10.3389/frmst.2026.1954364",
+          "title": "Advanced nanocomposite membranes for sustainable water reuse in agriculture",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4416941130",
+          "doi": "https://doi.org/10.3390/plants14233632",
+          "title": "Recent Advances on the Individual Roles and Emerging Synergistic Effects of Plant Growth-Promoting Rhizobacteria and Silicon Nanoparticles in Mitigating Salinity Stress",
+          "publication_year": 2025,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7171320020",
+          "doi": "https://doi.org/10.5281/zenodo.21578720",
+          "title": "Impacts of Microplastic Pollution on Soil Ecosystems and Agricultural Productivity",
+          "publication_year": 2025,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7221480278",
+          "doi": "https://doi.org/10.1007/s42729-026-03617-7",
+          "title": "Integrated Soil–Microbe–Plant and Transporter-Mediated Mechanisms for Mitigating Potentially Toxic Element Accumulation in Rice",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7167336247",
+          "doi": "https://doi.org/10.9734/ijecc/2026/v16i75540",
+          "title": "Artificial Intelligence and Machine Learning in Precision Agriculture: Applications, Challenges, and Future Directions",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2486047021",
+          "doi": "https://doi.org/10.2136/sssaspecpub61.c11",
+          "title": "Electrical Resistivity Tomography of the Root Zone",
+          "publication_year": 2013,
+          "type": "other"
+        },
+        {
+          "id": "https://openalex.org/W7171380012",
+          "doi": "https://doi.org/10.47836/pjtas.49.3.17",
+          "title": "Organic Amendment-Assisted Phytoremediation of Heavy Metals-Contaminated Paddy Soils",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4411992200",
+          "doi": "https://doi.org/10.1016/j.plana.2025.100169",
+          "title": "Advancements in nanotechnology for arsenic remediation in agricultural systems: Challenges and prospects",
+          "publication_year": 2025,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7128027767",
+          "doi": "https://doi.org/10.1016/j.ocsci.2026.01.007",
+          "title": "Within-plant variability in pod maturity and preharvest sprouting in peanut (Arachis hypogaea L.): Physiological drivers, agronomic impacts, and integrated mitigation strategies",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4409360592",
+          "doi": "https://doi.org/10.1016/j.ijoes.2025.101029",
+          "title": "Electrochemical technologies for sustainable agricultural water treatment and resource recovery",
+          "publication_year": 2025,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7167920163",
+          "doi": "https://doi.org/10.3390/ijms27146192",
+          "title": "Heavy Metals in Agriculture: Sources, Industrial Applications, Plant Toxicity, and Remediation Approaches",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4415810431",
+          "doi": "https://doi.org/10.3390/agronomy15112549",
+          "title": "Research Trends in Evaluation of Crop Water Use Efficiency in China: A Bibliometric Analysis",
+          "publication_year": 2025,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2980231959",
+          "doi": "https://doi.org/10.5772/intechopen.89678",
+          "title": "Possibility of No-Input Farming in Lowland Rice Fields in Japan from the Viewpoint of Sustaining Soil Fertility",
+          "publication_year": 2019,
+          "type": "book-chapter"
+        },
+        {
+          "id": "https://openalex.org/W7141282837",
+          "doi": "https://doi.org/10.1016/b978-0-443-44625-2.00007-2",
+          "title": "Artificial intelligence applications in drought quantification and impact assessment on hydrological and agricultural indicators",
+          "publication_year": 2026,
+          "type": "book-chapter"
+        },
+        {
+          "id": "https://openalex.org/W7169671605",
+          "doi": "https://doi.org/10.9734/bpi/mono/978-81-69006-97-2/ch8",
+          "title": "Soil Physics in Agriculture",
+          "publication_year": 2026,
+          "type": "book-chapter"
+        },
+        {
+          "id": "https://openalex.org/W7220869352",
+          "doi": "https://doi.org/10.1007/s11356-026-38297-4",
+          "title": "Sitagliptin beyond low aquatic risk: mobility, transformation products, and mixture uncertainty in water-reuse agroecosystems",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7213954517",
+          "doi": "https://doi.org/10.3389/fsoil.2026.1899490",
+          "title": "Microplastics in agricultural soils: sources, soil–plant interactions, ecotoxicological effects and food security concerns",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7204229146",
+          "doi": "https://doi.org/10.1016/j.compag.2026.112343",
+          "title": "Artificial intelligence and digital sensing for multiscale soil structure: from observation to decision-making",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4414994518",
+          "doi": "https://doi.org/10.32819/202520",
+          "title": "Modern trends in maize cultivation in Ukraine: National practices and international experience",
+          "publication_year": 2025,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2064777224",
+          "doi": "https://doi.org/10.5194/hessd-8-5917-2011",
+          "title": "Mass transfer effects in 2-D dual-permeability modeling of field preferential bromide leaching with drain effluent",
+          "publication_year": 2011,
+          "type": "preprint"
+        },
+        {
+          "id": "https://openalex.org/W4313568163",
+          "doi": "https://doi.org/10.1016/j.agwat.2023.108139",
+          "title": "CalBMP, a web-based modeling tool for evaluating pesticide offsite movement and best management practice scenarios in California agricultural land",
+          "publication_year": 2023,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7223340492",
+          "doi": "https://doi.org/10.5281/zenodo.23597048",
+          "title": "Evidence of potential for nature-based solutions for wastewater treatment and reuse in support of ecosystem regeneration",
+          "publication_year": 2026,
+          "type": "conference-paper"
+        },
+        {
+          "id": "https://openalex.org/W7160038522",
+          "doi": "https://doi.org/10.1016/j.temicr.2026.100082",
+          "title": "Halotolerant actinobacteria as nature-based solutions for salinity-affected agricultural systems",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7214778379",
+          "doi": "https://doi.org/10.9734/bpi/cafsgl/8067",
+          "title": "Climate-Resilient Agronomy for a Warming World: A Critical Synthesis of Cropping-System Redesign for Heat, Drought and Weather Extremes",
+          "publication_year": 2026,
+          "type": "book-chapter"
+        },
+        {
+          "id": "https://openalex.org/W7204818750",
+          "doi": "https://doi.org/10.14719/pst.16589",
+          "title": "Soil-pharmaceutical residue interactions: Understanding sorption and desorption mechanisms for effective risk assessment and mitigation",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7128798716",
+          "doi": "https://doi.org/10.1016/j.enmm.2026.101133",
+          "title": "Advanced NanoBiochar approaches for heavy metal detoxification in rice, wheat agroecosystems and challenges",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4411580774",
+          "doi": "https://doi.org/10.3390/atmos16070764",
+          "title": "Carbon Flux Estimation for Potato Production: A Literature-Based Study",
+          "publication_year": 2025,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7165167974",
+          "doi": "https://doi.org/10.1007/s42729-026-03398-z",
+          "title": "Advances in Coated Fertilizers for Sustainable Agriculture",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7213565564",
+          "doi": null,
+          "title": "Microplastics in soil ecosystems: impacts on microbial communities, nutrient cycling, and agronomic sustainability",
+          "publication_year": 2026,
+          "type": "conference-paper"
+        },
+        {
+          "id": "https://openalex.org/W3216263579",
+          "doi": null,
+          "title": "A Fresh Look at Resource Assimilation and Partitioning in Cotton",
+          "publication_year": 2021,
+          "type": "dissertation"
+        },
+        {
+          "id": "https://openalex.org/W7212075852",
+          "doi": "https://doi.org/10.1007/s10457-026-01620-6",
+          "title": "Harnessing farmland shelterbelts for ecosystem resilience in China’s arid regions: mechanisms, benefits, challenges, and strategic pathways",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7160866934",
+          "doi": "https://doi.org/10.51470/plantarchives.2026.v26.no.1.099",
+          "title": "SMART DETECTION OF CROP DISEASES: UAV APPLICATIONS IN THE ERA OF PRECISION PLANT PATHOLOGY",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7221786893",
+          "doi": "https://doi.org/10.3390/plants15203137",
+          "title": "Smart Agriculture Research in Date Palm (Phoenix dactylifera L.) Production: A Comprehensive Bibliometric Study",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7220853969",
+          "doi": "https://doi.org/10.9734/bpi/racsscbra/8068",
+          "title": "Digital Agronomy for Next-Generation Field Management: Critical Integration of Artificial Intelligence, Remote Sensing and Crop Models",
+          "publication_year": 2026,
+          "type": "book-chapter"
+        },
+        {
+          "id": "https://openalex.org/W7119609175",
+          "doi": "https://doi.org/10.48620/93710",
+          "title": "From Field to Catchment: Evaluating the Hydrological Effects of Soil Organic Carbon Increases with the distributed mesoscale hydrologic model mHM",
+          "publication_year": 2025,
+          "type": "conference-paper"
+        },
+        {
+          "id": "https://openalex.org/W4408485676",
+          "doi": "https://doi.org/10.5194/egusphere-egu25-18191",
+          "title": "From Field to Catchment: Evaluating the Hydrological Effects of Soil Organic Carbon Increases with the distributed mesoscale hydrologic model mHM",
+          "publication_year": 2025,
+          "type": "conference-abstract"
+        },
+        {
+          "id": "https://openalex.org/W2070664583",
+          "doi": "https://doi.org/10.2118/90-55",
+          "title": "Scale Inhibitor Evaluations And A Mechanism Of Inhibition Of Sparingly Soluble Salts",
+          "publication_year": 1990,
+          "type": "conference-paper"
+        },
+        {
+          "id": "https://openalex.org/W7163057224",
+          "doi": "https://doi.org/10.1016/j.cpb.2026.100629",
+          "title": "Seed nanopriming as a strategy to mitigate salinity stress: Physiological, biochemical, and molecular mechanisms",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W2948134692",
+          "doi": null,
+          "title": "Enhancing Food Security in Arab Countries - Phase II 2015-2017 External Evaluation Report",
+          "publication_year": 2018,
+          "type": "report"
+        },
+        {
+          "id": "https://openalex.org/W7147211169",
+          "doi": "https://doi.org/10.3389/fpls.2026.1837737",
+          "title": "Correction: Rice growth and yield formation in heterogeneous sodic and saline-sodic soils: challenges and management strategies",
+          "publication_year": 2026,
+          "type": "erratum"
+        },
+        {
+          "id": "https://openalex.org/W1868053740",
+          "doi": null,
+          "title": "HYDRAULIC MODELING AND OPTIMIZATION OF WASTE STABILIZATIONPOND DESIGN FOR DEVELOPING NATIONS",
+          "publication_year": 2011,
+          "type": "dissertation"
+        },
+        {
+          "id": "https://openalex.org/W4231542847",
+          "doi": "https://doi.org/10.2523/21571-ms",
+          "title": "SCALE INHIBITOR EVALUATIONS AND A MECHANISM OF INHIBITION OF SPARINGLY SOLUBLE SALTS",
+          "publication_year": 1990,
+          "type": "conference-paper"
+        },
+        {
+          "id": "https://openalex.org/W7155680790",
+          "doi": "https://doi.org/10.12133/j.smartag.sa202512002",
+          "title": "High Spatiotemporal Resolution Remote Sensing for Precision Agricultural Disaster Early Warning: Progress, Bottlenecks, and Integrative Pathways",
+          "publication_year": 2026,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W7129331883",
+          "doi": "https://doi.org/10.3389/fsufs.2026.1792118",
+          "title": "Editorial: Addressing microplastic contamination: sustainable solutions for resilient food systems",
+          "publication_year": 2026,
+          "type": "editorial"
+        },
+        {
+          "id": "https://openalex.org/W2058718919",
+          "doi": "https://doi.org/10.1111/jawr.12059",
+          "title": "Featured Collection Introduction: Assessing Consumptive Water Use via Satellite Data",
+          "publication_year": 2013,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W1580649540",
+          "doi": "https://doi.org/10.18174/202855",
+          "title": "Analysis and evaluation of tillage on an alfisol in a semi-arid tropical region of India",
+          "publication_year": 1983,
+          "type": "dissertation"
+        },
+        {
+          "id": "https://openalex.org/W159385728",
+          "doi": null,
+          "title": "Assessing the sustainability of a stockless arable rotation (OF0318)",
+          "publication_year": 2005,
+          "type": "report"
+        },
+        {
+          "id": "https://openalex.org/W2140045967",
+          "doi": "https://doi.org/10.1111/j.1469-8137.2010.03390.x",
+          "title": "Amazonian rain forests and drought: response and vulnerability",
+          "publication_year": 2010,
+          "type": "article"
+        },
+        {
+          "id": "https://openalex.org/W4416227009",
+          "doi": "https://doi.org/10.3389/fsufs.2025.1648861",
+          "title": "Leveraging process-based models to improve index crop insurance design",
+          "publication_year": 2025,
+          "type": "article"
+        }
+      ]
+    }
+  ],
+  "verifiedSeeds": {
+    "Jamal2023": "10.1029/2023WR035810",
+    "Bounajra2024": "10.1016/j.agwat.2024.108758"
+  },
+  "limitations": "Queries Q1 and Q2 recover targeted seeds but are not an exhaustive keyword search; no human screening or journal submission."
+}
