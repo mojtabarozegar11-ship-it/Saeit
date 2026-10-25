@@ -126,6 +126,25 @@ def main():
         result["selfhosted_active_workers"] = active
     except (OSError, ValueError, subprocess.TimeoutExpired):
         result["selfhosted_active_workers"] = "unavailable"
+    # Query only bounded numeric slot-progress fields from the private loopback engine;
+    # intentionally never return prompts, outputs, tokens or other manuscript data.
+    if result.get("selfhosted_private_inference_port_open"):
+        try:
+            import urllib.request
+            with urllib.request.urlopen("http://127.0.0.1:18767/slots", timeout=3) as response:
+                slots = json.load(response)
+            counters = []
+            if isinstance(slots, list):
+                for slot in slots[:2]:
+                    if not isinstance(slot, dict):
+                        continue
+                    keys = ("n_decoded", "n_predict", "n_past", "n_remaining",
+                            "n_prompt_tokens_processed", "n_tokens_max", "is_processing")
+                    counters.append({k: slot[k] for k in keys
+                                     if k in slot and isinstance(slot[k], (int, float, bool))})
+            result["selfhosted_token_progress"] = counters
+        except (OSError, ValueError, TypeError):
+            result["selfhosted_token_progress"] = "slots_endpoint_unavailable"
     # Determine actual accepted words even if the operator status only updates at completion.
     try:
         author = operations / "leech-professional-author.py"
