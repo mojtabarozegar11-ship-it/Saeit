@@ -1,0 +1,105 @@
+name: cPanel exact expired mother-robot lab generation removal one shot
+on:
+  pull_request:
+    types: [opened]
+    paths:
+      - .github/workflows/cpanel-delete-exact-26-stale-masterlab-generations-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Safely remove exact 26 unreferenced 21-day-old lab generation copies while preserving engine
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 360s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,time,stat,subprocess,json,shutil
+          h=Path('/home/zomorod2')
+          root=h/'Saeit/var/mother_robot/lab'
+          expected={"upgrade-g27-1791075276291346689":27287552,"upgrade-g26-1791074896172185714":27275264,"upgrade-g25-1791072986410208400":24870912,"upgrade-g24-1791072815428671020":24862720,"upgrade-g23-1791072572548321159":24850432,"module-g22-1791057162497726418":22478848,"module-g21-1791053552515464135":20815872,"module-g20-1791049942432132970":19116032,"module-g19-1791049526791960753":19083264,"upgrade-g18-1791048820201141111":19005440,"upgrade-g17-1791048762418785075":18989056,"upgrade-g15-1791048672422602572":18984960,"upgrade-g16-1791048722538373959":18984960,"upgrade-g14-1791048617490906533":18976768,"upgrade-g13-1791048567359936947":18972672,"upgrade-g11-1791048457370155723":18960384,"upgrade-g12-1791048517358905560":18960384,"upgrade-g10-1791048412401533977":18956288,"module-g4-1791047949601008718":18948096,"upgrade-g6-1791048207489314019":18948096,"upgrade-g7-1791048267362154079":18948096,"upgrade-g8-1791048312368125411":18948096,"upgrade-g9-1791048367445544855":18948096,"upgrade-g5-1791048127353710353":18939904,"module-g3-1791047791928575346":18931712,"upgrade-g1-1791040362384612572":16621568}
+          keep={"upgrade-g28-1791077099027995723":27394048,"capability-1791074095480655856":20480}
+          if os.geteuid()==0 or Path.home()!=h or h.is_symlink() or root.is_symlink() or not root.is_dir():
+              raise SystemExit('UNSAFE_OWNER_OR_LAB_ROOT')
+          items=list(root.iterdir())
+          if len(items)!=28 or any(p.is_symlink() or not p.is_dir() for p in items):
+              raise SystemExit('LAB_DIRECTORY_TOPOLOGY_CHANGED')
+          if set(p.name for p in items)!=set(expected)|set(keep):
+              raise SystemExit('LAB_GENERATION_SET_CHANGED')
+          def du(p):
+              q=subprocess.run(['du','-s','-B1','--',str(p)],capture_output=True,text=True,timeout=75)
+              if q.returncode:raise SystemExit('LAB_DU_FAILURE')
+              return int(q.stdout.split()[0])
+          for name,sz in list(expected.items())+list(keep.items()):
+              p=root/name
+              st=p.lstat()
+              if not stat.S_ISDIR(st.st_mode) or st.st_uid!=os.geteuid() or du(p)!=sz:
+                  raise SystemExit('LAB_METADATA_CHANGED')
+          for name in expected:
+              if time.time()-(root/name).stat().st_mtime<20*86400:
+                  raise SystemExit('LAB_GENERATION_TOO_RECENT')
+          for name in keep:
+              if not (root/name).is_dir():raise SystemExit('RETENTION_DIR_MISSING')
+          passenger=subprocess.run(['uapi','--output=json','PassengerApps','list_applications'],capture_output=True,text=True,timeout=30)
+          ps=subprocess.run(['ps','-u','zomorod2','-o','args='],capture_output=True,text=True,timeout=12)
+          cron=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=12)
+          if passenger.returncode or ps.returncode:raise SystemExit('ACTIVE_REFERENCE_INVENTORY_UNAVAILABLE')
+          active=passenger.stdout+'\n'+ps.stdout+'\n'+(cron.stdout if cron.returncode==0 else '')
+          if str(root) in active or any(name in active for name in expected):
+              raise SystemExit('ACTIVE_SERVICE_REFERENCES_OLD_LAB')
+          for pid in subprocess.run(['ps','-u','zomorod2','-o','pid='],capture_output=True,text=True,timeout=10).stdout.split():
+              fdroot=Path('/proc')/pid/'fd'
+              try:
+                  for fd in fdroot.iterdir():
+                      try:link=os.readlink(fd)
+                      except OSError:continue
+                      if any(link==str(root/n) or link.startswith(str(root/n)+'/') for n in expected):
+                          raise SystemExit('PROCESS_HOLDS_OLD_LAB_FILE')
+              except OSError:pass
+          stdev=root.stat().st_dev
+          for name in expected:
+              src=root/name
+              for here,dirs,files in os.walk(str(src),followlinks=False):
+                  for dn in list(dirs):
+                      p=Path(here)/dn
+                      if p.lstat().st_dev!=stdev:raise SystemExit('NESTED_MOUNT_DETECTED')
+                      if p.is_symlink():dirs.remove(dn)
+                  for fn in files:
+                      if (Path(here)/fn).lstat().st_dev!=stdev:
+                          raise SystemExit('NESTED_FILE_DEVICE_CHANGED')
+          for name in sorted(expected):
+              shutil.rmtree(str(root/name))
+          remaining=sorted(p.name for p in root.iterdir())
+          if remaining!=sorted(keep):
+              raise SystemExit('POST_DELETE_RETAINED_SET_NOT_EXACT')
+          if not all((h/x).is_dir() for x in ('Saeit','public_html','mail','mojtaba_personal','mojtaba_personal/.venv_personal_test')):
+              raise SystemExit('POST_DELETE_PROTECTED_SITE_OR_TEST_ENV_MISSING')
+          if du(root)>sum(keep.values())+4096:raise SystemExit('POST_DELETE_LAB_USAGE_UNEXPECTED')
+          print('CPANEL_EXACT_MASTERLAB_CLEANUP='+json.dumps({'deleted_directories':len(expected),'deleted_allocated_bytes_before':sum(expected.values()),
+          'kept_directories':remaining,'retained_lab_bytes':du(root),'main_engine_preserved':True,'public_sites_mail_preserved':True},sort_keys=True),flush=True)
+
+          PY
+          echo CPANEL_MASTERLAB_CLEANUP_VERIFIED=PASS
