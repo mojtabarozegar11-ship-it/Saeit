@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light"><meta name="theme-color" content="#f8f9fd">
+<title>Secure TRX Checkout | MojPlayWin Pay</title>
+<link rel="stylesheet" href="/assets/checkout.css">
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <a class="brand" href="https://mojplaywin.com" aria-label="MojPlayWin home">
+      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M9 28V12l11 11 11-11v16" fill="none" stroke="currentColor" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 33h24" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+      <span class="brand-copy"><strong>MojPlayWin<span class="brand-dot">.</span></strong><span>PAY</span></span>
+    </a>
+    <div class="header-right"><a class="header-link" href="https://mojplaywin.com/contact/">Help center <span aria-hidden="true">↗</span></a><span class="header-divider"></span><span class="secure-label"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg> Encrypted checkout</span></div>
+  </header>
+  <main class="content">
+    <div class="overline"><span class="overline-icon" aria-hidden="true">←</span> <a href="https://mojplaywin.com/store/">Return to store</a><span class="overline-sep">/</span><span>Secure payment</span></div>
+    <div class="page-title"><div><p class="mini-eyebrow">THE FINAL STEP</p><h1>You're almost <span>there.</span></h1><p class="subtitle">Complete your payment securely on the TRON network.</p></div><div class="stepper" aria-label="Checkout progress"><span class="step done"><i>✓</i> Order</span><b></b><span class="step active"><i>2</i> Payment</span><b></b><span class="step" id="stage-done"><i>3</i> Delivery</span></div></div>
+    <div class="layout">
+      <section class="payment-card" aria-labelledby="payment-title">
+        <div class="payment-card-heading"><div><span class="section-eyebrow">PAYMENT DETAILS</span><h2 id="payment-title">Pay with TRX</h2></div><span class="chain-pill"><span class="chain-live"></span> TRON MAINNET</span></div>
+        <div class="amount-panel">
+          <div class="amount-upper"><span><span class="trx-emblem" aria-hidden="true"><svg viewBox="0 0 42 42"><path d="M8 9 34 14 25 33 8 9Zm0 0 13 14 13-9M21 23l4 10" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linejoin="round"/></svg></span><span class="currency-name">TRON <small>Native TRX</small></span></span><span class="rate-tag"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="10" width="12" height="10" rx="2"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/></svg> Rate locked</span></div>
+          <div class="amount-number"><span id="trx-amount">{{TRX_AMOUNT}}</span><span class="amount-symbol">TRX</span></div>
+          <div class="amount-lower"><span>Equivalent to <b>${{USD_AMOUNT}} USD</b></span><span>Exact invoice amount</span></div>
+        </div>
+        <section class="quick-pay" aria-label="Choose how to pay">
+          <div class="quick-pay-head"><span class="section-eyebrow">CHOOSE YOUR PAYMENT METHOD</span><span class="quick-pay-safe">Your wallet controls the transfer</span></div>
+          <div class="quick-pay-options">
+            <a id="trust-wallet-pay" class="wallet-option trust-wallet" href="{{TRUST_URL}}" rel="noopener noreferrer" {{TRUST_DISABLED}}>
+              <span class="option-icon">◈</span><span><strong>Trust Wallet</strong><small>Open app with payment details</small></span><span class="option-arrow" aria-hidden="true">↗</span>
+            </a>
+            <button type="button" id="tronlink-pay" class="wallet-option tronlink-wallet" {{WALLET_DISABLED}}>
+              <span class="option-icon">◉</span><span><strong>TronLink</strong><small>Connect · review · approve in wallet</small></span><span class="option-arrow" aria-hidden="true">→</span>
+            </button>
+          </div>
+          <div class="alternate-pay"><span>OR USE ANY COMPATIBLE TRON WALLET</span><span class="alt-divider"></span><span>SCAN QR OR COPY DETAILS BELOW</span></div>
+          <p class="quick-pay-note" id="wallet-support">A wallet never needs your recovery phrase here. Your transfer is verified only after TRON finality.</p>
+        </section>
+        <div class="payment-instructions"><div class="instructions-title"><strong>Manual TRON transfer</strong><span>QR / Address fallback</span></div><div class="pay-steps"><span><i>1</i> Open your TRON wallet</span><span class="arrow">→</span><span><i>2</i> Scan or copy the details</span></div></div>
+        <div class="address-panel"><div class="qr-frame">{{QR_MARKUP}}<small>TRON ONLY</small></div><div class="address-detail"><div class="detail-label">RECEIVING ADDRESS <span class="network-badge">TRX</span></div><code id="trx-address">{{ADDRESS}}</code><button type="button" id="copy-address" class="copy-button" {{COPY_DISABLED}}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5H5v11h3"/></svg> <span>Copy address</span></button></div></div>
+        <div class="copy-amount-row"><span>Payment amount <b>{{TRX_AMOUNT}} TRX</b></span><button type="button" id="copy-amount" class="minor-copy" {{COPY_DISABLED}}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5H5v11h3"/></svg> <span>Copy amount</span></button></div>
+        <div class="network-warning"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5m0 3v.1"/></svg><span>Send <b>native TRX on TRON only.</b> Other coins or networks may cause permanent loss.</span></div>
+        <div class="payment-status" data-status="pending"><div class="status-dot"></div><div><b>Waiting for your payment</b><span>Network finality will be checked; background monitoring requires an active server worker.</span></div><span class="status-label">PENDING</span></div>
+        <div id="monitoring-notice" class="monitoring-notice" role="status" aria-live="polite">Automatic blockchain scanner: not enabled in this pilot.</div>
+        <div class="live-status-guide"><span class="guide-node active" id="phase-quote"><i>1</i> Quote locked</span><span class="guide-rule"></span><span class="guide-node" id="phase-chain"><i>2</i> On-chain</span><span class="guide-rule"></span><span class="guide-node" id="phase-final"><i>3</i> Finalized</span><span class="guide-rule"></span><span class="guide-node" id="phase-delivery"><i>4</i> Delivered</span></div>
+        <div id="fulfillment-notice" class="fulfillment-notice" role="status" aria-live="polite">Automated delivery status: awaiting payment. A verified TRON transfer is required.</div>
+        <div id="receipt-proof" class="receipt-proof" hidden><strong>Verified blockchain receipt</strong><a id="receipt-link" href="#" target="_blank" rel="noopener noreferrer">View transaction on TRONSCAN ↗</a></div>
+        <details class="manual"><summary>Paid already? Verify using your transaction ID <span aria-hidden="true">⌄</span></summary><div class="manual-body"><form id="verify-form" autocomplete="off"><label for="txid">TRON transaction hash</label><div class="verify-row"><input type="text" id="txid" name="txid" spellcheck="false" autocapitalize="off" maxlength="64" placeholder="Enter the 64-character transaction ID" {{VERIFY_DISABLED}} required/><button type="submit" id="verify-button" {{VERIFY_DISABLED}}>Verify <span aria-hidden="true">→</span></button></div><small id="verify-help">Payment is marked complete only after finality is confirmed.</small></form></div></details>
+        <div id="feedback" class="feedback" role="status" aria-live="polite">{{INIT_MESSAGE}}</div>
+      </section>
+      <aside class="sidebar" aria-label="Order summary">
+        <div class="order-card"><div class="order-head"><span>YOUR ORDER</span><span class="order-secured"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 6v6c0 5 3.4 8.2 8 10 4.6-1.8 8-5 8-10V6l-8-4Z"/></svg> Protected</span></div><div class="product"><span class="product-art" aria-hidden="true"><span class="art-ring ring-one"></span><span class="art-ring ring-two"></span><span class="art-cube">◈</span></span><div><strong>{{PRODUCT_TITLE}}</strong><small>Automatic delivery after verified payment and store confirmation</small></div></div><div class="order-divider"></div><div class="order-line"><span>Subtotal</span><b>${{USD_AMOUNT}}</b></div><div class="order-line"><span>Network</span><span class="network-plain"><span class="tiny-trx">◢</span> TRON (TRX)</span></div><div class="order-line"><span>Merchant</span><b>MojPlayWin</b></div><div class="order-divider"></div><div class="total-row"><span>Total due</span><strong>${{USD_AMOUNT}}</strong></div><div class="order-footnote">USD equivalent; TRX is fixed for this invoice. Wallet network fees are determined separately by TRON.</div></div>
+        <div class="expiry-card"><div class="expiry-label"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg> INVOICE EXPIRES IN</div><div class="expiry-time" id="timer">{{TIME_TEXT}}</div><div class="progress"><div id="timer-progress"></div></div><p>Initiate your transfer while the rate is locked. Payments in progress may confirm after expiration.</p></div>
+        <div class="sidebar-trust"><div class="trust-item"><span><svg viewBox="0 0 24 24"><path d="m4 12 5 5 11-11"/></svg></span><div><strong>Verified on-chain</strong><small>Network finality, not screenshots</small></div></div><div class="trust-item"><span><svg viewBox="0 0 24 24"><path d="M12 2 4 6v6c0 5 3.4 8.2 8 10 4.6-1.8 8-5 8-10V6l-8-4Z"/></svg></span><div><strong>Wallet stays yours</strong><small>Never share your recovery phrase</small></div></div><div class="trust-item"><span><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 9h8M8 13h8"/></svg></span><div><strong>Clear transaction record</strong><small>Every payment tied to one order</small></div></div></div>
+        <a class="need-help" href="https://mojplaywin.com/contact/">Need help with your payment? <span>↗</span></a>
+      </aside>
+    </div>
+    <footer><span>© 2026 MojPlayWin. All rights reserved.</span><span>TRON network · Non-custodial checkout</span></footer>
+  </main>
+</div>
+<script id="invoice-data" type="application/json">{{INVOICE_JSON}}</script><script src="/assets/checkout.js" defer></script>
+</body></html>
