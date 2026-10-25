@@ -43,4 +43,27 @@ const init=js.slice(js.indexOf('let save=loadSave();'),js.indexOf('// Each silho
 const legacy=vm.runInNewContext("const STORAGE='mpw-crown-v10-save';const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));"+loader+init+'save.best',{localStorage:{getItem(key){return key==='mpw-crown-defender-best-v1'?'Infinity':'{\"best\":250}'},setItem(){}},JSON,Number,Math,Set,Date});
 assert.equal(legacy,250,'nonfinite legacy scores must not poison the current save');
 assert.equal(vm.runInNewContext(loader+'validRecordDate(\"2026-02-28\")',{Date,Number,Math,JSON,Set}), '2026-02-28');
+
+// Exercise the real menu transition: abandoning a premium trial must restore earned-flight rewards.
+const menuCode=js.slice(js.indexOf('function mainMenu(){'),js.indexOf('function pause(){'));
+assert.ok(menuCode.includes('if(trialJet){trialJet=false;'), 'practice reset must exist at menu boundary');
+function menuTransition(practice){
+ const nodes=new Map();
+ const get=id=>{if(!nodes.has(id))nodes.set(id,{value:'1',hidden:false,textContent:'',append(){}});return nodes.get(id)};
+ const result=vm.runInNewContext(
+  "let trialJet="+practice+",activeJet='spectre',selectedJet='falcon',state='playing',overlayState='none';"+
+  "const save={campaign:{unlockedSector:2}};"+menuCode+
+  "mainMenu();({trialJet,activeJet,state,overlayState})",
+  {$:get,document:{createElement(){return {}}},sectors:Array.from({length:10},(_,i)=>({name:'Sector '+i})),
+   ownedJet:id=>id==='falcon',getMission:()=>({name:'Safe mission',text:'Briefing'}),hidePanes(){},showOverlay(){}}
+ );
+ return result;
+}
+const abandoned=menuTransition(true);
+assert.equal(abandoned.trialJet,false,'abandoned trial must not suppress normal mission rewards');
+assert.equal(abandoned.activeJet,'falcon','abandoned premium preview must not remain active');
+assert.equal(abandoned.state,'menu');
+const normal=menuTransition(false);
+assert.equal(normal.trialJet,false,'normal menu must remain normal');
+
 console.log('CROWN_SAVE_SAFETY_PASS: scoreboard validation, date safety, achievements and backward-compatible progress');
