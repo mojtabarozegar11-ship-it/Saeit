@@ -63,3 +63,5 @@ jobs:
           ssh_vps "test \"\$(sha256sum '$stage' | awk '{print \$1}')\" = '$expected' && /usr/bin/python3 -B -m py_compile '$stage' && mv -- '$stage' '$file' && chmod 700 '$file' && test \"\$(sha256sum '$file' | awk '{print \$1}')\" = '$expected'"
           echo LEECH_OWNER_VPS_STREAMING_AUTHOR_HOTFIX_INSTALLED=true
           echo LEECH_PREEXISTING_PRIVATE_MANUSCRIPT_AND_RUNNING_WORKER_PRESERVED=true
+          ssh_vps "nohup /usr/bin/python3 -B '$file' </dev/null >/dev/null 2>&1 &"
+          echo LEECH_OWNER_VPS_STREAMING_AUTHOR_KICK_SUBMITTED=true
