@@ -1,0 +1,33 @@
+name: AE-2026-001 public WDI agricultural productivity data pilot
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/ae-2026-001-wdi-agricultural-productivity-pilot.yml
+      - research/manuscripts/AE-2026-001/analysis/wdi_agricultural_productivity_pilot.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fetch-verified-wdi-observations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify standalone analysis script with synthetic fixture
+        run: python research/manuscripts/AE-2026-001/analysis/wdi_agricultural_productivity_pilot.py --self-test
+      - name: Fetch current official World Bank WDI observations
+        run: |
+          python research/manuscripts/AE-2026-001/analysis/wdi_agricultural_productivity_pilot.py --outdir /tmp/ae-2026-001
+      - name: Retain raw sourced observation panel and missingness report (not a publication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: AE-2026-001-world-bank-wdi-observation-pilot
+          path: /tmp/ae-2026-001/
+          retention-days: 7
+          if-no-files-found: error
