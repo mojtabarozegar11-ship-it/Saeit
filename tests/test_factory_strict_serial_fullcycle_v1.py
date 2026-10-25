@@ -1,5 +1,6 @@
 """Fair one-product-per-tick rework, no fabricated reviews or cross-order writes."""
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -272,6 +273,52 @@ class StrictSerialTests(unittest.TestCase):
             self.assertFalse((ops / ".strict-serial-fullcycle.lock").exists())
             self.assertFalse((root / "production-instructions/stage-06/strict-serial-active-v1.json").exists())
 
+
+
+    def test_immutable_source_bound_receipts_do_not_claim_artifact_or_qa(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, ops = workspace(Path(folder))
+            first = cycle.tick(root, ops, runner=lambda *a, **k: Successful(),
+                               disk_usage=lambda _: Disk(), monotonic=lambda: 0)
+            receipt = root / "production-instructions" / first["tick_receipt_file"]
+            raw = receipt.read_bytes()
+            self.assertEqual(hashlib.sha256(raw).hexdigest(),
+                             first["tick_receipt_sha256"])
+            record = json.loads(raw)
+            self.assertEqual(record["order_id"], "WO-00000601")
+            self.assertEqual(record["decision"], "RETURN_TO_PRODUCTION")
+            self.assertEqual(record["product_version_evidence"], "NOT_PROVEN")
+            self.assertIsNone(record["independent_qa1000_receipt_sha256"])
+            self.assertIsNone(record["product_version_after"])
+            self.assertEqual(len(record["stage_receipts"]), len(cycle.STAGES))
+            self.assertTrue(all(stage["artifact_sha256"] is None
+                                for stage in record["stage_receipts"].values()))
+            self.assertEqual(record["stage_receipts"]["primary_source"]["worker_sha256_before"],
+                             hashlib.sha256((ops / cycle.STAGES[0][1]).read_bytes()).hexdigest())
+            state = json.loads((root / "production-instructions/stage-06/strict-serial-active-v1.json")
+                               .read_text())
+            self.assertEqual(state["last_tick_receipt_sha256"], first["tick_receipt_sha256"])
+            self.assertEqual(state["last_tick_receipt_file"], first["tick_receipt_file"])
+            second = cycle.tick(root, ops, runner=lambda *a, **k: Successful(),
+                                disk_usage=lambda _: Disk(), monotonic=lambda: 0)
+            self.assertNotEqual(first["tick_receipt_file"], second["tick_receipt_file"])
+            self.assertEqual(receipt.read_bytes(), raw)
+            self.assertEqual(json.loads((root / "production-instructions" /
+                             second["tick_receipt_file"]).read_text())["order_id"],
+                             "WO-00000602")
+
+    def test_receipt_persistence_failure_does_not_advance_private_cursor(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, ops = workspace(Path(folder))
+            state = root / "production-instructions/stage-06/strict-serial-active-v1.json"
+            with patch.object(cycle, "immutable_tick_receipt",
+                              side_effect=OSError("DISK_IO_ERROR")):
+                with self.assertRaisesRegex(OSError, "DISK_IO_ERROR"):
+                    cycle.tick(root, ops, runner=lambda *a, **k: Successful(),
+                               disk_usage=lambda _: Disk(), monotonic=lambda: 0)
+            self.assertFalse(state.exists())
+            self.assertFalse((root / "production-instructions/stage-06/"
+                              "strict-serial-tick-receipts-v1").exists())
 
 if __name__=="__main__":
     unittest.main()
