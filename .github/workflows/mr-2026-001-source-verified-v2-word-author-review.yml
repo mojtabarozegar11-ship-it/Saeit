@@ -1,16 +1,16 @@
-name: MR-2026-001 source-verified V3 exact Word for human scientific review
+name: MR-2026-001 source-verified V4 exact Word for human scientific review
 on:
   push:
     branches: [research/mr-2026-001-novelty-audit]
     paths:
-      - .github/workflows/mr-2026-001-source-verified-v3-word-author-review.yml
-      - research/manuscripts/MR-2026-001/MR-2026-001_EVIDENCE_FRAMEWORK_CROSSWALK_AUTHOR_REVIEW_V3_2026-10-26.md
-      - research/manuscripts/MR-2026-001/C30_SEPARATE_AI_SANRA_V3_AND_PUBLICATION_DECISION_2026-10-26.md
+      - .github/workflows/mr-2026-001-source-verified-v2-word-author-review.yml
+      - research/manuscripts/MR-2026-001/MR-2026-001_RECENT_PRIOR_ART_ACTIVE_COMPARATOR_AUTHOR_REVIEW_V4_2026-10-26.md
+      - research/manuscripts/MR-2026-001/C31_INDEPENDENT_V4_NOVELTY_SANRA_AUTHOR_GATE_2026-10-26.md
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  produce-exact-version-v3-author-review:
+  produce-exact-version-v4-author-review:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -26,15 +26,15 @@ jobs:
           python - <<'PY'
           import re,hashlib
           from pathlib import Path
-          p=Path('research/manuscripts/MR-2026-001/MR-2026-001_EVIDENCE_FRAMEWORK_CROSSWALK_AUTHOR_REVIEW_V3_2026-10-26.md')
+          p=Path('research/manuscripts/MR-2026-001/MR-2026-001_RECENT_PRIOR_ART_ACTIVE_COMPARATOR_AUTHOR_REVIEW_V4_2026-10-26.md')
           t=p.read_text(encoding='utf-8')
           a=t.split('## Abstract\n\n',1)[1].split('\n\n## ',1)[0]
           refs=t.split('## References\n\n',1)[1]
           doi=re.findall(r'https://doi.org/(10\.\S+)',refs)
           nums=[int(x) for x in re.findall(r'^(\d+)\. ',refs,re.M)]
           assert len(a.split())<250
-          assert len(doi)==16 and len(set(doi))==16
-          assert nums==list(range(1,17))
+          assert len(doi)==19 and len(set(doi))==19
+          assert nums==list(range(1,20))
           assert '6. **Counterfactual attribution:**' in t
           assert '**Cross-cutting follow-up:**' in t
           assert '45/72 = 62.5%' in t
@@ -43,10 +43,13 @@ jobs:
           assert '26+7+3+6+15+17' not in t
           assert 'TIDieR' in t and 'Carroll' in t
           assert '10.48130/tia-0026-0009' in t and '10.1016/j.agsy.2026.104867' in t
-          assert Path('research/manuscripts/MR-2026-001/C30_SEPARATE_AI_SANRA_V3_AND_PUBLICATION_DECISION_2026-10-26.md').exists()
-          print('V3 mechanical gates passed; abstract words',len(a.split()),'DOIs',len(doi),'SHA256',hashlib.sha256(t.encode()).hexdigest())
+          assert all(x in t for x in ['10.1016/j.agwat.2024.108838','10.3390/w18172174','10.1002/ird.70098'])
+          assert 'TIDieR/Carroll-informed extraction form' in t
+          assert 'not a validated' in t.lower()
+          assert Path('research/manuscripts/MR-2026-001/C31_INDEPENDENT_V4_NOVELTY_SANRA_AUTHOR_GATE_2026-10-26.md').exists()
+          print('V4 mechanical gates passed; abstract words',len(a.split()),'DOIs',len(doi),'SHA256',hashlib.sha256(t.encode()).hexdigest())
           PY
-      - name: Build exact V3 Word using no-cost hosted tools
+      - name: Build exact V4 Word using no-cost hosted tools
         shell: bash
         run: |
           set -euo pipefail
@@ -55,15 +58,15 @@ jobs:
             sudo apt-get install -y -qq pandoc
           fi
           python -m pip install --disable-pip-version-check python-docx==1.2.0
-          mkdir -p /tmp/mr-v3-author-review
-          pandoc research/manuscripts/MR-2026-001/MR-2026-001_EVIDENCE_FRAMEWORK_CROSSWALK_AUTHOR_REVIEW_V3_2026-10-26.md \
+          mkdir -p /tmp/mr-v4-author-review
+          pandoc research/manuscripts/MR-2026-001/MR-2026-001_RECENT_PRIOR_ART_ACTIVE_COMPARATOR_AUTHOR_REVIEW_V4_2026-10-26.md \
             --from=gfm --to=docx --standalone \
-            -o /tmp/mr-v3-author-review/MR-2026-001_EXACT_V3_AUTHOR_SCIENTIFIC_REVIEW.docx
+            -o /tmp/mr-v4-author-review/MR-2026-001_EXACT_V4_AUTHOR_SCIENTIFIC_REVIEW.docx
           python - <<'PY'
           from docx import Document
           from docx.shared import Inches,Pt
           from pathlib import Path
-          p=Path('/tmp/mr-v3-author-review/MR-2026-001_EXACT_V3_AUTHOR_SCIENTIFIC_REVIEW.docx')
+          p=Path('/tmp/mr-v4-author-review/MR-2026-001_EXACT_V4_AUTHOR_SCIENTIFIC_REVIEW.docx')
           d=Document(p)
           for sec in d.sections:
               sec.top_margin=sec.bottom_margin=sec.left_margin=sec.right_margin=Inches(1)
@@ -87,15 +90,15 @@ jobs:
           d.core_properties.author='Proposed human author approval pending'
           d.save(p)
           assert p.stat().st_size>20000 and len(d.tables)>=1
-          print('EXACT V3 AUTHOR REVIEW WORD',p.stat().st_size,'bytes')
+          print('EXACT V4 AUTHOR REVIEW WORD',p.stat().st_size,'bytes')
           PY
-          cp research/manuscripts/MR-2026-001/C30_SEPARATE_AI_SANRA_V3_AND_PUBLICATION_DECISION_2026-10-26.md /tmp/mr-v3-author-review/
-          cp research/manuscripts/MR-2026-001/C27_AUTHOR_DECISION_DOSSIER_AND_VERIFIED_DISCOVER_AGRICULTURE_COST_GATE_2026-10-25.md /tmp/mr-v3-author-review/
-          printf '%s\n' 'AUTHOR SCIENTIFIC REVIEW ONLY. V3 MAJOR REVISION. NO HUMAN AUTHOR APPROVAL. NO JOURNAL SUBMISSION OR APC COMMITMENT.' > /tmp/mr-v3-author-review/READ_ME_FIRST.txt
-      - name: Preserve exact V3 manuscript and honest author-gate dossier
+          cp research/manuscripts/MR-2026-001/C31_INDEPENDENT_V4_NOVELTY_SANRA_AUTHOR_GATE_2026-10-26.md /tmp/mr-v4-author-review/
+          cp research/manuscripts/MR-2026-001/C27_AUTHOR_DECISION_DOSSIER_AND_VERIFIED_DISCOVER_AGRICULTURE_COST_GATE_2026-10-25.md /tmp/mr-v4-author-review/
+          printf '%s\n' 'AUTHOR SCIENTIFIC REVIEW ONLY. V4 MAJOR REVISION. NO HUMAN AUTHOR APPROVAL. NO JOURNAL SUBMISSION OR APC COMMITMENT.' > /tmp/mr-v4-author-review/READ_ME_FIRST.txt
+      - name: Preserve exact V4 manuscript and honest author-gate dossier
         uses: actions/upload-artifact@v4
         with:
-          name: MR-2026-001-V3-author-scientific-review-NOT-SUBMITTED
-          path: /tmp/mr-v3-author-review/
+          name: MR-2026-001-V4-author-scientific-review-NOT-SUBMITTED
+          path: /tmp/mr-v4-author-review/
           retention-days: 14
           if-no-files-found: error
