@@ -138,10 +138,8 @@ def main():
                 for slot in slots[:2]:
                     if not isinstance(slot, dict):
                         continue
-                    keys = ("n_decoded", "n_predict", "n_past", "n_remaining",
-                            "n_prompt_tokens_processed", "n_tokens_max", "is_processing")
-                    counters.append({k: slot[k] for k in keys
-                                     if k in slot and isinstance(slot[k], (int, float, bool))})
+                    counters.append({str(k)[:60]: v for k, v in list(slot.items())[:65]
+                                     if isinstance(v, (int, float, bool))})
             result["selfhosted_token_progress"] = counters
         except (OSError, ValueError, TypeError):
             result["selfhosted_token_progress"] = "slots_endpoint_unavailable"
