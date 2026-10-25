@@ -90,7 +90,7 @@ def main():
         result["selfhosted_binary_smoke_error"] = type(exc).__name__
     try:
         cpu_first = Path("/proc/cpuinfo").read_text(encoding="utf-8").split("\n\n", 1)[0]
-        cpu_map = dict(part.split(":",1) for part in cpu_first.splitlines() if ":" in part)
+        cpu_map = dict((part.split(":",1)[0].strip(),part.split(":",1)[1].strip()) for part in cpu_first.splitlines() if ":" in part)
         flags = set(cpu_map.get("flags", "").split())
         result["cpu_model"] = cpu_map.get("model name", "").strip()[:85]
         result["cpu_relevant_flags"] = sorted(set((
