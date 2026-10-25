@@ -216,6 +216,40 @@ jobs:
               print('MPW_TRON_INDEPENDENT_GATEWAY='+json.dumps(result,sort_keys=True))
           print('MPW_TRON_INDEPENDENT_GATEWAY_SCOPE=READ_ONLY')
           PY
+      - name: Check supported same-operator backup Solidity routes without writes
+        run: |
+          set -euo pipefail
+          timeout 82s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import json,time,urllib.request,urllib.error
+          from datetime import datetime,timezone
+          candidates=(
+              ('publicnode-solidity-post','https://tron-solidity-rpc.publicnode.com/walletsolidity/getnowblock','POST'),
+              ('publicnode-full-get','https://tron-rpc.publicnode.com/walletsolidity/getnowblock','GET'),
+              ('publicnode-full-post','https://tron-rpc.publicnode.com/walletsolidity/getnowblock','POST'),
+          )
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs):return None
+          opener=urllib.request.build_opener(NoRedirect())
+          for label,url,method in candidates:
+              result={'route':label,'read_only':True,'fresh_finalized_head':False}
+              tick=time.monotonic()
+              try:
+                  req=urllib.request.Request(url,method=method,
+                      data=b'{}' if method=='POST' else None,
+                      headers={'Accept':'application/json','Content-Type':'application/json','User-Agent':'MojPlayWin-Readonly-Diagnostic/1.0'})
+                  with opener.open(req,timeout=12) as h:
+                      if h.status!=200 or h.headers.get_content_type()!='application/json':raise ValueError('Invalid RPC metadata')
+                      raw=h.read(2_000_001)
+                  if len(raw)>2_000_000:raise ValueError('Oversize response')
+                  v=json.loads(raw)['block_header']['raw_data']
+                  age=datetime.now(timezone.utc).timestamp()-v['timestamp']/1000
+                  result['fresh_finalized_head']=(type(v['number']) is int and v['number']>0 and -60<=age<=600)
+              except Exception as exc:
+                  result['error_type']=type(exc).__name__
+                  if hasattr(exc,'code') and type(exc.code) is int:result['http_status']=exc.code
+              result['seconds']=round(time.monotonic()-tick,2)
+              print('MPW_TRON_PUBLICNODE_BACKUP='+json.dumps(result,sort_keys=True))
+          PY
       - name: Remove temporary SSH relay keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
