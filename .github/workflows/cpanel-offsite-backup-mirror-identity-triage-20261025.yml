@@ -63,7 +63,7 @@ jobs:
           for root in roots:
               if root.is_symlink() or not root.is_dir():continue
               rows=[]
-              for sub in (root,root/'.backups',root/'.backups/zomorodmelal-complete'):
+              for sub in (root,root/'archive',root/'archive/.backups',root/'archive/.backups/zomorodmelal-complete'):
                   if not sub.is_dir() or sub.is_symlink():continue
                   q=subprocess.run(['du','-sb','--',str(sub)],capture_output=True,text=True,timeout=80)
                   rows.append({'path':str(sub.relative_to(h)),'bytes':int(q.stdout.split()[0]) if q.returncode==0 else None,
