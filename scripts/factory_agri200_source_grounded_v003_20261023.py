@@ -273,7 +273,10 @@ def author_one(area, name, lib, stage5, candidate):
     return lib.once(area / "stage-05/source-grounded-v003-manifests" / name, manifest)
 
 
-def run(root, lib, stage5, candidate, *, batch=200):
+def run(root, lib, stage5, candidate, *, batch=200, only_order_id=None):
+    if only_order_id is not None and (not isinstance(only_order_id,str)
+                                   or re.fullmatch(r"WO-[0-9]{8}",only_order_id) is None):
+        raise RuntimeError("REVISION_TARGET_ORDER_INVALID")
     area = Path(root).resolve() / "production-instructions"
     inbox = area / "stage-05/strict-qc-rework"
     if inbox.is_symlink() or not inbox.is_dir():
@@ -289,6 +292,8 @@ def run(root, lib, stage5, candidate, *, batch=200):
         fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
         names = sorted(p.name for p in inbox.iterdir()
                        if p.is_file() and not p.is_symlink() and NAME.fullmatch(p.name))
+        if only_order_id is not None:
+            names = [name for name in names if name.startswith(only_order_id+"--r")]
         created = failed = 0
         for name in names[:batch]:
             try:
@@ -315,13 +320,15 @@ if __name__ == "__main__":
         p.add_argument("--stage5-worker", required=True)
         p.add_argument("--candidate-worker", required=True)
         p.add_argument("--batch", type=int, default=200)
+        p.add_argument("--only-order-id")
         args = p.parse_args()
         if not 1 <= args.batch <= 250:
             raise RuntimeError("REVISION_BATCH_INVALID")
         lib = load_module(args.stage34_worker, "revision_stage34")
         stage5 = load_module(args.stage5_worker, "revision_stage5")
         candidate = load_module(args.candidate_worker, "revision_zip")
-        print(json.dumps(run(args.factory_private, lib, stage5, candidate, batch=args.batch),
+        print(json.dumps(run(args.factory_private, lib, stage5, candidate, batch=args.batch,
+                             only_order_id=args.only_order_id),
                          sort_keys=True, ensure_ascii=False))
     except Exception as exc:
         print("REVISION_ERROR:" + type(exc).__name__ + ":" + str(exc)[:180], file=sys.stderr)

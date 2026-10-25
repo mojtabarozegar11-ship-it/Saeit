@@ -168,14 +168,17 @@ def validated(area, name):
         "do_not_copy_selling_products_or_mutate_prior_versions": True
     }
 
-def execute(root, batch=2000, dry_run=False):
+def execute(root, batch=2000, dry_run=False, excluded_orders=None):
     area = Path(root).resolve() / "production-instructions"
     source = area / "stage-05/source-grounded-v003-manifests"
     ensure(area.is_dir() and not area.is_symlink()
            and source.is_dir() and not source.is_symlink(), "PRIVATE_FACTORY_INPUT_UNSAFE")
     names = sorted(p.name for p in source.iterdir()
-                   if p.is_file() and not p.is_symlink() and NAME.fullmatch(p.name))
-    ensure(names, "EMPTY_REWORK_COHORT")
+                   if p.is_file() and not p.is_symlink() and NAME.fullmatch(p.name)
+                   and (excluded_orders is None or
+                        p.name.split("--r", 1)[0] not in excluded_orders))
+    if excluded_orders is None:
+        ensure(names, "EMPTY_REWORK_COHORT")
     if dry_run:
         packets = [validated(area, name) for name in names]
         return {"schema": SCHEMA, "checked": len(packets), "written": 0,
@@ -220,9 +223,16 @@ if __name__ == "__main__":
     parser.add_argument("--factory-private", required=True)
     parser.add_argument("--batch", type=int, default=2000)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--exclude-owner-agri200", action="store_true")
     args = parser.parse_args()
     try:
-        print(json.dumps(execute(args.factory_private, args.batch, args.dry_run),
+        if args.exclude_owner_agri200:
+            from factory_strict_serial_scope_v1 import owner_agri200_ids
+            excluded = owner_agri200_ids(args.factory_private)
+        else:
+            excluded = None
+        print(json.dumps(execute(args.factory_private, args.batch, args.dry_run,
+                                 excluded_orders=excluded),
                          ensure_ascii=False, sort_keys=True), flush=True)
     except Exception as exc:
         print("SCIENCE_REPAIR_ERROR:" + type(exc).__name__ + ":" + str(exc)[:180],

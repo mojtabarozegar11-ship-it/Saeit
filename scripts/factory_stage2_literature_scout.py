@@ -949,7 +949,11 @@ def retry_delay(candidate, title):
 
 
 def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
-        batch=200,workers=3,query_burst=1,expedite_gap_research=False):
+        batch=200,workers=3,query_burst=1,expedite_gap_research=False,
+        only_order_id=None):
+    if only_order_id is not None and (not isinstance(only_order_id,str)
+                                   or re.fullmatch(r"WO-[0-9]{8}",only_order_id) is None):
+        raise ValueError("SCOUT_TARGET_ORDER_INVALID")
     if not 1<=query_burst<=3:
         raise ValueError("SCOUT_INVALID_QUERY_BURST")
     root=Path(root).expanduser().resolve()
@@ -1009,6 +1013,8 @@ def run(root,stage2_program,fetcher=fetch_openalex,backstop=crossref_metadata,
                 area,ident+"--r001.json")
             if order.get("source_product_id")!="AGRI-%03d"%rank:
                 raise RuntimeError("SCOUT_INDEX_ORDER_MISMATCH")
+            if only_order_id is not None and ident!=only_order_id:
+                continue
             if (stage/"source-evidence"/(order["source_product_id"]+"--r001.json")).exists():
                 continue
             out=stage/"literature-candidates"/(order["source_product_id"]+"--r001.json")
@@ -1110,12 +1116,14 @@ def main():
     p.add_argument("--workers",type=int,default=3)
     p.add_argument("--query-burst",type=int,default=1)
     p.add_argument("--expedite-gap-research",action="store_true")
+    p.add_argument("--only-order-id")
     args=p.parse_args()
     if not 1<=args.batch<=200 or not 1<=args.workers<=4 or not 1<=args.query_burst<=3:
         raise ValueError("SCOUT_INVALID_BOUNDED_EXECUTION")
     output=run(args.factory_private,args.stage2_program,batch=args.batch,
                workers=args.workers,query_burst=args.query_burst,
-               expedite_gap_research=args.expedite_gap_research)
+               expedite_gap_research=args.expedite_gap_research,
+               only_order_id=args.only_order_id)
     for key,value in output.items():
         print("FACTORY_STAGE2_SCOUT_"+key.upper()+"="+str(value))
 
