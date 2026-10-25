@@ -72,10 +72,7 @@ jobs:
             /tmp/zm-r01-gse294406/GSE294406_FPKM_all_treatments.xlsx \
             --output /tmp/zm-r01-gse294406/GSE294406_sample_composition_QC.json
       - name: Generate descriptive three-way D x heat x CO2 interaction hypotheses (NOT DEG)
-        run: |
-          python research/manuscripts/ZM-R01/analysis/exploratory_three_way_fpkm_interaction.py \\
-            /tmp/zm-r01-gse294406/GSE294406_FPKM_all_treatments.xlsx \\
-            --output /tmp/zm-r01-gse294406/GSE294406_three_way_hypothesis_candidates.json
+        run: python research/manuscripts/ZM-R01/analysis/exploratory_three_way_fpkm_interaction.py /tmp/zm-r01-gse294406/GSE294406_FPKM_all_treatments.xlsx --output /tmp/zm-r01-gse294406/GSE294406_three_way_hypothesis_candidates.json
       - name: Preserve original data privately in Actions artifact (never commit large file)
         if: success()
         uses: actions/upload-artifact@v4
