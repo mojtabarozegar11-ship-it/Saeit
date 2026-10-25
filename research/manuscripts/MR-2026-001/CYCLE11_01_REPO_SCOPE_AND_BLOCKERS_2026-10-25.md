@@ -1,0 +1,5 @@
+# MR-2026-001 — Cycle 11 — repository state and change-control decision
+Date: 2026-10-25. GitHub connector read PR #1054 directly before this cycle: OPEN, DRAFT, not merged, 72 changed files and 76 commits, branch `research/mr-2026-001-novelty-audit`. PR #1045 and #1048 are CLOSED/MERGED.
+Evidence: https://github.com/mojtabarozegar11-ship-it/Saeit/pull/1054 ; https://github.com/mojtabarozegar11-ship-it/Saeit/pull/1045 ; https://github.com/mojtabarozegar11-ship-it/Saeit/pull/1048
+Novel actionable gap in the prior ten cycles: repeated candidate source notes do not constitute a frozen, fully exported bibliographic corpus or human screening. Do not use file/commit counts as proxies for scoping-review completion. Prior cycle 10 already analyzed Jamal (2023); do not re-extract it.
+Cycle 11 therefore prioritizes two distinct 2026 primary studies (Bonet and Bernhardt), explicit evidence classification, arithmetic reproducibility, and a prospective protocol amendment. Neither an author-approved scope nor final journal decision is recorded. No merge or live-site change authorized by this document.
