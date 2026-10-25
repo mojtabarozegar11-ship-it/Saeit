@@ -59,6 +59,16 @@ Eight original browser-only HTML tools are now deployed to **ten verified live p
 
 These are free educational utilities published on the live sites, not independent proof of successful checkout, new traffic, conversions or commercial results.
 
+## New independent buyer and research resources — 25 October 2026
+
+These original, publicly readable resources are intended to answer real customer and collaborator questions, not to imply social-media publication or sales.
+
+- **MojPlayWin — [Which digital product fits your goal?](docs/marketing/mojplaywin-digital-products-selection-guide-20261025.md)** compares the three live listings, their formats and prices checked on 25 October 2026, limitations, free alternatives and the described TRX checkout steps. [Browse the official store](https://mojplaywin.com/store/?utm_source=github&utm_medium=referral&utm_campaign=organic_guides_20261025&utm_content=buyer_guide).
+- **Mojtaba Roozegar — [Reproducible research and collaboration protocol](docs/marketing/mojtaba-roozegar-reproducible-research-protocol-20261025.md)** offers a versioned methodology, evidence-chain and scientific/commercial validation gates. [Public professional profile](https://mojplaywin.com/mojtaba.roozegar/resume/?utm_source=github&utm_medium=referral&utm_campaign=organic_guides_20261025&utm_content=research_protocol).
+- **Zomorod Melal — [راهنمای هزینه آب و انرژی مزرعه](https://github.com/mojtabarozegar11-ship-it/zomorodmelal-codex/blob/main/public-guides/rahnama-senario-ab-va-enerzhi-mazrae-20261025.md)** provides a worked hypothetical unit-economics and risk scenario. [ابزار رایگان اقتصاد مزرعه](https://zomorodmelal.ir/agriculture/free-tools/20261025/farm-break-even/?utm_source=github&utm_medium=referral&utm_campaign=organic_guides_20261025&utm_content=water_energy).
+
+No independent social account, verified purchase, traffic lift or sales conversion is asserted by this publication.
+
 ## Runtime safety
 
 The execution path is governed by capability, risk, owner-approval, execution-identity, retry-budget, and audit controls. Production-changing or other sensitive actions must pass the approval gate before execution.
