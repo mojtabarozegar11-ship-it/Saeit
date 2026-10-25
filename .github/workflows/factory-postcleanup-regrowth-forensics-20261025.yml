@@ -1,0 +1,66 @@
+name: Forensic read-only stage regeneration audit
+on:
+  pull_request:
+    paths:
+      - .github/workflows/factory-postcleanup-regrowth-forensics-20261025.yml
+permissions: {contents: read}
+jobs:
+  read-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Identify recently recreated incomplete WO artifacts
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/postpurge-regrowth"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 170s ssh -T -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes githubops@178.239.147.150 python3 - <<'PY'
+          import json,os,time,collections,re
+          from pathlib import Path
+          area=Path("/home/githubops/factory-runtime/private/autonomous-product-cycle/production-instructions")
+          if area.is_symlink() or not area.is_dir():raise SystemExit("AREA_UNSAFE")
+          now=time.time()
+          rows={}
+          for n in range(1,7):
+              stage=area/("stage-%02d"%n)
+              if stage.is_symlink() or not stage.is_dir():raise SystemExit("STAGE_UNSAFE")
+              totals=collections.Counter(); latest=[]
+              for base,dirs,names in os.walk(stage,followlinks=False):
+                  for name in names:
+                      p=Path(base)/name
+                      if p.is_symlink() or not p.is_file():continue
+                      m=re.search(r"WO-[0-9]{8}",str(p.relative_to(stage)))
+                      if not m:continue
+                      age=now-p.stat().st_mtime
+                      totals["files"]+=1;totals["bytes"]+=p.stat().st_size
+                      for minutes in (5,15,60):
+                          if age<=minutes*60:totals[str(minutes)+"m"]+=1
+                      if age<3600:
+                          latest.append((age,p,m.group(0)))
+              latest.sort(key=lambda x:x[0])
+              sample=[]
+              for age,p,order in latest[:3]:
+                  r={"order":order,"relative":str(p.relative_to(stage))[:130],"minutes_ago":round(age/60,2),"bytes":p.stat().st_size}
+                  if p.suffix==".json" and p.stat().st_size<100000:
+                      try:
+                          x=json.loads(p.read_text())
+                          if isinstance(x,dict):
+                              r["keys"]=sorted(x)[:18]
+                              r["schema"]=x.get("schema")
+                              r["stage"]=x.get("stage")
+                      except Exception:pass
+                  sample.append(r)
+              rows[stage.name]={"totals":dict(totals),"newest":sample}
+          print("FACTORY_POSTPURGE_REGROWTH="+json.dumps({"stages":rows,"proof_only":True},sort_keys=True))
+          PY
+          rm -rf "$d"
