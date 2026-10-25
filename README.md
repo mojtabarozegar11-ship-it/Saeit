@@ -124,3 +124,14 @@ The repository includes automated Django checks, migration consistency checks, t
 ## Deployment boundary
 
 GitHub is the development/source-of-truth stage. cPanel/Passenger deployment is a separate production stage and must be validated independently; historical deployment commits are not treated as proof of current server health.
+
+
+## New buyer, game-publishing and scientific resources — 25 October 2026
+
+The following four-step collection is **free public documentation in this GitHub repository**, not a claim of a new deployment to the live websites, verified store payments or a social-media post. Pricing is intentionally omitted because the live product pages could not be independently rechecked in this publication cycle.
+
+- **Game developers:** [Commercial mobile-game release gatebook](docs/marketing/mobile-game-commercial-release-gates-20261025.md) — a practical GO/NO-GO matrix for reproducible builds, gameplay, privacy, payments, accessibility, rights and rollback. [Free browser QA tool](https://mojplaywin.com/mpw-free-tools/20261025/browser-game-qa/?utm_source=github&utm_medium=resource&utm_campaign=game_release_20261025&utm_content=readme).
+- **Digital buyers:** [Digital-download buyer resolution playbook](docs/marketing/digital-download-buyer-resolution-playbook-20261025.md) — invoice, transaction and entitlement evidence, privacy-safe support and dispute diagnosis. [Official storefront](https://mojplaywin.com/store/?utm_source=github&utm_medium=resource&utm_campaign=buyer_help_20261025&utm_content=readme).
+- **Research collaborators:** [Agricultural field-trial preregistration template](docs/marketing/agricultural-field-trial-preregistration-template-20261025.md) — experimental unit, randomization, outcomes, statistical plan, integrity and amendments. [Scientific profile](https://mojplaywin.com/mojtaba.roozegar/resume/?utm_source=github&utm_medium=research&utm_campaign=field_trial_20261025&utm_content=readme).
+
+The links are source-attributed for measurement if analytics are configured. No click, sale, live checkout or social engagement is asserted.
