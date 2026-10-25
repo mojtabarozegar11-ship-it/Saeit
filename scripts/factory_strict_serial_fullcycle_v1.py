@@ -290,7 +290,12 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
         if not certified and problem is None:
             for stage in STAGES:
                 label = stage[0]
-                if hold and label != "primary_source":
+                # A primary-source acquisition can download new files too.
+                # Recheck before EVERY stage, not just once at tick start: a
+                # prior worker may consume the last free bytes in this tick.
+                if disk_usage(root).free < RESERVE:
+                    hold = True
+                if hold:
                     results[label] = "STORAGE_RESERVE_HOLD"
                     continue
                 remaining = budget - (monotonic() - began)
