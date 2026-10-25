@@ -5,6 +5,14 @@ Production-oriented Django foundation for the research, knowledge, data, agent o
 Repository scope: this project only.
 
 
+## Public press and collaboration reference — 25 October 2026
+
+Verified, shareable factual introductions (no invented audience or sales claims):
+- [MojPlayWin — English media factsheet](docs/marketing/press/mojplaywin-media-factsheet-20261025.md) · three live-listed digital products, prices verified on 25 October, educational resources, image-use caveats and the official press contact.
+- [Mojtaba Roozegar — independent scientific and professional factsheet](docs/marketing/press/mojtaba-roozegar-research-factsheet-20261025.md) · transparent publication/submission evidence status and research collaboration scope.
+
+Both are public GitHub documents, **not social-network posts** or newly deployed website pages. They link to live official destinations with distinct referral parameters; click and conversion data have not been independently observed.
+
 ## Official public websites
 
 These are external public-facing websites associated with the broader work; their availability, commercial checkout and deployments are verified separately from this source repository.
