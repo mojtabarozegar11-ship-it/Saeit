@@ -301,7 +301,7 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
         if not certified and not blocked:
             blocked = ["independent_scientific_review_or_authentic_rework"]
         atomic(state, {"schema":SCHEMA, "active_order":next_order,
-                       "index":next_index, "ticks":0 if certified else ticks + 1,
+                       "index":next_index, "ticks":0,  # reset per-order tick counter on rotation
                        "all_complete":all_complete,
                        "last_order":order, "last_order_certified":certified,
                        "last_decision":decision, "last_blockers":blocked,
