@@ -148,6 +148,55 @@ jobs:
               report["deleted"]=False
               print("SANDBOX_AUDIT="+json.dumps(report,sort_keys=True))
           PY
+      - name: Attribute sandbox disk usage to exact generated and source children
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 185s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import os, json, subprocess, re
+          from pathlib import Path
+          root=Path("/home/zomorod2/Saeit-staging")
+          if Path.home()!=Path("/home/zomorod2") or root.is_symlink() or not root.is_dir():
+              raise SystemExit("INVALID_ACCOUNT_OR_ROOT")
+          for name in ("moj-commerce-v10-sandbox","moj-commerce-v12-sandbox"):
+              p=root/name
+              if p.is_symlink() or not p.is_dir():raise SystemExit("INVALID_TARGET")
+              children=[]
+              for child in list(p.iterdir())[:180]:
+                  if child.is_symlink():
+                      typ="symlink";size=0
+                  elif child.is_dir():
+                      typ="directory"
+                      try:
+                          q=subprocess.run(["du","-sxB1","--",str(child)],capture_output=True,text=True,timeout=35)
+                          size=int(q.stdout.split()[0]) if q.returncode==0 else None
+                      except Exception:size=None
+                  elif child.is_file():
+                      typ="file";size=child.stat().st_size
+                  else:continue
+                  safe=child.name if re.fullmatch(r"[A-Za-z0-9._-]{1,60}",child.name) else "(nonportable-name)"
+                  children.append({"child":safe,"type":typ,"bytes":size})
+              children.sort(key=lambda x:x["bytes"] or 0,reverse=True)
+              print("SANDBOX_CHILD_USAGE="+json.dumps({"sandbox":name,"top":children[:40],"child_count_sampled":len(children)},sort_keys=True))
+              observed_fds=0
+              observed_exes=0
+              for proc in Path("/proc").iterdir():
+                  if not proc.name.isdigit():continue
+                  try:
+                      exe=os.readlink(proc/"exe")
+                      if exe.startswith(str(p)+"/"):observed_exes+=1
+                  except OSError:pass
+                  try:
+                      fd=proc/"fd"
+                      for entry in fd.iterdir():
+                          try:
+                              target=os.readlink(entry)
+                              if target.startswith(str(p)+"/"):observed_fds+=1
+                          except OSError:continue
+                  except OSError:continue
+              print("SANDBOX_PROCESS_REFS="+json.dumps({"sandbox":name,"open_fds":observed_fds,"executables":observed_exes}))
+          PY
       - name: Remove runner SSH identities
         if: always()
         shell: bash
