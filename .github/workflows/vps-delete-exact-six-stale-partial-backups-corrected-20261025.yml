@@ -1,0 +1,97 @@
+name: VPS exact six abandoned encrypted-partial cleanup single execution
+on:
+  pull_request:
+    types: [opened]
+    paths:
+      - .github/workflows/vps-delete-exact-six-stale-partial-backups-corrected-20261025.yml
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Fail-closed exact six partial archive cleanup without site changes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/vps-incomplete-backup-cleanup"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 550s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          import json,os,stat,subprocess,shutil,time
+          home=Path('/home/githubops')
+          root=home/'.private-mojplaywin-offhost-backups'
+          expected={
+          'mojplaywin_20261017_files.gcm.partial':0,
+          'mojplaywin_20261017_files_gpgv2.gpg.partial':90789440,
+          'mojplaywin_20261017_mysql.gcm.partial':0,
+          'mojplaywin_20261017_mysql_gpgv2.gpg.partial':62395638,
+          'mojplaywin_20261021T154105Z_4b82af34ea50d036_mysql_gpgv2.gpg.partial':432943049,
+          'mojplaywin_20261021T170529Z_ecbf041c6011f3a3_mysql_gpgv2.gpg.partial':505726685
+          }
+          if os.geteuid()==0 or os.environ.get('USER')!='githubops':
+              raise SystemExit('UNSAFE_LOGIN_IDENTITY')
+          if root.is_symlink() or not root.is_dir() or str(root.resolve())!=str(root):
+              raise SystemExit('UNSAFE_BACKUP_ROOT')
+          files=list(root.iterdir())
+          if len(files)!=18 or any(p.is_symlink() or not p.is_file() for p in files):
+              raise SystemExit('UNEXPECTED_BACKUP_TOPOLOGY')
+          partial=[p for p in files if p.name.endswith('.partial')]
+          complete=[p for p in files if p.name.endswith('.gpg')]
+          manifest=[p for p in files if p.name.endswith('.manifest.json')]
+          if set(p.name for p in partial)!=set(expected) or len(complete)!=6 or len(manifest)!=6:
+              raise SystemExit('UNEXPECTED_PARTIAL_OR_COMPLETE_FILE_SET')
+          safety=[]
+          for p in complete:
+              m=root/(p.name[:-4]+'.manifest.json')
+              if not m.is_file() or m.is_symlink() or p.is_symlink():
+                  raise SystemExit('MISSING_OR_UNSAFE_COMPLETED_MANIFEST')
+              d=json.loads(m.read_text())
+              if not (d.get('ciphertext_roundtrip_integrity_verified') is True and d.get('source_completion_footer_verified') is True):
+                  raise SystemExit('COMPLETED_BACKUP_INTEGRITY_NOT_VERIFIED')
+              safety.append(p)
+          st_before={}
+          for p in partial:
+              st=p.lstat()
+              if not stat.S_ISREG(st.st_mode) or st.st_nlink!=1 or st.st_uid!=os.geteuid() or st.st_size!=expected[p.name]:
+                  raise SystemExit('PARTIAL_METADATA_CHANGED')
+              if time.time()-st.st_mtime < 72*3600:
+                  raise SystemExit('PARTIAL_NOT_STALE')
+              category='files' if 'files' in p.name else 'mysql' if 'mysql' in p.name else None
+              if not category or not any(('_'+category+'_') in x.name and x.stat().st_mtime>=st.st_mtime for x in safety):
+                  raise SystemExit('NO_LATER_INTEGRITY_VERIFIED_FULL_BACKUP')
+              st_before[p.name]=(st.st_ino,st.st_size)
+          if not shutil.which('lsof'):
+              raise SystemExit('OPEN_HANDLE_CHECK_UNAVAILABLE')
+          chk=subprocess.run(['lsof','-nP','--']+[str(p) for p in partial],capture_output=True,text=True,timeout=45)
+          if chk.returncode!=1 or chk.stdout.strip():
+              raise SystemExit('PARTIAL_FILES_OPEN_OR_LOSOF_FAILED')
+          v=os.statvfs(str(root))
+          free_before=v.f_bavail*v.f_frsize
+          for p in partial:
+              if p.lstat().st_ino!=st_before[p.name][0] or p.lstat().st_size!=st_before[p.name][1]:
+                  raise SystemExit('CONCURRENT_PARTIAL_CHANGE')
+          for p in sorted(partial,key=lambda x:x.name):
+              p.unlink()
+          remaining=list(root.iterdir())
+          if len(remaining)!=12 or any(p.name.endswith('.partial') for p in remaining):
+              raise SystemExit('POST_DELETE_FILESET_UNEXPECTED')
+          for p in safety:
+              if not p.exists() or not (root/(p.name[:-4]+'.manifest.json')).is_file():
+                  raise SystemExit('PROTECTED_COMPLETE_BACKUP_MISSING')
+          v2=os.statvfs(str(root))
+          result={'deleted_count':len(expected),'deleted_bytes':sum(expected.values()),'deleted_files':sorted(expected),'free_bytes_before':free_before,'free_bytes_after':v2.f_bavail*v2.f_frsize,'remaining_complete_backups':len(safety),'remaining_manifests':len(manifest),'protected_backup_integrity_flags_checked':True,'root':str(root)}
+          print('VPS_OLD_PARTIAL_CLEANUP='+json.dumps(result,sort_keys=True),flush=True)
+
+          PY
+          echo VPS_EXACT_SIX_INCOMPLETE_BACKUPS_DELETED=PASS
