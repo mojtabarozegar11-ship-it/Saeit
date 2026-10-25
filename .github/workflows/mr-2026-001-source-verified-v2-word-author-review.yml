@@ -1,0 +1,99 @@
+name: MR-2026-001 source-verified V2 exact Word for human scientific review
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/mr-2026-001-source-verified-v2-word-author-review.yml
+      - research/manuscripts/MR-2026-001/MR-2026-001_SOURCE_VERIFIED_PERSPECTIVE_AUTHOR_REVIEW_V2_2026-10-25.md
+      - research/manuscripts/MR-2026-001/C25_INDEPENDENT_AI_SCIENTIFIC_REVIEW_OF_SOURCE_VERIFIED_V2_2026-10-25.md
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  produce-exact-version-v2-author-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Source-locked mechanical review (not scientific acceptance)
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re,hashlib
+          from pathlib import Path
+          p=Path('research/manuscripts/MR-2026-001/MR-2026-001_SOURCE_VERIFIED_PERSPECTIVE_AUTHOR_REVIEW_V2_2026-10-25.md')
+          t=p.read_text(encoding='utf-8')
+          a=t.split('## Abstract\n\n',1)[1].split('\n\n## ',1)[0]
+          refs=t.split('## References\n\n',1)[1]
+          doi=re.findall(r'https://doi.org/(10\.\S+)',refs)
+          nums=[int(x) for x in re.findall(r'^(\d+)\. ',refs,re.M)]
+          assert len(a.split())<250
+          assert len(doi)==12 and len(set(doi))==12
+          assert nums==list(range(1,13))
+          assert '6. **Counterfactual attribution:**' in t
+          assert '**Cross-cutting follow-up:**' in t
+          assert '45/72 = 62.5%' in t
+          assert '25% savings were independently metered' in t # explicit prohibited inference in table
+          assert 'not a validated' in t.lower()
+          assert '26+7+3+6+15+17' not in t
+          assert Path('research/manuscripts/MR-2026-001/C25_INDEPENDENT_AI_SCIENTIFIC_REVIEW_OF_SOURCE_VERIFIED_V2_2026-10-25.md').exists()
+          print('V2 mechanical gates passed; abstract words',len(a.split()),'DOIs',len(doi),'SHA256',hashlib.sha256(t.encode()).hexdigest())
+          PY
+      - name: Build exact V2 Word using no-cost hosted tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v pandoc >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq pandoc
+          fi
+          python -m pip install --disable-pip-version-check python-docx==1.2.0
+          mkdir -p /tmp/mr-v2-author-review
+          pandoc research/manuscripts/MR-2026-001/MR-2026-001_SOURCE_VERIFIED_PERSPECTIVE_AUTHOR_REVIEW_V2_2026-10-25.md \
+            --from=gfm --to=docx --standalone \
+            -o /tmp/mr-v2-author-review/MR-2026-001_EXACT_V2_AUTHOR_SCIENTIFIC_REVIEW.docx
+          python - <<'PY'
+          from docx import Document
+          from docx.shared import Inches,Pt
+          from pathlib import Path
+          p=Path('/tmp/mr-v2-author-review/MR-2026-001_EXACT_V2_AUTHOR_SCIENTIFIC_REVIEW.docx')
+          d=Document(p)
+          for sec in d.sections:
+              sec.top_margin=sec.bottom_margin=sec.left_margin=sec.right_margin=Inches(1)
+          for style in d.styles:
+              if style.type==1:
+                  style.font.name='Arial'
+                  style.font.size=Pt(12)
+          for para in d.paragraphs:
+              for run in para.runs:
+                  run.font.name='Arial'
+                  if not para.style.name.startswith('Heading'):
+                      run.font.size=Pt(12)
+          for tab in d.tables:
+              for row in tab.rows:
+                  for cell in row.cells:
+                      for para in cell.paragraphs:
+                          for run in para.runs:
+                              run.font.name='Arial'
+                              run.font.size=Pt(12)
+          d.core_properties.title='What Does an Irrigation Recommendation Actually Change?'
+          d.core_properties.author='Proposed human author approval pending'
+          d.save(p)
+          assert p.stat().st_size>20000 and len(d.tables)>=1
+          print('EXACT V2 AUTHOR REVIEW WORD',p.stat().st_size,'bytes')
+          PY
+          cp research/manuscripts/MR-2026-001/C25_INDEPENDENT_AI_SCIENTIFIC_REVIEW_OF_SOURCE_VERIFIED_V2_2026-10-25.md /tmp/mr-v2-author-review/
+          cp research/manuscripts/MR-2026-001/C27_AUTHOR_DECISION_DOSSIER_AND_VERIFIED_DISCOVER_AGRICULTURE_COST_GATE_2026-10-25.md /tmp/mr-v2-author-review/
+          printf '%s\n' 'AUTHOR SCIENTIFIC REVIEW ONLY. MAJOR REVISION. NO HUMAN AUTHOR APPROVAL. NO JOURNAL SUBMISSION OR APC COMMITMENT.' > /tmp/mr-v2-author-review/READ_ME_FIRST.txt
+      - name: Preserve exact V2 manuscript and honest author-gate dossier
+        uses: actions/upload-artifact@v4
+        with:
+          name: MR-2026-001-EXACT-V2-human-scientific-review-NOT-SUBMITTED
+          path: /tmp/mr-v2-author-review/
+          retention-days: 14
+          if-no-files-found: error
