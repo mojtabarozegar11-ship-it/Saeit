@@ -13,7 +13,7 @@ for(const [slug,expected] of [['grid-dominion',0],['lexicon-sprint',0],['metro-v
 }
 const best=section('let best=0;try{','function text(');
 for(const [stored,want] of [['Infinity',0],['-4',0],['42',42]]){
- const actual=vm.runInNewContext(best+'best',{localStorage:{getItem(){return stored}}});
+ const actual=vm.runInNewContext("const storageKey='test';"+best+'best',{localStorage:{getItem(){return stored}}});
  assert.equal(actual,want,'corrupt ten-lab best must be sanitized');
 }
 const metro=section('function metro(){','function cargo(){');
