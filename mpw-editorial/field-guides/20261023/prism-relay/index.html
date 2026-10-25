@@ -40,7 +40,20 @@ function trace(p,config=p.tiles){
  }
  return {won,points,hit,iterations};
 }
-function load(){try{const d=JSON.parse(localStorage.getItem(KEY)||'null');if(!d||d.version!==1)return;unlocked=Math.max(1,Math.min(MAX,Number.isInteger(d.unlocked)?d.unlocked:1));best=(d.best&&typeof d.best==='object')?d.best:{};level=unlocked}catch(e){}}
+function cleanProgress(raw){
+ const fallback={unlocked:1,best:Object.create(null)};
+ if(!raw||typeof raw!=='object'||Array.isArray(raw)||raw.version!==1)return fallback;
+ const maxLevel=Number.isInteger(raw.unlocked)?Math.max(1,Math.min(MAX,raw.unlocked)):1;
+ const scores=Object.create(null);
+ if(raw.best&&typeof raw.best==='object'&&!Array.isArray(raw.best)){
+  for(const [key,value] of Object.entries(raw.best)){
+   const k=Number(key);
+   if(String(k)===key&&Number.isInteger(k)&&k>=1&&k<=maxLevel&&Number.isInteger(value)&&value>=1&&value<=3)scores[key]=value;
+  }
+ }
+ return {unlocked:maxLevel,best:scores};
+}
+function load(){try{const p=cleanProgress(JSON.parse(localStorage.getItem(KEY)||'null'));unlocked=p.unlocked;best=p.best;level=unlocked}catch(e){unlocked=1;best=Object.create(null);level=1}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify({version:1,unlocked,best}))}catch(e){$('status').textContent='Progress could not be saved in this browser. You can continue playing.'}}
 function tone(freq){if(!sound)return;try{audio=audio||new (window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')audio.resume();let o=audio.createOscillator(),g=audio.createGain(),t=audio.currentTime;o.frequency.value=freq;o.type='sine';g.gain.setValueAtTime(.05,t);g.gain.exponentialRampToValueAtTime(.001,t+.12);o.connect(g);g.connect(audio.destination);o.start(t);o.stop(t+.13)}catch(e){sound=false;$('sound').textContent='♫ Sound unavailable'}}
 function solutionConfig(p){const m={};Object.keys(p.tiles).forEach(k=>m[k]={...p.tiles[k]});for(const k of Object.keys(p.solution))m[k].slash=p.solution[k];return m}
@@ -73,7 +86,11 @@ function selftest(){
   seen.add(p.start+':'+p.goal+':'+p.path.join(':'));
  }
  let first=produce(12),t=first.path[0],before=first.tiles[t].slash;first.tiles[t].slash=!before;if(first.tiles[t].slash===before)errors.push('turn');
- if(errors.length)throw Error(errors.slice(0,5).join(','));return 'PRISM_RELAY_FUNCTIONAL_TEST_PASS '+MAX+' solved seeds, '+seen.size+' route signatures, rotation and scramble checked'
+ const cleaned=cleanProgress({version:1,unlocked:2,best:{'1':3,'2':999,'150':3}});
+  if(cleaned.unlocked!==2||cleaned.best['1']!==3||Object.keys(cleaned.best).length!==1)errors.push('corrupt-progress');
+  if(cleanProgress({version:1,unlocked:9999,best:[]}).unlocked!==MAX)errors.push('bounded-progress');
+  if(cleanProgress({version:0,unlocked:100,best:{'1':3}}).unlocked!==1)errors.push('version-gate');
+  if(errors.length)throw Error(errors.slice(0,5).join(','));return 'PRISM_RELAY_FUNCTIONAL_TEST_PASS '+MAX+' solved seeds, '+seen.size+' route signatures, rotation and scramble checked'
 }
 load();start(level);
 if(new URLSearchParams(location.search).has('selftest')){const o=document.createElement('output');o.id='selftest';try{o.textContent=selftest();o.dataset.result='pass'}catch(e){o.textContent='PRISM_RELAY_FUNCTIONAL_TEST_FAIL '+e.message;o.dataset.result='fail'}document.body.append(o)}
