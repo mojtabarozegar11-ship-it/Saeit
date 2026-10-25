@@ -179,6 +179,11 @@ def call_model(doc, process, error, retry=0):
     chunks = []
     last_checked_bytes = 0
     start = time.monotonic()
+    last_progress = start
+    content_events = 0
+    reasoning_events = 0
+    stream_event_lines = 0
+    content_chars = 0
     token_word = re.compile(r"[A-Za-z][A-Za-z'-]*")
 
     def good_segment(body, minimum):
@@ -193,22 +198,41 @@ def call_model(doc, process, error, retry=0):
         if response.status != 200:
             raise RuntimeError("INFERENCE_HTTP_NOT_OK")
         for line in response:
+            now = time.monotonic()
             if error or process.poll() is not None:
                 raise RuntimeError("LOW_MEMORY_OR_MODEL_EXIT_ABORT")
-            if time.monotonic() - start > 775:
+            if now - last_progress >= 100:
+                record(result="private_original_prose_stream_progress",
+                       verified_words=doc["global_verified_draft_words"],
+                       next_chapter=doc["next_chapter"],
+                       next_part=doc["next_part"],
+                       stream_elapsed_seconds=int(now - start),
+                       stream_content_chars=content_chars,
+                       stream_content_events=content_events,
+                       stream_reasoning_events=reasoning_events,
+                       stream_event_lines=stream_event_lines)
+                last_progress = now
+            if now - start > 775:
                 break
             if not line.startswith(b"data: "):
                 continue
+            stream_event_lines += 1
             raw = line[6:].strip()
             if raw == b"[DONE]":
                 break
             try:
                 event = json.loads(raw)
-                delta = event.get("choices", [{}])[0].get("delta", {}).get("content", "")
-            except (ValueError, IndexError, KeyError, TypeError):
+                delta_obj = event.get("choices", [{}])[0].get("delta", {})
+                delta = delta_obj.get("content", "")
+                reasoning = delta_obj.get("reasoning_content", "")
+            except (ValueError, IndexError, KeyError, TypeError, AttributeError):
                 continue
+            if isinstance(reasoning, str) and reasoning:
+                reasoning_events += 1
             if not isinstance(delta, str) or not delta:
                 continue
+            content_events += 1
+            content_chars += len(delta)
             chunks.append(delta)
             if sum(map(len, chunks)) - last_checked_bytes < 120:
                 continue
