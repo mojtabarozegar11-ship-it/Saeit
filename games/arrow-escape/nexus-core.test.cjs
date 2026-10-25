@@ -62,4 +62,9 @@ assert.equal(core.generate(Infinity).level,1,'nonfinite Nexus level must be reje
 assert.equal(core.generate(NaN).level,1,'NaN Nexus level must be rejected');
 assert.equal(core.generate(-5).level,1,'negative Nexus level must normalize');
 assert.equal(core.generate(1e30).level,100000,'extreme Nexus level must be bounded');
+const invalidState=core.initialState(core.generate(1));
+assert.equal(core.transition(invalidState,null),null,'missing Nexus action must fail closed');
+assert.equal(core.transition(null,{type:'twist',step:1}),null,'missing Nexus state must fail closed');
+assert.equal(core.solve(core.generate(1),invalidState,Infinity),null,'unbounded solver budget must be rejected');
+assert.equal(core.solve(core.generate(1),invalidState,0),null,'zero solver budget must be rejected');
 console.log('NEXUS_WORM_CORE_QA=PASS',{levels:240,physicalBlockLevels,sourceLevels});
