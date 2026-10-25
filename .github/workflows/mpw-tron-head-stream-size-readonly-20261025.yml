@@ -160,6 +160,49 @@ jobs:
               result['blocked_class']=type(exc).__name__
           print('MPW_TRON_PUBLIC_TWO_OPERATOR_CANARY='+json.dumps(result,sort_keys=True))
           PY
+      - name: Verify live walletless reconciliation cron heartbeat and safe results
+        run: |
+          set -euo pipefail
+          timeout 55s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import json,os,re,subprocess,time
+          from pathlib import Path
+          home=Path('/home/zomorod2')
+          app=home/'Saeit-staging'
+          if app.is_symlink() or not app.is_dir():raise SystemExit('BAD_RUNTIME_ROOT')
+          p=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=10,check=False)
+          entries=[x for x in p.stdout.splitlines() if x.strip() and not x.lstrip().startswith('#')]
+          target=[x for x in entries if 'mpw_trx_commercial_reconcile_cron.py' in x]
+          result={'cron_readable':p.returncode==0,'walletless_script_entries':len(target),
+                  'recent_heartbeat':False,'last_mode':'UNOBSERVED','read_only':True}
+          files=[]
+          for entry in target:
+              for raw in re.findall(r'[^\s<>"|&;]+\.log',entry):
+                  candidate=Path(raw)
+                  if candidate.is_absolute() and str(candidate).startswith(str(home)+'/'):
+                      files.append(candidate)
+          private=home/'.private_mojplaywin_main_agents'
+          if private.is_dir() and not private.is_symlink():
+              files.extend(x for x in private.glob('*tron*reconcil*.log'))
+              files.extend(x for x in private.glob('*trx*reconcil*.log'))
+          now=time.time()
+          for path in files[:16]:
+              if path.is_symlink() or not path.is_file() or path.stat().st_size>8_000_000:continue
+              age=now-path.stat().st_mtime
+              if age>=-30 and age<=300:
+                  result['recent_heartbeat']=True
+              for line in path.read_text('utf8','replace').splitlines()[-80:]:
+                  marker='MPW_TRX_AUTORECONCILE='
+                  if marker not in line:continue
+                  try:
+                      v=json.JSONDecoder().raw_decode(line.split(marker,1)[1])[0]
+                  except Exception:continue
+                  if isinstance(v,dict):
+                      result['last_mode']=str(v.get('mode','UNKNOWN'))[:70]
+                      result['last_examined']=v.get('examined') if type(v.get('examined')) is int else None
+                      result['last_held']=v.get('held') if type(v.get('held')) is int else None
+                      result['last_settled']=v.get('settled') if type(v.get('settled')) is int else None
+          print('MPW_TRX_LIVE_CRON_HEARTBEAT='+json.dumps(result,sort_keys=True))
+          PY
       - name: Remove temporary SSH relay keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
