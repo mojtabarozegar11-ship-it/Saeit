@@ -88,7 +88,8 @@
     return path.length >= 2 ? { id, dir, path } : null;
   }
   function generate(level) {
-    const number = Math.max(1, Math.floor(Number(level) || 1));
+    const requested = Number(level);
+    const number = Number.isFinite(requested) ? Math.max(1, Math.min(1000000, Math.floor(requested))) : 1;
     const size = Math.min(11, 7 + Math.floor((number - 1) / 20));
     const target = Math.min(22, 6 + Math.floor((number - 1) * 0.62));
     const rng = seededRandom((Math.imul(number, 2654435761) ^ 0x6d2b79f5) >>> 0);
