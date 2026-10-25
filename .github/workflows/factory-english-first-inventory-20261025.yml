@@ -72,7 +72,7 @@ jobs:
             'strict_serial_active':sum('SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025' in x for x in active),
             'active_cron_count':len(active),
             'active_cron_markers':[x.rsplit('#',1)[-1].strip()[:90] if '#' in x else 'UNMARKED' for x in active],
-            'active_cron_script_names':[{'marker':x.rsplit('#',1)[-1].strip()[:82] if '#' in x else 'UNMARKED', 'programs':[pathlib.Path(z).name for z in re.findall(r'/[^ ]+\\.py',x)[:3]]} for x in active]},sort_keys=True))
+            'active_cron_script_names':[{'marker':x.rsplit('#',1)[-1].strip()[:82] if '#' in x else 'UNMARKED', 'programs':[pathlib.Path(z).name for z in re.findall(r'/[^ ]+[.]py',x)[:3]]} for x in active]},sort_keys=True))
           PY
 
 # Read-only scheduler inventory after clean; find potential incomplete artifact rewriters.
