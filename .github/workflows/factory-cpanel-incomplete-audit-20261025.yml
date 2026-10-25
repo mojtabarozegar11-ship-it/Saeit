@@ -35,27 +35,73 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
           timeout 240s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
-          import os,shutil,json,subprocess
+          import os,json,subprocess,collections,time,shutil
           from pathlib import Path
           h=Path("/home/zomorod2")
-          if h.is_symlink() or not h.is_dir() or Path.home()!=h:raise SystemExit("CPANEL_HOME_UNSAFE")
-          def sz(p):
-              if not p.exists() or p.is_symlink():return None
-              try:return int(subprocess.run(["du","-s","-B1","--",str(p)],capture_output=True,text=True,check=True,timeout=32).stdout.split()[0])
-              except Exception:return None
-          dirs=[p for p in h.iterdir() if p.is_dir() and not p.is_symlink()]
-          sizes={p.name:sz(p) for p in dirs}
-          top=sorted(sizes.items(),key=lambda a:-(a[1] if a[1] is not None else -1))[:27]
           staging=h/"Saeit-staging"
-          stag=[]
-          if staging.is_dir() and not staging.is_symlink():
-              for p in sorted(staging.iterdir())[:70]:
-                  if p.is_dir() and not p.is_symlink():stag.append({"name":p.name,"bytes":sz(p),"immediate":len(list(p.iterdir()))})
-          quota=subprocess.run(["uapi","--output=json","Quota","get_quota_info"],capture_output=True,text=True,timeout=22)
-          q={}
-          if quota.returncode==0:
-              x=json.loads(quota.stdout).get("result",{}).get("data",{})
-              q={k:v for k,v in x.items() if isinstance(v,(int,float,str,bool)) and any(z in k.lower() for z in ("quota","limit","used","byte","percent","mb"))}
-          print("CPANEL_INCOMPLETE_READ_ONLY="+json.dumps({"mount_free_gib":round(shutil.disk_usage(h).free/2**30,3),"home_top":top,"staging_families":stag,"quota":q,"paths_deleted":0,"storefronts_untouched":True},sort_keys=True))
+          if h.is_symlink() or not h.is_dir() or Path.home()!=h or staging.is_symlink() or not staging.is_dir():raise SystemExit("STAGING_ROOT_UNSAFE")
+          def usage_batch(paths,limit=65):
+              paths=[p for p in paths if p.exists() and not p.is_symlink()][:limit]
+              if not paths:return {}
+              try:
+                  x=subprocess.run(["du","-s","-B1","--"]+[str(p) for p in paths],capture_output=True,text=True,timeout=95,check=True)
+                  return {Path(line.split("\t",1)[1]).name:int(line.split("\t",1)[0]) for line in x.stdout.splitlines() if "\t" in line}
+              except Exception:return {}
+          cr=subprocess.run(["crontab","-l"],text=True,capture_output=True,timeout=8)
+          cron="\n".join(l for l in cr.stdout.splitlines() if l.strip() and not l.lstrip().startswith("#"))
+          pr=subprocess.run(["uapi","--output=json","PassengerApps","list_applications"],capture_output=True,text=True,timeout=30)
+          if pr.returncode!=0:raise SystemExit("PASSENGER_LOOKUP_FAILED")
+          apps=json.dumps(json.loads(pr.stdout).get("result",{}).get("data",[]))
+          proc_links=[]
+          for x in Path("/proc").iterdir():
+              if not x.name.isdigit():continue
+              for what in ("cwd","exe"):
+                  try:proc_links.append(os.readlink(x/what))
+                  except OSError:pass
+          families=("admin-smoke","moj-commerce-v10-sandbox","moj-commerce-v12-sandbox","releases","var","v91_personnel_isolated","zomorod_json_admin_stage","tmp")
+          result={}
+          for name in families:
+              root=staging/name
+              if root.is_symlink():raise SystemExit("STAGING_SYMLINK")
+              if not root.is_dir():continue
+              children=[p for p in root.iterdir() if p.is_dir() and not p.is_symlink()]
+              sizes=usage_batch(children)
+              rows=[]
+              for p in children:
+                  target=str(p)
+                  rows.append({"name":p.name[:75],"du":sizes.get(p.name),"mtime_age_days":round((time.time()-p.stat().st_mtime)/86400,1),"cron_ref":target in cron or p.name in cron,"passenger_ref":target in apps or p.name in apps,"process_ref":any(s==target or s.startswith(target+"/") for s in proc_links)})
+              rows.sort(key=lambda x:-(x["du"] or 0))
+              result[name]={"total_children":len(children),"immediate_subfolders":rows[:24],"total_bytes":usage_batch([root]).get(name),"root_cron_ref":str(root) in cron,"root_passenger_ref":str(root) in apps,"root_process_ref":any(s==str(root) or s.startswith(str(root)+"/") for s in proc_links)}
+          backups=h/".backups"
+          backup_files=[]
+          if backups.is_dir() and not backups.is_symlink():
+              for p in backups.iterdir():
+                  if p.is_file() and not p.is_symlink():
+                      backup_files.append({"suffix":p.suffix.lower(),"bytes":p.stat().st_size,"days_old":round((time.time()-p.stat().st_mtime)/86400,1)})
+          backup_files.sort(key=lambda x:-x["bytes"])
+          from collections import Counter
+          roots=[staging/"admin-smoke"]
+          for family in ("moj-commerce-v10-sandbox","moj-commerce-v12-sandbox"):
+              parent=staging/family
+              for p in parent.iterdir():
+                  if p.is_dir() and not p.is_symlink() and p.name not in ("mc10-c3a540e57cb4","mc12-20874316936e"):
+                      roots.append(p)
+          detail=[]
+          for base in roots:
+              if base.is_symlink() or not base.is_dir():raise SystemExit("UNSAFE_CANDIDATE_PATH")
+              counter=Counter(); files=0; bytes_count=0; special=[]; max_bytes=0
+              for walk,dirs,ns in os.walk(base,followlinks=False):
+                  for name in dirs+ns:
+                      x=Path(walk)/name
+                      if x.is_symlink():special.append("symlink")
+                  for name in ns:
+                      p=Path(walk)/name
+                      if not p.is_file() or p.is_symlink():continue
+                      files+=1; bytes_count+=p.stat().st_size
+                      counter[p.suffix.lower() or "(none)"]+=1
+                      max_bytes=max(max_bytes,p.stat().st_size)
+              detail.append({"family":base.parent.name,"name":base.name,"files":files,"bytes":bytes_count,"types":counter.most_common(12),"special":special[:8],"max_file_bytes":max_bytes,"venv_present":(base/".venv").exists(),"cron_reference":str(base) in cron or base.name in cron,"passenger_reference":str(base) in apps or base.name in apps})
+          print("CPANEL_SMOKE_AND_UNUSED_SANDBOX_DETAILS="+json.dumps(detail,sort_keys=True))
+          print("CPANEL_DEEP_STAGING_READ_ONLY="+json.dumps({"families":result,"backup_biggest_types":backup_files[:12],"mount_free_gib":round(shutil.disk_usage(h).free/2**30,3),"deleted":0,"store_products_untouched":True},sort_keys=True))
           PY
           rm -rf "$d"
