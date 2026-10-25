@@ -46,7 +46,7 @@ def apply(run):
         print('GUIDE_SITEMAP_ALREADY_CORRECT_NO_CHANGE');return
     s=before.decode('utf8')
     if s.count('</urlset>')!=1:raise RuntimeError('UNEXPECTED_XML_END')
-    addition=''.join('  <url><loc>'+u+'</loc></url>\\n' for u in missing)
+    addition=''.join('  <url><loc>'+u+'</loc></url>\n' for u in missing)
     after=s.replace('</urlset>',addition+'</urlset>',1).encode('utf8')
     nextloc=[e.text for e in ET.fromstring(after).iter() if e.tag.endswith('loc')]
     if len(nextloc)!=len(locs)+len(missing) or any(nextloc.count(u)!=1 for u in URLS):
