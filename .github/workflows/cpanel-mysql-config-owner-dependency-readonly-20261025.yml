@@ -1,0 +1,95 @@
+name: cPanel MySQL 11GB application ownership scan READ ONLY
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - .github/workflows/cpanel-mysql-config-owner-dependency-readonly-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Find application config dependencies on reported giant MySQL database without reading customer rows
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 400s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,re,json,subprocess,hashlib
+          h=Path('/home/zomorod2')
+          if os.geteuid()==0 or Path.home()!=h or h.is_symlink():raise SystemExit('WRONG_ACCOUNT')
+          u=subprocess.run(['uapi','--output=json','Mysql','list_databases'],capture_output=True,text=True,timeout=30)
+          apps=subprocess.run(['uapi','--output=json','PassengerApps','list_applications'],capture_output=True,text=True,timeout=30)
+          cron=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=15)
+          ps=subprocess.run(['ps','-u','zomorod2','-o','args='],capture_output=True,text=True,timeout=15)
+          records=[]
+          if u.returncode==0:
+           try:
+            rows=json.loads(u.stdout).get('result',{}).get('data',[])
+            if isinstance(rows,list):records=[r for r in rows if isinstance(r,dict)]
+           except Exception:pass
+          dbnames=[str(r.get('database','')) for r in records if r.get('database')]
+          roots=['Saeit/config','mojtaba_personal','public_html','mojplaywin.com','Saeit-staging/config','Saeit-staging/zomorod_json_admin_stage/config']
+          config_files=[]
+          considered=0
+          allowed={'settings.py','wp-config.php','configuration.php','database.php','db.php','database.yml','config.php','config.ini','config.json','.env','.env.local','.env.production','.my.cnf'}
+          for base in roots:
+           root=h/base
+           if root.is_symlink() or not root.is_dir():continue
+           for here,dirs,names in os.walk(str(root),followlinks=False):
+            dirs[:]=[n for n in dirs if n not in ('.git','.venv','node_modules','__pycache__','staticfiles','media','venv','models','backups')]
+            for nm in names:
+             if nm not in allowed and not nm.endswith(('.env','.db.ini')):continue
+             file=Path(here)/nm
+             if file.is_symlink() or not file.is_file() or file.stat().st_size>400000:continue
+             considered+=1
+             try:content=file.read_text(errors='replace')
+             except Exception:continue
+             mysql_present=bool(re.search(r'(?i)mysql|mariadb|DATABASE_URL|DB_HOST|DB_PORT',content))
+             dbname_present=any(x and x in content for x in dbnames)
+             if mysql_present or dbname_present:
+              config_files.append({'root':base,'path_relative':str(file.relative_to(h))[:180],'mysql_config_mentioned':mysql_present,'reported_db_name_mentioned':dbname_present,'file_bytes':file.stat().st_size})
+          for rel in ['.env','.my.cnf','Saeit/.env','Saeit-staging/.env','mojtaba_personal/.env','public_html/wp-config.php']:
+           f=h/rel
+           if f.is_file() and not f.is_symlink() and f.stat().st_size<400000:
+            if not any(z['path_relative']==rel for z in config_files):
+             considered+=1
+             try:
+              content=f.read_text(errors='replace')
+              config_files.append({'root':rel.split('/')[0],'path_relative':rel,'mysql_config_mentioned':bool(re.search(r'(?i)mysql|mariadb|DATABASE_URL|DB_HOST|DB_PORT',content)),'reported_db_name_mentioned':any(x and x in content for x in dbnames),'file_bytes':f.stat().st_size})
+             except Exception:pass
+          a={}
+          if apps.returncode==0:
+           try:
+            result=json.loads(apps.stdout).get('result',{}).get('data',{})
+            if isinstance(result,dict):a={'app_keys':list(result.keys())[:20],'app_count':len(result)}
+            else:a={'app_data_type':type(result).__name__}
+           except Exception:pass
+          dbmeta=[{'record_fields':sorted(list(r.keys()))[:20],'user_count':len(r.get('users',[])) if isinstance(r.get('users'),list) else None,'disk_usage_bytes':r.get('disk_usage')} for r in records]
+          refs=cron.stdout+'\n'+ps.stdout
+          print('CPANEL_MYSQL_APP_OWNER_AUDIT='+json.dumps({'databases':dbmeta,'config_files_considered':considered,'matching_configs':config_files[:70],'matching_config_count':len(config_files),'active_process_or_cron_mentions_db_name':any(x in refs for x in dbnames if x),'active_process_or_cron_mentions_mysql':bool(re.search(r'(?i)mysql|mariadb',refs)),'passenger':a,'mutations':0},sort_keys=True),flush=True)
+
+          PY
+          echo CPANEL_MYSQL_APP_OWNER_READONLY=PASS
