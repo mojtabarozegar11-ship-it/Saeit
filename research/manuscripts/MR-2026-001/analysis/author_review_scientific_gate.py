@@ -46,8 +46,8 @@ def run():
       "supplementary_search_log_explicitly_non_systematic":"not a retroactively reconstructed log" in log.lower() and
          "not a systematic" in log.lower(),
       "source_arithmetic_74_vs_72_retained_as_uncertainty":"26+7+3+6+15+17=74" in decision and
-         "45+13+14=72" in decision,
-      "no_first_ever_or_guaranteed_publication":not re.search(r"\b(first-ever|first ever|guaranteed acceptance|ready for immediate submission)\b",a,re.I),
+         "45+13+14=72" in log and all(str(x) in decision for x in (45,13,14,72)),
+      "no_unqualified_first_ever_or_guaranteed_publication":(not re.search(r"\\b(guaranteed acceptance|ready for immediate submission)\\b",a,re.I) and all(re.search(r"\\b(not|no)\\s+(?:a\\s+)?$",a[max(0,m.start()-30):m.start()],re.I) for m in re.finditer(r"\\bfirst[- ]ever\\b",a,re.I))),
       "journal_author_fields_explicitly_unverified":"[AUTHOR" in a and
          "NOT" in decision and "MAJOR REVISION" in decision,
     }
