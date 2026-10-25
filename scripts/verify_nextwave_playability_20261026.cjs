@@ -29,7 +29,7 @@ assert.equal(finishes[0].won,false);
 function checkPostFinish(start,end,game,rand){
  const source=section(start,end),input={value:'1234',addEventListener(){},parentElement:{remove(){}},focus(){}};
  vm.runInNewContext('let level=1,playing=false,paused=false;'+source+'const scene='+game+'();scene.act("action")',{
-  mountInput:()=>input,rnd,reward:()=>{throw Error('post-finish score changed')},notify:()=>{},finish:()=>{}
+  mountInput:()=>input,rnd:rand,reward:()=>{throw Error('post-finish score changed')},notify:()=>{},finish:()=>{}
  });
  assert.equal(input.value,'1234',game+' must not mutate input after game end');
 }
