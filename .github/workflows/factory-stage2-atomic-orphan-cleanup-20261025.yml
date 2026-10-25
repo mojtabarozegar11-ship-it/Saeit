@@ -1,0 +1,47 @@
+name: Remove only expired Stage1 atomic temp blocking private Stage2
+on:
+  pull_request:
+    paths:
+      - scripts/factory_cleanup_stale_stage1_atomic_orphans_20261025.py
+      - .github/workflows/factory-stage2-atomic-orphan-cleanup-20261025.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_cleanup_stale_stage1_atomic_orphans_20261025.py
+      - .github/workflows/factory-stage2-atomic-orphan-cleanup-20261025.yml
+permissions: {contents: read}
+concurrency:
+  group: saeit-factory-stage2-single-order-orphan-purge-20261025
+  cancel-in-progress: false
+jobs:
+  cleanup-only-old-atomic-orphans:
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-remove-stale-stage1-atomic-orphans-20261025]'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Syntax check production-scope cleanup
+        run: |
+          set -euo pipefail
+          python3 -B -c 'import ast,pathlib;ast.parse(pathlib.Path("scripts/factory_cleanup_stale_stage1_atomic_orphans_20261025.py").read_text())'
+      - name: Confined VPS stale atomic leftovers (PR read-only)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/only-stage2-atomic-orphans"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          command=(PYTHONDONTWRITEBYTECODE=1 python3 -)
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then command+=(--apply); else echo STALE_ATOMIC_ORPHANS=DRY_RUN; fi
+          timeout 180s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 "${command[*]}" < scripts/factory_cleanup_stale_stage1_atomic_orphans_20261025.py
+          echo STORE_3_PAID_PRODUCTS_AND_WORK_ORDER_QUEUE=NOT_TOUCHED
