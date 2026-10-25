@@ -226,6 +226,10 @@ def accept(chunks, body):
         "target_words": REQUIRED_CHAPTERS * TARGET_PER_CHAPTER,
         "original_prose_independent_review": False, "quality1000_approved": False,
         "commercial_release": False, "public_distribution_allowed": False,
+        "inference_backend": "offline Qwen/Qwen3-4B-GGUF Q4_K_M on free public GitHub runner",
+        "model_license": "Apache-2.0",
+        "model_source": "https://huggingface.co/Qwen/Qwen3-4B-GGUF",
+        "model_is_not_independent_scientific_reviewer": True,
         "updated_utc": datetime.datetime.now(datetime.timezone.utc).isoformat()
     }
     save_atomic(PRIVATE / "status.json", (json.dumps(status, sort_keys=True) + "\n").encode())
