@@ -1,0 +1,107 @@
+name: Crown TRON fail-closed checkout checks
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "services/mpw_crown_**"
+      - "services/mpw_trx_walletless_core.py"
+      - "services/mpw_tron_independent_solidified_rpc.py"
+      - "tests/test_crown_tron_mainnet_adapter.py"
+      - "tests/test_crown_trx_discovery.py"
+      - "core/crown_**"
+      - "config/urls.py"
+      - "config/settings.py"
+      - ".github/workflows/crown-tron-mainnet-preflight.yml"
+permissions:
+  contents: read
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "ci-only-crown-nonproduction-key"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+      CROWN_STORE_ENABLED: "false"
+      CROWN_PAYMENT_GATEWAY_APPROVED: "false"
+      CROWN_TRX_PAID_END_TO_END_ACCEPTED: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r requirements.txt
+      - name: Assert no production checkout flags
+        run: |
+          python - <<'PY'
+          from config import settings
+          assert settings.CROWN_STORE_ENABLED is False
+          assert settings.CROWN_PAYMENT_GATEWAY_APPROVED is False
+          assert settings.CROWN_TRX_PAID_END_TO_END_ACCEPTED is False
+          print("CROWN_PUBLIC_PAYMENT_GATE=CLOSED")
+          PY
+      - name: Tests (no external chain or wallet calls)
+        run: |
+          python -m pytest -q \
+            tests/test_crown_tron_mainnet_adapter.py \
+            tests/test_crown_trx_discovery.py \
+            tests/test_crown_checkout.py \
+            tests/test_crown_tron_receipts.py
+
+  mariadb-atomic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: ci-only-crown-root
+          MARIADB_DATABASE: crown_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=8
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings
+      DATABASE_URL: mysql://root:ci-only-crown-root@127.0.0.1:3306/crown_ci
+      DEBUG: "true"
+      SECRET_KEY: "ci-only-crown-mariadb-key"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+      CROWN_STORE_ENABLED: "false"
+      CROWN_PAYMENT_GATEWAY_APPROVED: "false"
+      CROWN_TRX_PAID_END_TO_END_ACCEPTED: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python and MariaDB test driver
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq default-libmysqlclient-dev pkg-config
+          python -m pip install -r requirements.txt 'mysqlclient>=2.2.6,<3'
+      - name: Verify isolated MariaDB only
+        run: |
+          python - <<'PY'
+          from django.conf import settings
+          import django
+          django.setup()
+          from django.db import connection
+          assert connection.vendor == 'mysql'
+          assert connection.settings_dict['HOST'] == '127.0.0.1'
+          assert settings.CROWN_STORE_ENABLED is False
+          assert settings.CROWN_PAYMENT_GATEWAY_APPROVED is False
+          print('CROWN_ISOLATED_MARIADB=YES')
+          PY
+      - name: Actual SQL lock and atomic settlement contract
+        run: |
+          python -m pytest -q \
+            tests/test_crown_tron_mainnet_adapter.py \
+            tests/test_crown_trx_discovery.py
