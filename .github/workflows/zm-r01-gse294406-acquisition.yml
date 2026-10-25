@@ -1,0 +1,43 @@
+name: ZM-R01 GSE294406 data acquisition and provenance
+on:
+  push:
+    branches:
+      - research/mr-2026-001-novelty-audit
+    paths:
+      - .github/workflows/zm-r01-gse294406-acquisition.yml
+      - research/manuscripts/ZM-R01/GSE294406_24_SAMPLE_FACTORIZED_MANIFEST_2026-10-25.csv
+      - research/manuscripts/ZM-R01/analysis/fetch_and_audit_gse294406.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zm-r01-gse294406-research-data
+  cancel-in-progress: false
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install only required public XLSX reader
+        run: python -m pip install --disable-pip-version-check openpyxl==3.1.5
+      - name: Compile acquisition code
+        run: python -m py_compile research/manuscripts/ZM-R01/analysis/fetch_and_audit_gse294406.py
+      - name: Download GEO original workbook and produce source checksum
+        run: |
+          python research/manuscripts/ZM-R01/analysis/fetch_and_audit_gse294406.py \
+            --manifest research/manuscripts/ZM-R01/GSE294406_24_SAMPLE_FACTORIZED_MANIFEST_2026-10-25.csv \
+            --outdir /tmp/zm-r01-gse294406
+      - name: Preserve original data privately in Actions artifact (never commit large file)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZM-R01-GSE294406-source-workbook-and-audit
+          path: /tmp/zm-r01-gse294406/
+          if-no-files-found: error
+          retention-days: 14
