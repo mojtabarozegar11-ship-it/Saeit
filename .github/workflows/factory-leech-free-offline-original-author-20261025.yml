@@ -169,6 +169,23 @@ jobs:
               raise SystemExit("LEECH_SECTION_PLAN_MISSING")
           focus=plan[(int(assignment["part_number"])-1+retry)%len(plan)]
           prompt=(
+            "This is a complete professional VOCATIONAL TRAINING MANUAL for people establishing, "
+            "operating, auditing and commercially managing a LEGAL LEECH BREEDING FARM "
+            "(correct term: leech farm). The job and farm are the product, not an "
+            "encyclopaedia of leeches, an academic literature survey, a clinical manual, "
+            "or a general biology book. Teach the actual zero-to-operational leech farm "
+            "with farm-level decisions and documented workflows. "
+            "Every section must answer: what the FARM OPERATOR needs to do, why it matters, "
+            "what inputs and equipment are required, how to document the work, what can "
+            "go wrong, how to detect problems and when to seek veterinary/regulatory support. "
+            "Cover realistic facility feasibility, species verification and legal sourcing, "
+            "farm layout, water and enclosure systems, species-appropriate welfare, "
+            "biosecurity, controlled breeding and cocoon management, juvenile growth, "
+            "sustainable feed procurement with veterinary oversight, routine monitoring, "
+            "staff training, lawful handling and transport, waste management, traceability, "
+            "cost accounting, marketing and viable enterprise decisions over the whole book. "
+            "Treat all numerical thresholds and business figures as evidence-backed "
+            "or explicitly illustrative hypotheses, never fabricated facts. "
             "Write a NEW and substantively distinct continuation, not a recap. "
             "For THIS manuscript segment, concentrate on this specific planned section only: "
             +json.dumps(focus,ensure_ascii=False)+". "
@@ -194,7 +211,7 @@ jobs:
             +json.dumps(assignment,ensure_ascii=False)
           )
           payload={"model":"local-offline-qwen3","messages":[
-             {"role":"system","content":"You are an original English vocational-textbook author supervised by strict human-facing publishing gates. Create substantive new text; never invent sources. Write the answer only."},
+             {"role":"system","content":"You are writing a commercially usable, evidence-bound farm-operator training textbook on lawful leech farm establishment, breeding and management, not clinical treatment or general zoology. Every section must teach practical farm work. Create original substantive text; never invent evidence. Write the answer only."},
              {"role":"user","content":prompt}],
              "max_tokens":2400,"temperature":0.62,"top_p":0.88,
              "chat_template_kwargs":{"enable_thinking":False},"stream":False}
