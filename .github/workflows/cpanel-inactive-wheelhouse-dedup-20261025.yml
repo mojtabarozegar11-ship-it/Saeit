@@ -1,0 +1,173 @@
+name: cPanel inactive bundle unpacked wheel deduplication
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/cpanel-inactive-wheelhouse-dedup-20261025.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cpanel-inactive-wheelhouse-dedup-20261025
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Delete only verified wheelhouse copies matching retained compressed wheels
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 240s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import json,os,shutil,subprocess,tarfile,hashlib,stat,time
+          from pathlib import Path
+          h=Path("/home/zomorod2")
+          root=h/"Saeit-staging"
+          targets=(
+              ("moj-commerce-v10-sandbox","mc10-6880988d8026"),
+              ("moj-commerce-v10-sandbox","mc10-6f774717dc11"),
+              ("moj-commerce-v10-sandbox","mc10-76476c84ee63"),
+              ("moj-commerce-v10-sandbox","mc10-968992b02a2f"),
+              ("moj-commerce-v10-sandbox","mc10-c76b20c7c550"),
+              ("moj-commerce-v10-sandbox","mc10-fcc3aa05fc5d"),
+              ("moj-commerce-v12-sandbox","mc10-8b33ad50ceee"),
+              ("moj-commerce-v12-sandbox","mc12-8595498588a0"),
+              ("moj-commerce-v12-sandbox","mc12-ec28ed75f4d0"),
+          )
+          if Path.home()!=h or root.is_symlink() or not root.is_dir():raise SystemExit("ACCOUNT_ROOT_MISMATCH")
+          keeps=(root/"moj-commerce-v10-sandbox"/"mc10-c3a540e57cb4",
+                 root/"moj-commerce-v12-sandbox"/"mc12-20874316936e")
+          if not all((p/".venv").is_dir() and (p/"wheelhouse").is_dir() for p in keeps):
+              raise SystemExit("RETAINED_COMPLETE_ENVIRONMENTS_UNAVAILABLE")
+          procpaths=[]
+          for proc in Path("/proc").iterdir():
+              if not proc.name.isdigit():continue
+              for prop in ("cwd","exe"):
+                  try:procpaths.append(os.readlink(proc/prop))
+                  except OSError:pass
+              try:
+                  for fd in (proc/"fd").iterdir():
+                      try:procpaths.append(os.readlink(fd))
+                      except OSError:pass
+              except OSError:pass
+          cronjob=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=10)
+          cron=cronjob.stdout if cronjob.returncode==0 else ""
+          app=subprocess.run(["uapi","--output=json","PassengerApps","list_applications"],capture_output=True,text=True,timeout=20)
+          if app.returncode!=0:raise SystemExit("PASSENGER_PREFLIGHT_FAILED")
+          apps=json.dumps(json.loads(app.stdout).get("result",{}).get("data",[]))
+          def sha_stream(stream):
+              digest=hashlib.sha256()
+              size=0
+              for chunk in iter(lambda:stream.read(1024*1024),b""):
+                  digest.update(chunk);size+=len(chunk)
+              return (size,digest.hexdigest())
+          plans=[]
+          for parent,name in targets:
+              bundle=root/parent/name
+              wheelhouse=bundle/"wheelhouse"
+              zipped=bundle/"wheels.tar.gz"
+              for p in (bundle,wheelhouse):
+                  if not p.is_dir() or p.is_symlink() or p.resolve()!=p:raise SystemExit("UNSAFE_BUNDLE_PATH")
+              if (bundle/".venv").exists() or not (bundle/"source.tar.gz").is_file():
+                  raise SystemExit("BUNDLE_NOT_IN_EXPECTED_INACTIVE_STATE")
+              if not zipped.is_file() or zipped.is_symlink() or zipped.stat().st_size<1000000:
+                  raise SystemExit("MISSING_WHEEL_ARCHIVE")
+              if time.time()-bundle.stat().st_mtime<48*3600:
+                  raise SystemExit("BUNDLE_TOO_RECENT")
+              if name in cron or name in apps or any(x==str(wheelhouse) or x.startswith(str(wheelhouse)+"/") for x in procpaths):
+                  raise SystemExit("BUNDLE_HAS_LIVE_REFERENCE")
+              actual=[]
+              for base,dirs,names in os.walk(wheelhouse,followlinks=False):
+                  for d in dirs:
+                      if (Path(base)/d).is_symlink():raise SystemExit("WHEELHOUSE_SYMLINK")
+                  for f in names:
+                      item=Path(base)/f
+                      if item.is_symlink() or not item.is_file():raise SystemExit("WHEELHOUSE_UNEXPECTED_FILE")
+                      with item.open("rb") as stream:actual.append((f,)+sha_stream(stream))
+              archived=[]
+              with tarfile.open(zipped,"r:gz") as tar:
+                  for member in tar:
+                      if member.issym() or member.islnk():raise SystemExit("WHEEL_ARCHIVE_LINK")
+                      if member.isfile():
+                          stream=tar.extractfile(member)
+                          if stream is None:raise SystemExit("WHEEL_ARCHIVE_UNREADABLE")
+                          archived.append((Path(member.name).name,)+sha_stream(stream))
+              if len(actual)<1 or len(archived)!=len(actual) or sorted(actual)!=sorted(archived):
+                  raise SystemExit("WHEEL_ARCHIVE_CONTENT_MISMATCH")
+              d=subprocess.run(["du","-sxB1","--",str(wheelhouse)],capture_output=True,text=True,timeout=25,check=True)
+              size=int(d.stdout.split()[0])
+              if not 8*1024**2<=size<=40*1024**2:raise SystemExit("WHEELHOUSE_UNEXPECTED_SIZE")
+              plans.append((wheelhouse,size,len(actual)))
+          before=shutil.disk_usage(h).free
+          freed=0
+          for wheelhouse,size,count in plans:
+              shutil.rmtree(wheelhouse)
+              if wheelhouse.exists():raise SystemExit("INACTIVE_WHEELHOUSE_REMOVE_INCOMPLETE")
+              assert (wheelhouse.parent/"wheels.tar.gz").is_file()
+              assert (wheelhouse.parent/"source.tar.gz").is_file()
+              freed+=size
+              print("WHEELHOUSE_DEDUP="+json.dumps({"bundle":wheelhouse.parent.name,"bytes":size,"verified_files":count,"compressed_wheels_retained":True}))
+          print("WHEELHOUSE_DEDUP_TOTAL="+json.dumps({"count":len(plans),"measured_du_bytes":freed,"free_before":before,"free_after":shutil.disk_usage(h).free,"customer_data_modified":False,"retained_complete_environments":len(keeps)}))
+          PY
+      - name: Check live company and storefront pages following canonical redirects
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in "https://mojplaywin.com/" "https://mojplaywin.com/store/" "https://zomorodmelal.ir/" "https://zomorodmelal.ir/agents/"; do
+            code="$(curl --max-time 18 --max-redirs 3 -sSL -o /dev/null -w '%{http_code}' "$url" || true)"
+            echo "POST_WHEELHOUSE_DEDUP_HEALTH=$url:$code"
+            test "$code" = "200"
+          done
+      - name: Remove runner SSH identities
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
