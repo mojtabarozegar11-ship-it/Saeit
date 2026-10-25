@@ -89,3 +89,33 @@ jobs:
              'operations_area':stats(ops)
           },ensure_ascii=False,sort_keys=True))
           PY
+          timeout 170s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import json
+          home=Path('/home/githubops/factory-runtime/private/autonomous-product-cycle')
+          area=home/'production-instructions'
+          selected=['build-50','customer-packs','digital-products','product-lifecycle',
+              'production-warehouse','quality-excellence','quality-return-candidates',
+              'research-dossiers','research-rework','generated-product-recipes',
+              'generated-source-revisions','native-candidate-evidence']
+          for n in ['stage-01','stage-02','stage-03','stage-04','stage-05','stage-06']:
+              selected.append('production-instructions/'+n)
+          for name in selected:
+              p=home/name
+              if p.is_symlink() or not p.is_dir(): continue
+              ch=sorted(p.iterdir(),key=lambda x:x.name)
+              print('PRIVATE_FAMILY',json.dumps({'folder':name,'immediate_total':len(ch),'examples':[{'name':x.name,'kind':'symlink' if x.is_symlink() else 'dir' if x.is_dir() else 'file','children':len(list(x.iterdir())) if x.is_dir() and not x.is_symlink() and len(ch)<60 else None} for x in ch[:16]]}))
+          samples=[]
+          statuses=Counter()
+          for p in sorted((area/'orders').glob('*.json')):
+              if p.is_symlink() or not p.is_file(): continue
+              try:
+                  obj=json.loads(p.read_text())
+                  if not isinstance(obj,dict): continue
+                  statuses[str(obj.get('status','MISSING'))]+=1
+                  if len(samples)<8:
+                      samples.append({'file_prefix':p.name[:15], 'keys':sorted(obj.keys())[:30],'status':obj.get('status'),'type':obj.get('type'),'origin':obj.get('origin')})
+              except Exception: statuses['INVALID_JSON']+=1
+          print('ORDER_SCHEMAS',json.dumps({'total':sum(statuses.values()),'status_count':dict(statuses),'samples':samples}))
+          PY
