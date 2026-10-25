@@ -1,5 +1,5 @@
-# MR-2026-001 — viable sole-human-author route (OPTION; no manuscript-type conversion yet)
-Version: 2026-10-25-v1
+# MR-2026-001 — single-author critical narrative review route (APPROVED 2026-10-25)
+Version: 2026-10-25-v2, author decision addendum
 Status: **Methodological contingency proposal** for the case that the project has one genuine human researcher (Mojtaba Roozegar) plus an AI research assistant. Does **not** assert that a second human reviewer exists; does **not** alter the author-approved scientific scope; does **not** rename or submit the existing scoping-review draft.
 
 ## Why this option is necessary
@@ -41,3 +41,12 @@ The word 'selected' and source-selection criteria require a real, dated, author-
 **Awaiting explicit author choice:** A = maintain the current formally dual-human-screened Scoping Review, B = start a distinct sole-human-author Critical Narrative Review draft (preserve the original draft and all data). This file is **NOT** the author's confirmation of changing article type, and this option does not relieve the author from genuine intellectual accountability.
 
 Submission status: NOT SUBMITTED.
+
+
+## Author's subsequent binding decision, 2026-10-25 — SUPERSEDES OPTIONAL STATUS ABOVE
+
+In a later explicit project instruction, the author answered **YES** to conversion of MR-2026-001 into a single-human-author critical narrative review, and additionally required **single-human-authored papers across the entire research programme**. Therefore **Path B IS APPROVED and active for MR-2026-001**. Path A remains as an informational ethical alternative only if the owner independently elects to revisit that future decision. The authoritative programme-level decision is `../SOLO_AUTHORSHIP_POLICY_ALL_PROJECTS_2026-10-25.md`.
+
+The unamended historical 'awaiting explicit author choice' wording and preceding discussion describe what was true before the author decision. Do **not** treat them as active blockers. Work on the new narrative-review manuscript rather than waiting for a human reviewer who would be used solely to satisfy a scoping-review label.
+
+**Unchanged safeguards:** the author's actual substantive intellectual contribution must be demonstrable; AI does not become an author or human screener; source and text verification, journal-specific narrative review fit, attribution, integrity declarations and final version/journal/APC authorization are still pending. Status: **NOT SUBMITTED**.
