@@ -36,5 +36,9 @@ for (const level of [...Array(200)].map((_, index) => index + 1).concat([500, 99
   assert.equal(remaining.length, 0);
   tested++;
 }
+assert.equal(game.generate(Infinity).level,1,'infinite level must be rejected safely');
+assert.equal(game.generate(NaN).level,1,'NaN level must be rejected safely');
+assert.equal(game.generate(-20).level,1,'negative level must normalize to first level');
+assert.equal(game.generate(1e30).level,1000000,'extreme level must be bounded');
 assert.ok(withBlockers > 10, 'levels contain no challenging dependencies');
 console.log('ARROW_SOLVABLE_LEVELS=PASS', { tested, withBlockers, min, max });
