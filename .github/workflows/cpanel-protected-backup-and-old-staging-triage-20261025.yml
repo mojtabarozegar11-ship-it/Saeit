@@ -1,0 +1,109 @@
+name: cPanel heavy backup and obsolete staging candidate triage READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/cpanel-protected-backup-and-old-staging-triage-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Audit deep backup trees, staging snapshots, Passenger and cron references
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 475s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,json,time,subprocess,collections
+          h=Path('/home/zomorod2')
+          if os.geteuid()==0 or h.is_symlink() or Path.home()!=h:raise SystemExit('ACCOUNT_ROOT_UNSAFE')
+          def du(root,depth=1):
+              if not root.is_dir() or root.is_symlink():return []
+              try:
+                  q=subprocess.run(['du','-x','-B1','--max-depth='+str(depth),str(root)],capture_output=True,text=True,timeout=105)
+                  out=[]
+                  for line in q.stdout.splitlines():
+                      if '\t' not in line:continue
+                      a,b=line.split('\t',1)
+                      try:n=int(a)
+                      except ValueError:continue
+                      p=Path(b)
+                      if p==root:continue
+                      out.append({'path':str(p.relative_to(h))[:150],'bytes':n})
+                  return sorted(out,key=lambda d:-d['bytes'])[:26]
+              except Exception:return [{'error':'scan_unavailable'}]
+          roots=['.backups','Saeit','Saeit-staging/admin-smoke','Saeit-staging/releases',
+          'Saeit-staging/moj-commerce-v10-sandbox','Saeit-staging/moj-commerce-v12-sandbox',
+          'virtualenv','.mpw-proof-backups','.mpw-private-db-backups','mojtaba_personal']
+          deep={x:du(h/x) for x in roots}
+          cr=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=12)
+          cron=cr.stdout if cr.returncode==0 else ''
+          ps=subprocess.run(['ps','-u','zomorod2','-o','args='],capture_output=True,text=True,timeout=12)
+          proc=ps.stdout if ps.returncode==0 else ''
+          api=subprocess.run(['uapi','--output=json','PassengerApps','list_applications'],capture_output=True,text=True,timeout=30)
+          if api.returncode!=0:raise SystemExit('PASSENGER_CHECK_FAILED')
+          app=json.dumps(json.loads(api.stdout).get('result',{}).get('data',{}))
+          active_refs=cron+'\n'+proc+'\n'+app
+          smoke=h/'Saeit-staging/admin-smoke'
+          smoke_list=[]
+          if smoke.is_dir() and not smoke.is_symlink():
+              for p in smoke.iterdir():
+                  if p.is_symlink() or not p.is_dir():continue
+                  marker=(p/'manage.py').is_file()
+                  ref=(str(p) in active_refs or p.name in active_refs)
+                  smoke_list.append({'name':p.name[:75],'age_days':round((time.time()-p.stat().st_mtime)/86400,1),'has_manage_py':marker,'active_ref':ref})
+          backup_root=h/'.backups'
+          entries=[]
+          if backup_root.is_dir() and not backup_root.is_symlink():
+              for p in backup_root.iterdir():
+                  if p.is_symlink():continue
+                  entries.append({'name':p.name[:85],'is_dir':p.is_dir(),'age_days':round((time.time()-p.stat().st_mtime)/86400,1),'size_bytes':p.stat().st_size if p.is_file() else None})
+          files=[]
+          for rootname in ('.backups','.mpw-proof-backups','.mpw-private-db-backups'):
+              p=h/rootname
+              if not p.is_dir() or p.is_symlink():continue
+              for child in p.iterdir():
+                  if child.is_file() and not child.is_symlink():
+                      files.append({'path':str(child.relative_to(h))[:160],'bytes':child.stat().st_size,
+                          'age_days':round((time.time()-child.stat().st_mtime)/86400,1)})
+          files.sort(key=lambda d:-d['bytes'])
+          mysql=subprocess.run(['uapi','--output=json','Mysql','list_databases'],capture_output=True,text=True,timeout=30)
+          dbsizes=[]
+          if mysql.returncode==0:
+              try:
+                  d=json.loads(mysql.stdout).get('result',{}).get('data',[])
+                  if isinstance(d,list):
+                      for x in d:
+                          if isinstance(x,dict):
+                              dbsizes.append({k:v for k,v in x.items() if k in ('disk_usage','size','disk_usage_formatted')})
+              except Exception:pass
+          r={'heavy_subdirectories':deep,'backup_entries':entries[:60],'large_backup_files':files[:30],
+          'admin_smoke_counts':{'total_snapshots':len(smoke_list),'referenced':sum(bool(x['active_ref']) for x in smoke_list),'older_than_10_days':sum(x['age_days']>10 for x in smoke_list)},
+          'admin_smoke_candidates':sorted(smoke_list,key=lambda x:-x['age_days'])[:65],
+          'mysql_storage_numeric_only':dbsizes,'mutations':0,'read_only':True}
+          print('CPANEL_DEEP_CLEANUP_TRIAGE='+json.dumps(r,sort_keys=True),flush=True)
+
+          PY
+          echo CPANEL_DEEP_READONLY=PASS
