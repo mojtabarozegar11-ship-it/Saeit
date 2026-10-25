@@ -1,8 +1,5 @@
 name: cPanel bounded inactive commerce venv reclaim
 on:
-  push:
-    branches: [main]
-    paths: [".github/workflows/cpanel-inactive-commerce-venv-reclaim-20261025.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -162,7 +159,7 @@ jobs:
         run: |
           set -euo pipefail
           for url in "https://mojplaywin.com/" "https://mojplaywin.com/store/" "https://zomorodmelal.ir/" "https://zomorodmelal.ir/agents/"; do
-            code="$(curl --max-time 18 -sS -o /dev/null -w '%{http_code}' "$url" || true)"
+            code="$(curl --max-time 18 --max-redirs 3 -sSL -o /dev/null -w '%{http_code}' "$url" || true)"
             echo "POST_VENV_RECLAIM_HEALTH=$url:$code"
             test "$code" = "200"
           done
