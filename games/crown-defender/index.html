@@ -249,7 +249,9 @@ function reset(){if(!trialJet)activeJet=ownedJet(selectedJet)?selectedJet:'falco
 function showOverlay(title,body,eyebrow='JET DOMINION · V120'){ $('overlayTitle').textContent=title;$('overlayText').textContent=body;$('overlayEyebrow').textContent=eyebrow;$('overlay').hidden=false;}
 function hidePanes(){$('menuJet').hidden=true;$('fleet').hidden=false;for(const id of ['shopPane','leaderPane','settingsPane','fleetPane'])$(id).hidden=true;$('entryOptions').hidden=true;$('missionBox').hidden=true;$('result').hidden=true;}
 function hideOverlay(){$('overlay').hidden=true;overlayState='none'}
-function mainMenu(){state='menu';overlayState='home';hidePanes();$('entryOptions').hidden=false;$('missionBox').hidden=false;
+function mainMenu(){// Exiting a free test flight must never carry its no-reward state into a regular sortie.
+ if(trialJet){trialJet=false;activeJet=ownedJet(selectedJet)?selectedJet:'falcon';}
+ state='menu';overlayState='home';hidePanes();$('entryOptions').hidden=false;$('missionBox').hidden=false;
  const selector=$('startSector'),desired=selector.value;selector.textContent='';
  for(let k=1;k<=save.campaign.unlockedSector;k++){const o=document.createElement('option');o.value=String(k);o.textContent=String(k).padStart(2,'0')+' · '+sectors[k-1].name;selector.append(o)}
  selector.value=desired&&Number(desired)<=save.campaign.unlockedSector?desired:'1';
