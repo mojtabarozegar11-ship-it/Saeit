@@ -6,6 +6,7 @@ unexpected cron content, missing invariant, or anything outside six stage roots.
 The order list, all lifecycle records, warehouse, customer packs, and stores are
 intentionally untouched.
 """
+# Post-cleanup verification rerun: read-only preview; never a second deletion.
 from __future__ import annotations
 
 import argparse
