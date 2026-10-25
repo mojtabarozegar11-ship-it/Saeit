@@ -22,6 +22,7 @@ on:
       - 'tests/test_factory_sequential_scientific_casework_v1.py'
       - 'tests/test_factory_stage34_autonomous_handoff_20261023.py'
       - 'deploy/install_factory_strict_serial_fullcycle_v1.sh'
+      - 'tests/test_factory_strict_serial_installer_config_only.py'
       - '.github/workflows/factory-strict-serial-fullcycle-20261025.yml'
   push:
     branches: [main]
@@ -46,6 +47,7 @@ on:
       - 'tests/test_factory_sequential_scientific_casework_v1.py'
       - 'tests/test_factory_stage34_autonomous_handoff_20261023.py'
       - 'deploy/install_factory_strict_serial_fullcycle_v1.sh'
+      - 'tests/test_factory_strict_serial_installer_config_only.py'
       - '.github/workflows/factory-strict-serial-fullcycle-20261025.yml'
 permissions: {contents: read}
 concurrency:
@@ -67,6 +69,7 @@ jobs:
           python3 -B -m unittest discover -s tests -p test_factory_sequential_scientific_casework_v1.py -v
           python3 -B -m unittest discover -s tests -p 'test_factory_stage*.py' -q
           python3 -B -m unittest discover -s tests -p 'test_factory_agri200_*.py' -q
+          python3 -B -m unittest discover -s tests -p test_factory_strict_serial_installer_config_only.py -v
           bash -n deploy/install_factory_strict_serial_fullcycle_v1.sh
   deploy:
     needs: regression
@@ -79,11 +82,13 @@ jobs:
       - name: Pinned SSH relay and private one-product worker activation
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          SAEIT_QC1000_INSTALL_APPROVED: ${{ vars.SAEIT_QC1000_INSTALL_APPROVED }}
         shell: bash
         run: |
           set -euo pipefail
           umask 077
           test -n "$VPS_KEY"
+          test "$SAEIT_QC1000_INSTALL_APPROVED" = '1' || { echo 'STRICT_SERIAL_DEPLOY_ENV_APPROVAL_REQUIRED' >&2; exit 1; }
           d="$RUNNER_TEMP/factory-strict-serial"
           install -d -m 700 "$d"
           trap 'rm -rf -- "$d"' EXIT
@@ -116,6 +121,7 @@ jobs:
             tests/test_factory_strict_serial_scope_v1.py \
             tests/test_factory_strict_serial_cron_partition_v1.py \
             tests/test_factory_sequential_scientific_casework_v1.py \
+            tests/test_factory_strict_serial_installer_config_only.py \
             deploy/install_factory_strict_serial_fullcycle_v1.sh; do
               ssh_vps "umask 077; cat > '$target/$file'; chmod 600 '$target/$file'" < "$file"
               checksum="$(sha256sum "$file" | awk '{print $1}')"
@@ -125,8 +131,9 @@ jobs:
           ssh_vps "timeout 60s '$py' -B -m unittest discover -s '$target/tests' -p test_factory_strict_serial_fullcycle_v1.py -q"
           ssh_vps "timeout 60s '$py' -B -m unittest discover -s '$target/tests' -p test_factory_strict_serial_scope_v1.py -q"
           ssh_vps "timeout 60s '$py' -B -m unittest discover -s '$target/tests' -p test_factory_strict_serial_cron_partition_v1.py -q"
+          ssh_vps "timeout 60s '$py' -B -m unittest discover -s '$target/tests' -p test_factory_strict_serial_installer_config_only.py -q"
           ssh_vps "bash -n '$target/deploy/install_factory_strict_serial_fullcycle_v1.sh'"
-          ssh_vps "GITHUB_RUN_ID='$GITHUB_RUN_ID' GITHUB_RUN_ATTEMPT='$GITHUB_RUN_ATTEMPT' timeout 200s bash '$target/deploy/install_factory_strict_serial_fullcycle_v1.sh' '$target'"
+          ssh_vps "SAEIT_QC1000_INSTALL_APPROVED='1' GITHUB_RUN_ID='$GITHUB_RUN_ID' GITHUB_RUN_ATTEMPT='$GITHUB_RUN_ATTEMPT' timeout 200s bash '$target/deploy/install_factory_strict_serial_fullcycle_v1.sh' '$target'"
           ssh_vps "timeout 30s '$py' -B '/home/githubops/factory-runtime/operations/production-instructions/strict-serial-fullcycle-v1.py' --factory-private '/home/githubops/factory-runtime/private/autonomous-product-cycle' --operations '/home/githubops/factory-runtime/operations/production-instructions' --dry-run"
-          echo 'FACTORY_ONE_ACTIVE_PRODUCT_PER_MINUTE=INSTALLED'
+          echo 'FACTORY_MINUTE_CRON_CONFIGURED_RUNTIME_NOT_VERIFIED'
           echo 'INDEPENDENT_QC1000_NOT_AUTOMATICALLY_GRANTED'
