@@ -1,0 +1,30 @@
+name: Game priority runtime integrity
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - games/ramadan-war/**
+      - games/crown-defender/index.html
+      - tests/game/crown-v120.cjs
+      - tests/game/ramadan-runtime-integrity-20261025.cjs
+      - .github/workflows/game-priority-runtime-quality-20261025.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  runtime-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate Ramadan War module syntax
+        run: node --input-type=module --check < games/ramadan-war/game.js
+      - name: Run Ramadan save, targeting and controls regression
+        run: node tests/game/ramadan-runtime-integrity-20261025.cjs
+      - name: Run Crown Defender complete simulation and trial isolation regression
+        run: node tests/game/crown-v120.cjs
