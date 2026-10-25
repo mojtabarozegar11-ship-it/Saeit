@@ -124,7 +124,7 @@ def build_prompt(d, retry=0):
     source_context = " | ".join(sources)[:1600]
     deliverable = " ".join(str(d.get("practical_deliverable", "")).split())[:175]
     return (
-        "Write 400-560 original, non-repetitive English words for a "
+        "/no_think\\nWrite 400-560 original, non-repetitive English words for a "
         "professional medicinal LEECH BREEDING FARM operator handbook, "
         "not clinical treatment and not general zoology. "
         "Chapter %s: %s. Specific new topic: %s. Practical angle: %s. "
@@ -166,7 +166,7 @@ def call_model(doc, process, error, retry=0):
             {"role": "system", "content": (
                 "Produce commercially useful, source-bounded vocational leech FARM "
                 "OPERATOR prose. Never invent empirical thresholds or approvals. "
-                "Write ONLY substantive textbook text, without internal reasoning.")},
+                "Write ONLY substantive textbook text, without internal reasoning. /no_think")},
             {"role": "user", "content": prompt}],
         "max_tokens": 1150, "temperature": round(0.69 + retry * 0.05, 2),
         "top_p": 0.9, "chat_template_kwargs": {"enable_thinking": False},
@@ -219,8 +219,10 @@ def call_model(doc, process, error, retry=0):
     if error:
         raise RuntimeError("LOW_MEMORY_ABORT")
     body = "".join(chunks).strip()
-    if not body or "<think>" in body or "</think>" in body:
-        raise RuntimeError("UNSAFE_MODEL_RESPONSE")
+    if not body:
+        raise RuntimeError("EMPTY_MODEL_CONTENT_STREAM")
+    if "<think>" in body or "</think>" in body:
+        raise RuntimeError("MODEL_REASONING_LEAK_BLOCKED")
     if not good_segment(body, 300):
         raise RuntimeError("STREAMED_SEGMENT_BELOW_QC_SUBSTANCE")
     return body
@@ -245,7 +247,7 @@ def main():
                "PYTHONDONTWRITEBYTECODE": "1",
                "LEECH_OFFLINE_INFERENCE_BACKEND": "owner-vps-qwen3-1.7b-q4km"}
         cmd = [str(SERVER), "-m", str(MODEL), "--host", "127.0.0.1",
-               "--port", str(PORT), "-c", "4096", "-t", "1", "-ngl", "0", "--parallel", "1"]
+               "--port", str(PORT), "-c", "4096", "-t", "1", "-ngl", "0", "--parallel", "1", "--reasoning", "off"]
         with open(os.devnull, "wb") as sink:
             proc = subprocess.Popen(cmd, env=env, stdin=subprocess.DEVNULL,
                                     stdout=sink, stderr=sink, preexec_fn=low_priority_preexec)
