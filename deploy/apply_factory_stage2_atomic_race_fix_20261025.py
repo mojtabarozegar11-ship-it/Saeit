@@ -72,15 +72,17 @@ def run(candidate,expected,run_id,apply):
         with os.fdopen(fd,"wb") as out:
             out.write(before);out.flush();os.fsync(out.fileno())
         fd,temporary=tempfile.mkstemp(prefix=".atomic-stage2-install-",dir=OPS)
+        replaced=False
         try:
             os.fchmod(fd,0o600)
             with os.fdopen(fd,"wb") as stream:
                 stream.write(updated);stream.flush();os.fsync(stream.fileno())
             os.replace(temporary,LIVE)
+            replaced=True
             if sha(LIVE.read_bytes())!=expected:
                 raise RuntimeError("INSTALLED_SHA_MISMATCH")
         except Exception:
-            if sha(LIVE.read_bytes())==expected:
+            if replaced:
                 os.replace(backup,LIVE)
             if os.path.exists(temporary):os.unlink(temporary)
             raise
