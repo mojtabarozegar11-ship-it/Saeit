@@ -1,0 +1,46 @@
+name: ZM-R01 independently verify completed original single-sample counts
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/zm-r01-original-pilot-independent-qc.yml
+      - research/manuscripts/ZM-R01/analysis/audit_original_pilot_artifact.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  original-artifact-independent-cross-check:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download ORIGINAL verified single-sample result, no FASTQ or VPS use
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/original_zm_pilot"
+          gh run download 40222743342 \
+            --repo "$GITHUB_REPOSITORY" \
+            --name ZM-R01-SRR33083355-genuine-integer-gene-count-pilot \
+            --dir "$RUNNER_TEMP/original_zm_pilot"
+      - name: Independent original-ENA MD5, manifest, reference SHA, count totals and Bowtie2 QC
+        shell: bash
+        run: |
+          set -euo pipefail
+          python research/manuscripts/ZM-R01/analysis/audit_original_pilot_artifact.py \
+            --artifact-dir "$RUNNER_TEMP/original_zm_pilot" \
+            --manifest research/manuscripts/ZM-R01/ENA_PRJNA1249400_OFFICIAL_24_RUN_PAIRED_FASTQ_MD5_2026-10-25.tsv \
+            --output "$RUNNER_TEMP/original_zm_pilot/independent_qc.json"
+      - name: Preserve verified derived evidence for 30 days without raw FASTQ
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZM-R01-original-single-sample-counts-independently-audited
+          path: ${{ runner.temp }}/original_zm_pilot/
+          retention-days: 30
+          if-no-files-found: error
