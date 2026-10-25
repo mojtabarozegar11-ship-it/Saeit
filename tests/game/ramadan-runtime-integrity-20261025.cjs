@@ -45,4 +45,23 @@ assert(src.includes('if(world.time>=nextCheckpointAt){nextCheckpointAt=world.tim
 assert(src.includes('nextCheckpointAt=world.time+12'),'resumed games must rebase checkpoint schedule');
 assert(src.includes('world.enemyTimer=Number.isFinite(world.enemyTimer)'),'corrupted enemy spawn cooldown must be repaired');
 assert(src.includes('world.reloading=world.reloading===true'),'invalid reload state must be repaired');
+
+const cleanup=slice('function cleanSavedProjectiles(', 'function restore(){');
+const cleanupFns=vm.runInNewContext(cleanup+'({cleanSavedProjectiles,cleanSavedPickups})');
+const goodHostile={x:5,y:7,vx:4.2,vy:0,life:4,hp:14};
+const goodMissile={x:2.5,y:7.5,vx:7.5,vy:0,life:2.5,targetUid:1};
+assert.equal(cleanupFns.cleanSavedProjectiles([goodHostile],100,'hostile').length,1,'legitimate hostile projectile must survive resume');
+assert.equal(cleanupFns.cleanSavedProjectiles([goodMissile],50,'missile').length,1,'legitimate player missile must survive resume');
+assert.equal(cleanupFns.cleanSavedProjectiles([{...goodHostile,vx:1e100},goodHostile],100,'hostile').length,1,'extreme velocity must not corrupt physics');
+assert.equal(cleanupFns.cleanSavedProjectiles([{...goodMissile,x:-50}],50,'missile').length,0,'off-map missiles must be removed');
+assert.equal(cleanupFns.cleanSavedProjectiles([{...goodHostile,hp:-999}],100,'hostile').length,0,'negative projectile damage must be rejected');
+assert.equal(cleanupFns.cleanSavedProjectiles([{...goodMissile,life:Infinity}],50,'missile').length,0,'infinite projectile lifetime must be rejected');
+assert.equal(cleanupFns.cleanSavedPickups([{x:8.5,y:7.5,life:3600,type:'mission-intel'}]).length,1,'mission intel must survive resume');
+assert.equal(cleanupFns.cleanSavedPickups([{x:8.5,y:7.5,life:22,type:'ammo'}]).length,1,'normal ammo must survive resume');
+assert.equal(cleanupFns.cleanSavedPickups([{x:8.5,y:7.5,life:22,type:'script'}]).length,0,'unknown pickup types must not enter gameplay');
+assert.equal(cleanupFns.cleanSavedPickups([{x:8.5,y:7.5,life:1e20,type:'health'}]).length,0,'invalid pickup lifetime must be removed');
+assert(src.includes('world.hostile=cleanSavedProjectiles('),'resume must sanitize enemy projectiles');
+assert(src.includes('world.missiles=cleanSavedProjectiles('),'resume must sanitize guided missiles');
+assert(src.includes('world.pickups=cleanSavedPickups('),'resume must sanitize pickups');
+
 console.log('RAMADAN_RUNTIME_INTEGRITY_PASS save-validation=13 stable-missiles controls visibility');
