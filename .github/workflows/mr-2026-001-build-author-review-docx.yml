@@ -4,8 +4,9 @@ on:
     branches: [research/mr-2026-001-novelty-audit]
     paths:
       - .github/workflows/mr-2026-001-build-author-review-docx.yml
-      - research/manuscripts/MR-2026-001/MR-2026-001_DISCOVER_AGRICULTURE_PERSPECTIVE_AUTHOR_REVIEW_CANDIDATE_2026-10-25.md
+      - research/manuscripts/MR-2026-001/MR-2026-001_CONCISE_PERSPECTIVE_AUTHOR_SCIENTIFIC_REVIEW_2026-10-25.md
       - research/manuscripts/MR-2026-001/C20_DISCOVER_AGRICULTURE_COVER_LETTER_AND_DECLARATIONS_FOR_AUTHOR_REVIEW_2026-10-25.md
+      - research/manuscripts/MR-2026-001/analysis/concise_perspective_scientific_gate.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -27,11 +28,13 @@ jobs:
             sudo apt-get install -y -qq pandoc
           fi
           python -m pip install --disable-pip-version-check python-docx==1.2.0
+      - name: Independently enforce source-bounded concise Perspective mechanical gate
+        run: python research/manuscripts/MR-2026-001/analysis/concise_perspective_scientific_gate.py
       - name: Build journal-style manuscript Word from source-locked candidate
         shell: bash
         run: |
           mkdir -p /tmp/mr-2026-001-review
-          pandoc research/manuscripts/MR-2026-001/MR-2026-001_DISCOVER_AGRICULTURE_PERSPECTIVE_AUTHOR_REVIEW_CANDIDATE_2026-10-25.md \
+          pandoc research/manuscripts/MR-2026-001/MR-2026-001_CONCISE_PERSPECTIVE_AUTHOR_SCIENTIFIC_REVIEW_2026-10-25.md \
             --from=gfm --to=docx --standalone \
             -o /tmp/mr-2026-001-review/MR-2026-001_MANUSCRIPT_AUTHOR_REVIEW.docx
           python - <<'PY'
@@ -64,12 +67,12 @@ jobs:
                           for run in paragraph.runs:
                               run.font.name='Arial'
                               run.font.size=Pt(12)
-          doc.core_properties.title='From Irrigation Recommendations to Field Outcomes'
-          doc.core_properties.author='Mojtaba Roozegar'
+          doc.core_properties.title='What Does an Irrigation Recommendation Actually Change?'
+          doc.core_properties.author='Mojtaba Roozegar (proposed; approval pending)'
           doc.save(p)
           assert p.stat().st_size>20000
-          assert len(doc.tables)>=2
-          assert len(doc.paragraphs)>80
+          assert len(doc.tables)>=1
+          assert len(doc.paragraphs)>35
           print('AUTHOR REVIEW DOCX CREATED',p.stat().st_size,'bytes',len(doc.tables),'tables')
           PY
       - name: Build cover letter and approvals file for author review only
@@ -103,7 +106,9 @@ jobs:
       - name: Preserve author-review files (no journal submission, deployment or payment)
         uses: actions/upload-artifact@v4
         with:
-          name: MR-2026-001-author-review-publisher-format
-          path: /tmp/mr-2026-001-review/
+          name: MR-2026-001-CONCISE-PERSPECTIVE-author-review-not-submitted
+          path: |
+            /tmp/mr-2026-001-review/
+            research/manuscripts/MR-2026-001/MR-2026-001_CONCISE_PERSPECTIVE_MECHANICAL_QA_2026-10-25.json
           retention-days: 7
           if-no-files-found: error
