@@ -79,6 +79,29 @@ jobs:
                   if p.is_file() and not p.is_symlink():
                       backup_files.append({"suffix":p.suffix.lower(),"bytes":p.stat().st_size,"days_old":round((time.time()-p.stat().st_mtime)/86400,1)})
           backup_files.sort(key=lambda x:-x["bytes"])
+          from collections import Counter
+          roots=[staging/"admin-smoke"]
+          for family in ("moj-commerce-v10-sandbox","moj-commerce-v12-sandbox"):
+              parent=staging/family
+              for p in parent.iterdir():
+                  if p.is_dir() and not p.is_symlink() and p.name not in ("mc10-c3a540e57cb4","mc12-20874316936e"):
+                      roots.append(p)
+          detail=[]
+          for base in roots:
+              if base.is_symlink() or not base.is_dir():raise SystemExit("UNSAFE_CANDIDATE_PATH")
+              counter=Counter(); files=0; bytes_count=0; special=[]; max_bytes=0
+              for walk,dirs,ns in os.walk(base,followlinks=False):
+                  for name in dirs+ns:
+                      x=Path(walk)/name
+                      if x.is_symlink():special.append("symlink")
+                  for name in ns:
+                      p=Path(walk)/name
+                      if not p.is_file() or p.is_symlink():continue
+                      files+=1; bytes_count+=p.stat().st_size
+                      counter[p.suffix.lower() or "(none)"]+=1
+                      max_bytes=max(max_bytes,p.stat().st_size)
+              detail.append({"family":base.parent.name,"name":base.name,"files":files,"bytes":bytes_count,"types":counter.most_common(12),"special":special[:8],"max_file_bytes":max_bytes,"venv_present":(base/".venv").exists(),"cron_reference":str(base) in cron or base.name in cron,"passenger_reference":str(base) in apps or base.name in apps})
+          print("CPANEL_SMOKE_AND_UNUSED_SANDBOX_DETAILS="+json.dumps(detail,sort_keys=True))
           print("CPANEL_DEEP_STAGING_READ_ONLY="+json.dumps({"families":result,"backup_biggest_types":backup_files[:12],"mount_free_gib":round(shutil.disk_usage(h).free/2**30,3),"deleted":0,"store_products_untouched":True},sort_keys=True))
           PY
           rm -rf "$d"
