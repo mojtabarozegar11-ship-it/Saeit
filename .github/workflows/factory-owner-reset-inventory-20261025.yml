@@ -133,6 +133,27 @@ jobs:
              'backup_modified_within_24h':dict(backup_recent),
              'no_mutations':True
           },sort_keys=True))
+          def tree_sizes(folder):
+              if folder.is_symlink() or not folder.is_dir():raise SystemExit('UNSAFE_RUNTIME_ROOT')
+              children=[p for p in folder.iterdir() if not p.is_symlink()]
+              if len(children)>250:raise SystemExit('EXCESSIVE_RUNTIME_ROOT_CHILDREN')
+              cmd=subprocess.run(['du','-sx','-B1','--']+[str(p) for p in children],
+                                 capture_output=True,text=True,timeout=170)
+              if cmd.returncode:raise SystemExit('RUNTIME_DU_FAILURE')
+              sizes={}
+              for x in cmd.stdout.splitlines():
+                  b,n=x.split('\t',1)
+                  sizes[Path(n).name]=int(b)
+              return sorted(sizes.items(),key=lambda x:-x[1])[:35]
+          sys_timers=subprocess.run(['systemctl','list-timers','--all','--no-legend','--no-pager'],capture_output=True,text=True,timeout=15)
+          print('OWNER_RESET_RUNTIME_TREES='+json.dumps({
+             'private_top':tree_sizes(runtime/'private'),
+             'operations_top':tree_sizes(ops),
+             'runtime_top':tree_sizes(runtime),
+             'system_timer_scan_available':sys_timers.returncode==0,
+             'system_timer_factory_mentions':sum('factory' in x.lower() or 'saeit' in x.lower() for x in sys_timers.stdout.splitlines()) if sys_timers.returncode==0 else None,
+             'mutations':0
+          },sort_keys=True))
           print('OWNER_RESET_FORENSIC_READ_ONLY='+json.dumps({
              'order_files':len(orders),'order_sha256':dig.hexdigest(),
              'order_statuses':dict(status),'order_origins':origin.most_common(15),
