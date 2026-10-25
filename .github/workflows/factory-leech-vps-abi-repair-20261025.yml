@@ -31,7 +31,7 @@ jobs:
             python3 -m pip install --no-cache-dir --quiet 'cmake==3.31.6'
             export PATH=/usr/local/bin:$PATH
             cmake --version
-            cmake -S /src -B /build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DLLAMA_CURL=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_UI=OFF -DLLAMA_BUILD_TESTS=OFF
+            cmake -S /src -B /build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DGGML_SSE42=OFF -DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF -DGGML_BMI2=OFF -DGGML_CPU_REPACK=OFF -DLLAMA_CURL=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_UI=OFF -DLLAMA_BUILD_TESTS=OFF
             cmake --build /build -j 3 --target llama-server
             test -x /build/bin/llama-server
           '
@@ -59,10 +59,10 @@ jobs:
           }
           eng="/home/githubops/factory-runtime/operations/production-instructions/leech-offline-engine-20261025"
           ops="/home/githubops/factory-runtime/operations/production-instructions"
-          ssh_vps "test \"\$(id -un)\" = githubops && test -d '$eng/bin' && test -f '$eng/models/Qwen3-1.7B-Q4_K_M.gguf' && test ! -e '$eng/bin-glibc231' && test ! -e '$eng/bin-ubuntu22-abi-incompatible-20261025' && install -d -m 700 '$eng/bin-glibc231'"
+          ssh_vps "test \"\$(id -un)\" = githubops && test -d '$eng/bin' && test -f '$eng/models/Qwen3-1.7B-Q4_K_M.gguf' && test ! -e '$eng/bin-glibc231-baseline' && test ! -e '$eng/bin-ubuntu22-abi-incompatible-20261025' && install -d -m 700 '$eng/bin-glibc231-baseline'"
           ssh_vps "umask 077; cat > '$eng/glibc231-engine-transfer.tar.gz'" < "$RUNNER_TEMP/leech-glibc231-cpu-engine.tar.gz"
-          ssh_vps "set -eu; tar -xzf '$eng/glibc231-engine-transfer.tar.gz' -C '$eng/bin-glibc231'; test -x '$eng/bin-glibc231/llama-server'; LD_LIBRARY_PATH='$eng/bin-glibc231' '$eng/bin-glibc231/llama-server' --help >/dev/null"
+          ssh_vps "set -eu; tar -xzf '$eng/glibc231-engine-transfer.tar.gz' -C '$eng/bin-glibc231-baseline'; test -x '$eng/bin-glibc231-baseline/llama-server'; LD_LIBRARY_PATH='$eng/bin-glibc231-baseline' '$eng/bin-glibc231-baseline/llama-server' --help >/dev/null"
           echo LEECH_VPS_LEGACY_ENGINE_NATIVE_SMOKE_PASSED=true
-          ssh_vps "set -eu; mv '$eng/bin' '$eng/bin-ubuntu22-abi-incompatible-20261025'; mv '$eng/bin-glibc231' '$eng/bin'; rm -- '$eng/glibc231-engine-transfer.tar.gz'; test -x '$eng/bin/llama-server'; LD_LIBRARY_PATH='$eng/bin' '$eng/bin/llama-server' --help >/dev/null"
+          ssh_vps "set -eu; mv '$eng/bin' '$eng/bin-ubuntu22-abi-incompatible-20261025'; mv '$eng/bin-glibc231-baseline' '$eng/bin'; rm -- '$eng/glibc231-engine-transfer.tar.gz'; test -x '$eng/bin/llama-server'; LD_LIBRARY_PATH='$eng/bin' '$eng/bin/llama-server' --help >/dev/null"
           ssh_vps "nohup /usr/bin/python3 -B '$ops/leech-vps-resource-guarded-author.py' </dev/null >/dev/null 2>&1 &"
           echo LEECH_OWNER_VPS_SELFHOSTED_GLIBC231_ABI_REPAIRED_AND_RESTARTED=true
