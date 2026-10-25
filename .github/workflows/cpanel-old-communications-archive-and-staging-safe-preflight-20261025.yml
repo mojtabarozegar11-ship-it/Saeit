@@ -1,0 +1,75 @@
+name: cPanel historical communication backup and staging safety READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/cpanel-old-communications-archive-and-staging-safe-preflight-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Verify old communication source archives and inactive staging paths before safe purge
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 380s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,json,stat,subprocess,time,tarfile,hashlib
+          h=Path('/home/zomorod2')
+          if os.geteuid()==0 or Path.home()!=h or h.is_symlink():raise SystemExit('UNSAFE_USER')
+          targets=['Saeit/backups/communication-core-20261005-051054.tar.gz','Saeit-staging/releases','Saeit-staging/v91_personnel_isolated','saeit_v91_runtime_stage_20261012','Saeit-staging/admin-smoke','.trash']
+          cron=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=15)
+          ps=subprocess.run(['ps','-u','zomorod2','-o','args='],capture_output=True,text=True,timeout=15)
+          active=cron.stdout+'\n'+ps.stdout
+          output={}
+          for name in targets:
+           p=h/name
+           if p.is_symlink() or not p.exists():output[name]={'error':'absent_or_symlink'};continue
+           o={'age_days':round((time.time()-p.stat().st_mtime)/86400,1),'active_fullpath_reference':str(p) in active,'active_leaf_reference':p.name in active}
+           if p.is_file():
+            o['file_size']=p.stat().st_size
+            if tarfile.is_tarfile(p):
+             with tarfile.open(p,'r:gz') as z:
+              members=z.getmembers();o['count']=len(members);o['total_uncompressed_size']=sum(m.size for m in members if m.isfile());o['types']={q:sum(1 for m in members if (q=='dir' and m.isdir()) or(q=='regular' and m.isfile()) or (q=='symlink' and m.issym()) or (q=='other' and not(m.isdir() or m.isfile() or m.issym()))) for q in ['dir','regular','symlink','other']}
+              o['head_names']=[m.name[:190] for m in members[:35]];o['large']=[{'name':m.name[:150],'bytes':m.size} for m in sorted(members,key=lambda x:-x.size)[:12]]
+              o['contains_data_extensions']={e:sum(1 for m in members if m.name.lower().endswith(e)) for e in ['.sqlite3','.sql','.db','.pem','.key','.json','.gz','.zip']}
+           else:
+            rows=[];totalbytes=0;files=0;symlinks=0;newest=0;oldest=time.time()
+            for here,dirs,names in os.walk(p,followlinks=False):
+             for dn in dirs:
+              d=Path(here)/dn
+              if d.is_symlink():symlinks+=1
+             for fn in names:
+              f=Path(here)/fn
+              if f.is_symlink():symlinks+=1;continue
+              if not f.is_file():continue
+              st=f.stat();totalbytes+=st.st_size;files+=1;newest=max(newest,st.st_mtime);oldest=min(oldest,st.st_mtime)
+            o.update({'files':files,'file_content_bytes':totalbytes,'symlinks':symlinks,'newest_file_age_days':round((time.time()-newest)/86400,1),'oldest_file_age_days':round((time.time()-oldest)/86400,1)})
+            o['children']=[{'name':c.name,'age_days':round((time.time()-c.stat().st_mtime)/86400,1),'is_symlink':c.is_symlink(),'is_dir':c.is_dir()} for c in sorted(p.iterdir())][:45]
+           output[name]=o
+          print('CPANEL_OLD_STAGING_ARCHIVE_PREFLIGHT='+json.dumps({'targets':output,'cron_active_lines':sum(1 for l in cron.stdout.splitlines() if l.strip() and not l.lstrip().startswith('#')),'mutations':0},sort_keys=True),flush=True)
+
+          PY
+          echo CPANEL_STAGING_ARCHIVE_PREFLIGHT_READONLY=PASS
