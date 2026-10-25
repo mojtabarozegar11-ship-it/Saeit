@@ -97,7 +97,7 @@ jobs:
       - name: Independently verify live store metadata and unchanged protected pages
         run: |
           python3 - <<'PY'
-          import urllib.request,urllib.error,json,time,os
+          import urllib.request,urllib.error,json,time,os,html
           title='Digital Books & Website Kits | MojPlayWin'
           description=('Explore two original English digital books and an editable website kit. '
                        'Compare listed prices and review account-based TRX checkout and private delivery terms.')
@@ -106,10 +106,10 @@ jobs:
               req=urllib.request.Request(u+'?__mpw_meta_verify='+os.environ['GITHUB_RUN_ID']+'-'+str(i),headers={'Cache-Control':'no-cache'})
               try:
                   with urllib.request.urlopen(req,timeout=20) as r:
-                      body=r.read(400000).decode('utf8','replace')
+                      body=html.unescape(r.read(400000).decode('utf8','replace'))
                       status=r.status
               except urllib.error.HTTPError as e:
-                  status=e.code;body=e.read(400000).decode('utf8','replace')
+                  status=e.code;body=html.unescape(e.read(400000).decode('utf8','replace'))
               ok=(status==200 and '<title>'+title+'</title>' in body
                   and 'content="'+description+'"' in body
                   and 'property="og:title" content="'+title+'"' in body
