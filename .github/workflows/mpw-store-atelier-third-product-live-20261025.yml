@@ -86,12 +86,37 @@ jobs:
           d="$RUNNER_TEMP/mpw-atelier-ssh"
           stage="/home/zomorod2/.mpw-atelier-stage-$GITHUB_RUN_ID"
           installed=0
+          reload_main_passenger() {
+            ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          root=Path('/home/zomorod2/mojplaywin.com')
+          app=Path('/home/zomorod2/Saeit-staging')
+          wsgi=root/'passenger_wsgi.py'
+          if root.is_symlink() or app.is_symlink() or not root.is_dir() or not app.is_dir():
+              raise RuntimeError('UNTRUSTED_MAIN_APP_PATH')
+          if wsgi.is_symlink() or not wsgi.is_file() or "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):
+              raise RuntimeError('PASSENGER_APP_IDENTITY_MISMATCH')
+          folder=root/'tmp'
+          if folder.is_symlink():
+              raise RuntimeError('UNSAFE_PASSENGER_RESTART_DIRECTORY')
+          folder.mkdir(exist_ok=True)
+          marker=folder/'restart.txt'
+          if marker.is_symlink():
+              raise RuntimeError('UNSAFE_PASSENGER_RESTART_MARKER')
+          marker.touch()
+          print('MPW_MAIN_PASSENGER_TEMPLATE_CACHE_RELOAD_REQUESTED')
+          PY
+          }
           cleanup() {
             rc=$?
             trap - EXIT
             if test "$rc" -ne 0 && test "$installed" -eq 1; then
               echo "STOREFRONT_SMOKE_FAILED_ATTEMPTING_ROLLBACK"
-              ssh -F "$d/config" saeit-cpanel "python3 '$stage/patch.py' rollback '$GITHUB_RUN_ID'" || echo "MANUAL_RECOVERY_REQUIRED"
+              if ssh -F "$d/config" saeit-cpanel "python3 '$stage/patch.py' rollback '$GITHUB_RUN_ID'"; then
+                reload_main_passenger || echo "MANUAL_RESTART_REQUIRED_AFTER_ROLLBACK"
+              else
+                echo "MANUAL_RECOVERY_REQUIRED"
+              fi
             fi
             ssh -F "$d/config" saeit-cpanel "rm -rf -- '$stage'" || true
             rm -rf -- "$d"
@@ -102,6 +127,10 @@ jobs:
           scp -F "$d/config" scripts/mpw_store_atelier_third_product_discovery_20261025.py "saeit-cpanel:$stage/patch.py"
           ssh -F "$d/config" saeit-cpanel "python3 '$stage/patch.py' apply '$GITHUB_RUN_ID'"
           installed=1
+          # Production Django caches templates until the pinned Passenger app reloads.
+          # Prior run applied the template but the live HTTP smoke never saw it.
+          reload_main_passenger
+          sleep 16
           success=0
           for attempt in 1 2 3 4 5; do
             curl -fsSL --max-time 25 -H 'Cache-Control: no-cache' "https://mojplaywin.com/store/?atelier_release=$GITHUB_RUN_ID&attempt=$attempt" -o "$RUNNER_TEMP/store-after.html" || true
