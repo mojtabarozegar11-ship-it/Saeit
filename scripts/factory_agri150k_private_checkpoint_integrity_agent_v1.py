@@ -52,7 +52,7 @@ def prose_tokens(markdown):
     references = False
     for raw in markdown.splitlines():
         s = raw.strip()
-        if s.startswith(("~~~", "\`\`\`")):
+        if s.startswith(("~~~", chr(96) * 3)):
             fenced = not fenced
             continue
         if fenced or not s:
