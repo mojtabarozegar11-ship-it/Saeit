@@ -1,0 +1,9 @@
+# Car et al. 2012 — institutional abstract corroboration, no Table 5 repair
+
+**Checked 2026-10-26.** Official institutional research record at [University of New England](https://researchers.une.edu.au/en/publications/using-a-mobile-phone-short-messaging-service-sms-for-irrigation-s-5/) and [UNE institutional repository](https://rune.une.edu.au/entities/publication/68f9d1ef-6e62-415a-b831-0beb96df9853) identify the original paper by Nicholas J. Car, Evan W. Christen, John W. Hornbuckle and Graham A. Moore, *Computers and Electronics in Agriculture* **84**, 132–143, [DOI 10.1016/j.compag.2012.03.003](https://doi.org/10.1016/j.compag.2012.03.003).
+
+The **institutional abstract itself** independently corroborates 72 SMS recipients, 45 returning irrigation/rainfall data throughout the season, 13 returning for half the season and 14 never returning data. Arithmetic: 45+13+14=72; 45/72=62.5%, reported as approximately 63% utility/engagement by original authors. The same abstract says six of the 13 half-season dropouts later wished they had continued, supporting the source's stated 80% overall usefulness interpretation; **this is not a measured compliance rate**.
+
+The institutional records do **not** expose an authenticated typeset image of Table 5. A ResearchGate author-uploaded full-text transcription is discoverable but was not treated as publisher-authenticated typeset proof. Any inconsistent secondary rendering of behavioral Table 5 cells therefore remains **unresolved** and excluded from MR quantitative inference. No attempt was made to silently change category counts.
+
+**Effect on MR-2026-001 V4:** its 45/13/14 and denominator distinction are supported by a stronger institution-linked primary bibliographic abstract. Its explicit Table 5 uncertainty remains correct. This source check does **not** validate the proposed six-link worksheet, prove novelty or replace the human author's direct source review.
