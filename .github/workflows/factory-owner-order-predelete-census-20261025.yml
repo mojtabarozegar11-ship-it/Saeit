@@ -1,0 +1,106 @@
+name: Factory protected internal work order PREDELETE census READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/factory-owner-order-predelete-census-20261025.yml
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Count safely isolated work orders without deletion
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-owner-reset-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 550s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          import collections, hashlib, json, os, re, stat, time
+          home=Path('/home/githubops')
+          root=home/'factory-runtime/private/autonomous-product-cycle'
+          area=root/'production-instructions'
+          orders=area/'orders'
+          ops=home/'factory-runtime/operations'
+          protected_roots=[root/'production-warehouse',root/'product-lifecycle',root/'customer-packs',root/'customer-extracted-acceptance',root/'digital-products']
+          protected_roots += [area/('stage-%02d'%n) for n in range(1,7)]
+          for p in [home,home/'factory-runtime',root,area,orders,ops,*protected_roots]:
+              if p.is_symlink() or not p.is_dir():
+                  raise SystemExit('UNSAFE_OR_MISSING_PROTECTED_DIRECTORY:'+p.name)
+          if os.geteuid()==0 or os.environ.get('USER')!='githubops':
+              raise SystemExit('REFUSE_ROOT_OR_UNEXPECTED_USER')
+          marker=ops/'.owner-orphan-workorder-purge-20261025.done'
+          if marker.exists() or marker.is_symlink():
+              raise SystemExit('ONE_TIME_RESET_ALREADY_RECORDED')
+          all_files=sorted(orders.iterdir())
+          if not 2500 <= len(all_files) <= 2800:
+              raise SystemExit('ORDER_POPULATION_OUTSIDE_AUDITED_RANGE')
+          expected_origins={'owner_requested_education700_p0','local-factory-research','factory-invention-snapshot','owner_requested_jobs300_iran_p0','owner_requested_agri200_p0','owner_requested_women_home200_iran_p0'}
+          site_origins={'site-topic-snapshot','mojplaywin-site-qa-return'}
+          protected_flags=('requires_customer_order','manufacturing_qa_passed','warehouse_goods_created','technical_product_release','publication_approved','public_distribution_allowed','end_to_end_buyer_purchase_delivery_verified','real_buyer_checkout_and_delivery_verified')
+          fingerprints={}
+          candidate={}
+          site_kept={}
+          for p in all_files:
+              if p.is_symlink() or not p.is_file() or not re.fullmatch(r'WO-[0-9]{8}\.json',p.name):
+                  raise SystemExit('UNEXPECTED_ORDER_ENTRY')
+              s=p.stat()
+              if s.st_nlink!=1 or s.st_size>262144:
+                  raise SystemExit('UNSAFE_ORDER_FILE_TOPOLOGY_OR_SIZE')
+              b=p.read_bytes()
+              obj=json.loads(b)
+              if not isinstance(obj,dict) or obj.get('id')!=p.stem:
+                  raise SystemExit('ORDER_IDENTITY_MISMATCH')
+              if any(obj.get(k) is True for k in protected_flags):
+                  raise SystemExit('PROTECTED_CUSTOMER_OR_RELEASE_ORDER_PRESENT')
+              origin=obj.get('origin')
+              if origin not in expected_origins | site_origins:
+                  raise SystemExit('UNEXPECTED_ORDER_ORIGIN')
+              if obj.get('status') not in ('issued','blocked_rework'):
+                  raise SystemExit('UNEXPECTED_ORDER_STATUS')
+              fingerprints[p.name]=hashlib.sha256(b).digest()
+              if origin in expected_origins:
+                  if obj.get('status')!='issued':raise SystemExit('UNEXPECTED_INTERNAL_STATUS')
+                  candidate[p.stem]=p
+              else:
+                  site_kept[p.name]=p
+          if len(site_kept)!=69 or len(candidate)<2400:
+              raise SystemExit('PROTECTED_SITE_BOUNDARY_CHANGED')
+          # Conservative protection: any WO id appearing in a protected tree's path
+          # is kept, whether its completion is known or not. No contents are read.
+          referenced=set()
+          id_re=re.compile(r'WO-[0-9]{8}')
+          for base_root in protected_roots:
+              for base,dirs,names in os.walk(base_root,followlinks=False):
+                  base_path=Path(base)
+                  if base_path.is_symlink():raise SystemExit('SYMLINK_IN_PROTECTED_TREE')
+                  for name in dirs+names:
+                      p=base_path/name
+                      if p.is_symlink():raise SystemExit('SYMLINK_IN_PROTECTED_TREE')
+                      referenced.update(id_re.findall(name))
+                  referenced.update(id_re.findall(base_path.name))
+          keep_referenced=set(candidate)&referenced
+          eligible=[p for ident,p in candidate.items() if ident not in referenced]
+          # Two-pass revalidation before irreversible mutation
+          if set(p.name for p in orders.iterdir()) != set(fingerprints):
+              raise SystemExit('ORDERS_CHANGED_DURING_PREFLIGHT')
+          for p in all_files:
+              if p.is_symlink() or not p.is_file() or hashlib.sha256(p.read_bytes()).digest()!=fingerprints[p.name]:
+                  raise SystemExit('ORDER_DATA_CHANGED_DURING_PREFLIGHT')
+          # Revalidate sites' and customer records are outside target directory.
+          if any(not str(p).startswith(str(orders)+'/') for p in eligible):
+              raise SystemExit('TARGET_ESCAPE')
+          print('OWNER_ORPHAN_ORDER_PREFLIGHT='+json.dumps({'all_orders':len(all_files),'protected_site_origin':len(site_kept),'internally_generated':len(candidate),'protected_tree_referenced':len(keep_referenced),'orphan_delete_candidates':len(eligible),'mutations':0},sort_keys=True))
+          PY
+          echo OWNER_ORDER_PREFLIGHT_READONLY=PASS
