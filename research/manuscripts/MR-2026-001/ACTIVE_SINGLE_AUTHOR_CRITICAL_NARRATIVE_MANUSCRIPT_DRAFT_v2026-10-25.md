@@ -1,7 +1,7 @@
 # From Irrigation Recommendations to Field Outcomes: A Critical Review of Validation Evidence and Farmer Uptake under Water Scarcity
 **Article category (author-approved path):** Critical Narrative Review / Evidence-informed Critical Review  
 **Intended sole human author:** Mojtaba Roozegar (**working academic byline**; identity/affiliation/ORCID/contribution and final text approval pending).  
-**Draft version:** MR-2026-001/CRITICAL-REVIEW/2026-10-25-v1 — **UNSUBMITTED, INCOMPLETE AI-assisted research draft; not approved final author writing**.  
+**Draft version:** MR-2026-001/CRITICAL-REVIEW/2026-10-25-v2 — **UNSUBMITTED, INCOMPLETE AI-assisted research draft; not approved final author writing**.  
 **Prior working title:** Field Validation and Farmer Adoption of Irrigation Decision-Support Tools under Water Scarcity: A Scoping Review. Former scoping review study materials preserved as historical discovery/protocol records, **not** a claim of systematic completed screening.
 **Human-author decision:** see `../SOLO_AUTHORSHIP_POLICY_ALL_PROJECTS_2026-10-25.md`.
 
@@ -51,7 +51,7 @@ The preliminary evidence sources were chosen to illustrate contrasting research 
 ## 7. References — source identities checked in project records, bibliography formatting pending
 - Amini A, Emami S, Dehghanisanij H. (2025). Participatory evaluation of an irrigation decision support system for water-saving and productivity gains in Lake Urmia Basin. *Scientific Reports*. https://doi.org/10.1038/s41598-025-26567-z
 - Cvejić R, Černič-Istenič M, Honzak L, Pečan U, Železnikar Š, Pintar M. (2020). Farmers Try to Improve Their Irrigation Practices by Using Daily Irrigation Recommendations—The Vipava Valley Case, Slovenia. *Agronomy*, 10(9), 1238. https://doi.org/10.3390/agronomy10091238
-- Jamal et al. (2023). Real-Time Irrigation Scheduling Based on Weather Forecasts, Field Observations, and Human-Machine Interactions. *Water Resources Research*. https://doi.org/10.1029/2023WR035810 (complete author byline to revalidate against publisher metadata)
+- Jamal A, Cai X, Qiao X, Garcia L, Wang J, Amori A, Yang H. (2023). Real-Time Irrigation Scheduling Based on Weather Forecasts, Field Observations, and Human-Machine Interactions. *Water Resources Research*, 59, e2023WR035810. https://doi.org/10.1029/2023WR035810 (author order, journal, year and DOI verified against Wiley publisher page 2026-10-25)
 - Baethge C, Goldbeck-Wood S, Mertens S. (2019). SANRA—a scale for the quality assessment of narrative review articles. *Research Integrity and Peer Review*. https://doi.org/10.1186/s41073-019-0064-8
 
 ## 8. Mandatory finalization and disclosure gates
@@ -60,3 +60,44 @@ The preliminary evidence sources were chosen to illustrate contrasting research 
 - **Pending publisher compliance:** independently verify journal permits unsolicited critical/narrative reviews with a sole author, author guidelines, fees/waivers and rights; accurately confirm affiliation, identity, ORCID, data/copyright permissions, funding/COI and AI disclosure.
 - **Pending submission authorization:** actual final manuscript, specific journal choice, any fee and policy declarations must receive *separate* author approval. No publisher receipt or Manuscript ID currently exists.
 **Status: NOT SUBMITTED; NOT ACCEPTED; NOT PUBLISHED.**
+
+
+## 9. C13 evidence-grade and publisher-fit audit — 2026-10-25 (research annotations, not final article text)
+
+### A. Three original sources independently re-opened
+| Source and DOI | Design actually supported by publisher | Claims permitted | Claims not supported by available evidence |
+|---|---|---|---|
+| Amini, Emami & Dehghanisanij, 2025; 10.1038/s41598-025-26567-z | Eight farm/orchard sites in four villages; within-farm treatment versus farmer-managed control; 2021–2022; field water measurements and participatory workshops. Publisher abstract reports drip **41% lower**, sprinkler **14% lower**, and surface irrigation **2.8% higher** versus controls, as aggregated category contrasts. | Field measurements for local comparisons **with design caveats**; participatory ratings as separate self-report evidence. | Universal water saving, randomized trial, causal long-term adoption, metered energy/cost savings inferred from workshop scores, or extrapolation of category percentages to all eight sites. |
+| Cvejić et al., 2020; 10.3390/agronomy10091238 | 35 farms initially interested in advisory service, 2016–2020; 2020 telephone feedback; **83% of contacted farmers self-reported using DSS**, **71% self-reported regularly checking soil moisture**; **91% did not keep regular irrigation diaries**; modeled change in target soil-water replenishment. | Advisory deployment; farmer-reported interaction; conditional scenario **25% irrigation volume** and **24% energy/CO₂** potential. | 83% objectively logged compliance, 25% realized measured water savings, 24% realized energy/CO₂ savings, or a validated unique respondent denominator. |
+| Jamal et al., 2023; 10.1029/2023WR035810 | Two maize fields support data-assimilation/model assessment; human–machine applicability explored via **virtual** irrigation exercise; publisher's full authorship checked. | Validity of field-informed state estimates, virtual choice exercise, modeled comparisons under scenario assumptions. | An actual season of farmer compliance caused the simulated benefits, or two fields and workshop groups constitute independent deployed-farm adoption replications. |
+
+**Unresolved Cvejić denominator contradiction:** the article abstract and methods discuss **35 farms** enrolled/interested, while its 2019 results paragraph says **"Forty-six farmers use the irrigation advice they receive by e-mail"**. These statements may refer to different people, years or recruitment definitions, but the source text available does not reconcile them. **Do not compute 46/35, assign the 83% to 35, or treat the 46 as a verified unique farm count**. Cite both as a data-reporting limitation and, if needed, seek clarification from the original authors before any denominator-sensitive quantitative inference. This is a substantive limitation, not a typographical correction invented by this review.
+
+**Amini interpretation constraint:** the publisher abstract's system-specific percentages are aggregates. Do not sum them, average them without system sample sizes, or infer farmer-level statistical precision. The 2.8% increase for surface irrigation is an important counterexample to universal savings; compare its design and field geometry before explaining it causally.
+
+**Jamal interpretation constraint:** measured observations can validate model predictions without validating uptake. Classify separate outcomes rather than label the whole paper as field-adopted. The publisher lists seven authors in order: Jamal, Cai, Qiao, Garcia, Wang, Amori, Yang; this corrects the previous incomplete bibliography.
+
+### B. Proposed original methodological contribution: the claim-to-evidence chain
+The review's organizing proposition is that a causal claim about real-world DSS benefit has **five separately observable links**: (1) an advisory recommendation with timestamp and agronomic context, (2) documented delivery/exposure to an identified decision-maker, (3) independently logged farmer action or deviation, (4) independently measured physical field water/agronomic outcomes, and (5) an interpretable counterfactual or comparison accounting for field conditions and uncertainty. Sustained adoption adds a **sixth temporal link**, repeated voluntary use after intervention support ends.
+
+A failure to observe a link does **not** prove the tool failed; it restricts the inference that can be drawn. For example, an interview can substantiate perceived usefulness (link 2 and reported use) but not independently establish link 3; a validated soil-moisture model supports prediction fidelity but does not establish link 4; an optimization scenario describes a possible link 5 without observed link 4. The six-link framework is a **proposed analytical interpretation** that the intended human author must critically review, refine and compare against existing adoption and evaluation frameworks before claiming originality.
+
+**Suggested compact evidence chart for the author to verify before publication**:
+| Study | A/B/C role | M field-measured | O independently observed compliance | S self-report | P modeled/simulated | Sustained independent adoption proven |
+|---|---|---|---|---|---|---|
+| Amini 2025 | A | Yes, site water comparisons reported | Treatment application reported, independent event-level adherence not fully verified here | Yes | Also model/schedule components | No verified post-project longitudinal record |
+| Cvejić 2020 | A | Soil-water monitoring in system, **not equivalent to measured water savings** | Not reliably established (diary completion problem) | Yes, telephone feedback | Yes, 25/24% scenario | Not verified by independently logged sustained farmer decisions |
+| Jamal 2023 | C contextual for uptake, field-informed modeling | Yes, field observations as model inputs/validation | No field deployment adherence established from virtual exercise | Workshop feedback | Yes | No |
+
+The classifications are provisional analytical tags, not a finalized human-selected study set or a quantitative synthesis.
+
+### C. Target-journal fit checked against official live policy on 2026-10-25
+- **Discover Agriculture (Springer Nature)**: publisher explicitly lists **Review** and **Perspective** as eligible article types: https://link.springer.com/journal/44279/submission-guidelines . Review must be a **comprehensive critical survey**, whereas Perspective can advance a narrower analytical position. The current **three-case illustrative draft is NOT yet comprehensive enough to submit as a Review**; it could become a more narrowly scoped Perspective **only if the author approves another article-type change**, or the Review corpus and state-of-the-art comparison must be expanded. **No unilateral type change**.
+- Journal subject scope explicitly includes **Water & Irrigation**, precision agriculture, technology and social impact: https://link.springer.com/journal/44279/aims-and-scope . Topic fit is plausible, **not editorial acceptance**.
+- Discover Agriculture APC on publisher's fee page as of 2026-10-25: **GBP 990 / USD 1,390 / EUR 1,090**, applicable if accepted; waiver/discount requests for financial need must be made **at submission**, not after acceptance: https://link.springer.com/journal/44279/how-to-publish-with-us . This is a disclosed cost, **not an authorized charge**.
+- Publisher requires an **abstract under 250 words**, **cover letter**, **funding statement**, **data availability**, author contribution and competing-interest declarations and correct copyright permissions. Reference citations are numeric in square brackets, unlike this working author–date draft. Those submission assets are NOT yet final.
+- **Agricultural Water Management**: official Elsevier guide at https://www.sciencedirect.com/journal/agricultural-water-management/publish/guide-for-authors returned 403 to the available reader; therefore **eligibility of unsolicited sole-author critical narrative reviews and current fees have NOT been verified**. Do not list it as confirmed accepting this format.
+- SANRA source: Baethge, Goldbeck-Wood & Mertens (2019), DOI 10.1186/s41073-019-0064-8. Its six items are importance, aims, search description, referencing, scientific argument/evidence and endpoint-data presentation. **No numeric SANRA score is assigned** until source corpus and manuscript are genuinely ready for assessment.
+
+### D. Editorial blockers that must not be misrepresented as completed
+The manuscript currently offers an original *proposed* interpretation and **three illustrative primary studies**, not a robust critical survey of the whole literature. Additional prior reviews and opposing studies, systematic verification of bibliography, original source data where needed, genuine human scientific decisions, source coverage, and critical response to competing explanations are outstanding. The intended sole author must substantively interpret and revise this AI-assisted draft. **No submission has occurred; no publisher manuscript ID exists.**
