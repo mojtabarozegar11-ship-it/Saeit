@@ -189,7 +189,7 @@ def call_model(doc, process, error, retry=0):
                 len({w.casefold() for w in word_list}) >= 145 and
                 body.rstrip().endswith((".", "!", "?")))
 
-    with urllib.request.urlopen(req, timeout=120) as response:
+    with urllib.request.urlopen(req, timeout=300) as response:
         if response.status != 200:
             raise RuntimeError("INFERENCE_HTTP_NOT_OK")
         for line in response:
