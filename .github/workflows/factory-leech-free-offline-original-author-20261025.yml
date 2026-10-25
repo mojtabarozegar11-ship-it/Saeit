@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/factory-leech-free-offline-original-author-20261025.yml
       - scripts/factory_leech_free_offline_original_author_20261025.py
+      - tests/test_factory_leech_free_offline_original_author_20261025.py
   schedule:
     - cron: '*/20 * * * *'
   workflow_dispatch:
@@ -28,6 +29,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -B -m py_compile scripts/factory_leech_free_offline_original_author_20261025.py
+          python3 -B -m unittest discover -s tests -p test_factory_leech_free_offline_original_author_20261025.py -v
           python3 - <<'PY'
           import ast,pathlib
           p=pathlib.Path("scripts/factory_leech_free_offline_original_author_20261025.py")
@@ -77,6 +79,7 @@ jobs:
           import json,sys
           d=json.load(open(sys.argv[1],encoding="utf8"))
           if d.get("next_chapter") is None:
+              assert d.get("complete_length_only") is True and d.get("total_verified_draft_words",0)>=159000
               print("LEECH_PRIVATE_MANUSCRIPT_LENGTH_COMPLETE="+str(d.get("total_verified_draft_words",0)))
           else:
               assert d["order_id"]=="WO-26102501" and 1<=d["chapter_number"]<=30
@@ -87,6 +90,8 @@ jobs:
           if python3 - "$work/assignment.json" <<'PY'
           import json,sys
           d=json.load(open(sys.argv[1],encoding="utf8"))
+          if d.get("next_chapter") is None:
+              assert d.get("complete_length_only") and d.get("total_verified_draft_words",0)>=159000
           sys.exit(0 if d.get("next_chapter") is None else 1)
           PY
           then
