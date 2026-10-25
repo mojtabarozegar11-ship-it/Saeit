@@ -32,6 +32,23 @@ STOP_AVAILABLE_MIB = 1250
 VIRTUAL_MEMORY_CAP_MIB = 2600
 
 
+
+
+def stream_segment_is_acceptable(body, minimum=300):
+    """Fail closed on leaked reasoning/control tokens before early stream acceptance."""
+    import re
+    lowered = body.casefold()
+    if any(marker in lowered for marker in (
+            "<think", "</think", "<|im_start|>", "<|im_end|>",
+            "<|assistant", "[/inst]", "[inst]")):
+        return False
+    prose_lines = [line.strip() for line in body.splitlines()
+                   if line.strip() and not line.lstrip().startswith(("#", "|"))]
+    words = re.findall(r"[A-Za-z][A-Za-z'-]*", " ".join(prose_lines))
+    return (len(words) >= minimum and
+            len({w.casefold() for w in words}) >= 135 and
+            body.rstrip().endswith((".", "!", "?")))
+
 def available_memory_mib():
     for line in Path("/proc/meminfo").read_text().splitlines():
         if line.startswith("MemAvailable:"):
@@ -89,7 +106,7 @@ def assignment():
                        capture_output=True, text=True, timeout=45,
                        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}, check=True)
     doc = json.loads(p.stdout)
-    if doc.get("order_id") != "WO-26102501" and doc.get("next_chapter") is not None:
+    if doc.get("order_id") != "WO-26102501":
         raise RuntimeError("WRONG_PRODUCT_ORDER")
     return doc
 
@@ -166,14 +183,6 @@ def call_model(doc, process, error, retry=0):
     content_chars = 0
     token_word = re.compile(r"[A-Za-z][A-Za-z'-]*")
 
-    def good_segment(body, minimum):
-        prose_lines = [line.strip() for line in body.splitlines()
-                       if line.strip() and not line.lstrip().startswith(("#", "|"))]
-        word_list = token_word.findall(" ".join(prose_lines))
-        return (len(word_list) >= minimum and
-                len({w.casefold() for w in word_list}) >= 135 and
-                body.rstrip().endswith((".", "!", "?")))
-
     with urllib.request.urlopen(req, timeout=300) as response:
         if response.status != 200:
             raise RuntimeError("INFERENCE_HTTP_NOT_OK")
@@ -218,7 +227,7 @@ def call_model(doc, process, error, retry=0):
                 continue
             body = "".join(chunks).strip()
             last_checked_bytes = len(body)
-            if good_segment(body, 300):
+            if stream_segment_is_acceptable(body, 300):
                 return body
     if error:
         raise RuntimeError("LOW_MEMORY_ABORT")
@@ -227,10 +236,10 @@ def call_model(doc, process, error, retry=0):
         raise RuntimeError("EMPTY_MODEL_CONTENT_STREAM")
     if "<think>" in body or "</think>" in body:
         raise RuntimeError("MODEL_REASONING_LEAK_BLOCKED")
-    if not good_segment(body, 300):
+    if not stream_segment_is_acceptable(body, 300):
         end = max(body.rfind("."), body.rfind("!"), body.rfind("?"))
         complete = body[:end + 1].strip() if end > 0 else ""
-        if complete and good_segment(complete, 300):
+        if complete and stream_segment_is_acceptable(complete, 300):
             return complete
         prose = [line.strip() for line in body.splitlines()
                  if line.strip() and not line.lstrip().startswith(("#", "|"))]
