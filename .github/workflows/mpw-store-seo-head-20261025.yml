@@ -132,8 +132,8 @@ jobs:
               head_markup=body.split('</head>',1)[0]
               checks={'title':title in head_markup,
                       'description':description in head_markup,
-                      'og_title':head_markup.count(title)>=2,
-                      'og_description':head_markup.count(description)>=2,
+                      'og_title_tag':'property="og:title"' in head_markup,
+                      'og_description_tag':'property="og:description"' in head_markup,
                       'chess_link':'/store/product/72/' in body,
                       'taniya_link':'/store/product/225/' in body}
               ok=(status==200 and all(checks.values()))
