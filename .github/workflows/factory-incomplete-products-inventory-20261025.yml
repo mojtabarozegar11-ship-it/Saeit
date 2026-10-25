@@ -1,5 +1,8 @@
 name: Factory incomplete-product inventory (read-only)
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/factory-incomplete-products-inventory-20261025.yml'
   push:
     branches: [main]
     paths:
