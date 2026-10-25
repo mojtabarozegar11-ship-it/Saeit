@@ -1,0 +1,75 @@
+name: Private factory English-first order audit
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/factory-english-first-inventory-20261025.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/factory-english-first-inventory-20261025.yml'
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Read only VPS work orders and locale evidence
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/private-english-priority"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 180s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          import json,collections,re,subprocess,shutil
+          root=Path('/home/githubops/factory-runtime/private/autonomous-product-cycle')
+          area=root/'production-instructions'
+          inp=area/'orders'
+          if any(p.is_symlink() or not p.is_dir() for p in (root,area,inp)):
+              raise SystemExit('UNSAFE_ORDER_ROOT')
+          group=collections.Counter()
+          site_counts=collections.Counter()
+          quality=collections.Counter()
+          rows=[]
+          for p in sorted(inp.iterdir()):
+              if p.is_symlink() or not p.is_file() or not re.fullmatch(r'WO-[0-9]{8}\.json',p.name):
+                  raise SystemExit('UNEXPECTED_ORDER_FILE')
+              obj=json.loads(p.read_text())
+              editions=obj.get('editions')
+              if not isinstance(editions,list): editions=[]
+              locales=[str(e.get('locale','')).lower() for e in editions if isinstance(e,dict)]
+              sites=[str(e.get('site','')).lower() for e in editions if isinstance(e,dict)]
+              has_en=any(re.match(r'^en($|[-_])',x) for x in locales)
+              has_fa=any(re.match(r'^fa($|[-_])',x) for x in locales)
+              scope=('english_and_other' if has_en and len(locales)>1 else 'english_only' if has_en else 'other' if locales else 'unspecified')
+              group[scope]+=1
+              for s in sites:site_counts[s]+=1
+              quality[str(obj.get('status','MISSING'))]+=1
+              rows.append({'id':p.stem,'scope':scope,'locales':locales[:4],'site':sites[:4],
+                 'priority':obj.get('priority'), 'rank':obj.get('priority_rank'),
+                 'family':obj.get('family_id'),'origin':obj.get('origin'),
+                 'status':obj.get('status')})
+          sorted_rows=sorted(rows,key=lambda x:(0 if x['scope']=='english_only' else 1 if x['scope']=='english_and_other' else 2,
+                 x['rank'] if type(x['rank']) is int else 999999,x['id']))
+          cron=subprocess.run(['crontab','-l'],text=True,capture_output=True,timeout=5,check=True).stdout
+          active=[x for x in cron.splitlines() if x.strip() and not x.lstrip().startswith('#')]
+          print('PRIVATE_ENGLISH_PRIORITY_INVENTORY='+json.dumps({
+            'total':len(rows),'group_counts':dict(group),'site_counts':dict(site_counts),
+            'order_statuses':dict(quality),
+            'first20_english_priority':sorted_rows[:20],
+            'last5':sorted_rows[-5:],
+            'storage_free_gib':round(shutil.disk_usage(root).free/2**30,3),
+            'strict_serial_active':sum('SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025' in x for x in active),
+            'active_cron_count':len(active),
+            'active_cron_markers':[x.rsplit('#',1)[-1].strip()[:90] if '#' in x else 'UNMARKED' for x in active]},sort_keys=True))
+          PY
