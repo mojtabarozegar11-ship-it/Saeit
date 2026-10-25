@@ -1,0 +1,47 @@
+name: Submit two new canonical Zomorod resource URLs to IndexNow
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zm-20261025b-indexnow-submit.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zm-20261025b-indexnow-one-off
+  cancel-in-progress: false
+jobs:
+  submit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify live destinations and submit only these two URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error
+          host='zomorodmelal.ir'
+          key='6ffbcd2d1f8d739fca4d0d6790164dba'
+          keyloc='https://'+host+'/'+key+'.txt'
+          base='https://'+host+'/resources/20261025b/'
+          urls=[base+'cold-chain-acceptance/',base+'supplier-technical-comparison/']
+          with urllib.request.urlopen(keyloc,timeout=25) as r:
+              assert r.status==200 and r.read().decode('ascii').strip()==key
+          for url in urls:
+              with urllib.request.urlopen(url,timeout=25) as r:
+                  html=r.read(100000).decode('utf8','replace')
+                  assert r.status==200 and '<link rel="canonical" href="'+url+'"' in html,url
+          body=json.dumps({'host':host,'key':key,'keyLocation':keyloc,'urlList':urls}).encode('utf8')
+          req=urllib.request.Request('https://api.indexnow.org/indexnow',data=body,method='POST',headers={'Content-Type':'application/json; charset=utf-8','User-Agent':'ZomorodMelal-Canonical-Submission/1.0'})
+          try:
+              with urllib.request.urlopen(req,timeout=35) as r:
+                  print('INDEXNOW_HTTP_STATUS',r.status)
+                  assert r.status in (200,202),'INDEXNOW_NOT_ACCEPTED'
+          except urllib.error.HTTPError as e:
+              print('INDEXNOW_HTTP_ERROR',e.code,e.read(200).decode('utf8','replace'))
+              raise
+          for url in urls:print('INDEXNOW_SUBMITTED_URL',url)
+          print('NOTE: accepted submission does not prove search engine indexing')
+          PY
