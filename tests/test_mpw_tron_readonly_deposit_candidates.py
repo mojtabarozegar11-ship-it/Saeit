@@ -79,7 +79,8 @@ class CandidateIndexerTests(unittest.TestCase):
         with self.assertRaises(PaymentHold):
             fetch_page("http://api.trongrid.io/v1/accounts/evil")
 
-    def test_only_https_json_and_bounded_content(self):
+    @patch("services.mpw_tron_readonly_deposit_candidates._paced_slot")
+    def test_only_https_json_and_bounded_content(self, _pace):
         class Response:
             status=200
             headers=Message()
