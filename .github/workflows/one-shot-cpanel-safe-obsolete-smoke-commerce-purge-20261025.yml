@@ -1,0 +1,112 @@
+name: ONE SHOT cPanel obsolete smoke tests and commerce sandbox cleanup
+on:
+  pull_request:
+    types: [opened]
+    paths:
+      - .github/workflows/one-shot-cpanel-safe-obsolete-smoke-commerce-purge-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Delete only preverified unreferenced synthetic smoke snapshots and inactive empty-commerce sandboxes
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 420s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,re,json,tarfile,shutil,subprocess,time,stat
+          home=Path('/home/zomorod2')
+          if os.geteuid()==0 or Path.home()!=home or home.is_symlink() or str(home.resolve())!='/home/zomorod2':raise SystemExit('ACCOUNT_GUARD_FAILED')
+          if not getattr(shutil.rmtree,'avoids_symlink_attacks',False):raise SystemExit('UNSAFE_RMTREE')
+          protected=['Saeit/manage.py','Saeit/passenger_wsgi.py','public_html','mail','mojtaba_personal','Saeit-staging/admin-smoke/ab090d03f5bc-38498776878']
+          for name in protected:
+           if not (home/name).exists():raise SystemExit('PROTECTED_MISSING:'+name)
+          checks=[{"path":"Saeit-staging/admin-smoke/0a99d2278bd8-38487451925.tar.gz","bytes":5525285,"min_age":0.35,"kind":"tar"},{"path":"Saeit-staging/admin-smoke/22a39fbf52e8-38482850257.tar.gz","bytes":19324090,"min_age":0.35,"kind":"tar"},{"path":"Saeit-staging/admin-smoke/26e7c8216ba9-38483785387.tar.gz","bytes":19324142,"min_age":0.35,"kind":"tar"},{"path":"Saeit-staging/admin-smoke/363c9b65ff72-38486072918.tar.gz","bytes":5523069,"min_age":0.35,"kind":"tar"},{"path":"Saeit-staging/admin-smoke/3d0d2e78fb33-38487543837","bytes":7656565,"min_age":6.3,"kind":"smoke_dir"},{"path":"Saeit-staging/admin-smoke/4bed451e8576-38498217004","bytes":7665812,"min_age":6.3,"kind":"smoke_dir"},{"path":"Saeit-staging/admin-smoke/4fb506969932-38484464557","bytes":7614561,"min_age":6.3,"kind":"smoke_dir"},{"path":"Saeit-staging/admin-smoke/55c45560e5a2-38498583041.tar.gz","bytes":19339918,"min_age":0.35,"kind":"tar"},{"path":"Saeit-staging/admin-smoke/6a807e171a8d-38486197457","bytes":7634404,"min_age":6.3,"kind":"smoke_dir"},{"path":"Saeit-staging/admin-smoke/6c9ec5074b99-38483624067.tar.gz","bytes":19325293,"min_age":0.35,"kind":"tar"},{"path":"Saeit-staging/admin-smoke/7ad8de1c8a9c-38486132655.tar.gz","bytes":5523036,"min_age":0.35,"kind":"tar"},{"path":"Saeit-staging/admin-smoke/7ca3fb38f8f2-38487342108.tar.gz","bytes":5523341,"min_age":0.35,"kind":"tar"},{"path":"Saeit-staging/admin-smoke/900b74ca3c31-38487386843.tar.gz","bytes":5524004,"min_age":0.35,"kind":"tar"},{"path":"Saeit-staging/admin-smoke/9369c1a43fd4-38498401914.tar.gz","bytes":19339172,"min_age":0.35,"kind":"tar"},{"path":"Saeit-staging/admin-smoke/a603e8fe5646-38486544944","bytes":7634996,"min_age":6.3,"kind":"smoke_dir"},{"path":"Saeit-staging/admin-smoke/b1e599ea05f2-38483484397.tar.gz","bytes":19323931,"min_age":0.35,"kind":"tar"},{"path":"Saeit-staging/admin-smoke/ba380e0c4a46-38487712470","bytes":7656563,"min_age":6.3,"kind":"smoke_dir"},{"path":"Saeit-staging/admin-smoke/cbbd4b5dca3c-38483312144.tar.gz","bytes":19324645,"min_age":0.35,"kind":"tar"},{"path":"Saeit-staging/admin-smoke/e080ccba83cf-38487506021.tar.gz","bytes":19975658,"min_age":0.35,"kind":"tar"},{"path":"Saeit-staging/admin-smoke/e717e706ff27-38482630039.tar.gz","bytes":5561192,"min_age":0.35,"kind":"tar"},{"path":"Saeit-staging/admin-smoke/ee521ea2d100-38498204241.tar.gz","bytes":5525808,"min_age":0.35,"kind":"tar"},{"path":"Saeit-staging/admin-smoke/f173784d392f-38484034226","bytes":7613969,"min_age":6.3,"kind":"smoke_dir"},{"path":"Saeit-staging/moj-commerce-v10-sandbox/mc10-c3a540e57cb4","bytes":118826284,"min_age":3.1,"kind":"sandbox"},{"path":"Saeit-staging/moj-commerce-v12-sandbox/mc12-20874316936e","bytes":118867316,"min_age":3.1,"kind":"sandbox"}]
+          cron=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=20)
+          ps=subprocess.run(['ps','-u','zomorod2','-o','args='],capture_output=True,text=True,timeout=20)
+          if cron.returncode or ps.returncode:raise SystemExit('ACTIVE_REF_READ_FAILED')
+          uapi=subprocess.run(['uapi','--output=json','PassengerApps','list_applications'],capture_output=True,text=True,timeout=35)
+          if uapi.returncode:raise SystemExit('PASSENGER_API_FAILED')
+          app=json.loads(uapi.stdout)
+          if app.get('result',{}).get('status')!=1:raise SystemExit('PASSENGER_READ_FAILED')
+          references=cron.stdout+'\n'+ps.stdout+'\n'+json.dumps(app)
+          def used_quota():
+           q=subprocess.run(['uapi','--output=json','Quota','get_quota_info'],capture_output=True,text=True,timeout=30)
+           if q.returncode:return None
+           try:return json.loads(q.stdout).get('result',{}).get('data',{})
+           except Exception:return None
+          def stat_size(p,kind):
+           if kind=='tar':
+            if not p.is_file() or p.is_symlink():raise SystemExit('TAR_PATH_INVALID')
+            with tarfile.open(str(p),'r:gz') as tf:
+             ms=tf.getmembers()
+             if not ms or len(ms)>15000:raise SystemExit('TAR_UNEXPECTED_MEMBER_COUNT')
+             for member in ms:
+              if member.issym() or member.islnk() or (not (member.isfile() or member.isdir())):raise SystemExit('TAR_SPECIAL_MEMBER')
+              name=member.name
+              if name.startswith('/') or '..' in Path(name).parts:raise SystemExit('TAR_UNSAFE_PATH')
+              if any(name.lower().endswith(x) for x in ('.sqlite3','.sql','.db')) and not name.endswith('/isolated-smoke.sqlite3'):raise SystemExit('TAR_CUSTOMER_DB_POSSIBLE')
+            return p.stat().st_size
+           if not p.is_dir() or p.is_symlink():raise SystemExit('DIRECTORY_TARGET_INVALID')
+           s=0
+           for here,dirs,names in os.walk(str(p),followlinks=False):
+            root=Path(here)
+            if os.path.ismount(root) or root.stat().st_dev!=home.stat().st_dev:raise SystemExit('MOUNT_INSIDE_TARGET')
+            for n in names:
+             f=root/n
+             if f.is_symlink():continue
+             if not f.is_file():raise SystemExit('SPECIAL_FILE')
+             rel=str(f.relative_to(p)).lower()
+             if kind=='sandbox' and any(x in rel for x in ('.sqlite','.db','.sql','customer-data','customer_data','orders.sqlite')):raise SystemExit('SANDBOX_CUSTOMER_FILE')
+             if kind=='smoke_dir' and (rel.endswith('.sqlite3') or rel.endswith('.db') or rel.endswith('.sql')) and rel!='isolated-smoke.sqlite3':raise SystemExit('SMOKE_CUSTOMER_DB')
+             s+=f.stat().st_size
+           return s
+          verified=[]
+          for item in checks:
+           rel=item['path'];kind=item['kind'];p=home/rel
+           if '..' in Path(rel).parts or rel.startswith('/') or len(Path(rel).parts)!=3:raise SystemExit('INVALID_TARGET')
+           if any((home/Path(*Path(rel).parts[:i])).is_symlink() for i in range(1,4)):raise SystemExit('PARENT_SYMLINK')
+           if os.path.ismount(p) or p.stat().st_dev!=home.stat().st_dev:raise SystemExit('TARGET_MOUNT')
+           if rel in references or p.name in references:raise SystemExit('ACTIVE_REFERENCE:'+rel)
+           actual=stat_size(p,kind)
+           if actual!=item['bytes']:raise SystemExit('TARGET_CHANGED:'+rel+':'+str(actual))
+           age=(time.time()-p.stat().st_mtime)/86400
+           if age<item['min_age']:raise SystemExit('TARGET_TOO_RECENT:'+rel)
+           verified.append((p,kind,actual,rel))
+          if len(verified)!=24:raise SystemExit('EXPECTED_24_EXACT_TARGETS')
+          before=used_quota()
+          deleted=[]
+          for p,kind,amount,rel in verified:
+           if kind=='tar':p.unlink()
+           else:shutil.rmtree(str(p))
+           deleted.append({'path':rel,'file_content_bytes':amount})
+          for name in protected:
+           if not (home/name).exists():raise SystemExit('PROTECTED_POSTCHECK_FAILED:'+name)
+          after=used_quota()
+          print('CPANEL_SAFE_SMOKE_COMMERCE_PURGE='+json.dumps({'deleted_count':len(deleted),'removed_content_bytes':sum(x['file_content_bytes'] for x in deleted),'removed_paths':[x['path'] for x in deleted],'quota_before_mb':before.get('megabytes_used') if before else None,'quota_after_mb':after.get('megabytes_used') if after else None,'quota_limit_mb':after.get('megabyte_limit') if after else None,'protected_preserved':True,'only_allowlisted_targets':True},sort_keys=True),flush=True)
+
+          PY
+          echo CPANEL_GUARDED_CLEANUP=PASS
