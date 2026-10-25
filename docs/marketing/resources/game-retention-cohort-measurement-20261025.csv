@@ -1,0 +1,2 @@
+cohort_start_utc,eligible_new_players,returned_day_1,returned_day_7,returned_day_30,d1_retention_formula,d7_retention_formula,d30_retention_formula,notes
+2026-10-25,0,0,0,0,"=IFERROR(C2/B2,0)","=IFERROR(D2/B2,0)","=IFERROR(E2/B2,0)","Blank template: replace zeroes with consented aggregate counts; cohorts must be mature before measuring D7/D30"
