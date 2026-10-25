@@ -78,9 +78,13 @@ jobs:
                   if p.stat().st_nlink!=1:raise SystemExit('HARDLINKED_BACKUP')
                   files=[p]
                   db=p
-              if db.is_symlink() or not db.is_file():raise SystemExit('FACTORY_SQLITE_SNAPSHOT_MISSING')
               size=sum(x.stat().st_size for x in files)
-              if not 70*2**20<size<950*2**20:raise SystemExit('UNEXPECTED_HISTORICAL_BACKUP_SIZE')
+              if db.is_symlink() or not db.is_file():
+                  classified.append({'name':name,'bytes':size,'safe_candidate':False,'reason':'FACTORY_SQLITE_SNAPSHOT_MISSING'})
+                  continue
+              if not 70*2**20<size<950*2**20:
+                  classified.append({'name':name,'bytes':size,'safe_candidate':False,'reason':'BACKUP_SIZE_OUTSIDE_EXPECTED_RANGE'})
+                  continue
               con=sqlite3.connect('file:'+str(db)+'?mode=ro&immutable=1',uri=True,timeout=12)
               tables=set(x[0] for x in con.execute("select name from sqlite_master where type='table'"))
               if not {'core_factoryrun','core_factoryevidence','core_product','core_order','core_paymentintent'}.issubset(tables):
