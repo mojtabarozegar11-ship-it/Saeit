@@ -35,8 +35,8 @@ assert.equal(cases[1].unlocked,150);
 assert.equal(cases[2].unlocked,1);
 const jungle=between(rah,'function jungleRunGame(stage){','function runnerGame(stage){');
 function runJungle(choices,random=()=>0){
- const listeners=new Map(),stage={isConnected:true,buttons:[],_html:'',get innerHTML(){return this._html},set innerHTML(v){this._html=v;this.buttons=[]},querySelector(){return {append(...items){stage.buttons.push(...items)}}}};
- const sandbox={Math:Object.assign(Object.create(Math),{random}),localStorage:{getItem(){return '0'},setItem(){}},document:{
+ const listeners=new Map(),storage=new Map(),stage={isConnected:true,buttons:[],_html:'',get innerHTML(){return this._html},set innerHTML(v){this._html=v;this.buttons=[]},querySelector(){return {append(...items){stage.buttons.push(...items)}}}};
+ const sandbox={Math:Object.assign(Object.create(Math),{random}),localStorage:{getItem(k){return storage.get(k)||'0'},setItem(k,v){storage.set(k,v)}},document:{
   getElementById(){return {classList:{contains(){return true}}}},
   addEventListener(event,fn){listeners.set(event,fn)},
   removeEventListener(event,fn){if(listeners.get(event)===fn)listeners.delete(event)}
@@ -50,12 +50,14 @@ function runJungle(choices,random=()=>0){
   const b=stage.buttons.find(x=>x.text.toLowerCase().startsWith(selected));
   assert.ok(b,'action '+selected+' unavailable');b.click();
  }
- return {stage,listeners,seen};
+ return {stage,listeners,seen,storage};
 }
 
 const win=runJungle(Array(12).fill(hint=>hint));
 for(const hazard of ['jump','duck','sidestep'])assert.equal(win.seen.filter(x=>x===hazard).length,4,'every jungle course must balance '+hazard);
 assert.ok(win.stage.innerHTML.includes('Jungle cleared!'),'12 correct jumps should win');
+assert.ok(Number(win.storage.get('studio-raha-jungle-best-v1'))>0,'jungle personal best must persist');
+assert.ok(win.stage.innerHTML.includes('Best '+win.storage.get('studio-raha-jungle-best-v1')),'jungle UI must display saved record');
 const lose=runJungle(Array(3).fill(hint=>hint==='jump'?'duck':'jump'));
 assert.ok(lose.stage.innerHTML.includes('jungle wins'),'three wrong moves should end run');
 const sidestep=runJungle(Array(12).fill(hint=>hint),()=>.99);
@@ -83,4 +85,19 @@ cakeNodes['[data-action="cake-reset"]'].onclick();
 assert.equal((cakeNodes['#cakepreview'].innerHTML.match(/y="480"/g)||[]).length,0,'start over must reset all candles');
 cakeNodes['[data-action="cake-download"]'].onclick();
 assert.ok(downloaded.includes('#ff79b8'),'reset must restore default icing in exported design');
+// Verify Cake Maker persistence survives a complete UI remount without trusting stored markup.
+const savedCake=new Map();cakeSandbox.localStorage={getItem:k=>savedCake.get(k)||null,setItem:(k,v)=>savedCake.set(k,v)};
+vm.runInNewContext(cake+cakeUI+'mountCake();',cakeSandbox);
+cakeNodes['#icing'].oninput({target:{value:'#4488cc'}});
+cakeNodes['#cakeGreeting'].onchange({target:{value:'Congratulations'}});
+cakeNodes['[data-action="candle"]'].onclick();
+assert.ok(savedCake.has('taniya-cake-design-v1'),'cake design must persist after editing');
+vm.runInNewContext(cake+cakeUI+'mountCake();',cakeSandbox);
+assert.ok(cakeNodes['#cakepreview'].innerHTML.includes('#4488cc'),'frosting must restore on remount');
+assert.ok(cakeNodes['#cakepreview'].innerHTML.includes('Congratulations'),'greeting must restore on remount');
+assert.equal((cakeNodes['#cakepreview'].innerHTML.match(/y="480"/g)||[]).length,1,'candles must restore on remount');
+savedCake.set('taniya-cake-design-v1',JSON.stringify({icing:'url(javascript:alert(1))',topping:'<svg>',candles:999,greeting:'<script>'}));
+vm.runInNewContext(cake+cakeUI+'mountCake();',cakeSandbox);
+assert.ok(!cakeNodes['#cakepreview'].innerHTML.includes('javascript'),'tampered cake color must be rejected');
+assert.ok(!cakeNodes['#cakepreview'].innerHTML.includes('<script>'),'tampered greeting must be rejected');
 console.log('GAME_QUALITY_REGRESSION_PASS: Raham runner, Taniya cake SVG, Prism progress, three JS parsers');
