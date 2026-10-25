@@ -1,0 +1,74 @@
+name: cPanel post-cleanup quota and protected web health READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/cpanel-post-cleanup-space-and-live-preservation-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Verify cPanel released blocks, stores, webroot, mail, agents, and actual quota
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 380s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,subprocess,json
+          h=Path('/home/zomorod2')
+          if os.geteuid()==0 or Path.home()!=h or h.is_symlink():raise SystemExit('INVALID_USER')
+          paths=['.','Saeit','Saeit-staging','Saeit-staging/admin-smoke','Saeit-staging/moj-commerce-v10-sandbox','Saeit-staging/moj-commerce-v12-sandbox','.backups','public_html','mail','mojtaba_personal']
+          def size(p):
+           if not p.exists():return None
+           o=subprocess.run(['du','-s','-B1',str(p)],capture_output=True,text=True,timeout=50)
+           return int(o.stdout.split()[0]) if o.returncode==0 else None
+          sizes={rel:size(h/rel) for rel in paths}
+          protected=['Saeit/manage.py','Saeit/passenger_wsgi.py','public_html','mail','mojtaba_personal','MojPlayWin_Private_Assets','private_products','Saeit-staging/admin-smoke/ab090d03f5bc-38498776878']
+          present={rel:(h/rel).exists() for rel in protected}
+          ref=subprocess.run(['uapi','--output=json','PassengerApps','list_applications'],capture_output=True,text=True,timeout=35)
+          quota=subprocess.run(['uapi','--output=json','Quota','get_quota_info'],capture_output=True,text=True,timeout=35)
+          db=subprocess.run(['uapi','--output=json','Mysql','list_databases'],capture_output=True,text=True,timeout=35)
+          def parse(p):
+           try:return json.loads(p.stdout).get('result',{})
+           except Exception:return {}
+          q=parse(quota).get('data',{})
+          p=parse(ref).get('data',{})
+          m=parse(db).get('data',{})
+          absent=['Saeit-staging/moj-commerce-v10-sandbox/mc10-c3a540e57cb4','Saeit-staging/moj-commerce-v12-sandbox/mc12-20874316936e','Saeit-staging/admin-smoke/3d0d2e78fb33-38487543837','Saeit-staging/admin-smoke/e080ccba83cf-38487506021.tar.gz']
+          gone={rel:not(h/rel).exists() for rel in absent}
+          print('CPANEL_POST_PURGE_VERIFIED='+json.dumps({'sizes_allocated_bytes':sizes,'protected_exist':present,'deleted_samples_gone':gone,'quota':{k:v for k,v in q.items() if k in ['megabytes_used','megabyte_limit','under_quota_overall','inodes_used']},'passenger_status':parse(ref).get('status'),'passenger_apps':list(p.keys()) if isinstance(p,dict) else 'other','mysql_status':parse(db).get('status'),'mysql_database_count':len(m) if isinstance(m,list) else 'unavailable','mutations':0},sort_keys=True),flush=True)
+
+          PY
+          python3 - <<'PY'
+          import urllib.request,json
+          out={}
+          for name in ('https://mojplaywin.com/','https://zomorodmelal.ir/'):
+              try:
+                  req=urllib.request.Request(name,headers={'User-Agent':'ZomorodMelal-host-cleanup-postcheck/1.0'})
+                  with urllib.request.urlopen(req,timeout=25) as r:out[name]={'http_status':r.status,'final_host':r.url.split('/')[2]}
+              except Exception as e:out[name]={'error_type':type(e).__name__}
+          print('CPANEL_POST_PURGE_PUBLIC_HTTP='+json.dumps(out,sort_keys=True),flush=True)
+          PY
+          echo CPANEL_POST_PURGE_READONLY=PASS
