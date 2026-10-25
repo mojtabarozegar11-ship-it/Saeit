@@ -31,7 +31,7 @@ jobs:
                             'STOP_AVAILABLE_MIB = 1250',
                             'VIRTUAL_MEMORY_CAP_MIB = 2600',
                             '"published": False',
-                            'STREAMED_SEGMENT_BELOW_QC_SUBSTANCE'):
+                            'STREAM_QC_WORDS_'):
               assert condition in s, condition
           print("LEECH_SELFHOSTED_STREAMING_SOFTWARE_QA=passed")
           PY
