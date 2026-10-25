@@ -1,0 +1,106 @@
+name: MPW merchant cron after indexer repair read-only 2026-10-25
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-tron-postfix-cron-readonly-20261025.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-revenue-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read cron outcome, private rate gate and real order counts
+        run: |
+          set -euo pipefail
+          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,time,hashlib,re,subprocess,collections
+          from pathlib import Path
+          home=Path('/home/zomorod2');root=home/'Saeit-staging'
+          if root.is_symlink() or not root.is_dir():raise SystemExit('BAD_APP_ROOT')
+          os.chdir(root);sys.path.insert(0,str(root))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.db.models import Count
+          from core.models import PaymentIntent
+          rows=PaymentIntent.objects.filter(provider='mpw_walletless_trx_v1').values('status').annotate(count=Count('pk'))
+          gate=home/'.local/share/mpw_trongrid_readonly_rate_gate_v1'
+          source=root/'services/mpw_tron_readonly_deposit_candidates.py'
+          result={'financial_writes':0,'read_only':True,
+                  'intent_statuses':{r['status']:r['count'] for r in rows},
+                  'rate_gate_exists':gate.is_file() and not gate.is_symlink(),
+                  'rate_gate_private':bool(gate.is_file() and (gate.stat().st_mode&0o077)==0),
+                  'live_indexer_sha256':hashlib.sha256(source.read_bytes()).hexdigest() if source.is_file() and not source.is_symlink() else 'missing'}
+          cron=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=10)
+          lines=[x for x in cron.stdout.splitlines() if 'mpw_trx_commercial_reconcile_cron.py' in x and not x.lstrip().startswith('#')]
+          result['walletless_cron_entries']=len(lines)
+          files=[]
+          for entry in lines:
+              for raw in re.findall(r'[^\s<>"|&;]+\.log',entry):
+                  p=Path(raw)
+                  if p.is_absolute() and str(p).startswith(str(home)+'/'):files.append(p)
+          private=home/'.private_mojplaywin_main_agents'
+          if private.is_dir() and not private.is_symlink():
+              files.extend(private.glob('*trx*reconcil*.log'))
+              files.extend(private.glob('*tron*reconcil*.log'))
+          last=[]
+          for file in files[:16]:
+              if file.is_symlink() or not file.is_file() or file.stat().st_size>8_000_000:continue
+              if 0<=time.time()-file.stat().st_mtime<=300:result['log_recent']=True
+              for line in file.read_text('utf8','replace').splitlines()[-100:]:
+                  marker='MPW_TRX_AUTORECONCILE='
+                  if marker not in line:continue
+                  try:v=json.JSONDecoder().raw_decode(line.split(marker,1)[1])[0]
+                  except Exception:continue
+                  if isinstance(v,dict):
+                      last.append({k:v.get(k) for k in ('mode','examined','pending','held','settled') if k in v})
+          result['recent_cycles']=last[-4:]
+          print('MPW_TRON_POSTFIX_CRON='+json.dumps(result,sort_keys=True))
+          PY
+      - name: Remove temporary SSH relay keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
