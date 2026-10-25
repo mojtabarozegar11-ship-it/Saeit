@@ -29,7 +29,13 @@ def publish(run):
     if stage.exists() or stage.is_symlink() or backup.exists() or backup.is_symlink():fail("Release collision")
     if target.exists():
         safe_tree(target)
-        if not target.is_dir() or not ((target/".mpw-revenue-release.json").is_file() or not any(target.iterdir())):
+        if not target.is_dir():
+            fail("Revenue target is not a directory")
+        entries=list(target.iterdir())
+        placeholder=target/"assets"
+        empty_placeholder=(len(entries)==1 and entries[0]==placeholder and
+                           placeholder.is_dir() and not placeholder.is_symlink() and not any(placeholder.iterdir()))
+        if not ((target/".mpw-revenue-release.json").is_file() or not entries or empty_placeholder):
             fail("Revenue directory holds unknown or unmanaged files; never overwrite")
     data=sys.stdin.buffer.read(1500000)
     if len(data)==1500000 or not data:fail("Release archive too large or empty")
