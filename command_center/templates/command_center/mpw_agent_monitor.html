@@ -30,6 +30,8 @@ h3{font-size:15px;overflow-wrap:anywhere}
 <div><a href="/staff/command-center/">بازگشت به پنل</a>　<button id="reload" type="button">به‌روزرسانی</button></div></header>
 <section id="intro" aria-live="polite"><p>در حال دریافت وضعیت واقعی...</p></section>
 <section class="stats" id="stats" aria-label="خلاصه سامانه"></section>
+<h2>شواهد کیفیت و بازکاری خودکار</h2>
+<section class="stats" id="quality" aria-label="شواهد تولید و کنترل کیفیت"></section>
 <div class="controls"><label for="kind">نوع:</label><select id="kind">
 <option value="all">همه</option><option value="master">مستر ایجنت</option>
 <option value="agent">ایجنت‌ها و نقش‌ها</option><option value="robot">ربات‌ها</option>
@@ -104,11 +106,25 @@ async function load(){
   for(const [key,title] of [["total","کل موارد ثبت‌شده"],["healthy","گزارش سالم"],["loaded_only","فقط بارگذاری"],["stale","قدیمی"],["unknown","نامشخص"],["failed","خطا"],["degraded","اختلال"]]){
    const box=element("article","card");box.append(element("div","count",s[key]||0),element("small","",title));stats.append(box);
   }
+  const evidence=data.evidence||{};
+  const quality=$("quality");quality.replaceChildren();
+  const proof=(value)=>value===null||value===undefined?"تأیید نشده":String(value);
+  for(const [field,title] of [
+      ["open_rework_items","پرونده‌های باز رفع عیب"],
+      ["functional_modules_verified","ماژول‌های دارای آزمون مستقل"],
+      ["legacy_probes","آزمون‌های تابعی منتخب"],
+      ["generation_promoted","ارتقای نسل با شواهد"]]){
+    const box=element("article","card");
+    const value=field==="generation_promoted"
+      ?(evidence[field]===true?"مستند":evidence[field]===false?"تأیید نشده":"نامشخص")
+      :proof(evidence[field]);
+    box.append(element("div","count",value),element("small","",title));quality.append(box);
+  }
   const detail=data.source==="private_cpanel_unavailable"?"منبع خصوصی در این سرور در دسترس نیست؛ اتصالی تأیید نشده است.":
    "داده خصوصی دریافت شد؛ هر جزء فقط با شواهد و زمان آخرین گزارش ارزیابی می‌شود.";
   txt($("intro"),detail+" | زمان بررسی: "+(data.captured_at||"نامشخص"));
   paint();
- }catch(e){rows=[];txt($("intro"),"خطا در دریافت داده؛ سلامت هیچ جزء تأیید نشده است.");$("cards").replaceChildren();$("stats").replaceChildren();}
+ }catch(e){rows=[];txt($("intro"),"خطا در دریافت داده؛ سلامت هیچ جزء تأیید نشده است.");$("cards").replaceChildren();$("stats").replaceChildren();$("quality").replaceChildren();}
 }
 $("reload").addEventListener("click",load);
 $("kind").addEventListener("change",paint);$("status").addEventListener("change",paint);

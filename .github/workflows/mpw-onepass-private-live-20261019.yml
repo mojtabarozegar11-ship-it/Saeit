@@ -1,0 +1,201 @@
+name: MojPlayWin one-pass private agent QA and evolution deployment
+on:
+  push:
+    branches: [fix/mpw-onepass-private-agent-evolution-20261019]
+    paths:
+      - .github/workflows/mpw-onepass-private-live-20261019.yml
+      - scripts/mpw_onepass_private_evolution_20261019.py
+      - command_center/mpw_private_telemetry.py
+      - command_center/templates/command_center/mpw_agent_monitor.html
+      - tests/test_mpw_onepass_private_evolution_20261019.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-onepass-tenant-only-release
+  cancel-in-progress: false
+jobs:
+  onepass:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/fix/mpw-onepass-private-agent-evolution-20261019'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify all tenant-only QA checks before any mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_onepass_private_evolution_20261019 -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest command_center.tests.test_mpw_private_telemetry -v
+          python3 -m py_compile scripts/mpw_onepass_private_evolution_20261019.py scripts/mpw_onepass_private_release_cpanel_20261019.py command_center/mpw_private_telemetry.py
+          python3 - <<'PY'
+          from pathlib import Path
+          workflow=Path('.github/workflows/mpw-onepass-private-live-20261019.yml').read_text()
+          assert 'refs/heads/fix/mpw-onepass-private-agent-evolution-20261019' in workflow
+          source=Path('scripts/mpw_onepass_private_evolution_20261019.py').read_text()
+          for forbidden in ('zomorodmelal.ir', 'public_html/', 'passenger_restart'):
+              assert forbidden not in source
+          print('MPW_ONEPASS_SOURCE_AND_TENANT_GUARDS_PASS')
+          PY
+      - name: Pack exact allowlisted source with content hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, io, json, os, tarfile
+          from pathlib import Path
+          sources={
+            'runner.py':'scripts/mpw_onepass_private_evolution_20261019.py',
+            'telemetry.py':'command_center/mpw_private_telemetry.py',
+            'dashboard.html':'command_center/templates/command_center/mpw_agent_monitor.html',
+          }
+          content={k:Path(p).read_bytes() for k,p in sources.items()}
+          manifest=json.dumps({'tenant':'mojplaywin-main','schema':'mpw.onepass.release.v1',
+              'sha256':{k:hashlib.sha256(v).hexdigest() for k,v in content.items()}},sort_keys=True).encode()
+          path=Path(os.environ['RUNNER_TEMP'])/'mpw-onepass-payload.tgz'
+          with tarfile.open(path,'w:gz') as archive:
+              for name,raw in [*content.items(),('manifest.json',manifest)]:
+                  info=tarfile.TarInfo(name);info.size=len(raw);info.mode=0o600;info.mtime=0
+                  archive.addfile(info,io.BytesIO(raw))
+          assert 5000<path.stat().st_size<55000
+          print('MPW_ONEPASS_PACKAGE_SHA256='+hashlib.sha256(path.read_bytes()).hexdigest())
+          PY
+      - name: Capture MojPlayWin main plus protected siblings HTTP baselines
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          paths=('/','/store/','/staff/command-center/mpw-agents/',
+                 '/farnaz/','/taniya/','/saman/','/picm/','/zahra/','/mojtaba.roozegar/')
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,req,fp,code,msg,headers,newurl): return None
+          opener=urllib.request.build_opener(NoRedirect)
+          outcome={}
+          for path in paths:
+              request=urllib.request.Request('https://mojplaywin.com'+path,
+                        headers={'User-Agent':'MPW-Onepass-Scoped-Before','Cache-Control':'no-cache'})
+              try:
+                  with opener.open(request,timeout=20) as response: status=response.status
+              except urllib.error.HTTPError as exc: status=exc.code
+              outcome[path]=status
+          assert outcome['/']==200 and outcome['/store/']==200
+          assert outcome['/staff/command-center/mpw-agents/'] in (301,302,303,401,403)
+          with open(os.environ['RUNNER_TEMP']+'/mpw-onepass-http-before.json','w') as f:
+              json.dump(outcome,f,sort_keys=True)
+          print('MPW_PROTECTED_BASELINE='+json.dumps(outcome,sort_keys=True))
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Install all three scoped artifacts atomically and execute real private canary
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="$RUNNER_TEMP/mpw-onepass-payload.tgz"
+          sha="$(sha256sum "$package" | awk '{print $1}')"
+          controller="$(base64 -w0 scripts/mpw_onepass_private_release_cpanel_20261019.py)"
+          timeout 240s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$controller\"))' install '$GITHUB_RUN_ID' '$sha'" < "$package"
+      - name: Confirm private reports, cron preservation and no collateral HTTP regressions
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 40s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import json,subprocess
+          root=Path('/home/zomorod2/.private_mojplaywin_main_agents/evolution_runtime_20261018/onepass_agent_quality')
+          status=json.loads((root/'onepass_status.json').read_text())
+          ledger=json.loads((root/'onepass_rework_ledger.json').read_text())
+          assert status['tenant']=='mojplaywin-main' and status['schema']=='mpw.onepass.agent_quality.v1'
+          assert status['summary']['total']==103
+          assert status['other_sites_touched'] is False
+          assert status['autonomous_master_dispatch_verified'] is False
+          assert ledger['history_is_never_discarded_for_quality_failure'] is True
+          assert ledger['task_executions_claimed']==0
+          cron=subprocess.run(['crontab','-l'],capture_output=True,text=True,check=True,timeout=12).stdout
+          assert sum('MPW_ONEPASS_QUALITY_MAIN_ONLY_20261019' in line
+             for line in cron.splitlines() if not line.startswith('#'))==1
+          print('MPW_REAL_ONEPASS_QA_READBACK='+json.dumps({
+              'component_count':status['summary']['total'],
+              'module_loaded_only':status['summary']['loaded_only'],
+              'defect_rework_open':ledger['open_rework_items'],
+              'legacy_probes':status['legacy_curated_functional_probes'],
+              'no_false_generation_claim':not status['evolution_generation_promoted'],
+              'other_sites_touched':status['other_sites_touched']},sort_keys=True))
+          PY
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          with open(os.environ['RUNNER_TEMP']+'/mpw-onepass-http-before.json') as f: before=json.load(f)
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,req,fp,code,msg,headers,newurl): return None
+          opener=urllib.request.build_opener(NoRedirect)
+          after={}
+          for path in before:
+              request=urllib.request.Request('https://mojplaywin.com'+path,
+                           headers={'Cache-Control':'no-cache','User-Agent':'MPW-Onepass-Scoped-After'})
+              try:
+                  with opener.open(request,timeout=20) as response: code=response.status
+              except urllib.error.HTTPError as exc: code=exc.code
+              after[path]=code
+          print('MPW_POST_RELEASE_HTTP='+json.dumps(after,sort_keys=True))
+          assert before==after, 'SIBLING_OR_MAIN_HTTP_REGRESSION'
+          print('MPW_ONEPASS_PRIVATE_RELEASE_ACCEPTED=true')
+          PY
+      - name: Restore exact scoped sources after any post-install regression
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          controller="$(base64 -w0 scripts/mpw_onepass_private_release_cpanel_20261019.py)"
+          timeout 100s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$controller\"))' rollback '$GITHUB_RUN_ID'"
+      - name: Destroy ephemeral relay keys and package
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/mojplaywin-inventory-ssh" "$RUNNER_TEMP/mpw-onepass-payload.tgz"
