@@ -136,7 +136,7 @@ jobs:
           def tree_sizes(folder):
               if folder.is_symlink() or not folder.is_dir():raise SystemExit('UNSAFE_RUNTIME_ROOT')
               children=[p for p in folder.iterdir() if not p.is_symlink()]
-              if len(children)>250:raise SystemExit('EXCESSIVE_RUNTIME_ROOT_CHILDREN')
+              if len(children)>2500:raise SystemExit('EXCESSIVE_RUNTIME_ROOT_CHILDREN')
               cmd=subprocess.run(['du','-sx','-B1','--']+[str(p) for p in children],
                                  capture_output=True,text=True,timeout=170)
               if cmd.returncode:raise SystemExit('RUNTIME_DU_FAILURE')
