@@ -128,6 +128,7 @@ for line in active:
             raise SystemExit("CASEWORK_UNRECOGNIZED_NEW_SCHEDULER")
     elif ("SAEIT_FACTORY_EVERY_MINUTE_V1" in line
           or "SAEIT_AGRI200_AUTONOMOUS_CLOSED_LOOP_V1" in line
+          or "SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025" in line
           or (minute and any(word in line.lower() for word in
               ("factory", "agri200", "qc1000", "product", "production",
                "warehouse", "sequential", "run-minute-cycle.sh")))):
