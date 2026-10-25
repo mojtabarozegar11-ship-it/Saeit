@@ -95,37 +95,54 @@ def assignment():
 
 
 def build_prompt(d, retry=0):
+    """Bound source-scoped prompt prefill on the owner's legacy SSE2-only CPU.
+
+    No live drafts or protected customer data are included. Every section
+    receives the same safety boundaries and documented source limitations.
+    """
     focus_list = d.get("section_plan", [])
     if not isinstance(focus_list, list) or not focus_list:
         raise RuntimeError("MISSING_OPERATIONAL_SECTION_PLAN")
     part = int(d["part_number"])
-    focus = focus_list[(part - 1 + retry) % len(focus_list)]
+    focus = str(focus_list[(part - 1 + retry) % len(focus_list)])[:200]
     angles = (
-        "site layout and daily routine, with a practical operator checklist",
-        "record-keeping, water testing plans, observable indicators and corrective decisions",
-        "a clearly hypothetical cost, staffing or farm-capacity calculation with assumptions",
-        "biosecurity workflow, veterinary escalation, quarantine decision log and responsible sourcing",
-        "harvest and quality traceability, customer specifications, transport risk and compliance review",
-        "a new farm equipment, procurement and husbandry scheduling case with failure diagnosis",
+        "site layout, staff tasks and operator checklist",
+        "record-keeping, water observation and escalation decision",
+        "hypothetical equipment cost or staffing calculation",
+        "quarantine, containment and veterinary referral",
+        "traceability, packaging risk and buyer specification",
+        "procurement, work scheduling and failure diagnosis",
     )
-    brief = {k: v for k, v in d.items() if k != "previous_chapter_context_tail"}
+    sources = []
+    for row in d.get("foundational_source_records", [])[:9]:
+        if isinstance(row, dict):
+            ident = str(row.get("id", ""))[:30]
+            title = " ".join(str(row.get("title", "")).split())[:48]
+            scope = " ".join(str(row.get("limitation", "")).split())[:95]
+            if ident:
+                sources.append("%s: %s; scope: %s" % (ident, title, scope))
+    source_context = " | ".join(sources)[:1600]
+    deliverable = " ".join(str(d.get("practical_deliverable", "")).split())[:175]
     return (
-        "Continue a real vocational English handbook on establishing and operating "
-        "a legally compliant commercial MEDICINAL LEECH BREEDING FARM. "
-        "Do not write a general zoology essay or clinical treatment advice. "
-        "Chapter " + str(d["chapter_number"]) + ": " + str(d["chapter_title"]) + ". "
-        "New topic: " + str(focus) + ". Fresh distinct angle: "
-        + angles[(part - 1 + 2 * retry) % len(angles)] + ". "
-        "Write 650 to 950 new substantive English words, starting with a concrete "
-        "descriptive subheading. Include farm SOP, realistic monitoring record "
-        "fields, a worked HYPOTHETICAL example or decision, hazard signs and "
-        "escalation to licensed expertise. Use original paragraphs; no padding, "
-        "repeated introductions, unsourced numeric husbandry limits, invented citations, "
-        "unsafe wild capture advice, human/animal blood-feeding instructions, or "
-        "pathogen culture. Label assumptions and distinguish Hirudo species accurately. "
-        "Use source IDs only for source-supported claims. Source-bounded research "
-        "and farm-task context: " + json.dumps(brief, ensure_ascii=False)
-    )
+        "Write 400-560 original, non-repetitive English words for a "
+        "professional medicinal LEECH BREEDING FARM operator handbook, "
+        "not clinical treatment and not general zoology. "
+        "Chapter %s: %s. Specific new topic: %s. Practical angle: %s. "
+        "Required vocational output: %s. "
+        "Start with a descriptive heading. Include an actionable farm SOP, "
+        "specific monitoring-log fields, accountable decisions, a clearly "
+        "HYPOTHETICAL worked farm example with explicit assumptions, hazards "
+        "and a trained-veterinarian/regulator escalation decision. Explain "
+        "species identity: Hirudo medicinalis, H. verbana and H. orientalis "
+        "are not interchangeable. No wild capture, human or animal blood-feeding "
+        "methods, pathogen culture, invented temperatures/densities, clinical "
+        "advice, fabricated citations or unsupported regulations. Claim only "
+        "what the following bounded source notes support, name an ID only for "
+        "a grounded claim, and flag uncertainties. Sources: %s. "
+        "Write textbook prose directly, no opening boilerplate or repetition."
+    ) % (d["chapter_number"], str(d["chapter_title"])[:95],
+         focus, angles[(part - 1 + 2 * retry) % len(angles)],
+         deliverable, source_context)
 
 
 def low_priority_preexec():
@@ -142,10 +159,7 @@ def call_model(doc, process, error, retry=0):
     as soon as a self-contained segment passes diversity/length checks.
     """
     import re
-    prompt = build_prompt(doc, retry).replace(
-        "Write 650 to 950 new substantive English words",
-        "Write 450 to 650 new substantive English words"
-    )
+    prompt = build_prompt(doc, retry)
     payload = {
         "model": "local-owner-vps-qwen3-1.7b",
         "messages": [
@@ -154,7 +168,7 @@ def call_model(doc, process, error, retry=0):
                 "OPERATOR prose. Never invent empirical thresholds or approvals. "
                 "Write ONLY substantive textbook text, without internal reasoning.")},
             {"role": "user", "content": prompt}],
-        "max_tokens": 1450, "temperature": round(0.69 + retry * 0.05, 2),
+        "max_tokens": 1150, "temperature": round(0.69 + retry * 0.05, 2),
         "top_p": 0.9, "chat_template_kwargs": {"enable_thinking": False},
         "stream": True,
     }
@@ -200,7 +214,7 @@ def call_model(doc, process, error, retry=0):
                 continue
             body = "".join(chunks).strip()
             last_checked_bytes = len(body)
-            if good_segment(body, 410):
+            if good_segment(body, 355):
                 return body
     if error:
         raise RuntimeError("LOW_MEMORY_ABORT")
