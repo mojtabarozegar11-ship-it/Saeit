@@ -16,6 +16,7 @@ assert.equal(check(base),true,'normal persisted campaign must remain resumable')
 for(const [label,bad] of [
  ['bad hero',{hero:999}],['negative hero',{hero:-1}],['nonfinite x',{x:Infinity}],['bad health',{hp:200}],['negative lives',{lives:-2}],['impossible ammo',{ammo:999}],['nonfinite score',{score:NaN}],['out-of-bounds mission',{mission:6}],['endless campaign',{endless:true}],['invalid enemy',{enemies:[{x:NaN,y:7.5,hp:39}]}],['too many enemies',{enemies:Array(21).fill({x:8,y:8,hp:39})}],['invalid missiles',{missiles:{}}]
 ])assert.equal(check({...base,...bad}),false,label);
+assert(src.includes("if(world.missionPassed){showResult('منطقه پاکسازی شد'"),'completed mission restore must return to success/continue UI');
 assert(src.includes('targetUid:target.uid'),'missiles must track stable enemy identities');
 assert(src.includes('world.enemies.find(e=>e.uid===m.targetUid)'),'missile guidance must resolve stable IDs');
 assert(src.includes('document.addEventListener(\'visibilitychange\''),'hidden tabs must pause');
