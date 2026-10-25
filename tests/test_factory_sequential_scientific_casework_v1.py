@@ -53,12 +53,23 @@ def provider(url, limit):
             "<body>"+body*3+"</body></article>").encode()
 
 
+def step_with_ample_disk(*args, **kwargs):
+    """Isolate the science/rotation tests from the VPS's real disk level.
+
+    A separate test below explicitly proves the 2 GiB production hold.
+    """
+    class Disk:
+        free=worker.DISK_RESERVE + 1024 * 1024 * 1024
+    with patch.object(worker.shutil, "disk_usage", return_value=Disk()):
+        return worker.step(*args, **kwargs)
+
+
 class SequentialCaseworkTests(unittest.TestCase):
     def test_only_one_product_per_tick_with_real_evidence_and_review_hold(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)
             fixture(root)
-            first=worker.step(root,max_attempts=4,http_get=provider)
+            first=step_with_ample_disk(root,max_attempts=4,http_get=provider)
             self.assertEqual(first["cases_processed"],1)
             self.assertEqual(first["selected_order_file"],"WO-00000001--r001.json")
             self.assertEqual(first["result"],"WAITING_QUALIFIED_CLAIM_REVIEW_AND_REAUTHORING")
@@ -67,13 +78,13 @@ class SequentialCaseworkTests(unittest.TestCase):
             self.assertEqual(first["publications"],0)
             target=root/"production-instructions/stage-02/primary-source-acquisition-v1"
             self.assertEqual(len(list((target/"sequential-casework-v1").glob("*.json"))),1)
-            second=worker.step(root,http_get=lambda *_: (_ for _ in ()).throw(
+            second=step_with_ample_disk(root,http_get=lambda *_: (_ for _ in ()).throw(
                 AssertionError("cached DOIs must not be fetched again")))
             self.assertEqual(second["selected_order_file"],"WO-00000002--r001.json")
             self.assertEqual(second["source_attempts"],0)
-            third=worker.step(root,http_get=provider)
+            third=step_with_ample_disk(root,http_get=provider)
             self.assertEqual(third["selected_order_file"],"WO-00000003--r001.json")
-            next_tick=worker.step(root,http_get=provider)
+            next_tick=step_with_ample_disk(root,http_get=provider)
             self.assertEqual(next_tick["selected_order_file"],first["selected_order_file"])
             statuses=list((target/"sequential-casework-v1").glob("*.json"))
             self.assertEqual(len(statuses),3)
@@ -89,11 +100,11 @@ class SequentialCaseworkTests(unittest.TestCase):
             tampered["qc1000_approved"]=True
             p.write_text(json.dumps(tampered))
             original=p.read_bytes()
-            first=worker.step(root,http_get=provider)
+            first=step_with_ample_disk(root,http_get=provider)
             self.assertEqual(first["result"],"BLOCKED_INPUT_INTEGRITY")
             self.assertEqual(first["qc1000_approvals"],0)
             self.assertEqual(original,p.read_bytes())
-            second=worker.step(root,http_get=provider)
+            second=step_with_ample_disk(root,http_get=provider)
             self.assertEqual(second["selected_order_file"],"WO-00000002--r001.json")
             self.assertEqual(second["result"],"WAITING_QUALIFIED_CLAIM_REVIEW_AND_REAUTHORING")
 
@@ -106,13 +117,13 @@ class SequentialCaseworkTests(unittest.TestCase):
                 if "/search?" in url and "realstudy-0" in url:
                     raise m.TemporaryFailure("PROVIDER_500")
                 return provider(url,limit)
-            first=worker.step(root,http_get=fail_once)
+            first=step_with_ample_disk(root,http_get=fail_once)
             self.assertEqual(first["result"],"SOURCE_OR_LICENSE_REWORK_REQUIRED")
             self.assertEqual(first["source_attempts"],4)
-            second=worker.step(root,http_get=provider)
+            second=step_with_ample_disk(root,http_get=provider)
             self.assertEqual(second["selected_order_file"],"WO-00000002--r001.json")
             self.assertEqual(second["result"],"WAITING_QUALIFIED_CLAIM_REVIEW_AND_REAUTHORING")
-            third=worker.step(root,http_get=provider)
+            third=step_with_ample_disk(root,http_get=provider)
             self.assertEqual(third["selected_order_file"],"WO-00000001--r001.json")
             self.assertEqual(third["result"],"WAITING_QUALIFIED_CLAIM_REVIEW_AND_REAUTHORING")
 
