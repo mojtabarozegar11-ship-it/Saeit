@@ -216,6 +216,8 @@ class CronInstallerPreflightTests(unittest.TestCase):
             (f"* * * * * python3 /opt/agri200-autonomous-closed-loop.py # SAEIT_AGRI200_AUTONOMOUS_CLOSED_LOOP_V1",
              False, "COMPETING_MINUTE_PIPELINE"),
             ("* * * * * python3 /opt/custom-factory-cycle.py", False, "COMPETING_MINUTE_PIPELINE"),
+            ("* * * * * python3 /opt/strict-serial-fullcycle-v1.py # SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025",
+             False, "COMPETING_MINUTE_PIPELINE"),
             (new_row + "\n" + new_row, False, "DUPLICATE_OR_CONFLICTING_MARKERS"),
             (new_row + "\n" + old_row, False, "DUPLICATE_OR_CONFLICTING_MARKERS"),
             (old_row.replace("* * * * *", "*/5 * * * *"), False, "UNRECOGNIZED_OLD_SCHEDULER"),
