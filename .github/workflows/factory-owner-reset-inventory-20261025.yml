@@ -1,0 +1,123 @@
+name: Factory owner-authorized data reset forensic inventory READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/factory-owner-reset-inventory-20261025.yml
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Read-only classify factory data versus engines, stores, and customer records
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-owner-reset-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 550s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          import collections, hashlib, json, os, re, shutil, subprocess
+          home=Path('/home/githubops')
+          runtime=home/'factory-runtime'
+          private=runtime/'private/autonomous-product-cycle'
+          area=private/'production-instructions'
+          ops=runtime/'operations'
+          backups=ops/'backups'
+          for p in (home,runtime,private,area,ops,backups,area/'orders'):
+              if p.is_symlink() or not p.is_dir():
+                  raise SystemExit('REQUIRED_FACTORY_ROOT_NOT_SAFE:'+p.name)
+          if os.geteuid()==0 or os.getenv('USER')!='githubops':
+              raise SystemExit('MUST_BE_NONROOT_FACTORY_ACCOUNT')
+          order_dir=area/'orders'
+          orders=sorted(order_dir.iterdir())
+          dig=hashlib.sha256()
+          status=collections.Counter()
+          origin=collections.Counter()
+          protected=collections.Counter()
+          invalid=[]
+          for p in orders:
+              if p.is_symlink() or not p.is_file() or not re.fullmatch(r'WO-[0-9]{8}\.json',p.name):
+                  invalid.append('unexpected_filename_or_filetype')
+                  continue
+              b=p.read_bytes()
+              dig.update(p.name.encode()+hashlib.sha256(b).digest())
+              try: x=json.loads(b)
+              except Exception: invalid.append('bad_json'); continue
+              if not isinstance(x,dict) or x.get('id')!=p.stem:
+                  invalid.append('bad_order_identity');continue
+              status[str(x.get('status','MISSING'))]+=1
+              origin[str(x.get('origin','MISSING'))]+=1
+              for key in ('requires_customer_order','manufacturing_qa_passed','warehouse_goods_created','technical_product_release','publication_approved','public_distribution_allowed'):
+                  if x.get(key) is True: protected[key]+=1
+          families=[
+             'production-instructions','production-order-inputs','production-state.json',
+             'production-warehouse','product-lifecycle','customer-packs',
+             'customer-extracted-acceptance','digital-products',
+             'build-50','quality-excellence','quality-return-candidates',
+             'research-dossiers','research-rework','research-triage',
+             'native-candidate-evidence','generated-product-recipes',
+             'generated-source-revisions','design-intake','design-state',
+             'engineering-intake','engineering-gaps','owner500-autonomous-production',
+             'product-planning','product-commercial-pilots','qa-rework',
+             'f41-blockchain-token','f41-multiproduct','f41-solidity-finality',
+             'tool-router','production-toolkit','production-toolkit-3000',
+             'production-family-management','code-self-upgrade','activation40',
+             'commercial40','merchant-rails'
+          ]
+          present=[private/f for f in families if (private/f).exists()]
+          if any(p.is_symlink() for p in present):
+              raise SystemExit('SYMLINK_TOP_LEVEL_FAMILY')
+          du=subprocess.run(['du','-sx','-B1','--']+[str(p) for p in present],
+                            capture_output=True,text=True,timeout=210)
+          if du.returncode!=0:raise SystemExit('DU_INVENTORY_FAILED')
+          sizes={}
+          for line in du.stdout.splitlines():
+              n,p=line.split('\t',1)
+              sizes[Path(p).name]=int(n)
+          cron=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=8)
+          if cron.returncode:raise SystemExit('CRON_NOT_READABLE')
+          active=[x for x in cron.stdout.splitlines() if x.strip() and not x.lstrip().startswith('#')]
+          classified=collections.Counter()
+          for line in active:
+              if 'SAEIT_' in line or 'factory-runtime' in line:
+                  classified['factory_marked']+=1
+              else:classified['nonfactory_or_unmarked']+=1
+          ps=subprocess.run(['ps','-u','githubops','-o','args='],capture_output=True,text=True,timeout=12)
+          if ps.returncode:raise SystemExit('PROCESS_LIST_UNAVAILABLE')
+          processes=[line for line in ps.stdout.splitlines() if 'factory-runtime/' in line]
+          timers=subprocess.run(['systemctl','--user','list-timers','--all','--no-legend','--no-pager'],capture_output=True,text=True,timeout=12)
+          back_children=list(backups.iterdir())
+          back_kind=collections.Counter()
+          for p in back_children:
+              if p.is_symlink():back_kind['symlink']+=1
+              elif p.is_dir():back_kind['directory']+=1
+              elif p.is_file():back_kind['file']+=1
+              else:back_kind['special']+=1
+          print('OWNER_RESET_FORENSIC_READ_ONLY='+json.dumps({
+             'order_files':len(orders),'order_sha256':dig.hexdigest(),
+             'order_statuses':dict(status),'order_origins':origin.most_common(15),
+             'protected_order_flags':dict(protected),'invalid_order_entries':dict(collections.Counter(invalid)),
+             'data_family_sizes':sizes,'private_root_bytes':sum(sizes.values()),
+             'operation_worker_files':len([p for p in (ops/'production-instructions').iterdir() if p.is_file()]) if (ops/'production-instructions').is_dir() else None,
+             'active_cron':len(active),'cron_classes':dict(classified),
+             'factory_path_process_lines':len(processes),
+             'user_timer_inventory_available':timers.returncode==0,
+             'user_timer_count':len(timers.stdout.splitlines()) if timers.returncode==0 else None,
+             'backup_entries':len(back_children),'backup_types':dict(back_kind),
+             'vps_free_gib':round(shutil.disk_usage(private).free/2**30,3),
+             'mutations':0,'customer_data_excluded':True,
+             'site_paths_examined_for_deletion':False
+          },sort_keys=True))
+          PY
+          echo FACTORY_OWNER_RESET_INVENTORY_ONLY=PASS
