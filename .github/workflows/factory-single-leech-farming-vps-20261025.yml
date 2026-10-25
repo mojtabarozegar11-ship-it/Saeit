@@ -105,7 +105,24 @@ jobs:
               if any(x.is_symlink() or not x.is_file() or re.fullmatch(r"WO-[0-9]{8}\.json",x.name) is None for x in prior):
                   raise SystemExit("LEECH_BLOCKED_UNSAFE_OLD_QUEUE")
               if prior and [x.name for x in prior]!=[target.name]:
-                  print("LEECH_VPS_START_BLOCKED="+json.dumps({"reason":"OLD_WORK_ORDERS_NOT_CLEARED","old_queue_count":len(prior),"mutations":0}))
+                  from collections import Counter
+                  origin,status,sites=Counter(),Counter(),Counter()
+                  for file in prior:
+                      try:
+                          doc=json.loads(file.read_text(encoding="utf8"))
+                          origin[str(doc.get("origin","missing"))[:80]]+=1
+                          status[str(doc.get("status","missing"))[:50]]+=1
+                          sites[str(doc.get("requesting_site","internal"))[:60]]+=1
+                      except (ValueError,OSError):
+                          origin["unreadable"]+=1
+                  import subprocess
+                  cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=6,check=False)
+                  active=[x.strip().rsplit("#",1)[-1].strip()[:100] for x in cron.stdout.splitlines()
+                      if x.strip() and not x.lstrip().startswith("#")]
+                  print("LEECH_VPS_START_BLOCKED="+json.dumps({"reason":"OLD_WORK_ORDERS_NOT_CLEARED",
+                      "old_queue_count":len(prior),"origin_counts":dict(origin),
+                      "status_counts":dict(status),"requesting_site_counts":dict(sites),
+                      "active_cron_markers":active,"mutations":0},sort_keys=True))
                   raise SystemExit(2)
               if target.exists():
                   old=json.loads(target.read_text(encoding="utf8"))
