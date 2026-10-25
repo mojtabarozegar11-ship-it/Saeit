@@ -1,0 +1,82 @@
+name: ZM-R01 Milec original preprint source-method audit
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths: [.github/workflows/zm-r01-milec-source-claim-audit.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Retrieve original author-deposited preprint and audit methods (no redistribution)
+        shell: bash
+        run: |
+          python - <<'PY'
+          import urllib.request, urllib.parse, json, hashlib, zipfile, io, re, time, pathlib, xml.etree.ElementTree as ET
+          record='https://zenodo.org/api/records/16229021'
+          name='Wheat responses to combined drought, heat, and elevated CO2.docx'
+          q=urllib.parse.quote(name)
+          urls=[f'https://zenodo.org/records/16229021/files/{q}?download=1',
+                f'https://zenodo.org/api/records/16229021/files/{q}/content']
+          try:
+              req=urllib.request.Request(record,headers={'User-Agent':'Academic-source-integrity-audit/1.0'})
+              with urllib.request.urlopen(req,timeout=30) as resp:
+                  meta=json.load(resp)
+              for f in meta.get('files',[]):
+                  if f.get('key','').lower().endswith('.docx'):
+                      urls=[f.get('links',{}).get('content',''),f.get('links',{}).get('self','')]+urls
+          except Exception as exc:
+              print('Metadata lookup issue:',type(exc).__name__,str(exc)[:200])
+          raw=None
+          errors=[]
+          for u in dict.fromkeys(z for z in urls if z):
+              for attempt in range(3):
+                  try:
+                      req=urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0 (research integrity source audit)','Accept':'application/octet-stream'})
+                      with urllib.request.urlopen(req,timeout=60) as resp:
+                          blob=resp.read(10_000_000)
+                      if not blob.startswith(b'PK'):
+                          raise ValueError('Not a DOCX ZIP')
+                      raw=blob
+                      break
+                  except Exception as exc:
+                      errors.append(f'{type(exc).__name__}: {str(exc)[:100]}')
+                      time.sleep(2*(attempt+1))
+              if raw: break
+          if not raw:
+              raise RuntimeError('Preprint retrieval failed: '+'; '.join(errors[-5:]))
+          md5=hashlib.md5(raw).hexdigest()
+          assert md5=='d4ff896311410ddb3531d68295a69692',md5
+          z=zipfile.ZipFile(io.BytesIO(raw))
+          xml=z.read('word/document.xml')
+          root=ET.fromstring(xml)
+          W='{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+          paras=[]
+          for p in root.iter(W+'p'):
+              t=''.join(n.text or '' for n in p.iter(W+'t')).strip()
+              if t: paras.append(re.sub(r'\s+',' ',t))
+          terms=['differential expression','DESeq2','edgeR','FPKM','featureCounts','HTSeq','STAR','HISAT','Salmon','kallisto','transcription factor','WGCNA','interaction','three-way','ANOVA','gene ontology','GO enrichment','RNA-seq','raw count','read count','normalization','co-expression','GEO','SRA','ABA','elevated CO2','elevated CO₂','principal component','FDR','multiple testing','supplementary']
+          hits={}
+          for term in terms:
+              m=[(i,p) for i,p in enumerate(paras) if term.lower() in p.lower()]
+              hits[term]={'n_paragraphs':len(m),'examples':[{'paragraph_index':i,'excerpt':p[:250]} for i,p in m[:3]]}
+          headings=[{'paragraph_index':i,'text':p[:120]} for i,p in enumerate(paras) if len(p)<115 and (re.match(r'^(?:[1-9][.]|[1-9][.]?[1-9][.]|Methods|Materials|Results|Discussion|Conclusion|Supplement|RNA|Transcript|Gene)',p,re.I) or p.isupper())][:80]
+          out={'source_record':'https://zenodo.org/records/16229021','source_md5':md5,'bytes':len(raw),'paragraphs':len(paras),'headings':headings,'keyword_evidence':hits,'scientific_boundary':'This is a source-method inventory, NOT new gene analysis or validation of novelty. Original source DOCX is NOT redistributed.'}
+          pathlib.Path('source_audit.json').write_text(json.dumps(out,indent=2,ensure_ascii=False))
+          print('SOURCE_MD5',md5,'BYTES',len(raw),'PARAGRAPHS',len(paras))
+          print('HEADINGS',json.dumps(headings[:30],ensure_ascii=False))
+          print('KEYWORD_COUNTS',json.dumps({k:v['n_paragraphs'] for k,v in hits.items()}))
+          for k in ['DESeq2','FPKM','featureCounts','interaction','three-way','ANOVA','transcription factor','gene ontology','raw count','read count','elevated CO2','elevated CO₂','FDR']:
+              print('SOURCE_CONTEXT',k,json.dumps(hits[k]['examples'][:2],ensure_ascii=False))
+          PY
+      - name: Retain derived source-audit metadata only, not copyrighted DOCX
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZM-R01-Milec-2025-source-method-audit
+          path: source_audit.json
+          retention-days: 14
+          if-no-files-found: error
