@@ -1,0 +1,382 @@
+{
+  "dataset": "MR-2026-001 OpenAlex exact indexed search",
+  "execution_utc": "2026-10-25T02:40:52.349Z",
+  "executed_query": "\"irrigation decision support\" AND farmer",
+  "api_url": "https://api.openalex.org/works?search.title_and_abstract=%22irrigation%20decision%20support%22%20AND%20farmer&per_page=100&select=id,doi,title,publication_year,type",
+  "platform": "OpenAlex",
+  "result_type": "selected bibliographic fields, no abstract retrieved",
+  "reported_hits": 52,
+  "returned_records": 52,
+  "search_result_completeness": "all API-matched records in one page; API access limited keyless/shared quota",
+  "api_metadata": {
+    "count": 52,
+    "page": 1,
+    "per_page": 100
+  },
+  "records": [
+    {
+      "id": "https://openalex.org/W2889139687",
+      "doi": "https://doi.org/10.1016/j.agwat.2018.08.025",
+      "title": "Web-based irrigation decision support system with limited inputs for farmers",
+      "publication_year": 2018,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W7214082963",
+      "doi": "https://doi.org/10.1016/j.softx.2026.103039",
+      "title": "PI-Advisor: Precision irrigation decision support with farmer-in-the-loop control",
+      "publication_year": 2026,
+      "type": "software-paper"
+    },
+    {
+      "id": "https://openalex.org/W2884627861",
+      "doi": "https://doi.org/10.1016/j.compag.2018.07.024",
+      "title": "USING decision models to enable better irrigation Decision Support Systems",
+      "publication_year": 2018,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W2769670502",
+      "doi": "https://doi.org/10.1109/icpet.2017.26",
+      "title": "Smart Irrigation Decision Support Based on Fuzzy Logic Using Wireless Sensor Network",
+      "publication_year": 2017,
+      "type": "conference-paper"
+    },
+    {
+      "id": "https://openalex.org/W3205703249",
+      "doi": "https://doi.org/10.13031/2013.21913",
+      "title": "Development of a Pocket PC Surface Irrigation Decision Support System",
+      "publication_year": 2013,
+      "type": "conference-paper"
+    },
+    {
+      "id": "https://openalex.org/W3092379901",
+      "doi": "https://doi.org/10.1016/j.compag.2020.105822",
+      "title": "IrrigaSys: A web-based irrigation decision support system based on open source data and technology",
+      "publication_year": 2020,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W4205526755",
+      "doi": "https://doi.org/10.14758/set-revue.2020.4.13",
+      "title": "Focus - Irré-LIS®, an example of an irrigation decision-support tool",
+      "publication_year": 2020,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W3116873376",
+      "doi": null,
+      "title": "Use of SIRMOD as a quasi real time surface irrigation decision support system",
+      "publication_year": 2020,
+      "type": "conference-paper"
+    },
+    {
+      "id": "https://openalex.org/W1523518197",
+      "doi": "https://doi.org/10.1007/978-3-642-18336-2_87",
+      "title": "Study on Water Resources Optimal Allocation of Irrigation District and Irrigation Decision Support System",
+      "publication_year": 2011,
+      "type": "conference-paper"
+    },
+    {
+      "id": "https://openalex.org/W4408445138",
+      "doi": "https://doi.org/10.5194/egusphere-egu25-1513",
+      "title": "Integrating soil-based sensor technologies for irrigation decision support in date palm trees",
+      "publication_year": 2025,
+      "type": "conference-abstract"
+    },
+    {
+      "id": "https://openalex.org/W4416763963",
+      "doi": "https://doi.org/10.1038/s41598-025-26567-z",
+      "title": "Participatory evaluation of an irrigation decision support system for water-saving and productivity gains in Lake Urmia Basin",
+      "publication_year": 2025,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W7204110078",
+      "doi": "https://doi.org/10.5281/zenodo.21995100",
+      "title": "Practice abstract - Digitalization of vegetable irrigation - decision support for efficient use of water and good crop quality",
+      "publication_year": 2026,
+      "type": "other"
+    },
+    {
+      "id": "https://openalex.org/W7198920892",
+      "doi": null,
+      "title": "Towards climate and water smart Olive system in Morroco C4S olive irrigation decision support pool",
+      "publication_year": 2023,
+      "type": "report"
+    },
+    {
+      "id": "https://openalex.org/W4386402252",
+      "doi": "https://doi.org/10.1080/00288233.2023.2251930",
+      "title": "Field evaluation of a commercial variable‐rate irrigation decision support system – a study for maize and sweet corn",
+      "publication_year": 2023,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W7116683687",
+      "doi": "https://doi.org/10.31237/osf.io/bmvxz_v1",
+      "title": "SMART INTEGRATED AGRICULTURAL MONITORING SYSTEM (SIAMS): An IoT and Machine Learning Approach for Crop Health and Irrigation Decision Support",
+      "publication_year": 2025,
+      "type": "preprint"
+    },
+    {
+      "id": "https://openalex.org/W7147443779",
+      "doi": "https://doi.org/10.18174/712175",
+      "title": "Development of an irrigation decision tool for Jordan Greenhouse farmers",
+      "publication_year": 2026,
+      "type": "report"
+    },
+    {
+      "id": "https://openalex.org/W3080741464",
+      "doi": "https://doi.org/10.3390/agronomy10091238",
+      "title": "Farmers Try to Improve Their Irrigation Practices by Using Daily Irrigation Recommendations—The Vipava Valley Case, Slovenia",
+      "publication_year": 2020,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W2030365305",
+      "doi": "https://doi.org/10.1016/j.compag.2012.03.003",
+      "title": "Using a mobile phone Short Messaging Service (SMS) for irrigation scheduling in Australia – Farmers’ participation and utility evaluation",
+      "publication_year": 2012,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W4321497230",
+      "doi": "https://doi.org/10.4236/as.2023.142015",
+      "title": "Assessing Suitability of Irrigation Scheduling Decision Support Systems for Lowland Rice Farmers in Sub-Saharan Africa—A Review",
+      "publication_year": 2023,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W7221570381",
+      "doi": "https://doi.org/10.21203/rs.3.rs-11316023/v1",
+      "title": "Artificial Intelligence in Agricultural Extension and Advisory Services: A Scoping Review of Applications, Explainability, Trust and Farmer-Centred Adoption",
+      "publication_year": 2026,
+      "type": "preprint"
+    },
+    {
+      "id": "https://openalex.org/W7213902064",
+      "doi": "https://doi.org/10.1145/3838079.3838114",
+      "title": "AI-Driven Precision Agriculture for Nigerian Smallholder Farmers: Bridging the Technology Gap Toward Food Security and Economic Growth",
+      "publication_year": 2026,
+      "type": "conference-paper"
+    },
+    {
+      "id": "https://openalex.org/W3016244496",
+      "doi": "https://doi.org/10.1016/j.compag.2020.105376",
+      "title": "Development of a closed-loop irrigation system for sugarcane farms using the Internet of Things",
+      "publication_year": 2020,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W2792799947",
+      "doi": "https://doi.org/10.1109/i2c2.2017.8321902",
+      "title": "A smart agricultural model by integrating IoT, mobile and cloud-based big data analytics",
+      "publication_year": 2017,
+      "type": "conference-paper"
+    },
+    {
+      "id": "https://openalex.org/W3121935720",
+      "doi": "https://doi.org/10.1007/s11356-021-12524-6",
+      "title": "Application of smart irrigation systems for water conservation in Italian farms",
+      "publication_year": 2021,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W2810485496",
+      "doi": "https://doi.org/10.1109/icecds.2017.8390018",
+      "title": "Real-time monitoring of soil nutrient analysis using WSN",
+      "publication_year": 2017,
+      "type": "conference-paper"
+    },
+    {
+      "id": "https://openalex.org/W350667430",
+      "doi": "https://doi.org/10.1007/978-3-319-15994-2_18",
+      "title": "A Cotton Irrigator’s Decision Support System and Benchmarking Tool Using National, Regional and Local Data",
+      "publication_year": 2015,
+      "type": "conference-paper"
+    },
+    {
+      "id": "https://openalex.org/W2811417598",
+      "doi": "https://doi.org/10.1109/icisc.2018.8399118",
+      "title": "IoT based smart crop-field monitoring and automation irrigation system",
+      "publication_year": 2018,
+      "type": "conference-paper"
+    },
+    {
+      "id": "https://openalex.org/W2888543770",
+      "doi": "https://doi.org/10.5120/ijca2018917677",
+      "title": "Review of Application of Internet of Things in Agriculture in India",
+      "publication_year": 2018,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W3168785824",
+      "doi": "https://doi.org/10.3390/agronomy11061228",
+      "title": "Exploring the Use of Vegetation Indices for Validating Crop Transpiration Fluxes Computed with the MOHID-Land Model. Application to Vineyard",
+      "publication_year": 2021,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W4400473028",
+      "doi": "https://doi.org/10.1002/crso.20383",
+      "title": "Precision Irrigation Technologies for Water‐Wise and Climate Resilient Alfalfa Production",
+      "publication_year": 2024,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W4400529647",
+      "doi": "https://doi.org/10.1002/crso.20285",
+      "title": "Issue Information",
+      "publication_year": 2024,
+      "type": "paratext"
+    },
+    {
+      "id": "https://openalex.org/W4400530471",
+      "doi": "https://doi.org/10.1002/crso.v57.4",
+      "title": null,
+      "publication_year": 2024,
+      "type": "paratext"
+    },
+    {
+      "id": "https://openalex.org/W4323665738",
+      "doi": "https://doi.org/10.3389/fpls.2023.1094677",
+      "title": "Usefulness of cultivar-level calibration of AquaCrop for vegetables depends on the crop and data availability",
+      "publication_year": 2023,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W7118880024",
+      "doi": "https://doi.org/10.3389/fagro.2025.1697188",
+      "title": "Integrating OPTRAM and machine learning with multimodal EO proxies for optimized irrigation scheduling in smallholder systems: a Vhembe District case study",
+      "publication_year": 2026,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W2907489797",
+      "doi": "https://doi.org/10.1016/j.agwat.2018.09.052",
+      "title": "Using agrometeorological data to assist irrigation management in oil palm crops: A decision support method and results from crop model simulation",
+      "publication_year": 2019,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W2052058210",
+      "doi": "https://doi.org/10.1016/j.biosystemseng.2014.03.010",
+      "title": "Drip vs. surface irrigation: A comparison focussing on water saving and economic returns using multicriteria analysis applied to cotton",
+      "publication_year": 2014,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W4255836603",
+      "doi": "https://doi.org/10.5772/67009",
+      "title": "On the Use of Decision-Support Tools for Improved Irrigation Management: AquaCrop-Based Applications",
+      "publication_year": 2017,
+      "type": "book-chapter"
+    },
+    {
+      "id": "https://openalex.org/W3174482915",
+      "doi": "https://doi.org/10.2139/ssrn.3868690",
+      "title": "Soil Monitoring and Recommendation System",
+      "publication_year": 2021,
+      "type": "preprint"
+    },
+    {
+      "id": "https://openalex.org/W2092375899",
+      "doi": "https://doi.org/10.13031/2013.19031",
+      "title": "Improved Decision Making for Deficit Irrigation of Wheat in Northern Syria",
+      "publication_year": 2005,
+      "type": "conference-paper"
+    },
+    {
+      "id": "https://openalex.org/W2553030511",
+      "doi": "https://doi.org/10.13031/2013.21953",
+      "title": "Peanut Irrigation Management Using Climate-Based Information",
+      "publication_year": 2013,
+      "type": "conference-paper"
+    },
+    {
+      "id": "https://openalex.org/W2280356555",
+      "doi": null,
+      "title": "Intelligent environmental knowledge system for sustainable water resource management solution",
+      "publication_year": 2013,
+      "type": "conference-paper"
+    },
+    {
+      "id": "https://openalex.org/W4414348416",
+      "doi": "https://doi.org/10.1109/access.2025.3612263",
+      "title": "Development of an Expert System for Precision Irrigation: Knowledge Modeling Approach",
+      "publication_year": 2025,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W4412168598",
+      "doi": "https://doi.org/10.1016/j.agwat.2026.110730",
+      "title": "AIDspat: Introduction of a model framework to estimate spatio-temporal agricultural irrigation demands – A study area in Germany",
+      "publication_year": 2026,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W4408527646",
+      "doi": "https://doi.org/10.3390/horticulturae11030322",
+      "title": "Evapotranspiration-Based Irrigation Management Effects on Yield and Water Productivity of Summer Cauliflower on the California Central Coast",
+      "publication_year": 2025,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W2316104948",
+      "doi": "https://doi.org/10.1016/0309-586x(85)90041-x",
+      "title": "The food and farm policies of the European community",
+      "publication_year": 1985,
+      "type": "book-review"
+    },
+    {
+      "id": "https://openalex.org/W2745860443",
+      "doi": null,
+      "title": "A Study to Improve Crop Yield in Agriculture Using IOT and Big Data",
+      "publication_year": 2017,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W4383337321",
+      "doi": "https://doi.org/10.1016/j.agwat.2023.108430",
+      "title": "Using AquaCrop as a decision-support tool for improved irrigation management in the Sahel region",
+      "publication_year": 2023,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W7223016583",
+      "doi": "https://doi.org/10.30871/jaic.v10i5.13774",
+      "title": "Multi-Crop Irrigation Need Classification Based on Machine Learning with an Indonesian-Language GenAI-UX Recommendation Layer",
+      "publication_year": 2026,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W4404214513",
+      "doi": "https://doi.org/10.1016/j.compag.2024.109597",
+      "title": "Convolutional Neural Networks accurately predict soil matric potential from soil, weather, and satellite-derived data",
+      "publication_year": 2024,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W3091962567",
+      "doi": "https://doi.org/10.13031/trans.13907",
+      "title": "ARSPivot, A Sensor-Based Decision Support Software for Variable-Rate Irrigation Center Pivot Systems: Part A. Development",
+      "publication_year": 2020,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W3092125173",
+      "doi": "https://doi.org/10.13031/trans.13908",
+      "title": "ARSPivot, A Sensor-Based Decision Support Software for Variable-Rate Irrigation Center Pivot Systems: Part B. Application",
+      "publication_year": 2020,
+      "type": "article"
+    },
+    {
+      "id": "https://openalex.org/W4375860339",
+      "doi": "https://doi.org/10.5194/egusphere-gc8-hydro-87",
+      "title": "Observing soil moisture dynamics on starch potato fields for improving irrigation management based on hydrological simulations",
+      "publication_year": 2023,
+      "type": "conference-abstract"
+    }
+  ]
+}
