@@ -197,6 +197,54 @@ jobs:
                   except OSError:continue
               print("SANDBOX_PROCESS_REFS="+json.dumps({"sandbox":name,"open_fds":observed_fds,"executables":observed_exes}))
           PY
+      - name: Identify reproducible dependency trees inside isolated bundle copies
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 180s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import json, os, stat, subprocess, time
+          from pathlib import Path
+          root=Path("/home/zomorod2/Saeit-staging")
+          allowed=("moj-commerce-v10-sandbox","moj-commerce-v12-sandbox")
+          if root.is_symlink() or Path.home()!=Path("/home/zomorod2"):raise SystemExit("BAD_ROOT")
+          def size(p):
+              try:
+                  a=subprocess.run(["du","-sxB1","--",str(p)],capture_output=True,text=True,timeout=20)
+                  return int(a.stdout.split()[0]) if a.returncode==0 else None
+              except Exception:return None
+          now=time.time()
+          for name in allowed:
+              parent=root/name
+              if parent.is_symlink() or not parent.is_dir():raise SystemExit("BAD_PARENT")
+              for bundle in sorted(parent.iterdir()):
+                  if bundle.is_symlink() or not bundle.is_dir():continue
+                  if not bundle.name.startswith(("mc10-","mc12-")):continue
+                  tops=[]
+                  for child in list(bundle.iterdir())[:50]:
+                      if child.is_symlink():kind="link";bytes_=0
+                      elif child.is_dir():kind="dir";bytes_=size(child)
+                      elif child.is_file():kind="file";bytes_=child.stat().st_size
+                      else:continue
+                      tops.append({"name":child.name[:60],"type":kind,"bytes":bytes_})
+                  tops.sort(key=lambda x:x["bytes"] or 0,reverse=True)
+                  db=0;secrets=0;total=0;newest=0;all_done=True
+                  for base,dirs,files in os.walk(bundle,followlinks=False):
+                      dirs[:]=[d for d in dirs if not (Path(base)/d).is_symlink()]
+                      for f in files:
+                          total+=1
+                          if total>12000:
+                              all_done=False;break
+                          p=Path(base)/f
+                          try:
+                              if not stat.S_ISREG(p.lstat().st_mode):continue
+                              newest=max(newest,p.stat().st_mtime)
+                              if p.suffix.lower() in (".sqlite",".sqlite3",".db",".sql"):db+=1
+                              if f.lower() in (".env",".env.local",".env.production","secrets.json","credentials.json"):secrets+=1
+                          except OSError:continue
+                      if not all_done:break
+                  print("SANDBOX_BUNDLE="+json.dumps({"parent":name,"bundle":bundle.name,"age_days":round((now-bundle.stat().st_mtime)/86400,2),"top":tops[:9],"db_like_count_sampled":db,"sensitive_config_count_sampled":secrets,"file_scan_complete":all_done,"file_count_sampled":total,"latest_file_age_days":round((now-newest)/86400,2) if newest else None},sort_keys=True))
+          PY
       - name: Remove runner SSH identities
         if: always()
         shell: bash
