@@ -1,4 +1,5 @@
 name: Private factory English-first order audit
+# Verify the recurring next-minute tick after initial private admission.
 on:
   pull_request:
     paths:
