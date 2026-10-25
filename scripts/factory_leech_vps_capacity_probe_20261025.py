@@ -68,6 +68,26 @@ def main():
             }
         except (OSError, ValueError):
             result["selfhosted_last_cycle"] = "unreadable"
+    try:
+        import platform
+        import subprocess
+        result["platform_libc"] = platform.libc_ver()
+        result["platform_machine"] = platform.machine()
+        env = {**os.environ, "LD_LIBRARY_PATH": str(engine / "bin")}
+        if executable.is_file() and os.access(executable, os.X_OK):
+            smoke = subprocess.run([str(executable), "--help"],
+                    capture_output=True, text=True, timeout=8, env=env)
+            result["selfhosted_binary_smoke_exit"] = smoke.returncode
+            if smoke.returncode != 0:
+                result["selfhosted_binary_smoke_error"] = (smoke.stderr or smoke.stdout)[-400:]
+        dynamic = subprocess.run(["ldd", str(executable)],
+                    capture_output=True, text=True, timeout=8, env=env)
+        result["selfhosted_missing_dynamic_libs"] = [
+            line.strip().split()[0] for line in dynamic.stdout.splitlines()
+            if "not found" in line
+        ][:12]
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        result["selfhosted_binary_smoke_error"] = type(exc).__name__
     print("LEECH_VPS_CAPACITY=" + json.dumps(result, sort_keys=True))
 
 
