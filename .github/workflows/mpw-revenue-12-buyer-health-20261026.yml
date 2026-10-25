@@ -1,0 +1,76 @@
+name: MojPlayWin revenue 12 buyer-path public health check
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-revenue-12-buyer-health-20261026.yml"]
+permissions: {contents: read}
+concurrency:
+  group: mpw-revenue-12-public-health
+  cancel-in-progress: false
+jobs:
+  public-buyer-path:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Verify twelve commercial inquiry paths, free browser utilities and static assets
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,urllib.parse,hashlib,time
+          base="https://mojplaywin.com/mpw-editorial/revenue/"
+          slugs=("website-doctor","landing-page-studio","ai-automation",
+                 "business-spreadsheets","website-templates","social-media-kits",
+                 "resume-builder","logo-studio","browser-games","marketing-ai",
+                 "business-calculators","website-care")
+          paths=["index.html"]+[s+"/index.html" for s in slugs]
+          faults=[]
+          def fetch(path):
+            url=base+path+"?mpw_revenue_health="+str(time.time_ns())
+            req=urllib.request.Request(url,headers={"User-Agent":"MojPlayWinRevenuePublicCanary/1.0","Cache-Control":"no-cache"})
+            with urllib.request.urlopen(req,timeout=16) as res:
+              body=res.read(190000)
+              return res.status,body.decode("utf-8","replace"),res.geturl()
+          for p in paths:
+            try:
+              code,body,final=fetch(p)
+              expected=base+p
+              checks={"HTTP_200":code==200,"exact_canonical":('href="'+expected+'"') in body,
+                      "real_html":("<title>" in body and "</html>" in body)}
+              if p=="index.html":
+                checks["12_offer_links"]=all(("/mpw-editorial/revenue/"+slug+"/index.html") in body for slug in slugs)
+                checks["not_fake_checkout"]="no payment is collected" in body.lower()
+              else:
+                slug=p.split("/")[0]
+                checks["interactive_tool"]=('data-tool="'+slug+'"') in body and 'assets/tools-v1.js' in body
+                checks["quotation_cta"]="Request a tailored quote by email" in body
+                checks["no_fake_payment"]="No payment is collected on this page" in body
+              misses=[k for k,ok in checks.items() if not ok]
+              if misses:faults.append((p,"BAD_CONTENT:"+",".join(misses)))
+              print("MPW_REVENUE_PAGE="+p+" HTTP="+str(code)+" checks="+str(len(checks)-len(misses))+"/"+str(len(checks)))
+            except Exception as e:
+              faults.append((p,"FETCH_"+type(e).__name__))
+              print("MPW_REVENUE_PAGE="+p+" FAIL="+type(e).__name__)
+          assets={"assets/tools-v1.js":"const defs=","assets/tools-v1.css":".mpw-functional-wrap","assets/style.css":"body"}
+          for p,signature in assets.items():
+            try:
+              code,body,final=fetch(p)
+              ok=code==200 and len(body)>1200 and signature in body
+              if not ok:faults.append((p,"INVALID_ASSET"))
+              print("MPW_REVENUE_ASSET="+p+" HTTP="+str(code)+" VALID="+str(ok))
+            except Exception as e:
+              faults.append((p,"FETCH_"+type(e).__name__))
+          for p in ("/","/store/","/contact/"):
+            try:
+              req=urllib.request.Request("https://mojplaywin.com"+p,headers={"User-Agent":"MojPlayWinRevenuePublicCanary/1.0"})
+              with urllib.request.urlopen(req,timeout=16) as response:code=response.status
+              if code!=200:faults.append((p,"HTTP_"+str(code)))
+              print("MPW_PROTECTED_MAIN="+p+" HTTP="+str(code))
+            except Exception as e:faults.append((p,type(e).__name__))
+          print("MPW_REVENUE_PUBLIC_HEALTH="+("PASS" if not faults else "FAIL"))
+          print("MPW_REVENUE_FAULTS="+repr(faults))
+          assert not faults,"Commercial inquiry paths are not all healthy"
+          print("NO_PAYMENT_OR_ORDER_MUTATION=TRUE")
+          PY
