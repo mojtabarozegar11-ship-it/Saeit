@@ -1,0 +1,88 @@
+name: Factory incomplete-product inventory (read-only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/factory-incomplete-products-inventory-20261025.yml'
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Inspect private factory only; do not modify VPS or stores
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-private-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 260s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import collections, json, os, pathlib, shutil, subprocess
+          home=pathlib.Path('/home/githubops')
+          root=home/'factory-runtime/private/autonomous-product-cycle'
+          area=root/'production-instructions'
+          ops=home/'factory-runtime/operations/production-instructions'
+          for p in (root,area,ops):
+              if p.is_symlink() or not p.is_dir(): raise SystemExit('UNSAFE_PRIVATE_ROOT')
+          du=shutil.disk_usage(root)
+          def size(p):
+              try:
+                  c=subprocess.run(['du','-s','-B1','--',str(p)],capture_output=True,text=True,timeout=18,check=True)
+                  return int(c.stdout.split()[0])
+              except Exception:
+                  return None
+          def stats(p):
+              if not p.exists(): return {'exists':False}
+              if p.is_symlink(): return {'symlink':True}
+              if p.is_dir():
+                  children=list(p.iterdir())
+                  return {'kind':'dir','entries':len(children),'files':sum(x.is_file() and not x.is_symlink() for x in children),'dirs':sum(x.is_dir() and not x.is_symlink() for x in children),'bytes':size(p)}
+              return {'kind':'file','bytes':p.stat().st_size}
+          top={}
+          for p in sorted(area.iterdir(),key=lambda x:x.name):
+              if p.is_symlink(): raise SystemExit('SYMLINK_TOPLEVEL')
+              top[p.name]=stats(p)
+          idx=area/'owner-agri200-p0-index.json'
+          orders=[]
+          if idx.is_file() and not idx.is_symlink():
+              x=json.loads(idx.read_text())
+              orders=x.get('order_ids_ranked',[])
+          status=collections.Counter()
+          for order in orders:
+              p=area/'orders'/(order+'.json')
+              try: status[json.loads(p.read_text()).get('status','UNKNOWN')]+=1
+              except Exception: status['UNREADABLE']+=1
+          warehouse=root/'product-lifecycle/approved-finished-goods'
+          q={}
+          if warehouse.is_dir() and not warehouse.is_symlink():
+              for p in warehouse.iterdir():
+                  if p.is_dir() and not p.is_symlink():
+                      q[p.name]={'zip':(p/'product.zip').is_file(),'receipt':(p/'receipt.json').is_file()}
+          c=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=6)
+          crons=[x for x in c.stdout.splitlines() if x.strip() and not x.lstrip().startswith('#')]
+          markers=['SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025','SAEIT_AGRI200_AUTONOMOUS_CLOSED_LOOP_V1']
+          print(json.dumps({
+             'inventory':'READ_ONLY_NO_DELETIONS',
+             'factory_free_gib':round(du.free/2**30,3),
+             'agri200_index_count':len(orders),
+             'agri200_order_status_counts':dict(status),
+             'private_area_top_level':top,
+             'warehouse_directories_with_receipts':sum(x['receipt'] for x in q.values()),
+             'warehouse_directories_with_archives':sum(x['zip'] for x in q.values()),
+             'root_immediate':{p.name:stats(p) for p in sorted(root.iterdir(),key=lambda x:x.name) if not p.is_symlink()},
+             'cron_markers':{m:sum(m in x for x in crons) for m in markers},
+             'cron_active_total':len(crons),
+             'operations_area':stats(ops)
+          },ensure_ascii=False,sort_keys=True))
+          PY
