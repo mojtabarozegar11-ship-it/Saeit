@@ -69,6 +69,25 @@ These original, publicly readable resources are intended to answer real customer
 
 No independent social account, verified purchase, traffic lift or sales conversion is asserted by this publication.
 
+## Live evergreen learning guides — 25 October 2026
+
+The six new evergreen articles below were verified as live on 25 October 2026. They provide practical help first and offer optional, transparent links to official destinations; neither checkout completion nor sales is asserted. These are **live website pages**, distinct from the downloadable repository resources above.
+
+**MojPlayWin (English):**
+- [Chess Training Baseline — a measurable first week](https://mojplaywin.com/mpw-learning/20261025/chess-baseline/?utm_source=github&utm_medium=organic_referral&utm_campaign=evergreen_discovery_20261025&utm_content=chess) — game PGN evidence, calculation practice, endgame review and realistic progress metrics. [Optional official chess book](https://mojplaywin.com/store/product/72/?utm_source=github&utm_medium=organic_referral&utm_campaign=evergreen_discovery_20261025&utm_content=chess_book).
+- [Family Storytime — a 15-minute read-aloud routine](https://mojplaywin.com/mpw-learning/20261025/family-storytime/?utm_source=github&utm_medium=organic_referral&utm_campaign=evergreen_discovery_20261025&utm_content=storytime) — reading, retelling, creativity and accessibility. [Optional Taniya digital picture book](https://mojplaywin.com/store/product/225/?utm_source=github&utm_medium=organic_referral&utm_campaign=evergreen_discovery_20261025&utm_content=taniya_book).
+- [Client-Ready Website — requirements before design](https://mojplaywin.com/mpw-learning/20261025/website-client-brief/?utm_source=github&utm_medium=organic_referral&utm_campaign=evergreen_discovery_20261025&utm_content=website_brief) — licensing, accessibility, privacy, performance and handover criteria. [Optional Atelier website kit](https://mojplaywin.com/store/product/879/?utm_source=github&utm_medium=organic_referral&utm_campaign=evergreen_discovery_20261025&utm_content=atelier_kit).
+- [Reproducible Research — evidence-first project intake](https://mojplaywin.com/mpw-learning/20261025/research-methods/?utm_source=github&utm_medium=organic_referral&utm_campaign=evergreen_discovery_20261025&utm_content=research) — methods, bias, governance and versioned protocols. [Independent scientific profile](https://mojplaywin.com/mojtaba.roozegar/resume/?utm_source=github&utm_medium=organic_referral&utm_campaign=evergreen_discovery_20261025&utm_content=research_profile).
+
+**Zomorod Melal (Persian):**
+- [چک‌لیست استعلام قیمت بین‌المللی و ارزیابی پیشنهاد تأمین‌کننده](https://zomorodmelal.ir/resources/20261025/trade-rfq/?utm_source=github&utm_medium=organic_referral&utm_campaign=evergreen_discovery_20261025&utm_content=trade_rfq) — اینکوترمز، مشخصات فنی، کیفیت، پرداخت قانونی و مقایسه پیشنهادها.
+- [مدیریت ریسک آب، انرژی و سودآوری مزرعه](https://zomorodmelal.ir/resources/20261025/farm-risk/?utm_source=github&utm_medium=organic_referral&utm_campaign=evergreen_discovery_20261025&utm_content=farm_risk) — خط مبنا، سناریوهای افت عملکرد، هزینه انرژی و اولویت اصلاح.
+
+[English resource directory](https://mojplaywin.com/mpw-learning/20261025/?utm_source=github&utm_medium=organic_referral&utm_campaign=evergreen_discovery_20261025&utm_content=mpw_index) · [فهرست منابع فارسی](https://zomorodmelal.ir/resources/20261025/?utm_source=github&utm_medium=organic_referral&utm_campaign=evergreen_discovery_20261025&utm_content=zm_index)
+
+*Verification boundary:* The linked articles and product pages were fetched from the live sites on 25 October 2026. A valid page and listed price do not independently prove successful purchase, delivery, indexing, click attribution or sales.
+
+
 ## Runtime safety
 
 The execution path is governed by capability, risk, owner-approval, execution-identity, retry-budget, and audit controls. Production-changing or other sensitive actions must pass the approval gate before execution.
