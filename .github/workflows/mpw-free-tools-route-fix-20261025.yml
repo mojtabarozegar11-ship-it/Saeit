@@ -1,0 +1,140 @@
+name: Resolve MojPlayWin free-tools canonical directory routes
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-free-tools-route-fix-20261025.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-free-tools-directory-route-20261025
+  cancel-in-progress: false
+jobs:
+  route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Establish authorized pinned relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/route-ssh";install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),chr(10)).replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Add only release-local Passenger-off and DirectoryIndex configuration
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/route-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os
+          root=Path('/home/zomorod2/mojplaywin.com')
+          release=root/'mpw-free-tools/20261025'
+          wsgi=root/'passenger_wsgi.py'
+          if root.is_symlink() or release.is_symlink() or not release.is_dir() or wsgi.is_symlink() or not wsgi.is_file():
+              raise RuntimeError('UNTRUSTED_RELEASE_OR_MAIN_APP')
+          if "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):
+              raise RuntimeError('APP_IDENTITY_CHANGED')
+          names=('chess-calendar','taniya-storytime','atelier-seo','atelier-contrast','browser-game-qa','research-evidence')
+          if not (release/'index.html').is_file() or any(not (release/name/'index.html').is_file() for name in names):
+              raise RuntimeError('RELEASE_FILES_MISSING')
+          target=release/'.htaccess'
+          if target.exists() or target.is_symlink():
+              raise RuntimeError('RELEASE_HTACCESS_ALREADY_PRESENT_NO_OVERWRITE')
+          data=b'PassengerEnabled off\nDirectoryIndex index.html\nOptions -Indexes\n'
+          fd=os.open(str(target),os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o644)
+          try:
+              with os.fdopen(fd,'wb') as f:
+                  f.write(data);f.flush();os.fsync(f.fileno())
+          except BaseException:
+              target.unlink(missing_ok=True)
+              raise
+          assert target.read_bytes()==data
+          print('ISOLATED_FREE_TOOLS_DIRECTORY_INDEX_CONFIG_INSTALLED')
+          PY
+      - name: Verify seven canonical slash URLs and unchanged protected pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,time
+          base='https://mojplaywin.com/mpw-free-tools/20261025/'
+          for slug in ('','chess-calendar/','taniya-storytime/','atelier-seo/',
+                       'atelier-contrast/','browser-game-qa/','research-evidence/'):
+              url=base+slug
+              ok=False
+              for attempt in range(5):
+                  try:
+                      with urllib.request.urlopen(url+'?canonical_check='+str(time.time_ns()),timeout=18) as r:
+                          s=r.read(25000).decode('utf8','replace')
+                          if r.status==200 and '<link rel="canonical" href="'+url+'"' in s:
+                              ok=True;break
+                  except Exception as e:
+                      print('DIRECTORY_INDEX_RETRY',url,type(e).__name__,str(e)[:90])
+                  time.sleep(3)
+              if not ok:raise RuntimeError('DIRECTORY_CANONICAL_UNRESOLVED:'+url)
+              print('FREE_TOOL_CANONICAL_SLASH_ROUTE_LIVE',url)
+          for url in ('https://mojplaywin.com/','https://mojplaywin.com/store/',
+                      'https://mojplaywin.com/store/product/72/','https://mojplaywin.com/store/product/225/',
+                      'https://mojplaywin.com/store/product/879/','https://zomorodmelal.ir/'):
+              with urllib.request.urlopen(url,timeout=20) as r:assert r.status==200,url
+          print('FREE_TOOLS_CANONICAL_AND_PROTECTED_SITES_VERIFIED')
+          PY
+      - name: Remove only own new htaccess if public verification failed
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/route-ssh/config";then
+            ssh -T -F "$RUNNER_TEMP/route-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/home/zomorod2/mojplaywin.com/mpw-free-tools/20261025/.htaccess')
+          expected=b'PassengerEnabled off\nDirectoryIndex index.html\nOptions -Indexes\n'
+          if p.is_symlink() or not p.is_file() or p.read_bytes()!=expected:
+              raise RuntimeError('MANUAL_RECOVERY_REQUIRED_CHANGED_HTACCESS')
+          p.unlink()
+          print('ONLY_NEW_RELEASE_HTACCESS_ROLLED_BACK')
+          PY
+          fi
+      - name: Remove temporary SSH keys
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/route-ssh"
