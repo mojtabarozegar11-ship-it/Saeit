@@ -1,0 +1,78 @@
+name: Deliver SHA256-pinned public GGUF dependency to owner VPS without hosted inference
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-leech-vps-model-dependency-delivery-20261025.yml
+permissions: {contents: read}
+concurrency:
+  group: owner-vps-leech-model-dependency-delivery-20261025
+  cancel-in-progress: false
+jobs:
+  download-and-deploy-model-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && contains(github.event.head_commit.message, '[owner-leech-model-delivery-20261025]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      HF_HUB_DISABLE_PROGRESS_BARS: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Fetch pinned Apache-2.0 model as owner VPS software deployment dependency only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --disable-pip-version-check 'huggingface_hub>=0.27,<2'
+          python3 - <<'PY'
+          import hashlib, pathlib
+          from huggingface_hub import hf_hub_download
+          repo="ggml-org/Qwen3-1.7B-GGUF"
+          path=pathlib.Path(hf_hub_download(
+              repo_id=repo, filename="Qwen3-1.7B-Q4_K_M.gguf",
+              revision="daeb8e2d528a760970442092f6bf1e55c3b659eb", token=False))
+          if not (1_200_000_000 <= path.stat().st_size <= 1_450_000_000):
+              raise SystemExit("LEECH_MODEL_DEPENDENCY_SIZE_OUT_OF_RANGE")
+          h=hashlib.sha256()
+          with path.open("rb") as f:
+              if f.read(4)!=b"GGUF":
+                  raise SystemExit("LEECH_MODEL_INVALID_GGUF")
+              f.seek(0)
+              for chunk in iter(lambda:f.read(8*1024*1024),b""):
+                  h.update(chunk)
+          assert h.hexdigest()=="d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5"
+          pathlib.Path("/tmp/leech-model-dependency-location").write_text(str(path))
+          print("LEECH_MODEL_DEPENDENCY_SOURCE_AND_SHA256_VERIFIED=true")
+          PY
+      - name: Transfer pinned non-secret model privately to existing VPS and activate local inference cron
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          local_dir="$RUNNER_TEMP/leech-model-private-transfer"
+          install -d -m 700 "$local_dir"
+          trap 'rm -f -- "$local_dir/key" "$local_dir/known"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$local_dir/key"
+          chmod 600 "$local_dir/key"
+          ssh-keygen -y -P '' -f "$local_dir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$local_dir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$local_dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$local_dir/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$local_dir/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=4 githubops@178.239.147.150 "$@"
+          }
+          base="/home/githubops/factory-runtime/operations/production-instructions"
+          eng="$base/leech-offline-engine-20261025"
+          model="$eng/models/Qwen3-1.7B-Q4_K_M.gguf"
+          part="$model.partial"
+          ssh_vps "test \"\$(id -un)\" = githubops && test -d '$eng/models' && test -x '$eng/bin/llama-server' && test ! -L '$model' && test ! -L '$part'"
+          source_path="$(tr -d '\n' < /tmp/leech-model-dependency-location)"
+          test -f "$source_path"
+          echo LEECH_PUBLIC_MODEL_DEPENDENCY_PRIVATE_DEPLOYMENT_STARTED=true
+          ssh_vps "umask 077; cat > '$part'; chmod 400 '$part'" < "$source_path"
+          ssh_vps "set -eu; printf '%s  %s\n' 'd2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5' '$part' | sha256sum --check --status; test ! -e '$model'; mv '$part' '$model'"
+          echo LEECH_PRIVATE_MODEL_DEPLOYMENT_SHA256_VERIFIED=true
+          ssh_vps 'bash -se' < scripts/factory_leech_vps_install_selfhosted_20261025.sh
+          echo LEECH_OWNER_VPS_CRON_STARTED_WITH_ZERO_EXTRA_COST=true
