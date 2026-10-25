@@ -164,56 +164,48 @@ jobs:
           assignment=json.load(open(sys.argv[1],encoding="utf8"))
           if assignment.get("next_chapter") is None:raise SystemExit("LEECH_NO_PENDING_CHAPTER")
           retry=int(os.environ.get("LEECH_RETRY_NUMBER","0"))
+          part=int(assignment["part_number"])
           plan=assignment.get("section_plan") or []
           if not isinstance(plan,list) or not plan:
               raise SystemExit("LEECH_SECTION_PLAN_MISSING")
-          focus=plan[(int(assignment["part_number"])-1+retry)%len(plan)]
+          focus=plan[(part-1+retry)%len(plan)]
+          angles=[
+            "an original step-by-step farm standard operating procedure, tools, inputs and logbook",
+            "a new explicitly hypothetical farm calculation, decisions and a worked example",
+            "distinct farm failure signs, root-cause diagnosis, containment and escalation",
+            "quality-assurance monitoring, practical acceptance criteria and corrective records",
+            "staff skills, timing, farm logistics and an operational decision matrix",
+            "uncertainty, responsible sourcing and documented regulatory or veterinary checks",
+          ]
+          angle=angles[(part-1+retry*2)%len(angles)]
+          # Suppress verbatim previous paragraphs: a small local model may echo
+          # them and fail the unchanged 12-word overlap QC threshold.
+          brief={k:v for k,v in assignment.items()
+                 if k!="previous_chapter_context_tail"}
           prompt=(
-            "This is a complete professional VOCATIONAL TRAINING MANUAL for people establishing, "
-            "operating, auditing and commercially managing a LEGAL LEECH BREEDING FARM "
-            "(correct term: leech farm). The job and farm are the product, not an "
-            "encyclopaedia of leeches, an academic literature survey, a clinical manual, "
-            "or a general biology book. Teach the actual zero-to-operational leech farm "
-            "with farm-level decisions and documented workflows. "
-            "Every section must answer: what the FARM OPERATOR needs to do, why it matters, "
-            "what inputs and equipment are required, how to document the work, what can "
-            "go wrong, how to detect problems and when to seek veterinary/regulatory support. "
-            "Cover realistic facility feasibility, species verification and legal sourcing, "
-            "farm layout, water and enclosure systems, species-appropriate welfare, "
-            "biosecurity, controlled breeding and cocoon management, juvenile growth, "
-            "sustainable feed procurement with veterinary oversight, routine monitoring, "
-            "staff training, lawful handling and transport, waste management, traceability, "
-            "cost accounting, marketing and viable enterprise decisions over the whole book. "
-            "Treat all numerical thresholds and business figures as evidence-backed "
-            "or explicitly illustrative hypotheses, never fabricated facts. "
-            "Write a NEW and substantively distinct continuation, not a recap. "
-            "For THIS manuscript segment, concentrate on this specific planned section only: "
-            +json.dumps(focus,ensure_ascii=False)+". "
-            "Explain at least THREE new, concrete, non-overlapping decisions or mechanisms "
-            "specific to the section; use different worked examples from the earlier text. "
-            "Do not repeat definitions, generic openings, regulatory boilerplate, the prior "
-            "worked case, or any twelve-word sequence from preceding chapter content. "
-            "If this is an advanced repeat of a section, deepen into a different technical "
-            "subproblem with new evidence limitations and auditable professional outputs. "
-            "Write the next ORIGINAL, coherent, professionally structured textbook section in excellent English. "
-            "Target 800-1100 substantive words of prose now. This is a manuscript fragment, not an outline, "
-            "not a proposal, not a status report. Fully explain subject-specific mechanisms, "
-            "realistic operating decisions, a transparent worked hypothetical case, "
-            "auditable records or assessment, and failure/escalation conditions. "
-            "Use one descriptive Markdown subheading, then rigorous paragraphs, unique examples and "
-            "one practical calculation or decision table if suited. "
-            "No invention of empirical study outcomes, permits, citations, standards, safety limits or "
-            "professional approval. Reference exact source IDs only when they support the particular claim. "
-            "Never repeat prior chapter context. No clinical advice, feeding instructions involving humans, "
-            "microbial culturing instructions, unapproved wildlife capture, or medical efficacy claims. "
-            "Avoid introduction and conclusion boilerplate. "
-            "Use these supplied verified factory facts and topic constraints, treating limitations seriously: "
-            +json.dumps(assignment,ensure_ascii=False)
+            "AUTHOR A NEW SEGMENT of the English professional handbook for someone "
+            "starting and operating a lawful commercial LEECH BREEDING FARM. "
+            "No zoological essay, no clinical guidance, no recap of previous segments. "
+            "Chapter: "+str(brief["chapter_number"])+" - "+str(brief["chapter_title"])+". "
+            "Current focus: "+json.dumps(focus,ensure_ascii=False)+". "
+            "This particular segment must take a FRESH angle: "+angle+". "
+            "Write 750-1050 substantive English words: concrete operational decisions, "
+            "inputs, safe workflow, monitoring, record forms, a clearly hypothetical "
+            "case or calculation, warning signs and when to seek licensed specialists. "
+            "Do not reuse generic introductions, definitions, chapter summaries or "
+            "prior case studies. Start directly with a specific descriptive subheading. "
+            "Explain only farm occupational skills; avoid unsupported husbandry "
+            "thresholds, fabricated sources, real-world efficacy promises, wildlife "
+            "capture instructions, human feeding or pathogen culture. "
+            "Declare assumptions explicitly. Cite source IDs only for supported claims. "
+            "The following verified research, section plan, safety limits and chapter "
+            "progress metadata delimit what you may say: "
+            +json.dumps(brief,ensure_ascii=False)
           )
           payload={"model":"local-offline-qwen3","messages":[
              {"role":"system","content":"You are writing a commercially usable, evidence-bound farm-operator training textbook on lawful leech farm establishment, breeding and management, not clinical treatment or general zoology. Every section must teach practical farm work. Create original substantive text; never invent evidence. Write the answer only."},
              {"role":"user","content":prompt}],
-             "max_tokens":2400,"temperature":0.62,"top_p":0.88,
+             "max_tokens":2400,"temperature":round(0.66+0.08*retry,2),"top_p":0.92,
              "chat_template_kwargs":{"enable_thinking":False},"stream":False}
           request=urllib.request.Request("http://127.0.0.1:18766/v1/chat/completions",
               data=json.dumps(payload).encode("utf8"),
