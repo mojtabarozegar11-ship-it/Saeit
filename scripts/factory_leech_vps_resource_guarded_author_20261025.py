@@ -119,7 +119,8 @@ def build_prompt(d, retry=0):
         "Differentiate Hirudo medicinalis, H. verbana and H. orientalis. "
         "No wild capture, feeding procedures, human therapy, pathogen culture, "
         "invented limits or citations. State uncertainty and use only "
-        "source-supported IDs: %s. Start with a specific heading."
+        "source-supported IDs: %s. Start with a specific heading. "
+        "Use complete ENGLISH PARAGRAPHS; NO MARKDOWN TABLES or long bullet lists."
     ) % (d["chapter_number"], str(d["chapter_title"])[:55],
          focus, " | ".join(refs)[:390])
 
