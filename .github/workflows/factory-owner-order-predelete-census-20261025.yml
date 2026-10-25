@@ -105,6 +105,25 @@ jobs:
           # Revalidate sites' and customer records are outside target directory.
           if any(not str(p).startswith(str(orders)+'/') for p in eligible):
               raise SystemExit('TARGET_ESCAPE')
+          import collections
+          life=root/'product-lifecycle'
+          top_kinds=[]
+          for p in sorted(life.iterdir()):
+              if p.is_symlink():raise SystemExit('LIFECYCLE_TOP_SYMLINK')
+              top_kinds.append({'name':p.name,'kind':'dir' if p.is_dir() else 'file'})
+          patterns=collections.Counter()
+          files_by_order=collections.Counter()
+          for base,dirs,names in os.walk(life,followlinks=False):
+              for name in dirs+names:
+                  p=Path(base)/name
+                  if p.is_symlink():raise SystemExit('LIFECYCLE_SYMLINK')
+                  ids=id_re.findall(str(p.relative_to(life)))
+                  if not ids:continue
+                  parts=list(p.relative_to(life).parts)
+                  masked=[id_re.sub('WO-ID',x) for x in parts]
+                  patterns['/'.join(masked[:4])]+=1
+                  for ident in set(ids):files_by_order[ident]+=1
+          print('OWNER_LIFECYCLE_SHAPE='+json.dumps({'top_level':top_kinds[:80],'patterns_top':patterns.most_common(25),'internal_orders_with_lifecycle_artifacts':len(set(candidate)&set(files_by_order)),'site_orders_with_lifecycle_artifacts':len({p.stem for p in site_kept.values()}&set(files_by_order)),'mutations':0},sort_keys=True))
           print('OWNER_ORPHAN_ORDER_PREFLIGHT='+json.dumps({'all_orders':len(all_files),'protected_site_origin':len(site_kept),'internally_generated':len(candidate),'protected_tree_referenced':len(keep_referenced),'per_protected_tree':references_by_tree,'orphan_delete_candidates':len(eligible),'mutations':0},sort_keys=True))
           PY
           echo OWNER_ORDER_PREFLIGHT_READONLY=PASS
