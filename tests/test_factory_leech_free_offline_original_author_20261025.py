@@ -1,6 +1,7 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 
 def load_writer():
@@ -54,6 +55,21 @@ class FreeLeechAuthorContract(unittest.TestCase):
         self.assertEqual(self.author.MIN_WORDS, 150001)
         self.assertEqual(self.author.REQUIRED_CHAPTERS, 30)
         self.assertGreater(self.author.TARGET_PER_CHAPTER * 30, 150001)
+
+
+    def test_private_accept_rejects_reasoning_tokens_without_writing(self):
+        # The direct private writer must fail closed even if the upstream
+        # streaming operator is bypassed; no real manuscript path is touched.
+        clean = " ".join("lexeme" + str(i) + "analysis" for i in range(320)) + "."
+        chunks = {i: [] for i in range(1, 31)}
+        with patch.object(self.author, "source_evidence", return_value=({}, [], [])), \
+             patch.object(self.author, "state", return_value=({}, 0, 1, 1)), \
+             patch.object(self.author, "ensure_private", side_effect=AssertionError("unexpected write")):
+            for token in ("<think>hidden reasoning</think>", "<|im_start|>",
+                          "<|im_end|>", "[INST]", "[/INST]", "<|assistant"):
+                with self.subTest(token=token):
+                    with self.assertRaisesRegex(RuntimeError, "MODEL_REASONING_OR_CONTROL_TOKEN"):
+                        self.author.accept(chunks, clean + " " + token)
 
 
 if __name__ == "__main__":
