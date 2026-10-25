@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+"""Read-only, fail-closed private manuscript length and integrity audit.
+
+This is NOT scientific peer review, originality certification or permission to publish.
+No manuscript files, locks, crons or storefront data are modified.
+"""
+from __future__ import annotations
+import argparse
+import hashlib
+import json
+from pathlib import Path
+import re
+
+PART = re.compile(r"chapter-(\d{2})-part-(\d{3})\.md\Z")
+WORD = re.compile(r"[A-Za-z][A-Za-z'-]*")
+FORBIDDEN = ("<think", "</think", "<|im_start|>", "<|im_end|>",
+             "<|assistant", "<|endoftext|>", "[inst]", "[/inst]",
+             "lorem ipsum", "[citation needed]", "as an ai language model")
+MAX_SEGMENT_BYTES = 50000
+
+
+def substantive_words(text: str) -> list[str]:
+    lines = []
+    for row in text.splitlines():
+        row = row.strip()
+        if not row or row.startswith(("#", "|", "http://", "https://")):
+            continue
+        lines.append(re.sub(r"https?://\S+", "", row))
+    return [x.casefold() for x in WORD.findall("\n".join(lines))]
+
+
+def audit(root: Path, *, chapters: int = 30, chapter_target: int = 5300,
+          total_target: int = 159000) -> dict:
+    """Produce private evidence hashes and structural diagnostics; never approve release."""
+    if not 1 <= chapters <= 99 or chapter_target <= 0 or total_target <= 0:
+        raise ValueError("invalid audit target")
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("unsafe or absent manuscript directory")
+    counts = {str(i): 0 for i in range(1, chapters + 1)}
+    parts = {i: [] for i in range(1, chapters + 1)}
+    hashes = []
+    flags = []
+    total = 0
+    for path in sorted(root.iterdir()):
+        if path.name in ("status.json", "complete-unreviewed.md", ".authoring.lock"):
+            continue
+        if path.name.startswith(".leech-status-"):
+            continue  # atomic status writer temporary file, never prose
+        match = PART.fullmatch(path.name)
+        if not match or path.is_symlink() or not path.is_file():
+            flags.append("unexpected_or_unsafe_entry:" + path.name[:80])
+            continue
+        chapter, part = map(int, match.groups())
+        if chapter not in parts or not 1 <= part <= 999:
+            flags.append("out_of_range_part:" + path.name)
+            continue
+        size = path.stat().st_size
+        if not 200 < size <= MAX_SEGMENT_BYTES:
+            flags.append("invalid_segment_size:" + path.name)
+            continue
+        raw = path.read_bytes()
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            flags.append("invalid_utf8:" + path.name)
+            continue
+        if any(token in text.casefold() for token in FORBIDDEN):
+            flags.append("unsafe_content_marker:" + path.name)
+        n = len(substantive_words(text))
+        counts[str(chapter)] += n
+        total += n
+        parts[chapter].append(part)
+        hashes.append({"name": path.name, "sha256": hashlib.sha256(raw).hexdigest(),
+                       "substantive_words": n})
+    for chapter, numbers in parts.items():
+        if sorted(numbers) != list(range(1, len(numbers) + 1)):
+            flags.append("noncontiguous_parts:chapter-%02d" % chapter)
+    missing = [i for i in range(1, chapters + 1) if counts[str(i)] < chapter_target]
+    ready = total >= total_target and not missing and not flags
+    return {"schema": "saeit.private.manuscript-integrity-audit.v1",
+            "total_substantive_words": total, "target_words": total_target,
+            "chapter_word_counts": counts, "chapters_below_target": missing,
+            "part_evidence": hashes, "integrity_flags": flags,
+            "length_and_structure_ready_for_independent_review": ready,
+            "independent_scientific_review_passed": False,
+            "quality1000_approved": False, "commercial_release_allowed": False,
+            "manuscript_modified": False}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--manuscript-dir", type=Path, required=True)
+    parser.add_argument("--chapters", type=int, default=30)
+    parser.add_argument("--chapter-target", type=int, default=5300)
+    parser.add_argument("--total-target", type=int, default=159000)
+    args = parser.parse_args()
+    try:
+        print(json.dumps(audit(args.manuscript_dir, chapters=args.chapters,
+                               chapter_target=args.chapter_target,
+                               total_target=args.total_target), sort_keys=True))
+    except (OSError, ValueError) as exc:
+        parser.exit(2, "MANUSCRIPT_AUDIT_BLOCKED: " + str(exc)[:160] + "\n")
+
+
+if __name__ == "__main__":
+    main()
