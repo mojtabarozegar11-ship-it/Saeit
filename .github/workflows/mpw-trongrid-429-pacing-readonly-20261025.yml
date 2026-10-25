@@ -1,0 +1,98 @@
+name: MPW TronGrid rate response pacing evidence 2026-10-25
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-trongrid-429-pacing-readonly-20261025.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-revenue-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Check independent short and cooled TronGrid read-only requests
+        run: |
+          set -euo pipefail
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import json,os,sys,time,urllib.parse,urllib.request,urllib.error
+          from pathlib import Path
+          root=Path('/home/zomorod2/Saeit-staging')
+          if root.is_symlink() or not root.is_dir():raise SystemExit('BAD_APP_ROOT')
+          os.chdir(root);sys.path.insert(0,str(root));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from core.models import PaymentIntent
+          from services.mpw_walletless_commercial_intent import _decode,PROVIDER,WAITING
+          from services.mpw_tron_readonly_deposit_candidates import ORIGIN,NoRedirect
+          intent=PaymentIntent.objects.filter(provider=PROVIDER,status=WAITING).order_by('pk').first()
+          if not intent:raise SystemExit('NO_PENDING_INVOICE')
+          inv=_decode(intent)
+          params={'only_confirmed':'true','only_to':'true','limit':'200',
+                  'min_block_timestamp':str(max(1,int(inv.issued_at.timestamp()*1000)-30000)),
+                  'max_block_timestamp':str(int(inv.expires_at.timestamp()*1000)+30000),
+                  'order_by':'block_timestamp,desc'}
+          url=ORIGIN+'/v1/accounts/'+inv.recipient+'/transactions?'+urllib.parse.urlencode(params)
+          opener=urllib.request.build_opener(NoRedirect())
+          for idx,pause in enumerate((0,3,5),1):
+              if pause:time.sleep(pause)
+              result={'sample_index':idx,'prior_pause_s':pause,'read_only':True}
+              try:
+                  req=urllib.request.Request(url,method='GET',headers={'Accept':'application/json','User-Agent':'MojPlayWin-TRX-Readonly/1.0'})
+                  with opener.open(req,timeout=10) as resp:
+                      result['status']=resp.status
+                      body=resp.read(1000)
+                      result['json_reply_prefix']=body.lstrip().startswith(b'{')
+              except urllib.error.HTTPError as exc:
+                  result['status']=exc.code
+                  retry=exc.headers.get('Retry-After','')
+                  result['retry_after_valid_numeric']=retry.isdecimal()
+                  if retry.isdecimal():result['retry_after_seconds']=min(int(retry),86400)
+              except Exception as exc:result['error_type']=type(exc).__name__
+              print('MPW_TRONGRID_429_PACING='+json.dumps(result,sort_keys=True))
+          PY
+      - name: Remove temporary SSH relay keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
