@@ -1,0 +1,106 @@
+name: cPanel Zomorod live account space classification READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/cpanel-owner-live-storage-census-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Classify live disk consumption, backup candidates, and protected webroot status
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 400s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import json,os,subprocess,time,collections
+          home=Path('/home/zomorod2')
+          if os.geteuid()==0 or home.is_symlink() or not home.is_dir() or Path.home()!=home:
+              raise SystemExit('UNSAFE_CPANEL_ACCOUNT')
+          def usage(p,level,limit):
+              try:
+                  x=subprocess.run(['du','-x','-B1','--max-depth='+str(level),str(p)],capture_output=True,text=True,timeout=limit)
+                  out=[]
+                  for line in x.stdout.splitlines():
+                      if '\t' not in line:continue
+                      a,b=line.split('\t',1)
+                      try:sz=int(a)
+                      except ValueError:continue
+                      t=Path(b)
+                      try:r=str(t.relative_to(home))
+                      except ValueError:continue
+                      out.append({'rel':r[:110],'bytes':sz})
+                  return {'ok':x.returncode==0,'rows':sorted(out,key=lambda z:-z['bytes'])[:32]}
+              except subprocess.TimeoutExpired:return {'ok':False,'reason':'du_timeout','rows':[]}
+              except Exception as e:return {'ok':False,'reason':type(e).__name__,'rows':[]}
+          root_usage=usage(home,1,250)
+          select=['Saeit-staging','.backups','.cache','.local','.npm','tmp','public_html','mail','etc','logs','backups','softaculous_backups','mysql','domains','nodevenv','.trash']
+          selected={}
+          for name in select:
+              p=home/name
+              if p.exists() and not p.is_symlink():
+                  try:
+                      q=subprocess.run(['du','-s','-B1','--',str(p)],capture_output=True,text=True,timeout=80)
+                      selected[name]=int(q.stdout.split()[0]) if q.returncode==0 else None
+                  except Exception:selected[name]=None
+          staging=home/'Saeit-staging'
+          staging_usage=usage(staging,2,130) if staging.is_dir() and not staging.is_symlink() else {'ok':False,'rows':[]}
+          cache=home/'.cache'
+          cache_usage=usage(cache,1,45) if cache.is_dir() and not cache.is_symlink() else {'ok':False,'rows':[]}
+          backups=home/'.backups'
+          backup_meta=[]
+          if backups.is_dir() and not backups.is_symlink():
+              for p in backups.iterdir():
+                  if p.is_file() and not p.is_symlink():
+                      backup_meta.append({'suffix':p.suffix[:15],'bytes':p.stat().st_size,'age_days':round((time.time()-p.stat().st_mtime)/86400,1)})
+          backup_meta.sort(key=lambda z:-z['bytes'])
+          def api(mod,func):
+              try:
+                  x=subprocess.run(['uapi','--output=json',mod,func],capture_output=True,text=True,timeout=35)
+                  if x.returncode:return {'ok':False}
+                  d=json.loads(x.stdout)
+                  obj=d.get('result',{})
+                  data=obj.get('data')
+                  r={'ok':obj.get('status')==1,'data_type':type(data).__name__}
+                  if isinstance(data,dict):
+                      r['numeric_fields']={k:v for k,v in data.items() if isinstance(v,(int,float)) and not isinstance(v,bool)}
+                      r['field_names']=list(data)[:30]
+                  elif isinstance(data,list):r['items']=len(data)
+                  return r
+              except Exception as e:return {'ok':False,'error_type':type(e).__name__}
+          passenger=api('PassengerApps','list_applications')
+          mysql=api('Mysql','list_databases')
+          quota=api('Quota','get_quota_info')
+          disk=api('DiskUsage','get_disk_usage')
+          cron=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=10)
+          summary={'user_home_verified':True,'home':str(home),'root_usage':root_usage,'selected_sizes':selected,
+          'staging_usage':staging_usage,'cache_usage':cache_usage,'backup_file_count':len(backup_meta),'top_backup_sizes':backup_meta[:20],
+          'quota':quota,'disk_api':disk,'passenger':passenger,'mysql':mysql,'active_cron_line_count':len([x for x in cron.stdout.splitlines() if x.strip() and not x.strip().startswith('#')]) if cron.returncode==0 else None,
+          'protected_paths_exist':{k:(home/k).exists() for k in ['public_html','mail','etc']},'mutations':0,'read_only':True}
+          print('CPANEL_OWNER_DISK_CENSUS='+json.dumps(summary,sort_keys=True),flush=True)
+
+          PY
+          echo CPANEL_OWNER_DISK_READONLY=PASS
