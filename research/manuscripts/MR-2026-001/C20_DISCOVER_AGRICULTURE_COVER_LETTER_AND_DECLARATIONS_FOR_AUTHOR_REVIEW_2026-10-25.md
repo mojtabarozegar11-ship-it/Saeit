@@ -13,11 +13,11 @@
 
 Dear Editors,
 
-Please consider our manuscript, “From Irrigation Recommendations to Field Outcomes: A Critical Review of Validation Evidence and Farmer Uptake under Water Scarcity,” for consideration as a Perspective in *Discover Agriculture*.
+Please consider my manuscript, “From Irrigation Recommendations to Field Outcomes: A Critical Review of Validation Evidence and Farmer Uptake under Water Scarcity,” for consideration as a Perspective in *Discover Agriculture*.
 
 The manuscript examines a recurring inferential problem in irrigation decision-support research: the distinction between a technically plausible recommendation, farmer-reported system use, independently verifiable implementation and field-measured water conservation. Through a purposive critical narrative comparison of eight contrasting primary studies, it identifies where reported percentages describe field measurements, farmer engagement, or modeled scenarios, and proposes a claim-level provenance worksheet to make those distinctions transparent.
 
-We explicitly acknowledge prior research that has already compared actual and recommended irrigation or examined farmer adoption. The proposed contribution is therefore limited to a source-specific, counterfactual-aware reporting synthesis rather than a claim of first discovery, a systematic review, or a validated new metric. We do not pool heterogeneous water-saving or adoption percentages.
+I explicitly acknowledge prior research that has already compared actual and recommended irrigation or examined farmer adoption. The proposed contribution is therefore limited to a source-specific, counterfactual-aware reporting synthesis rather than a claim of first discovery, a systematic review, or a validated new metric. I do not pool heterogeneous water-saving or adoption percentages.
 
 The topic connects water-resource management, agricultural decision support and the real-world implementation of sustainable practices, consistent with the journal's interdisciplinary agricultural scope.
 
