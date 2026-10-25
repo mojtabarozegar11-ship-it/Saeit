@@ -39,6 +39,23 @@ def main():
         "disk_free_gib": round(disk.f_bavail * disk.f_frsize / 1024**3, 2),
         "toolchain": {name: bool(shutil.which(name)) for name in ("cmake", "git", "g++", "curl", "flock", "nice", "systemd-run", "crontab")},
     }
+    operations = runtime / "operations/production-instructions"
+    engine = operations / "leech-offline-engine-20261025"
+    status = engine / "self-hosted-author-status.json"
+    model = engine / "models/Qwen3-1.7B-Q4_K_M.gguf"
+    executable = engine / "bin/llama-server"
+    result["selfhosted_engine_binary_ready"] = executable.is_file() and os.access(executable, os.X_OK)
+    result["selfhosted_model_bytes"] = model.stat().st_size if model.is_file() and not model.is_symlink() else 0
+    if status.is_file() and not status.is_symlink() and status.stat().st_size < 12000:
+        try:
+            current = json.loads(status.read_text(encoding="utf-8"))
+            result["selfhosted_last_cycle"] = {
+                k: current.get(k) for k in
+                ("result", "reason", "verified_words", "accepted_words", "next_chapter",
+                 "next_part", "checked_utc", "paid_inference_api_cost_usd", "published")
+            }
+        except (OSError, ValueError):
+            result["selfhosted_last_cycle"] = "unreadable"
     print("LEECH_VPS_CAPACITY=" + json.dumps(result, sort_keys=True))
 
 
