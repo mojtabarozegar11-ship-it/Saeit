@@ -104,10 +104,11 @@ jobs:
               prior=sorted(orders.iterdir())
               if any(x.is_symlink() or not x.is_file() or re.fullmatch(r"WO-[0-9]{8}\.json",x.name) is None for x in prior):
                   raise SystemExit("LEECH_BLOCKED_UNSAFE_OLD_QUEUE")
-              if prior and [x.name for x in prior]!=[target.name]:
+              legacy=[file for file in prior if file.name!=target.name]
+              if legacy:
                   from collections import Counter
                   origin,status,sites=Counter(),Counter(),Counter()
-                  for file in prior:
+                  for file in legacy:
                       try:
                           doc=json.loads(file.read_text(encoding="utf8"))
                           origin[str(doc.get("origin","missing"))[:80]]+=1
@@ -122,18 +123,18 @@ jobs:
                   expected_origins={"mojplaywin-site-qa-return":15,"owner_requested_education700_p0":1,"site-topic-snapshot":54}
                   expected_status={"blocked_rework":15,"issued":55}
                   expected_sites={"internal":1,"mojplaywin.com":15,"zomorodmelal.ir":54}
-                  if (len(prior)!=70 or dict(origin)!=expected_origins
+                  if (len(legacy)!=70 or dict(origin)!=expected_origins
                       or dict(status)!=expected_status or dict(sites)!=expected_sites):
                       print("LEECH_VPS_START_BLOCKED="+json.dumps({"reason":"UNEXPECTED_LEGACY_QUEUE",
-                          "old_queue_count":len(prior),"origin_counts":dict(origin),
+                          "old_queue_count":len(legacy),"origin_counts":dict(origin),
                           "status_counts":dict(status),"requesting_site_counts":dict(sites),
                           "mutations":0},sort_keys=True))
                       raise SystemExit(2)
-                  for file in prior:
+                  for file in legacy:
                       doc=json.loads(file.read_text(encoding="utf8"))
                       if doc.get("source_product_id")==product_key:
                           raise SystemExit("LEECH_BLOCKED_DUPLICATE_PRODUCT_KEY")
-                  print("LEECH_PROTECTED_LEGACY_ORDERS="+json.dumps({"preserved":len(prior),
+                  print("LEECH_PROTECTED_LEGACY_ORDERS="+json.dumps({"preserved":len(legacy),
                       "known_origins":dict(origin),"legacy_queue_modified":False,
                       "existing_english_first_cron_present":("SAEIT_ENGLISH_FIRST_SINGLE_ACTIVE_20261025" in active)},sort_keys=True))
               if target.exists():
@@ -162,5 +163,17 @@ jobs:
             "stage2_inbox_sha256":sha(inbox),"private_only":True,
             "quality1000_certified":False,"published":False,
             "free_gib_at_preflight":round(free/2**30,3)},sort_keys=True))
+          import subprocess
+          cmd=[str(base/".venv/bin/python"),"-B",str(stage2),"--factory-private",str(root),
+               "--only-order-id",ident,"--batch","1"]
+          try:
+              run=subprocess.run(cmd,capture_output=True,text=True,timeout=48,check=False)
+              step={"order_id":ident,"stage2_exit":run.returncode,
+                    "stdout_tail":run.stdout[-900:],"stderr_tail":run.stderr[-900:],
+                    "research_needed":(area/"stage-02/research-needed"/(ident+"--r001.json")).is_file(),
+                    "research_receipt":(area/"stage-02/receipts"/(ident+"--r001.json")).is_file()}
+          except subprocess.TimeoutExpired:
+              step={"order_id":ident,"stage2_exit":"timeout_48s","research_completed":False}
+          print("LEECH_STAGE2_ONE_ORDER="+json.dumps(step,sort_keys=True))
           PY
           echo LEECH_OWNER_SINGLE_PRODUCT_VPS_HANDOFF_COMPLETED=true
