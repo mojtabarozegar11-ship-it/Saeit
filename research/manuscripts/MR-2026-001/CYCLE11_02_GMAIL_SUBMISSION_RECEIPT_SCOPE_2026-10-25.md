@@ -1,0 +1,6 @@
+# MR-2026-001 — Cycle 11 — Gmail publisher-receipt audit
+Date: 2026-10-25. Connected accounts queried: mojtaba.rozegar11@gmail.com and zomorodmelal@gmail.com.
+Search A (both accounts): `("Agricultural Water Management" OR "Discover Agriculture" OR "Manuscript ID" OR "submission confirmation" OR "Frontiers in Plant Science") newer_than:180d`. Result: 0 matching messages in both accounts.
+Search B (both accounts): `("Manuscript" OR "submission" OR "editorial" OR "reviewer") after:2026/10/20 -in:spam -in:trash`. Personal account returned messages about unrelated MOJ1 security audits and GitHub notifications; corporate account returned none. One GitHub notification concerned scholarly CV PR #1045, NOT a journal receipt.
+Limitations: these are bounded Gmail queries, not all folders/accounts/aliases; cPanel mailbox not inspected. No journal portal was accessed. No publisher receipt, manuscript ID or submission can be inferred. Submission status: NOT SUBMITTED (no verified submission evidence).
+Actionable next: obtain official submission confirmation only after the completed author-approved manuscript has actually been submitted; archive original receipt and portal screenshot/ID in private authorized records.
