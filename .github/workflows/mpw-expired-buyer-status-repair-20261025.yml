@@ -1,0 +1,163 @@
+name: MojPlayWin expired invoice buyer status repair
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-expired-buyer-status-repair-20261025.yml"
+permissions: {contents: read}
+concurrency:
+  group: mpw-sales-funnel-read-only-audit
+  cancel-in-progress: false
+jobs:
+  audit-live:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate read-only audit source
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast,pathlib
+          p=pathlib.Path("scripts/mpw_guest_trx_core_scope_readonly_20261020.py")
+          ast.parse(p.read_text("utf8"))
+          source=p.read_text("utf8")
+          assert "production_db_writes\":False" in source
+          assert "MPW_LIVE_ORDER_AGGREGATE=" in source
+          print("MPW_AUDIT_SOURCE_VALID=true")
+          PY
+      - name: Establish pinned SSH relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-sales-audit-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Repair expired presentation and verify existing invoices
+        run: |
+          set -euo pipefail
+          timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-sales-audit-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,hashlib,stat,tempfile,ast
+          from pathlib import Path
+          from datetime import timedelta
+          from unittest.mock import patch
+          root=Path('/home/zomorod2/Saeit-staging');site=Path('/home/zomorod2/mojplaywin.com')
+          target=root/'services/mpw_walletless_commercial_intent.py'
+          for p in (root,site,target,target.parent):
+           if p.is_symlink():raise RuntimeError('UNSAFE_PATH')
+          if "APP='/home/zomorod2/Saeit-staging'" not in (site/'passenger_wsgi.py').read_text():raise RuntimeError('WRONG_APP')
+          raw=target.read_bytes();source=raw.decode();tree=ast.parse(source)
+          fn=next(x for x in tree.body if isinstance(x,ast.FunctionDef) and x.name=='commercial_buyer_status')
+          segment=ast.get_source_segment(source,fn)
+          old='''    if (intent.status != "paid" or intent.order.status != "paid"
+                      or Decimal(intent.order.total) != invoice.usd_total):
+                  return {"status": "awaiting", "can_download": False}'''
+          new='''    if (intent.status != "paid" or intent.order.status != "paid"
+                      or Decimal(intent.order.total) != invoice.usd_total):
+                  # Presentation only: retain the pending ledger record for reconciliation.
+                  # A previously sent payment must still be independently checked by cron.
+                  if intent.status == WAITING and intent.order.status == "pending":
+                      from django.utils import timezone as buyer_status_timezone
+                      if buyer_status_timezone.now() > invoice.expires_at:
+                          return {"status": "expired", "can_download": False}
+                  return {"status": "awaiting", "can_download": False}'''
+          if segment.count(old)!=1:raise RuntimeError('STATUS_SOURCE_DRIFT_NO_WRITE')
+          updated=source.replace(segment,segment.replace(old,new,1),1).encode();compile(updated,str(target),'exec')
+          os.chdir(root);sys.path.insert(0,str(root));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.db import connection
+          connection.ensure_connection()
+          with connection.cursor() as c:c.execute('SET SESSION TRANSACTION READ ONLY')
+          from core.models import PaymentIntent,Order
+          import services.mpw_walletless_commercial_intent as module
+          rows=list(PaymentIntent.objects.filter(provider=module.PROVIDER,status=module.WAITING).select_related('order').order_by('pk')[:100])
+          if not rows:raise RuntimeError('NO_EXISTING_INVOICES')
+          from django.utils import timezone
+          before=[(x.pk,x.status,x.order.status) for x in rows]
+          namespace=dict(vars(module));exec(compile(updated,str(target),'exec'),namespace)
+          check=namespace['commercial_buyer_status']
+          expired=0;active=0
+          for x in rows:
+           inv=module._decode(x)
+           result=check(x.pk,x.order.customer_id)
+           if timezone.now()>inv.expires_at:
+            assert result=={'status':'expired','can_download':False};expired+=1
+           with patch('django.utils.timezone.now',return_value=inv.issued_at+timedelta(seconds=1)):
+            assert check(x.pk,x.order.customer_id)=={'status':'awaiting','can_download':False};active+=1
+           # Ownership checks remain enforced.
+           try:check(x.pk,2147483647)
+           except module.PaymentHold:pass
+           else:raise RuntimeError('OWNERSHIP_GUARD_FAILED')
+          print('MPW_EXPIRY_PRECHECK='+json.dumps({'expired_checked':expired,'active_time_checked':active,'financial_writes':0}))
+          backup=root/'services'/'.mpw-buyer-expiry-before-20261025.bak'
+          if backup.exists() or backup.is_symlink():raise RuntimeError('BACKUP_ALREADY_EXISTS')
+          fd=os.open(backup,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+          with os.fdopen(fd,'wb') as f:f.write(raw);f.flush();os.fsync(f.fileno())
+          def write(data):
+           fd,tmp=tempfile.mkstemp(prefix='.mpw-expiry-',dir=target.parent)
+           try:
+            os.fchmod(fd,stat.S_IMODE(target.stat().st_mode))
+            with os.fdopen(fd,'wb') as f:f.write(data);f.flush();os.fsync(f.fileno())
+            os.replace(tmp,target)
+           finally:
+            if os.path.exists(tmp):os.unlink(tmp)
+          if target.read_bytes()!=raw:raise RuntimeError('CONCURRENT_SOURCE_CHANGE')
+          write(updated)
+          try:
+           import importlib
+           importlib.invalidate_caches();module=importlib.reload(module)
+           for x in rows:
+            if timezone.now()>module._decode(x).expires_at:assert module.commercial_buyer_status(x.pk,x.order.customer_id)=={'status':'expired','can_download':False}
+           after=list(PaymentIntent.objects.filter(pk__in=[x.pk for x in rows]).order_by('pk').values_list('pk','status','order__status'))
+           assert before==after
+           for base in (root,site):
+            d=base/'tmp';marker=d/'restart.txt'
+            if d.is_symlink() or marker.is_symlink():raise RuntimeError('UNSAFE_RESTART')
+            d.mkdir(exist_ok=True);marker.touch()
+          except BaseException:
+           if target.read_bytes()==updated:write(raw)
+           raise
+          print('MPW_EXPIRY_FIX='+json.dumps({'status':'INSTALLED_VERIFIED','expired_invoices':expired,'pending_financial_records_unchanged':True,'before_sha256':hashlib.sha256(raw).hexdigest(),'after_sha256':hashlib.sha256(updated).hexdigest()}))
+          PY
+      - name: Remove relay keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-sales-audit-ssh"
