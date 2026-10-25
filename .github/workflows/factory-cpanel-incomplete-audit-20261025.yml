@@ -102,6 +102,10 @@ jobs:
                       max_bytes=max(max_bytes,p.stat().st_size)
               detail.append({"family":base.parent.name,"name":base.name,"files":files,"bytes":bytes_count,"types":counter.most_common(12),"special":special[:8],"max_file_bytes":max_bytes,"venv_present":(base/".venv").exists(),"cron_reference":str(base) in cron or base.name in cron,"passenger_reference":str(base) in apps or base.name in apps})
           print("CPANEL_SMOKE_AND_UNUSED_SANDBOX_DETAILS="+json.dumps(detail,sort_keys=True))
+          quota_result=subprocess.run(["uapi","--output=json","Quota","get_quota_info"],capture_output=True,text=True,timeout=22)
+          if quota_result.returncode==0:
+              quota_data=json.loads(quota_result.stdout).get("result",{}).get("data",{})
+              print("POST_CLEANUP_CPANEL_QUOTA="+json.dumps({k:v for k,v in quota_data.items() if k in ("megabytes_used","megabyte_limit","megabytes_remain","under_quota_overall")},sort_keys=True))
           print("CPANEL_DEEP_STAGING_READ_ONLY="+json.dumps({"families":result,"backup_biggest_types":backup_files[:12],"mount_free_gib":round(shutil.disk_usage(h).free/2**30,3),"deleted":0,"store_products_untouched":True},sort_keys=True))
           PY
           rm -rf "$d"
