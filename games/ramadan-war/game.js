@@ -90,12 +90,29 @@ function validSavedWorld(s){
  if(s.enemies.length>20||!s.enemies.every(e=>e&&within(e.x,1,14)&&within(e.y,1,14)&&within(e.hp,-1000,10000)))return false;
  return [['pickups',200],['hostile',300],['missiles',200]].every(([k,cap])=>s[k]===undefined||(Array.isArray(s[k])&&s[k].length<=cap));
 }
+// Saved browser state is untrusted. Preserve legitimate projectiles and mission items,
+// but drop off-map, over-speed or malformed objects before they enter the render/physics loop.
+function cleanSavedProjectiles(items,cap,kind){
+ if(!Array.isArray(items))return [];
+ return items.slice(0,200).filter(p=>p&&typeof p==='object'&&!Array.isArray(p)&&
+  [p.x,p.y,p.vx,p.vy,p.life].every(Number.isFinite)&&
+  p.x>=0&&p.x<=16&&p.y>=0&&p.y<=16&&p.life>0&&p.life<=12&&
+  Math.hypot(p.vx,p.vy)<=25&&
+  (kind!=='hostile'||Number.isFinite(p.hp)&&p.hp>=0&&p.hp<=1000)).slice(0,cap);
+}
+function cleanSavedPickups(items){
+ if(!Array.isArray(items))return [];
+ return items.slice(0,200).filter(p=>p&&typeof p==='object'&&!Array.isArray(p)&&
+  [p.x,p.y,p.life].every(Number.isFinite)&&p.x>=0&&p.x<=16&&
+  p.y>=0&&p.y<=16&&p.life>0&&p.life<=3600&&
+  ['ammo','health','intel','mission-intel'].includes(p.type)).slice(0,30);
+}
 function restore(){try{const s=JSON.parse(localStorage[saveKey]||'null');if(!validSavedWorld(s))return false;world={ammo:8,magazine:8,reloadTimer:0,combo:0,comboTimer:0,score:0,rocketHits:0,missionKills:0,kills:0,points:0,time:0,pickups:[],...s};nextCheckpointAt=world.time+12;
  // Old or tampered saves must not turn cooldowns into NaN and soft-lock combat.
  for(const k of ['shotTimer','rocketTimer','droneTimer','skillTimer','reloadTimer','comboTimer','shield','strikeTimer','muzzle','hitFlash','explosionTimer','freeze'])world[k]=Number.isFinite(world[k])?clamp(world[k],0,60):0;
  world.enemyTimer=Number.isFinite(world.enemyTimer)?clamp(world.enemyTimer,0,60):.8;
  world.reloading=world.reloading===true;
- world.pickups=(world.pickups||[]).filter(p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&Number.isFinite(p.life)&&p.life>0).slice(0,30);if(!world.endless&&!world.objective){prepareObjective()}if(world.x===2.5&&world.y===2.5&&world.missionKills===0)world.y=7.5;hero=world.hero;world.enemies=world.enemies.slice(0,20);const seenEnemyIds=new Set();world.enemies.forEach((e,i)=>{if(!Number.isFinite(e.strafe))e.strafe=i%2?1:-1;if(!Number.isSafeInteger(e.uid)||e.uid<=0||e.uid>1000000||seenEnemyIds.has(e.uid)){let next=1;while(seenEnemyIds.has(next))next++;e.uid=next}seenEnemyIds.add(e.uid)});enemySerial=Math.max(0,...seenEnemyIds);world.hostile=(world.hostile||[]).slice(0,300).filter(p=>p&&[p.x,p.y,p.vx,p.vy,p.life,p.hp].every(Number.isFinite)).slice(0,100);world.missiles=(world.missiles||[]).slice(0,200).filter(p=>p&&[p.x,p.y,p.vx,p.vy,p.life].every(Number.isFinite)).slice(0,50);screen='play';engine.build(world,tile);if(world.missionPassed){showResult('منطقه پاکسازی شد','پیشرفت ذخیره شده است؛ برای ادامه مرحلهٔ بعد را انتخاب کنید.','success');toast('مرحلهٔ پایان‌یافته بازیابی شد');return true}showScreen('game');last=performance.now();requestAnimationFrame(frame);toast('بازی ذخیره‌شده ادامه پیدا می‌کند');return true}catch(_){return false}}
+ world.pickups=cleanSavedPickups(world.pickups);if(!world.endless&&!world.objective){prepareObjective()}if(world.x===2.5&&world.y===2.5&&world.missionKills===0)world.y=7.5;hero=world.hero;world.enemies=world.enemies.slice(0,20);const seenEnemyIds=new Set();world.enemies.forEach((e,i)=>{if(!Number.isFinite(e.strafe))e.strafe=i%2?1:-1;if(!Number.isSafeInteger(e.uid)||e.uid<=0||e.uid>1000000||seenEnemyIds.has(e.uid)){let next=1;while(seenEnemyIds.has(next))next++;e.uid=next}seenEnemyIds.add(e.uid)});enemySerial=Math.max(0,...seenEnemyIds);world.hostile=cleanSavedProjectiles(world.hostile,100,'hostile');world.missiles=cleanSavedProjectiles(world.missiles,50,'missile');screen='play';engine.build(world,tile);if(world.missionPassed){showResult('منطقه پاکسازی شد','پیشرفت ذخیره شده است؛ برای ادامه مرحلهٔ بعد را انتخاب کنید.','success');toast('مرحلهٔ پایان‌یافته بازیابی شد');return true}showScreen('game');last=performance.now();requestAnimationFrame(frame);toast('بازی ذخیره‌شده ادامه پیدا می‌کند');return true}catch(_){return false}}
 function showScreen(name){screen=name;gameRoot.classList.toggle('playing',name==='game');if(name==='game'&&world)setMissionScene(world.mission);hud.classList.toggle('hidden',name!=='game');for(const id of ['home','heroes','pausePanel','upgradePanel','result'])$('#'+id).classList.toggle('hidden',id!==name&&!(id==='result'&&['success','victory','over'].includes(name)));if(name==='home'){updateHome();$('#survival').classList.toggle('hidden',localStorage.rwWin!=='1');$('#start').textContent=localStorage[saveKey]?'ادامهٔ نبرد':'شروع نبرد'}if(name==='game'){hud.classList.remove('hidden');sync()}}
 function toast(text){const el=$('#toast');el.textContent=text;el.classList.add('on');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('on'),1700)}
 function updateHome(){$('#heroName').textContent=NAMES[hero];$('#skillName').textContent=SKILLS[hero%6];$('#portrait').textContent=fa(hero+1)}
