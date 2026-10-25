@@ -47,7 +47,7 @@ class PrivateCheckpointIntegrityTests(unittest.TestCase):
         name = f"chapter-03-part-{part:03d}.md"
         raw = _chunk(seed).encode("utf-8")
         (self.root / name).write_bytes(raw)
-        count = len(agent._gate().prose_tokens(raw.decode()))
+        count = len(agent.prose_tokens(raw.decode()))
         self.manifest["chunks"].append({
             "chapter": 3, "part": part, "file": name,
             "sha256": hashlib.sha256(raw).hexdigest(),
