@@ -48,5 +48,5 @@ jobs:
           else
             echo ARCHIVE_RETIREMENT=PREVIEW_READ_ONLY
           fi
-          timeout 900s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 "${command[*]}" < scripts/prune_verified_retired_factory_rollbacks_20261025.py
+          timeout 900s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=40 -o TCPKeepAlive=yes githubops@178.239.147.150 "${command[*]}" < scripts/prune_verified_retired_factory_rollbacks_20261025.py
           echo CUSTOMER_ORDERS_STOREFRONTS_PRODUCTION_DB=NOT_TOUCHED
