@@ -90,7 +90,7 @@ timers="$(systemctl list-timers --all --no-legend --no-pager 2>/dev/null)" || {
   echo CASEWORK_SYSTEMD_TIMER_AUDIT_FAILED >&2
   exit 1
 }
-if printf '%s\n' "$timers" | grep -Eiq '(factory|agri200|qc1000|sequential|production|warehouse).*\\.timer'; then
+if printf '%s\n' "$timers" | grep -Eiq '(factory|agri200|qc1000|sequential|production|warehouse).*\.timer'; then
   echo CASEWORK_COMPETING_SYSTEMD_TIMER >&2
   exit 1
 fi
@@ -157,20 +157,21 @@ fi
 if [ "$new_count" -eq 1 ]; then
   grep -F "$new_marker" "$cron_backup" | grep -Fq "$case_worker"
 fi
-if [ "$new_count" -eq 1 ] && [ "$old_count" -eq 0 ]; then
-  grep -F "$new_marker" "$cron_backup" | grep -Fq "$case_worker"
+expected_cron="* * * * * /usr/bin/flock -n '$ops/.sequential-science-casework-cron.lock' /usr/bin/timeout 90s '$py' -B '$case_worker' --factory-private '$root' --max-source-attempts 2 >> '$ops/sequential-scientific-casework.log' 2>&1 # $new_marker"
+if [ "$new_count" -eq 1 ] && [ "$old_count" -eq 0 ] && grep -Fxq "$expected_cron" "$cron_backup"; then
+  :
 else
   temp_cron="$(mktemp "$ops/.sequential-cron.XXXXXX")"
   awk -v old="$old_marker" -v new="$new_marker" \
     'index($0, "# " old) == 0 && index($0, "# " new) == 0 {print}' "$cron_backup" > "$temp_cron"
-  printf '%s\n' "* * * * * /usr/bin/flock -n '$ops/.sequential-science-casework-cron.lock' /usr/bin/timeout 90s '$py' -B '$case_worker' --factory-private '$root' --max-source-attempts 2 >> '$ops/sequential-scientific-casework.log' 2>&1 # $new_marker" >> "$temp_cron"
+  printf '%s\n' "$expected_cron" >> "$temp_cron"
   crontab "$temp_cron"
   cron_changed=1
   rm -f -- "$temp_cron"
 fi
 crontab -l | grep -F "$new_marker"
 complete=1
-printf '%s\n' 'SEQUENTIAL_ONE_PRODUCT_PER_TICK=ACTIVE' \
+printf '%s\n' 'SEQUENTIAL_SCIENTIFIC_SOURCE_ONLY=CRON_CONFIGURED_NOT_QC1000' \
   'INDEPENDENT_SCIENTIFIC_REVIEW=MANDATORY' \
   'QC1000_AUTO_APPROVALS=0' 'PUBLIC_RELEASES=0' \
   "CRON_ROLLBACK_BACKUP=$cron_backup"
