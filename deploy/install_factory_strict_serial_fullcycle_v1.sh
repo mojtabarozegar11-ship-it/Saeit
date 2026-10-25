@@ -59,6 +59,63 @@ files=(
   'factory_agri200_source_grounded_v003_qc_20261023.py:agri200-source-grounded-v003-qc-serial.py'
   'factory_systemwide_science_rework_20261024.py:systemwide-scientific-source-rework-serial.py'
 )
+# Read-only scheduler inventory MUST precede backups, worker replacements, and
+# crontab edits. The existing installer previously rewrote 14 executable files
+# before checking whether another minute producer already owned this cohort.
+command -v crontab >/dev/null
+command -v systemctl >/dev/null
+command -v flock >/dev/null
+cron_snapshot="$(crontab -l)" || {
+  echo STRICT_SERIAL_CRON_INVENTORY_UNREADABLE >&2
+  exit 1
+}
+if ! systemctl is-active --quiet cron 2>/dev/null && ! systemctl is-active --quiet crond 2>/dev/null; then
+  echo STRICT_SERIAL_CRON_SERVICE_INACTIVE >&2
+  exit 1
+fi
+if ! systemctl is-enabled --quiet cron 2>/dev/null && ! systemctl is-enabled --quiet crond 2>/dev/null; then
+  echo STRICT_SERIAL_CRON_SERVICE_NOT_ENABLED >&2
+  exit 1
+fi
+timer_inventory="$(systemctl list-timers --all --no-legend --no-pager)" || {
+  echo STRICT_SERIAL_SYSTEMD_TIMER_INVENTORY_UNREADABLE >&2
+  exit 1
+}
+if printf '%s\n' "$timer_inventory" | grep -Eiq '(factory|agri200|qc1000|strict[-_]?serial|owner500).*\.timer'; then
+  echo STRICT_SERIAL_COMPETING_SYSTEMD_TIMER >&2
+  exit 1
+fi
+printf '%s\n' "$cron_snapshot" | python3 -B -c '
+import re
+import sys
+new = sys.argv[1]
+parts = sys.argv[2:]
+sep = parts.index("--SHARED-MARKERS--")
+legacy = set(parts[:sep])
+shared = set(parts[sep + 1:])
+allowed = legacy | shared | {new}
+active = [row.strip() for row in sys.stdin.read().splitlines()
+          if row.strip() and not row.lstrip().startswith("#")]
+serial = [row for row in active if new in row]
+if len(serial) > 1:
+    raise SystemExit("STRICT_SERIAL_DUPLICATE_MINUTE_MARKER")
+for row in serial:
+    if not row.startswith("* * * * * ") or "strict-serial-fullcycle-v1.py" not in row:
+        raise SystemExit("STRICT_SERIAL_UNRECOGNIZED_EXISTING_SCHEDULE")
+for row in active:
+    if re.search(r"(agri200|qc1000|factory[-_]?minute|strict[-_]?serial|sequential[-_]?scientific|owner500)", row, re.I):
+        if not any(marker in row for marker in allowed):
+            raise SystemExit("STRICT_SERIAL_UNMARKED_COMPETING_PRODUCER")
+' "$new_marker" "${legacy_markers[@]}" '--SHARED-MARKERS--' "${shared_markers[@]}"
+# After read-only audit, serialize installers and reject concurrent cron edits.
+# This lock is an installer-only private operations file, not a product write.
+exec 8>"$ops/.strict-serial-installer.lock"
+flock -n 8 || { echo STRICT_SERIAL_INSTALLER_ALREADY_RUNNING >&2; exit 1; }
+if [ "$(crontab -l)" != "$cron_snapshot" ]; then
+  echo STRICT_SERIAL_CRON_CHANGED_DURING_PREFLIGHT >&2
+  exit 1
+fi
+
 run_id="${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-1}"
 [[ "$run_id" =~ ^[a-zA-Z0-9-]{1,55}$ ]]
 backup="$backup_root/strict-serial-$run_id"
