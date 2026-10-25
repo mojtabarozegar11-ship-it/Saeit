@@ -21,6 +21,9 @@
     };
   }
   function canExit(piece, others, size) {
+    if (!piece || !Number.isInteger(piece.dir) || piece.dir < 0 || piece.dir >= DIRECTIONS.length ||
+        !Array.isArray(piece.path) || !piece.path.length || !Array.isArray(others) ||
+        !Number.isInteger(size) || size < 1 || size > 100) return false;
     const occupied = new Set();
     for (const other of others) {
       if (other.id === piece.id) continue;
@@ -41,6 +44,7 @@
     return false;
   }
   function solve(pieces, size) {
+    if (!Array.isArray(pieces) || !Number.isInteger(size) || size < 1 || size > 100) return null;
     const remaining = pieces.slice();
     const order = [];
     while (remaining.length) {
