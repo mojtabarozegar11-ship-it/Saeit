@@ -9,10 +9,13 @@ const slice=(from,to)=>{
  return src.slice(i,j);
 };
 const helper=slice('const safeHero=v=>','let enemySerial=0;');
+const operations=slice('const OPERATIONS=[','function plan(){');
 const validator=slice('function validSavedWorld(s){','function restore(){');
-const check=vm.runInNewContext('const NAMES=Array(30).fill("Hero");\n'+helper+validator+'\nvalidSavedWorld');
+const check=vm.runInNewContext('const NAMES=Array(30).fill("Hero");\n'+helper+operations+validator+'\nvalidSavedWorld');
 const base={hero:0,mission:0,endless:false,victory:false,gameOver:false,x:2.5,y:7.5,angle:0,hp:100,maxHp:100,lives:100,ammo:8,rockets:12,drones:3,score:0,enemies:[{x:8.5,y:7.5,hp:39}],hostile:[],missiles:[],pickups:[]};
 assert.equal(check(base),true,'normal persisted campaign must remain resumable');
+assert.equal(check({...base,mission:0,objective:{done:2,hold:0,bossDefeated:false}}),true,'completed activation mission must remain resumable');
+assert.equal(check({...base,mission:1,objective:{done:1,hold:22,bossDefeated:false}}),true,'completed defense timer must remain resumable');
 for(const [label,bad] of [
  ['zero-health resume',{hp:0}],['bad hero',{hero:999}],['negative hero',{hero:-1}],['nonfinite x',{x:Infinity}],['bad health',{hp:200}],['negative lives',{lives:-2}],['impossible ammo',{ammo:999}],['nonfinite score',{score:NaN}],['out-of-bounds mission',{mission:6}],['endless campaign',{endless:true}],['invalid enemy',{enemies:[{x:NaN,y:7.5,hp:39}]}],['too many enemies',{enemies:Array(21).fill({x:8,y:8,hp:39})}],['invalid missiles',{missiles:{}}],
  ['nonfinite mission kills',{missionKills:NaN}],
@@ -25,7 +28,11 @@ for(const [label,bad] of [
  ['oversized hostile bullets',{hostile:Array(301).fill({})}],
  ['oversized rockets',{missiles:Array(201).fill({})}],
  ['oversized pickups',{pickups:Array(201).fill({})}],
- ['invalid missionPassed',{missionPassed:'true'}]
+ ['invalid missionPassed',{missionPassed:'true'}],
+ ['too many activated sites',{mission:0,objective:{done:3,hold:0,bossDefeated:false}}],
+ ['excess defense hold',{mission:1,objective:{done:1,hold:23,bossDefeated:false}}],
+ ['defense time in activation mission',{mission:0,objective:{done:1,hold:1,bossDefeated:false}}],
+ ['excess recovered intel',{mission:2,objective:{done:4,hold:0,bossDefeated:false}}]
 ])assert.equal(check({...base,...bad}),false,label);
 assert(src.includes("if(world.missionPassed){showResult('منطقه پاکسازی شد'"),'completed mission restore must return to success/continue UI');
 assert(src.includes('targetUid:target.uid'),'missiles must track stable enemy identities');
