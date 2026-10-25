@@ -57,9 +57,9 @@ jobs:
           ops="/home/githubops/factory-runtime/operations/production-instructions"
           file="$ops/leech-vps-resource-guarded-author.py"
           stage="$ops/.leech-vps-resource-guarded-author-streaming-next.py"
-          ssh_vps "test "\$(id -un)" = githubops && test -d '$ops' && test ! -L '$ops' && test -f '$file' && test ! -L '$file' && test ! -e '$stage'"
+          ssh_vps "test \"\$(id -un)\" = githubops && test -d '$ops' && test ! -L '$ops' && test -f '$file' && test ! -L '$file' && test ! -e '$stage'"
           ssh_vps "umask 077; cat > '$stage'; chmod 600 '$stage'" < scripts/factory_leech_vps_resource_guarded_author_20261025.py
           expected="$(sha256sum scripts/factory_leech_vps_resource_guarded_author_20261025.py | awk '{print $1}')"
-          ssh_vps "test "\$(sha256sum '$stage' | awk '{print \$1}')" = '$expected' && /usr/bin/python3 -B -m py_compile '$stage' && mv -- '$stage' '$file' && chmod 700 '$file' && test "\$(sha256sum '$file' | awk '{print \$1}')" = '$expected'"
+          ssh_vps "test \"\$(sha256sum '$stage' | awk '{print \$1}')\" = '$expected' && /usr/bin/python3 -B -m py_compile '$stage' && mv -- '$stage' '$file' && chmod 700 '$file' && test \"\$(sha256sum '$file' | awk '{print \$1}')\" = '$expected'"
           echo LEECH_OWNER_VPS_STREAMING_AUTHOR_HOTFIX_INSTALLED=true
           echo LEECH_PREEXISTING_PRIVATE_MANUSCRIPT_AND_RUNNING_WORKER_PRESERVED=true
