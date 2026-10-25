@@ -1,0 +1,25 @@
+name: Studio games quality regression (isolated)
+on:
+  pull_request:
+    paths:
+      - 'templates/studio_raha/index.html'
+      - 'templates/taniya_studio/index.html'
+      - 'mpw-editorial/field-guides/20261023/prism-relay/index.html'
+      - 'scripts/verify_studio_game_quality_20261025.cjs'
+      - '.github/workflows/studio-games-quality-20261025.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  game-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run isolated game logic and syntax regressions
+        run: node scripts/verify_studio_game_quality_20261025.cjs
+      - name: Check that no checkout or payment gate was changed
+        run: |
+          git diff --name-only ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }} HEAD 2>/dev/null | grep -E '(checkout|payment|wallet|store)' && exit 1 || true
