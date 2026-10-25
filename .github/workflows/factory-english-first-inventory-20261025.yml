@@ -63,6 +63,29 @@ jobs:
                  x['rank'] if type(x['rank']) is int else 999999,x['id']))
           cron=subprocess.run(['crontab','-l'],text=True,capture_output=True,timeout=5,check=True).stdout
           active=[x for x in cron.splitlines() if x.strip() and not x.lstrip().startswith('#')]
+          state_file=area/'stage-06/english-first-active-v1.json'
+          queue_file=area/'english-first-ranked-order-list-v1.json'
+          for p in (state_file,queue_file):
+              if p.is_symlink():raise SystemExit('ENGLISH_STATE_SYMLINK')
+          state=json.loads(state_file.read_text()) if state_file.is_file() else None
+          queue=json.loads(queue_file.read_text()) if queue_file.is_file() else None
+          current=state.get('active_order') if isinstance(state,dict) else None
+          ticket=area/'stage-02/inbox'/(str(current)+'--r001.json')
+          receipt=area/'stage-01/receipts'/(str(current)+'--r001.json')
+          print('PRIVATE_ENGLISH_ACTIVATION_PROOF='+json.dumps({
+            'state_present':isinstance(state,dict),
+            'queue_present':isinstance(queue,dict),
+            'ranked_order_count':len(queue.get('orders',[])) if isinstance(queue,dict) else None,
+            'queue_first_order':queue.get('orders',[None])[0] if isinstance(queue,dict) else None,
+            'active_order':current,
+            'active_index':state.get('index') if isinstance(state,dict) else None,
+            'tick':state.get('tick') if isinstance(state,dict) else None,
+            'stage1_private_receipt_exists':receipt.is_file() and not receipt.is_symlink(),
+            'stage2_private_ticket_exists':ticket.is_file() and not ticket.is_symlink(),
+            'new_serial_cron_active':sum('SAEIT_ENGLISH_FIRST_SINGLE_ACTIVE_20261025' in x for x in active),
+            'bulk_stage1_cron_active':sum('SAEIT_FACTORY_STAGE1_INDEPENDENT_V1' in x for x in active),
+            'old_serial_cron_active':sum('SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025' in x for x in active)
+          },sort_keys=True))
           print('PRIVATE_ENGLISH_PRIORITY_INVENTORY='+json.dumps({
             'total':len(rows),'group_counts':dict(group),'site_counts':dict(site_counts),
             'order_statuses':dict(quality),
