@@ -1,0 +1,74 @@
+name: cPanel expired agent lab and personal test environment preflight READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/cpanel-inactive-lab-and-personal-test-venv-preflight-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Verify historic agent lab generations and test venv have no Passenger, cron or process owners
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 340s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import json,os,subprocess,time,shutil
+          h=Path('/home/zomorod2')
+          if os.geteuid()==0 or Path.home()!=h or h.is_symlink():raise SystemExit('BAD_HOST_USER')
+          roots={'lab':h/'Saeit/var/mother_robot/lab','personal_testvenv':h/'mojtaba_personal/.venv_personal_test'}
+          passenger=subprocess.run(['uapi','--output=json','PassengerApps','list_applications'],capture_output=True,text=True,timeout=30)
+          if passenger.returncode:raise SystemExit('NO_PASSENGER_INVENTORY')
+          ps=subprocess.run(['ps','-u','zomorod2','-o','args='],capture_output=True,text=True,timeout=12)
+          cron=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=12)
+          refs=passenger.stdout+'\n'+ps.stdout+'\n'+(cron.stdout if cron.returncode==0 else '')
+          def sized(p):
+              q=subprocess.run(['du','-s','-B1','--',str(p)],capture_output=True,text=True,timeout=100)
+              return int(q.stdout.split()[0]) if q.returncode==0 else None
+          out={}
+          for key,root in roots.items():
+              if not root.is_dir() or root.is_symlink():raise SystemExit('EXPECTED_ROOT_MISSING')
+              children=[]
+              for child in root.iterdir():
+                  if child.is_symlink():raise SystemExit('TOP_LEVEL_SYMLINK')
+                  if child.is_dir():
+                      children.append({'name':child.name[:115],'bytes':sized(child),'age_days':round((time.time()-child.stat().st_mtime)/86400,1),
+                          'has_project':(child/'project').is_dir(),
+                          'ref':str(child) in refs or child.name in refs})
+              out[key]={'root_bytes':sized(root),'is_referenced':str(root) in refs,
+                  'children_count':len(children),'children':sorted(children,key=lambda x:-(x['bytes'] or 0))[:70]}
+          # Code may use generic lab path via dynamic joins; only inspect file paths, not contents.
+          scan=[]
+          if shutil.which('rg'):
+              q=subprocess.run(['rg','-l','--no-messages','-g','*.py','-g','*.sh',
+                 'mother_robot/lab|venv_personal_test',str(h/'Saeit/core'),str(h/'Saeit/moj'),
+                 str(h/'mojtaba_personal/runtime')],capture_output=True,text=True,timeout=65)
+              scan=[str(Path(x).relative_to(h))[:150] for x in q.stdout.splitlines()[:30]] if q.returncode in (0,1) else ['search-unavailable']
+          print('CPANEL_AGENT_LAB_TEST_VENV_PREFLIGHT='+json.dumps({'targets':out,'code_reference_paths':scan,
+          'read_only':True,'mutations':0},sort_keys=True),flush=True)
+
+          PY
+          echo CPANEL_LAB_PREFLIGHT_READONLY=PASS
