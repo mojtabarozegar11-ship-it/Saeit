@@ -1,0 +1,709 @@
+{
+  "schema": "MR001-priority-abstract-lookup-v1",
+  "generated_utc": "2026-10-25T02:57:00.271Z",
+  "query": "DOI OR batch lookup for high/medium metadata priorities with no previous abstract; not full search",
+  "source_que": "CANDIDATE_QUEUE_604_METADATA_TRIAGE_2026-10-25.csv",
+  "requested_dois": 73,
+  "matched_dois": 73,
+  "returned_abstracts": 15,
+  "without_abstract": 58,
+  "source_page_urls": [
+    "https://api.openalex.org/works?filter=doi%3A10.1016%2Fj.agwat.2018.08.025%7C10.1071%2Fea02055%7C10.1007%2Fs10661-006-9359-6%7C10.1016%2Fj.compag.2015.06.008%7C10.1016%2Fj.compag.2012.07.001%7C10.1016%2Fj.compag.2012.03.003%7C10.1007%2F978-3-319-15994-2_18%7C10.1016%2Fj.jenvman.2005.09.001%7C10.1016%2Fj.biosystemseng.2008.01.004%7C10.1016%2Fj.compag.2016.04.003%7C10.1016%2Fj.compag.2014.03.012%7C10.1016%2Fj.compag.2019.05.029%7C10.1016%2Fj.compag.2006.11.003%7C10.1016%2Fj.compag.2014.04.007%7C10.1016%2Fj.compag.2020.105822&per_page=25&select=id,doi,title,publication_year,type,abstract_inverted_index",
+    "https://api.openalex.org/works?filter=doi%3A10.1016%2Fj.biosystemseng.2019.01.016%7C10.1007%2F978-3-642-18336-2_87%7C10.1016%2Fj.compag.2018.07.024%7C10.1016%2Fj.compag.2017.11.018%7C10.1016%2Fj.compag.2012.02.015%7C10.1016%2Fj.compag.2008.01.003%7C10.1016%2Fj.agwat.2018.09.052%7C10.21203%2Frs.3.rs-5474956%2Fv1%7C10.21203%2Frs.3.rs-2904576%2Fv1%7C10.1016%2Fj.compag.2020.105741%7C10.1007%2Fs11119-019-09688-0%7C10.1016%2Fj.compag.2017.12.038%7C10.1016%2Fj.fcr.2011.03.004%7C10.1002%2Fagj2.21059%7C10.1016%2Fj.compag.2015.06.015&per_page=25&select=id,doi,title,publication_year,type,abstract_inverted_index",
+    "https://api.openalex.org/works?filter=doi%3A10.1016%2Fj.compag.2018.06.030%7C10.1071%2Fea01204%7C10.1016%2Fj.biosystemseng.2006.05.013%7C10.1016%2Fs1161-0301(99)00043-x%7C10.1002%2Fagj2.20205%7C10.1016%2Fj.compag.2014.12.021%7C10.1081%2Ffri-200033466%7C10.1016%2Fj.foreco.2004.01.025%7C10.2135%2Fcropsci2016.10.0907%7C10.1016%2Fj.fcr.2022.108579%7C10.2135%2Fcropsci2011.11.0581%7C10.1016%2Fj.compag.2016.06.021%7C10.1016%2F0168-1699(90)90010-m%7C10.1016%2Fj.compag.2017.10.023%7C10.1016%2Fj.compag.2015.11.007&per_page=25&select=id,doi,title,publication_year,type,abstract_inverted_index",
+    "https://api.openalex.org/works?filter=doi%3A10.1111%2Fjac.12466%7C10.1016%2Fj.agee.2018.11.011%7C10.1016%2Fj.compag.2016.10.004%7C10.1016%2Fs1161-0301(02)00077-1%7C10.1016%2F0168-1699(90)90011-d%7C10.3146%2Fps08-023.1%7C10.1016%2Fj.biosystemseng.2012.09.002%7C10.1016%2Fj.fcr.2010.12.005%7C10.1016%2Fj.compag.2004.02.006%7C10.1007%2Fs11540-019-9423-6%7C10.1016%2Fs1161-0301(01)00124-1%7C10.1016%2Fj.agrformet.2024.109967%7C10.1016%2Fj.biosystemseng.2007.12.005%7C10.1002%2Fagj2.20246%7C10.2135%2Fcropsci2016.01.0009&per_page=25&select=id,doi,title,publication_year,type,abstract_inverted_index",
+    "https://api.openalex.org/works?filter=doi%3A10.1016%2Fj.compag.2008.05.022%7C10.2134%2Fagronj2015.0437%7C10.1016%2Fj.compag.2018.06.052%7C10.1016%2Fj.agee.2004.10.005%7C10.1016%2Fj.agrformet.2015.04.010%7C10.1016%2Fj.compag.2018.06.034%7C10.1016%2Fj.agrformet.2015.08.244%7C10.1080%2F00221589.1992.11516293%7C10.1016%2Fj.biosystemseng.2016.07.001%7C10.1016%2Fj.fcr.2010.07.017%7C10.1016%2Fs0168-1923(99)00030-1%7C10.1016%2Fj.biosystemseng.2010.07.009%7C10.1016%2Fs0168-1699(01)00170-3&per_page=25&select=id,doi,title,publication_year,type,abstract_inverted_index"
+  ],
+  "page_counts": [
+    {
+      "i": 1,
+      "requested": 15,
+      "returned": 15,
+      "indexHits": 15
+    },
+    {
+      "i": 2,
+      "requested": 15,
+      "returned": 15,
+      "indexHits": 15
+    },
+    {
+      "i": 3,
+      "requested": 15,
+      "returned": 15,
+      "indexHits": 15
+    },
+    {
+      "i": 4,
+      "requested": 15,
+      "returned": 15,
+      "indexHits": 15
+    },
+    {
+      "i": 5,
+      "requested": 13,
+      "returned": 13,
+      "indexHits": 13
+    }
+  ],
+  "access_limit": "Bibliographic abstracts from OpenAlex inverted index, not confirmed publisher text; still missing for many high/medium records; no human screening",
+  "records": [
+    {
+      "doi": "10.1016/j.agwat.2018.08.025",
+      "openalex_id": "https://openalex.org/W2889139687",
+      "title": "Web-based irrigation decision support system with limited inputs for farmers",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1071/ea02055",
+      "openalex_id": "https://openalex.org/W2077661037",
+      "title": "Context evaluation: a profile of irrigator climate knowledge, needs and practices in the northern Murray–Darling Basin to aid development of climate-based decision support tools and information and dissemination of research",
+      "abstract_available": true,
+      "abstract_word_count": 303,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": "Understanding client needs, knowledge and practices offers a means of ensuring research outputs match intended audience requirements. This paper shows the initial impact of context evaluation on the development of a suite of decision support tools and information to help irrigators better manage their water resources under different climatic conditions. The context evaluation study involved a survey of ~170 irrigators in the northern MurrayÐDarling Basin in Australia. It sought to clarify how they make cropping area and water management decisions and their levels of understanding and use of climate information. We found irrigators consult widely on cropping decisions and those with large areas commonly apply the Southern Oscillation Index to property decisions. Respondents demonstrated a reasonably good understanding of climate phenomena in an Southern Oscillation Index knowledge test. Two-thirds use seasonal climate outlook information, but only 20% are very confident to apply climate information to decisions. More than half would find a decision support system (comprising tools and information) useful for cropping decisions. Almost 75% would change their crop area, and 43% their crop type, if given advance information about water availability up to 4 months ahead of irrigation season. About 70% have access to a computer and half to the internet, but two-thirds consider their personal computing skill is only nil or basic. Twenty-three percent of respondents expressed interest in working directly with the research team to interact regarding their requirements, indicating the potential for future participative research activities such as collaborative, on-farm research. The context evaluation facilitated formation of a focus group that cooperated to assess research findings and incorporate improvements to the projectÕs set of decision support tools. The evaluation was a new experience for the researchers and, albeit an arms-length consultation process, it has broadened our knowledge about our target audience and their preferred ways to access research findings."
+    },
+    {
+      "doi": "10.1007/s10661-006-9359-6",
+      "openalex_id": "https://openalex.org/W2028981662",
+      "title": "Impact Assessment and Recommendation of Alternative Conjunctive Water Use Strategies for Salt Affected Agricultural Lands through a Field Scale Decision Support System – A Case Study",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2015.06.008",
+      "openalex_id": "https://openalex.org/W835572154",
+      "title": "On-farm testing of a nutrient management decision-support tool for rice in the Senegal River valley",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2012.07.001",
+      "openalex_id": "https://openalex.org/W2083323986",
+      "title": "Software for on-farm irrigation scheduling of stone fruit orchards under water limitations",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2012.03.003",
+      "openalex_id": "https://openalex.org/W2030365305",
+      "title": "Using a mobile phone Short Messaging Service (SMS) for irrigation scheduling in Australia – Farmers’ participation and utility evaluation",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1007/978-3-319-15994-2_18",
+      "openalex_id": "https://openalex.org/W350667430",
+      "title": "A Cotton Irrigator’s Decision Support System and Benchmarking Tool Using National, Regional and Local Data",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.jenvman.2005.09.001",
+      "openalex_id": "https://openalex.org/W2027681256",
+      "title": "A decision support for an integrated multi-scale analysis of irrigation: DSIRR",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.biosystemseng.2008.01.004",
+      "openalex_id": "https://openalex.org/W1999257158",
+      "title": "A decision support model for travelling gun irrigation machines",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2016.04.003",
+      "openalex_id": "https://openalex.org/W2325879942",
+      "title": "A decision support system for managing irrigation in agriculture",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2014.03.012",
+      "openalex_id": "https://openalex.org/W2026882991",
+      "title": "Automated zone-specific irrigation with wireless sensor/actuator network and adaptable decision support",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2019.05.029",
+      "openalex_id": "https://openalex.org/W2946508459",
+      "title": "D-Risk: A decision-support webtool for improving drought risk management in irrigated agriculture",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2006.11.003",
+      "openalex_id": "https://openalex.org/W2144037960",
+      "title": "Development of an ENSO-based irrigation decision support tool for peanut production in the southeastern US",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2014.04.007",
+      "openalex_id": "https://openalex.org/W2019653953",
+      "title": "Integrating soil water monitoring technology and weather based crop modelling to provide improved decision support for sugarcane irrigation management",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2020.105822",
+      "openalex_id": "https://openalex.org/W3092379901",
+      "title": "IrrigaSys: A web-based irrigation decision support system based on open source data and technology",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.biosystemseng.2019.01.016",
+      "openalex_id": "https://openalex.org/W2913555401",
+      "title": "Irrigation decision support based on leaf relative water content determination in olive grove using near infrared spectroscopy",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1007/978-3-642-18336-2_87",
+      "openalex_id": "https://openalex.org/W1523518197",
+      "title": "Study on Water Resources Optimal Allocation of Irrigation District and Irrigation Decision Support System",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2018.07.024",
+      "openalex_id": "https://openalex.org/W2884627861",
+      "title": "USING decision models to enable better irrigation Decision Support Systems",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2017.11.018",
+      "openalex_id": "https://openalex.org/W2769264666",
+      "title": "Web-based decision support system for canal irrigation management",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2012.02.015",
+      "openalex_id": "https://openalex.org/W2161925491",
+      "title": "A Decision Support System-Fertigation Simulator (DSS-FS) for design and optimization of sprinkler and drip irrigation systems",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2008.01.003",
+      "openalex_id": "https://openalex.org/W2143130947",
+      "title": "Use of a decision support system and a simulation game to help collective decision-making in water management",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.agwat.2018.09.052",
+      "openalex_id": "https://openalex.org/W2907489797",
+      "title": "Using agrometeorological data to assist irrigation management in oil palm crops: A decision support method and results from crop model simulation",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.21203/rs.3.rs-5474956/v1",
+      "openalex_id": "https://openalex.org/W4404982924",
+      "title": "A Novel Decision Support System for Generating Irrigation Ecolabels Based on the Resource Overutilization Ratio",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.21203/rs.3.rs-2904576/v1",
+      "openalex_id": "https://openalex.org/W4379521274",
+      "title": "A Simple-Structured Framework for Decision Support System in Irrigation Water Management: Tool Description and Preliminary Testing",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2020.105741",
+      "openalex_id": "https://openalex.org/W3081905966",
+      "title": "Applying case-based reasoning and a learning-based adaptation strategy to irrigation scheduling in grape farming",
+      "abstract_available": true,
+      "abstract_word_count": 358,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": "As a key part of vineyard management, irrigation of grapevines puts forward the need of scheduling water resources in a more precise and efficient way. Typically, irrigation plans are generated through the use of mathematical models. However, the unwelcoming fact is that such models usually require a massive quantity of monitored data that is often unavailable or incomplete in most developing countries. As a consequence, this paper takes advantage of advanced artificial intelligence techniques, in particular, the case-based reasoning approach, to estimate the reference evapotranspiration, and therefore, to calculate the amount of irrigation water in grape farming. For improving the current case-based reasoning approach, especially the solution revision part, this paper proposes a learning-based adaptation strategy by fully making use of the hidden information in the case base. Inspired by the feature vector representation, a revision task could be also considered as a situation and action pair. The situation part attempts to capture the difference between the target case and past cases, while the action pair aims at adapting the solution to reflect the detected difference by learning adaptation knowledge from past experiences. Two retrieval tasks are involved in the revision process. On the one hand, the first one tries to retrieve an adaptation case and evaluate the difference between the new case. On the other hand, the second retrieval task should identify a collection of past cases that shares the similar difference as detected before. By learning from how the solutions of retrieved past cases were updated to solve the adaptation case, the solution of the adaptation case can be revised accordingly based on the obtained adaptation knowledge, and therefore to solve the new case. The experiment focuses on verifying the effectiveness of the case-based reasoning approach in irrigation scheduling, and evaluating the accuracy of the learning-based adaptation strategy. The experimental results demonstrate that the system is able to output a reasonable irrigation plan, while the deviation between the predicted and recorded values is around 5.42% and 7.94% for the relevance evapotranspiration and the amount of irrigation water respectively. In conclusion, the proposal in this paper has great potential for modeling irrigation scheduling system with promising advantages."
+    },
+    {
+      "doi": "10.1007/s11119-019-09688-0",
+      "openalex_id": "https://openalex.org/W2977381436",
+      "title": "Delineation of management zones and optimization of irrigation scheduling to improve irrigation water productivity and revenue in a farmland of Northwest China",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2017.12.038",
+      "openalex_id": "https://openalex.org/W2792456166",
+      "title": "Design and implementation of a low cost photovoltaic soil moisture monitoring station for irrigation scheduling with different frequency domain analysis probe structures",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.fcr.2011.03.004",
+      "openalex_id": "https://openalex.org/W2013804607",
+      "title": "Evaluation and application of ORYZA2000 for irrigation scheduling of puddled transplanted rice in north west India",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1002/agj2.21059",
+      "openalex_id": "https://openalex.org/W4220669259",
+      "title": "Evaluation of irrigation scheduling approaches within sand‐capped turfgrass systems",
+      "abstract_available": true,
+      "abstract_word_count": 247,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": "Abstract In an effort to improve performance of turfgrass irrigated with poor‐quality water, the practice of sand capping is increasing. Given current strains on water supplies, evaluation of various methods of irrigation scheduling approaches for these systems is needed. The objectives of this 2‐yr field study were to evaluate turfgrass performance, temporal and spatial soil moisture and salinity dynamics, and comparative water use among four irrigation scheduling approaches including (a) wireless soil moisture sensor (SMS), (b) on‐site reference evapotranspiration (ETo), (c) National Oceanic and Atmospheric Administration forecasted reference evapotranspiration, and (d) visual‐wilt‐based treatment. The turfgrass used was ‘Latitude 36’ hybrid bermudagrass [Cynodon dactylon (L.) Pers. ×C. transvaalensis Burtt‐Davy] planted atop a 17.8‐cm medium‐coarse textured sand cap. Results demonstrated that all approaches produced similar levels of acceptable turfgrass quality and percentage green cover with no apparent differences in root development. Forecasted reference evapotranspiration was found to be a good predictor of on‐site ETo (R2 = .97) when comparing daily values across two growing seasons. Under wilt‐based irrigation, the volumetric water content (7.6 cm sand‐cap depth) at which wilt occurred was highest mid‐summer (4.1–4.7%) but declined during early and late summer months (1.8–2.2%), suggesting different thresholds may be needed throughout the season when using SMS‐based scheduling. Finally, seasonal water use was 23% lower for the on‐site ETo–based approach compared with SMS‐based scheduling, although this did not result in elevated electrical conductivity within the sand cap. The results provide important information to guide adoption of data‐driven approaches to irrigation scheduling."
+    },
+    {
+      "doi": "10.1016/j.compag.2015.06.015",
+      "openalex_id": "https://openalex.org/W786694500",
+      "title": "Evaluation of optimal irrigation scheduling and groundwater recharge at representative sites in the North China Plain with SWAP model and field experiments",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2018.06.030",
+      "openalex_id": "https://openalex.org/W2809073710",
+      "title": "Evaluation of the Oceanic Niño Index as a decision support tool for winter wheat cropping systems in the Texas High Plains using SWAT",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1071/ea01204",
+      "openalex_id": "https://openalex.org/W2150396562",
+      "title": "Formative evaluation to benchmark and improve climate-based decision support for graziers in Western Queensland",
+      "abstract_available": true,
+      "abstract_word_count": 276,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": "Researchers developing climate-based forecasts, workshops, software tools and information to aid grazier decisions undertook an evaluation study to enhance planning and benchmark impact. One hundred graziers in Western Queensland were randomly selected from 7 shires and surveyed by mail and telephone (43 respondents) to explore levels of knowledge and use of climate information, practices and information needs. We found 36% of respondents apply the Southern Oscillation Index to property decisions but 92% were unaware El Niño Southern Oscillation's predictive signal in the region is greater for pasture growth than rainfall, suggesting they may not recognise the potential of pasture growth forecasts. Almost 75% of graziers consider they are conservative or risk averse in their attitude to managing their enterprise. Mail respondents ( n = 20) if given a 68%, on average, probability of exceeding median rainfall forecast may change a decision; almost two-thirds vary stocking rate based on forage available, last year's pasture growth or the Southern Oscillation Index; the balance maintain a constant stocking rate strategy; 90% have access to a computer; 75% to the internet and 95% have a fax. This paper presents findings of the study and draws comparisons with a similar study of 174 irrigators in the Northern Murray–Darling Basin ( Aust. J. Exp. Ag. 44, 247–257). New insights and information gained are helping the team better understand client needs and plan, design and extend tools and information tailored to grazier knowledge, practice, information needs and preferences. Results have also provided a benchmark against which to measure project impact and have influenced the team to make important changes to their project planning, activities and methods for transferring technology tailored to grazier preferences."
+    },
+    {
+      "doi": "10.1016/j.biosystemseng.2006.05.013",
+      "openalex_id": "https://openalex.org/W1978749754",
+      "title": "Model Validation, Crop Coefficients and Yield Response Factors for Maize Irrigation Scheduling based on Long-term Experiments",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/s1161-0301(99)00043-x",
+      "openalex_id": "https://openalex.org/W2037435931",
+      "title": "Modelling irrigation scheduling to analyse water management at farm level, during water shortages",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1002/agj2.20205",
+      "openalex_id": "https://openalex.org/W3011863394",
+      "title": "Tensiometer‐based irrigation scheduling and water use efficiency of field‐grown strawberries",
+      "abstract_available": true,
+      "abstract_word_count": 251,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": "Abstract In recent decades, moisture‐based subsurface drip irrigation management strategies lead to water savings while maintaining strawberry yields in open fields. Most soils in the Québec City area are characterized by a high proportion of schist fragments and high hydraulic conductivity, causing substantial water losses following irrigation. Until now, little was known about the efficiency of soil‐moisture‐based irrigation strategies used on moderately coarse‐textured soils and their potential to improve water use efficiency (WUE). The first objective of this study was to test two tensiometer‐based irrigation managements for strawberry plants grown in a conventional system. Since field fumigation is increasingly restricted in field‐grown strawberries, we designed a raised‐bed trough system for use in the field and tested its productivity potential. The two irrigation methods included two treatments using pulsed irrigation: one with a constant irrigation threshold of −15 kPa (Pl), and the other with a variable threshold (−15/−30 kPa) adjusted daily to the predicted crop evapotranspiration (PlETc), in addition to a soilless treatment (SL) using a peat substrate and an irrigation threshold of −5 kPa. Compared to conventional irrigation, the PlETc treatment increased the WUE by 8 to 44% while maintaining marketable yields and fruit quality. Thus, this pulsed irrigation strategy is recommended for strawberry plants grown in clay loam soils. Strawberry plants grown in the soilless system gave 73 to 98% higher early marketable yield than soil cultivation. These results may encourage North American farmers to consider the soilless raised‐bed trough system as a viable alternative to conventional strawberry production systems."
+    },
+    {
+      "doi": "10.1016/j.compag.2014.12.021",
+      "openalex_id": "https://openalex.org/W2009911208",
+      "title": "A smartphone app to extend use of a cloud-based irrigation scheduling tool",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1081/fri-200033466",
+      "openalex_id": "https://openalex.org/W2042379590",
+      "title": "Adapting Crop-Yield Models to Irrigation Scheduling in Nigeria",
+      "abstract_available": true,
+      "abstract_word_count": 176,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": "Simulation models are being increasingly used to solve agricultural and environmental management problems associated with agricultural crop production, such as irrigation scheduling and design, design of tile drainage systems, pollution of surface and ground water resources by agricultural practice, and economic analysis of agricultural production. Crop-yield models have proliferated in the last decade with capabilities from simple regression models to complex physiological models with varying degrees of sophistication of the solution of the soil-water flow problem. The choice of any model depends on the nature of the problem, availability of input data, and resources. Calibration, testing, and modification of existing models or development of a new model may be necessary in a specific case. This article first reviews some of the major crop-yield models, discusses their capability and limitations for use in irrigation scheduling in a developing country such as Nigeria, and suggests further areas of research to increase their adaptation for irrigation scheduling in developing countries. It also lists some of the advantages derivable from the use of such models for irrigation scheduling and management."
+    },
+    {
+      "doi": "10.1016/j.foreco.2004.01.025",
+      "openalex_id": "https://openalex.org/W2012970956",
+      "title": "An irrigation-scheduling model for application of saline water to tree plantations",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.2135/cropsci2016.10.0907",
+      "openalex_id": "https://openalex.org/W2610639626",
+      "title": "Assessing the Utility of Primed Acclimation for Improving Water Savings in Cotton using a Sensor‐Based Irrigation Scheduling System",
+      "abstract_available": true,
+      "abstract_word_count": 251,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": "This study addressed the potential of reduced prebloom irrigation, referred to as primed acclimation (PA), to increase agricultural water‐use efficiency (WUE) using a soil‐moisture‐based irrigation scheduling system in cotton (Gossypium hirsutum L.). To address this, a study was conducted near Camilla, GA, under a variable‐rate, center‐pivot irrigation system using a Watermark‐based automated soil moisture sensing approach to measure soil water potential (SWP) and impose varying irrigation scheduling treatments during the prebloom stage of development. Early season thresholds were −20 (Treatment 1), −40 (Treatment 2), −70 (Treatment 3), to −100 kPa (Treatment 4) prior to flowering. Reductions in prebloom irrigation of up to 17% were noted in this study for the driest thresholds (−100 kPa) with no reduction in lint yield relative to the −20 and −40 kPa thresholds. In some cases, prebloom irrigation was eliminated completely in the drier prebloom threshold treatments with no appreciable yield reductions. In rainfed treatments, episodic drought during flowering (2014) limited plant growth and node production, hastened cutout, decreased boll numbers per plant, produced a more compact boll distribution on the plant, and decreased yield and WUE relative to irrigated treatments. In contrast, season‐long rainfed treatments exhibited the highest WUE in 2015 (a wet season). The results of this study conclude that prebloom irrigation thresholds between −70 and −100 kPa appear to be viable for use in a sensor‐based PA irrigation scheduling system, whereas episodic drought coinciding with flowering represents a major threat to yield stability and WUE for cotton production in the southeastern United States."
+    },
+    {
+      "doi": "10.1016/j.fcr.2022.108579",
+      "openalex_id": "https://openalex.org/W4281389602",
+      "title": "Crop yield estimation and irrigation scheduling optimization using a root-weighted soil water availability based water production function",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.2135/cropsci2011.11.0581",
+      "openalex_id": "https://openalex.org/W2080768234",
+      "title": "Determining the Optimum Plant Temperature of Cotton Physiology and Yield to Improve Plant‐Based Irrigation Scheduling",
+      "abstract_available": true,
+      "abstract_word_count": 204,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": "ABSTRACT A plant‐based thermal optimum approach to irrigation scheduling provides potential benefits in that water applications are scheduled on the basis of plant response to water status. Such irrigation systems require a defined thermal optimum for the crop and while such optimum values have been identified for cotton ( Gossypium hirsutum L.) cultivars in the United States, there is no information of this type for cultivars common in Australian production. This paper outlines a threefold approach to determining the optimum temperature (T opt ) of the commercial Australian cotton cultivar Sicot 70BRF in an Australian production system. It combines the use of a laboratory‐based fluorescence assay, field‐based net C assimilation rate (A) and stomatal conductance to water vapor (g s ), and canopy temperature (T c )–yield relations. The fluorescence assay showed a T opt between 28 and 30°C while leaf gas exchange rates peaked at a leaf temperature (T l ) of 29°C. The T c –yield relations peaked at 26°C, with yield reductions observed when T c > 28°C. We conclude the T opt of the Australian upland cotton cultivar Sicot 70BRF to be 28 ± 2°C. This T opt will provide valuable information for use in thermal optimum irrigation scheduling systems."
+    },
+    {
+      "doi": "10.1016/j.compag.2016.06.021",
+      "openalex_id": "https://openalex.org/W2466846827",
+      "title": "Development and assessment of a smartphone application for irrigation scheduling in cotton",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/0168-1699(90)90010-m",
+      "openalex_id": "https://openalex.org/W2054780400",
+      "title": "Development of a trickle irrigation scheduling model",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2017.10.023",
+      "openalex_id": "https://openalex.org/W2765262425",
+      "title": "Development of an irrigation scheduling software based on model predicted crop water stress",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2015.11.007",
+      "openalex_id": "https://openalex.org/W2184145677",
+      "title": "DIDAS – User-friendly software package for assisting drip irrigation design and scheduling",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1111/jac.12466",
+      "openalex_id": "https://openalex.org/W3110590204",
+      "title": "Effect of deficit irrigation scheduling and planting pattern on leaf water status and radiation use efficiency of winter wheat",
+      "abstract_available": true,
+      "abstract_word_count": 212,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": "Abstract Drought and water shortages have always been great challenges for agricultural production in the North China Plain. To explore appropriate irrigation regimes and planting patterns in this area, a field experiment was conducted for winter wheat (Triticum aestivum L.) from 2014 to 2016. Three irrigation treatments of 50 mm irrigation at growth stage of jointing (GS34) and heading (GS48, W1), 100 mm irrigation at GS34 (W2) and 100 mm irrigation at GS34 and GS48 (W3) combined with uniform (U), double–double (DD) and furrow‐ridge (F) planting patterns were designed. The tillers number, leaf water status, spike characteristics and radiation use efficiency (RUE) were measured. Results showed that compared with W2, W3 significantly reduced leaf abscisic acid (ABA) content and increased tillers number, spikelets spike−1, yield components and RUE, while W1 produced more tillers number, leaf relative water content (LRWC) and water potential (Lψ) only in the late growth stage, yield components and RUE. The DD significantly increased tillers number, LRWC, Lψ, leaf osmotic potential, spike length, spikes m−2, grains spike−1 and RUE, and reduced the ABA content compared with U. Considering the serious water shortage in the North China Plain, 50 mm irrigation at jointing and heading stages combined with DD is a worthy cultivation measure for sustainable agriculture at water‐deficit condition."
+    },
+    {
+      "doi": "10.1016/j.agee.2018.11.011",
+      "openalex_id": "https://openalex.org/W2903078069",
+      "title": "Effect of irrigation scheduling on nitrous oxide emissions in intensively managed pastures",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2016.10.004",
+      "openalex_id": "https://openalex.org/W2543803190",
+      "title": "Efficient model-based sub-optimal irrigation scheduling using imperfect weather forecasts",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/s1161-0301(02)00077-1",
+      "openalex_id": "https://openalex.org/W1996669504",
+      "title": "Fertigation studies and irrigation scheduling in drip irrigation system in tomato crop (Lycopersicon esculentum L.)",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/0168-1699(90)90011-d",
+      "openalex_id": "https://openalex.org/W2060409796",
+      "title": "General irrigation scheduling package for microcomputers",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.3146/ps08-023.1",
+      "openalex_id": "https://openalex.org/W2147037777",
+      "title": "Genotypic Differences in Current Peanut (Arachis hypogaea L.) Cultivars in Phenology and Stability of These Traits under Different Irrigation Scheduling Methods",
+      "abstract_available": true,
+      "abstract_word_count": 310,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": "Abstract Understanding differences among peanut (Arachis hypogaea L.) cultivars in growth and phenology and the interactions with environment (G X E interactions) for these traits allows predictions for yield potential or performance in variable environments. Despite the importance of this information, very little quantitative data exists on the differences in aboveground growth, canopy architecture, and reproductive phenology for currently grown peanut cultivars. This study quantified differences in these traits among eight peanut cultivars and explored whether irrigation scheduling method (a factor of environment) affected the development in these traits through the season in 2004 and 2005. As expected, year to year variability in environmental conditions (most likely timing of rainfall events during the growing season) significantly affected growth habit across cultivars. However, the irrigation scheduling method, despite differences in total water applied among methods during the season, had no effect on any of the measured traits. This result is likely due to the fact that all methods were adequately supplying crop water demand. Genetic variability in all of the measured growth and phonological traits was strong despite the expectation that cultivars were genetically similar. Further, the lack of significant interactions between year and cultivar for most of the plant growth and reproductive characteristics also indicated a strong genetic component to these traits. One overall trend noted was that late-maturing cultivars had, on average, higher maximum values of LAI, stem mass, and leaf mass measured in the late growth period. Differences in isotopic composition were also strong among cultivars; the cultivars Georgia-02C and Tifrunner had significantly higher isotopic levels (and thus water-use efficiency) than Georgia-01R, Georgia Green, and AP3 across years. Aside from the obvious relationships between pod number and weight, the strongest predictors of reproductive output were late-season traits including leaf weight and LAI. This study successfully documented variability among peanut cultivars in many important traits linked to overall production."
+    },
+    {
+      "doi": "10.1016/j.biosystemseng.2012.09.002",
+      "openalex_id": "https://openalex.org/W2039780487",
+      "title": "Ground-based remote sensing system for irrigation scheduling",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.fcr.2010.12.005",
+      "openalex_id": "https://openalex.org/W2023225744",
+      "title": "Growth, yield and water productivity of zero till wheat as affected by rice straw mulch and irrigation schedule",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2004.02.006",
+      "openalex_id": "https://openalex.org/W2085635066",
+      "title": "Imaging from an unmanned aerial vehicle: agricultural surveillance and decision support",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1007/s11540-019-9423-6",
+      "openalex_id": "https://openalex.org/W2962044002",
+      "title": "Improvement of Water Productivity, Economics and Energetics of Potato through Straw Mulching and Irrigation Scheduling in Indian Punjab",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/s1161-0301(01)00124-1",
+      "openalex_id": "https://openalex.org/W1971377729",
+      "title": "Improving irrigation schedules by using a biophysical and a decisional model",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.agrformet.2024.109967",
+      "openalex_id": "https://openalex.org/W4393111034",
+      "title": "Improving parameterization of an evapotranspiration estimation model with eddy covariance measurements for a regional irrigation scheduling program",
+      "abstract_available": true,
+      "abstract_word_count": 275,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": "Actual evapotranspiration (ETa) is an essential variable in linking energy cycles, carbon, and water, yet challenging to measure. Inputs uncertainty and deficiencies in the key elements of hydrologic models are fundamental challenges for optimizing model performance. Furthermore, the performance of land surface model-based ETa, reanalysis, and remote sensing products varies with spatiotemporal scales. Here, we evaluate sources of bias in the regional Wisconsin Irrigation and Scheduling Program (WISP) model and develop a correction using eddy covariance (EC) observations. ETa, observations were made for five years (2018–2022) using EC systems in agricultural fields in Wisconsin. WISP model ETa bias was linked to underestimation of net longwave radiation (LWnet) that was traced to incorrect specification of effective clear sky atmospheric emissivity (εa,clr). Applying a correction to the εa,clr led to reduced WISP model percent bias (pbias) and error for both LWnet and ETa. The calibrated model more accurately represented observed ETa. The results indicate that explicit treatment of the LWnet balance decreases the uncertainty of model parameters and improves the WISP model performance at independent sites. Applying this improved model parameterization reduced the bias of LWnet radiation from 62.8% to -6.2%, which improved the Nash-Sutcliffe Efficiency (NSE) from -0.08 to 0.52 for ETa on training sites. Additionally, overall pbias was significantly reduced (p = 0.035) for validation sites after WISP correction. Hence, WISP performance improved for different crop types when optimal regional parameters were used, confirming the physical parameters' reliability. Our results highlight that model development should focus on energy balance parameterizations to improve ET simulation and the accuracy of hydrologic and climatic simulations for understanding critical processes underlying hydrologic and climatic variability and change over land."
+    },
+    {
+      "doi": "10.1016/j.biosystemseng.2007.12.005",
+      "openalex_id": "https://openalex.org/W2011218783",
+      "title": "Irrigation scheduling for furrow-irrigated maize under climate uncertainties in the Thrace plain, Bulgaria",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1002/agj2.20246",
+      "openalex_id": "https://openalex.org/W3015800374",
+      "title": "Irrigation scheduling technologies reduce water use and maintain turfgrass quality",
+      "abstract_available": true,
+      "abstract_word_count": 251,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": "Abstract Smart irrigation controllers have demonstrated potential for turfgrass water conservation in humid and temperate environments but have not been comprehensively tested in arid environments. The objective of this study was to determine the accuracy of a wireless capacitance sensor over a wide soil moisture range and to ascertain if smart irrigation controllers resulted in water savings without reducing quality of tall fescue [Schedonorus arundinaceus (Schreb.) Dumort.] and bermudagrass (Cynodon dactylon L.). A two‐yr study was conducted to compare turfgrass quality, root morphology, and water use of plots irrigated with a constant run time to plots for which irrigation was scheduled using soil moisture sensors (SMS), evapotranspiration (ET) [Climate Logic (CL)] controllers, or 80% of historic ET (ET80) for tall fescue and 60% (ET60) for bermudagrass. Sensors accurately tracked soil moisture up to salinity levels of 4 dS m−1. Turf performance and root morphology were not affected by irrigation treatments for either grass. Compared to tall fescue plots irrigated with constant run time, plots irrigated using ET80 and CL required 38% less water, and SMS plots used 44% less than tall fescue. Scheduling bermudagrass irrigation by ET60, CL, and SMS resulted in a 29, 42, and 39% reduction in water applied compared to constant run time. The majority of water savings was in spring and fall. Water requirement for bermudagrass during the summer did not differ between the scheduling treatments. Our study confirms that smart irrigation controllers can be used as an effective measure to conserve water in an arid environment."
+    },
+    {
+      "doi": "10.2135/cropsci2016.01.0009",
+      "openalex_id": "https://openalex.org/W2522722283",
+      "title": "Irrigation Scheduling Using Predawn Leaf Water Potential Improves Water Productivity in Drip‐Irrigated Cotton",
+      "abstract_available": true,
+      "abstract_word_count": 252,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": "To address the effectiveness of predawn leaf water potential in plant‐based irrigation scheduling, Gossypium hirsutum L. plants were grown under fully irrigated and dryland conditions and under three predawn water potential (Ψ PD ) thresholds (−0.5, −0.7, and −0.9 MPa). Measurements included Ψ PD , plant height, mainstem node number, lint yield, water productivity, and continuous crop canopy temperature. We found that Ψ PD produced similar yields to current practices, while decreasing overall water use from 7 to 31%, depending on rainfall levels and the treatment utilized. When considered across both years of the study (2013 and 2014), using a −0.5‐MPa Ψ PD irrigation threshold consistently resulted in less irrigation applied than the checkbook method and maximum water productivity and lint yield. Using a well‐watered baseline developed in 2013 for canopy temperature versus vapor pressure deficit, we calculated a crop water stress index (CWSI) that exhibited a very strong, nonlinear relationship with season average Ψ PD values between approximately −0.4 and −0.7 MPa ( r 2 = 0.81). A strong, nonlinear relationship was also seen between CWSI and lint yield ( r 2 = 0.81). Predawn water potential appears to be an effective means of determining the need for irrigation in cotton, and in the current study, yield and water productivity were maximized at a season‐long average Ψ PD threshold of −0.5 MPa. Furthermore, when calibrated using Ψ PD –based irrigation triggers, canopy‐temperature derived CWSI appears to be a promising tool for future automated plant‐based irrigation scheduling in the southeastern United States."
+    },
+    {
+      "doi": "10.1016/j.compag.2008.05.022",
+      "openalex_id": "https://openalex.org/W2126034361",
+      "title": "Methodology for the use of DSSAT models for precision agriculture decision support",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.2134/agronj2015.0437",
+      "openalex_id": "https://openalex.org/W2405292412",
+      "title": "Modeling Cotton Lint Yield and Water Use Efficiency Responses to Irrigation Scheduling Using Cotton2K",
+      "abstract_available": true,
+      "abstract_word_count": 281,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": "Decreasing groundwater supplies and increasing variability in weather challenge profitable cotton (Gossypium hirsutum L.) production in the Texas Rolling Plains. A modeling study was conducted using the Cotton2K model using weather data from 1980 to 2010 (31 yr) from the Texas Rolling Plains. Our objective was to study cotton yield, water use efficiency (WUE), and economic returns responses to irrigation, which included a combination of six evapotranspiration (ET) replacement levels (40, 60, 80, 100, 120, and 140% ET) and four irrigation durations (4, 6, 8, and 10 wk). The model was initially calibrated and validated using field data. Calibrated model was then used to run simulation scenarios. Maximum lint yield of 1838 kg ha−1 was obtained by irrigating at 111% ET for 10 wk while maximum WUE of 2.65 kg ha−1 mm−1 was obtained by irrigating at 85% ET for 8 wk or 96% ET for 10 wk. This maximum lint yield required 530 mm of irrigation and 880 mm of total water. Maximum economic returns of US$1610 ha−1 was obtained with 516 mm of irrigation water. However, if this amount of water is not available for irrigation, deficit irrigation at 85% ET for 8 wk is a good alternative strategy as it produced 1560 kg lint ha−1 and $1240 ha−1 economic returns with improved WUE. Our results indicate that scheduling irrigation by considering cotton ET demand could increase lint yield, WUE, and profit in the Texas Rolling Plains. Core Ideas Core IdeasCrop models can be used for agronomic and economic assessments. Core IdeasCotton2K can be used to simulate the yield of cotton in semi‐arid regions. Core Ideas85% ET replacement is a promising deficit irrigation strategy for the Texas Rolling Plains."
+    },
+    {
+      "doi": "10.1016/j.compag.2018.06.052",
+      "openalex_id": "https://openalex.org/W2811503142",
+      "title": "Optimum soil water content sensors placement for surface drip irrigation scheduling in layered soils",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.agee.2004.10.005",
+      "openalex_id": "https://openalex.org/W2124559814",
+      "title": "Physiological tools for irrigation scheduling in grapevine (Vitis vinifera L.)",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.agrformet.2015.04.010",
+      "openalex_id": "https://openalex.org/W2076407220",
+      "title": "Reducing nitrous oxide emissions and nitrogen leaching losses from irrigated arable cropping in Australia through optimized irrigation scheduling",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.compag.2018.06.034",
+      "openalex_id": "https://openalex.org/W2810242969",
+      "title": "SIMAGRI: An agro-climate decision support tool",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.agrformet.2015.08.244",
+      "openalex_id": "https://openalex.org/W1464013413",
+      "title": "Species-specific irrigation scheduling with a spatially explicit biophysical model: A comparison to substrate moisture sensing with insight into simplified physiological parameterization",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1080/00221589.1992.11516293",
+      "openalex_id": "https://openalex.org/W2303023091",
+      "title": "Specific micromorphometric reactions of fruit trees to water stress and irrigation scheduling automation",
+      "abstract_available": true,
+      "abstract_word_count": 131,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": "Continuous recordings of diameter variations using LVDT gauges were made on potted or field grown apple and peach-trees to seek a reliable indicator of water stress. The first and general indication of water stress was the decrease and stoppage of daily growth in stem diameter. When water was sufficiently available in the soil, maximum daily shrinkage was a versatile indicator of transpiration stream intensity. When water availability in the soil strongly decreased two kinds of specific daily shrinkage patterns appeared: a) ‘peach-tree’ pattern, whose maximum daily shrinkage markedly increased as water stress became more severe, and b) ‘apple-tree’ pattern, where maximum daily shrinkage under severe water stress was smaller than its well watered value. Parameters for irrigation automation designs are proposed by processing both daily growth data and daily shrinkage data."
+    },
+    {
+      "doi": "10.1016/j.biosystemseng.2016.07.001",
+      "openalex_id": "https://openalex.org/W2465913766",
+      "title": "Stomatal resistance of New Guinea Impatiens pot plants. Part 2: Model extension for water restriction and application to irrigation scheduling",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.fcr.2010.07.017",
+      "openalex_id": "https://openalex.org/W2043365243",
+      "title": "The effect of irrigation scheduling and water stress on the maturity and chemical composition of Virginia tobacco leaf",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/s0168-1923(99)00030-1",
+      "openalex_id": "https://openalex.org/W2123234588",
+      "title": "Use of infrared thermometry for estimation of stomatal conductance as a possible aid to irrigation scheduling",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/j.biosystemseng.2010.07.009",
+      "openalex_id": "https://openalex.org/W2060419989",
+      "title": "Water distribution uniformity and scheduling in micro-irrigation systems for water saving and environmental protection",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    },
+    {
+      "doi": "10.1016/s0168-1699(01)00170-3",
+      "openalex_id": "https://openalex.org/W2042722252",
+      "title": "WISE: a web-linked and producer oriented program for irrigation scheduling",
+      "abstract_available": false,
+      "abstract_word_count": 0,
+      "abstract_source": "OpenAlex inverted index, not journal verified",
+      "abstract": null
+    }
+  ]
+}
