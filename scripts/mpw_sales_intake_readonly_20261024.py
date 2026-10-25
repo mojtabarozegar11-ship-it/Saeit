@@ -163,6 +163,8 @@ def domain_catchall():
     output("MPW_DOMAIN_CATCHALL", info)
 
 def route_bucket(page):
+    if page.startswith(("/mpw-editorial/revenue/", "/earn/")):
+        return "revenue_hub" if page in ("/mpw-editorial/revenue/", "/mpw-editorial/revenue/index.html", "/earn/", "/earn/index.html") else "revenue_offer"
     if page.startswith("/store/product/"):
         return "product_checkout" if "/checkout/" in page else "product_detail"
     if page.startswith("/store/") or page == "/store":
@@ -212,7 +214,9 @@ def visitor_logs():
               "within_30d": 0, "likely_human_page_hits": 0,
               "likely_bot_page_hits": 0, "approx_distinct_ips": 0,
               "store_page_hits": 0, "product_page_hits": 0,
-              "checkout_page_hits": 0, "page_4xx": 0, "page_5xx": 0,
+              "checkout_page_hits": 0, "revenue_hub_hits": 0,
+              "revenue_offer_hits": 0, "contact_page_hits": 0,
+              "page_4xx": 0, "page_5xx": 0,
               "earliest_utc": None, "latest_utc": None,
               "limitations": "Raw archived logs may omit current days; IPs and user-agent heuristics are not people or sessions."}
     if not safe_directory(root):
@@ -270,6 +274,13 @@ def visitor_logs():
                         if status == "403" and page.startswith("/accounts/"):
                             login_errors_by_day[at.date().isoformat() + ":" + route_bucket(page)] += 1
                     unique.add(ip)
+                    bucket = route_bucket(page)
+                    if bucket == "revenue_hub":
+                        report["revenue_hub_hits"] += 1
+                    elif bucket == "revenue_offer":
+                        report["revenue_offer_hits"] += 1
+                    elif bucket == "support_contact":
+                        report["contact_page_hits"] += 1
                     if page.startswith("/store/") or page == "/store/":
                         report["store_page_hits"] += 1
                     if page.startswith("/store/product/") and not page.endswith("/checkout/"):
