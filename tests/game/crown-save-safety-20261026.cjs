@@ -13,7 +13,7 @@ const records=[
  {score:Infinity,wave:2,mode:'campaign'},
  {score:99,wave:-1,mode:'campaign'},
  {score:99,wave:1,mode:'javascript:alert(1)'},
- {score:3,wave:2,mode:'endless',when:'not-a-date'},
+ {score:3,wave:2,mode:'endless',when:'2026-02-31'},
  {score:2,wave:2,mode:'bossrush',when:'2026-10-26'}
 ];
 const storage={getItem(){return JSON.stringify({
@@ -31,4 +31,8 @@ assert.equal(run.history[2].when,'2026-10-26');
 assert.equal(run.achievements.length,2,'duplicate and malformed achievements must be removed');
 assert.equal(run.credits,30,'legitimate local credit history must survive');
 assert.equal(run.campaign.unlockedSector,2,'valid campaign progress must survive');
+const init=js.slice(js.indexOf('let save=loadSave();'),js.indexOf('// Each silhouette'));
+const legacy=vm.runInNewContext("const STORAGE='mpw-crown-v10-save';const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));"+loader+init+'save.best',{localStorage:{getItem(key){return key==='mpw-crown-defender-best-v1'?'Infinity':'{\"best\":250}'},setItem(){}},JSON,Number,Math,Set,Date});
+assert.equal(legacy,250,'nonfinite legacy scores must not poison the current save');
+assert.equal(vm.runInNewContext(loader+'validRecordDate(\"2026-02-28\")',{Date,Number,Math,JSON,Set}), '2026-02-28');
 console.log('CROWN_SAVE_SAFETY_PASS: scoreboard validation, date safety, achievements and backward-compatible progress');
