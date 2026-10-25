@@ -33,7 +33,7 @@ assert.equal(cases[1].unlocked,150);
 assert.equal(cases[2].unlocked,1);
 const jungle=between(rah,'function jungleRunGame(stage){','function runnerGame(stage){');
 function runJungle(choices){
- const listeners=new Map(),stage={isConnected:true,buttons:[],innerHTML:'',querySelector(){return {append(...items){stage.buttons=items}}}};
+ const listeners=new Map(),stage={isConnected:true,buttons:[],_html:'',get innerHTML(){return this._html},set innerHTML(v){this._html=v;this.buttons=[]},querySelector(){return {append(...items){stage.buttons.push(...items)}}}};
  const sandbox={Math:Object.assign(Object.create(Math),{random:()=>0}),localStorage:{getItem(){return '0'},setItem(){}},document:{
   getElementById(){return {classList:{contains(){return true}}}},
   addEventListener(event,fn){listeners.set(event,fn)},
