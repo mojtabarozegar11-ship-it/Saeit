@@ -106,7 +106,7 @@ jobs:
           PY
           git clone --quiet --filter=blob:none --depth=1 --branch b10488 https://github.com/ggml-org/llama.cpp.git "$work/llama"
           test "$(git -C "$work/llama" rev-parse HEAD)" = '9d77fa17254e1dee4b9e92504c91611a60b1359f'
-          cmake -S "$work/llama" -B "$work/llama/build" -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=ON
+          cmake -S "$work/llama" -B "$work/llama/build" -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=ON -DLLAMA_BUILD_UI=OFF
           cmake --build "$work/llama/build" -j 4 --target llama-server
           test -x "$work/llama/build/bin/llama-server"
           python3 -m venv "$work/venv"
