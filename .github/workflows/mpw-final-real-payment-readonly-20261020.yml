@@ -156,6 +156,41 @@ jobs:
           out('MPW_MICRO_PDF_LIBS',{name:bool(importlib.util.find_spec(name)) for name in ('pypdf','PyPDF2','fitz')})
           print('MPW_MICRO_PREFLIGHT_READONLY=PASS')
           PY
+      - name: Classify walletless versus legacy cron without touching payments
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,subprocess,inspect
+          from pathlib import Path
+          app=Path('/home/zomorod2/Saeit-staging')
+          if app.is_symlink() or not app.is_dir():raise SystemExit('UNSAFE_APP_ROOT')
+          os.chdir(app);sys.path.insert(0,str(app))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from core.models import PaymentIntent
+          from mpw_commerce.models import CommerceInvoice
+          from django.db.models import Count
+          def emit(label,data):print(label+'='+json.dumps(data,sort_keys=True))
+          cron=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=15,check=False)
+          entries=[s for s in cron.stdout.splitlines() if s.strip() and not s.lstrip().startswith('#')]
+          walletless=sum(('mpw_walletless' in s or 'mpw_trx_commercial' in s or 'reconcile_commercial_intent' in s) for s in entries)
+          legacy=sum(('mpw_commerce_reconcile' in s or 'mpw_commerce_live_inbound_reconciler' in s) for s in entries)
+          emit('MPW_P0_SCHEDULER_SCOPE',{'cron_readable':cron.returncode==0,'entry_count':len(entries),'walletless_reconciler_entries':walletless,'legacy_reconciler_entries':legacy,'cron_data_redacted':True})
+          rows=list(PaymentIntent.objects.filter(provider='mpw_walletless_trx_v1').values('status').annotate(count=Count('pk')).order_by('status'))
+          emit('MPW_P0_ACTIVE_INTENTS',{'provider':'mpw_walletless_trx_v1','status_counts':{r['status']:r['count'] for r in rows}})
+          emit('MPW_P0_LEGACY_INVOICES',{'count':CommerceInvoice.objects.count()})
+          from services import mpw_trx_commercial_web as web
+          fn=getattr(web,'reconcile_commercial_intent_from_candidates',None)
+          emit('MPW_P0_RECONCILER_INTERFACE',{'callback_present':callable(fn),'callback_module':getattr(fn,'__module__',None),'parameters':list(inspect.signature(fn).parameters) if callable(fn) else [],'route_callback_present':callable(getattr(web,'_reconcile_invoice',None))})
+          try:
+              from services.mpw_trx_commercial_chain import read_only_independent_pair
+              pair=read_only_independent_pair()
+              emit('MPW_P0_TRON_PROVIDERS',{'available':True,'provider_a_type':type(getattr(pair,'identifier_a',None)).__name__,'provider_b_type':type(getattr(pair,'identifier_b',None)).__name__,'no_tx_broadcast':True})
+          except (OSError,ValueError,TypeError,RuntimeError) as exc:
+              emit('MPW_P0_TRON_PROVIDERS',{'available':False,'error_type':type(exc).__name__,'no_tx_broadcast':True})
+          print('MPW_P0_PRIVATE_DIAGNOSTIC_READONLY=PASS')
+          PY
       - name: Remove temporary SSH relay keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
