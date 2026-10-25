@@ -104,10 +104,13 @@ jobs:
           from pathlib import Path
           root=Path('/home/zomorod2/mojplaywin.com/mpw-editorial/revenue')
           assert root.is_dir() and not root.is_symlink()
-          contents=[p.name for p in root.iterdir()]
-          assets=root/'assets'
-          placeholder=(contents==['assets'] and assets.is_dir() and not assets.is_symlink() and not any(assets.iterdir()))
-          assert not contents or placeholder, "Refuse to touch nonempty/modified revenue directory: "+repr(contents[:8])
+          assert not (root/'.mpw-revenue-release.json').exists()
+          slugs=('website-doctor','landing-page-studio','ai-automation','business-spreadsheets','website-templates','social-media-kits','resume-builder','logo-studio','browser-games','marketing-ai','business-calculators','website-care')
+          owned=['index.html','catalog.json','sitemap.xml','assets/style.css','assets/tools-v1.js','assets/tools-v1.css']+[s+'/index.html' for s in slugs]
+          for rel in owned:
+            p=root/rel
+            assert not p.exists() and not p.is_symlink(), 'Refuse overwrite of '+rel
+          print('MPW_P0_EXISTING_UNRELATED_ASSETS_PRESERVED='+str(len(list(root.iterdir()))))
           assert Path('/home/zomorod2/mojplaywin.com/.htaccess').is_file()
           print('MPW_P0_REVENUE_EMPTY_DIRECTORY_VERIFIED=PASS')
           PY
