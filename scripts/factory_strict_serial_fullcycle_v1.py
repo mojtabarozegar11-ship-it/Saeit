@@ -120,6 +120,15 @@ def verified_intake(area, order):
     return True
 
 
+def intake_failure(area, order):
+    """Return a precise private rework blocker; never silently drop an order."""
+    try:
+        verified_intake(area, order)
+    except (OSError, RuntimeError, ValueError, TypeError, UnicodeError) as exc:
+        return type(exc).__name__ + ":" + str(exc)[:120]
+    return None
+
+
 def selected_order(path, orders):
     if not path.exists() and not path.is_symlink():
         return orders[0], 0, 0
@@ -242,11 +251,14 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
             raise RuntimeError("STRICT_SERIAL_QUEUE_COMPLETION_UNVERIFIED")
         return {"schema":SCHEMA, "all_complete":True, "stages_executed":0,
                 "sites_modified":False, "publications":0}
-    verified_intake(area, order)
-    # Dry-run doesn't create a lock or mutate any private inventory.
+    # Do not reject a broken intake before acquiring the per-tick lock:
+    # that would freeze the same selected order on every future minute.
+    # Dry-run remains read-only and surfaces the exact integrity blocker.
     if dry_run:
+        problem = intake_failure(area, order)
         return {"schema":SCHEMA, "active_order":order, "tick_number":ticks,
-                "certified":certified_finished(root, order, governance),
+                "certified":problem is None and certified_finished(root, order, governance),
+                "intake_blocker":problem,
                 "storage_hold":disk_usage(root).free < RESERVE,
                 "stages_executed":0, "sites_modified":False}
     lock = ops / ".strict-serial-fullcycle.lock"
@@ -265,12 +277,17 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
                 raise RuntimeError("STRICT_SERIAL_QUEUE_COMPLETION_UNVERIFIED")
             return {"schema":SCHEMA, "all_complete":True, "stages_executed":0,
                     "publications":0}
-        verified_intake(area, order)
+        problem = intake_failure(area, order)
         began = monotonic()
-        certified = certified_finished(root, order, governance)
+        # A corrupt/missing work-order cannot be certified by this worker.
+        certified = problem is None and certified_finished(root, order, governance)
         results = {}
         hold = disk_usage(root).free < RESERVE
-        if not certified:
+        if problem is not None:
+            results["intake"] = "BLOCKED_" + problem
+            for stage in STAGES:
+                results[stage[0]] = "SKIPPED_INVALID_INTAKE"
+        if not certified and problem is None:
             for stage in STAGES:
                 label = stage[0]
                 if hold and label != "primary_source":
@@ -305,6 +322,8 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
                        "all_complete":all_complete,
                        "last_order":order, "last_order_certified":certified,
                        "last_decision":decision, "last_blockers":blocked,
+                       "intake_blocker":problem,
+                       "rework_stage_owner":"intake_integrity" if problem else ("independent_quality_review" if not certified else None),
                        "required_next_version":"AUTHENTIC_REWORK_VERSION" if not certified else None,
                        "last_cycle_utc":datetime.now(timezone.utc).isoformat(),
                        "stage_results":results, "storage_hold":hold,
@@ -313,6 +332,8 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
         return {"schema":SCHEMA, "processed_order":order,
                 "active_order_after_cycle":next_order,
                 "decision":decision, "rework_blockers":blocked,
+                "intake_blocker":problem,
+                "rework_stage_owner":"intake_integrity" if problem else ("independent_quality_review" if not certified else None),
                 "required_next_version":"AUTHENTIC_REWORK_VERSION" if not certified else None,
                 "certified_to_private_finished_goods":certified,
                 "stages_executed":sum(v=="EXECUTED" for v in results.values()),
