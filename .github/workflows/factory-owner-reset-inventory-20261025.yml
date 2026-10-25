@@ -126,6 +126,32 @@ jobs:
               backup_classes[family]+=1
               if p.stat().st_mtime > (dt.datetime.now(dt.timezone.utc).timestamp()-86400):
                   backup_recent[family]+=1
+          # Aggregate metadata only; never print order bodies or customer fields.
+          suspect_fields=collections.Counter()
+          origin_suspect=collections.Counter()
+          for p in orders:
+              x=json.loads(p.read_text())
+              keys=set()
+              def collect_keys(obj,depth=0):
+                  if depth>5:return
+                  if isinstance(obj,dict):
+                      for k,v in obj.items():
+                          keys.add(str(k))
+                          collect_keys(v,depth+1)
+                  elif isinstance(obj,list):
+                      for v in obj[:20]:collect_keys(v,depth+1)
+              collect_keys(x)
+              found=sorted(k for k in keys if re.search(r'customer|buyer|payment|invoice|billing|checkout|purchas|email|contact|wallet|transaction|shipping',k,re.I))
+              for k in found:suspect_fields[k]+=1
+              if found: origin_suspect[str(x.get('origin','MISSING'))]+=1
+          print('OWNER_RESET_ORDER_FIELD_KEYS='+json.dumps({'sensitive_key_counts':dict(suspect_fields),'orders_with_sensitive_keys_by_origin':dict(origin_suspect),'mutations':0},sort_keys=True))
+          b_du=subprocess.run(['du','-sx','-B1','--']+[str(p) for p in back_children if not p.is_symlink()],capture_output=True,text=True,timeout=220)
+          if b_du.returncode:raise SystemExit('BACKUP_DU_FAILURE')
+          b_sizes={}
+          for line in b_du.stdout.splitlines():
+              sz,pth=line.split('\\t',1)
+              b_sizes[Path(pth).name]=int(sz)
+          print('OWNER_RESET_BACKUP_TOP='+json.dumps({'largest':sorted(b_sizes.items(),key=lambda x:-x[1])[:35], 'sum_bytes':sum(b_sizes.values()), 'mutations':0},sort_keys=True))
           print('OWNER_RESET_DEPENDENCY_DETAIL='+json.dumps({
              'cron_markers':cron_markers,
              'factory_process_script_classes':dict(process_scripts),
