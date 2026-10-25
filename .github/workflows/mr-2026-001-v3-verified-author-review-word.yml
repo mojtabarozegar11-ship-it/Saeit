@@ -1,0 +1,85 @@
+name: MR-2026-001 V3 author scientific review Word (no submission)
+on:
+  push:
+    branches:
+      - research/mr-2026-001-novelty-audit
+    paths:
+      - .github/workflows/mr-2026-001-v3-verified-author-review-word.yml
+      - research/manuscripts/MR-2026-001/MR-2026-001_EVIDENCE_FRAMEWORK_CROSSWALK_AUTHOR_REVIEW_V3_2026-10-26.md
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-v3-source-to-docx:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check exact V3 evidence and source lock
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re,hashlib,json
+          p=Path("research/manuscripts/MR-2026-001/MR-2026-001_EVIDENCE_FRAMEWORK_CROSSWALK_AUTHOR_REVIEW_V3_2026-10-26.md")
+          s=p.read_text(encoding="utf-8")
+          assert s.count("## Abstract")==1 and s.count("## References")==1
+          abstract=s.split("## Abstract\n\n",1)[1].split("\n\n## 1.",1)[0]
+          refs=s.split("## References\n\n",1)[1]
+          doi=re.findall(r"https://doi.org/(10\.\S+)",refs)
+          nums=[int(x) for x in re.findall(r"^(\d+)\. ",refs,re.M)]
+          assert len(abstract.split())<250, len(abstract.split())
+          assert nums==list(range(1,17)),nums
+          assert len(doi)==16 and len(set(doi))==16
+          for required in ["TIDieR","Carroll","45/72 = 62.5%","Counterfactual attribution","not a validated"]:
+              assert required.lower() in s.lower(),required
+          assert "26+7+3+6+15+17" not in s
+          assert "independently metered" in s
+          Path("/tmp").joinpath("mr-v3-source-sha256.txt").write_text(hashlib.sha256(s.encode()).hexdigest()+"  "+str(p)+"\n")
+          print(json.dumps({"abstract_words":len(abstract.split()),"references":len(doi),"body_words":len(s.split("## References")[0].split()),"sha256":hashlib.sha256(s.encode()).hexdigest()}))
+          PY
+      - name: Generate exact-version editable Word and source provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v pandoc >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq pandoc
+          fi
+          python -m pip install -q --disable-pip-version-check python-docx==1.2.0
+          mkdir -p /tmp/mr-v3-author
+          pandoc research/manuscripts/MR-2026-001/MR-2026-001_EVIDENCE_FRAMEWORK_CROSSWALK_AUTHOR_REVIEW_V3_2026-10-26.md \
+            --from=gfm --to=docx --standalone \
+            -o /tmp/mr-v3-author/MR-2026-001_EXACT_V3_AUTHOR_REVIEW.docx
+          python - <<'PY'
+          from docx import Document
+          from docx.shared import Pt,Inches
+          from pathlib import Path
+          p=Path("/tmp/mr-v3-author/MR-2026-001_EXACT_V3_AUTHOR_REVIEW.docx")
+          d=Document(p)
+          for sec in d.sections:
+              sec.top_margin=sec.bottom_margin=sec.left_margin=sec.right_margin=Inches(1)
+          for style in d.styles:
+              if style.type==1:
+                  style.font.name="Arial"
+                  style.font.size=Pt(11)
+          d.core_properties.title="What Does an Irrigation Recommendation Actually Change?"
+          d.core_properties.author="Human author review and scientific approval pending"
+          d.save(p)
+          assert p.stat().st_size>20000 and len(d.tables)>=1
+          print("DOCX bytes",p.stat().st_size,"tables",len(d.tables))
+          PY
+          cp /tmp/mr-v3-source-sha256.txt /tmp/mr-v3-author/
+          cp research/manuscripts/MR-2026-001/C29_2026_PRIOR_ART_IMPLEMENTATION_FIDELITY_AND_HUMAN_ACCOUNTABILITY_2026-10-26.md /tmp/mr-v3-author/
+          printf '%s\n' "AI scientific review candidate; NOT HUMAN-APPROVED, NOT SUBMITTED, no Manuscript ID, no APC or copyright agreement." > /tmp/mr-v3-author/READ_ME_FIRST.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MR-2026-001-V3-EXACT-WORD-HUMAN-REVIEW-NOT-SUBMITTED
+          path: /tmp/mr-v3-author/
+          retention-days: 14
+          if-no-files-found: error
