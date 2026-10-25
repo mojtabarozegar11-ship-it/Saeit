@@ -98,6 +98,23 @@ jobs:
         run: |
           python3 - <<'PY'
           import urllib.request,urllib.error,json,time,os,html
+          from html.parser import HTMLParser
+          class Head(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.in_title=False
+                  self.title=''
+                  self.tags={}
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag=='title':self.in_title=True
+                  if tag=='meta':
+                      key=a.get('name') or a.get('property')
+                      if key:self.tags[key]=a.get('content','')
+              def handle_endtag(self,tag):
+                  if tag=='title':self.in_title=False
+              def handle_data(self,data):
+                  if self.in_title:self.title+=data
           title='Digital Books & Website Kits | MojPlayWin'
           description=('Explore two original English digital books and an editable website kit. '
                        'Compare listed prices and review account-based TRX checkout and private delivery terms.')
@@ -110,12 +127,15 @@ jobs:
                       status=r.status
               except urllib.error.HTTPError as e:
                   status=e.code;body=html.unescape(e.read(400000).decode('utf8','replace'))
-              ok=(status==200 and '<title>'+title+'</title>' in body
-                  and 'content="'+description+'"' in body
-                  and 'property="og:title" content="'+title+'"' in body
-                  and 'property="og:description" content="'+description+'"' in body
-                  and '/store/product/72/' in body and '/store/product/225/' in body)
-              print('MPW_STORE_META_VERIFY='+json.dumps({'attempt':i,'status':status,'metadata_ok':ok}))
+              head=Head();head.feed(body)
+              checks={'title':head.title.strip()==title,
+                      'description':head.tags.get('description')==description,
+                      'og_title':head.tags.get('og:title')==title,
+                      'og_description':head.tags.get('og:description')==description,
+                      'chess_link':'/store/product/72/' in body,
+                      'taniya_link':'/store/product/225/' in body}
+              ok=(status==200 and all(checks.values()))
+              print('MPW_STORE_META_VERIFY='+json.dumps({'attempt':i,'status':status,'checks':checks}))
               if ok:break
               time.sleep(4)
           else:raise SystemExit('Store metadata not visible; rollback required')
