@@ -9,6 +9,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: zm-r01-single-srr-verified-source
+  cancel-in-progress: true
 jobs:
   single-sample-proof-of-reconstruction:
     # Standard public-repository runner: no larger paid runners, no VPS,
@@ -44,14 +47,26 @@ jobs:
           cd "$RUNNER_TEMP/zm_counts"
           curl -fL --retry 2 --connect-timeout 30 --max-time 600 "$REFERENCE_URL" -o wheat_cdna.fa.gz
           gzip -t wheat_cdna.fa.gz
-          python research/manuscripts/ZM-R01/analysis/verified_resumable_ena_pair_download.py
+          python - <<'PY'
+          import gzip,re
+          n=0
+          with gzip.open("wheat_cdna.fa.gz","rt") as f:
+              for line in f:
+                  if line.startswith(">") and "gene:" in line:
+                      n+=1
+          print("GENE-ANNOTATED TRANSCRIPT HEADERS",n,flush=True)
+          assert n >= 10000, "Incompatible transcript-to-gene annotations; abort before FASTQ"
+          PY
+          sha256sum wheat_cdna.fa.gz > wheat_cdna.fa.gz.sha256
+          zcat wheat_cdna.fa.gz > wheat_cdna.fa
+          bowtie2-build --threads 3 wheat_cdna.fa wheat_cdna_idx
+          python "$GITHUB_WORKSPACE/research/manuscripts/ZM-R01/analysis/verified_resumable_ena_pair_download.py"
       - name: Transcriptome alignment and genuine conservative integer fragment counts
         shell: bash
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/zm_counts"
-          zcat wheat_cdna.fa.gz > wheat_cdna.fa
-          bowtie2-build --threads 3 wheat_cdna.fa wheat_cdna_idx
+          # Reference index was checked and built before FASTQ download.
           # Only primary first mates of proper pairs at MAPQ >=20 can contribute
           # once each; no FPKM/TPM or fabricated integer conversions.
           bowtie2 -x wheat_cdna_idx -1 R1.fastq.gz -2 R2.fastq.gz \
@@ -81,5 +96,6 @@ jobs:
             ${{ runner.temp }}/zm_counts/provenance.json
             ${{ runner.temp }}/zm_counts/alignment_summary.txt
             ${{ runner.temp }}/zm_counts/verified_ena_download_provenance.json
+            ${{ runner.temp }}/zm_counts/wheat_cdna.fa.gz.sha256
           retention-days: 7
           if-no-files-found: error
