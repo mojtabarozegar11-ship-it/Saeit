@@ -42,20 +42,22 @@ These five **published, editable companions** provide practical value without re
 **Access and measurement:** Public GitHub links show published source artifacts. UTM parameters on the official destinations permit source attribution if the websites' analytics are configured; no clicks, conversions, purchases or successful checkout are asserted without observed analytics.
 
 
-## Free offline interactive tools — 25 October 2026
+## Live free interactive tools — 25 October 2026
 
-Eight original, standalone HTML tools. Download the HTML file from GitHub (Raw → Save As) and open it locally in a browser. GitHub's code viewer does **not** execute HTML; these are not deployed to the commercial websites. No personal data is transmitted, no prices or stock claims are made, and the examples are illustrative.
+Eight original browser-only HTML tools are now deployed to **ten verified live pages** (eight tools plus two directory indexes). These pages have working canonical URLs and are accessible without an account. The original editable source files remain in `docs/marketing/tools/`. Calculations are illustrative, and no purchase, traffic increase or conversion is claimed.
 
-- **MojPlayWin / Atelier:** [SEO title, description, canonical and social-tag generator](docs/marketing/tools/atelier-seo-meta-generator-20261025.html) — HTML escaping, HTTPS checks, copyable markup.
-- **MojPlayWin / Taniya:** [Family storytime studio](docs/marketing/tools/taniya-storytime-studio-20261025.html) — original child-friendly prompts, reflection questions, text download.
-- **MojPlayWin / Chess:** [84-day calendar CSV builder](docs/marketing/tools/chess-84-day-calendar-builder-20261025.html) — dated practice plan, six phases, downloadable CSV.
-- **Zomorod Melal:** [محاسبه‌گر اقتصادی نقطه سربه‌سر مزرعه](docs/marketing/tools/fa-farm-break-even-calculator-20261025.html) — برآورد سود/زیان، عملکرد و قیمت سربه‌سر، حساسیت عملکرد.
-- **Zomorod Melal / International trade:** [محاسبه‌گر سناریوی بهای تمام‌شده واردات](docs/marketing/tools/fa-import-landed-cost-scenario-20261025.html) — هزینه‌های کالا، حمل، بیمه، عوارض و مالیات فرضی؛ بدون ادعای ارزش‌گذاری رسمی.
-- **MojPlayWin / Atelier:** [WCAG 2.2 text contrast checker](docs/marketing/tools/atelier-wcag-contrast-checker-20261025.html) — exact sRGB luminance, AA/AAA text thresholds.
-- **MojPlayWin / Browser games:** [Release-readiness evidence worksheet](docs/marketing/tools/browser-game-qa-evidence-20261025.html) — untested checks never count as passing, JSON export.
-- **Mojtaba Roozegar / Research:** [Scientific evidence appraisal worksheet](docs/marketing/tools/mojtaba-research-evidence-appraisal-20261025.html) — traceable source limitations and Markdown export, no fictitious peer-review score.
+**Live catalogs:** [MojPlayWin — six free tools](https://mojplaywin.com/mpw-free-tools/20261025/?utm_source=github&utm_medium=organic_referral&utm_campaign=free_tools_20261025) · [زمرد ملل — دو ابزار رایگان](https://zomorodmelal.ir/agriculture/free-tools/20261025/?utm_source=github&utm_medium=organic_referral&utm_campaign=free_tools_20261025).
 
-These are free educational utilities, not independent proof of product availability, a successful checkout, or commercial results.
+- **MojPlayWin / Atelier:** [SEO title, description, canonical and social-tag generator](https://mojplaywin.com/mpw-free-tools/20261025/atelier-seo/?utm_source=github&utm_medium=organic_referral&utm_campaign=free_tools_20261025) — HTML escaping, HTTPS checks, copyable markup.
+- **MojPlayWin / Taniya:** [Family storytime studio](https://mojplaywin.com/mpw-free-tools/20261025/taniya-storytime/?utm_source=github&utm_medium=organic_referral&utm_campaign=free_tools_20261025) — original child-friendly prompts, reflection questions, text download.
+- **MojPlayWin / Chess:** [84-day calendar CSV builder](https://mojplaywin.com/mpw-free-tools/20261025/chess-calendar/?utm_source=github&utm_medium=organic_referral&utm_campaign=free_tools_20261025) — dated practice plan, six phases, downloadable CSV.
+- **Zomorod Melal:** [محاسبه‌گر اقتصادی نقطه سربه‌سر مزرعه](https://zomorodmelal.ir/agriculture/free-tools/20261025/farm-break-even/?utm_source=github&utm_medium=organic_referral&utm_campaign=free_tools_20261025) — برآورد سود/زیان، عملکرد و قیمت سربه‌سر، حساسیت عملکرد.
+- **Zomorod Melal / International trade:** [محاسبه‌گر سناریوی بهای تمام‌شده واردات](https://zomorodmelal.ir/agriculture/free-tools/20261025/import-landed-cost/?utm_source=github&utm_medium=organic_referral&utm_campaign=free_tools_20261025) — هزینه‌های کالا، حمل، بیمه، عوارض و مالیات فرضی؛ بدون ادعای ارزش‌گذاری رسمی.
+- **MojPlayWin / Atelier:** [WCAG 2.2 text contrast checker](https://mojplaywin.com/mpw-free-tools/20261025/atelier-contrast/?utm_source=github&utm_medium=organic_referral&utm_campaign=free_tools_20261025) — exact sRGB luminance, AA/AAA text thresholds.
+- **MojPlayWin / Browser games:** [Release-readiness evidence worksheet](https://mojplaywin.com/mpw-free-tools/20261025/browser-game-qa/?utm_source=github&utm_medium=organic_referral&utm_campaign=free_tools_20261025) — untested checks never count as passing, JSON export.
+- **Mojtaba Roozegar / Research:** [Scientific evidence appraisal worksheet](https://mojplaywin.com/mpw-free-tools/20261025/research-evidence/?utm_source=github&utm_medium=organic_referral&utm_campaign=free_tools_20261025) — traceable source limitations and Markdown export, no fictitious peer-review score.
+
+These are free educational utilities published on the live sites, not independent proof of successful checkout, new traffic, conversions or commercial results.
 
 ## Runtime safety
 
