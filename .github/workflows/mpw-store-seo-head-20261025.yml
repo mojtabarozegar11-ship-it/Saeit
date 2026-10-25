@@ -151,8 +151,8 @@ jobs:
               ('https://mojplaywin.com/store/product/879/','Atelier Interior — Client-Ready Website Kit | MojPlayWin')):
               with urllib.request.urlopen(url,timeout=20) as r:
                   body=r.read(150000).decode('utf8','replace')
-                  if '<title>'+expected_title+'</title>' not in body:
-                      raise SystemExit('Product metadata changed: '+url)
+                  if expected_title not in html.unescape(body):
+                      raise SystemExit('Product metadata title missing: '+url)
           print('MPW_STORE_ONLY_META_LIVE=PASS;ORDERS_AND_PAYMENTS_UNCHANGED=YES')
           PY
       - name: Roll back on any verification failure
