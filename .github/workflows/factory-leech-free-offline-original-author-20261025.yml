@@ -7,7 +7,7 @@ on:
       - scripts/factory_leech_free_offline_original_author_20261025.py
       - tests/test_factory_leech_free_offline_original_author_20261025.py
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '7,17,27,37,47,57 * * * *'
   workflow_dispatch:
 permissions: {contents: read}
 concurrency:
