@@ -392,7 +392,7 @@ def stage2_loop(root, batch=100, only_order_id=None, excluded_orders=None):
             # it is never a committed order. Unknown files and symlinks still fail.
             if file.name.startswith(".stage1-"):
                 if (file.is_symlink() or not file.is_file()
-                        or re.fullmatch(r"\\.stage1-[a-zA-Z0-9_]{8}",file.name) is None):
+                        or re.fullmatch(r"\.stage1-[a-zA-Z0-9_]{8}",file.name) is None):
                     raise RuntimeError("STAGE2_UNSAFE_STAGE1_ATOMIC_TEMP:" + file.name)
                 continue
             if file.is_symlink() or not file.is_file() or INBOX_FILE.fullmatch(file.name) is None:
