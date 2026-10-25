@@ -7,9 +7,11 @@ The cursor moves past blocked cases so one impossible source cannot starve 183
 other products. It is deliberately separate from the legacy all-order worker.
 """
 import argparse
+from bisect import bisect_right
 from collections import Counter
 from datetime import datetime, timezone
 import fcntl
+import hashlib
 from functools import lru_cache
 import importlib.util
 import json
@@ -17,6 +19,7 @@ import os
 from pathlib import Path
 import shutil
 import sys
+import time
 
 SCHEMA = "saeit.factory.sequential-scientific-casework.v1"
 HERE = Path(__file__).resolve().parent
@@ -48,14 +51,24 @@ def queue(area, m):
     return names
 
 
-def cursor_position(path, m):
+def cursor_position(path, m, names):
+    """Resume after the last identity, not a shifting queue offset.
+
+    Index-only cursors repeat or skip products when earlier entries change.
+    Legacy index-only cursor state remains readable.
+    """
     if not path.exists() and not path.is_symlink():
         return 0
     record = json.loads(m.safe_read(path, 2048))
     m.ensure(record.get("schema") == SCHEMA and
              type(record.get("next_index")) is int and
              record["next_index"] >= 0, "CASEWORK_CURSOR_INVALID")
-    return record["next_index"]
+    if "last_order_file" in record:
+        last = record["last_order_file"]
+        m.ensure(isinstance(last, str) and m.NAME.fullmatch(last),
+                 "CASEWORK_CURSOR_LAST_ORDER_INVALID")
+        return bisect_right(names, last) % len(names)
+    return record["next_index"] % len(names)
 
 
 def source_cycle(m, target, unique, max_attempts, http_get):
@@ -113,7 +126,7 @@ def step(factory_private, *, max_attempts=4, dry_run=False, http_get=None):
     # Read-only mode must not create the evidence tree or lock.
     cursor = target / ".product-sequential-cursor.json"
     if dry_run:
-        index = cursor_position(cursor, m)
+        index = cursor_position(cursor, m, names)
         return {"schema":SCHEMA, "mode":"read_only", "queue_size":len(names),
                 "next_order_file":names[index % len(names)],
                 "publications":0, "qc1000_approvals":0}
@@ -132,8 +145,9 @@ def step(factory_private, *, max_attempts=4, dry_run=False, http_get=None):
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return {"schema":SCHEMA, "already_running":True, "cases_processed":0}
-        index = cursor_position(cursor, m)
-        name = names[index % len(names)]
+        index = cursor_position(cursor, m, names)
+        name = names[index]
+        started_ns = time.monotonic_ns()
         case = {"schema":SCHEMA, "order_file":name,
                 "visited_utc":datetime.now(timezone.utc).isoformat(),
                 "result":"BLOCKED_INPUT_INTEGRITY", "source_attempts":0,
@@ -141,13 +155,23 @@ def step(factory_private, *, max_attempts=4, dry_run=False, http_get=None):
                 "independent_scientific_review_completed":False,
                 "manuscript_scientifically_complete":False,
                 "qc1000_approved":False, "public_distribution_allowed":False,
-                "commercial_release":False, "blocking_code":None}
+                "commercial_release":False, "blocking_code":None,
+                "decision":"RETURN_TO_PRODUCTION",
+                "stage_owner":"scientific_source_acquisition",
+                "required_next_version":"NEW_AUTHENTIC_REVISION_AFTER_REWORK",
+                "source_order_sha256":None,
+                "source_stage":"NOT_RUN",
+                "design_build_package_technical_content_stages":"NOT_RUN_BY_THIS_WORKER",
+                "independent_qc_stage":"NOT_PERFORMED"}
         case["storage_reserve_hold"] = storage_hold
         try:
+            original = m.safe_read(area / "stage-02/primary-fulltext-repair-inbox" / name)
+            case["source_order_sha256"] = hashlib.sha256(original).hexdigest()
             unique, orders, total = m.collect(area, only_order=name)
             m.ensure(len(orders) == 1 and total >= 4, "SELECTED_CASE_EVIDENCE_INVALID")
             report = source_cycle(m, target, unique, max_attempts,
                                   http_get or m.live_get)
+            case["source_stage"] = "SOURCE_EVIDENCE_CHECKED"
             case.update(report)
             case["source_tasks"] = total
             case["distinct_doi_count"] = len(unique)
@@ -172,11 +196,26 @@ def step(factory_private, *, max_attempts=4, dry_run=False, http_get=None):
             # turn rather than allowing this case to freeze the whole queue.
             case["result"] = "BLOCKED_INPUT_INTEGRITY"
             case["blocking_code"] = type(exc).__name__ + ":" + str(exc)[:100]
+        case["finished_utc"] = datetime.now(timezone.utc).isoformat()
+        case["elapsed_ms"] = round((time.monotonic_ns() - started_ns) / 1_000_000, 3)
+        receipt = m.canonical(case)
+        receipt_sha256 = hashlib.sha256(receipt).hexdigest()
+        # Immutable visit history; per-product status is only a projection.
+        history_name = (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+                        + "-" + receipt_sha256[:16] + ".json")
+        history = (target / "sequential-casework-v1/history"
+                   / name.removesuffix(".json") / history_name)
+        m.once(history, receipt)
         output = target / "sequential-casework-v1" / name
         m.replace_cursor(output, case)
         m.replace_cursor(cursor, {"schema":SCHEMA, "next_index":index + 1,
                                  "last_order_file":name})
         return {"schema":SCHEMA, "queue_size":len(names),
+                "decision":"RETURN_TO_PRODUCTION",
+                "source_order_sha256":case["source_order_sha256"],
+                "receipt_sha256":receipt_sha256,
+                "receipt_relative_path":str(history.relative_to(area)),
+                "elapsed_ms":case["elapsed_ms"],
                 "cases_processed":1, "selected_order_file":name,
                 "next_order_file":names[(index+1) % len(names)],
                 "result":case["result"],
