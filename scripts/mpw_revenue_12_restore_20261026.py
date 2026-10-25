@@ -27,16 +27,16 @@ def publish(run):
     guard()
     target,stage,backup=paths(run)
     if stage.exists() or stage.is_symlink() or backup.exists() or backup.is_symlink():fail("Release collision")
-    if target.exists():
-        safe_tree(target)
-        if not target.is_dir():
-            fail("Revenue target is not a directory")
-        entries=list(target.iterdir())
-        placeholder=target/"assets"
-        empty_placeholder=(len(entries)==1 and entries[0]==placeholder and
-                           placeholder.is_dir() and not placeholder.is_symlink() and not any(placeholder.iterdir()))
-        if not ((target/".mpw-revenue-release.json").is_file() or not entries or empty_placeholder):
-            fail("Revenue directory holds unknown or unmanaged files; never overwrite")
+    if not target.is_dir() or target.is_symlink():
+        fail("Missing or unsafe main revenue directory")
+    safe_tree(target)
+    if (target/".mpw-revenue-release.json").exists():
+        fail("Previously released revenue tools exist; refuse duplicate")
+    if any((target/rel).exists() or (target/rel).is_symlink() for rel in
+           ["index.html", "catalog.json", "sitemap.xml", "assets/style.css",
+            "assets/tools-v1.js", "assets/tools-v1.css"]+
+           [slug+"/index.html" for slug in SLUGS]):
+        fail("An original revenue path is present; preserve it rather than overwrite")
     data=sys.stdin.buffer.read(1500000)
     if len(data)==1500000 or not data:fail("Release archive too large or empty")
     try:
@@ -103,13 +103,38 @@ def publish(run):
         (stage/".mpw-revenue-release.json").chmod(0o644)
         for rel,digest in checks.items():
             if sha((stage/rel).read_bytes())!=digest:fail("Stage file integrity mismatch")
-        had_old=target.exists()
-        if had_old:os.replace(target,backup)
-        try:os.replace(stage,target)
+        # Add only missing files: the existing public assets directory may
+        # contain independently managed resources that must remain untouched.
+        added=[]
+        try:
+            for rel,digest in sorted(checks.items()):
+                src=stage/rel
+                dst=target/rel
+                if dst.exists() or dst.is_symlink():
+                    fail("Concurrent file appeared: "+rel)
+                parent=dst.parent
+                if parent.is_symlink():
+                    fail("Unsafe target parent: "+rel)
+                parent.mkdir(parents=True,exist_ok=True)
+                if parent.is_symlink() or not parent.is_dir():
+                    fail("Unsafe target parent after creation: "+rel)
+                os.replace(src,dst)
+                added.append(rel)
+                if sha(dst.read_bytes())!=digest:
+                    fail("Failed exact new file verification: "+rel)
+            marker=target/".mpw-revenue-release.json"
+            if marker.exists() or marker.is_symlink():fail("Concurrent release marker")
+            os.replace(stage/".mpw-revenue-release.json",marker)
+            if any(sha((target/rel).read_bytes())!=h for rel,h in checks.items()):
+                fail("Final path digest mismatch")
         except BaseException:
-            if had_old and backup.exists():os.replace(backup,target)
+            # Never delete an unfamiliar or concurrently edited file.
+            for rel in reversed(added):
+                dst=target/rel
+                if dst.is_file() and not dst.is_symlink() and sha(dst.read_bytes())==checks[rel]:
+                    dst.unlink()
             raise
-        print("MPW_REVENUE_HUB_PUBLISHED="+json.dumps({"run":run,"files":len(checks),"only_static_earn":True,"payment_flags_modified":False,"old_earn_backed_up":had_old}))
+        print("MPW_REVENUE_MISSING_FILES_RESTORED="+json.dumps({"run":run,"new_files":len(added),"preserved_existing_assets":True,"payment_flags_modified":False,"checkout_modified":False}))
     finally:
         if stage.exists():shutil.rmtree(stage)
 def rollback(run):
@@ -121,13 +146,21 @@ def rollback(run):
     doc=json.loads(meta.read_text())
     if doc.get("run")!=run:fail("Refuse rollback over newer release")
     safe_tree(target)
-    for rel,digest in doc["sha256"].items():
-        if sha((target/rel).read_bytes())!=digest:fail("Modified target; refuse destructive rollback")
-    shutil.rmtree(target)
-    if backup.exists():
-        if backup.is_symlink():fail("Unsafe backup")
-        os.replace(backup,target)
-    print("MPW_REVENUE_HUB_ROLLBACK=VERIFIED")
+    checks=doc.get("sha256",{})
+    if len(checks)!=18:fail("Unexpected owned file count")
+    for rel,digest in checks.items():
+        p=target/rel
+        if not p.is_file() or p.is_symlink() or sha(p.read_bytes())!=digest:
+            fail("A restored file was modified; refuse unsafe rollback")
+    for rel in checks:
+        (target/rel).unlink()
+    meta.unlink()
+    # Empty directories created by recovery only; leave unrelated assets untouched.
+    for slug in SLUGS:
+        folder=target/slug
+        if folder.is_dir() and not folder.is_symlink() and not any(folder.iterdir()):
+            folder.rmdir()
+    print("MPW_REVENUE_ADDED_FILES_ONLY_ROLLBACK=VERIFIED;OTHER_ASSETS_PRESERVED")
 if __name__=="__main__":
     if len(sys.argv)!=3 or sys.argv[1] not in ("publish","rollback"):raise SystemExit("publish|rollback RUN_ID")
     (publish if sys.argv[1]=="publish" else rollback)(sys.argv[2])
