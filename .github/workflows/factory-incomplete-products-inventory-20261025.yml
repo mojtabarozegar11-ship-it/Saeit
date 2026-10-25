@@ -1,4 +1,5 @@
 name: Factory incomplete-product inventory (read-only)
+# Post-cleanup independent read-only verification.
 on:
   pull_request:
     paths:
