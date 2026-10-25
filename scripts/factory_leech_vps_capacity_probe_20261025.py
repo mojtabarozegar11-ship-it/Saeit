@@ -45,6 +45,10 @@ def main():
     model = engine / "models/Qwen3-1.7B-Q4_K_M.gguf"
     executable = engine / "bin/llama-server"
     result["selfhosted_engine_binary_ready"] = executable.is_file() and os.access(executable, os.X_OK)
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(0.5)
+        result["selfhosted_private_inference_port_open"] = probe.connect_ex(("127.0.0.1", 18767)) == 0
     result["selfhosted_model_bytes"] = model.stat().st_size if model.is_file() and not model.is_symlink() else 0
     partial = engine / "models/Qwen3-1.7B-Q4_K_M.gguf.partial"
     result["selfhosted_model_partial_bytes"] = partial.stat().st_size if partial.is_file() and not partial.is_symlink() else 0
