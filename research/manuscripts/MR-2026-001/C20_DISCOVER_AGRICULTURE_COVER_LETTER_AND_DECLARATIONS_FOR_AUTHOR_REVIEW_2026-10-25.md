@@ -13,9 +13,9 @@
 
 Dear Editors,
 
-Please consider my manuscript, “From Irrigation Recommendations to Field Outcomes: A Critical Review of Validation Evidence and Farmer Uptake under Water Scarcity,” for consideration as a Perspective in *Discover Agriculture*.
+Please consider my manuscript, “What Does an Irrigation Recommendation Actually Change? An Evidence-Chain Perspective on Farmer Decisions and Water Outcomes,” for consideration as a Perspective in *Discover Agriculture*.
 
-The manuscript examines a recurring inferential problem in irrigation decision-support research: the distinction between a technically plausible recommendation, farmer-reported system use, independently verifiable implementation and field-measured water conservation. Through a purposive critical narrative comparison of eight contrasting primary studies, it identifies where reported percentages describe field measurements, farmer engagement, or modeled scenarios, and proposes a claim-level provenance worksheet to make those distinctions transparent.
+The manuscript examines a recurring inferential problem in irrigation decision-support research: the distinction between a technically plausible recommendation, farmer-reported system use, independently verifiable implementation and field-measured water conservation. Through a deliberately bounded comparison of eight illustrative primary studies, the Perspective distinguishes field measurements, participant engagement and simulated scenarios and proposes a six-link, claim-level reporting worksheet. This is a forward-looking editorial proposal, not a validated new measurement scale.
 
 I explicitly acknowledge prior research that has already compared actual and recommended irrigation or examined farmer adoption. The proposed contribution is therefore limited to a source-specific, counterfactual-aware reporting synthesis rather than a claim of first discovery, a systematic review, or a validated new metric. I do not pool heterogeneous water-saving or adoption percentages.
 
@@ -46,5 +46,7 @@ Mojtaba Roozegar
 ## Evidence needed to mark submitted
 
 A genuine submission acknowledgment issued by the publisher with a manuscript ID, date, journal and article type. A GitHub commit, email draft, local manuscript file or submission-page screenshot without completed submission is not evidence of submitted status.
+
+**Current review source:** `MR-2026-001_CONCISE_PERSPECTIVE_AUTHOR_SCIENTIFIC_REVIEW_2026-10-25.md` (concise candidate); C19 and the long Perspective remain source-audit working documents, not simultaneous submissions. This draft cover letter is not approved or sent.
 
 **Next state:** Scientific manuscript and publisher packet await author scientific review and explicit approvals. Do not merge Draft PR #1054 or alter either live website.
