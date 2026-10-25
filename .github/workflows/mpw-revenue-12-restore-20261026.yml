@@ -1,0 +1,166 @@
+name: MojPlayWin P0 restore 12 revenue pages and free tools after missing-files audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-revenue-12-restore-20261026.yml"
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: mpw-main-revenue-only-p0-recovery
+  cancel-in-progress: false
+jobs:
+  recovery:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate original twelve source pages and original client-side tools
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_revenue_12_restore_20261026.py
+          node --check mpw_revenue_tools_20261020/toolkit.js
+          python3 - <<'PY'
+          import json,pathlib,tarfile,os
+          root=pathlib.Path("mpw_revenue_20261020/earn")
+          doc=json.loads((root/"catalog.json").read_text())
+          offers=doc["offers"]
+          assert len(offers)==12 and len({p["slug"] for p in offers})==12
+          for item in offers:
+            page=root/item["slug"]/"index.html"
+            src=page.read_text()
+            assert 'No payment is collected on this page' in src
+            assert '<html lang="en">' in src and '</main>' in src
+            assert '/contact/' in src
+          with tarfile.open(os.environ["RUNNER_TEMP"]+"/mpw-p0-restore12.tgz","w:gz") as t:
+            t.add(root,arcname="earn",recursive=True)
+            for name in ("toolkit.js","toolkit.css"):
+              t.add(pathlib.Path("mpw_revenue_tools_20261020")/name,arcname=name)
+          print("P0_REVENUE_12_SOURCE_INTACT_NO_FAKE_PAYMENT=PASS")
+          PY
+      - name: Prove core customer sites are reachable before repair
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json,os
+          statuses={}
+          for path in ("/","/store/","/contact/","/farnaz/","/saman/","/taniya/"):
+            try:
+              req=urllib.request.Request("https://mojplaywin.com"+path,headers={"Cache-Control":"no-cache"})
+              with urllib.request.urlopen(req,timeout=18) as resp:statuses[path]=resp.status
+            except urllib.error.HTTPError as exc:statuses[path]=exc.code
+          assert statuses["/"]==200 and statuses["/store/"]==200 and statuses["/contact/"]==200,statuses
+          with open(os.environ["RUNNER_TEMP"]+"/mpw-p0-protected.json","w") as f:json.dump(statuses,f)
+          print("MPW_P0_PROTECTED_BASELINE="+json.dumps(statuses,sort_keys=True))
+          PY
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-revenue-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Confirm erased revenue folder state before restoring
+        run: |
+          set -euo pipefail
+          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          root=Path('/home/zomorod2/mojplaywin.com/mpw-editorial/revenue')
+          assert root.is_dir() and not root.is_symlink()
+          contents=[p.name for p in root.iterdir()]
+          assert not contents, "Refuse to touch nonempty/modified revenue directory: "+repr(contents[:8])
+          assert Path('/home/zomorod2/mojplaywin.com/.htaccess').is_file()
+          print('MPW_P0_REVENUE_EMPTY_DIRECTORY_VERIFIED=PASS')
+          PY
+      - name: Restore exactly original twelve HTML tools and assets atomically
+        id: publish
+        run: |
+          set -euo pipefail
+          source="$(base64 -w0 scripts/mpw_revenue_12_restore_20261026.py)"
+          timeout 120s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' publish '$GITHUB_RUN_ID'" < "$RUNNER_TEMP/mpw-p0-restore12.tgz"
+      - name: Verify all 13 revenue HTML endpoints and browser app scripts from external runner
+        run: |
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error,os,time
+          slugs=('website-doctor','landing-page-studio','ai-automation','business-spreadsheets','website-templates','social-media-kits','resume-builder','logo-studio','browser-games','marketing-ai','business-calculators','website-care')
+          base='https://mojplaywin.com/mpw-editorial/revenue/'
+          paths=['index.html']+[s+'/index.html' for s in slugs]
+          for route in paths:
+            success=False
+            for attempt in range(4):
+              url=base+route+'?p0restore='+str(time.time_ns())
+              try:
+                with urllib.request.urlopen(urllib.request.Request(url,headers={'Cache-Control':'no-cache','User-Agent':'MPW12SafeRecovery/1.0'}),timeout=22) as resp:
+                  html=resp.read(200000).decode('utf-8','replace')
+                  ok=resp.status==200 and 'href="'+base+route+'"' in html
+                  if route!='index.html':
+                    slug=route.split('/')[0]
+                    ok=ok and ('data-tool="'+slug+'"') in html and 'assets/tools-v1.js' in html and 'Request a tailored quote by email' in html
+                  else:ok=ok and '12 working free browser utilities' in html
+                  success=ok
+                  if not ok:print('P0_READBACK_CONTENT_MISMATCH='+route)
+              except Exception as e:print('P0_READBACK_HTTP_FAIL='+route+' '+type(e).__name__+' '+str(getattr(e,'code','')) )
+              if success:break
+              time.sleep(2)
+            if not success:raise RuntimeError('P0_UNRECOVERED_REVENUE_PAGE='+route)
+            print('MPW_P0_REVENUE_200='+route)
+          for asset in ('assets/tools-v1.js','assets/tools-v1.css','assets/style.css'):
+            with urllib.request.urlopen(base+asset+'?p0restore='+str(time.time_ns()),timeout=22) as resp:
+              body=resp.read(200000)
+              assert resp.status==200 and len(body)>1200,(asset,len(body))
+            print('MPW_P0_REVENUE_ASSET_200='+asset)
+          old=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-p0-protected.json'))
+          for path,status in old.items():
+            try:
+              with urllib.request.urlopen('https://mojplaywin.com'+path,timeout=20) as resp:new=resp.status
+            except urllib.error.HTTPError as e:new=e.code
+            assert new==status,(path,status,new)
+          print('MPW_12_REVENUE_PAGES_AND_TOOLS_VERIFIED=PASS;PAYMENT_NOT_TESTED')
+          PY
+      - name: Roll back recovery only if public content verification fails
+        if: failure() && steps.publish.outcome == 'success'
+        run: |
+          set -euo pipefail
+          source="$(base64 -w0 scripts/mpw_revenue_12_restore_20261026.py)"
+          timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' rollback '$GITHUB_RUN_ID'"
+      - name: Remove ephemeral relay material
+        if: always()
+        run: |
+          rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh" "$RUNNER_TEMP/mpw-p0-restore12.tgz"
