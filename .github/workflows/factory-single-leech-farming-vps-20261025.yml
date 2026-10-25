@@ -463,5 +463,56 @@ jobs:
               "title_verification_sha256":sha(verified_title_file),
               "private_authoring_manifest_sha256":sha(stage4_jobs_file),
               "qc1000":False,"publication":False},sort_keys=True))
+
+          # Additional, separately traceable primary research for Chapters
+          # 3, 10, 12-15, 24 and 26.  Neither source existence nor an abstract
+          # confers farm certification, biosafety clearance or export authority.
+          research_addendum={
+              "schema":"saeit.factory.leech-stage4-primary-source-addendum.v1",
+              "order_id":ident,"revision":1,
+              "stage2_research_sha256":designlib.digest(research),
+              "stage3_design_sha256":designlib.digest(design),
+              "stage4_full_authoring_manifest_sha256":designlib.digest(authoring_manifest),
+              "verified_date":"2026-10-25",
+              "sources":[
+                {"id":"cites_2026_sc81","type":"official_international_wildlife_trade",
+                 "title":"CITES Standing Committee 81 document 36.1",
+                 "url":"https://cites.org/sites/default/files/documents/SC/81/agenda/E-SC81-36-01.pdf",
+                 "species":["Hirudo medicinalis","Hirudo verbana"],
+                 "limited_claim":"The official committee document identifies both named Hirudo species as CITES Appendix II; the operator must check currently effective Appendices and applicable national authorities before every international shipment.",
+                 "chapter_numbers":[3,10,24,26],
+                 "not_a_permit":True},
+                {"id":"manav2019","type":"original_reproduction_experiment",
+                 "title":"Investigation of reproductive efficiency, growth performance and survival of the southern medicinal leech, Hirudo verbana, fed with mammalian and poultry blood",
+                 "url":"https://pubmed.ncbi.nlm.nih.gov/31103350/",
+                 "doi":"10.1016/j.anireprosci.2019.05.004",
+                 "limited_claim":"The original comparative experiment reported different reproductive outcomes by tested blood source in H. verbana; it does not establish universally safe or lawful farm feeding.",
+                 "chapter_numbers":[12,15],
+                 "lawful_input_and_biosecurity_screening_required":True},
+                {"id":"tasiemski2015","type":"original_microbiology_research",
+                 "title":"Reciprocal immune benefit based on complementary production of antibiotics by the leech Hirudo verbana and its gut symbiont Aeromonas veronii",
+                 "url":"https://pmc.ncbi.nlm.nih.gov/articles/PMC4669451/",
+                 "doi":"10.1038/srep17498",
+                 "limited_claim":"The original leech-symbiont study found coordinated host-symbiont antimicrobial mechanisms, while noting Aeromonas can be opportunistically pathogenic; farm and clinical infection risk must be assessed by qualified specialists.",
+                 "chapter_numbers":[13,14],
+                 "not_a_justification_to_culture_pathogens":True}
+              ],
+              "claim_verification_policy":"Check original methods, effect sizes, taxon and jurisdiction against the complete primary text before using in operational SOPs",
+              "additional_scientific_review_required":True,
+              "zero_unverified_husbandry_thresholds_published":True,
+              "commercial_release":False,"quality1000_approved":False,
+              "public_distribution_allowed":False
+          }
+          with lock3.open("a+b") as lock_handle:
+              os.fchmod(lock_handle.fileno(),0o600)
+              fcntl.flock(lock_handle.fileno(),fcntl.LOCK_EX)
+              addendum_path=area/"stage-04/primary-research-addenda"/name
+              source_addendum_created=designlib.once(addendum_path,research_addendum)
+          print("LEECH_STAGE4_ADDITIONAL_PRIMARY_RESEARCH="+json.dumps({
+              "order_id":ident,"new_file":source_addendum_created,
+              "new_sources_in_addendum":len(research_addendum["sources"]),
+              "total_distinct_source_ids":len(research["sources"])+len(research_addendum["sources"]),
+              "research_addendum_sha256":sha(addendum_path),
+              "reviewed_and_qc_certified":False,"public_release":False},sort_keys=True))
           PY
           echo LEECH_OWNER_SINGLE_PRODUCT_VPS_HANDOFF_COMPLETED=true
