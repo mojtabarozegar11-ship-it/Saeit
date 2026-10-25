@@ -95,37 +95,33 @@ def assignment():
 
 
 def build_prompt(d, retry=0):
-    """Source-scoped short-context leech SOP prompt for very slow old SSE2 VPS."""
+    """Compact, source-bounded vocational leech farm prompt for old SSE2."""
     focus_list = d.get("section_plan", [])
     if not isinstance(focus_list, list) or not focus_list:
         raise RuntimeError("MISSING_OPERATIONAL_SECTION_PLAN")
     part = int(d["part_number"])
-    focus = " ".join(str(focus_list[(part - 1 + retry) % len(focus_list)]).split())[:125]
-    angles = (
-        "layout and daily staff duties", "water-monitoring records and response",
-        "hypothetical operating costs", "quarantine and veterinary referral",
-        "traceable harvest and buyer specification", "equipment failure response")
+    focus = " ".join(str(focus_list[(part - 1 + retry) % len(focus_list)]).split())[:105]
+    source_rows = d.get("foundational_source_records", [])
+    source_rows = source_rows[(part - 1) % 3:] + source_rows[:(part - 1) % 3]
     refs = []
-    for row in d.get("foundational_source_records", [])[:5]:
+    for row in source_rows:
         if isinstance(row, dict) and row.get("id"):
             scope = str(row.get("limitation") or row.get("title") or "")
-            scope = " ".join(scope.split())[:65]
-            refs.append(str(row["id"])[:20] + ":" + scope)
+            refs.append(str(row["id"])[:14] + ":" + " ".join(scope.split())[:47])
+        if len(refs) >= 4:
+            break
     return (
-        "/no_think\n"
-        "Write 335-460 ORIGINAL English vocational textbook words about "
-        "OPERATING a lawful medicinal-leech breeding FARM. No clinical advice. "
-        "Chapter %s, %s. Section: %s. Angle: %s. "
-        "Explain a practical SOP, named monitoring-log fields, decision thresholds "
-        "only if sourced, one explicitly HYPOTHETICAL operational calculation, "
-        "staff responsibility, biosecurity hazard, and licensed specialist referral. "
-        "Distinguish Hirudo medicinalis, H. verbana and H. orientalis. "
-        "No wild capture, human/animal feeding protocol, pathogen culture, "
-        "fake citations, unsourced fixed limits or padding. "
-        "Bound evidence by these source IDs and scopes: %s. "
-        "Acknowledge unknowns; use a concrete section heading and fresh prose."
-    ) % (d["chapter_number"], str(d["chapter_title"])[:72],
-         focus, angles[(part - 1 + retry) % len(angles)], " | ".join(refs)[:620])
+        "/no_think\nWrite 330-450 ORIGINAL English vocational words about a "
+        "lawful medicinal LEECH BREEDING FARM. "
+        "Chapter %s %s. This section: %s. "
+        "Give a concrete farm SOP, named monitoring log, hypothetical "
+        "worked example, biosecurity and veterinarian referral. "
+        "Differentiate Hirudo medicinalis, H. verbana and H. orientalis. "
+        "No wild capture, feeding procedures, human therapy, pathogen culture, "
+        "invented limits or citations. State uncertainty and use only "
+        "source-supported IDs: %s. Start with a specific heading."
+    ) % (d["chapter_number"], str(d["chapter_title"])[:55],
+         focus, " | ".join(refs)[:390])
 
 
 def low_priority_preexec():
@@ -151,7 +147,7 @@ def call_model(doc, process, error, retry=0):
                 "OPERATOR prose. Never invent empirical thresholds or approvals. "
                 "Write ONLY substantive textbook text, without internal reasoning. /no_think")},
             {"role": "user", "content": prompt}],
-        "max_tokens": 900, "temperature": round(0.69 + retry * 0.05, 2),
+        "max_tokens": 1000, "temperature": round(0.69 + retry * 0.05, 2),
         "top_p": 0.9, "chat_template_kwargs": {"enable_thinking": False},
         "stream": True,
     }
@@ -195,7 +191,7 @@ def call_model(doc, process, error, retry=0):
                        stream_reasoning_events=reasoning_events,
                        stream_event_lines=stream_event_lines)
                 last_progress = now
-            if now - start > 775:
+            if now - start > 1000:
                 break
             if not line.startswith(b"data: "):
                 continue
@@ -231,7 +227,17 @@ def call_model(doc, process, error, retry=0):
     if "<think>" in body or "</think>" in body:
         raise RuntimeError("MODEL_REASONING_LEAK_BLOCKED")
     if not good_segment(body, 300):
-        raise RuntimeError("STREAMED_SEGMENT_BELOW_QC_SUBSTANCE")
+        end = max(body.rfind("."), body.rfind("!"), body.rfind("?"))
+        complete = body[:end + 1].strip() if end > 0 else ""
+        if complete and good_segment(complete, 300):
+            return complete
+        prose = [line.strip() for line in body.splitlines()
+                 if line.strip() and not line.lstrip().startswith(("#", "|"))]
+        vocabulary = token_word.findall(" ".join(prose))
+        unique = len({w.casefold() for w in vocabulary})
+        ended = int(body.rstrip().endswith((".", "!", "?")))
+        raise RuntimeError("STREAM_QC_WORDS_%d_UNIQUE_%d_END_%d" %
+                           (len(vocabulary), unique, ended))
     return body
 
 def main():
