@@ -1,0 +1,62 @@
+name: Harden live private Stage2 against in-flight atomic handoff files
+on:
+  pull_request:
+    paths:
+      - scripts/factory_stage2_research.py
+      - tests/test_factory_stage2_research.py
+      - deploy/apply_factory_stage2_atomic_race_fix_20261025.py
+      - .github/workflows/factory-stage2-atomic-race-fix-20261025.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_stage2_research.py
+      - deploy/apply_factory_stage2_atomic_race_fix_20261025.py
+      - .github/workflows/factory-stage2-atomic-race-fix-20261025.yml
+permissions: {contents: read}
+concurrency:
+  group: saeit-factory-atomic-race-hardening-20261025
+  cancel-in-progress: false
+jobs:
+  verify-and-deploy:
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-stage2-atomic-race-hardening-20261025]'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Full existing source-linked Stage2 acceptance and atomic race regression
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_factory_stage2_research -v
+          python3 -B -c 'import ast,pathlib;ast.parse(pathlib.Path("deploy/apply_factory_stage2_atomic_race_fix_20261025.py").read_text())'
+      - name: VPS old SHA preflight and narrow live Stage2 replacement
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/stage2-safe-code"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          remote=(ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150)
+          old_sha='0651bedc72cfce394b91f907b73855b5b084f4370ecf18fe56c602bec8586fca'
+          new_sha="$(sha256sum scripts/factory_stage2_research.py | awk '{print $1}')"
+          worker='/home/githubops/factory-runtime/operations/production-instructions/stage2-research-serial.py'
+          live_sha="$("${remote[@]}" "sha256sum '$worker' | cut -d ' ' -f1")"
+          echo "DEPLOYED_PRIVATE_STAGE2_SHA=$live_sha"
+          test "$live_sha" = "$old_sha" || test "$live_sha" = "$new_sha"
+          if [[ "$GITHUB_EVENT_NAME" == 'pull_request' ]]; then
+            echo STAGE2_CODE_ACTION=READONLY_PREFLIGHT
+            exit 0
+          fi
+          remote_file="/home/githubops/factory-runtime/operations/production-instructions/.stage2-verified-upload-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.py"
+          timeout 70s "${remote[@]}" "umask 077; test ! -e '$remote_file'; install -m 600 /dev/stdin '$remote_file'" < scripts/factory_stage2_research.py
+          timeout 150s "${remote[@]}" "PYTHONDONTWRITEBYTECODE=1 python3 - --candidate '$remote_file' --expected-sha '$new_sha' --run-id '$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT' --apply" < deploy/apply_factory_stage2_atomic_race_fix_20261025.py
+          echo STOREFRONT_AND_ORDER_QUEUE=NOT_MODIFIED
