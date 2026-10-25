@@ -170,6 +170,20 @@ jobs:
           for line in active:
               py=re.findall(r'[a-z0-9_-]+\\.py',line,re.I)
               cron_scripts.append(py[-1] if py else 'NO_PY_SCRIPT')
+          # Count protected business entities in live and historical factory DBs; never inspect row values.
+          sensitive_tables=('core_order','core_orderitem','core_paymentintent','core_paymentwebhookevent','core_walletconnection','core_ledgerentry','core_companyinquiry','core_chatmessage','core_cryptopaymentintent','core_product','core_factoryartifact','core_factoryrun','core_factoryevidence')
+          db_extra=[backups/'native-master-20261022T100951Z-2216076/sqlite-before.sqlite3',backups/'f41-master-20261022T101121Z-2216944/sqlite-before.sqlite3']
+          table_counts=[]
+          for p in samples+db_extra:
+              if p.is_symlink() or not p.is_file():raise SystemExit('DB_COUNT_PATH_NOT_REGULAR')
+              cc=sqlite3.connect('file:'+str(p)+'?mode=ro&immutable=1',uri=True,timeout=8)
+              have=set(x[0] for x in cc.execute("select name from sqlite_master where type='table'"))
+              rows={}
+              for tbl in sensitive_tables:
+                  if tbl in have:rows[tbl]=cc.execute('select count(*) from "'+tbl+'"').fetchone()[0]
+              cc.close()
+              table_counts.append({'name':p.parent.name+'/'+p.name if p.parent!=backups and p.parent!=runtime/'private' else p.name,'row_counts':rows})
+          print('OWNER_RESET_PROTECTED_DATABASE_COUNTS='+json.dumps(table_counts,sort_keys=True))
           print('OWNER_RESET_SCHEDULER_SCRIPT_BASENAMES='+json.dumps(cron_scripts))
           backup_folder_summaries=[]
           for name in ['native-master-20261022T100951Z-2216076','f41-master-20261022T101121Z-2216944']:
