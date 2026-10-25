@@ -89,3 +89,5 @@ jobs:
           print("MYSQL_CLEANUP_PREFLIGHT_SAFETY=PASS; SQL_MUTATIONS=0",flush=True)
           PY
           timeout 20s ssh -T -F "$d/config" saeit-vps 'df -B1 . | tail -n 1'
+          timeout 20s ssh -T -F "$d/config" saeit-cpanel 'command -v mysqldump || command -v mariadb-dump || true; command -v gzip || true'
+          timeout 20s ssh -T -F "$d/config" saeit-vps 'pwd; test -w /home/githubops && echo VPS_BACKUP_HOME_WRITABLE=YES; command -v gzip; command -v sha256sum'
