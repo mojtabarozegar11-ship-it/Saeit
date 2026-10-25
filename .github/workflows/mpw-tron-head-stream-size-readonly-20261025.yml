@@ -130,6 +130,36 @@ jobs:
           if live.is_file() and not live.is_symlink():
               print('MPW_TRON_LIVE_CHAIN_SOURCE_SHA256='+hashlib.sha256(live.read_bytes()).hexdigest())
           PY
+      - name: Verify one recent public native TRX transfer at both solidified operators
+        run: |
+          set -euo pipefail
+          timeout 105s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import json,os,sys,hashlib
+          from pathlib import Path
+          app=Path('/home/zomorod2/Saeit-staging')
+          if not app.is_dir() or app.is_symlink():raise SystemExit('UNSAFE_APP_ROOT')
+          os.chdir(app);sys.path.insert(0,str(app))
+          from scripts.mpw_tron_public_dual_probe_readonly_20261023 import NODES,get,select_native_candidate
+          from services.mpw_trx_commercial_chain import read_only_independent_pair
+          result={'scope':'public-native-trx-two-source-finality','financial_writes':0,'proof_verified':False}
+          try:
+              block=get(NODES[1],'head')
+              tx=select_native_candidate(block)
+              pair=read_only_independent_pair()
+              left,right=pair.prove_a(tx),pair.prove_b(tx)
+              fields=('tx_hash','sender','recipient','amount_sun','block_time','network')
+              if not all(getattr(left,f)==getattr(right,f) for f in fields):
+                  raise ValueError('Independent native proofs disagree')
+              if not all((left.solidified,right.solidified,left.execution_success,right.execution_success,
+                          left.transfer_contract,right.transfer_contract)):
+                  raise ValueError('Native finality execution not confirmed')
+              if pair.identifier_a==pair.identifier_b or left.source_id!=pair.identifier_a or right.source_id!=pair.identifier_b:
+                  raise ValueError('Operator identity mismatch')
+              result['proof_verified']=True
+          except Exception as exc:
+              result['blocked_class']=type(exc).__name__
+          print('MPW_TRON_PUBLIC_TWO_OPERATOR_CANARY='+json.dumps(result,sort_keys=True))
+          PY
       - name: Remove temporary SSH relay keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
