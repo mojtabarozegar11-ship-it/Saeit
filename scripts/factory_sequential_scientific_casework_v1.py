@@ -100,7 +100,8 @@ def source_cycle(m, target, unique, max_attempts, http_get):
     return dict(totals)
 
 
-def step(factory_private, *, max_attempts=4, dry_run=False, http_get=None):
+def step(factory_private, *, max_attempts=4, dry_run=False, http_get=None,
+         only_order_file=None):
     m = engine()
     if type(max_attempts) is not int or not 0 <= max_attempts <= 20:
         raise ValueError("CASEWORK_SOURCE_BUDGET_INVALID")
@@ -109,13 +110,17 @@ def step(factory_private, *, max_attempts=4, dry_run=False, http_get=None):
     area = root / "production-instructions"
     m.ensure(area.is_dir() and not area.is_symlink(), "PRIVATE_INSTRUCTIONS_UNSAFE")
     names = queue(area, m)
+    if only_order_file is not None:
+        m.ensure(isinstance(only_order_file, str) and
+                 m.NAME.fullmatch(only_order_file) and only_order_file in names,
+                 "PINNED_SOURCE_ORDER_UNAVAILABLE")
     target = area / "stage-02/primary-source-acquisition-v1"
     # Read-only mode must not create the evidence tree or lock.
     cursor = target / ".product-sequential-cursor.json"
     if dry_run:
         index = cursor_position(cursor, m)
         return {"schema":SCHEMA, "mode":"read_only", "queue_size":len(names),
-                "next_order_file":names[index % len(names)],
+                "next_order_file":only_order_file or names[index % len(names)],
                 "publications":0, "qc1000_approvals":0}
     storage_free = shutil.disk_usage(root).free
     storage_hold = storage_free < DISK_RESERVE
@@ -133,7 +138,7 @@ def step(factory_private, *, max_attempts=4, dry_run=False, http_get=None):
         except BlockingIOError:
             return {"schema":SCHEMA, "already_running":True, "cases_processed":0}
         index = cursor_position(cursor, m)
-        name = names[index % len(names)]
+        name = only_order_file or names[index % len(names)]
         case = {"schema":SCHEMA, "order_file":name,
                 "visited_utc":datetime.now(timezone.utc).isoformat(),
                 "result":"BLOCKED_INPUT_INTEGRITY", "source_attempts":0,
@@ -174,11 +179,12 @@ def step(factory_private, *, max_attempts=4, dry_run=False, http_get=None):
             case["blocking_code"] = type(exc).__name__ + ":" + str(exc)[:100]
         output = target / "sequential-casework-v1" / name
         m.replace_cursor(output, case)
-        m.replace_cursor(cursor, {"schema":SCHEMA, "next_index":index + 1,
-                                 "last_order_file":name})
+        if only_order_file is None:
+            m.replace_cursor(cursor, {"schema":SCHEMA, "next_index":index + 1,
+                                     "last_order_file":name})
         return {"schema":SCHEMA, "queue_size":len(names),
                 "cases_processed":1, "selected_order_file":name,
-                "next_order_file":names[(index+1) % len(names)],
+                "next_order_file":(name if only_order_file else names[(index+1) % len(names)]),
                 "result":case["result"],
                 "source_attempts":case["source_attempts"],
                 "licensed_sources_available":case["licensed_sources_available"],
@@ -195,10 +201,12 @@ if __name__ == "__main__":
     parser.add_argument("--factory-private", required=True)
     parser.add_argument("--max-source-attempts", type=int, default=4)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--only-order-file")
     args = parser.parse_args()
     try:
         print(json.dumps(step(args.factory_private, max_attempts=args.max_source_attempts,
-                              dry_run=args.dry_run), ensure_ascii=False, sort_keys=True))
+                              dry_run=args.dry_run, only_order_file=args.only_order_file),
+                         ensure_ascii=False, sort_keys=True))
     except Exception as exc:
         print("SEQUENTIAL_CASEWORK_ERROR=" + type(exc).__name__ + ":" + str(exc)[:160],
               file=sys.stderr)

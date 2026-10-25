@@ -1,0 +1,132 @@
+name: Factory strict one-product-to-real-QC1000 cycle
+on:
+  pull_request:
+    paths:
+      - 'scripts/factory_strict_serial_fullcycle_v1.py'
+      - 'scripts/factory_strict_serial_scope_v1.py'
+      - 'scripts/factory_systemwide_science_rework_20261024.py'
+      - 'scripts/factory_sequential_scientific_casework_v1.py'
+      - 'scripts/factory_stage2_literature_scout.py'
+      - 'scripts/factory_stage2_research.py'
+      - 'scripts/factory_stage34_autonomous_handoff_20261023.py'
+      - 'scripts/factory_stage5_evidence_workbook_20261023.py'
+      - 'scripts/factory_stage6_preflight_rework_20261023.py'
+      - 'scripts/factory_agri200_downloadable_20261023.py'
+      - 'scripts/factory_agri200_strict_qc_20261023.py'
+      - 'scripts/factory_stage5_substantive_rework_20261023.py'
+      - 'scripts/factory_agri200_source_grounded_v003_20261023.py'
+      - 'scripts/factory_agri200_source_grounded_v003_qc_20261023.py'
+      - 'tests/test_factory_strict_serial_fullcycle_v1.py'
+      - 'tests/test_factory_strict_serial_scope_v1.py'
+      - 'tests/test_factory_strict_serial_cron_partition_v1.py'
+      - 'tests/test_factory_sequential_scientific_casework_v1.py'
+      - 'tests/test_factory_stage34_autonomous_handoff_20261023.py'
+      - 'deploy/install_factory_strict_serial_fullcycle_v1.sh'
+      - '.github/workflows/factory-strict-serial-fullcycle-20261025.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/factory_strict_serial_fullcycle_v1.py'
+      - 'scripts/factory_strict_serial_scope_v1.py'
+      - 'scripts/factory_systemwide_science_rework_20261024.py'
+      - 'scripts/factory_sequential_scientific_casework_v1.py'
+      - 'scripts/factory_stage2_literature_scout.py'
+      - 'scripts/factory_stage2_research.py'
+      - 'scripts/factory_stage34_autonomous_handoff_20261023.py'
+      - 'scripts/factory_stage5_evidence_workbook_20261023.py'
+      - 'scripts/factory_stage6_preflight_rework_20261023.py'
+      - 'scripts/factory_agri200_downloadable_20261023.py'
+      - 'scripts/factory_agri200_strict_qc_20261023.py'
+      - 'scripts/factory_stage5_substantive_rework_20261023.py'
+      - 'scripts/factory_agri200_source_grounded_v003_20261023.py'
+      - 'scripts/factory_agri200_source_grounded_v003_qc_20261023.py'
+      - 'tests/test_factory_strict_serial_fullcycle_v1.py'
+      - 'tests/test_factory_strict_serial_scope_v1.py'
+      - 'tests/test_factory_strict_serial_cron_partition_v1.py'
+      - 'tests/test_factory_sequential_scientific_casework_v1.py'
+      - 'tests/test_factory_stage34_autonomous_handoff_20261023.py'
+      - 'deploy/install_factory_strict_serial_fullcycle_v1.sh'
+      - '.github/workflows/factory-strict-serial-fullcycle-20261025.yml'
+permissions: {contents: read}
+concurrency:
+  group: factory-strict-serial-fullcycle
+  cancel-in-progress: false
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Prove targeted production and strict independent quality gate
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_strict_serial_fullcycle_v1.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_strict_serial_scope_v1.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_strict_serial_cron_partition_v1.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_sequential_scientific_casework_v1.py -v
+          python3 -B -m unittest discover -s tests -p 'test_factory_stage*.py' -q
+          python3 -B -m unittest discover -s tests -p 'test_factory_agri200_*.py' -q
+          bash -n deploy/install_factory_strict_serial_fullcycle_v1.sh
+  deploy:
+    needs: regression
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-strict-serial-fullcycle-20261025]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Pinned SSH relay and private one-product worker activation
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-strict-serial"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          target="/home/githubops/factory-runtime/operations/.strict-serial-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh_vps "umask 077; test ! -e '$target'; install -d -m 700 '$target/scripts' '$target/tests' '$target/deploy'"
+          for file in \
+            scripts/factory_strict_serial_fullcycle_v1.py \
+            scripts/factory_strict_serial_scope_v1.py \
+            scripts/factory_systemwide_science_rework_20261024.py \
+            scripts/factory_sequential_scientific_casework_v1.py \
+            scripts/factory_stage2_literature_scout.py \
+            scripts/factory_stage2_research.py \
+            scripts/factory_stage34_autonomous_handoff_20261023.py \
+            scripts/factory_stage5_evidence_workbook_20261023.py \
+            scripts/factory_stage6_preflight_rework_20261023.py \
+            scripts/factory_agri200_downloadable_20261023.py \
+            scripts/factory_agri200_strict_qc_20261023.py \
+            scripts/factory_stage5_substantive_rework_20261023.py \
+            scripts/factory_agri200_source_grounded_v003_20261023.py \
+            scripts/factory_agri200_source_grounded_v003_qc_20261023.py \
+            tests/test_factory_strict_serial_fullcycle_v1.py \
+            tests/test_factory_strict_serial_scope_v1.py \
+            tests/test_factory_strict_serial_cron_partition_v1.py \
+            tests/test_factory_sequential_scientific_casework_v1.py \
+            deploy/install_factory_strict_serial_fullcycle_v1.sh; do
+              ssh_vps "umask 077; cat > '$target/$file'; chmod 600 '$target/$file'" < "$file"
+              checksum="$(sha256sum "$file" | awk '{print $1}')"
+              ssh_vps "test \"\$(sha256sum '$target/$file' | awk '{print \$1}')\" = '$checksum'"
+          done
+          py="/home/githubops/factory-runtime/.venv/bin/python"
+          ssh_vps "timeout 60s '$py' -B -m unittest discover -s '$target/tests' -p test_factory_strict_serial_fullcycle_v1.py -q"
+          ssh_vps "timeout 60s '$py' -B -m unittest discover -s '$target/tests' -p test_factory_strict_serial_scope_v1.py -q"
+          ssh_vps "timeout 60s '$py' -B -m unittest discover -s '$target/tests' -p test_factory_strict_serial_cron_partition_v1.py -q"
+          ssh_vps "bash -n '$target/deploy/install_factory_strict_serial_fullcycle_v1.sh'"
+          ssh_vps "GITHUB_RUN_ID='$GITHUB_RUN_ID' GITHUB_RUN_ATTEMPT='$GITHUB_RUN_ATTEMPT' timeout 200s bash '$target/deploy/install_factory_strict_serial_fullcycle_v1.sh' '$target'"
+          ssh_vps "timeout 30s '$py' -B '/home/githubops/factory-runtime/operations/production-instructions/strict-serial-fullcycle-v1.py' --factory-private '/home/githubops/factory-runtime/private/autonomous-product-cycle' --operations '/home/githubops/factory-runtime/operations/production-instructions' --dry-run"
+          echo 'FACTORY_ONE_ACTIVE_PRODUCT_PER_MINUTE=INSTALLED'
+          echo 'INDEPENDENT_QC1000_NOT_AUTOMATICALLY_GRANTED'

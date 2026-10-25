@@ -146,7 +146,10 @@ def check_one(area, name, lib, catalog):
     }
 
 
-def execute(root, lib, batch=250):
+def execute(root, lib, batch=250, only_order_id=None):
+    if only_order_id is not None and (not isinstance(only_order_id,str)
+                                   or re.fullmatch(r"WO-[0-9]{8}",only_order_id) is None):
+        raise RuntimeError("REVISED_QC_TARGET_ORDER_INVALID")
     area = Path(root).resolve() / "production-instructions"
     inbox = area / "stage-05/source-grounded-v003-manifests"
     if inbox.is_symlink() or not inbox.is_dir():
@@ -161,6 +164,8 @@ def execute(root, lib, batch=250):
         fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
         names = sorted(p.name for p in inbox.iterdir()
                        if p.is_file() and not p.is_symlink() and NAME.fullmatch(p.name))
+        if only_order_id is not None:
+            names = [name for name in names if name.startswith(only_order_id+"--r")]
         passed_mechanical = errors = new = 0
         for name in names[:batch]:
             try:
@@ -187,9 +192,11 @@ if __name__ == "__main__":
         p.add_argument("--factory-private", required=True)
         p.add_argument("--stage34-worker", required=True)
         p.add_argument("--batch", type=int, default=250)
+        p.add_argument("--only-order-id")
         a = p.parse_args()
         lib = module(a.stage34_worker, "revised_qc_stage34")
-        print(json.dumps(execute(a.factory_private, lib, a.batch), sort_keys=True))
+        print(json.dumps(execute(a.factory_private, lib, a.batch,
+                                 only_order_id=a.only_order_id), sort_keys=True))
     except Exception as exc:
         print("REVISED_QC_ERROR:" + type(exc).__name__ + ":" + str(exc)[:170],
               file=sys.stderr)

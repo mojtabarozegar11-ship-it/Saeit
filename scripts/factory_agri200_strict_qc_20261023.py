@@ -249,7 +249,10 @@ def audit_one(area, name, lib, stage5, rubric):
     return created, result["disposition"]
 
 
-def execute(root, lib, stage5, rubric, batch=250):
+def execute(root, lib, stage5, rubric, batch=250, only_order_id=None):
+    if only_order_id is not None and (not isinstance(only_order_id,str)
+                                   or re.fullmatch(r"WO-[0-9]{8}",only_order_id) is None):
+        raise RuntimeError("STRICT_QC_TARGET_ORDER_INVALID")
     root = Path(root).expanduser().resolve()
     area = root / "production-instructions"
     queue = area / "stage-05/completed-drafts"
@@ -277,6 +280,8 @@ def execute(root, lib, stage5, rubric, batch=250):
             raise RuntimeError("STRICT_QC_CURSOR_INVALID")
         start = cursor["next_index"] % len(names) if names else 0
         chosen = [names[(start + i) % len(names)] for i in range(min(batch, len(names)))]
+        if only_order_id is not None:
+            chosen = [name for name in names if name.startswith(only_order_id+"--r")][:batch]
         newly_audited = quarantined = blocked = 0
         for name in chosen:
             try:
@@ -290,9 +295,10 @@ def execute(root, lib, stage5, rubric, batch=250):
                     "order_file": name, "error": type(exc).__name__ + ":" + str(exc)[:190],
                     "needs_rework": True, "quality1000_approved": False,
                     "commercial_release": False})
-        lib.atomic(cursor_file, {
-            "schema": "saeit.factory.agri200.strict-qc-cursor.v1",
-            "next_index": (start + len(chosen)) % len(names) if names else 0})
+        if only_order_id is None:
+            lib.atomic(cursor_file, {
+                "schema": "saeit.factory.agri200.strict-qc-cursor.v1",
+                "next_index": (start + len(chosen)) % len(names) if names else 0})
         total = sum(1 for p in (area / "stage-06/strict-qc1000").iterdir()
                     if p.is_file() and NAME.fullmatch(p.name))
         report = {
@@ -320,12 +326,14 @@ def main():
     p.add_argument("--stage5-worker", required=True)
     p.add_argument("--criteria", required=True)
     p.add_argument("--batch", type=int, default=250)
+    p.add_argument("--only-order-id")
     a = p.parse_args()
     if not 1 <= a.batch <= 1000:
         raise SystemExit("STRICT_QC_BATCH_RANGE")
     lib = dependency(a.stage34_worker, "strict_qc_stage34")
     stage5 = dependency(a.stage5_worker, "strict_qc_stage5")
-    print(json.dumps(execute(a.factory_private, lib, stage5, criteria(a.criteria), a.batch),
+    print(json.dumps(execute(a.factory_private, lib, stage5, criteria(a.criteria), a.batch,
+                             only_order_id=a.only_order_id),
                      ensure_ascii=False, sort_keys=True))
 
 

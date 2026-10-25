@@ -109,6 +109,23 @@ class Stage34Tests(unittest.TestCase):
         self.assertEqual(mod.execute(self.root)["stage5_inbox_total"], 1)
         self.assertEqual(mod.execute(self.root)["stage3_new"], 0)
 
+    def test_serial_target_does_not_build_another_order(self):
+        result = mod.execute(self.root, only_order_id="WO-00000002")
+        self.assertEqual(result["stage3_new"], 0)
+        self.assertEqual(result["stage4_new"], 0)
+        self.assertFalse((self.area / "stage-03/completed-designs" / self.name).exists())
+        selected = mod.execute(self.root, only_order_id="WO-00000001")
+        self.assertEqual(selected["stage3_new"], 1)
+        self.assertEqual(selected["stage4_new"], 1)
+
+    def test_shared_stage_worker_excludes_owner_cohort_without_losing_other_orders(self):
+        skipped = mod.execute(self.root, excluded_orders={"WO-00000001"})
+        self.assertEqual(skipped["stage3_new"], 0)
+        self.assertEqual(skipped["stage4_new"], 0)
+        self.assertFalse((self.area / "stage-03/completed-designs" / self.name).exists())
+        ordinary = mod.execute(self.root, excluded_orders={"WO-00000002"})
+        self.assertEqual((ordinary["stage3_new"], ordinary["stage4_new"]), (1, 1))
+
     def test_tampered_stage2_source_does_not_advance(self):
         self.change("stage-02/completed-dossiers",
                     lambda doc: doc["claims"][0].update({"statement": "Silent tamper"}))

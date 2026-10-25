@@ -12,6 +12,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import sys
 
 REPORT = "saeit.factory.stage6.technical-preflight.v1"
@@ -204,7 +205,10 @@ def fair_batch(area, names, batch, lib):
     return chosen, cursor_path, next_state
 
 
-def execute(root, lib, stage5, batch=300):
+def execute(root, lib, stage5, batch=300, only_order_id=None, excluded_orders=None):
+    if only_order_id is not None and (not isinstance(only_order_id, str)
+                                   or re.fullmatch(r"WO-[0-9]{8}", only_order_id) is None):
+        raise RuntimeError("STAGE6_TARGET_ORDER_INVALID")
     root = Path(root).expanduser().resolve()
     if not root.is_dir():
         raise RuntimeError("STAGE6_PRIVATE_ROOT_MISSING")
@@ -222,8 +226,14 @@ def execute(root, lib, stage5, batch=300):
         if queue.is_symlink() or not queue.is_dir():
             raise RuntimeError("STAGE6_UNSAFE_INBOX")
         names = sorted(p.name for p in queue.iterdir()
-                       if p.is_file() and not p.is_symlink() and lib.NAME.fullmatch(p.name))
+                       if p.is_file() and not p.is_symlink() and lib.NAME.fullmatch(p.name)
+                       and (excluded_orders is None or
+                            p.name.split("--r", 1)[0] not in excluded_orders))
         selected, cursor_path, next_state = fair_batch(area, names, batch, lib)
+        if only_order_id is not None:
+            selected = [name for name in names if name.startswith(only_order_id + "--r")][:batch]
+            next_state = lib.read(cursor_path) if cursor_path.exists() else {
+                "schema": "saeit.factory.stage6.round-robin.v1", "next_index": 0}
         created, blocked = 0, 0
         for name in selected:
             try:
@@ -258,12 +268,22 @@ def main():
     parser.add_argument("--stage34-worker", required=True)
     parser.add_argument("--stage5-worker", required=True)
     parser.add_argument("--batch", type=int, default=300)
+    parser.add_argument("--only-order-id")
+    parser.add_argument("--exclude-owner-agri200", action="store_true")
     args = parser.parse_args()
     if not 1 <= args.batch <= 1000:
         raise SystemExit("STAGE6_BATCH_RANGE")
     lib = dependency(args.stage34_worker, "stage34_private_for_stage6")
     stage5 = dependency(args.stage5_worker, "stage5_private_for_stage6")
-    print(json.dumps(execute(args.factory_private, lib, stage5, args.batch),
+    if args.only_order_id and args.exclude_owner_agri200:
+        raise RuntimeError("STAGE6_CONFLICTING_SCOPE")
+    if args.exclude_owner_agri200:
+        from factory_strict_serial_scope_v1 import owner_agri200_ids
+        excluded = owner_agri200_ids(args.factory_private)
+    else:
+        excluded = None
+    print(json.dumps(execute(args.factory_private, lib, stage5, args.batch,
+                             only_order_id=args.only_order_id, excluded_orders=excluded),
                      sort_keys=True, ensure_ascii=False))
 
 

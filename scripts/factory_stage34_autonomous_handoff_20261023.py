@@ -311,7 +311,10 @@ def fair_batch(area, stage, names, batch):
     return selected, path, after
 
 
-def execute(root, batch=250):
+def execute(root, batch=250, only_order_id=None, excluded_orders=None):
+    if only_order_id is not None and (not isinstance(only_order_id, str)
+                                   or re.fullmatch(r"WO-[0-9]{8}", only_order_id) is None):
+        raise RuntimeError("STAGE34_TARGET_ORDER_INVALID")
     root = Path(root).expanduser().resolve()
     if not root.is_dir():
         raise RuntimeError("STAGE34_PRIVATE_FACTORY_MISSING")
@@ -328,8 +331,14 @@ def execute(root, batch=250):
         for n, fn in ((3, stage3), (4, stage4)):
             inbox = area / ("stage-%02d" % n) / "inbox"
             names = sorted(p.name for p in inbox.iterdir()
-                           if p.is_file() and not p.is_symlink() and NAME.fullmatch(p.name))
+                           if p.is_file() and not p.is_symlink() and NAME.fullmatch(p.name)
+                           and (excluded_orders is None or
+                                p.name.split("--r", 1)[0] not in excluded_orders))
             selected, cursor_path, next_state = fair_batch(area, n, names, batch)
+            if only_order_id is not None:
+                selected = [name for name in names if name.startswith(only_order_id + "--r")][:batch]
+                next_state = read(cursor_path) if cursor_path.exists() else {
+                    "schema": "saeit.factory.stage%d.round-robin.v1" % n, "next_index": 0}
             fresh, invalid = 0, 0
             for name in selected:
                 try:
@@ -361,10 +370,20 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--factory-private", required=True)
     p.add_argument("--batch", type=int, default=250)
+    p.add_argument("--only-order-id")
+    p.add_argument("--exclude-owner-agri200", action="store_true")
     args = p.parse_args()
     if not 1 <= args.batch <= 1000:
         raise RuntimeError("STAGE34_INVALID_BATCH")
-    report = execute(args.factory_private, args.batch)
+    if args.only_order_id and args.exclude_owner_agri200:
+        raise RuntimeError("STAGE34_CONFLICTING_SCOPE")
+    if args.exclude_owner_agri200:
+        from factory_strict_serial_scope_v1 import owner_agri200_ids
+        excluded = owner_agri200_ids(args.factory_private)
+    else:
+        excluded = None
+    report = execute(args.factory_private, args.batch, only_order_id=args.only_order_id,
+                     excluded_orders=excluded)
     for key, value in sorted(report.items()):
         print("FACTORY_STAGE34_" + key.upper() + "=" + str(value).lower()
               if isinstance(value, bool) else

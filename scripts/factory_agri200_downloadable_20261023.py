@@ -243,7 +243,10 @@ def fair_selection(names, state, batch):
                      "next_index":(start+count)%total if total else 0}
 
 
-def execute(root, lib, stage5, batch=250):
+def execute(root, lib, stage5, batch=250, only_order_id=None):
+    if only_order_id is not None and (not isinstance(only_order_id,str)
+                                   or re.fullmatch(r"WO-[0-9]{8}",only_order_id) is None):
+        raise RuntimeError("CANDIDATE_TARGET_ORDER_INVALID")
     area=Path(root).resolve()/"production-instructions"
     inbox=area/"stage-05/completed-drafts"
     if inbox.is_symlink() or not inbox.is_dir():
@@ -263,6 +266,8 @@ def execute(root, lib, stage5, batch=250):
             raise RuntimeError("CANDIDATE_CURSOR_SYMLINK")
         state=lib.read(cursor_path) if cursor_path.exists() else None
         selected,new_state=fair_selection(names,state,batch)
+        if only_order_id is not None:
+            selected=[name for name in names if name.startswith(only_order_id+"--r")][:batch]
         made=blocked=0
         for name in selected:
             try:
@@ -272,7 +277,8 @@ def execute(root, lib, stage5, batch=250):
                 lib.atomic(area/"stage-05/downloadable-blocked"/name,{
                     "order_file":name,"reason":type(e).__name__+":"+str(e)[:180],
                     "scientific_quality_certified":False,"public_distribution_allowed":False})
-        lib.atomic(cursor_path,new_state)
+        if only_order_id is None:
+            lib.atomic(cursor_path,new_state)
         result={"private_downloadable_candidate_zips":len(list(
                   (area/"stage-05/downloadable-receipts").glob("WO-*.json"))),
                 "new_packages_this_tick":made,"blocked_this_tick":blocked,
@@ -289,11 +295,13 @@ def main():
     parser.add_argument("--stage34-worker",required=True)
     parser.add_argument("--stage5-worker",required=True)
     parser.add_argument("--batch",type=int,default=250)
+    parser.add_argument("--only-order-id")
     a=parser.parse_args()
     if not 1<=a.batch<=500:raise RuntimeError("CANDIDATE_BATCH_INVALID")
     lib=load_module(a.stage34_worker,"candidate_stage34")
     stage5=load_module(a.stage5_worker,"candidate_stage5")
-    print(json.dumps(execute(a.factory_private,lib,stage5,a.batch),
+    print(json.dumps(execute(a.factory_private,lib,stage5,a.batch,
+                             only_order_id=a.only_order_id),
                      ensure_ascii=False,sort_keys=True),flush=True)
 
 

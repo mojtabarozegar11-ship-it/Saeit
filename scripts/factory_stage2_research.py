@@ -367,7 +367,13 @@ def safe_catalog_seed(root, bundle_file):
     return count
 
 
-def stage2_loop(root, batch=100):
+def stage2_loop(root, batch=100, only_order_id=None, excluded_orders=None):
+    if only_order_id is not None and (not isinstance(only_order_id, str)
+                                   or re.fullmatch(r"WO-[0-9]{8}", only_order_id) is None):
+        raise ValueError("STAGE2_TARGET_ORDER_INVALID")
+    if excluded_orders is not None and (not isinstance(excluded_orders, set)
+                                        or any(not ORDER_ID.fullmatch(x) for x in excluded_orders)):
+        raise ValueError("STAGE2_EXCLUSION_INVALID")
     root = Path(root).expanduser().resolve()
     area = root / "production-instructions"
     inbox = area / "stage-02" / "inbox"
@@ -395,6 +401,10 @@ def stage2_loop(root, batch=100):
             packet, order = verified_return(area, file.name)
             candidates.append((prioritize(packet), 0, file.name, packet))
         candidates.sort(key=lambda x: (x[0][0], x[1], x[0][1], x[0][2]))
+        if only_order_id is not None:
+            candidates = [x for x in candidates if x[2].split("--r", 1)[0] == only_order_id]
+        if excluded_orders:
+            candidates = [x for x in candidates if x[2].split("--r", 1)[0] not in excluded_orders]
 
         total = len(candidates)
         completed = 0
@@ -462,6 +472,8 @@ def main():
     parser.add_argument("--factory-private", required=True)
     parser.add_argument("--seed-research")
     parser.add_argument("--batch", type=int, default=100)
+    parser.add_argument("--only-order-id")
+    parser.add_argument("--exclude-owner-agri200", action="store_true")
     args = parser.parse_args()
     if not 1 <= args.batch <= 2000:
         raise ValueError("STAGE2_INVALID_BATCH")
@@ -475,7 +487,15 @@ def main():
             fcntl.flock(locked.fileno(), fcntl.LOCK_EX)
             print("FACTORY_STAGE2_CURATED_EVIDENCE_INSTALLED=" +
                   str(safe_catalog_seed(root, Path(args.seed_research))))
-    result = stage2_loop(root, args.batch)
+    if args.only_order_id and args.exclude_owner_agri200:
+        raise ValueError("STAGE2_CONFLICTING_SCOPE")
+    if args.exclude_owner_agri200:
+        from factory_strict_serial_scope_v1 import owner_agri200_ids
+        excluded = owner_agri200_ids(root)
+    else:
+        excluded = None
+    result = stage2_loop(root, args.batch, only_order_id=args.only_order_id,
+                         excluded_orders=excluded)
     print("FACTORY_STAGE2_RESEARCH_DOSSIERS_NEW=" +
           str(result["newly_completed_research_dossiers"]))
     print("FACTORY_STAGE2_NEEDS_SOURCES_NEW=" +

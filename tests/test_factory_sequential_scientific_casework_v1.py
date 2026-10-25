@@ -65,6 +65,20 @@ def step_with_ample_disk(*args, **kwargs):
 
 
 class SequentialCaseworkTests(unittest.TestCase):
+    def test_pinned_order_repeats_without_rotating_other_products(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            fixture(root,3)
+            selected="WO-00000002--r001.json"
+            first=step_with_ample_disk(root,only_order_file=selected,http_get=provider)
+            second=step_with_ample_disk(root,only_order_file=selected,http_get=provider)
+            self.assertEqual(first["selected_order_file"],selected)
+            self.assertEqual(second["selected_order_file"],selected)
+            self.assertEqual(second["next_order_file"],selected)
+            target=root/"production-instructions/stage-02/primary-source-acquisition-v1"
+            self.assertFalse((target/".product-sequential-cursor.json").exists())
+            self.assertEqual(len(list((target/"sequential-casework-v1").glob("*.json"))),1)
+
     def test_only_one_product_per_tick_with_real_evidence_and_review_hold(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)

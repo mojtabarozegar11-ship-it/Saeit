@@ -12,6 +12,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import sys
 
 SCHEMA = "saeit.factory.stage5.substantive-revision-brief.v1"
@@ -201,7 +202,10 @@ def reauthor(area, name, lib, stage5, stage6):
     lib.once(area / "stage-06/substantive-review-inbox" / name, review)
     return created
 
-def execute(root, lib, stage5, stage6, batch=200):
+def execute(root, lib, stage5, stage6, batch=200, only_order_id=None, excluded_orders=None):
+    if only_order_id is not None and (not isinstance(only_order_id, str)
+                                   or re.fullmatch(r"WO-[0-9]{8}", only_order_id) is None):
+        raise RuntimeError("STAGE5_REWORK_TARGET_INVALID")
     root = Path(root).expanduser().resolve()
     area = root / "production-instructions"
     if not root.is_dir():
@@ -219,7 +223,9 @@ def execute(root, lib, stage5, stage6, batch=200):
         os.fchmod(handle.fileno(), 0o600)
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
         names = sorted(p.name for p in queue.iterdir() if
-                       p.is_file() and not p.is_symlink() and lib.NAME.fullmatch(p.name))
+                       p.is_file() and not p.is_symlink() and lib.NAME.fullmatch(p.name)
+                       and (excluded_orders is None or
+                            p.name.split("--r", 1)[0] not in excluded_orders))
         cursor_path = area / "stage-05/substantive-revision-cursor.json"
         if cursor_path.is_symlink():
             raise RuntimeError("STAGE5_REWORK_CURSOR_UNSAFE")
@@ -231,6 +237,8 @@ def execute(root, lib, stage5, stage6, batch=200):
         count = min(batch, len(names))
         start = cursor["next_index"] % len(names) if names else 0
         selected = [names[(start + i) % len(names)] for i in range(count)]
+        if only_order_id is not None:
+            selected = [name for name in names if name.startswith(only_order_id + "--r")][:batch]
         made = blocked = 0
         for name in selected:
             try:
@@ -241,11 +249,12 @@ def execute(root, lib, stage5, stage6, batch=200):
                     "order_file": name,
                     "reason": type(exc).__name__ + ":" + str(exc)[:160],
                     "review_approval_created": False})
-        lib.atomic(cursor_path, {
-            "schema": "saeit.factory.stage5.substantive-cursor.v1",
-            "next_index": (start + count) % len(names) if names else 0})
+        if only_order_id is None:
+            lib.atomic(cursor_path, {
+                "schema": "saeit.factory.stage5.substantive-cursor.v1",
+                "next_index": (start + count) % len(names) if names else 0})
         result = {
-            "rework_orders": len(names), "attempted": count,
+            "rework_orders": len(names), "attempted": len(selected),
             "source_specific_revision_briefs_created_this_run": made,
             "source_specific_revision_briefs_total": len(list(
                 (area / "stage-05/substantive-revision-manifests").glob("WO-*.json"))),
@@ -264,13 +273,23 @@ def main():
     p.add_argument("--stage5-worker", required=True)
     p.add_argument("--stage6-worker", required=True)
     p.add_argument("--batch", type=int, default=200)
+    p.add_argument("--only-order-id")
+    p.add_argument("--exclude-owner-agri200", action="store_true")
     a = p.parse_args()
     if not 1 <= a.batch <= 1000:
         raise SystemExit("STAGE5_REWORK_BAD_BATCH")
     lib = load(a.stage34_worker, "stage34_substantive_rework")
     stage5 = load(a.stage5_worker, "stage5_substantive_rework")
     stage6 = load(a.stage6_worker, "stage6_substantive_rework")
-    print(json.dumps(execute(a.factory_private, lib, stage5, stage6, a.batch),
+    if a.only_order_id and a.exclude_owner_agri200:
+        raise RuntimeError("STAGE5_REWORK_CONFLICTING_SCOPE")
+    if a.exclude_owner_agri200:
+        from factory_strict_serial_scope_v1 import owner_agri200_ids
+        excluded = owner_agri200_ids(a.factory_private)
+    else:
+        excluded = None
+    print(json.dumps(execute(a.factory_private, lib, stage5, stage6, a.batch,
+                             only_order_id=a.only_order_id, excluded_orders=excluded),
                      ensure_ascii=False, sort_keys=True))
 
 if __name__ == "__main__":
