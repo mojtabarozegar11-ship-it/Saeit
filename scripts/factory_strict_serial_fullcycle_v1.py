@@ -8,6 +8,7 @@ A minute is scheduling cadence, not a promise of scientific completion.
 import argparse
 from datetime import datetime, timezone
 import fcntl
+import hashlib
 import importlib.util
 import json
 import os
@@ -18,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 
 SCHEMA = "saeit.factory.strict-serial-fullcycle.v1"
 ORDER = re.compile(r"WO-[0-9]{8}\Z")
@@ -97,6 +99,57 @@ def atomic(path, document):
     finally:
         if os.path.exists(temp):
             os.unlink(temp)
+
+
+def source_sha256(path):
+    """Hash actual private input/worker bytes, never invent a product hash."""
+    if path.is_symlink() or not path.is_file():
+        return None
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def output_sha256(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.encode("utf8")
+    return hashlib.sha256(value).hexdigest()
+
+
+def immutable_tick_receipt(area, document):
+    """Persist source-bound, immutable *process* evidence before cursor advance.
+
+    A successful process exit is NOT an artifact hash or QC1000 certification.
+    Failure to persist the receipt prevents the product queue from advancing.
+    """
+    folder = area / "stage-06" / "strict-serial-tick-receipts-v1"
+    if folder.is_symlink() or folder.parent.is_symlink():
+        raise RuntimeError("STRICT_SERIAL_RECEIPT_PATH_UNSAFE")
+    folder.mkdir(mode=0o700, exist_ok=True)
+    if folder.is_symlink() or not folder.is_dir():
+        raise RuntimeError("STRICT_SERIAL_RECEIPT_PATH_UNSAFE")
+    filename = "tick-" + uuid.uuid4().hex + ".json"
+    payload = (json.dumps(document, sort_keys=True, ensure_ascii=False,
+                          separators=(",", ":")) + "\\n").encode("utf8")
+    target = folder / filename
+    fd = os.open(str(target), os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                 getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except BaseException:
+        try:
+            target.unlink()
+        except OSError:
+            pass
+        raise
+    return str(target.relative_to(area)), hashlib.sha256(payload).hexdigest()
 
 
 def index_orders(area):
@@ -279,6 +332,8 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
                     "publications":0}
         problem = intake_failure(area, order)
         began = monotonic()
+        actual_began = time.perf_counter()
+        process_evidence = {}
         # A corrupt/missing work-order cannot be certified by this worker.
         certified = problem is None and certified_finished(root, order, governance)
         results = {}
@@ -304,9 +359,21 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
                     continue
                 try:
                     command = worker_args(root, ops, order, stage)
-                    completed = (runner or subprocess.run)(
-                        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                        timeout=max(1, min(stage[3], remaining-1)), check=False)
+                    source_before = source_sha256(ops / stage[1])
+                    process_began = time.perf_counter()
+                    try:
+                        completed = (runner or subprocess.run)(
+                            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            timeout=max(1, min(stage[3], remaining-1)), check=False)
+                    finally:
+                        process_evidence.setdefault(label, {})["elapsed_ms"] = max(
+                            0, round((time.perf_counter() - process_began) * 1000))
+                    process_evidence[label].update({
+                        "worker_sha256_before": source_before,
+                        "stdout_sha256": output_sha256(getattr(completed, "stdout", None)),
+                        "stderr_sha256": output_sha256(getattr(completed, "stderr", None)),
+                        "exit_code": completed.returncode,
+                    })
                     results[label] = ("EXECUTED" if completed.returncode == 0
                                       else "BLOCKED_WORKER_EXIT_" + str(completed.returncode))
                 except subprocess.TimeoutExpired:
@@ -322,7 +389,41 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
         blocked = [label for label, status in results.items() if status != "EXECUTED"]
         if not certified and not blocked:
             blocked = ["independent_scientific_review_or_authentic_rework"]
+        # Persist a verifiable receipt for the one selected product, including
+        # skipped/blocked stages. No stage is represented as independently passed.
+        stage_receipts = {}
+        for label, filename, _, _ in STAGES:
+            evidence = dict(process_evidence.get(label, {}))
+            evidence.update({
+                "process_status": results.get(label, "SKIPPED_ALREADY_CERTIFIED"),
+                "worker_sha256_after": source_sha256(ops / filename),
+                "artifact_sha256": None,  # no validated version-specific artifact
+            })
+            before = evidence.get("worker_sha256_before")
+            after = evidence["worker_sha256_after"]
+            evidence["worker_source_changed"] = (before is not None and
+                                                  before != after)
+            stage_receipts[label] = evidence
+        receipt_document = {
+            "schema": "saeit.factory.strict-serial-tick-receipt.v1",
+            "recorded_utc": datetime.now(timezone.utc).isoformat(),
+            "order_id": order,
+            "order_intake_sha256": source_sha256(area / "orders" / (order + ".json")),
+            "product_version_before": None,
+            "product_version_after": None,
+            "product_version_evidence": "NOT_PROVEN",
+            "decision": decision,
+            "rework_blockers": blocked,
+            "intake_blocker": problem,
+            "stage_receipts": stage_receipts,
+            "runtime_ms": max(0, round((time.perf_counter() - actual_began) * 1000)),
+            "independent_qa1000_receipt_sha256": None,
+            "commercial_release": False,
+        }
+        receipt_file, receipt_sha256 = immutable_tick_receipt(area, receipt_document)
         atomic(state, {"schema":SCHEMA, "active_order":next_order,
+                       "last_tick_receipt_file": receipt_file,
+                       "last_tick_receipt_sha256": receipt_sha256,
                        "index":next_index, "ticks":0,  # reset per-order tick counter on rotation
                        "all_complete":all_complete,
                        "last_order":order, "last_order_certified":certified,
@@ -337,6 +438,9 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
         return {"schema":SCHEMA, "processed_order":order,
                 "active_order_after_cycle":next_order,
                 "decision":decision, "rework_blockers":blocked,
+                "tick_receipt_file":receipt_file,
+                "tick_receipt_sha256":receipt_sha256,
+                "runtime_ms":receipt_document["runtime_ms"],
                 "intake_blocker":problem,
                 "rework_stage_owner":"intake_integrity" if problem else ("independent_quality_review" if not certified else None),
                 "required_next_version":"AUTHENTIC_REWORK_VERSION" if not certified else None,
