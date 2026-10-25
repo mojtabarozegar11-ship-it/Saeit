@@ -1,0 +1,172 @@
+name: cPanel bounded inactive commerce venv reclaim
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/cpanel-inactive-commerce-venv-reclaim-20261025.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cpanel-inactive-commerce-venv-reclaim-20261025
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Reclaim nine exact inactive Python virtual environments with safety gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 240s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import json,os,shutil,subprocess,tarfile,stat
+          from pathlib import Path
+          home=Path("/home/zomorod2")
+          root=home/"Saeit-staging"
+          exact=(
+              ("moj-commerce-v10-sandbox","mc10-6880988d8026"),
+              ("moj-commerce-v10-sandbox","mc10-6f774717dc11"),
+              ("moj-commerce-v10-sandbox","mc10-76476c84ee63"),
+              ("moj-commerce-v10-sandbox","mc10-968992b02a2f"),
+              ("moj-commerce-v10-sandbox","mc10-c76b20c7c550"),
+              ("moj-commerce-v10-sandbox","mc10-fcc3aa05fc5d"),
+              ("moj-commerce-v12-sandbox","mc10-8b33ad50ceee"),
+              ("moj-commerce-v12-sandbox","mc12-8595498588a0"),
+              ("moj-commerce-v12-sandbox","mc12-ec28ed75f4d0"),
+          )
+          retained=(
+              root/"moj-commerce-v10-sandbox"/"mc10-c3a540e57cb4"/".venv",
+              root/"moj-commerce-v12-sandbox"/"mc12-20874316936e"/".venv",
+          )
+          assert Path.home()==home and root.is_dir() and not root.is_symlink()
+          assert all(p.is_dir() and not p.is_symlink() for p in retained)
+          assert all((p.parent/"source.tar.gz").is_file() for p in retained)
+          procpaths=[]
+          for proc in Path("/proc").iterdir():
+              if not proc.name.isdigit():continue
+              for prop in ("cwd","exe"):
+                  try:procpaths.append(os.readlink(proc/prop))
+                  except OSError:pass
+              try:
+                  for fd in (proc/"fd").iterdir():
+                      try:procpaths.append(os.readlink(fd))
+                      except OSError:pass
+              except OSError:pass
+          crontab=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=8)
+          cron=crontab.stdout if crontab.returncode==0 else ""
+          passenger=subprocess.run(["uapi","--output=json","PassengerApps","list_applications"],capture_output=True,text=True,timeout=25)
+          if passenger.returncode!=0:raise SystemExit("PASSENGER_INVENTORY_FAILED")
+          apps=json.dumps(json.loads(passenger.stdout).get("result",{}).get("data",[]))
+          plans=[]
+          def check_archive(p):
+              if not p.is_file() or p.is_symlink() or p.stat().st_size<1000:raise SystemExit("BUNDLE_ARCHIVE_UNUSABLE")
+              with tarfile.open(p,"r:gz") as tar:
+                  seen=0
+                  for item in tar:
+                      if item.isfile():
+                          f=tar.extractfile(item)
+                          if f is None:raise SystemExit("ARCHIVE_MEMBER_INVALID")
+                          while f.read(1024*1024):pass
+                          seen+=1
+                  if seen<1:raise SystemExit("BUNDLE_ARCHIVE_EMPTY")
+          for parent,name in exact:
+              top=root/parent
+              bundle=top/name
+              env=bundle/".venv"
+              for path in (top,bundle,env):
+                  if path.is_symlink() or not path.is_dir():raise SystemExit("EXPECTED_VENV_MISSING_OR_SYMLINK")
+              if env.resolve()!=env or bundle.resolve()!=bundle:raise SystemExit("PATH_ESCAPE")
+              if any(z==str(env) or z.startswith(str(env)+"/") for z in procpaths):
+                  raise SystemExit("VENV_ACTIVE_PROCESS_REFERENCE")
+              if name in cron or name in apps or str(env) in cron or str(env) in apps:
+                  raise SystemExit("VENV_SCHEDULED_OR_PASSENGER_REFERENCE")
+              if not (bundle/"wheelhouse").is_dir() or (bundle/"wheelhouse").is_symlink():
+                  raise SystemExit("WHEELHOUSE_MISSING")
+              check_archive(bundle/"source.tar.gz")
+              check_archive(bundle/"wheels.tar.gz")
+              q=subprocess.run(["du","-sxB1","--",str(env)],capture_output=True,text=True,timeout=25,check=True)
+              size=int(q.stdout.split()[0])
+              if not (70*1024**2 < size < 180*1024**2):raise SystemExit("VENV_SIZE_OUT_OF_EXPECTED_BOUNDS")
+              checked=0
+              for base,dirs,files in os.walk(env,followlinks=False):
+                  dirs[:]=[n for n in dirs if not (Path(base)/n).is_symlink()]
+                  for fname in files:
+                      if fname.lower() in (".env",".env.local",".env.production","secrets.json","credentials.json") or Path(fname).suffix.lower() in (".sqlite",".sqlite3",".db",".sql"):
+                          raise SystemExit("VENV_MAY_CONTAIN_PRIVATE_DATA")
+                      checked+=1
+                      if checked>14000:raise SystemExit("UNEXPECTED_VENV_FILE_COUNT")
+              plans.append((env,size))
+          before=shutil.disk_usage(home).free
+          freed=0
+          for env,size in plans:
+              shutil.rmtree(env)
+              if env.exists() or env.is_symlink():raise SystemExit("VENV_RECLAIM_INCOMPLETE")
+              if not (env.parent/"source.tar.gz").is_file() or not (env.parent/"wheels.tar.gz").is_file():
+                  raise SystemExit("BUNDLE_SOURCE_OR_WHEELS_LOST")
+              freed+=size
+              print("INACTIVE_VENV_RECLAIM="+json.dumps({"parent":env.parent.parent.name,"bundle":env.parent.name,"reclaimed_du_bytes":size,"source_and_wheels_retained":True}))
+          after=shutil.disk_usage(home).free
+          print("INACTIVE_VENV_RECLAIM_TOTAL="+json.dumps({"count":len(plans),"estimated_reclaimed_bytes":freed,"mount_free_before":before,"mount_free_after":after,"retained_runnable_venvs":len(retained),"live_site_roots_modified":False,"customer_db_or_orders_modified":False}))
+          PY
+      - name: Verify storefront and company public health after scoped reclaim
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in "https://mojplaywin.com/" "https://mojplaywin.com/store/" "https://zomorodmelal.ir/" "https://zomorodmelal.ir/agents/"; do
+            code="$(curl --max-time 18 -sS -o /dev/null -w '%{http_code}' "$url" || true)"
+            echo "POST_VENV_RECLAIM_HEALTH=$url:$code"
+            test "$code" = "200"
+          done
+      - name: Remove runner SSH identities
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
