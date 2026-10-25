@@ -15,8 +15,8 @@ RELEASE = "organic-resource-pages-20261025b-v1"
 HOME = Path("/home/zomorod2")
 STAGE_PREFIX = ".organic-resource-b-stage-"
 ROOTS = {
-    "mpw": HOME / "mojplaywin.com" / "mpw-learning" / "20261025",
-    "zm": HOME / "public_html" / "resources" / "20261025",
+    "mpw": HOME / "mojplaywin.com" / "mpw-learning" / "20261025b",
+    "zm": HOME / "public_html" / "resources" / "20261025b",
 }
 DATA = {
   "mpw": [
