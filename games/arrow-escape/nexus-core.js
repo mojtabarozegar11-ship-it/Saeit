@@ -191,7 +191,8 @@
     return best.path;
   }
   function generate(level) {
-    const number = Math.max(1, Math.min(100000, Math.floor(Number(level) || 1)));
+    const requested = Number(level);
+    const number = Number.isFinite(requested) ? Math.max(1, Math.min(100000, Math.floor(requested))) : 1;
     const random = rngFor((Math.imul(number, 2654435761) ^ 0x9e3779b9) >>> 0);
     const advanced = number >= 12;
     const count = Math.min(12, 5 + Math.floor(number / 3));
