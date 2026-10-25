@@ -123,3 +123,5 @@ jobs:
 # Safety-only refreshed inventory; no mutation of stores or private factory.
 
 # Read-only independent post-cleanup audit; no private or public writes.
+
+# Recheck preserved work orders and scheduler after VPS and cPanel cleanup.
