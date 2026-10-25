@@ -103,7 +103,7 @@ jobs:
                           n=entry['name']
                           p=Path(n.replace(' (deleted)',''))
                           try:label=str(p.relative_to(home)) if n.startswith('/') else '[nonabsolute]'
-                  except ValueError:label='[outside-user-home]'
+                          except ValueError:label='[outside-user-home]'
                           if any(t in label.lower() for t in ('secret','credential','ssh','token')):label='[sensitive-path]'
                           opened.append({'process':current_process[:40],'pid':current_pid,'inode':entry['inode'],'bytes':entry['size'],'path_category':label[:130]})
                   for line in cp.stdout.splitlines():
