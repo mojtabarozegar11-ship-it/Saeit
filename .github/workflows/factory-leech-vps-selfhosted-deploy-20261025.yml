@@ -1,0 +1,78 @@
+name: Build and deploy compliant zero-cost leech author onto owner VPS
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-leech-vps-selfhosted-deploy-20261025.yml
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: owner-vps-single-leech-selfhosted-software-deploy-20261025
+  cancel-in-progress: false
+jobs:
+  compile-test-and-install-selfhosted-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && contains(github.event.head_commit.message, '[owner-deploy-leech-on-vps-20261025]')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test deployment software, no model inference on GitHub Actions
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/factory_leech_vps_resource_guarded_author_20261025.py scripts/factory_leech_free_offline_original_author_20261025.py
+          python3 -B -m unittest discover -s tests -p test_factory_leech_free_offline_original_author_20261025.py -v
+          bash -n scripts/factory_leech_vps_install_selfhosted_20261025.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path("scripts/factory_leech_vps_resource_guarded_author_20261025.py").read_text()
+          assert "SAFE_START_AVAILABLE_MIB = 2700" in src
+          assert "STOP_AVAILABLE_MIB = 1250" in src
+          assert "VIRTUAL_MEMORY_CAP_MIB = 2600" in src
+          assert 'fcntl.LOCK_EX | fcntl.LOCK_NB' in src
+          assert '"published": False' in src
+          print("LEECH_SELFHOSTED_DEPLOY_SOFTWARE_QA=passed")
+          PY
+      - name: Compile CPU llama-server executable as software build (no inference)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none --depth=1 --branch b10488 https://github.com/ggml-org/llama.cpp.git "$RUNNER_TEMP/leech-llama-source"
+          test "$(git -C "$RUNNER_TEMP/leech-llama-source" rev-parse HEAD)" = '9d77fa17254e1dee4b9e92504c91611a60b1359f'
+          cmake -S "$RUNNER_TEMP/leech-llama-source" -B "$RUNNER_TEMP/leech-llama-source/build" -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_UI=OFF
+          cmake --build "$RUNNER_TEMP/leech-llama-source/build" -j 3 --target llama-server
+          test -x "$RUNNER_TEMP/leech-llama-source/build/bin/llama-server"
+          tar -czf "$RUNNER_TEMP/leech-llama-cpu-bin.tar.gz" -C "$RUNNER_TEMP/leech-llama-source/build/bin" .
+          test "$(stat -c %s "$RUNNER_TEMP/leech-llama-cpu-bin.tar.gz")" -lt 50000000
+          echo LEECH_VPS_ENGINE_CPU_SOFTWARE_BUILT=true
+      - name: Deploy only to isolated VPS operation directory and download pinned model on VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          local_dir="$RUNNER_TEMP/leech-vps-secret-transport"
+          install -d -m 700 "$local_dir"
+          trap 'rm -f -- "$local_dir/key" "$local_dir/known"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$local_dir/key"
+          chmod 600 "$local_dir/key"
+          ssh-keygen -y -P '' -f "$local_dir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$local_dir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$local_dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$local_dir/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$local_dir/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=4 githubops@178.239.147.150 "$@"
+          }
+          ops="/home/githubops/factory-runtime/operations/production-instructions"
+          eng="$ops/leech-offline-engine-20261025"
+          ssh_vps "test \"\$(id -un)\" = githubops && test -d '$ops' && test ! -L '$ops' && test ! -L '$eng' && install -d -m 700 '$eng/bin' '$eng/models' && test ! -L '$eng/bin'"
+          ssh_vps "umask 077; cat > '$eng/engine-cpu-deploy.tar.gz'" < "$RUNNER_TEMP/leech-llama-cpu-bin.tar.gz"
+          ssh_vps "set -eu; test ! -L '$eng/engine-cpu-deploy.tar.gz'; tar -tzf '$eng/engine-cpu-deploy.tar.gz' | grep -Fx './llama-server'; tar -xzf '$eng/engine-cpu-deploy.tar.gz' -C '$eng/bin'; test -x '$eng/bin/llama-server'; rm -- '$eng/engine-cpu-deploy.tar.gz'"
+          ssh_vps "umask 077; cat > '$ops/leech-professional-author.py'; chmod 600 '$ops/leech-professional-author.py'" < scripts/factory_leech_free_offline_original_author_20261025.py
+          ssh_vps "umask 077; cat > '$ops/leech-vps-resource-guarded-author.py'; chmod 700 '$ops/leech-vps-resource-guarded-author.py'" < scripts/factory_leech_vps_resource_guarded_author_20261025.py
+          a="$(sha256sum scripts/factory_leech_free_offline_original_author_20261025.py | awk '{print $1}')"
+          b="$(sha256sum scripts/factory_leech_vps_resource_guarded_author_20261025.py | awk '{print $1}')"
+          ssh_vps "test \"\$(sha256sum '$ops/leech-professional-author.py' | awk '{print \$1}')\" = '$a' && test \"\$(sha256sum '$ops/leech-vps-resource-guarded-author.py' | awk '{print \$1}')\" = '$b'"
+          ssh_vps 'bash -se' < scripts/factory_leech_vps_install_selfhosted_20261025.sh
+          echo LEECH_SELFHOSTED_VPS_SOFTWARE_AND_MODEL_DEPLOYMENT_FINISHED=true
