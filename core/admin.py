@@ -277,3 +277,6 @@ class CompanyInquiryAdmin(admin.ModelAdmin):
     search_fields = ("name", "organization", "email", "subject", "message")
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (("درخواست", {"fields": ("kind", "name", "organization", "email", "phone", "subject", "message")}), ("مدیریت", {"fields": ("status", "internal_note", "created_at", "updated_at")}))
+
+# MojPlayWin internal brief ledger is visible only to its main-site superuser.
+from . import mojplaywin_production_admin  # noqa: F401
