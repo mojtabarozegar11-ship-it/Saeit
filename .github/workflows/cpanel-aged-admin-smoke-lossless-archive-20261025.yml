@@ -1,0 +1,164 @@
+name: cPanel lossless archival of obsolete isolated admin smoke bundles
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/cpanel-aged-admin-smoke-lossless-archive-20261025.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cpanel-aged-admin-smoke-lossless-archive-20261025
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Archive fourteen exact obsolete isolated admin snapshots with full byte-level verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 400s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import hashlib,json,os,shutil,stat,subprocess,tarfile,time
+          from pathlib import Path
+          h=Path("/home/zomorod2")
+          root=h/"Saeit-staging"/"admin-smoke"
+          names=(
+              "9369c1a43fd4-38498401914","55c45560e5a2-38498583041",
+              "22a39fbf52e8-38482850257","cbbd4b5dca3c-38483312144",
+              "b1e599ea05f2-38483484397","6c9ec5074b99-38483624067",
+              "26e7c8216ba9-38483785387","e717e706ff27-38482630039",
+              "ee521ea2d100-38498204241","0a99d2278bd8-38487451925",
+              "7ca3fb38f8f2-38487342108","900b74ca3c31-38487386843",
+              "363c9b65ff72-38486072918","7ad8de1c8a9c-38486132655",
+          )
+          keep=root/"ab090d03f5bc-38498776878"
+          if Path.home()!=h or root.is_symlink() or not root.is_dir():raise SystemExit("SMOKE_ROOT_INVALID")
+          if keep.is_symlink() or not keep.is_dir() or not (keep/"manage.py").is_file():
+              raise SystemExit("ACTIVE_SMOKE_RETENTION_MISSING")
+          proc=subprocess.run(["ps","-u","zomorod2","-o","args="],capture_output=True,text=True,timeout=12)
+          cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=12)
+          passenger=subprocess.run(["uapi","--output=json","PassengerApps","list_applications"],capture_output=True,text=True,timeout=20)
+          if passenger.returncode!=0:raise SystemExit("PASSENGER_PREFLIGHT_FAILED")
+          published=json.dumps(json.loads(passenger.stdout).get("result",{}).get("data",[]))
+          refs=proc.stdout+"\n"+(cron.stdout if cron.returncode==0 else "")+"\n"+published
+          def digest(stream):
+              h=hashlib.sha256()
+              for chunk in iter(lambda:stream.read(1024*1024),b""):h.update(chunk)
+              return h.hexdigest()
+          plans=[]
+          now=time.time()
+          for name in names:
+              src=root/name
+              dst=root/(name+".tar.gz")
+              tmp=root/("."+name+".tar.gz.tmp")
+              if src.is_symlink() or not src.is_dir() or src.resolve()!=src:
+                  raise SystemExit("SOURCE_NOT_SCOPED_DIRECTORY")
+              if dst.exists() or tmp.exists():raise SystemExit("ARCHIVE_ALREADY_EXISTS")
+              if now-src.stat().st_mtime<10*86400:raise SystemExit("SOURCE_TOO_RECENT")
+              if str(src) in refs or name in refs:raise SystemExit("SOURCE_HAS_ACTIVE_REFERENCE")
+              if not (src/"manage.py").is_file():raise SystemExit("EXPECTED_SMOKE_SOURCE_MISSING")
+              original={}
+              for here,dirs,files in os.walk(src,followlinks=False):
+                  for item in dirs+files:
+                      if (Path(here)/item).is_symlink():raise SystemExit("SOURCE_CONTAINS_SYMLINK")
+                  for fname in files:
+                      p=Path(here)/fname
+                      if not p.is_file():raise SystemExit("SOURCE_SPECIAL_FILE")
+                      with p.open("rb") as stream:original[str(p.relative_to(src))]=digest(stream)
+              if len(original)<50 or len(original)>4000:raise SystemExit("SOURCE_FILE_COUNT_ANOMALY")
+              d=subprocess.run(["du","-sxB1","--",str(src)],capture_output=True,text=True,timeout=25,check=True)
+              sz=int(d.stdout.split()[0])
+              if not 4*1024**2<=sz<=50*1024**2:raise SystemExit("SOURCE_SIZE_ANOMALY")
+              plans.append((src,dst,tmp,original,sz))
+          saved=0
+          for src,dst,tmp,original,raw in plans:
+              try:
+                  with tarfile.open(tmp,"w:gz",compresslevel=6) as tar:
+                      tar.add(src,arcname=src.name,recursive=True)
+                  with tmp.open("rb") as f:os.fsync(f.fileno())
+                  with tarfile.open(tmp,"r:gz") as tar:
+                      recovered={}
+                      for m in tar:
+                          if m.issym() or m.islnk():raise SystemExit("ARCHIVE_LINK_UNEXPECTED")
+                          if m.isfile():
+                              p=Path(m.name)
+                              if p.parts[0]!=src.name:raise SystemExit("ARCHIVE_PATH_INVALID")
+                              f=tar.extractfile(m)
+                              if f is None:raise SystemExit("ARCHIVE_UNREADABLE")
+                              recovered[str(p.relative_to(src.name))]=digest(f)
+                  if recovered!=original:raise SystemExit("ARCHIVE_HASH_MISMATCH")
+                  packed=tmp.stat().st_size
+                  if packed>=raw-1024*1024:raise SystemExit("ARCHIVE_NO_SIGNIFICANT_SAVING")
+                  os.chmod(tmp,0o600)
+                  os.replace(tmp,dst)
+                  shutil.rmtree(src)
+                  if src.exists() or not dst.is_file():raise SystemExit("ARCHIVE_REPLACE_FAILED")
+                  saved+=raw-packed
+                  print("OBSOLETE_SMOKE_ARCHIVED="+json.dumps({"snapshot":src.name,"files_verified":len(original),"source_du_bytes":raw,"compressed_bytes":packed,"saved_estimate_bytes":raw-packed,"private_archive_preserved":True}))
+              finally:
+                  if tmp.exists():tmp.unlink()
+          print("OBSOLETE_SMOKE_ARCHIVE_TOTAL="+json.dumps({"count":len(plans),"estimated_saved_bytes":saved,"latest_smoke_retained":keep.is_dir(),"customer_database_modified":False}))
+          PY
+      - name: Verify two live websites after lossless archival
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in "https://mojplaywin.com/" "https://mojplaywin.com/store/" "https://zomorodmelal.ir/" "https://zomorodmelal.ir/agents/"; do
+            code="$(curl --max-time 18 --max-redirs 3 -sSL -o /dev/null -w '%{http_code}' "$url" || true)"
+            echo "POST_SMOKE_ARCHIVE_HEALTH=$url:$code"
+            test "$code" = "200"
+          done
+      - name: Remove runner SSH identities
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
