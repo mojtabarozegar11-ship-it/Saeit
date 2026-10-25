@@ -31,6 +31,14 @@ assert.equal(run.history[2].when,'2026-10-26');
 assert.equal(run.achievements.length,2,'duplicate and malformed achievements must be removed');
 assert.equal(run.credits,30,'legitimate local credit history must survive');
 assert.equal(run.campaign.unlockedSector,2,'valid campaign progress must survive');
+const forged=vm.runInNewContext("const STORAGE='mpw-crown-v10-save';const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));"+loader+'loadSave()',{
+ localStorage:{getItem(){return JSON.stringify({best:'99999',credits:'1000000',hangar:{cannons:'5'},campaign:{unlockedSector:'10'},stats:{kills:true}})}},JSON,Number,Math,Set
+});
+assert.equal(forged.best,0,'string scores must not be promoted to valid records');
+assert.equal(forged.credits,0,'string credits must not become earned currency');
+assert.equal(forged.hangar.cannons,0,'string upgrades must not become purchased upgrades');
+assert.equal(forged.campaign.unlockedSector,1,'string campaign progress must not unlock sectors');
+assert.equal(forged.stats.kills,0,'boolean statistics must not be counted as kills');
 const init=js.slice(js.indexOf('let save=loadSave();'),js.indexOf('// Each silhouette'));
 const legacy=vm.runInNewContext("const STORAGE='mpw-crown-v10-save';const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));"+loader+init+'save.best',{localStorage:{getItem(key){return key==='mpw-crown-defender-best-v1'?'Infinity':'{\"best\":250}'},setItem(){}},JSON,Number,Math,Set,Date});
 assert.equal(legacy,250,'nonfinite legacy scores must not poison the current save');
