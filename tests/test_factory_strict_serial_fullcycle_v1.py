@@ -320,5 +320,68 @@ class StrictSerialTests(unittest.TestCase):
             self.assertFalse((root / "production-instructions/stage-06/"
                               "strict-serial-tick-receipts-v1").exists())
 
+
+    def test_storage_hold_routes_to_real_storage_owner_with_checkpoint(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, ops = workspace(Path(folder))
+            result = cycle.tick(root, ops, disk_usage=lambda _: SmallDisk())
+            self.assertEqual(result["decision"], "RETURN_TO_PRODUCTION")
+            self.assertEqual(result["rework_stage_owner"], "storage_capacity")
+            self.assertEqual(result["repair_request"], "RESTORE_PRIVATE_2_GIB_RESERVE")
+            self.assertEqual(result["checkpoint_stage"], "primary_source")
+            self.assertFalse(result["checkpoint_is_resumable"])
+            self.assertIsNotNone(result["earliest_recheck_utc"])
+            receipt = json.loads((root / "production-instructions" /
+                                  result["tick_receipt_file"]).read_text())
+            self.assertEqual(receipt["rework_stage_owner"], "storage_capacity")
+            self.assertEqual(receipt["repair_request"], result["repair_request"])
+            self.assertFalse(receipt["checkpoint_is_resumable"])
+
+    def test_failed_stage_routes_to_its_actual_owner_not_independent_review(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, ops = workspace(Path(folder))
+            class Failed:
+                returncode = 7
+                stdout = b""
+                stderr = b"failure"
+            def runner(argv, **kwargs):
+                if "stage2-literature-scout-serial.py" in argv[2]:
+                    return Failed()
+                return Successful()
+            result = cycle.tick(root, ops, runner=runner,
+                                disk_usage=lambda _: Disk(), monotonic=lambda: 0)
+            self.assertEqual(result["decision"], "RETURN_TO_PRODUCTION")
+            self.assertEqual(result["stage_results"]["source_discovery"],
+                             "BLOCKED_WORKER_EXIT_7")
+            self.assertEqual(result["rework_stage_owner"], "source_discovery")
+            self.assertEqual(result["checkpoint_stage"], "source_discovery")
+            self.assertEqual(result["repair_request"],
+                             "REPAIR_OR_CONTINUE_STAGE_FROM_RECEIPT")
+
+    def test_green_workers_still_require_real_independent_qa(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, ops = workspace(Path(folder))
+            result = cycle.tick(root, ops, runner=lambda *a, **kw: Successful(),
+                                disk_usage=lambda _: Disk(), monotonic=lambda: 0)
+            self.assertEqual(result["decision"], "RETURN_TO_PRODUCTION")
+            self.assertEqual(result["rework_stage_owner"], "independent_quality_review")
+            self.assertEqual(result["checkpoint_stage"], "independent_quality_review")
+            self.assertEqual(result["repair_request"],
+                             "OBTAIN_VERSION_BOUND_INDEPENDENT_QA1000_AND_VALID_APPROVAL")
+            self.assertFalse(result["certified_to_private_finished_goods"])
+
+    def test_certified_order_has_no_fabricated_rework_or_checkpoint(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, ops = workspace(Path(folder))
+            with patch.object(cycle, "certified_finished",
+                              side_effect=lambda _root, order, _gov:
+                              order == "WO-00000601"):
+                result = cycle.tick(root, ops, disk_usage=lambda _: Disk())
+            self.assertEqual(result["decision"], "CERTIFIED_AND_EXIT")
+            self.assertIsNone(result["rework_stage_owner"])
+            self.assertIsNone(result["repair_request"])
+            self.assertIsNone(result["checkpoint_stage"])
+            self.assertIsNone(result["earliest_recheck_utc"])
+
 if __name__=="__main__":
     unittest.main()
