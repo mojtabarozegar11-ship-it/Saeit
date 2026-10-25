@@ -129,7 +129,8 @@ class StrictSerialTests(unittest.TestCase):
     def test_certified_real_stock_is_only_path_to_next_order(self):
         with tempfile.TemporaryDirectory() as folder:
             root, ops = workspace(Path(folder))
-            with patch.object(cycle, "certified_finished", return_value=True):
+            with patch.object(cycle, "certified_finished",
+                              side_effect=lambda _root, order, _gov: order == "WO-00000601"):
                 result = cycle.tick(root, ops, runner=lambda *a, **kw: (_ for _ in ()).throw(
                     AssertionError("certified product must not rework")),
                     disk_usage=lambda _:Disk())
