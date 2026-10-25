@@ -1,0 +1,76 @@
+name: Factory one-product-at-a-time scientific rework on VPS
+on:
+  pull_request:
+    paths:
+      - scripts/factory_primary_fulltext_acquisition_20261024.py
+      - scripts/factory_sequential_scientific_casework_v1.py
+      - tests/test_factory_primary_fulltext_acquisition_20261024.py
+      - tests/test_factory_sequential_scientific_casework_v1.py
+      - deploy/install_factory_sequential_scientific_casework_v1.sh
+      - .github/workflows/factory-sequential-scientific-casework-20261025.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_primary_fulltext_acquisition_20261024.py
+      - scripts/factory_sequential_scientific_casework_v1.py
+      - tests/test_factory_primary_fulltext_acquisition_20261024.py
+      - tests/test_factory_sequential_scientific_casework_v1.py
+      - deploy/install_factory_sequential_scientific_casework_v1.sh
+      - .github/workflows/factory-sequential-scientific-casework-20261025.yml
+permissions: {contents: read}
+concurrency:
+  group: factory-sequential-scientific-casework
+  cancel-in-progress: false
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Prove each tick processes one order, skips blockers and never fabricates QC1000
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_primary_fulltext_acquisition_20261024.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_sequential_scientific_casework_v1.py -v
+          bash -n deploy/install_factory_sequential_scientific_casework_v1.sh
+  deploy-private-factory:
+    needs: regression
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-sequential-scientific-casework-20261025]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: SHA-bound private relay, installed sequential casework and real one-order proof
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-sequential-casework"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          py='/home/githubops/factory-runtime/.venv/bin/python'
+          target="/home/githubops/factory-runtime/operations/.sequential-casework-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh_vps "test \"\$(id -un)\" = githubops; umask 077; test ! -e '$target'; install -d -m 700 '$target/scripts' '$target/tests' '$target/deploy'"
+          for file in scripts/factory_primary_fulltext_acquisition_20261024.py scripts/factory_sequential_scientific_casework_v1.py tests/test_factory_primary_fulltext_acquisition_20261024.py tests/test_factory_sequential_scientific_casework_v1.py deploy/install_factory_sequential_scientific_casework_v1.sh; do
+            ssh_vps "umask 077; cat > '$target/$file'; chmod 600 '$target/$file'" < "$file"
+            expected="$(sha256sum "$file" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$target/$file' | awk '{print \$1}')\" = '$expected'"
+          done
+          ssh_vps "timeout 90s '$py' -B -m unittest discover -s '$target/tests' -p test_factory_sequential_scientific_casework_v1.py -v"
+          ssh_vps "bash -n '$target/deploy/install_factory_sequential_scientific_casework_v1.sh'"
+          ssh_vps "GITHUB_RUN_ID='$GITHUB_RUN_ID' GITHUB_RUN_ATTEMPT='$GITHUB_RUN_ATTEMPT' timeout 220s bash '$target/deploy/install_factory_sequential_scientific_casework_v1.sh' '$target/scripts/factory_sequential_scientific_casework_v1.py' '$target/scripts/factory_primary_fulltext_acquisition_20261024.py'"
+          ssh_vps "timeout 35s '$py' -B '/home/githubops/factory-runtime/operations/production-instructions/sequential-scientific-casework-v1.py' --factory-private '/home/githubops/factory-runtime/private/autonomous-product-cycle' --dry-run"
+          printf '%s\n' 'PRIVATE_SEQUENTIAL_CASEWORK=ONE_PRODUCT_PER_CYCLE' 'QC1000_AND_PUBLIC_RELEASE=UNCHANGED_AND_UNAPPROVED'
