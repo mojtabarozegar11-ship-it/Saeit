@@ -119,3 +119,5 @@ jobs:
               except Exception: statuses['INVALID_JSON']+=1
           print('ORDER_SCHEMAS',json.dumps({'total':sum(statuses.values()),'status_count':dict(statuses),'samples':samples}))
           PY
+
+# Safety-only refreshed inventory; no mutation of stores or private factory.
