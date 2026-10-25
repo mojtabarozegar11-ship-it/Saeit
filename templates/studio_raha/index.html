@@ -150,7 +150,7 @@ function jungleRunGame(stage){
  const course=Array.from({length:12},(_,i)=>hazards[i%hazards.length]);
  for(let i=course.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[course[i],course[j]]=[course[j],course[i]]}
  let step=0,lives=3,stars=0,streak=0,finished=false,best=0;
- try{const n=Number(localStorage.getItem('studio-raha-jungle-best-v1'));if(Number.isFinite(n)&&n>0)best=Math.floor(n)}catch(e){}
+ try{const n=Number(localStorage.getItem('studio-raha-jungle-best-v1'));if(Number.isSafeInteger(n)&&n>=0&&n<=286)best=n}catch(e){}
  function paint(){
   const won=finished&&lives>0,over=finished;
   const hazard=course[step];
@@ -171,6 +171,7 @@ function jungleRunGame(stage){
    if(stars>best){best=stars;try{localStorage.setItem('studio-raha-jungle-best-v1',String(best))}catch(e){}}
   }
   paint();
+  if(finished)jungleCleanup(); // Finished runs must release their keyboard handler.
  }
  function key(e){
   if(!stage.isConnected||!document.getElementById('gameOverlay').classList.contains('open')||finished)return;
