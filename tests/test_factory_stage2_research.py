@@ -61,6 +61,29 @@ class StageTwoTests(unittest.TestCase):
         self.assertFalse((self.area / "stage-03").exists())
         self.assertEqual(STAGE2.stage2_loop(self.root)["newly_documented_missing_sources"], 0)
 
+    def test_uncommitted_stage1_atomic_file_is_ignored_without_qc_claim(self):
+        self.stage1()
+        orphan = self.area / "stage-02/inbox/.stage1-a1b2c3d4"
+        orphan.write_text("{unfinished")
+        report = STAGE2.stage2_loop(self.root, only_order_id="WO-00000001")
+        self.assertEqual(report["newly_documented_missing_sources"], 1)
+        self.assertEqual(report["newly_completed_research_dossiers"], 0)
+        self.assertTrue(orphan.exists())  # Stage 2 does not delete someone else's write
+        self.assertFalse((self.area / "stage-03").exists())
+
+    def test_symlink_or_unexpected_stage1_temp_still_fails_closed(self):
+        self.stage1()
+        folder = self.area / "stage-02/inbox"
+        (folder / ".stage1-a1b2c3d4").symlink_to("WO-00000001--r001.json")
+        with self.assertRaisesRegex(RuntimeError, "STAGE2_UNSAFE_STAGE1_ATOMIC_TEMP"):
+            STAGE2.stage2_loop(self.root)
+
+    def test_unknown_dotfile_still_fails_closed(self):
+        self.stage1()
+        (self.area / "stage-02/inbox/.not-a-stage1-temp").write_text("unsafe")
+        with self.assertRaisesRegex(RuntimeError, "STAGE2_UNEXPECTED_INBOX_FILE"):
+            STAGE2.stage2_loop(self.root)
+
     def test_curated_research_reaches_stage3_only_with_traceable_sources(self):
         order = self.stage1()
         evidence = self.research_source(order, 1)
