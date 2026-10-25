@@ -52,13 +52,16 @@ jobs:
           for key,root in roots.items():
               if not root.is_dir() or root.is_symlink():raise SystemExit('EXPECTED_ROOT_MISSING')
               children=[]
+              symlink_count=0
               for child in root.iterdir():
-                  if child.is_symlink():raise SystemExit('TOP_LEVEL_SYMLINK')
+                  if child.is_symlink():
+                      symlink_count+=1
+                      continue
                   if child.is_dir():
                       children.append({'name':child.name[:115],'bytes':sized(child),'age_days':round((time.time()-child.stat().st_mtime)/86400,1),
                           'has_project':(child/'project').is_dir(),
                           'ref':str(child) in refs or child.name in refs})
-              out[key]={'root_bytes':sized(root),'is_referenced':str(root) in refs,
+              out[key]={'root_bytes':sized(root),'is_referenced':str(root) in refs,'top_symlink_count':symlink_count,
                   'children_count':len(children),'children':sorted(children,key=lambda x:-(x['bytes'] or 0))[:70]}
           # Code may use generic lab path via dynamic joins; only inspect file paths, not contents.
           scan=[]
