@@ -36,3 +36,32 @@ Can drought-responsive transcriptional programs in *Triticum aestivum* be separa
 
 ## Scientific integrity and next action
 The existence of accession metadata is **not** proof of completed reanalysis, differential expression, laboratory experiment, novel marker or journal submission. Next necessary step: fetch real sample-level GEO/SRA manifests for A and B, record missing replicate(s), inspect licenses and plan a computational run with known resources. Candidate journal **Frontiers in Plant Science** is not selected or approved for submission. No new article has been submitted.
+
+
+## C13 sample-level verification — actual 27 GEO Sample records fetched 2026-10-25
+**Evidence:** [27-row machine-readable manifest](GEO_VERIFIED_SAMPLE_MANIFEST_27_SAMPLES_2026-10-25.csv), reconstructed directly from NCBI GEO full sample records (`GSE157033&targ=gsm&view=full&form=text` and `GSE226842&targ=gsm&view=full&form=text`). Each row preserves GSM accession, title, cultivar, stage, water treatment, genotype, tissue, BioSample/SRA experiment links and direct GEO URL. Source records, not new expression data.
+
+### A. GSE157033 — exact missing replicate identified
+| Cultivar | Stage | Dry | Wet |
+|---|---|---:|---:|
+| TAM111 | GrainFilling | 2 | 2 |
+| TAM111 | Heading | 2 | **1** |
+| TAM112 | GrainFilling | 2 | 2 |
+| TAM112 | Heading | 2 | 2 |
+
+Total = **15 biological pooled-leaf RNA-seq samples**. The missing cell is **TAM111 / Heading / Wet / replicate 2**; only `GSM4751175` (TAM111_Heading_Wet_rep1) is present in the source records. Do **not** invent an extra sample or pretend this is a balanced 2×2×2×2 design. Pooled leaves from four plants per library are **one RNA-seq biological library** for inferential sample size, not four independent sequencing replicates. A full factorial design with all interactions may have estimability/power limitations. Inspect rank of model matrix and residual degrees of freedom before specifying contrasts, avoid per-cell variance estimation from the singleton cell and do not overclaim three-way interactions.
+
+### B. GSE226842 — unequal treatment/genotype replication, distinct biological context
+| Genotype / virus treatment | Well-watered | 7-day drought |
+|---|---:|---:|
+| WT (no BSMV) | **1** | **1** |
+| BSMV empty-vector control | **1** | **1** |
+| TaZFP13D overexpression | 2 | 2 |
+| TaZFP13D underexpression (siRNA) | 2 | 2 |
+
+Total **12 libraries**. WT and empty-vector BSMV arms have one library per treatment; they **cannot** independently estimate within-arm dispersion. Avoid unsupported differential-expression claims from singleton WT/BSMV comparisons. Tissue = second leaf, cultivar = Atlas66, time = 21 days after germination, drought = seven days withholding water. Contrasts to GSE157033 (flag leaf, two cultivars, two stages, different drought exposure) cannot be treated as equivalent biological replicates. Gene-level external validation must account for gene identifiers, orthology, directionality, independent biological contexts and the original authors' findings.
+
+### Journal scope risk discovered from official publisher (not just a fee check)
+Frontiers in Plant Science / Plant Abiotic Stress scope: https://www.frontiersin.org/journals/plant-science/sections/plant-abiotic-stress/about . The section says **descriptive collections of transcripts/proteins/metabolites and basic gene-family description without new biological mechanism are generally not considered** unless extended to reveal biological insight. A routine re-run of DEG counts is therefore not an adequate ZM-R01 paper for this section. The current study must demonstrate a credible novel biological/methodological inference with independent validation or choose a more appropriate journal; **do not invent wet-lab validation**. Official article types https://www.frontiersin.org/journals/plant-science/sections/plant-abiotic-stress/for-authors/article-types : Original Research is a valid type for *actual unpublished primary findings*, not for an unexecuted analysis. Official APC as checked 2026-10-25: CHF **3,150** A-type, only if accepted; https://www.frontiersin.org/journals/plant-science/sections/plant-abiotic-stress/for-authors/publishing-fees . Fee waiver/support eligibility unverified; no expenditure approved.
+
+**Next computational gate:** download actual public expression counts or raw SRA files using the recorded SRX identifiers, verify per-library library-size/QC and wheat reference version, construct design matrix with explicit singleton and batch restrictions, run genuine reproducible analysis, then verify novelty against Chu et al. 2021 and Bouard et al. 2024. No raw read downloads or new DE results have been performed in this cycle.
