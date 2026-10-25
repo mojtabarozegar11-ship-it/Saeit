@@ -48,6 +48,13 @@ MANIFEST_PATH = "/mpw-editorial/field-guides/20261023/release.json"
 KNOWN_LEGACY_CANONICAL = {("mojplaywin.com", "/games/corwn-defender/"): "/games/crown-defender/"}
 MAX_BODY = 550_000
 MAX_REDIRECTS = 2
+STORE_CANONICAL_QUERY = "__mpw_canon_passthru=1"
+
+
+def allowed_query(host: str, path: str, query: str) -> bool:
+    """Only the exact public store canonicalization marker may survive a redirect."""
+    return not query or (host == "mojplaywin.com" and path == "/store/"
+                         and query == STORE_CANONICAL_QUERY)
 
 
 class RestrictedRedirect(urllib.request.HTTPRedirectHandler):
@@ -64,7 +71,8 @@ class RestrictedRedirect(urllib.request.HTTPRedirectHandler):
                 or target.path not in (self.path, KNOWN_LEGACY_CANONICAL.get((self.host, self.path)))
                 or target.port not in (None, 443)
                 or target.username or target.password
-                or target.query or target.fragment):
+                or not allowed_query(self.host, self.path, target.query)
+                or target.fragment):
             raise ValueError("redirect_outside_exact_site_route")
         self.count += 1
         if self.count > MAX_REDIRECTS:
@@ -78,7 +86,10 @@ def examine(host: str, path: str, code: int, data: bytes, final_url: str) -> str
         return "unapproved_route"
     final = urllib.parse.urlsplit(final_url)
     permitted_paths = (path, KNOWN_LEGACY_CANONICAL.get((host, path)))
-    if final.scheme != "https" or final.hostname not in (host, "www." + host) or final.path not in permitted_paths:
+    if (final.scheme != "https" or final.hostname not in (host, "www." + host)
+            or final.path not in permitted_paths or not allowed_query(host, path, final.query)
+            or final.fragment or final.port not in (None, 443)
+            or final.username or final.password):
         return "wrong_origin_or_route"
     if code != 200:
         return "http_" + str(code)
