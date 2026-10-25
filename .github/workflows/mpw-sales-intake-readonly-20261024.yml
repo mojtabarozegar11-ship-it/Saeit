@@ -5,6 +5,8 @@ on:
     paths:
       - ".github/workflows/mpw-sales-intake-readonly-20261024.yml"
       - "scripts/mpw_sales_intake_readonly_20261024.py"
+  schedule:
+    - cron: '21 * * * *'
   workflow_dispatch:
 permissions: {contents: read}
 concurrency:
@@ -30,6 +32,15 @@ jobs:
           assert "production_db_writes" in source
           assert "MPW_INTAKE_READONLY" in source
           print("MPW_INTAKE_AUDIT_SOURCE_VALID=true")
+          PY
+          python3 - <<'PY'
+          from scripts.mpw_sales_intake_readonly_20261024 import route_bucket
+          assert route_bucket("/mpw-editorial/revenue/index.html") == "revenue_hub"
+          assert route_bucket("/mpw-editorial/revenue/business-calculators/index.html") == "revenue_offer"
+          assert route_bucket("/earn/website-doctor/") == "revenue_offer"
+          assert route_bucket("/contact/") == "support_contact"
+          assert route_bucket("/store/product/72/checkout/") == "product_checkout"
+          print("MPW_SALES_FUNNEL_ROUTE_CLASSIFICATION=PASS")
           PY
       - name: Establish pinned SSH relay to cPanel
         env:
