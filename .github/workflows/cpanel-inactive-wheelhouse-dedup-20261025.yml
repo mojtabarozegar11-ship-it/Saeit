@@ -121,7 +121,7 @@ jobs:
                   raise SystemExit("BUNDLE_NOT_IN_EXPECTED_INACTIVE_STATE")
               if not zipped.is_file() or zipped.is_symlink() or zipped.stat().st_size<1000000:
                   raise SystemExit("MISSING_WHEEL_ARCHIVE")
-              if time.time()-bundle.stat().st_mtime<48*3600:
+              if time.time()-zipped.stat().st_mtime<48*3600:
                   raise SystemExit("BUNDLE_TOO_RECENT")
               if name in cron or name in apps or any(x==str(wheelhouse) or x.startswith(str(wheelhouse)+"/") for x in procpaths):
                   raise SystemExit("BUNDLE_HAS_LIVE_REFERENCE")
