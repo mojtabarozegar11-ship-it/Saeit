@@ -27,7 +27,10 @@ jobs:
           docker run --rm --network bridge -v "$work/src:/src:ro" -v "$work/build:/build" ubuntu:20.04 bash -ec '
             export DEBIAN_FRONTEND=noninteractive
             apt-get update -qq
-            apt-get install -qq -y --no-install-recommends cmake g++ make ca-certificates
+            apt-get install -qq -y --no-install-recommends cmake g++ make ca-certificates python3-pip
+            python3 -m pip install --no-cache-dir --quiet 'cmake==3.31.6'
+            export PATH=/usr/local/bin:$PATH
+            cmake --version
             cmake -S /src -B /build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DLLAMA_CURL=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_UI=OFF -DLLAMA_BUILD_TESTS=OFF
             cmake --build /build -j 3 --target llama-server
             test -x /build/bin/llama-server
