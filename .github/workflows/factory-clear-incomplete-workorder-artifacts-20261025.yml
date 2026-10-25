@@ -1,0 +1,51 @@
+name: Purge unapproved WO-keyed private factory stage artifacts only
+on:
+  pull_request:
+    paths:
+      - scripts/factory_clear_incomplete_workorder_artifacts_20261025.py
+      - .github/workflows/factory-clear-incomplete-workorder-artifacts-20261025.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_clear_incomplete_workorder_artifacts_20261025.py
+      - .github/workflows/factory-clear-incomplete-workorder-artifacts-20261025.yml
+permissions: {contents: read}
+concurrency:
+  group: factory-wo-incomplete-purge-20261025
+  cancel-in-progress: false
+jobs:
+  scope-and-execute:
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-private-incomplete-artifacts-purge-20261025]'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate scoped cleanup program
+        run: |
+          set -euo pipefail
+          python3 -B -c 'import ast,pathlib;ast.parse(pathlib.Path("scripts/factory_clear_incomplete_workorder_artifacts_20261025.py").read_text())'
+      - name: Private factory stage outputs (PR preview; approved push removes)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-incomplete-wo-purge"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          command=(PYTHONDONTWRITEBYTECODE=1 python3 - --run-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT")
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            command+=(--apply)
+          else
+            echo INCOMPLETE_WO_ACTION=DRY_RUN_NO_DELETIONS
+          fi
+          timeout 280s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 "${command[*]}" < scripts/factory_clear_incomplete_workorder_artifacts_20261025.py
+          echo FACTORY_STORES_AND_CUSTOMER_DOWNLOAD_PATHS=UNTOUCHED
