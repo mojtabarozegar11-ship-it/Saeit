@@ -27,9 +27,9 @@ def patch(b):
         print('MPW_SITEMAP_GUIDES_ALREADY_REGISTERED');return b
     if s.count(MARKER)!=1:raise RuntimeError('SITEMAP_ANCHOR_DRIFT')
     paths=",".join("'"+'/mpw-learning/20261025b/'+slug+"/'" for slug in SLUGS)
-    addition=SIGNATURE+"\\n$paths = array_merge($paths, ["+paths+"]);"
-    out=s.replace(MARKER,MARKER+"\\n"+addition,1)
-    if out.count(SIGNATURE)!=1 or out.replace(MARKER+"\\n"+addition,MARKER,1)!=s:
+    addition=SIGNATURE+"\n$paths = array_merge($paths, ["+paths+"]);"
+    out=s.replace(MARKER,MARKER+"\n"+addition,1)
+    if out.count(SIGNATURE)!=1 or out.replace(MARKER+"\n"+addition,MARKER,1)!=s:
         raise RuntimeError('NOT_EXACT_PATCH')
     return out.encode('utf8')
 def lint(data):
