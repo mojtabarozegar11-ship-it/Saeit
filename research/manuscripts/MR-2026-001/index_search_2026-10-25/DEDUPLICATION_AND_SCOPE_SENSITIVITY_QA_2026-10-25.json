@@ -37,8 +37,8 @@
       ]
     }
   ],
-  "abstracts_index_available": 68,
-  "abstract_missing": 536,
+  "abstracts_index_available": 83,
+  "abstract_missing": 521,
   "tiers": {
     "HIGH": 13,
     "MEDIUM": 159,
@@ -76,5 +76,15 @@
     "Cross-record DOI identity grouping is automated and needs human duplicate adjudication",
     "Missing titles retained rather than silently dropped",
     "Search strategy is not frozen and no exhaustive database coverage asserted"
-  ]
+  ],
+  "enrichment_update": {
+    "utc": "2026-10-25T02:57:20.100Z",
+    "provenance": "PRIORITY_DOI_ABSTRACT_LOOKUP_2026-10-25.json",
+    "requested": 73,
+    "matched": 73,
+    "additional_reconstructed_abstracts": 15,
+    "records_with_indexed_abstract_after_update": 83,
+    "human_decisions_changed": 0,
+    "publisher_verification": "NOT PERFORMED"
+  }
 }
