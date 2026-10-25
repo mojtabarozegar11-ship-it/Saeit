@@ -1,0 +1,146 @@
+name: MojPlayWin homepage footer origin read-only diagnosis
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mpw-home-footer-origin-audit-20261019.yml"
+permissions: {contents: read}
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Open host-key-pinned relay through VPS to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read-only check of public-home footer template and Passenger restart signal paths
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel 'python3 -c '"'"'
+          import hashlib
+          from pathlib import Path
+          home=Path("/home/zomorod2")
+          app=home/"Saeit-staging"
+          root=home/"mojplaywin.com"
+          for rel in ("core/templates/mojplaywin/home.html","core/templates/mojplaywin/footer.html"):
+              p=app/rel
+              if p.is_file():
+                  data=p.read_text("utf-8",errors="replace")
+                  print("TEMPLATE_HEAD",p.name,repr(data[:220]))
+                  for line in data.splitlines():
+                      if any(t in line for t in ("footer.html","site_base.html","mpx-bottom-bar","mpw-founder-footer-final","extends")):
+                          print("TEMPLATE_INCLUDE",p.name,line[:360])
+          rules=(root/".htaccess").read_text("utf-8",errors="replace").splitlines()
+          for line in rules:
+              if "PassengerAppRoot" in line or "PassengerStartupFile" in line or "PassengerPython" in line:
+                  print("PASSENGER_DIRECTIVE",line[:240])
+          for p in [app/"core/templates/base.html",
+                    app/"core/templates/mojplaywin/footer.html",
+                    app/"core/templates/mojplaywin/site_base.html",
+                    app/"core/templates/mojplaywin/home.html",
+                    root/"passenger_wsgi.py",
+                    root/"tmp/restart.txt",
+                    app/"tmp/restart.txt"]:
+              if not p.is_file():
+                  print("FILE_STATUS",p.name,str(p.parent.name),"missing")
+                  continue
+              raw=p.read_bytes()
+              text=raw.decode("utf-8",errors="replace")
+              flags={"mpx_bottom":"mpx-bottom-bar" in text,
+                "discover_nav":"MojPlayWin discover" in text,
+                "founder": "Mojtaba Roozegar" in text,
+                "new_line":"mpw-legal-one-line" in text,
+                "footer_include":"mojplaywin/footer.html" in text,
+                "home_2022_bar":"© 2022 MojPlayWin. All rights reserved." in text,
+                "home_footer_phrase":"Built for research, creativity and responsible commerce." in text}
+              print("FILE_STATUS",p.name,str(p.parent.name),len(raw),hashlib.sha256(raw).hexdigest()[:12],flags)
+          import os
+          needles=(b"Built for research, creativity and responsible commerce.",
+                   b"MojPlayWin discover",
+                   b"mpx-bottom-bar")
+          for label,base in (("ROOT",root),("APP",app)):
+              matches=[]
+              scanned=0
+              for d,dirs,files in os.walk(base):
+                  depth=len(Path(d).relative_to(base).parts)
+                  dirs[:]=[x for x in dirs if depth<6 and x not in (
+                      ".git","node_modules","venv",".venv","__pycache__",
+                      "tmp","media","logs","backup","backups","staticfiles",
+                      ".next","migrations","site-packages")]
+                  for f in files:
+                      p=Path(d)/f
+                      if p.suffix.lower() not in (".html",".htm",".php",".py",".js",".txt"):continue
+                      try:
+                          if p.stat().st_size>2200000 or p.is_symlink():continue
+                          data=p.read_bytes()
+                      except (OSError,PermissionError):continue
+                      scanned+=1
+                      hits=[i for i,n in enumerate(needles) if n in data]
+                      if hits:matches.append((str(p.relative_to(base)),hits))
+                      if scanned>=16000:break
+                  if scanned>=16000:break
+              print("SOURCE_SCAN",label,"files",scanned,"matches",matches[:45])
+          import urllib.request,hashlib,re
+          base=root/"design-preview-20261017"
+          try:
+              req=urllib.request.Request("https://mojplaywin.com/",headers={"Cache-Control":"no-cache"})
+              with urllib.request.urlopen(req,timeout=16) as resp:
+                  public=resp.read(3000000)
+              print("HOME_LIVE_HASH",len(public),hashlib.sha256(public).hexdigest()[:20])
+          except Exception as exc:
+              print("HOME_LIVE_FETCH_ERROR",type(exc).__name__)
+              public=b""
+          for rel in ("index.html","production-home-20261017.html","research.html"):
+              p=base/rel
+              if not p.is_file():continue
+              data=p.read_bytes()
+              title=re.search(rb"<title[^>]*>(.*?)</title>",data,re.I|re.S)
+              print("HOME_CANDIDATE",rel,len(data),hashlib.sha256(data).hexdigest()[:20],
+                    "same_as_live",data==public,"title",title.group(1)[:110].decode("utf8","replace") if title else "none")
+          for i,line in enumerate(rules,1):
+              if any(k in line for k in ("production-home-20261017","design-preview-20261017/index.html","RewriteRule ^$","RewriteRule ^/?$")):
+                  print("HOME_REWRITE",i,line[:320])
+          '"'"''
