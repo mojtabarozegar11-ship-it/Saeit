@@ -1,0 +1,72 @@
+name: Repair visibility of blocked one-English-order Stage 2 research handoff
+on:
+  pull_request:
+    paths: [.github/workflows/factory-one-english-stage2-run-20261025.yml]
+  push:
+    branches: [main]
+    paths: [.github/workflows/factory-one-english-stage2-run-20261025.yml]
+permissions: {contents: read}
+concurrency:
+  group: factory-one-english-stage2-only-20261025
+  cancel-in-progress: false
+jobs:
+  only-wo-1496-stage2:
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-single-english-stage2-only-20261025]'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Confined private single-order Stage 2 (PR preflight, main actual work)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/one-english-stage2"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          mode="PREVIEW"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then mode="APPLY"; fi
+          timeout 180s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 "PYTHONDONTWRITEBYTECODE=1 python3 - '$mode'" <<'PY'
+          import json,os,subprocess,sys,shutil
+          from pathlib import Path
+          mode=sys.argv[1]
+          assert mode in ("PREVIEW","APPLY")
+          base=Path("/home/githubops/factory-runtime")
+          root=base/"private/autonomous-product-cycle"
+          area=root/"production-instructions"
+          ops=base/"operations/production-instructions"
+          worker=ops/"stage2-research-serial.py"
+          py=base/".venv/bin/python"
+          for p in (root,area,ops):
+            assert p.is_dir() and not p.is_symlink()
+          assert worker.is_file() and not worker.is_symlink() and py.is_file()
+          orderpath=area/"orders/WO-00001496.json"
+          assert orderpath.is_file() and not orderpath.is_symlink()
+          order=json.loads(orderpath.read_text())
+          assert order.get("id")=="WO-00001496" and order.get("status")=="issued"
+          assert any(e.get("locale")=="en-GB" for e in order.get("editions",[]) if isinstance(e,dict))
+          source=worker.read_text()
+          assert "only_order_id" in source and "stage2_loop" in source
+          report={"mode":mode,"order_id":order["id"],"active_locale":"en-GB",
+            "stage2_worker_present":True,"private_only":True,
+            "storefront_and_order_list_modified":False,
+            "free_gib":round(shutil.disk_usage(root).free/2**30,3)}
+          if mode=="APPLY":
+            cmd=[str(py),"-B",str(worker),"--factory-private",str(root),
+                 "--only-order-id","WO-00001496","--batch","1"]
+            proc=subprocess.run(cmd,capture_output=True,text=True,timeout=52,check=False)
+            report["exit_code"]=proc.returncode
+            report["stdout_tail"]=proc.stdout[-1300:]
+            report["stderr_tail"]=proc.stderr[-1300:]
+            report["research_needed"]=(area/"stage-02/research-needed/WO-00001496--r001.json").is_file()
+            report["research_receipt"]=(area/"stage-02/receipts/WO-00001496--r001.json").is_file()
+          print("SINGLE_ENGLISH_STAGE2_EXECUTION="+json.dumps(report,sort_keys=True))
+          if mode=="APPLY" and report["exit_code"]!=0:raise SystemExit(1)
+          PY
