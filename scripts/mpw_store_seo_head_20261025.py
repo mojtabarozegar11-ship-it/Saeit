@@ -108,8 +108,13 @@ def install(run):
     if sha(old) != OLD_SHA:
         raise RuntimeError("Live shell drift; no write")
     new = patch(old)
-    import django.template
-    django.template.Template(new.decode("utf8"))
+    os.chdir(APP)
+    sys.path.insert(0, str(APP))
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    import django
+    django.setup()
+    from django.template import Template
+    Template(new.decode("utf8"))
     d = state(run)
     if d.exists() or d.is_symlink():
         raise RuntimeError("Backup collision")
