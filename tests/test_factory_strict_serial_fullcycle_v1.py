@@ -1,4 +1,4 @@
-"""No rotation on rework, no fabricated reviews, and strictly one target."""
+"""Fair one-product-per-tick rework, no fabricated reviews or cross-order writes."""
 import importlib.util
 import json
 from pathlib import Path
@@ -61,7 +61,7 @@ class StrictSerialTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "UNPARTITIONED"):
             cycle.verify_cron_partition(valid.replace("--exclude-owner-agri200", ""))
 
-    def test_one_product_holds_across_rework_cycles(self):
+    def test_rework_rotates_fairly_without_false_certification(self):
         with tempfile.TemporaryDirectory() as folder:
             root, ops = workspace(Path(folder))
             calls = []
@@ -70,23 +70,48 @@ class StrictSerialTests(unittest.TestCase):
                 calls.append(tuple(argv))
                 return Successful()
 
-            for _ in range(3):
-                result = cycle.tick(root, ops, runner=run, disk_usage=lambda _:Disk(),
-                                    monotonic=lambda:0)
-                self.assertEqual(result["processed_order"], "WO-00000601")
-                self.assertEqual(result["active_order_after_cycle"], "WO-00000601")
+            first = cycle.tick(root, ops, runner=run, disk_usage=lambda _:Disk(),
+                               monotonic=lambda:0)
+            second = cycle.tick(root, ops, runner=run, disk_usage=lambda _:Disk(),
+                                monotonic=lambda:0)
+            self.assertEqual(first["processed_order"], "WO-00000601")
+            self.assertEqual(first["active_order_after_cycle"], "WO-00000602")
+            self.assertEqual(second["processed_order"], "WO-00000602")
+            self.assertEqual(second["active_order_after_cycle"], "WO-00000603")
+            for result in (first, second):
+                self.assertEqual(result["decision"], "RETURN_TO_PRODUCTION")
+                self.assertEqual(result["required_next_version"], "AUTHENTIC_REWORK_VERSION")
                 self.assertFalse(result["certified_to_private_finished_goods"])
                 self.assertEqual(result["stages_executed"], len(cycle.STAGES))
                 self.assertEqual(result["publications"], 0)
-            self.assertEqual(len(calls), len(cycle.STAGES) * 3)
-            for args in calls:
+            self.assertEqual(len(calls), len(cycle.STAGES) * 2)
+            for args in calls[:len(cycle.STAGES)]:
                 self.assertTrue(any("WO-00000601" in value for value in args))
                 self.assertFalse(any("WO-00000602" in value for value in args))
-                self.assertTrue(("--only-order-id" in args) ^ ("--only-order-file" in args))
+            for args in calls[len(cycle.STAGES):]:
+                self.assertTrue(any("WO-00000602" in value for value in args))
+                self.assertFalse(any("WO-00000601" in value for value in args))
             state = json.loads((root / "production-instructions/stage-06/strict-serial-active-v1.json")
                                .read_text())
-            self.assertEqual(state["ticks"], 3)
-            self.assertEqual(state["active_order"], "WO-00000601")
+            self.assertEqual(state["active_order"], "WO-00000603")
+            self.assertEqual(state["last_decision"], "RETURN_TO_PRODUCTION")
+
+    def test_last_order_wraps_to_unfinished_first_instead_of_deadlocking(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, ops = workspace(Path(folder))
+            state = root / "production-instructions/stage-06/strict-serial-active-v1.json"
+            state.write_text(json.dumps({"schema":cycle.SCHEMA,
+                                         "active_order":"WO-00000800", "index":199,
+                                         "ticks":19}))
+            def verified(_root, order, _governance):
+                return order != "WO-00000601"
+            with patch.object(cycle, "certified_finished", side_effect=verified):
+                result = cycle.tick(root, ops, runner=lambda *a, **kw:Successful(),
+                                    disk_usage=lambda _:Disk(), monotonic=lambda:0)
+            self.assertEqual(result["processed_order"], "WO-00000800")
+            self.assertEqual(result["decision"], "CERTIFIED_AND_EXIT")
+            self.assertEqual(result["active_order_after_cycle"], "WO-00000601")
+            self.assertFalse(json.loads(state.read_text())["all_complete"])
 
     def test_low_disk_only_triages_selected_sources(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -130,7 +155,8 @@ class StrictSerialTests(unittest.TestCase):
             result = cycle.tick(root, ops, runner=lambda *a, **kw:Successful(),
                                 disk_usage=lambda _:Disk(), monotonic=lambda:next(times))
             self.assertEqual(result["stages_executed"], 0)
-            self.assertEqual(result["active_order_after_cycle"], "WO-00000601")
+            self.assertEqual(result["active_order_after_cycle"], "WO-00000602")
+            self.assertEqual(result["decision"], "RETURN_TO_PRODUCTION")
             self.assertEqual(result["stage_results"]["strict_qc"], "DEFERRED_TO_NEXT_MINUTE")
 
     def test_dry_run_never_writes_private_state(self):
