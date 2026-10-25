@@ -48,7 +48,7 @@ jobs:
               valid_manifest=False
               manifest_fields=[]
               manifest_sha_field=False
-          safe_flags={}
+              safe_flags={}
               if m.is_file():
                   try:
                       d=json.loads(m.read_text())
