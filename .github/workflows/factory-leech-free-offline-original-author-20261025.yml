@@ -6,8 +6,6 @@ on:
       - .github/workflows/factory-leech-free-offline-original-author-20261025.yml
       - scripts/factory_leech_free_offline_original_author_20261025.py
       - tests/test_factory_leech_free_offline_original_author_20261025.py
-  schedule:
-    - cron: '7,17,27,37,47,57 * * * *'
   workflow_dispatch:
 permissions: {contents: read}
 concurrency:
@@ -15,7 +13,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   genuinely-author-one-private-segment:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.event_name != 'push' || contains(github.event.head_commit.message, '[owner-leech-offline-author-20261025]'))
+    # Hosted-runner commercial content inference is paused for GitHub Actions terms compliance.
+    # Preserve all private VPS manuscript chunks and the implementation for approved migration.
+    if: false
     runs-on: ubuntu-24.04
     timeout-minutes: 55
     env:
