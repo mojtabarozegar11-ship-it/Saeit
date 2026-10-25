@@ -124,7 +124,7 @@ def build_prompt(d, retry=0):
     source_context = " | ".join(sources)[:1600]
     deliverable = " ".join(str(d.get("practical_deliverable", "")).split())[:175]
     return (
-        "/no_think\\nWrite 400-560 original, non-repetitive English words for a "
+        "/no_think\nWrite 400-560 original, non-repetitive English words for a "
         "professional medicinal LEECH BREEDING FARM operator handbook, "
         "not clinical treatment and not general zoology. "
         "Chapter %s: %s. Specific new topic: %s. Practical angle: %s. "
