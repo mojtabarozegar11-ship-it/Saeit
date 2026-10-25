@@ -1,0 +1,81 @@
+name: cPanel staging own virtualenv MySQL metadata audit READ ONLY
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - .github/workflows/cpanel-staging-virtualenv-information-schema-readonly-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Use staging's own Python virtualenv with configured DB URL for safe schema metadata
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 400s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,json,hashlib,subprocess
+          h=Path('/home/zomorod2')
+          if os.geteuid()==0 or Path.home()!=h or h.is_symlink():raise SystemExit('INVALID_ACCOUNT')
+          stage=h/'Saeit-staging'
+          if not stage.is_dir() or stage.is_symlink():raise SystemExit('STAGING_MISSING')
+          u=subprocess.run(['uapi','--output=json','Mysql','list_databases'],capture_output=True,text=True,timeout=30)
+          rows=[]
+          if u.returncode==0:
+           try:
+            data=json.loads(u.stdout).get('result',{}).get('data',[])
+            if isinstance(data,list):rows=data
+           except Exception:pass
+          names=[str(x.get('database','')) for x in rows if isinstance(x,dict) and x.get('database')]
+          target_hash=hashlib.sha256(names[0].encode()).hexdigest() if len(names)==1 else ''
+          all_candidates=[h/'Saeit-staging/.venv/bin/python',h/'virtualenv/Saeit-staging/3.11/bin/python',h/'virtualenv/Saeit-staging/3.12/bin/python',h/'virtualenv/Saeit-staging/3.13/bin/python',h/'virtualenv/Saeit-staging/3.10/bin/python',h/'Saeit/.venv/bin/python']
+          vr=h/'virtualenv/Saeit-staging'
+          if vr.is_dir():
+           for sub in vr.iterdir():
+            if sub.is_dir() and sub.name not in ('.','..'):all_candidates.append(sub/'bin/python')
+          exe=None
+          for cand in all_candidates:
+           if cand.exists() and cand.is_file() and os.access(cand,os.X_OK):
+            exe=cand;break
+          probe="import os,json,hashlib\nos.environ.setdefault(\"DJANGO_SETTINGS_MODULE\",\"config.settings\")\nos.environ[\"PYTHONDONTWRITEBYTECODE\"]=\"1\"\nout={\"attempt\":\"staging_django\",\"mutations\":0}\ntry:\n import django\n django.setup()\n from django.db import connections\n c=connections[\"default\"]\n out[\"engine\"]=c.settings_dict.get(\"ENGINE\",\"unknown\")\n if \"mysql\" in out[\"engine\"]:\n  with c.cursor() as cur:\n   cur.execute(\"SELECT DATABASE()\")\n   schema=cur.fetchone()[0]\n   out[\"schema_matches_reported_mysql\"]=hashlib.sha256(str(schema).encode()).hexdigest()==os.environ.get(\"TARGET_SCHEMA_SHA\",\"\")\n   cur.execute(\"SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, DATA_FREE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() ORDER BY (DATA_LENGTH+INDEX_LENGTH) DESC LIMIT 60\")\n   rows=cur.fetchall()\n   out[\"largest_tables\"]=[{\"table\":r[0][:100],\"engine\":r[1],\"approx_rows\":int(r[2] or 0),\"data_bytes\":int(r[3] or 0),\"index_bytes\":int(r[4] or 0),\"free_bytes\":int(r[5] or 0)} for r in rows]\n   cur.execute(\"SELECT COUNT(*),COALESCE(SUM(DATA_LENGTH),0),COALESCE(SUM(INDEX_LENGTH),0),COALESCE(SUM(DATA_FREE),0) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()\")\n   t=cur.fetchone()\n   out[\"totals\"]={\"table_count\":int(t[0]),\"data_bytes\":int(t[1]),\"index_bytes\":int(t[2]),\"free_bytes\":int(t[3])}\n   out[\"connected\"]=True\n else:\n  out[\"connected\"]=False\nexcept Exception as e:out[\"error_type\"]=type(e).__name__\nprint(\"STAGING_MYSQL_METADATA=\"+json.dumps(out,sort_keys=True),flush=True)"
+          data={}
+          if exe:
+           env=os.environ.copy()
+           env['PYTHONDONTWRITEBYTECODE']='1'
+           env['PYTHONPATH']=str(stage)
+           env['TARGET_SCHEMA_SHA']=target_hash
+           sub=subprocess.run([str(exe),'-B','-c',probe],capture_output=True,text=True,cwd=str(stage),env=env,timeout=160)
+           data={'interpreter_relative':str(exe.relative_to(h)),'exit_code':sub.returncode}
+           for line in sub.stdout.splitlines():
+            if line.startswith('STAGING_MYSQL_METADATA='):
+             try:data['schema']=json.loads(line.split('=',1)[1])
+             except Exception:data['error']='invalid_schema_json'
+           if not data.get('schema'):data['error']='application_startup_or_import_failed'
+          else:data={'error':'no_venv_interpreter'}
+          print('CPANEL_STAGING_MYSQL_METADATA_AUDIT='+json.dumps({'staging':data,'db_count':len(rows),'read_only':True,'mutations':0},sort_keys=True),flush=True)
+
+          PY
+          echo CPANEL_STAGING_MYSQL_METADATA_AUDIT_READONLY=PASS
