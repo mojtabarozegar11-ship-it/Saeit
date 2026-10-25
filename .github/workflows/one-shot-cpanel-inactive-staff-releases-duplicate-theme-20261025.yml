@@ -1,0 +1,101 @@
+name: ONE SHOT cPanel obsolete release snapshots and identical theme backup
+on:
+  pull_request:
+    types: [opened]
+    paths:
+      - .github/workflows/one-shot-cpanel-inactive-staff-releases-duplicate-theme-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Prune six unreferenced prior staff revisions; remove duplicate zip only on full SHA match
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 400s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,hashlib,json,tarfile,shutil,subprocess,time
+          home=Path('/home/zomorod2')
+          if os.geteuid()==0 or Path.home()!=home or home.is_symlink():raise SystemExit('WRONG_ACCOUNT')
+          if not getattr(shutil.rmtree,'avoids_symlink_attacks',False):raise SystemExit('UNSAFE_RMTREE')
+          source=home/'Saeit-staging/releases'
+          if source.is_symlink() or not source.is_dir():raise SystemExit('INVALID_RELEASE_ROOT')
+          must_keep=['Saeit/manage.py','Saeit/passenger_wsgi.py','Saeit-staging/releases/staff-c153e541e8cf','Saeit-staging/releases/staff-e57127108b06','Saeit-staging/admin-smoke/ab090d03f5bc-38498776878','public_html','mail','mojtaba_personal','private_products']
+          if not all((home/n).exists() for n in must_keep):raise SystemExit('PROTECTED_COMPONENT_MISSING')
+          c=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=15)
+          p=subprocess.run(['ps','-u','zomorod2','-o','args='],capture_output=True,text=True,timeout=15)
+          u=subprocess.run(['uapi','--output=json','PassengerApps','list_applications'],capture_output=True,text=True,timeout=30)
+          if c.returncode or p.returncode or u.returncode or json.loads(u.stdout).get('result',{}).get('status')!=1:raise SystemExit('ACTIVE_REFERENCES_UNREADABLE')
+          refs=c.stdout+'\n'+p.stdout+'\n'+u.stdout
+          targets=[{"name":"staff-0b24975a08ff","bytes":12334353},{"name":"staff-15b10881358f","bytes":12333509},{"name":"staff-309ca9c8dc6f","bytes":12342665},{"name":"staff-97aabfc9d73e","bytes":12335369},{"name":"staff-c7909e732c3e","bytes":12337171},{"name":"staff-ddfd396f53f1","bytes":12342777}]
+          verified=[]
+          for item in targets:
+           name=item['name']
+           if not name.startswith('staff-') or '/' in name or name in ['staff-c153e541e8cf','staff-e57127108b06']:raise SystemExit('NOT_EXACT_ALLOWLIST')
+           root=source/name
+           if root.is_symlink() or not root.is_dir() or os.path.ismount(root):raise SystemExit('BAD_TARGET')
+           if name in refs or str(root) in refs:raise SystemExit('ACTIVE_RELEASE')
+           size=0;files=0;archive_seen=0;latest=0
+           for here,dirs,names in os.walk(str(root),followlinks=False):
+            herep=Path(here)
+            if os.path.ismount(herep) or herep.stat().st_dev!=home.stat().st_dev:raise SystemExit('NESTED_MOUNT')
+            for n in names:
+             file=herep/n
+             if file.is_symlink():continue
+             if not file.is_file():raise SystemExit('SPECIAL_FILE')
+             st=file.stat();size+=st.st_size;files+=1;latest=max(latest,st.st_mtime)
+             low=n.lower()
+             if low.endswith(('.sqlite','.sqlite3','.db','.sql','.pem','.key')):raise SystemExit('DATA_BEARING_RELEASE')
+             if n=='source.tar.gz':
+              archive_seen+=1
+              with tarfile.open(str(file),'r:gz') as arch:
+               for member in arch:
+                if member.name.lower().endswith(('.sqlite3','.db','.sql','.pem','.key')):raise SystemExit('NESTED_ARCHIVE_HAS_DATA')
+           if size!=item['bytes'] or files<100 or archive_seen!=1 or (time.time()-latest)/86400<14:raise SystemExit('RELEASE_CHANGED_OR_RECENT:'+name)
+           verified.append((root,size,name))
+          if len(verified)!=6:raise SystemExit('SIX_ONLY')
+          old=home/'Saeit/backups/zomorodmelal-current-original-theme-20261011.zip'
+          keep=home/'Saeit/backups/zomorodmelal-live-theme-20261011T015315Z.zip'
+          identical=False
+          if old.is_file() and keep.is_file() and not old.is_symlink() and not keep.is_symlink() and old.stat().st_size==14509197 and keep.stat().st_size==14509197:
+           def sha(f):
+            h=hashlib.sha256()
+            with f.open('rb') as stream:
+             for chunk in iter(lambda:stream.read(1024*1024),b''):h.update(chunk)
+            return h.digest()
+           identical=sha(old)==sha(keep)
+          for root,size,name in verified:shutil.rmtree(str(root))
+          if identical:old.unlink()
+          if not all((home/n).exists() for n in must_keep):raise SystemExit('PROTECTED_POSTCHECK')
+          q=subprocess.run(['uapi','--output=json','Quota','get_quota_info'],capture_output=True,text=True,timeout=35)
+          qdata={}
+          if q.returncode==0:
+           try:qdata=json.loads(q.stdout).get('result',{}).get('data',{})
+           except Exception:pass
+          print('CPANEL_STAFF_HISTORY_GUARDED_PURGE='+json.dumps({'old_staff_release_count_deleted':len(verified),'removed_old_staff_content_bytes':sum(v[1] for v in verified),'removed_release_names':[v[2] for v in verified],'duplicate_old_theme_zip_deleted':identical,'duplicate_theme_extra_bytes':14509197 if identical else 0,'quota_used_mb_uapi':qdata.get('megabytes_used'),'quota_limit_mb':qdata.get('megabyte_limit'),'protected_preserved':True},sort_keys=True),flush=True)
+
+          PY
+          echo CPANEL_STAFF_HISTORY_GUARDED_PURGE=PASS
