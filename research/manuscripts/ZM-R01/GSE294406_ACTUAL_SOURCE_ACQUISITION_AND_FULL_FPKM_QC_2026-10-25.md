@@ -89,3 +89,22 @@ Concrete checks: `CTR_R1_FL → GSM8904963`, `eT_R1_FL → GSM8904969`, `CT_R1_F
 **Independent execution verified:** GitHub Actions run https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40174630549 completed **successfully**; job logs explicitly print `mapped_columns: 24` and `unique_GSM: 24`. Artifact **12591802041** includes original source XLSX, original full QC, filtered PCA QC and the new 24-column mapping JSON (expires **2026-11-08**). Reusable code: `research/manuscripts/ZM-R01/analysis/map_fpkm_columns_to_gsm.py`.
 
 **Important boundary:** This proves **metadata label concordance** between the submitter workbook and GEO sample titles, **not** a read-level forensic identity check; definitive identity/batch verification still requires raw sequencing metadata and count-level QC. No gene-level inference or novel biological result has been generated.
+
+### C18 per-sample expression-coverage and FPKM-composition QC — 2026-10-25
+
+**New analysis performed on actual original source bytes in a local isolated research environment.** The original 26,596,634-byte XLSX was recovered from the previously verified source artifact and its SHA256 rechecked as `751c80defdc09b180f6174d6bbb3c7234570e8f15725f4c47cfcc9565b2f7e7b`. A fresh, source-locked per-sample analysis scanned all 105,200 genes × 24 FPKM samples (2,524,800 entries) to quantify expression coverage and FPKM compositional variation; it did **not** infer gene-level differential expression.
+
+| Descriptive metric across 24 samples | Observed |
+|---|---:|
+| Genes with strictly positive FPKM per sample | 61,757–64,248 |
+| Genes with FPKM ≥ 1 per sample | **38,552–41,081** |
+| Fewest FPKM ≥ 1 | TD2_FL: 38,552 |
+| Most FPKM ≥ 1 | CTR_R2_FL: 41,081 |
+| Sum of reported FPKM values per sample | **616,332.954–739,055.826** |
+| Lowest total FPKM | CD2_FL |
+| Highest total FPKM | eC_R2_FL |
+| Within-condition range of FPKM ≥ 1 genes, three replicates | CTR 102; eT 239; eC 94; D 192; CT 188; CD 353; TD 286; CTD 420 |
+
+**Interpretation and limitation:** Expression-coverage distributions and total FPKM are **not equal across samples**, even when within-condition correlations are high. This warrants explicit sample-level sensitivity and normalization review when a valid raw-count workflow becomes available. It is **not** a test of statistical significance, sequencing depth, library size, batch effect, gene regulation or novel biology; FPKM totals are not raw library counts. A difference in the number of genes above an arbitrary FPKM threshold is descriptive, not a DEG finding. No genotype/tissue/stage generalization is permitted.
+
+**Reproducibility:** `research/manuscripts/ZM-R01/analysis/qc_sample_composition.py` verifies original source SHA256 and writes a JSON with per-sample zero fraction, positive-gene count, FPKM ≥ 1 count, median and 99th percentile among positive FPKM values, total FPKM and within-condition ranges. The exact computation was executed locally and produced `GSE294406_sample_composition_QC.json`. The read-only GitHub workflow `.github/workflows/zm-r01-gse294406-acquisition.yml` was extended to rerun this step and include the JSON in its artifact. **A successful NEW independent GitHub Actions run for this C18 step has NOT yet been verified**; do not call it CI-passed until the job log and artifact are inspected. This QC does not remove the raw-count or originality blockers.
