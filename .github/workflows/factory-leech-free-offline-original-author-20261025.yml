@@ -136,11 +136,48 @@ jobs:
             sleep 2
           done
           curl -fsS --max-time 5 http://127.0.0.1:18766/health > /dev/null
-          python3 - "$work/assignment.json" "$work/generated-private.md" <<'PY'
-          import json, pathlib, sys, urllib.request
+          # Reuse the single verified offline server for five substantive sections per run.
+          # Each section is privately prepared, generated, verified and accepted before
+          # the next begins; no manuscript prose enters public GitHub artifacts.
+          for generation_round in 1 2 3 4 5; do
+          if [ "$generation_round" -gt 1 ]; then
+          ssh_vps "PYTHONDONTWRITEBYTECODE=1 python3 -B '$worker' prepare" > "$work/assignment.json"
+          if python3 - "$work/assignment.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1],encoding="utf8"))
+          if d.get("next_chapter") is None:
+              assert d.get("complete_length_only") is True and d.get("total_verified_draft_words",0)>=159000
+              sys.exit(0)
+          assert d["order_id"]=="WO-26102501" and 1<=d["chapter_number"]<=30
+          assert 1<=d["part_number"]<=999 and d["locale"]=="en-GB"
+          sys.exit(1)
+          PY
+          then
+            echo LEECH_OFFLINE_AUTHOR_LENGTH_DONE_AWAITING_INDEPENDENT_QC=true
+            break
+          fi
+          fi
+          echo "LEECH_OFFLINE_BATCH_ROUND=$generation_round"
+          for retry_number in 0 1 2; do
+          LEECH_RETRY_NUMBER="$retry_number" python3 - "$work/assignment.json" "$work/generated-private.md" <<'PY'
+          import json, os, pathlib, sys, urllib.request
           assignment=json.load(open(sys.argv[1],encoding="utf8"))
           if assignment.get("next_chapter") is None:raise SystemExit("LEECH_NO_PENDING_CHAPTER")
+          retry=int(os.environ.get("LEECH_RETRY_NUMBER","0"))
+          plan=assignment.get("section_plan") or []
+          if not isinstance(plan,list) or not plan:
+              raise SystemExit("LEECH_SECTION_PLAN_MISSING")
+          focus=plan[(int(assignment["part_number"])-1+retry)%len(plan)]
           prompt=(
+            "Write a NEW and substantively distinct continuation, not a recap. "
+            "For THIS manuscript segment, concentrate on this specific planned section only: "
+            +json.dumps(focus,ensure_ascii=False)+". "
+            "Explain at least THREE new, concrete, non-overlapping decisions or mechanisms "
+            "specific to the section; use different worked examples from the earlier text. "
+            "Do not repeat definitions, generic openings, regulatory boilerplate, the prior "
+            "worked case, or any twelve-word sequence from preceding chapter content. "
+            "If this is an advanced repeat of a section, deepen into a different technical "
+            "subproblem with new evidence limitations and auditable professional outputs. "
             "Write the next ORIGINAL, coherent, professionally structured textbook section in excellent English. "
             "Target 800-1100 substantive words of prose now. This is a manuscript fragment, not an outline, "
             "not a proposal, not a status report. Fully explain subject-specific mechanisms, "
@@ -172,7 +209,7 @@ jobs:
           pathlib.Path(sys.argv[2]).write_text(body+"\n",encoding="utf8")
           print("LEECH_PRIVATE_GENERATED_TEXT_BYTES="+str(len(body.encode("utf8"))))
           PY
-          ssh_vps "PYTHONDONTWRITEBYTECODE=1 python3 -B '$worker' accept" < "$work/generated-private.md" > "$work/receipt.json"
+          if ssh_vps "PYTHONDONTWRITEBYTECODE=1 python3 -B '$worker' accept" < "$work/generated-private.md" > "$work/receipt.json" 2> "$work/accept-stderr"; then
           python3 - "$work/receipt.json" <<'PY'
           import json,sys
           d=json.load(open(sys.argv[1],encoding="utf8"))
@@ -184,3 +221,17 @@ jobs:
               "private_full_manuscript_assembled":d["full_private_unreviewed_manuscript_assembled"],
               "published":False,"paid_api_cost_usd":0},sort_keys=True))
           PY
+          break
+          fi
+          if ! grep -Fq -e "LEECH_ZERO_COST_SEGMENT_DUPLICATES_PREVIOUS" -e "LEECH_ZERO_COST_SEGMENT_REPETITIVE" "$work/accept-stderr"; then
+            echo LEECH_PRIVATE_RECEIVER_NON_DUPLICATION_FAILURE
+            exit 2
+          fi
+          echo "LEECH_REPETITIVE_SEGMENT_DISCARDED_REGENERATING_ATTEMPT=$retry_number"
+          if [ "$retry_number" -eq 2 ]; then
+            echo LEECH_DUPLICATION_RETRY_EXHAUSTED
+            exit 2
+          fi
+          done
+          done
+          echo LEECH_OFFLINE_BATCH_COMPLETED_WITH_NO_PAID_MODEL_API=true
