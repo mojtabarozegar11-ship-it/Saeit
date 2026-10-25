@@ -1,0 +1,70 @@
+name: cPanel MySQL cleanup capacity and dependency preflight READ ONLY
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - .github/workflows/cpanel-mysql-cleanup-preflight-readonly-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Check backup blockers, FK dependencies and payload compressibility without SQL mutations
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 400s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,json,hashlib,subprocess
+          h=Path('/home/zomorod2')
+          if os.geteuid()==0 or Path.home()!=h or h.is_symlink():raise SystemExit("INVALID_ACCOUNT")
+          stage=h/'Saeit-staging'
+          if not stage.is_dir() or stage.is_symlink():raise SystemExit("STAGING_MISSING")
+          u=subprocess.run(['uapi','--output=json','Mysql','list_databases'],capture_output=True,text=True,timeout=30)
+          dbs=[]
+          if u.returncode==0:
+           try:
+            data=json.loads(u.stdout).get("result",{}).get("data",[])
+            dbs=[x["database"] for x in data if isinstance(x,dict) and x.get("database")]
+           except Exception:pass
+          if len(dbs)!=1:raise SystemExit("DATABASE_SCOPE_NOT_UNIQUE")
+          target_hash=hashlib.sha256(dbs[0].encode()).hexdigest()
+          exe=h/'virtualenv/Saeit-staging/3.11/bin/python'
+          if not exe.is_file() or not os.access(exe,os.X_OK):raise SystemExit("STAGING_INTERPRETER_UNAVAILABLE")
+          probe = "import os,json,hashlib,zlib\nos.environ.setdefault(\"DJANGO_SETTINGS_MODULE\",\"config.settings\")\nos.environ[\"PYTHONDONTWRITEBYTECODE\"]=\"1\"\nout={\"mode\":\"preflight_only\",\"sql_writes\":0,\"mysql_backup_verified\":False}\ntry:\n import django\n django.setup()\n from django.db import connections\n c=connections[\"default\"]\n out[\"engine\"]=c.settings_dict.get(\"ENGINE\",\"unknown\")\n if \"mysql\" not in out[\"engine\"]:raise RuntimeError(\"mysql_engine_not_selected\")\n with c.cursor() as cur:\n  cur.execute(\"SELECT DATABASE()\")\n  schema=cur.fetchone()[0]\n  out[\"schema_match\"]=hashlib.sha256(str(schema).encode()).hexdigest()==os.environ.get(\"TARGET_SCHEMA_SHA\",\"\")\n  if not out[\"schema_match\"]:raise RuntimeError(\"schema_mismatch\")\n  cur.execute(\"SHOW VARIABLES LIKE 'innodb_file_per_table'\")\n  variable=cur.fetchone()\n  out[\"innodb_file_per_table\"]=str(variable[1]) if variable else \"unknown\"\n  cur.execute(\"SELECT COUNT(*) FROM core_factoryartifact WHERE created_by_task_id IS NOT NULL\")\n  out[\"artifacts_using_tasks\"]=int(cur.fetchone()[0])\n  cur.execute(\"SELECT COUNT(*) FROM core_knowledgearticle WHERE source_report_id IS NOT NULL\")\n  out[\"articles_using_reports\"]=int(cur.fetchone()[0])\n  cur.execute(\"SELECT COUNT(*) FROM core_factoryevidence WHERE status='stale' AND task_id IS NOT NULL\")\n  out[\"stale_evidence_tied_to_tasks\"]=int(cur.fetchone()[0])\n  out[\"sampled_payload_compressibility\"]={}\n  cases=[(\"core_agenttask\",\"output_data\",\"status='completed'\"),(\"core_agenttask\",\"input_data\",\"status='completed'\"),(\"core_factoryevidence\",\"details\",\"status='stale'\"),(\"core_report\",\"content\",\"status='draft'\")]\n  for table,field,condition in cases:\n   cur.execute(\"SELECT LEFT(\"+field+\",32768) FROM \"+table+\" WHERE \"+condition+\" AND \"+field+\" IS NOT NULL ORDER BY id DESC LIMIT 20\")\n   vals=[(x[0].encode(\"utf-8\") if isinstance(x[0],str) else bytes(x[0])) for x in cur.fetchall() if x[0] is not None]\n   raw=sum(map(len,vals)); packed=sum(len(zlib.compress(v,6)) for v in vals)\n   out[\"sampled_payload_compressibility\"][table+\".\"+field]={\"samples\":len(vals),\"raw_bytes\":raw,\"compressed_bytes\":packed}\n  out[\"read_only_preflight_passed\"]=True\nexcept Exception as e:\n out[\"error_type\"]=type(e).__name__\n out[\"read_only_preflight_passed\"]=False\nprint(\"MYSQL_CLEANUP_PREFLIGHT=\"+json.dumps(out,sort_keys=True),flush=True)"
+          env=os.environ.copy()
+          env["PYTHONDONTWRITEBYTECODE"]="1"
+          env["PYTHONPATH"]=str(stage)
+          env["TARGET_SCHEMA_SHA"]=target_hash
+          sub=subprocess.run([str(exe),'-B','-c',probe],capture_output=True,text=True,cwd=str(stage),env=env,timeout=180)
+          for line in sub.stdout.splitlines():
+           if line.startswith('MYSQL_CLEANUP_PREFLIGHT='):
+            print(line,flush=True)
+            status=json.loads(line.split('=',1)[1])
+            if not status.get("read_only_preflight_passed"):raise SystemExit("READONLY_PREFLIGHT_NOT_PASSED")
+            break
+          else:raise SystemExit("NO_PREFLIGHT_RESULT")
+          print("MYSQL_CLEANUP_PREFLIGHT_SAFETY=PASS; SQL_MUTATIONS=0",flush=True)
+          PY
