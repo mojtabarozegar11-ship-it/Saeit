@@ -6,7 +6,7 @@ it never monopolizes the minute scheduler while independent review is pending.
 A minute is scheduling cadence, not a promise of scientific completion.
 """
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import fcntl
 import hashlib
 import importlib.util
@@ -150,6 +150,26 @@ def immutable_tick_receipt(area, document):
             pass
         raise
     return str(target.relative_to(area)), hashlib.sha256(payload).hexdigest()
+
+
+def route_private_rework(results, intake_blocker, certified):
+    """Choose a concrete private repair owner, never infer independent approval."""
+    if certified:
+        return None, None, None
+    if intake_blocker:
+        return "intake_integrity", "RESTORE_AND_VALIDATE_SOURCE_WORK_ORDER", "intake"
+    # A reserve violation blocks all further producers, regardless of any
+    # earlier process exit codes. Repair storage without touching customer data.
+    for label, status in results.items():
+        if status == "STORAGE_RESERVE_HOLD":
+            return "storage_capacity", "RESTORE_PRIVATE_2_GIB_RESERVE", label
+    for label, status in results.items():
+        if status.startswith("BLOCKED_") or status.startswith("DEFERRED_"):
+            return label, "REPAIR_OR_CONTINUE_STAGE_FROM_RECEIPT", label
+    # A green process exit does not prove 100x10 independent QA.
+    return ("independent_quality_review",
+            "OBTAIN_VERSION_BOUND_INDEPENDENT_QA1000_AND_VALID_APPROVAL",
+            "independent_quality_review")
 
 
 def index_orders(area):
@@ -389,6 +409,13 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
         blocked = [label for label, status in results.items() if status != "EXECUTED"]
         if not certified and not blocked:
             blocked = ["independent_scientific_review_or_authentic_rework"]
+        repair_owner, repair_request, checkpoint_stage = route_private_rework(
+            results, problem, certified)
+        # This is the earliest review eligibility, not a claim that a minute
+        # timer actually ran or that a prior stage can be safely skipped.
+        earliest_recheck_utc = (
+            (datetime.now(timezone.utc) + timedelta(seconds=60)).isoformat()
+            if not certified else None)
         # Persist a verifiable receipt for the one selected product, including
         # skipped/blocked stages. No stage is represented as independently passed.
         stage_receipts = {}
@@ -414,6 +441,11 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
             "product_version_evidence": "NOT_PROVEN",
             "decision": decision,
             "rework_blockers": blocked,
+            "rework_stage_owner": repair_owner,
+            "repair_request": repair_request,
+            "checkpoint_stage": checkpoint_stage,
+            "checkpoint_is_resumable": False,
+            "earliest_recheck_utc": earliest_recheck_utc,
             "intake_blocker": problem,
             "stage_receipts": stage_receipts,
             "runtime_ms": max(0, round((time.perf_counter() - actual_began) * 1000)),
@@ -429,7 +461,11 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
                        "last_order":order, "last_order_certified":certified,
                        "last_decision":decision, "last_blockers":blocked,
                        "intake_blocker":problem,
-                       "rework_stage_owner":"intake_integrity" if problem else ("independent_quality_review" if not certified else None),
+                       "rework_stage_owner":repair_owner,
+                       "repair_request":repair_request,
+                       "checkpoint_stage":checkpoint_stage,
+                       "checkpoint_is_resumable":False,
+                       "earliest_recheck_utc":earliest_recheck_utc,
                        "required_next_version":"AUTHENTIC_REWORK_VERSION" if not certified else None,
                        "last_cycle_utc":datetime.now(timezone.utc).isoformat(),
                        "stage_results":results, "storage_hold":hold,
@@ -442,7 +478,11 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
                 "tick_receipt_sha256":receipt_sha256,
                 "runtime_ms":receipt_document["runtime_ms"],
                 "intake_blocker":problem,
-                "rework_stage_owner":"intake_integrity" if problem else ("independent_quality_review" if not certified else None),
+                "rework_stage_owner":repair_owner,
+                "repair_request":repair_request,
+                "checkpoint_stage":checkpoint_stage,
+                "checkpoint_is_resumable":False,
+                "earliest_recheck_utc":earliest_recheck_utc,
                 "required_next_version":"AUTHENTIC_REWORK_VERSION" if not certified else None,
                 "certified_to_private_finished_goods":certified,
                 "stages_executed":sum(v=="EXECUTED" for v in results.values()),
