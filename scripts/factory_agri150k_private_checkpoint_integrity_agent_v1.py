@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -43,16 +42,31 @@ def _read_regular(path: Path, *, limit: int) -> bytes:
         os.close(fd)
 
 
-def _gate():
-    path = Path(__file__).with_name("factory_agri150k_english_private_gate_v1.py")
-    if not path.is_file() or path.is_symlink():
-        raise IntegrityBlocked("WORD_COUNT_GATE_MISSING")
-    spec = importlib.util.spec_from_file_location("agri150k_gate", path)
-    if spec is None or spec.loader is None:
-        raise IntegrityBlocked("WORD_COUNT_GATE_UNLOADABLE")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+WORD = re.compile(r"[^\W\d_][\w’'-]*", re.UNICODE)
+
+
+def prose_tokens(markdown):
+    """Byte-for-byte equivalent tokenization contract to AGRI gate-v1."""
+    lines = []
+    fenced = False
+    references = False
+    for raw in markdown.splitlines():
+        s = raw.strip()
+        if s.startswith(("~~~", "\`\`\`")):
+            fenced = not fenced
+            continue
+        if fenced or not s:
+            continue
+        if s.startswith("#"):
+            if re.match(r"^#{1,6}\s+(references|bibliography|sources|works cited)\b", s, re.I):
+                references = True
+            continue
+        if references or s.startswith((">", "|", "http://", "https://")):
+            continue
+        s = re.sub(r"https?://\S+", " ", s)
+        s = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", s)
+        lines.append(s)
+    return [m.group().casefold() for m in WORD.finditer(" ".join(lines))]
 
 
 def audit(private_dir: Path) -> dict:
@@ -82,7 +96,6 @@ def audit(private_dir: Path) -> dict:
     previous = set()
     total = 0
     count_by_chapter = {}
-    gate = _gate()
     for row in chunks:
         if not isinstance(row, dict):
             raise IntegrityBlocked("CHUNK_RECORD_INVALID")
@@ -103,7 +116,7 @@ def audit(private_dir: Path) -> dict:
         if row.get("sha256") != digest or row.get("bytes") != len(raw):
             raise IntegrityBlocked("CHUNK_SHA256_OR_LENGTH_MISMATCH")
         try:
-            tokens = gate.prose_tokens(raw.decode("utf-8"))
+            tokens = prose_tokens(raw.decode("utf-8"))
         except UnicodeDecodeError as exc:
             raise IntegrityBlocked("CHUNK_NOT_UTF8") from exc
         count = len(tokens)
