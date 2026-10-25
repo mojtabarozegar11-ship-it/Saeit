@@ -4,6 +4,13 @@ This module cannot recognize a payment or deliver an asset. Candidates must be
 validated independently against finalized chain body and receipt.
 """
 from datetime import datetime,timedelta
+import fcntl
+import math
+import os
+import stat
+import time
+import urllib.error
+from pathlib import Path
 import json
 import re
 import urllib.parse
@@ -20,25 +27,90 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):
         return None
 
-def fetch_page(url):
-    if not url.startswith(ORIGIN+"/v1/accounts/") or len(url)>2048:
-        raise PaymentHold("Invalid read-only indexer origin")
-    request=urllib.request.Request(url,method="GET",headers={
-        "Accept":"application/json",
-        "User-Agent":"MojPlayWin-TRX-Readonly/1.0",
-    })
+def _paced_slot(authenticated: bool) -> None:
+    """Coordinate low-volume indexer requests across cron and web workers.
+
+    This only writes a private timing token, never invoices, blockchain state,
+    merchant addresses or payment data. External RPC quota may change and
+    HTTP 429 must still fail closed after bounded backoff.
+    """
+    root = Path.home() / ".local" / "share"
+    if root.is_symlink() or not root.is_dir():
+        raise PaymentHold("Private indexer rate-control directory unavailable")
+    path = root / "mpw_trongrid_readonly_rate_gate_v1"
+    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
-        with urllib.request.build_opener(NoRedirect()).open(request,timeout=10) as response:
-            if response.status!=200 or response.headers.get_content_type()!="application/json":
-                raise PaymentHold("Unexpected incoming transfer index response")
-            data=response.read(MAX_BYTES+1)
+        fd = os.open(path, flags, 0o600)
     except OSError as exc:
-        raise PaymentHold("Read-only indexer unavailable") from exc
-    if len(data)>MAX_BYTES:
+        raise PaymentHold("Private indexer rate-control lock unavailable") from exc
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode) or (stat.S_IMODE(os.fstat(fd).st_mode) & 0o077):
+            raise PaymentHold("Unsafe indexer rate-control file")
+        with os.fdopen(fd, "r+", encoding="ascii") as record:
+            fd = -1
+            fcntl.flock(record.fileno(), fcntl.LOCK_EX)
+            raw = record.read(64).strip()
+            try:
+                slot = float(raw) if raw else 0.0
+            except ValueError:
+                slot = 0.0
+            now = time.monotonic()
+            if not math.isfinite(slot) or slot < now - 3600 or slot > now + 30:
+                slot = now
+            delay = max(0.0, slot - now)
+            if delay > 19.0:
+                raise PaymentHold("Read-only indexer rate-control busy")
+            if delay:
+                time.sleep(delay)
+            # A key allows better access; still avoid bursts by default.
+            interval = 1.25 if authenticated else 8.5
+            record.seek(0)
+            record.write(format(time.monotonic() + interval, ".6f"))
+            record.truncate()
+            record.flush()
+            os.fsync(record.fileno())
+    finally:
+        if fd >= 0:
+            os.close(fd)
+
+
+def fetch_page(url):
+    if not url.startswith(ORIGIN + "/v1/accounts/") or len(url) > 2048:
+        raise PaymentHold("Invalid read-only indexer origin")
+    key = os.environ.get("MPW_TRONGRID_API_KEY", "")
+    if key and (len(key) < 8 or len(key) > 256 or
+                not re.fullmatch(r"[A-Za-z0-9_.-]+", key)):
+        raise PaymentHold("Invalid private indexer API key configuration")
+    headers = {"Accept": "application/json",
+               "User-Agent": "MojPlayWin-TRX-Readonly/1.0"}
+    if key:
+        headers["TRON-PRO-API-KEY"] = key
+    request = urllib.request.Request(url, method="GET", headers=headers)
+    data = None
+    for attempt in range(2):
+        _paced_slot(bool(key))
+        try:
+            with urllib.request.build_opener(NoRedirect()).open(request, timeout=10) as response:
+                if response.status != 200 or response.headers.get_content_type() != "application/json":
+                    raise PaymentHold("Unexpected incoming transfer index response")
+                data = response.read(MAX_BYTES + 1)
+            break
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429 and attempt == 0:
+                # One retry, with coordinated backoff; never release payments.
+                continue
+            if exc.code == 429:
+                raise PaymentHold("Read-only indexer rate limited") from exc
+            if exc.code in (401, 403):
+                raise PaymentHold("Read-only indexer authorization unavailable") from exc
+            raise PaymentHold("Read-only indexer unavailable") from exc
+        except OSError as exc:
+            raise PaymentHold("Read-only indexer unavailable") from exc
+    if data is None or len(data) > MAX_BYTES:
         raise PaymentHold("Indexer JSON overflow")
     try:
-        page=json.loads(data)
-    except (ValueError,UnicodeDecodeError) as exc:
+        page = json.loads(data)
+    except (ValueError, UnicodeDecodeError) as exc:
         raise PaymentHold("Unreadable indexer response") from exc
     if type(page) is not dict or page.get("success") is not True or type(page.get("data")) is not list:
         raise PaymentHold("Malformed incoming transaction page")
