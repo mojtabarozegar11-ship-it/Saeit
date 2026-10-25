@@ -57,6 +57,7 @@ function runJungle(choices,random=()=>0,storedBest=null){
 const win=runJungle(Array(12).fill(hint=>hint));
 for(const hazard of ['jump','duck','sidestep'])assert.equal(win.seen.filter(x=>x===hazard).length,4,'every jungle course must balance '+hazard);
 assert.ok(win.stage.innerHTML.includes('Jungle cleared!'),'12 correct jumps should win');
+assert.ok(win.stage.innerHTML.includes('GOLD medal'),'perfect 12-hazard course must award gold');
 assert.equal(win.listeners.has('keydown'),false,'completed jungle runs must release keyboard listeners');
 assert.ok(runJungle([hint=>hint],()=>0,'999999999').stage.innerHTML.includes('Best 0'),'impossible stored jungle records must be rejected');
 assert.ok(runJungle([hint=>hint],()=>0,'180').stage.innerHTML.includes('Best 180'),'legitimate personal records must be retained');
@@ -73,7 +74,7 @@ let cakeNodes={},downloaded='';
 const cakeSandbox={
  stage(html){cakeNodes={'#cakepreview':{innerHTML:''},'#icing':{},'#cakeGreeting':{},
   '[data-action="candle"]':{},'[data-action="cake-remove"]':{},
-  '[data-action="cake-reset"]':{},'[data-action="cake-undo"]':{},'[data-action="cake-download"]':{}};},
+  '[data-action="cake-reset"]':{},'[data-action="cake-undo"]':{},'[data-action="cake-surprise"]':{},'[data-action="cake-download"]':{}};},
  gamebody:{querySelector(sel){return cakeNodes[sel]},querySelectorAll(sel){return sel==='[data-top]'?[{dataset:{top:'🌼'},onclick:null}]:[]}},
  $(sel){return cakeNodes[sel]},
  btn(label,action){return '<button data-action="'+action+'">'+label+'</button>'},
@@ -93,6 +94,11 @@ assert.equal((cakeNodes['#cakepreview'].innerHTML.match(/y="480"/g)||[]).length,
 cakeNodes['[data-action="cake-undo"]'].onclick();
 assert.equal((cakeNodes['#cakepreview'].innerHTML.match(/y="480"/g)||[]).length,1,'undo must restore the design before reset');
 cakeNodes['[data-action="cake-reset"]'].onclick();
+cakeNodes['[data-action="cake-surprise"]'].onclick();
+assert.ok(['#4488cc','#73bc8b','#f2b36d','#ac85e6'].some(c=>cakeNodes['#cakepreview'].innerHTML.includes(c)),'surprise cake must change frosting');
+assert.ok((cakeNodes['#cakepreview'].innerHTML.match(/y="480"/g)||[]).length>=1,'surprise cake must add candles');
+cakeNodes['[data-action="cake-undo"]'].onclick();
+assert.ok(cakeNodes['#cakepreview'].innerHTML.includes('#ff79b8'),'undo must restore original frosting after surprise');
 cakeNodes['[data-action="cake-download"]'].onclick();
 assert.ok(downloaded.includes('#ff79b8'),'reset must restore default icing in exported design');
 // Verify Cake Maker persistence survives a complete UI remount without trusting stored markup.
