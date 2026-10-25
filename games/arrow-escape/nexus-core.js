@@ -111,6 +111,8 @@
     return choices;
   }
   function transition(state, action) {
+    if (!state || !Array.isArray(state.pieces) || !Array.isArray(state.removed) ||
+        !action || typeof action !== 'object') return null;
     if (action.type === 'remove') {
       if (!canExit(action.id, state)) return null;
       return { ...state, removed: [...state.removed, action.id] };
@@ -130,6 +132,8 @@
       state.twistsLeft, state.pieces.map(p => [p.face, p.u, p.v, p.dir].join(':')).join('|')].join('~');
   }
   function solve(levelData, start, maxVisited = 50000) {
+    if (!levelData || !Array.isArray(levelData.pieces) || !Number.isSafeInteger(maxVisited) || maxVisited < 1) return null;
+    maxVisited = Math.min(maxVisited, 100000);
     const state = start || initialState(levelData);
     const visited = new Set();
     function visit(current, path) {
