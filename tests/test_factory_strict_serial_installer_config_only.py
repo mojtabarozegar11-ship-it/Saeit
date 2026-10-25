@@ -76,17 +76,17 @@ class StrictSerialInstallerSafetyTests(unittest.TestCase):
 
     def test_preflight_allows_known_legacy_and_one_valid_serial(self):
         known = ("* * * * * /ops/agri200-autonomous-closed-loop.py "
-                 "# SAEIT_AGRI200_AUTONOMOUS_CLOSED_LOOP_V1\\n")
+                 "# SAEIT_AGRI200_AUTONOMOUS_CLOSED_LOOP_V1\n")
         self.assertEqual(self._run_embedded_cron_preflight(known).returncode, 0)
         serial = ("* * * * * /ops/strict-serial-fullcycle-v1.py "
-                  "# SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025\\n")
+                  "# SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025\n")
         self.assertEqual(self._run_embedded_cron_preflight(serial).returncode, 0)
 
     def test_preflight_rejects_unknown_and_duplicate_minute_producers(self):
         serial = ("* * * * * /ops/strict-serial-fullcycle-v1.py "
-                  "# SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025\\n")
+                  "# SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025\n")
         cases = (
-            ("* * * * * /ops/factory-minute-runner.sh\\n",
+            ("* * * * * /ops/factory-minute-runner.sh\n",
              "UNMARKED_COMPETING_PRODUCER"),
             (serial + serial, "DUPLICATE_MINUTE_MARKER"),
             (serial.replace("* * * * *", "23 * * * *"),
