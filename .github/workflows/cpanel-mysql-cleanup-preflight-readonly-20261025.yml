@@ -66,5 +66,26 @@ jobs:
             if not status.get("read_only_preflight_passed"):raise SystemExit("READONLY_PREFLIGHT_NOT_PASSED")
             break
           else:raise SystemExit("NO_PREFLIGHT_RESULT")
+          backup_candidates=[]
+          roots=[h/'.backups',h/'backup',h/'backups']
+          inspected=0
+          for root in roots:
+           if not root.is_dir() or root.is_symlink():continue
+           for current,dirs,files in os.walk(root,followlinks=False):
+            rel=Path(current).relative_to(root)
+            if len(rel.parts)>=4:dirs.clear()
+            for filename in files:
+             inspected+=1
+             if inspected>100000:break
+             p=Path(current)/filename
+             low=filename.lower()
+             if p.is_symlink() or not p.is_file():continue
+             if low.endswith(('.sql','.sql.gz','.sql.zst','.sql.xz','.sql.bz2','.mysql','.dump')):
+              try:backup_candidates.append(p.stat().st_size)
+              except OSError:pass
+            if inspected>100000:break
+          print("MYSQL_ARCHIVE_LOCAL_INVENTORY="+json.dumps({"scan_roots":len(roots),"items_scanned":inspected,"sql_dump_candidate_count":len(backup_candidates),"sql_dump_candidate_total_bytes":sum(backup_candidates),"complete_verified_mysql_backup":False,"sql_mutations":0},sort_keys=True),flush=True)
+
           print("MYSQL_CLEANUP_PREFLIGHT_SAFETY=PASS; SQL_MUTATIONS=0",flush=True)
           PY
+          timeout 20s ssh -T -F "$d/config" saeit-vps 'df -B1 . | tail -n 1'
