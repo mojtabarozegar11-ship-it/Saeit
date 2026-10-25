@@ -58,4 +58,8 @@ let turned={id:4,face:'front',u:0,v:0,dir:1,path:[[-.4,0],[-.2,0],[0,0]]};
 const copy=JSON.parse(JSON.stringify(turned));
 for(let i=0;i<4;i++) turned=core.twistPiece(turned,0,1);
 assert.deepEqual(turned,copy);
+assert.equal(core.generate(Infinity).level,1,'nonfinite Nexus level must be rejected');
+assert.equal(core.generate(NaN).level,1,'NaN Nexus level must be rejected');
+assert.equal(core.generate(-5).level,1,'negative Nexus level must normalize');
+assert.equal(core.generate(1e30).level,100000,'extreme Nexus level must be bounded');
 console.log('NEXUS_WORM_CORE_QA=PASS',{levels:240,physicalBlockLevels,sourceLevels});
