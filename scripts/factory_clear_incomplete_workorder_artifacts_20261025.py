@@ -26,7 +26,7 @@ ROOT = HOME / "factory-runtime/private/autonomous-product-cycle"
 AREA = ROOT / "production-instructions"
 OPS = HOME / "factory-runtime/operations/production-instructions"
 BACKUPS = HOME / "factory-runtime/operations/backups"
-ORDER_RE = re.compile(r"WO-[0-9]{8}\\Z")
+ORDER_RE = re.compile(r"WO-[0-9]{8}\Z")
 WO_PREFIX = re.compile(r"^(WO-[0-9]{8})(?=$|[-.])")
 PAUSE_MARKERS = (
     "SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025",
