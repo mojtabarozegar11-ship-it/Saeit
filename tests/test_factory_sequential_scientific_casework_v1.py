@@ -76,7 +76,18 @@ class SequentialCaseworkTests(unittest.TestCase):
             self.assertEqual(first["source_attempts"],4)
             self.assertEqual(first["qc1000_approvals"],0)
             self.assertEqual(first["publications"],0)
+            self.assertEqual(first["decision"],"RETURN_TO_PRODUCTION")
+            self.assertRegex(first["source_order_sha256"], r"^[a-f0-9]{64}$")
+            self.assertRegex(first["receipt_sha256"], r"^[a-f0-9]{64}$")
+            self.assertGreaterEqual(first["elapsed_ms"], 0)
             target=root/"production-instructions/stage-02/primary-source-acquisition-v1"
+            receipt_path=root/"production-instructions"/first["receipt_relative_path"]
+            self.assertTrue(receipt_path.is_file())
+            import hashlib
+            self.assertEqual(hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
+                             first["receipt_sha256"])
+            self.assertEqual(json.loads(receipt_path.read_text())["independent_qc_stage"],
+                             "NOT_PERFORMED")
             self.assertEqual(len(list((target/"sequential-casework-v1").glob("*.json"))),1)
             second=step_with_ample_disk(root,http_get=lambda *_: (_ for _ in ()).throw(
                 AssertionError("cached DOIs must not be fetched again")))
@@ -90,6 +101,43 @@ class SequentialCaseworkTests(unittest.TestCase):
             self.assertEqual(len(statuses),3)
             self.assertTrue(all(json.loads(p.read_text())["qc1000_approved"] is False
                                 for p in statuses))
+
+    def test_queue_insertion_before_cursor_does_not_repeat_old_product(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            fixture(root,3)
+            first=step_with_ample_disk(root,max_attempts=0)
+            self.assertEqual(first["selected_order_file"],"WO-00000001--r001.json")
+            inbox=root/"production-instructions/stage-02/primary-fulltext-repair-inbox"
+            new_name="WO-00000000--r001.json"
+            packet=json.loads((inbox/"WO-00000001--r001.json").read_text())
+            packet["order_file"]=new_name
+            (inbox/new_name).write_text(json.dumps(packet))
+            second=step_with_ample_disk(root,max_attempts=0)
+            self.assertEqual(second["selected_order_file"],"WO-00000002--r001.json")
+
+    def test_queue_removal_before_cursor_does_not_repeat_product(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            fixture(root,3)
+            step_with_ample_disk(root,max_attempts=0)
+            second=step_with_ample_disk(root,max_attempts=0)
+            self.assertEqual(second["selected_order_file"],"WO-00000002--r001.json")
+            inbox=root/"production-instructions/stage-02/primary-fulltext-repair-inbox"
+            (inbox/"WO-00000001--r001.json").unlink()
+            third=step_with_ample_disk(root,max_attempts=0)
+            self.assertEqual(third["selected_order_file"],"WO-00000003--r001.json")
+
+    def test_malicious_cursor_identity_fails_closed_without_product_work(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            fixture(root,2)
+            target=root/"production-instructions/stage-02/primary-source-acquisition-v1"
+            target.mkdir()
+            (target/".product-sequential-cursor.json").write_text(json.dumps({
+                "schema":worker.SCHEMA,"next_index":1,"last_order_file":"../secret"}))
+            with self.assertRaisesRegex(ValueError,"CASEWORK_CURSOR_LAST_ORDER_INVALID"):
+                worker.step(root,dry_run=True)
 
     def test_corrupt_one_product_does_not_starve_next_or_change_original(self):
         with tempfile.TemporaryDirectory() as d:
