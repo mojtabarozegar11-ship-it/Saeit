@@ -42,14 +42,23 @@ function runJungle(choices,random=()=>0){
   removeEventListener(event,fn){if(listeners.get(event)===fn)listeners.delete(event)}
  },button(text,fn){return {text,click:fn}}};
  vm.runInNewContext('let jungleCleanup=()=>{};'+jungle+'jungleRunGame(stage);',Object.assign(sandbox,{stage}));
- for(const move of choices){const b=stage.buttons.find(x=>x.text.toLowerCase().startsWith(move));assert.ok(b,'action '+move+' unavailable');b.click()}
- return {stage,listeners};
+ const seen=[];
+ for(const move of choices){
+  const hint=stage.innerHTML.includes('Jump over the log!')?'jump':stage.innerHTML.includes('Duck under the vines!')?'duck':'sidestep';
+  seen.push(hint);
+  const selected=typeof move==='function'?move(hint):move;
+  const b=stage.buttons.find(x=>x.text.toLowerCase().startsWith(selected));
+  assert.ok(b,'action '+selected+' unavailable');b.click();
+ }
+ return {stage,listeners,seen};
 }
-const win=runJungle(Array(12).fill('jump'));
+
+const win=runJungle(Array(12).fill(hint=>hint));
+for(const hazard of ['jump','duck','sidestep'])assert.equal(win.seen.filter(x=>x===hazard).length,4,'every jungle course must balance '+hazard);
 assert.ok(win.stage.innerHTML.includes('Jungle cleared!'),'12 correct jumps should win');
-const lose=runJungle(Array(3).fill('duck'));
+const lose=runJungle(Array(3).fill(hint=>hint==='jump'?'duck':'jump'));
 assert.ok(lose.stage.innerHTML.includes('jungle wins'),'three wrong moves should end run');
-const sidestep=runJungle(Array(12).fill('sidestep'),()=>.99);
+const sidestep=runJungle(Array(12).fill(hint=>hint),()=>.99);
 assert.ok(sidestep.stage.innerHTML.includes('Jungle cleared!'),'twelve sidesteps must clear mud course');
 assert.ok(sidestep.stage.innerHTML.includes('Streak 12'),'perfect course should build a streak');
 console.log('GAME_QUALITY_REGRESSION_PASS: Raham runner, Taniya cake SVG, Prism progress, three JS parsers');
