@@ -42,22 +42,34 @@ jobs:
               raise SystemExit('UNSAFE_MIRROR_ROOT')
           root_device=root.stat().st_dev
           files={}
+          symlinks=0
           for here,dirs,names in os.walk(str(root),followlinks=False):
-              for name in dirs:
+              for name in list(dirs):
                   p=Path(here)/name
-                  if p.is_symlink() or p.lstat().st_dev!=root_device:
-                      raise SystemExit('UNSAFE_BACKUP_TREE_DIRECTORY')
+                  st=p.lstat()
+                  if st.st_dev!=root_device:raise SystemExit('BACKUP_CONTAINS_MOUNT')
+                  if stat.S_ISLNK(st.st_mode):
+                      rel=str(p.relative_to(root))
+                      pathid=hashlib.sha256(rel.encode('utf-8')).hexdigest()
+                      files[pathid]=[0,hashlib.sha256(('link:'+os.readlink(p)).encode('utf-8')).hexdigest()]
+                      dirs.remove(name)
+                      symlinks+=1
               for name in names:
                   p=Path(here)/name
                   st=p.lstat()
-                  if not stat.S_ISREG(st.st_mode) or st.st_dev!=root_device:raise SystemExit('UNSAFE_BACKUP_TREE_FILE')
+                  if st.st_dev!=root_device:raise SystemExit('BACKUP_CONTAINS_MOUNT')
                   rel=str(p.relative_to(root))
                   pathid=hashlib.sha256(rel.encode('utf-8')).hexdigest()
-                  dig=hashlib.sha256()
-                  with p.open('rb') as stream:
-                      for chunk in iter(lambda:stream.read(1024*1024),b''):dig.update(chunk)
-                  files[pathid]=[st.st_size,dig.hexdigest()]
-          print(json.dumps({'count':len(files),'bytes':sum(v[0] for v in files.values()),'files':files,'read_only':True},sort_keys=True))
+                  if stat.S_ISLNK(st.st_mode):
+                      files[pathid]=[0,hashlib.sha256(('link:'+os.readlink(p)).encode('utf-8')).hexdigest()]
+                      symlinks+=1
+                  elif stat.S_ISREG(st.st_mode):
+                      dig=hashlib.sha256()
+                      with p.open('rb') as stream:
+                          for chunk in iter(lambda:stream.read(1024*1024),b''):dig.update(chunk)
+                      files[pathid]=[st.st_size,dig.hexdigest()]
+                  else:raise SystemExit('SPECIAL_BACKUP_FILE')
+          print(json.dumps({'count':len(files),'bytes':sum(v[0] for v in files.values()),'symlinks':symlinks,'files':files,'read_only':True},sort_keys=True))
           PYCP
           timeout 280s ssh -T -F "$d/config" saeit-vps 'PYTHONDONTWRITEBYTECODE=1 python3 -' > "$d/vps-digest.json" <<'PYVP'
           from pathlib import Path
@@ -67,22 +79,34 @@ jobs:
               raise SystemExit('UNSAFE_MIRROR_ROOT')
           root_device=root.stat().st_dev
           files={}
+          symlinks=0
           for here,dirs,names in os.walk(str(root),followlinks=False):
-              for name in dirs:
+              for name in list(dirs):
                   p=Path(here)/name
-                  if p.is_symlink() or p.lstat().st_dev!=root_device:
-                      raise SystemExit('UNSAFE_BACKUP_TREE_DIRECTORY')
+                  st=p.lstat()
+                  if st.st_dev!=root_device:raise SystemExit('BACKUP_CONTAINS_MOUNT')
+                  if stat.S_ISLNK(st.st_mode):
+                      rel=str(p.relative_to(root))
+                      pathid=hashlib.sha256(rel.encode('utf-8')).hexdigest()
+                      files[pathid]=[0,hashlib.sha256(('link:'+os.readlink(p)).encode('utf-8')).hexdigest()]
+                      dirs.remove(name)
+                      symlinks+=1
               for name in names:
                   p=Path(here)/name
                   st=p.lstat()
-                  if not stat.S_ISREG(st.st_mode) or st.st_dev!=root_device:raise SystemExit('UNSAFE_BACKUP_TREE_FILE')
+                  if st.st_dev!=root_device:raise SystemExit('BACKUP_CONTAINS_MOUNT')
                   rel=str(p.relative_to(root))
                   pathid=hashlib.sha256(rel.encode('utf-8')).hexdigest()
-                  dig=hashlib.sha256()
-                  with p.open('rb') as stream:
-                      for chunk in iter(lambda:stream.read(1024*1024),b''):dig.update(chunk)
-                  files[pathid]=[st.st_size,dig.hexdigest()]
-          print(json.dumps({'count':len(files),'bytes':sum(v[0] for v in files.values()),'files':files,'read_only':True},sort_keys=True))
+                  if stat.S_ISLNK(st.st_mode):
+                      files[pathid]=[0,hashlib.sha256(('link:'+os.readlink(p)).encode('utf-8')).hexdigest()]
+                      symlinks+=1
+                  elif stat.S_ISREG(st.st_mode):
+                      dig=hashlib.sha256()
+                      with p.open('rb') as stream:
+                          for chunk in iter(lambda:stream.read(1024*1024),b''):dig.update(chunk)
+                      files[pathid]=[st.st_size,dig.hexdigest()]
+                  else:raise SystemExit('SPECIAL_BACKUP_FILE')
+          print(json.dumps({'count':len(files),'bytes':sum(v[0] for v in files.values()),'symlinks':symlinks,'files':files,'read_only':True},sort_keys=True))
           PYVP
           python3 - "$d/cpanel-digest.json" "$d/vps-digest.json" <<'PYCMP'
           import sys,json
@@ -92,8 +116,8 @@ jobs:
           same=[k for k,v in fa.items() if fb.get(k)==v]
           different=[k for k,v in fa.items() if k in fb and fb[k]!=v]
           absent=[k for k in fa if k not in fb]
-          report={'cpanel_file_count':a['count'],'cpanel_content_bytes':a['bytes'],
-          'vps_file_count':b['count'],'vps_content_bytes':b['bytes'],
+          report={'cpanel_file_count':a['count'],'cpanel_content_bytes':a['bytes'],'cpanel_symlinks':a['symlinks'],
+          'vps_file_count':b['count'],'vps_content_bytes':b['bytes'],'vps_symlinks':b['symlinks'],
           'exact_mirror_file_count':len(same),'exact_mirror_content_bytes':sum(fa[k][0] for k in same),
           'changed_content_file_count':len(different),'changed_content_bytes':sum(fa[k][0] for k in different),
           'missing_from_vps_file_count':len(absent),'missing_from_vps_bytes':sum(fa[k][0] for k in absent),
