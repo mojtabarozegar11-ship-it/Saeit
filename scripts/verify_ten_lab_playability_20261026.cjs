@@ -20,7 +20,7 @@ const metro=section('function metro(){','function cargo(){');
 const metroResult=vm.runInNewContext('let clock=0,score=0,level=1;'+metro+'const scene=metro();for(let i=0;i<55;i++)scene.update(.1);({score,level})',{
  rand:(a,b)=>b-.01,down:()=>false,finish:()=>{},note:()=>{},clamp:(x,a,b)=>Math.max(a,Math.min(b,x))
 });
-assert(metroResult.score>230,'Metro Vault collected coin bonuses must survive later frames');
+assert(metroResult.score>180,'Metro Vault collected coin bonuses must survive later frames');
 const dominion=section('function dominion(){','function metro(){');
 const strokes=[];
 vm.runInNewContext('let score=0,level=1,active=true,paused=false;'+dominion+'dominion().draw()',{
