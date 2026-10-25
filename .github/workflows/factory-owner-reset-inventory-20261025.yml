@@ -104,6 +104,35 @@ jobs:
               elif p.is_dir():back_kind['directory']+=1
               elif p.is_file():back_kind['file']+=1
               else:back_kind['special']+=1
+          import datetime as dt
+          cron_markers=[]
+          for line in active:
+              m=re.findall(r'SAEIT_[A-Z0-9_]+|MPW_[A-Z0-9_]+|ASTRA_[A-Z0-9_]+',line)
+              cron_markers.append(m[-1] if m else 'UNMARKED_OR_OTHER')
+          process_scripts=collections.Counter()
+          for line in processes:
+              names=re.findall(r'(?:factory|mpw|saeit|vps)_[a-z0-9_]+\.py',line)
+              process_scripts[names[-1] if names else 'UNKNOWN_FACTORY_PATH_PROCESS']+=1
+          backup_classes=collections.Counter()
+          backup_recent=collections.Counter()
+          for p in back_children:
+              name=p.name
+              if name.startswith('native-master-'):family='native-master'
+              elif 'factory' in name:family='other-factory-marked'
+              elif 'rollback' in name:family='rollback'
+              elif 'stage' in name:family='stage'
+              elif 'qc' in name or 'quality' in name:family='quality'
+              else:family='unclassified'
+              backup_classes[family]+=1
+              if p.stat().st_mtime > (dt.datetime.now(dt.timezone.utc).timestamp()-86400):
+                  backup_recent[family]+=1
+          print('OWNER_RESET_DEPENDENCY_DETAIL='+json.dumps({
+             'cron_markers':cron_markers,
+             'factory_process_script_classes':dict(process_scripts),
+             'backup_name_classes':dict(backup_classes),
+             'backup_modified_within_24h':dict(backup_recent),
+             'no_mutations':True
+          },sort_keys=True))
           print('OWNER_RESET_FORENSIC_READ_ONLY='+json.dumps({
              'order_files':len(orders),'order_sha256':dig.hexdigest(),
              'order_statuses':dict(status),'order_origins':origin.most_common(15),
