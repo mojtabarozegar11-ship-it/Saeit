@@ -61,4 +61,26 @@ assert.ok(lose.stage.innerHTML.includes('jungle wins'),'three wrong moves should
 const sidestep=runJungle(Array(12).fill(hint=>hint),()=>.99);
 assert.ok(sidestep.stage.innerHTML.includes('Jungle cleared!'),'twelve sidesteps must clear mud course');
 assert.ok(sidestep.stage.innerHTML.includes('Streak 12'),'perfect course should build a streak');
+// Exercise the actual Cake Maker UI callbacks, not only its SVG serializer.
+const cakeUI=between(tan,'function mountCake(){','function mountPet(){');
+let cakeNodes={},downloaded='';
+const cakeSandbox={
+ stage(html){cakeNodes={'#cakepreview':{innerHTML:''},'#icing':{},'#cakeGreeting':{},
+  '[data-action="candle"]':{},'[data-action="cake-remove"]':{},
+  '[data-action="cake-reset"]':{},'[data-action="cake-download"]':{}};},
+ gamebody:{querySelector(sel){return cakeNodes[sel]},querySelectorAll(sel){return sel==='[data-top]'?[{dataset:{top:'🌼'},onclick:null}]:[]}},
+ $(sel){return cakeNodes[sel]},
+ btn(label,action){return '<button data-action="'+action+'">'+label+'</button>'},
+ say(){},downloadSvg(name,svg){downloaded=svg}
+};
+vm.runInNewContext(cake+cakeUI+'mountCake();',cakeSandbox);
+cakeNodes['[data-action="candle"]'].onclick();
+cakeNodes['[data-action="candle"]'].onclick();
+assert.equal((cakeNodes['#cakepreview'].innerHTML.match(/y="480"/g)||[]).length,2,'candle additions must update preview');
+cakeNodes['[data-action="cake-remove"]'].onclick();
+assert.equal((cakeNodes['#cakepreview'].innerHTML.match(/y="480"/g)||[]).length,1,'remove candle must update preview');
+cakeNodes['[data-action="cake-reset"]'].onclick();
+assert.equal((cakeNodes['#cakepreview'].innerHTML.match(/y="480"/g)||[]).length,0,'start over must reset all candles');
+cakeNodes['[data-action="cake-download"]'].onclick();
+assert.ok(downloaded.includes('#ff79b8'),'reset must restore default icing in exported design');
 console.log('GAME_QUALITY_REGRESSION_PASS: Raham runner, Taniya cake SVG, Prism progress, three JS parsers');
