@@ -135,3 +135,16 @@ The following four-step collection is **free public documentation in this GitHub
 - **Research collaborators:** [Agricultural field-trial preregistration template](docs/marketing/agricultural-field-trial-preregistration-template-20261025.md) — experimental unit, randomization, outcomes, statistical plan, integrity and amendments. [Scientific profile](https://mojplaywin.com/mojtaba.roozegar/resume/?utm_source=github&utm_medium=research&utm_campaign=field_trial_20261025&utm_content=readme).
 
 The links are source-attributed for measurement if analytics are configured. No click, sale, live checkout or social engagement is asserted.
+
+## New practical buyer, game and research resources — 25 October 2026 (08:19 Tehran)
+
+These **six new public GitHub resources** are freely available, distinct from existing live-site tools, and are not represented as social-network posts or new website deployments. Verify all product details and prices on the live store before purchase.
+
+- [Player interview and observation kit](docs/marketing/resources/game-player-research-interview-kit-20261025.md) — voluntary research protocol, neutral questions and evidence-based issue severity. [Games site](https://mojplaywin.com/games/?utm_source=github&utm_medium=resource_directory&utm_campaign=player_research_20261025).
+- [Digital-product license comparison worksheet](docs/marketing/resources/digital-product-license-comparison-worksheet-20261025.md) — practical buyer checklist for commercial rights, modification, redistribution and support. [Official store](https://mojplaywin.com/store/?utm_source=github&utm_medium=resource_directory&utm_campaign=license_clarity_20261025).
+- [Game retention cohort measurement CSV](docs/marketing/resources/game-retention-cohort-measurement-20261025.csv) — editable D1/D7/D30 cohort formulas; zeroes are placeholders, not measured retention.
+- [Ethical UTM attribution quality checklist](docs/marketing/resources/utm-attribution-quality-checklist-20261025.md) — link conventions, privacy safeguards and independently confirmed conversion definitions.
+- [Chess training error taxonomy](docs/marketing/resources/chess-training-error-taxonomy-20261025.md) — eight prioritized error classes, game-review workflow and comparable weekly metrics. [Storefront](https://mojplaywin.com/store/?utm_source=github&utm_medium=resource_directory&utm_campaign=chess_error_taxonomy_20261025).
+- [Research data dictionary CSV template](docs/marketing/resources/research-data-dictionary-template-20261025.csv) — transparent variable definitions, units, validation and privacy classification. [Research profile](https://mojplaywin.com/mojtaba.roozegar/?utm_source=github&utm_medium=resource_directory&utm_campaign=research_dictionary_20261025).
+
+**Measurement disclosure:** publication is confirmed by public repository commits, not by measured visits, leads, purchases, game retention, research outcomes, or publication in independent social accounts. No use of prohibited social accounts is authorized.
