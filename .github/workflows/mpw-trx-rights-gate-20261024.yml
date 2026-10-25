@@ -1,0 +1,27 @@
+name: MojPlayWin TRX explicit rights gate regression (source only)
+on:
+  push:
+    branches: [fix/mpw-trx-rights-gates-20261024]
+    paths:
+      - services/mpw_trx_commercial_context.py
+      - services/mpw_trx_public_pages.py
+      - services/mpw_trx_commercial_web.py
+      - tests/test_mpw_trx_rights_gate_20261024.py
+      - .github/workflows/mpw-trx-rights-gate-20261024.yml
+  pull_request:
+    branches: [release/mpw-public-trx-20261023]
+permissions: {contents: read}
+jobs:
+  nonfinancial-rights-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Prove public and invoice issuance fails closed without explicit rights
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_trx_rights_gate_20261024 -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile services/mpw_trx_public_pages.py services/mpw_trx_commercial_web.py services/mpw_trx_commercial_context.py
+          echo 'MPW_NEW_TRX_INVOICE_REQUIRES_EXPLICIT_RIGHTS=PASS'
+          echo 'PRODUCTION_PAYMENT_CHANGES=0; LIVE_RELEASE=0'
