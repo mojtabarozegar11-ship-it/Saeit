@@ -25,7 +25,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s = Path("scripts/factory_leech_vps_resource_guarded_author_20261025.py").read_text()
-          for condition in ('"stream": True', 'now - start > 775',
+          for condition in ('"stream": True', 'now - start > 1000',
                             'fcntl.LOCK_EX | fcntl.LOCK_NB',
                             'SAFE_START_AVAILABLE_MIB = 2700',
                             'STOP_AVAILABLE_MIB = 1250',
