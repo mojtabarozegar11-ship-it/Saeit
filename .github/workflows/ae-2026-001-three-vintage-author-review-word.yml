@@ -35,7 +35,7 @@ jobs:
               assert phrase.lower() in t.lower(), phrase
           assert 'The 2024 archive did not contain comparable 2023' in t
           assert '2000–2023 is not three-vintage estimable' in t
-          assert 'not a submitted journal article' in t
+          assert '**not** an accepted or submitted journal article' in t
           review=Path('research/manuscripts/AE-2026-001/AE-2026-001_THREE_VINTAGE_FIXED_COHORT_INDEPENDENT_AI_REVIEW_2026-10-26.md')
           assert review.is_file()
           print('SOURCE LOCKED; ABSTRACT WORDS',len(abstract.split()),'SHA256',hashlib.sha256(t.encode()).hexdigest())
