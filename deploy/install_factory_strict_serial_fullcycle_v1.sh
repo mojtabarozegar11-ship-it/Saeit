@@ -3,6 +3,12 @@
 set -euo pipefail
 umask 077
 test "$#" -eq 1
+# Explicit environment authorization is required before any private file,
+# crontab, or executable is modified. A CI green check is not authorization.
+if [ "${SAEIT_QC1000_INSTALL_APPROVED:-}" != "1" ]; then
+  echo STRICT_SERIAL_INSTALL_APPROVAL_REQUIRED >&2
+  exit 1
+fi
 source_root="$1"
 base='/home/githubops/factory-runtime'
 ops="$base/operations/production-instructions"
@@ -185,12 +191,11 @@ if pgrep -u githubops -f '/(agri200-autonomous-closed-loop|stage2-literature-sco
   echo LEGACY_AGRI_WORKER_STILL_RUNNING_RETRY_WHEN_QUIESCENT >&2
   exit 1
 fi
-# Now run exactly one bounded private product pass. Failure restores the prior
-# crontab and worker files; no QC approvals or storefront writes are invented.
-/usr/bin/timeout 56s "$python" -B "$ops/strict-serial-fullcycle-v1.py" \
-  --factory-private "$private" --operations "$ops" --require-scheduler-scope
+# Installation configures the protected VPS-local minute scheduler only.
+# A real product tick must happen through cron, not the installer. Neither
+# crontab presence nor a successful installer proves the next tick executed.
 rm -f -- "$temp_cron"
 complete=1
-echo STRICT_SERIAL_ACTIVE_ONE_ORDER_UNTIL_AUTHENTIC_QC1000
+echo STRICT_SERIAL_CRON_CONFIGURED_RUNTIME_NOT_VERIFIED
 echo PRIVATE_WAREHOUSE_ONLY_NO_UNVERIFIED_SITE_RELEASE
 echo "ROLLBACK_CRON=$backup/crontab.before"
