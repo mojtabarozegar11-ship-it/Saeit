@@ -193,5 +193,61 @@ class StrictSerialTests(unittest.TestCase):
             self.assertTrue(final["all_complete"])
 
 
+    def test_missing_intake_returns_precise_rework_and_rotates(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, ops = workspace(Path(folder))
+            state = root / "production-instructions/stage-06/strict-serial-active-v1.json"
+            state.write_text(json.dumps({"schema":cycle.SCHEMA,
+                                         "active_order":"WO-00000603", "index":2, "ticks":0}))
+            def forbidden(*args, **kwargs):
+                raise AssertionError("invalid intake must never run a producer")
+            result = cycle.tick(root, ops, runner=forbidden,
+                                disk_usage=lambda _:Disk(), monotonic=lambda:0)
+            self.assertEqual(result["processed_order"], "WO-00000603")
+            self.assertEqual(result["decision"], "RETURN_TO_PRODUCTION")
+            self.assertEqual(result["rework_stage_owner"], "intake_integrity")
+            self.assertIn("UNSAFE_OR_MISSING_SERIAL_EVIDENCE", result["intake_blocker"])
+            self.assertEqual(result["stage_results"]["strict_qc"], "SKIPPED_INVALID_INTAKE")
+            self.assertEqual(result["stages_executed"], 0)
+            self.assertEqual(result["active_order_after_cycle"], "WO-00000604")
+            self.assertFalse(result["certified_to_private_finished_goods"])
+            persisted = json.loads(state.read_text())
+            self.assertEqual(persisted["active_order"], "WO-00000604")
+            self.assertEqual(persisted["last_decision"], "RETURN_TO_PRODUCTION")
+            self.assertEqual(persisted["intake_blocker"], result["intake_blocker"])
+
+    def test_corrupt_intake_does_not_block_next_valid_product(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, ops = workspace(Path(folder))
+            first_path = root / "production-instructions/orders/WO-00000601.json"
+            first_path.write_text('{"id":"WO-00000601","status":"issued","fingerprint":"INVALID"}')
+            calls = []
+            def run(argv, **kwargs):
+                calls.append(argv)
+                return Successful()
+            first = cycle.tick(root, ops, runner=run,
+                               disk_usage=lambda _:Disk(), monotonic=lambda:0)
+            self.assertEqual(first["decision"], "RETURN_TO_PRODUCTION")
+            self.assertIn("STAGE1_WORK_ORDER_INVALID", first["intake_blocker"])
+            self.assertEqual(first["active_order_after_cycle"], "WO-00000602")
+            self.assertEqual(calls, [])
+            second = cycle.tick(root, ops, runner=run,
+                                disk_usage=lambda _:Disk(), monotonic=lambda:0)
+            self.assertEqual(second["processed_order"], "WO-00000602")
+            self.assertEqual(second["stages_executed"], len(cycle.STAGES))
+            self.assertEqual(len(calls), len(cycle.STAGES))
+            self.assertFalse(second["certified_to_private_finished_goods"])
+
+    def test_dry_run_missing_intake_remains_read_only(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, ops = workspace(Path(folder))
+            (root / "production-instructions/orders/WO-00000601.json").unlink()
+            result = cycle.tick(root, ops, dry_run=True, disk_usage=lambda _:Disk())
+            self.assertIsNotNone(result["intake_blocker"])
+            self.assertFalse(result["certified"])
+            self.assertFalse((ops / ".strict-serial-fullcycle.lock").exists())
+            self.assertFalse((root / "production-instructions/stage-06/strict-serial-active-v1.json").exists())
+
+
 if __name__=="__main__":
     unittest.main()
