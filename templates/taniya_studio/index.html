@@ -119,6 +119,8 @@ Total output lines: 1
 function mountCake(){
  let icing='#ff79b8',topping='🍓',candles=0,greeting='My celebration cake';
  const storageKey='taniya-cake-design-v1';
+ const history=[];
+ function remember(){history.push({icing,topping,candles,greeting});if(history.length>20)history.shift()}
  try{const raw=localStorage.getItem(storageKey);if(raw&&raw.length<512){const d=JSON.parse(raw);if(d&&typeof d==='object'&&!Array.isArray(d)){
   if(typeof d.icing==='string'&&/^#[0-9a-f]{6}$/i.test(d.icing))icing=d.icing;
   if(['🍓','🌼','🍬'].includes(d.topping))topping=d.topping;
@@ -133,7 +135,7 @@ function mountCake(){
    '<button class="game-action" type="button" data-top="🌼">🌼 flowers</button>'+
    '<button class="game-action" type="button" data-top="🍬">🍬 sweets</button></div>'+
    '<div class="choice-row"><label class="game-action">Card message <select id="cakeGreeting" aria-label="Choose card greeting"><option>My celebration cake</option><option>Happy Birthday</option><option>Congratulations</option><option>Just Because</option></select></label></div>'+ 
-   '<div class="game-actions">'+btn('Add a candle 🕯️','candle')+btn('Remove last candle','cake-remove')+btn('Download this cake card','cake-download')+btn('Start over','cake-reset')+'</div>'+
+   '<div class="game-actions">'+btn('Add a candle 🕯️','candle')+btn('Remove last candle','cake-remove')+btn('Download this cake card','cake-download')+btn('Undo last edit','cake-undo')+btn('Start over','cake-reset')+'</div>'+
    '<p class="game-message" aria-live="polite">Your design is saved in the downloaded SVG card.</p>');
   const preview=$('#cakepreview',gamebody);
   function renderPreview(){preview.innerHTML='<svg viewBox="150 400 600 620" width="230" height="230" aria-hidden="true">'+cakeCardMarkup(icing,topping,candles,greeting)+'</svg>';
@@ -141,12 +143,13 @@ function mountCake(){
   }
   renderPreview();
   $('#cakeGreeting',gamebody).value=greeting;
-  $('#icing',gamebody).oninput=e=>{icing=e.target.value;renderPreview()};
-  $('#cakeGreeting',gamebody).onchange=e=>{greeting=e.target.value;renderPreview();say('Your card greeting is updated.')};
-  gamebody.querySelectorAll('[data-top]').forEach(b=>b.onclick=()=>{topping=b.dataset.top;renderPreview();say('Topping selected. Add candles or download your cake.')});
-  gamebody.querySelector('[data-action="candle"]').onclick=()=>{if(candles>=12){say('Your cake already has twelve candles.');return}candles++;renderPreview();say(candles+' candle'+(candles===1?'':'s')+' added.')};
-  gamebody.querySelector('[data-action="cake-remove"]').onclick=()=>{if(candles===0){say('No candles to remove yet.');return}candles--;renderPreview();say(candles+' candles remain.')};
-  gamebody.querySelector('[data-action="cake-reset"]').onclick=()=>{icing='#ff79b8';topping='🍓';candles=0;greeting='My celebration cake';draw();say('A fresh cake is ready to decorate.')};
+  $('#icing',gamebody).oninput=e=>{remember();icing=e.target.value;renderPreview()};
+  $('#cakeGreeting',gamebody).onchange=e=>{remember();greeting=e.target.value;renderPreview();say('Your card greeting is updated.')};
+  gamebody.querySelectorAll('[data-top]').forEach(b=>b.onclick=()=>{remember();topping=b.dataset.top;renderPreview();say('Topping selected. Add candles or download your cake.')});
+  gamebody.querySelector('[data-action="candle"]').onclick=()=>{if(candles>=12){say('Your cake already has twelve candles.');return}remember();candles++;renderPreview();say(candles+' candle'+(candles===1?'':'s')+' added.')};
+  gamebody.querySelector('[data-action="cake-remove"]').onclick=()=>{if(candles===0){say('No candles to remove yet.');return}remember();candles--;renderPreview();say(candles+' candles remain.')};
+  gamebody.querySelector('[data-action="cake-reset"]').onclick=()=>{remember();icing='#ff79b8';topping='🍓';candles=0;greeting='My celebration cake';draw();say('A fresh cake is ready to decorate.')};
+  gamebody.querySelector('[data-action="cake-undo"]').onclick=()=>{const previous=history.pop();if(!previous){say('Nothing to undo yet.');return}({icing,topping,candles,greeting}=previous);draw();say('Your last edit was undone.')};
   gamebody.querySelector('[data-action="cake-download"]').onclick=()=>{downloadSvg('taniya-custom-cake-card',cakeCardMarkup(icing,topping,candles,greeting));say('Your customized cake card has been downloaded.')};
  }
  draw();
