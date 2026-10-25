@@ -10,6 +10,7 @@ on:
       - research/manuscripts/ZM-R01/analysis/audit_fpkm_matrix.py
       - research/manuscripts/ZM-R01/analysis/exploratory_filtered_fpkm_qc.py
       - research/manuscripts/ZM-R01/analysis/map_fpkm_columns_to_gsm.py
+      - research/manuscripts/ZM-R01/analysis/qc_sample_composition.py
   pull_request:
     branches:
       - main
@@ -20,6 +21,7 @@ on:
       - research/manuscripts/ZM-R01/analysis/audit_fpkm_matrix.py
       - research/manuscripts/ZM-R01/analysis/exploratory_filtered_fpkm_qc.py
       - research/manuscripts/ZM-R01/analysis/map_fpkm_columns_to_gsm.py
+      - research/manuscripts/ZM-R01/analysis/qc_sample_composition.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -40,7 +42,7 @@ jobs:
       - name: Install only required public XLSX reader
         run: python -m pip install --disable-pip-version-check openpyxl==3.1.5 numpy==2.1.3
       - name: Compile acquisition code
-        run: python -m py_compile research/manuscripts/ZM-R01/analysis/fetch_and_audit_gse294406.py research/manuscripts/ZM-R01/analysis/audit_fpkm_matrix.py research/manuscripts/ZM-R01/analysis/exploratory_filtered_fpkm_qc.py research/manuscripts/ZM-R01/analysis/map_fpkm_columns_to_gsm.py
+        run: python -m py_compile research/manuscripts/ZM-R01/analysis/fetch_and_audit_gse294406.py research/manuscripts/ZM-R01/analysis/audit_fpkm_matrix.py research/manuscripts/ZM-R01/analysis/exploratory_filtered_fpkm_qc.py research/manuscripts/ZM-R01/analysis/map_fpkm_columns_to_gsm.py research/manuscripts/ZM-R01/analysis/qc_sample_composition.py
       - name: Download GEO original workbook and produce source checksum
         run: |
           python research/manuscripts/ZM-R01/analysis/fetch_and_audit_gse294406.py \
@@ -62,6 +64,11 @@ jobs:
             /tmp/zm-r01-gse294406/GSE294406_FPKM_all_treatments.xlsx \
             research/manuscripts/ZM-R01/GSE294406_24_SAMPLE_FACTORIZED_MANIFEST_2026-10-25.csv \
             --output /tmp/zm-r01-gse294406/GSE294406_column_to_GSM_metadata_map.json
+      - name: Audit per-sample expressed gene coverage and FPKM composition (descriptive, NO DEG)
+        run: |
+          python research/manuscripts/ZM-R01/analysis/qc_sample_composition.py \
+            /tmp/zm-r01-gse294406/GSE294406_FPKM_all_treatments.xlsx \
+            --output /tmp/zm-r01-gse294406/GSE294406_sample_composition_QC.json
       - name: Preserve original data privately in Actions artifact (never commit large file)
         if: success()
         uses: actions/upload-artifact@v4
