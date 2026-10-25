@@ -1,0 +1,57 @@
+name: Zomorod Orbital V6 Lighthouse quality audit
+on:
+  push:
+    branches: [zomorod/orbital-v5-safe-release-20261018]
+    paths: [".github/workflows/zomorod-orbital-v6-lighthouse.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate production preview URL is online
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://zomorodmelal.ir/__zm_orbital_v6_preview_20261018/"
+          status="$(curl -L -sS --max-time 35 -o "$RUNNER_TEMP/v5.preview" -w '%{http_code}' "$url" || true)"
+          echo "V5_PREVIEW_HTTP=$status"
+          test "$status" = 200
+          grep -Fq 'id="orbit-shelves"' "$RUNNER_TEMP/v5.preview"
+      - name: Audit real web performance, accessibility, best practices, SEO
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://zomorodmelal.ir/__zm_orbital_v6_preview_20261018/"
+          npx --yes lighthouse@12.8.2 "$url" --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage" --output=json --output-path="$RUNNER_TEMP/lighthouse-mobile.json" --quiet
+          npx --yes lighthouse@12.8.2 "$url" --preset=desktop --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage" --output=json --output-path="$RUNNER_TEMP/lighthouse-desktop.json" --quiet
+          python3 - <<'PY'
+          import json,os
+          for kind in ("mobile","desktop"):
+              p=os.path.join(os.environ["RUNNER_TEMP"],f"lighthouse-{kind}.json")
+              r=json.load(open(p))
+              scores={key:int(round(r["categories"][key]["score"]*100)) for key in ("performance","accessibility","best-practices","seo")}
+              print(f"LH_{kind.upper()}={scores}")
+              issues=[(k,v) for k,v in r["audits"].items() if isinstance(v.get("score"),(float,int)) and v["score"]<0.999 and (v.get("scoreDisplayMode")=="numeric" or v.get("scoreDisplayMode")=="binary")]
+              for k,v in sorted(issues,key=lambda z:z[1].get("score",0)):
+                  print("LH_ISSUE",kind,k,"score=",v.get("score"),"value=",v.get("displayValue",""),"title=",v.get("title",""))
+                  if k in ("aria-prohibited-attr","label-content-name-mismatch"):
+                      for item in (v.get("details") or {}).get("items",[])[:12]:
+                          print("LH_ELEMENT",kind,k,str(item.get("node",{}).get("snippet",""))[:420],str(item.get("node",{}).get("selector",""))[:160])
+              for metric in ("first-contentful-paint","largest-contentful-paint","total-blocking-time","cumulative-layout-shift","speed-index"):
+                  print("LH_METRIC",kind,metric,r["audits"][metric].get("displayValue","?"))
+              with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as out:
+                  out.write(f"## {kind}\n")
+                  for key,score in scores.items():out.write(f"- {key}: **{score}/100**\n")
+          PY
+      - name: Preserve audit report artifacts for future improvements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-v6-lighthouse
+          path: ${{ runner.temp }}/lighthouse-*.json
+          if-no-files-found: ignore
+          retention-days: 7
