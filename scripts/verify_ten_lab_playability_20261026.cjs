@@ -5,7 +5,7 @@ const assert=require('node:assert/strict');
 const src=fs.readFileSync('site_releases/mojplaywin/ten-lab-20261023/assets/arcade.js','utf8');
 new vm.Script(src,{filename:'ten-lab-arcade.js'});
 function section(start,end){const a=src.indexOf(start),b=src.indexOf(end,a+start.length);assert(a>=0&&b>a,'missing runtime '+start);return src.slice(a,b)}
-const input=section('function inputKey(k){','function down(id){');
+const input=section('function inputKey(k){',"$('start').addEventListener('click',start);");
 for(const [slug,expected] of [['grid-dominion',0],['lexicon-sprint',0],['metro-vault',1]]){
  const result=vm.runInNewContext('let active=true,paused=false,calls=0,nav=0;const slug='+JSON.stringify(slug)+';function action(){calls++}const scene={key(){nav++}};'+input+'inputKey("ArrowUp");({calls,nav})');
  assert.equal(result.calls,expected,slug+' ArrowUp must not trigger an unintended game action');
