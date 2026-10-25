@@ -1,0 +1,83 @@
+name: Private leech-farm book completion and prepublication integrity gate
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_leech_prepublish_gate_20261025.py
+      - tests/test_factory_leech_prepublish_gate_20261025.py
+      - .github/workflows/factory-leech-private-prepublication-gate-20261025.yml
+  schedule:
+    - cron: '13 * * * *'
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: owner-leech-private-prepublication-gate-20261025
+  cancel-in-progress: false
+jobs:
+  assert-fail-closed-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Check private book integrity verifier and safe final-assembly recovery
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/factory_leech_prepublish_gate_20261025.py
+          python3 -B -m unittest discover -s tests -p test_factory_leech_prepublish_gate_20261025.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path("scripts/factory_leech_prepublish_gate_20261025.py").read_text()
+          assert "publication_authorized" in code and "quality1000_approved" in code
+          assert "scientific_content_approved" in code
+          assert "w.save_once(book, expected)" in code
+          assert "paid_api_cost_usd" in code
+          print("LEECH_PREPUBLICATION_ZERO_COST_STATIC_QA=passed")
+          PY
+  execute-private-book-gate:
+    needs: assert-fail-closed-gate
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.event_name != 'push' || contains(github.event.head_commit.message, '[owner-leech-prepublish-gate-20261025]'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Safely ensure full private assembly and mechanical QC without any release
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          work="$RUNNER_TEMP/leech-private-finalization"
+          install -d -m 700 "$work"
+          trap 'rm -f -- "$work/key"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 "$@"
+          }
+          ops="/home/githubops/factory-runtime/operations/production-instructions"
+          gate="$ops/leech-prepublication-gate.py"
+          author="$ops/leech-professional-author.py"
+          ssh_vps "test \"\$(id -un)\" = githubops && test -d '$ops' && test -f '$author' && test ! -L '$gate'"
+          ssh_vps "umask 077; cat > '$gate'; chmod 600 '$gate'" < scripts/factory_leech_prepublish_gate_20261025.py
+          expected="$(sha256sum scripts/factory_leech_prepublish_gate_20261025.py | awk '{print $1}')"
+          ssh_vps "test \"\$(sha256sum '$gate' | awk '{print \$1}')\" = '$expected'"
+          ssh_vps "PYTHONDONTWRITEBYTECODE=1 python3 -B '$gate' --mode finalize" > "$work/result.json"
+          python3 - "$work/result.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1],encoding="utf8"))
+          assert x["order_id"]=="WO-26102501" and x["quality1000_approved"] is False
+          assert x["publication_authorized"] is False and x["paid_api_cost_usd"]==0
+          print("LEECH_PRIVATE_PREPUBLICATION_GUARD="+json.dumps({
+             "state":x["state"],"words":x.get("words",0),
+             "next_chapter":x.get("next_chapter"),
+             "technical_integrity_passed":x.get("technical_integrity_passed",False),
+             "quality1000_approved":False,"published":False,
+             "paid_api_cost_usd":0},sort_keys=True))
+          PY
