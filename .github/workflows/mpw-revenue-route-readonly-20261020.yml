@@ -97,6 +97,41 @@ jobs:
               except urllib.error.HTTPError as e:
                   print('MPW_PUBLIC_ROUTE='+json.dumps(dict(path=route,status=e.code)))
           PY
+      - name: Read exact twelve-revenue files and static route health without mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import json,stat,hashlib
+          root=Path('/home/zomorod2/mojplaywin.com/mpw-editorial/revenue')
+          slugs=('website-doctor','landing-page-studio','ai-automation','business-spreadsheets','website-templates','social-media-kits','resume-builder','logo-studio','browser-games','marketing-ai','business-calculators','website-care')
+          targets=[root,root/'index.html',root/'assets/tools-v1.js',root/'assets/tools-v1.css',root/'assets/style.css',*[root/s/'index.html' for s in slugs]]
+          for path in targets:
+            if path.exists() and not path.is_symlink():
+              info={'path':str(path.relative_to(root.parent)),'exists':True,'dir':path.is_dir(),'mode':oct(stat.S_IMODE(path.stat().st_mode)),'size':path.stat().st_size}
+              if path.is_file() and path.stat().st_size<400000:
+                data=path.read_bytes();info['sha_prefix']=hashlib.sha256(data).hexdigest()[:16]
+                if path.suffix=='.html':
+                  info['tool_present']=b'id="mpw-functional-tool"' in data
+                  info['contains_contact']=b'/contact/' in data
+            else: info={'path':str(path.relative_to(root.parent)),'exists':False,'symlink':path.is_symlink()}
+            print('MPW_REVENUE_FILE_EXACT='+json.dumps(info,sort_keys=True))
+          PY
+      - name: Check all 13 revenue page statuses from external runner
+        run: |
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error
+          names=('','website-doctor/','landing-page-studio/','ai-automation/','business-spreadsheets/','website-templates/','social-media-kits/','resume-builder/','logo-studio/','browser-games/','marketing-ai/','business-calculators/','website-care/')
+          for name in names:
+            path='/mpw-editorial/revenue/'+name+'index.html'
+            try:
+              req=urllib.request.Request('https://mojplaywin.com'+path,headers={'Cache-Control':'no-cache','User-Agent':'Revenue12Audit/1.0'})
+              with urllib.request.urlopen(req,timeout=12) as r: status=r.status;final=r.geturl()
+            except urllib.error.HTTPError as e:status=e.code;final='error'
+            except Exception as e:status=0;final=type(e).__name__
+            print('MPW_REVENUE_PUBLIC_EXACT='+json.dumps({'path':path,'http':status,'final':final}))
+          PY
       - name: Delete ephemeral SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
