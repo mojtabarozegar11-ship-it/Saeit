@@ -111,11 +111,19 @@ def normalize_doi(value):
     ensure(DOI.fullmatch(d) is not None and len(d) <= 255, "DOI_INVALID")
     return d
 
-def collect(area):
+def collect(area, only_order=None):
     path = area / "stage-02/primary-fulltext-repair-inbox"
     ensure(path.is_dir() and not path.is_symlink(), "SOURCE_REWORK_QUEUE_UNAVAILABLE")
-    files = sorted(p for p in path.iterdir()
-                   if p.is_file() and not p.is_symlink() and NAME.fullmatch(p.name))
+    if only_order is None:
+        files = sorted(p for p in path.iterdir()
+                       if p.is_file() and not p.is_symlink() and NAME.fullmatch(p.name))
+    else:
+        ensure(isinstance(only_order, str) and NAME.fullmatch(only_order),
+               "SELECTED_ORDER_NAME_INVALID")
+        selected = path / only_order
+        ensure(selected.is_file() and not selected.is_symlink(),
+               "SELECTED_ORDER_FILE_UNSAFE")
+        files = [selected]
     ensure(files, "EMPTY_SOURCE_REWORK_QUEUE")
     unique = {}
     orders = []
