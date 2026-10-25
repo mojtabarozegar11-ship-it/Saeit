@@ -1,0 +1,148 @@
+name: Deploy bounded TRON finality head verifier with rollback 2026-10-25
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-tron-bounded-head-production-deploy-20261025.yml"]
+permissions: {contents: read}
+concurrency:
+  group: mpw-tron-bounded-live-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout immutable verified production patch
+        uses: actions/checkout@v4
+        with:
+          ref: 61c2fd352907c2fa33dc6323ad65995133445b23
+          persist-credentials: false
+      - name: Prove fixed source hash and offline dual-proof regressions
+        run: |
+          set -euo pipefail
+          test "$(sha256sum services/mpw_trx_commercial_chain.py | awk '{print $1}')" = "dd90bc0ab54283ab6dac25ad95025712e06bf334ae30bad239ad914435d510e3"
+          python3 -m py_compile services/mpw_trx_commercial_chain.py
+          python3 -m unittest discover -s tests -p test_mpw_tron_bounded_finalized_head_20261025.py -v
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-revenue-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Stage the pinned patch without touching live import
+        run: |
+          set -euo pipefail
+          scp -q -F "$RUNNER_TEMP/mpw-revenue-ssh/config" \
+            services/mpw_trx_commercial_chain.py \
+            saeit-cpanel:/home/zomorod2/Saeit-staging/services/.mpw_trx_commercial_chain.py.pending-20261025
+      - name: Atomically install and verify independent finality heads or roll back
+        run: |
+          set -euo pipefail
+          timeout 110s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,stat,hashlib,shutil,time,importlib
+          from pathlib import Path
+          app=Path('/home/zomorod2/Saeit-staging')
+          directory=app/'services'
+          if app.is_symlink() or directory.is_symlink() or not app.is_dir() or not directory.is_dir():
+              raise SystemExit('MPW_DEPLOY_UNSAFE_APP_ROOT')
+          live=directory/'mpw_trx_commercial_chain.py'
+          staged=directory/'.mpw_trx_commercial_chain.py.pending-20261025'
+          backup=directory/'.mpw_trx_commercial_chain.py.pre-bounded-20261025.bak'
+          expected_old='95f31846e71f299047b96693a536900c7bc92a909e4d7a3367be0d40975f1460'
+          expected_new='dd90bc0ab54283ab6dac25ad95025712e06bf334ae30bad239ad914435d510e3'
+          def checksum(file):
+              return hashlib.sha256(file.read_bytes()).hexdigest()
+          if live.is_symlink() or staged.is_symlink() or backup.is_symlink() or not live.is_file() or not staged.is_file():
+              raise SystemExit('MPW_DEPLOY_UNSAFE_FILE')
+          if checksum(staged)!=expected_new or checksum(live)!=expected_old:
+              raise SystemExit('MPW_DEPLOY_SOURCE_DRIFT_ABORTED')
+          mode=stat.S_IMODE(live.stat().st_mode)
+          if backup.exists():
+              if not backup.is_file() or checksum(backup)!=expected_old:
+                  raise SystemExit('MPW_DEPLOY_BACKUP_COLLISION_ABORTED')
+          else:
+              shutil.copy2(live,backup)
+              if checksum(backup)!=expected_old:raise SystemExit('MPW_DEPLOY_BACKUP_CHECK_FAILED')
+          compile(staged.read_bytes(),str(staged),'exec')
+          os.chmod(staged,mode)
+          installed=False
+          try:
+              os.replace(staged,live)
+              installed=True
+              os.chdir(app)
+              sys.path.insert(0,str(app))
+              importlib.invalidate_caches()
+              from services.mpw_trx_commercial_chain import read_only_independent_pair
+              verified=False
+              for attempt in range(2):
+                  try:
+                      pair=read_only_independent_pair()
+                      if pair.identifier_a==pair.identifier_b or not pair.audited_as_independent:
+                          raise RuntimeError('Independent operator proof not preserved')
+                      verified=True
+                      break
+                  except Exception:
+                      if attempt==0:time.sleep(1)
+              if not verified:raise RuntimeError('Finalized independent heads unavailable')
+              if checksum(live)!=expected_new:raise RuntimeError('Installed file hash changed')
+              print('MPW_TRON_BOUNDED_DEPLOY=VERIFIED_ACTIVE_TWO_INDEPENDENT_OPERATORS')
+          except BaseException:
+              if installed:
+                  restore=directory/'.mpw_trx_commercial_chain.py.rollback-20261025'
+                  shutil.copy2(backup,restore)
+                  os.replace(restore,live)
+                  print('MPW_TRON_BOUNDED_DEPLOY=ROLLED_BACK_TO_VERIFIED_BASELINE')
+              raise
+          PY
+      - name: Request graceful Passenger reload after verified patch
+        run: |
+          set -euo pipefail
+          timeout 30s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'from pathlib import Path; p=Path(\"/home/zomorod2/mojplaywin.com/tmp/restart.txt\"); assert p.parent.is_dir() and not p.parent.is_symlink(); p.touch(); print(\"MPW_TRON_PASSENGER_RELOAD_REQUESTED=TRUE\")'"
+      - name: Verify customer checkout page remains live
+        run: |
+          set -euo pipefail
+          code="$(curl -L -sS -o /dev/null -w '%{http_code}' --max-time 20 https://mojplaywin.com/store/product/72/checkout/)"
+          test "$code" = 200
+          echo "MPW_TRON_CHECKOUT_ROUTE_AFTER_DEPLOY=HTTP_200"
+      - name: Remove temporary SSH relay keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
