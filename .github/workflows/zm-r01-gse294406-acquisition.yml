@@ -7,6 +7,13 @@ on:
       - .github/workflows/zm-r01-gse294406-acquisition.yml
       - research/manuscripts/ZM-R01/GSE294406_24_SAMPLE_FACTORIZED_MANIFEST_2026-10-25.csv
       - research/manuscripts/ZM-R01/analysis/fetch_and_audit_gse294406.py
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/zm-r01-gse294406-acquisition.yml
+      - research/manuscripts/ZM-R01/GSE294406_24_SAMPLE_FACTORIZED_MANIFEST_2026-10-25.csv
+      - research/manuscripts/ZM-R01/analysis/fetch_and_audit_gse294406.py
   workflow_dispatch:
 permissions:
   contents: read
