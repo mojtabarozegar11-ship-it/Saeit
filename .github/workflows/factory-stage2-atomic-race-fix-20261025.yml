@@ -49,7 +49,7 @@ jobs:
           old_sha='0651bedc72cfce394b91f907b73855b5b084f4370ecf18fe56c602bec8586fca'
           new_sha="$(sha256sum scripts/factory_stage2_research.py | awk '{print $1}')"
           worker='/home/githubops/factory-runtime/operations/production-instructions/stage2-research-serial.py'
-          live_sha="$("${remote[@]}" "sha256sum '$worker' | awk '{print \\$1}'")"
+          live_sha="$("${remote[@]}" "sha256sum '$worker' | cut -d ' ' -f1")"
           echo "DEPLOYED_PRIVATE_STAGE2_SHA=$live_sha"
           test "$live_sha" = "$old_sha" || test "$live_sha" = "$new_sha"
           if [[ "$GITHUB_EVENT_NAME" == 'pull_request' ]]; then
