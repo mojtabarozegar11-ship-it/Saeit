@@ -194,6 +194,12 @@ def accept(chunks, body):
     counts, total, chapter, part = state(chunks)
     if chapter is None:
         reject("MANUSCRIPT_ALREADY_LENGTH_COMPLETE")
+    # Enforce the reasoning/control-token gate at the final private acceptance
+    # boundary too: the operator streaming filter is not an authorization gate.
+    if any(marker in body.casefold() for marker in (
+            "<think", "</think", "<|im_start|>", "<|im_end|>",
+            "<|assistant", "<|endoftext|>", "[inst]", "[/inst]")):
+        reject("MODEL_REASONING_OR_CONTROL_TOKEN")
     if len(body.encode("utf-8")) > 48000 or len(body.encode("utf-8")) < 1200:
         reject("SEGMENT_BYTES_OUT_OF_RANGE")
     if any(marker in body.casefold() for marker in
