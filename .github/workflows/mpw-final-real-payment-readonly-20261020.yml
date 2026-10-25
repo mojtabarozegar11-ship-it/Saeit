@@ -191,6 +191,31 @@ jobs:
               emit('MPW_P0_TRON_PROVIDERS',{'available':False,'error_type':type(exc).__name__,'no_tx_broadcast':True})
           print('MPW_P0_PRIVATE_DIAGNOSTIC_READONLY=PASS')
           PY
+      - name: Locate exact solidity gateway transport failure without changing payments
+        run: |
+          set -euo pipefail
+          timeout 85s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,time
+          from pathlib import Path
+          from datetime import datetime,timezone
+          root=Path('/home/zomorod2/Saeit-staging')
+          if root.is_symlink() or not root.is_dir():raise SystemExit('UNSAFE_APP_ROOT')
+          os.chdir(root);sys.path.insert(0,str(root))
+          from scripts.mpw_tron_public_dual_probe_readonly_20261023 import NODES,get,head_height_and_age
+          for idx,provider in enumerate(NODES):
+              started=time.monotonic()
+              result={'operator_index':idx+1,'solidity_head_valid':False,'read_only':True}
+              try:
+                  block=get(provider,'head')
+                  head_height_and_age(block,datetime.now(timezone.utc))
+                  result['solidity_head_valid']=True
+              except Exception as exc:
+                  result['error_type']=type(exc).__name__
+                  if hasattr(exc,'code') and type(exc.code) is int:result['http_status']=exc.code
+              result['elapsed_seconds']=round(time.monotonic()-started,2)
+              print('MPW_TRON_INDEPENDENT_GATEWAY='+json.dumps(result,sort_keys=True))
+          print('MPW_TRON_INDEPENDENT_GATEWAY_SCOPE=READ_ONLY')
+          PY
       - name: Remove temporary SSH relay keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
