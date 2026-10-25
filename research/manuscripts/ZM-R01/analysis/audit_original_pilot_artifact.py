@@ -103,6 +103,20 @@ def audit(folder, manifest_path):
     rates = re.findall(r"([0-9]+(?:\.[0-9]+)?)% overall alignment rate", align)
     if len(rates) != 1 or not 0 <= float(rates[0]) <= 100:
         raise ValueError("Bowtie2 original overall alignment rate absent/invalid")
+    raw = re.search(r"(?m)^(\d+) reads; of these:", align)
+    no = re.search(r"(\d+) \([\d.]+%\) aligned concordantly 0 times", align)
+    unique = re.search(r"(\d+) \([\d.]+%\) aligned concordantly exactly 1 time", align)
+    multi = re.search(r"(\d+) \([\d.]+%\) aligned concordantly >1 times", align)
+    if not all((raw, no, unique, multi)):
+        raise ValueError("Missing original Bowtie2 multimapping categories")
+    original_pairs = int(raw.group(1))
+    zero_pairs, one_pairs, multi_pairs = int(no.group(1)), int(unique.group(1)), int(multi.group(1))
+    if zero_pairs + one_pairs + multi_pairs != original_pairs:
+        raise ValueError("Original Bowtie2 categories do not sum to input pairs")
+    # MAPQ >=20 does NOT establish a uniquely concordant paired alignment.
+    # Source counts exceed uniquely aligned concordant pairs by 11.2 million.
+    lower_bound_multimapped_counted = max(0, total - one_pairs)
+    uniqueness_refuted = lower_bound_multimapped_counted > 0
     return {
         "audit": "original artifact cross-file provenance and sparse integer count consistency",
         "source_workflow_run": EXPECTED_RUN,
@@ -115,6 +129,14 @@ def audit(folder, manifest_path):
         "observed_nonzero_genes": nrows,
         "sum_conservative_integer_gene_counts": total,
         "bowtie2_overall_alignment_rate_percent": float(rates[0]),
+        "original_input_read_pairs": original_pairs,
+        "concordant_zero_pairs": zero_pairs,
+        "concordant_exactly_once_pairs": one_pairs,
+        "concordant_more_than_once_pairs": multi_pairs,
+        "minimum_counted_fragments_from_multimapping_category": lower_bound_multimapped_counted,
+        "sparse_integer_table_integrity": "PASS",
+        "unique_mapping_claim": "REFUTED_BY_ORIGINAL_BOWTIE2_SUMMARY" if uniqueness_refuted else "NOT_ESTABLISHED",
+        "scientific_release_gate": "BLOCKED_MULTIMAPPING_AND_ASSEMBLY" if uniqueness_refuted else "BLOCKED_ASSEMBLY_AND_INCOMPLETE_MATRIX",
         "all_24_libraries_counted": False,
         "assembly_equivalence_to_Milec_RefSeqv2": "NOT VERIFIED",
         "publication_grade_DESeq2_matrix": False,
