@@ -91,6 +91,7 @@ jobs:
           ps=subprocess.run(['ps','-u','githubops','-o','args='],capture_output=True,text=True,timeout=15)
           model_comparison['source_model_explicitly_referenced_by_process']=ps.returncode==0 and models[0].name in ps.stdout
           model_comparison['installed_model_explicitly_referenced_by_process']=ps.returncode==0 and str(models[1]) in ps.stdout
+          print('VPS_BACKUP_PROVENANCE_PRE_LSOF='+json.dumps({'archives':structures,'factory_transfer_matching':db_pairs,'model_duplicate':model_comparison,'mutations':0},sort_keys=True),flush=True)
           # Deleted-but-open file holders: show only sanitized basename/category, no actual arguments.
           opened=[]
           if shutil.which('lsof'):
@@ -101,7 +102,8 @@ jobs:
                       if entry['size']>=30*2**20:
                           n=entry['name']
                           p=Path(n.replace(' (deleted)',''))
-                          label=(str(p.relative_to(home)) if p.is_relative_to(home) else '[outside-user-home]') if n.startswith('/') else '[nonabsolute]'
+                          try:label=str(p.relative_to(home)) if n.startswith('/') else '[nonabsolute]'
+                  except ValueError:label='[outside-user-home]'
                           if any(t in label.lower() for t in ('secret','credential','ssh','token')):label='[sensitive-path]'
                           opened.append({'process':current_process[:40],'pid':current_pid,'inode':entry['inode'],'bytes':entry['size'],'path_category':label[:130]})
                   for line in cp.stdout.splitlines():
