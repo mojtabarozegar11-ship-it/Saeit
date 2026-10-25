@@ -1,0 +1,65 @@
+name: Fix SSE2-only leech manuscript generation through owner VPS streaming
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-leech-vps-streaming-author-hotfix-20261025.yml
+      - scripts/factory_leech_vps_resource_guarded_author_20261025.py
+permissions: {contents: read}
+concurrency:
+  group: owner-vps-leech-streaming-author-software-only-20261025
+  cancel-in-progress: false
+jobs:
+  software-qc-and-atomic-private-vps-author-hotfix:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && contains(github.event.head_commit.message, '[owner-leech-streaming-hotfix-20261025]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Check owner-only streaming author code without any model inference
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/factory_leech_vps_resource_guarded_author_20261025.py
+          python3 -B -m unittest discover -s tests -p test_factory_leech_free_offline_original_author_20261025.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path("scripts/factory_leech_vps_resource_guarded_author_20261025.py").read_text()
+          for condition in ('"stream": True', 'time.monotonic() - start > 775',
+                            'fcntl.LOCK_EX | fcntl.LOCK_NB',
+                            'SAFE_START_AVAILABLE_MIB = 2700',
+                            'STOP_AVAILABLE_MIB = 1250',
+                            'VIRTUAL_MEMORY_CAP_MIB = 2600',
+                            '"published": False',
+                            'STREAMED_SEGMENT_BELOW_QC_SUBSTANCE'):
+              assert condition in s, condition
+          print("LEECH_SELFHOSTED_STREAMING_SOFTWARE_QA=passed")
+          PY
+      - name: Atomically replace only owner VPS leech operator software
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/leech-streaming-hotfix-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 "$@"
+          }
+          ops="/home/githubops/factory-runtime/operations/production-instructions"
+          file="$ops/leech-vps-resource-guarded-author.py"
+          stage="$ops/.leech-vps-resource-guarded-author-streaming-next.py"
+          ssh_vps "test "\$(id -un)" = githubops && test -d '$ops' && test ! -L '$ops' && test -f '$file' && test ! -L '$file' && test ! -e '$stage'"
+          ssh_vps "umask 077; cat > '$stage'; chmod 600 '$stage'" < scripts/factory_leech_vps_resource_guarded_author_20261025.py
+          expected="$(sha256sum scripts/factory_leech_vps_resource_guarded_author_20261025.py | awk '{print $1}')"
+          ssh_vps "test "\$(sha256sum '$stage' | awk '{print \$1}')" = '$expected' && /usr/bin/python3 -B -m py_compile '$stage' && mv -- '$stage' '$file' && chmod 700 '$file' && test "\$(sha256sum '$file' | awk '{print \$1}')" = '$expected'"
+          echo LEECH_OWNER_VPS_STREAMING_AUTHOR_HOTFIX_INSTALLED=true
+          echo LEECH_PREEXISTING_PRIVATE_MANUSCRIPT_AND_RUNNING_WORKER_PRESERVED=true
