@@ -73,9 +73,11 @@ jobs:
           test ! -e "$backup"
           test "$(sha256sum "$stage" | awk '{print $1}')" = "$EXPECTED_SHA"
           /usr/bin/python3 -B -m py_compile "$stage"
+          original_sha="$(sha256sum "$file" | awk '{print $1}')"
           cp -p -- "$file" "$backup"
           chmod 600 "$backup"
           test -s "$backup"
+          test "$(sha256sum "$backup" | awk '{print $1}')" = "$original_sha"
           mv -- "$stage" "$file"
           chmod 700 "$file"
           if ! test "$(sha256sum "$file" | awk '{print $1}')" = "$EXPECTED_SHA"; then
