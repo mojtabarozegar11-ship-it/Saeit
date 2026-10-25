@@ -46,6 +46,35 @@ def indexed_orders(root):
     return [n + "--r001.json" for n in names]
 
 
+def intake_integrity(root, names):
+    """Verify historical indexed orders survive the authorized cleanup."""
+    folder = root / "production-instructions/orders"
+    count = {"indexed": len(names), "valid": 0, "missing": 0, "invalid": 0}
+    for source_name in names:
+        ident = source_name.removesuffix("--r001.json")
+        path = folder / (ident + ".json")
+        if not path.exists() and not path.is_symlink():
+            count["missing"] += 1
+            continue
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 250000:
+            count["invalid"] += 1
+            continue
+        try:
+            order = json.loads(path.read_text(encoding="utf8"))
+            if (not isinstance(order, dict) or order.get("id") != ident
+                    or order.get("status") not in ("issued", "in_engineering",
+                        "blocked_rework", "completed_verified")
+                    or not re.fullmatch(r"[0-9a-f]{64}",
+                        str(order.get("fingerprint", "")))):
+                raise ValueError("AGRI200_ORDER_INVALID")
+        except (OSError, ValueError, TypeError):
+            count["invalid"] += 1
+            continue
+        count["valid"] += 1
+    count["ready"] = count["valid"] == count["indexed"]
+    return count
+
+
 def inventory(root, names):
     area = root / "production-instructions"
     # These are progress artifacts, NEVER equivalent to sale approval.
@@ -129,8 +158,9 @@ def dispatch(root, ops, *, run_workers=True):
         raise RuntimeError("AGRI200_FACTORY_PATH_INVALID")
     names = indexed_orders(root)
     initial = inventory(root, names)
+    intake = intake_integrity(root, names)
     outcomes = {}
-    if run_workers:
+    if run_workers and intake["ready"]:
         lock = ops / ".agri200-dispatch.lock"
         if lock.is_symlink():
             raise RuntimeError("AGRI200_UNSAFE_LOCK")
@@ -156,6 +186,9 @@ def dispatch(root, ops, *, run_workers=True):
     if not run_workers:
         production_outcome = "audit_only"
         safe_next_action = "run_authorized_workers"
+    elif not intake["ready"]:
+        production_outcome = "blocked_incomplete_stage1_intake"
+        safe_next_action = "reconcile_valid_current_work_orders_before_regeneration"
     elif failed:
         production_outcome = "worker_failure"
         safe_next_action = "inspect_worker_errors_before_retry"
@@ -167,6 +200,7 @@ def dispatch(root, ops, *, run_workers=True):
         safe_next_action = "investigate_evidence_rework_and_approval_gates"
     return {"schema": "saeit.factory.agri200.onepass-dispatch.v1",
             "before": initial, "after": final, "worker_results": outcomes,
+            "intake_integrity": intake,
             "production_outcome": production_outcome,
             "safe_next_action": safe_next_action,
             "workers_success_does_not_mean_products_completed": True,
