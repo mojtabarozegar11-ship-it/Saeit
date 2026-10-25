@@ -78,6 +78,18 @@ For each economy `i`, `g_early,i = ln(y_i,2019/y_i,2000)/19` and `g_late,i = ln(
 
 The late-interval rate is positive in **90** economies and negative in **63**, whereas the early-interval rate is positive in **128** and negative in **25**. The 2019–2023 interval is only four years and sensitive to endpoint measurement, modeled employment and revision changes. These are not causal effects of COVID-19, climate events or policy, not worker-weighted global aggregates, and not statistical evidence of convergence. Subregional coverage remains selected: only **one** complete economy falls in the source's North America classification, making representative regional claims inappropriate. The comparison is a **new descriptive sensitivity of the archived panel**, not yet proof of a novel contribution relative to existing agricultural productivity research.
 
+### 3.7 Paired sign transitions on the non-overlapping growth intervals
+
+A second independently executable script, `analysis/wdi_archived_panel_sign_transition.py`, reads the same committed World Bank source panel and assigns **each of the 153 complete economies** to one of four cells using the sign of its 2000–2019 and 2019–2023 annualized log growth rates. The independent [GitHub Actions run 40232737846](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40232737846) completed successfully, and its [artifact 12613109128](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40232737846/artifacts/12613109128) preserves country-level transitions and a source-data SHA256. This is a reproducibility claim for the computation, **not** a publication novelty or causal inference claim.
+
+| Earlier 2000–2019 growth | Later 2019–2023 positive | Later 2019–2023 negative | Row total |
+|---|---:|---:|---:|
+| Positive | 79 | 49 | 128 |
+| Negative | 11 | 14 | 25 |
+| **Column total** | **90** | **63** | **153** |
+
+These four cells exactly reconcile with the marginal sign counts in Section 3.6. In particular, **49/153** of the observed complete-economy panel changed from positive to negative annualized log growth and **11/153** changed in the opposite direction. They are **fractions of economies with selected endpoints**, not worker-weighted shares, significance tests, changes in welfare, or attributable effects of a specific shock. A sign transition depends on the chosen endpoints, which are potentially subject to World Bank and ILO-modelled employment revisions. The post-2019 window is only four years and not a repeated yearly trend. Neither this table nor the preceding medians independently establishes that the result is original enough for an economics research journal.
+
 ## 4. Discussion
 
 The principal result is methodological modesty rather than a newly discovered economic law. A widely used official indicator is missing for a material fraction of the nominal country set in all three selected years. A common-country restriction produces a reproducible descriptive comparison, but does not eliminate missing-not-at-random selection. The observed median difference between 2000–2019 and 2000–2023 also combines different end years and time intervals, including economic and environmental events after 2019, so it cannot be assigned exclusively to coverage changes. Indeed, the 2000–2023 sample coincides with the three-year balanced set here; this specific sample provides little evidence of large median sensitivity to the balanced restriction.
