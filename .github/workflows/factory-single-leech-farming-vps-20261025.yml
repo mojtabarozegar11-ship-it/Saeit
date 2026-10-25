@@ -246,5 +246,134 @@ jobs:
             "claims":metrics["claim_count"],"locale":"en-GB",
             "independent_review_completed":False,"manuscript_created":False,
             "public_distribution":False,"stage2_results":stage2_after},sort_keys=True))
+          # Evidence-linked full-size professional architecture for exactly this
+          # F01 edition; no generic bilingual crop worksheet or fabricated prose.
+          stage34=ops/"stage34-autonomous-handoff-serial.py"
+          if stage34.is_symlink() or not stage34.is_file():
+              raise SystemExit("LEECH_BLOCKED_STAGE34_ORIGINAL_WORKER_MISSING")
+          ds=importlib.util.spec_from_file_location("single_leech_stage34_verify",stage34)
+          designlib=importlib.util.module_from_spec(ds)
+          ds.loader.exec_module(designlib)
+          designlib.LOCALES=("en-GB",)
+          name=ident+"--r001.json"
+          h,research,design_order,editions=designlib.verified_stage2(area,name)
+          if design_order!=order or set(editions)!={"en-GB"}:
+              raise SystemExit("LEECH_DESIGN_WRONG_PRODUCT_EDITION")
+          # Each tuple is one substantive, independently reviewed chapter.
+          # The practical deliverable is distinct for every chapter.
+          plan=[
+            ("Professional Scope and Responsible Enterprise",["Occupational competencies","Scope of non-clinical breeding","Ethical risk boundaries","Evidence grading"],"Define an operator competency and ethical risk register",[]),
+            ("Medicinal Leech Taxonomy and Identification",["Hirudo species complex","Morphological records","Identity uncertainty","Reference specimen management"],"Build a species identification and provenance log",["species_scope"]),
+            ("Ecology, Wild Populations and Conservation",["Habitat dependencies","Population pressures","No-unlicensed-capture policy","Conservation monitoring"],"Create a habitat impact and sourcing policy",["wildlife_trade"]),
+            ("Physiology, Behaviour and Life History",["External anatomy","Life cycle stages","Environmental responses","Evidence boundaries"],"Draw an evidence-tagged life-cycle map",["species_scope"]),
+            ("Breeding Stock Selection and Genetic Stewardship",["Provenance","Founder diversity","Health inclusion rules","Pedigree records"],"Design a broodstock and lineage register",[]),
+            ("Facility Selection and Biosecure Layout",["Land and water risk","Containment zones","Room adjacency","Emergency capacity"],"Produce a facility zoning and risk matrix",[]),
+            ("Water Engineering and Quality Management",["Supply qualification","Physical water parameters","Change-control records","Wastewater safeguards"],"Create a monitoring specification with uncertainty bands",[]),
+            ("Sensors, Sampling and Data Integrity",["Calibration plans","Sampling frequency design","Data integrity","Outlier escalation"],"Develop a traceable instrument calibration ledger",[]),
+            ("Quarantine, Containment and Escape Prevention",["Animal flow","Isolation policy","Escape scenarios","Release prevention"],"Map quarantine entry and exit controls",[]),
+            ("Legal Broodstock Procurement and Traceability",["Supplier legitimacy","Transport records","Health documentation","Chain of custody"],"Audit a model supplier evidence packet",["wildlife_trade"]),
+            ("Animal Welfare and Qualified Veterinary Oversight",["Welfare indicators","Handling risk","Humane incident response","Professional escalation"],"Draft a welfare observation and referral register",[]),
+            ("Feeding Systems and Lawful Input Sourcing",["Feed-source legality","Contamination hazards","Traceability","Restricted operator actions"],"Construct a lawful-input due-diligence checklist",[]),
+            ("Biosecurity and Microbial Ecology",["Endogenous microbiota","Cross-contamination routes","Sanitary separation","Verification sampling"],"Build a biosecurity hazard-analysis worksheet",[]),
+            ("Pathogen Risk and Occupational Health",["Aeromonas-associated hazards","PPE and exposure","Infection prevention","Incident escalation"],"Prepare a professional occupational risk register",[]),
+            ("Reproductive Biology and Breeding Calendar",["Mating behaviours","Broodstock staging","Seasonality caveats","Reproduction records"],"Build a species-specific reproduction data model",["breeding_outcome"]),
+            ("Cocoon Substrate Chemistry and Screening",["Substrate provenance","Electrical conductivity","Ionic and metal hazards","Study limitations"],"Specify a substrate incoming-inspection form",["substrate_hazard","substrate_limits"]),
+            ("Cocoon Monitoring and Incubation Records",["Cocoon morphology","Batch identification","Incubation logging","Abnormality escalation"],"Create cocoon batch and exception forms",["breeding_outcome"]),
+            ("Juvenile Welfare and Stage-Specific Survival",["Juvenile observation","Stage transitions","Mortality recording","Evidence transferability"],"Build a juvenile cohort monitoring sheet",["breeding_outcome"]),
+            ("Density, Survival and Population Modelling",["Stock-flow equations","Cohort tables","Statistical uncertainty","Sensitivity analysis"],"Design a reproducible cohort model template",[]),
+            ("Daily and Weekly Farm Standard Operations",["Responsibility matrix","Task scheduling","Record review","Nonconformance escalation"],"Write a controlled document register and shift log",[]),
+            ("Environmental Management and Waste Controls",["Effluent risk","Solid waste tracking","Environmental compliance","Contingency plans"],"Develop a waste and environmental audit matrix",[]),
+            ("Quality Management and Batch Release",["Critical attributes","Batch genealogy","Sampling evidence","Nonconforming stock"],"Define a traceable batch QA release dossier",[]),
+            ("Workforce Training and Competency Assessment",["Role separation","Practical assessments","Safety drills","Retraining triggers"],"Create examiner rubrics and observed skills logs",[]),
+            ("Permitting and Legal Responsibility Matrix",["Farm permits by jurisdiction","Animal welfare rules","Environmental approvals","Documentation audits"],"Build a jurisdiction-specific legal verification matrix",["wildlife_trade"]),
+            ("Medical-Use Regulatory Boundary and Claims",["Agricultural versus clinical products","United States CBER oversight","Claim substantiation","No implied clearance"],"Review and reject unsupported medicinal marketing claims",["medical_regulator"]),
+            ("CITES, Export Compliance and Shipping",["Species-specific trade status","Permit diligence","Traceable logistics","Destination controls"],"Create an export compliance evidence checklist",["wildlife_trade"]),
+            ("Product Specification, Packaging and Customers",["Legal product identity","Labelling review","Shipping stability evidence","Customer feedback"],"Develop a non-clinical product specification draft",[]),
+            ("Capital Expenditure and Facility Economics",["CAPEX register","Depreciation","Capacity assumptions","Financing sensitivity"],"Build an auditable investment decision worksheet",[]),
+            ("Operating Costs and Risk-Adjusted Unit Economics",["OPEX ledger","Mortality sensitivity","Scenario stress tests","Break-even uncertainty"],"Develop a multi-scenario cost and margin workbook",[]),
+            ("Integrated Farm Establishment and Final Capstone",["Project milestones","Independent technical review","Safety release criteria","Commercial readiness decision"],"Complete a full farm plan with assessor evidence",[])
+          ]
+          if len(plan)!=30 or len({row[0] for row in plan})!=30:
+              raise SystemExit("LEECH_DESIGN_NOT_30_UNIQUE_CHAPTERS")
+          citations={x["id"] for x in research["claims"]}
+          claim_by_id={x["id"]:x for x in research["claims"]}
+          chapters=[]
+          for n,(title,topics,activity,claim_ids) in enumerate(plan,1):
+              if len(topics)!=4 or len(set(topics))!=4 or not set(claim_ids).issubset(citations):
+                  raise SystemExit("LEECH_DESIGN_INVALID_CHAPTER_SCOPE")
+              ids=sorted({src for cid in claim_ids for src in claim_by_id[cid]["source_ids"]})
+              chapters.append({
+                "unit":n,"title_en":title,"section_plan":topics,
+                "practical_capstone":activity,"learning_objectives":[
+                    "Evaluate the chapter's specific biological or professional evidence and stated limitations",
+                    "Produce the named auditable practical deliverable using reproducible records",
+                    "Identify safety, conservation and legal conditions before recommending real-world use"
+                ],
+                "source_claim_ids":claim_ids,"source_ids":ids,
+                "additional_primary_research_required":len(claim_ids)==0,
+                "target_substantive_words":5300,"verified_actual_words":0,
+                "original_exercises_required":True,"independent_review_pending":True,
+                "content_status":"NOT_YET_AUTHORED"
+              })
+          if sum(x["target_substantive_words"] for x in chapters)!=159000:
+              raise SystemExit("LEECH_DESIGN_WORD_TARGET_INVALID")
+          design={
+            "schema":designlib.DESIGN,"stage":3,"order_id":ident,"revision":1,
+            "source_product_id":product_key,
+            "stage2_research_sha256":designlib.digest(research),
+            "design_status":"english_professional_reference_full_30_chapter_architecture",
+            "edition_plans":{"en-GB":{
+                "title":title,"audience":"vocational leech farming practitioners and doctoral-level instructors",
+                "research_scope":research["locale_scopes"]["en-GB"],
+                "chapters_requested":30,"units_localized":True}},
+            "chapters":chapters,"required_original_words":150001,
+            "authorship_target_words":159000,
+            "chapter_evidence_gaps":sum(x["additional_primary_research_required"] for x in chapters),
+            "foundational_peer_reviewed_and_official_sources":len(research["sources"]),
+            "academic_integrity":"No fabrication, plagiarism, repeated filler or unsupported quantitative protocols",
+            "authoring_acceptance":[
+                "Author 30 genuinely original evidence-backed substantive English chapters totalling at least 150001 verified words",
+                "Resolve all chapter-specific source gaps with authentic current primary literature and official regulations",
+                "Include original practical models, exercises, solved cases, formal figure rights and editable field records",
+                "Apply independent domain veterinary/biology, biosecurity, CITES/legal and editorial review to exact version",
+                "Produce fully accessible PDF and EPUB with tested hyperlinks, glossary, index and scientific bibliography",
+                "Pass full QC1000 and the existing 12-stage source-hash/reviewer approval chain before any public release"
+            ],
+            "full_manuscript_created":False,"scientific_review_completed":False,
+            "quality1000_approved":False,"commercial_release":False,
+            "public_distribution_allowed":False
+          }
+          lock3=area/".stage34-worker.lock"
+          if lock3.is_symlink():raise SystemExit("LEECH_STAGE3_UNSAFE_LOCK")
+          with lock3.open("a+b") as lock_handle:
+              os.fchmod(lock_handle.fileno(),0o600)
+              fcntl.flock(lock_handle.fileno(),fcntl.LOCK_EX)
+              design_path=area/"stage-03/completed-designs"/name
+              designed=designlib.once(design_path,design)
+              handoff4={
+                "schema":designlib.HANDOFF,"order_id":ident,"revision":1,
+                "previous_stage":3,"next_stage":4,
+                "stage3_design_sha256":designlib.digest(design),
+                "stage2_research_sha256":designlib.digest(research),
+                "stage_4_status":"awaiting_full_original_leech_specific_content_development",
+                "full_manuscript_created":False,"quality1000_approved":False,
+                "commercial_release":False,"public_distribution_allowed":False
+              }
+              designlib.once(area/"stage-04/inbox"/name,handoff4)
+              designlib.once(area/"stage-03/receipts"/name,{
+                "schema":designlib.HANDOFF,"order_id":ident,"revision":1,
+                "stage_3_design_completed":True,"stage_4_inbox_file":name,
+                "design_sha256":designlib.digest(design),
+                "stage_4_packet_sha256":designlib.digest(handoff4),
+                "scientific_review_completed":False,"quality1000_approved":False
+              })
+          print("LEECH_STAGE3_30_CHAPTER_DESIGN="+json.dumps({
+              "order_id":ident,"design_created":designed,
+              "chapters":len(chapters),"planned_words":159000,
+              "chapters_needing_additional_primary_evidence":design["chapter_evidence_gaps"],
+              "actual_verified_words":0,"design_sha256":sha(design_path),
+              "stage3_receipt_sha256":sha(area/"stage-03/receipts"/name),
+              "stage4_inbox_sha256":sha(area/"stage-04/inbox"/name),
+              "independent_certification":False,"public_release":False},sort_keys=True))
           PY
           echo LEECH_OWNER_SINGLE_PRODUCT_VPS_HANDOFF_COMPLETED=true
