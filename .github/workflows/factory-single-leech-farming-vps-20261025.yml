@@ -175,5 +175,68 @@ jobs:
           except subprocess.TimeoutExpired:
               step={"order_id":ident,"stage2_exit":"timeout_48s","research_completed":False}
           print("LEECH_STAGE2_ONE_ORDER="+json.dumps(step,sort_keys=True))
+          # One-order-only evidence adapter: the existing 200-item bilingual
+          # source validator remains unchanged on disk and for all other orders.
+          s2spec=importlib.util.spec_from_file_location("single_leech_stage2_adapter",stage2)
+          s2=importlib.util.module_from_spec(s2spec)
+          s2spec.loader.exec_module(s2)
+          s2.TOPIC_ID=re.compile(re.escape(product_key)+r"\Z")
+          s2.LOCALES={"en-GB"}
+          pkt,verified_order=s2.verified_stage1_packet(area,ident+"--r001.json")
+          if verified_order!=order: raise SystemExit("LEECH_SOURCE_ORDER_CHANGED")
+          evidence={
+            "schema":"saeit.factory.stage2-source-evidence.v1",
+            "source_product_id":product_key,"revision":1,
+            "work_order_sha256":s2.sha(verified_order),
+            "locale_scopes":{"en-GB":"Original English-language professional training for responsible leech husbandry. Species, climate, water, substrates, public health and commercial/legal requirements must be verified for every operating jurisdiction; no universal UK or global permit is assumed."},
+            "sources":[
+              {"id":"aminov2025","publisher":"Annals of Parasitology",
+               "title":"Optimal artificial conditions for keeping and breeding medicinal leeches Hirudo verbana and Hirudo orientalis",
+               "url":"https://annals-parasitology.eu/index.php/AoP/article/view/153",
+               "checked_date":"2026-10-25",
+               "evidence_note":"The original peer-reviewed study compared artificial keeping and breeding conditions in 180 medicinal leeches of two named species; species-specific findings require context."},
+              {"id":"ceylan2026","publisher":"Frontiers in Veterinary Science",
+               "title":"Influence of various reproduction substrates on the survival, health, and reproductive output of broodstock Mediterranean medicinal leech (Hirudo verbana)",
+               "url":"https://www.frontiersin.org/journals/veterinary-science/articles/10.3389/fvets.2026.1969385/full",
+               "checked_date":"2026-10-25",
+               "evidence_note":"Original controlled substrate study used 40 gravid Hirudo verbana and compared four breeding media; the small single-cycle design limits universal recommendations."},
+              {"id":"fda2024","publisher":"United States Food and Drug Administration",
+               "title":"Transfer of Regulatory Responsibility From CDRH to CBER for Medical Maggots and Medicinal Leeches",
+               "url":"https://www.fda.gov/vaccines-blood-biologics/development-approval-process-cber/transfer-regulatory-responsibility-center-devices-and-radiological-health-center-biologics",
+               "checked_date":"2026-10-25",
+               "evidence_note":"The FDA formally transferred regulatory responsibility for medicinal leeches with product code NRN to CBER effective December 30 2024; a farm is not thereby licensed."},
+              {"id":"cites2026","publisher":"Convention on International Trade in Endangered Species",
+               "title":"CITES Animals Committee analysis of international trade in listed animal species",
+               "url":"https://cites.org/sites/default/files/documents/AC/34/agenda/E-AC34-14-02-A1.pdf",
+               "checked_date":"2026-10-25",
+               "evidence_note":"Official CITES documentation identifies Hirudo medicinalis in Appendix II and the historical listing year 1987. Product-level trade advice must check current national authorities."}
+            ],
+            "claims":[
+              {"id":"species_scope","statement":"The 2025 controlled husbandry study evaluated both Hirudo verbana and Hirudo orientalis, so findings cannot be attributed without distinction to every medicinal-leech taxon.","source_ids":["aminov2025"]},
+              {"id":"study_population","statement":"Aminov and colleagues reported 180 medicinal leeches across the two named species, comparing experimental and conventional conditions in their original study.","source_ids":["aminov2025"]},
+              {"id":"breeding_outcome","statement":"In the 2025 study, the experimental conditions were associated with greater juvenile output and reported reductions in certain parent and juvenile mortality outcomes; these results need independent replication.","source_ids":["aminov2025"]},
+              {"id":"substrate_hazard","statement":"A 2026 study of forty gravid Hirudo verbana found that survival strongly depended on substrate: vermicompost and commercial lake peat caused early complete mortality in the studied groups.","source_ids":["ceylan2026"]},
+              {"id":"substrate_limits","statement":"The 2026 substrate comparison linked high ionic and osmotic loading, including elevated electrical conductivity and particular metals, with poor survival, but studied only one breeding cycle and a limited set of materials.","source_ids":["ceylan2026"]},
+              {"id":"medical_regulator","statement":"For the United States, the FDA assigned oversight of medicinal leeches under product code NRN to CBER effective 30 December 2024; cultivation alone does not demonstrate regulatory clearance for medical marketing.","source_ids":["fda2024"]},
+              {"id":"wildlife_trade","statement":"CITES records identify Hirudo medicinalis as an Appendix II listed taxon since 1987, requiring a species- and jurisdiction-specific check before international trade recommendations.","source_ids":["cites2026"]}
+            ],
+            "scientific_review_completed":False,
+            "public_distribution_allowed":False
+          }
+          metrics=s2.validate_evidence(evidence,verified_order,1)
+          source_file=area/"stage-02/source-evidence"/(product_key+"--r001.json")
+          seeded=s2.record_once(source_file,evidence,"LEECH_SOURCE_EVIDENCE_COLLISION")
+          stage2_after=s2.stage2_loop(root,batch=1,only_order_id=ident)
+          research_file=area/"stage-02/receipts"/(ident+"--r001.json")
+          stage3_file=area/"stage-03/inbox"/(ident+"--r001.json")
+          if not research_file.is_file() or not stage3_file.is_file():
+              raise SystemExit("LEECH_STAGE2_TO_STAGE3_NOT_PROVEN")
+          print("LEECH_STAGE2_VERIFIED_SOURCE_HANDOFF="+json.dumps({
+            "order_id":ident,"source_evidence_written":seeded,
+            "source_sha256":sha(source_file),"stage2_receipt_sha256":sha(research_file),
+            "stage3_inbox_sha256":sha(stage3_file),"sources":metrics["source_count"],
+            "claims":metrics["claim_count"],"locale":"en-GB",
+            "independent_review_completed":False,"manuscript_created":False,
+            "public_distribution":False,"stage2_results":stage2_after},sort_keys=True))
           PY
           echo LEECH_OWNER_SINGLE_PRODUCT_VPS_HANDOFF_COMPLETED=true
