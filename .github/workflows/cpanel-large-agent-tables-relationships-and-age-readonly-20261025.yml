@@ -1,0 +1,81 @@
+name: cPanel 11GB agent tasks evidence references and age READ ONLY
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - .github/workflows/cpanel-large-agent-tables-relationships-and-age-readonly-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Read column names, foreign keys and status/date aggregates for giant factory tables only
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 400s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,json,hashlib,subprocess
+          h=Path('/home/zomorod2')
+          if os.geteuid()==0 or Path.home()!=h or h.is_symlink():raise SystemExit('INVALID_ACCOUNT')
+          stage=h/'Saeit-staging'
+          if not stage.is_dir() or stage.is_symlink():raise SystemExit('STAGING_MISSING')
+          u=subprocess.run(['uapi','--output=json','Mysql','list_databases'],capture_output=True,text=True,timeout=30)
+          rows=[]
+          if u.returncode==0:
+           try:
+            data=json.loads(u.stdout).get('result',{}).get('data',[])
+            if isinstance(data,list):rows=data
+           except Exception:pass
+          names=[str(x.get('database','')) for x in rows if isinstance(x,dict) and x.get('database')]
+          target_hash=hashlib.sha256(names[0].encode()).hexdigest() if len(names)==1 else ''
+          all_candidates=[h/'Saeit-staging/.venv/bin/python',h/'virtualenv/Saeit-staging/3.11/bin/python',h/'virtualenv/Saeit-staging/3.12/bin/python',h/'virtualenv/Saeit-staging/3.13/bin/python',h/'virtualenv/Saeit-staging/3.10/bin/python',h/'Saeit/.venv/bin/python']
+          vr=h/'virtualenv/Saeit-staging'
+          if vr.is_dir():
+           for sub in vr.iterdir():
+            if sub.is_dir() and sub.name not in ('.','..'):all_candidates.append(sub/'bin/python')
+          exe=None
+          for cand in all_candidates:
+           if cand.exists() and cand.is_file() and os.access(cand,os.X_OK):
+            exe=cand;break
+          probe="import os,json,hashlib\nos.environ.setdefault(\"DJANGO_SETTINGS_MODULE\",\"config.settings\")\nos.environ[\"PYTHONDONTWRITEBYTECODE\"]=\"1\"\nout={\"attempt\":\"factory_big_table_metadata\",\"mutations\":0}\ntry:\n import django\n django.setup()\n from django.db import connections\n c=connections[\"default\"]\n out[\"engine\"]=c.settings_dict.get(\"ENGINE\",\"unknown\")\n if \"mysql\" in out[\"engine\"]:\n  targets=[\"core_agenttask\",\"core_factoryevidence\",\"core_report\",\"core_product\"]\n  with c.cursor() as cur:\n   cur.execute(\"SELECT DATABASE()\")\n   schema=cur.fetchone()[0]\n   out[\"schema_matches_reported_mysql\"]=hashlib.sha256(str(schema).encode()).hexdigest()==os.environ.get(\"TARGET_SCHEMA_SHA\",\"\")\n   cur.execute(\"SELECT TABLE_NAME,COLUMN_NAME,DATA_TYPE,COLUMN_KEY FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('core_agenttask','core_factoryevidence','core_report','core_product') ORDER BY TABLE_NAME,ORDINAL_POSITION\")\n   cols=cur.fetchall()\n   out[\"columns\"]={t:[{\"name\":r[1][:70],\"type\":r[2],\"key\":r[3]} for r in cols if r[0]==t] for t in targets}\n   cur.execute(\"SELECT TABLE_NAME,COLUMN_NAME,REFERENCED_TABLE_NAME,REFERENCED_COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA=DATABASE() AND REFERENCED_TABLE_NAME IS NOT NULL AND (TABLE_NAME IN ('core_agenttask','core_factoryevidence','core_report','core_product') OR REFERENCED_TABLE_NAME IN ('core_agenttask','core_factoryevidence','core_report','core_product')) ORDER BY TABLE_NAME\")\n   out[\"foreign_keys\"]=[{\"table\":r[0],\"column\":r[1],\"references_table\":r[2],\"references_column\":r[3]} for r in cur.fetchall()]\n   out[\"aggregates\"]={}\n   for t in targets:\n    names={r[1] for r in cols if r[0]==t}\n    agg={}\n    cur.execute(\"SELECT COUNT(*) FROM `\"+t+\"`\")\n    agg[\"exact_rows\"]=int(cur.fetchone()[0])\n    status=next((v for v in [\"status\",\"state\",\"processing_status\",\"qc_status\"] if v in names),None)\n    if status:\n     cur.execute(\"SELECT `\"+status+\"`, COUNT(*) FROM `\"+t+\"` GROUP BY `\"+status+\"` ORDER BY COUNT(*) DESC LIMIT 25\")\n     agg[\"status_counts\"]=[{\"status\":str(r[0])[:55],\"rows\":int(r[1])} for r in cur.fetchall()]\n    date=next((v for v in [\"created_at\",\"created_on\",\"created\",\"timestamp\",\"started_at\"] if v in names),None)\n    if date:\n     cur.execute(\"SELECT MIN(`\"+date+\"`),MAX(`\"+date+\"`) FROM `\"+t+\"`\")\n     r=cur.fetchone()\n     agg[\"date_column\"]=date\n     agg[\"first\"]=str(r[0])[:32]\n     agg[\"last\"]=str(r[1])[:32]\n     cur.execute(\"SELECT COUNT(*) FROM `\"+t+\"` WHERE `\"+date+\"` < DATE_SUB(UTC_TIMESTAMP(),INTERVAL 14 DAY)\")\n     agg[\"older_than_14_days\"]=int(cur.fetchone()[0])\n    out[\"aggregates\"][t]=agg\n   out[\"connected\"]=True\nexcept Exception as e:out[\"error_type\"]=type(e).__name__\nprint(\"STAGING_MYSQL_METADATA=\"+json.dumps(out,sort_keys=True),flush=True)"
+          data={}
+          if exe:
+           env=os.environ.copy()
+           env['PYTHONDONTWRITEBYTECODE']='1'
+           env['PYTHONPATH']=str(stage)
+           env['TARGET_SCHEMA_SHA']=target_hash
+           sub=subprocess.run([str(exe),'-B','-c',probe],capture_output=True,text=True,cwd=str(stage),env=env,timeout=160)
+           data={'interpreter_relative':str(exe.relative_to(h)),'exit_code':sub.returncode}
+           for line in sub.stdout.splitlines():
+            if line.startswith('STAGING_MYSQL_METADATA='):
+             try:data['schema']=json.loads(line.split('=',1)[1])
+             except Exception:data['error']='invalid_schema_json'
+           if not data.get('schema'):data['error']='application_startup_or_import_failed'
+          else:data={'error':'no_venv_interpreter'}
+          print('CPANEL_STAGING_MYSQL_METADATA_AUDIT='+json.dumps({'staging':data,'db_count':len(rows),'read_only':True,'mutations':0},sort_keys=True),flush=True)
+
+          PY
+          echo CPANEL_STAGING_MYSQL_METADATA_AUDIT_READONLY=PASS
