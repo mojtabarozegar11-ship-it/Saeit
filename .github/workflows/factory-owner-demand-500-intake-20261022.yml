@@ -1,0 +1,87 @@
+name: Owner 500 product demand -> private factory intake
+on:
+  push:
+    branches: [feature/factory-demand-500-20261022]
+    paths:
+      - factory_config/owner_demand_500_20261022.json
+      - factory_config/owner_demand_500_20261022.csv
+      - factory_config/owner_demand_500_factory_snapshot_20261022.json
+      - scripts/factory_owner_500_demand_intake.py
+      - tests/test_factory_owner_500_demand_intake.py
+      - .github/workflows/factory-owner-demand-500-intake-20261022.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - factory_config/owner_demand_500_20261022.json
+      - factory_config/owner_demand_500_factory_snapshot_20261022.json
+      - scripts/factory_owner_500_demand_intake.py
+      - tests/test_factory_owner_500_demand_intake.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: owner-500-product-demand-safe-vps-intake
+  cancel-in-progress: false
+jobs:
+  validate-500:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify unique 500 product briefs and factory order ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/factory_owner_500_demand_intake.py scripts/factory_continuous_production_orders.py
+          PYTHONPATH=scripts python3 -B -m unittest discover -s tests -p 'test_factory_owner_500_demand_intake.py' -v
+          PYTHONPATH=scripts python3 -B -m unittest discover -s tests -p 'test_factory_continuous_production_orders.py' -v
+          echo FACTORY_OWNER_500_CATALOG_AND_QUEUE_TESTS=PASS
+  install-private-intake:
+    needs: validate-500
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/factory-demand-500-20261022' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Transfer hash-pinned 500 owner demand briefs to actual factory VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d)"
+          chmod 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          host="githubops@178.239.147.150"
+          stage="/home/githubops/factory-runtime/operations/.owner-500-demand-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          timeout 35s ssh -T "${opts[@]}" "$host" "set -eu; test \"\$(id -un)\" = githubops; test ! -e '$stage'; install -d -m 700 '$stage'"
+          scp -q "${opts[@]}" factory_config/owner_demand_500_factory_snapshot_20261022.json "$host:$stage/snapshot.json"
+          scp -q "${opts[@]}" scripts/factory_owner_500_demand_intake.py "$host:$stage/factory_owner_500_demand_intake.py"
+          scp -q "${opts[@]}" scripts/factory_continuous_production_orders.py "$host:$stage/factory_continuous_production_orders.py"
+          for row in 'factory_config/owner_demand_500_factory_snapshot_20261022.json:snapshot.json' 'scripts/factory_owner_500_demand_intake.py:factory_owner_500_demand_intake.py' 'scripts/factory_continuous_production_orders.py:factory_continuous_production_orders.py'; do
+            from="${row%%:*}"
+            target="${row#*:}"
+            local_digest="$(sha256sum "$from" | cut -d' ' -f1)"
+            remote_digest="$(timeout 35s ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$target' | cut -d' ' -f1")"
+            test "$local_digest" = "$remote_digest"
+          done
+          echo FACTORY_OWNER_500_TRANSFER_HASHES=PASS
+          timeout 180s ssh -T "${opts[@]}" "$host" "set -eu; umask 077; root=/home/githubops/factory-runtime/private/autonomous-product-cycle; test -d \"\$root\"; python3 -B '$stage/factory_owner_500_demand_intake.py' --factory-private \"\$root\" --catalog '$stage/snapshot.json'; python3 -B '$stage/factory_continuous_production_orders.py' --factory-private \"\$root\""
+          echo FACTORY_OWNER_500_SITE_DEPLOYS=0
+          echo FACTORY_OWNER_500_QUALITY1000_CERTIFICATIONS=0
+          timeout 40s ssh -T "${opts[@]}" "$host" "rm -f -- '$stage/snapshot.json' '$stage/factory_owner_500_demand_intake.py' '$stage/factory_continuous_production_orders.py'; rmdir '$stage'"
