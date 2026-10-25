@@ -1,0 +1,88 @@
+name: cPanel private backup exact duplicate and quota READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/cpanel-private-backup-sha-duplicate-and-quota-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Identify redundant old private backup copies by full SHA and remeasure account quota
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 380s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,hashlib,json,stat,subprocess,time
+          h=Path('/home/zomorod2')
+          if os.geteuid()==0 or Path.home()!=h or h.is_symlink():raise SystemExit('UNSAFE_HOST_USER')
+          roots=['.mpw-proof-backups','.mpw-private-db-backups']
+          result={}
+          for name in roots:
+              root=h/name
+              if root.is_symlink() or not root.is_dir():raise SystemExit('BACKUP_ROOT_INVALID')
+              children=[]
+              for p in sorted(root.iterdir()):
+                  if p.is_symlink() or not p.is_dir():raise SystemExit('UNSAFE_BACKUP_SUBTREE')
+                  manifest=hashlib.sha256()
+                  filebytes=0
+                  count=0
+                  links=0
+                  for here,dirs,names in os.walk(str(p),followlinks=False):
+                      for n in list(dirs):
+                          obj=Path(here)/n
+                          if obj.is_symlink():
+                              dirs.remove(n)
+                              rel=str(obj.relative_to(p))
+                              manifest.update(('L'+rel+':'+os.readlink(obj)).encode())
+                              links+=1
+                      for n in sorted(names):
+                          obj=Path(here)/n
+                          rel=str(obj.relative_to(p))
+                          if obj.is_symlink():
+                              manifest.update(('L'+rel+':'+os.readlink(obj)).encode());links+=1;continue
+                          if not obj.is_file():raise SystemExit('SPECIAL_BACKUP_FILE')
+                          d=hashlib.sha256()
+                          with obj.open('rb') as f:
+                              for chunk in iter(lambda:f.read(1024*1024),b''):d.update(chunk)
+                          st=obj.stat()
+                          manifest.update(('F'+rel+':'+str(st.st_size)+':'+d.hexdigest()).encode())
+                          filebytes+=st.st_size
+                          count+=1
+                  children.append({'name':p.name[:80],'bytes_of_file_content':filebytes,'file_count':count,
+                     'symlinks':links,'tree_sha256':manifest.hexdigest(),'age_days':round((time.time()-p.stat().st_mtime)/86400,1)})
+              result[name]=children
+          q=subprocess.run(['uapi','--output=json','Quota','get_quota_info'],capture_output=True,text=True,timeout=25)
+          quota={}
+          if q.returncode==0:
+              try:
+                  o=json.loads(q.stdout).get('result',{}).get('data',{})
+                  quota={k:v for k,v in o.items() if k in ('megabytes_used','megabyte_limit','megabytes_remain','inodes_used','inodes_remain','under_quota_overall')}
+              except Exception:pass
+          print('CPANEL_PRIVATE_BACKUP_DUPLICATE_AUDIT='+json.dumps({'groups':result,'quota':quota,'mutations':0,'read_only':True},sort_keys=True),flush=True)
+
+          PY
+          echo CPANEL_PRIVATE_BACKUP_READONLY=PASS
