@@ -1,0 +1,60 @@
+name: Verify evergreen resource canonical URLs read-only
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-evergreen-public-smoke-20261025.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Verify all eight canonical public routes and protected destinations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, time, urllib.request
+          routes = [
+              "https://mojplaywin.com/mpw-learning/20261025/",
+              "https://mojplaywin.com/mpw-learning/20261025/chess-baseline/",
+              "https://mojplaywin.com/mpw-learning/20261025/family-storytime/",
+              "https://mojplaywin.com/mpw-learning/20261025/website-client-brief/",
+              "https://mojplaywin.com/mpw-learning/20261025/research-methods/",
+              "https://zomorodmelal.ir/resources/20261025/",
+              "https://zomorodmelal.ir/resources/20261025/trade-rfq/",
+              "https://zomorodmelal.ir/resources/20261025/farm-risk/",
+          ]
+          for url in routes:
+              ok = False
+              for attempt in range(4):
+                  try:
+                      req = urllib.request.Request(url+"?smoke="+str(time.time_ns()),headers={"Cache-Control":"no-cache"})
+                      with urllib.request.urlopen(req,timeout=16) as r:
+                          body = r.read(80000).decode("utf8","replace")
+                          canon = re.findall(r'<link\s+rel="canonical"\s+href="([^"]+)"',body)
+                          if r.status == 200 and canon == [url] and "<h1>" in body:
+                              ok = True
+                              break
+                  except Exception as e:
+                      print("RETRY",url,type(e).__name__,str(e)[:120])
+                  time.sleep(3)
+              if not ok:
+                  raise SystemExit("CANONICAL_ROUTE_UNVERIFIED:"+url)
+              print("CANONICAL_PUBLIC_RESOURCE_VERIFIED",url)
+          for url in (
+              "https://mojplaywin.com/store/",
+              "https://mojplaywin.com/store/product/72/",
+              "https://mojplaywin.com/store/product/225/",
+              "https://mojplaywin.com/store/product/879/",
+              "https://zomorodmelal.ir/contact/",
+              "https://mojplaywin.com/mojtaba.roozegar/resume/",
+          ):
+              with urllib.request.urlopen(url,timeout=18) as r:
+                  assert r.status == 200,url
+              print("PROTECTED_DESTINATION_STILL_PUBLIC",url)
+          print("ALL_EIGHT_CANONICAL_ROUTES_AND_SIX_EXISTING_DESTINATIONS_PASS")
+          PY
