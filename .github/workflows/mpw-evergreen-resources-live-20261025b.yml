@@ -1,0 +1,159 @@
+name: Publish ten evidence-led bilingual buyer guides to isolated live directories
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/mpw_evergreen_resources_live_20261025b.py"
+      - ".github/workflows/mpw-evergreen-resources-live-20261025b.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-zm-evergreen-pages-live-20261025b
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and validate all ten independent public pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_evergreen_resources_live_20261025b.py
+          python3 scripts/mpw_evergreen_resources_live_20261025b.py build "$RUNNER_TEMP/mpw-evergreen-release"
+          python3 - <<'PY'
+          import json,hashlib,re,subprocess,os
+          from pathlib import Path
+          root=Path(os.environ["RUNNER_TEMP"])/"mpw-evergreen-release"
+          m=json.loads((root/"release.json").read_text())
+          assert m["release"]=="organic-resource-pages-20261025b-v1"
+          assert len(m["files"]["mpw"])==8 and len(m["files"]["zm"])==3
+          for site,entries in m["files"].items():
+              for rel,sha in entries.items():
+                  data=(root/site/rel).read_bytes()
+                  assert hashlib.sha256(data).hexdigest()==sha,rel
+                  if rel!=".htaccess":
+                      assert b'<meta name="robots" content="index,follow' in data,rel
+                      assert b'<link rel="canonical"' in data,rel
+          print("TEN_RESOURCE_PAGES_AND_STATIC_CONFIG_HASH_VALIDATED")
+          PY
+      - name: Verify current official prices and protected pages before any publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request
+          for url,marker in [
+            ("https://mojplaywin.com/store/product/72/","7.50"),
+            ("https://mojplaywin.com/store/product/225/","4.00"),
+            ("https://mojplaywin.com/store/product/879/","6.80"),
+            ("https://mojplaywin.com/store/","Atelier Interior"),
+            ("https://zomorodmelal.ir/contact/","زمرد ملل"),
+            ("https://mojplaywin.com/mojtaba.roozegar/resume/","Mojtaba Roozegar")]:
+              with urllib.request.urlopen(url,timeout=22) as r:
+                  assert r.status==200 and marker in r.read(350000).decode("utf-8","replace"),url
+              print("PRE_RELEASE_LIVE_PAGE_AND_PRICE_VERIFIED",url)
+          PY
+      - name: Establish fingerprint-pinned private SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/evergreen-pages-ssh"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY_READY"
+      - name: Atomically publish only new directories and verify all public hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/evergreen-pages-ssh"
+          stage="/home/zomorod2/.organic-resource-b-stage-$GITHUB_RUN_ID"
+          installed=0
+          cleanup() {
+            rc=$?
+            trap - EXIT
+            if test "$rc" -ne 0 && test "$installed" -eq 1; then
+              echo "LIVE_SMOKE_FAILED_ROLLBACK_ONLY_NEW_HASH_MATCHED_DIRECTORIES"
+              ssh -T -F "$d/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_evergreen_resources_live_20261025b.py || echo "MANUAL_RELEASE_RECOVERY_REQUIRED"
+            fi
+            ssh -F "$d/config" saeit-cpanel "rm -rf -- '$stage'" || true
+            rm -rf -- "$d"
+            exit "$rc"
+          }
+          trap cleanup EXIT
+          ssh -F "$d/config" saeit-cpanel "test ! -e '$stage' && install -d -m 700 '$stage'"
+          tar -cf - -C "$RUNNER_TEMP/mpw-evergreen-release" . | ssh -T -F "$d/config" saeit-cpanel "tar -xf - -C '$stage'"
+          installed=1
+          ssh -T -F "$d/config" saeit-cpanel "python3 - apply '$GITHUB_RUN_ID'" < scripts/mpw_evergreen_resources_live_20261025b.py
+          python3 - <<'PY'
+          import hashlib,json,os,urllib.request,time
+          from pathlib import Path
+          m=json.loads((Path(os.environ["RUNNER_TEMP"])/"mpw-evergreen-release/release.json").read_text())
+          bases={"mpw":"https://mojplaywin.com/mpw-learning/20261025b/",
+                 "zm":"https://zomorodmelal.ir/resources/20261025b/"}
+          for site,entries in m["files"].items():
+              for rel,sha in entries.items():
+                  if rel==".htaccess": continue
+                  url=bases[site]+rel
+                  ok=False
+                  for attempt in range(5):
+                      try:
+                          req=urllib.request.Request(url+"?release="+str(time.time_ns()),headers={"Cache-Control":"no-cache"})
+                          with urllib.request.urlopen(req,timeout=22) as r:
+                              data=r.read(100000)
+                              if r.status==200 and hashlib.sha256(data).hexdigest()==sha:
+                                  ok=True;break
+                      except Exception as e:
+                          print("PUBLIC_SMOKE_RETRY",url,type(e).__name__,str(e)[:100])
+                      time.sleep(3)
+                  if not ok:raise RuntimeError("PUBLIC_PAGE_HASH_MISMATCH:"+url)
+                  print("PUBLIC_MARKETING_RESOURCE_VERIFIED",url)
+          for url in ("https://mojplaywin.com/","https://mojplaywin.com/store/",
+                      "https://mojplaywin.com/store/product/72/",
+                      "https://mojplaywin.com/store/product/225/",
+                      "https://mojplaywin.com/store/product/879/",
+                      "https://zomorodmelal.ir/"):
+              with urllib.request.urlopen(url,timeout=22) as r:assert r.status==200,url
+          print("TEN_LIVE_EVERGREEN_PAGES_AND_EXISTING_SITES_VERIFIED")
+          PY
+          installed=0
