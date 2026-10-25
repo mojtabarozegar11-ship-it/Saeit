@@ -375,5 +375,93 @@ jobs:
               "stage3_receipt_sha256":sha(area/"stage-03/receipts"/name),
               "stage4_inbox_sha256":sha(area/"stage-04/inbox"/name),
               "independent_certification":False,"public_release":False},sort_keys=True))
+
+          # Stage 4 is the private ORIGINAL AUTHORSHIP queue.  The generic
+          # bilingual 'prototype' worker is deliberately not invoked: it
+          # expects different chapter fields and is not a 150k-word book engine.
+          # Correct the architectural edition-title shadowing via immutable,
+          # hash-linked erratum; never rewrite the original Stage3 receipt.
+          true_title=order["subject"]
+          recorded_title=design["edition_plans"]["en-GB"]["title"]
+          if not true_title.startswith("The Professional Leech Farming Handbook"):
+              raise SystemExit("LEECH_UNEXPECTED_ORDER_TITLE")
+          if recorded_title==true_title:
+              editorial_erratum_status="not_required"
+              title_record={"schema":"saeit.factory.stage3-edition-title-verification.v1",
+                  "order_id":ident,"revision":1,"stage3_design_sha256":designlib.digest(design),
+                  "stage1_work_order_sha256":designlib.digest(order),
+                  "verified_book_title":true_title,
+                  "erratum_kind":"title_already_correct",
+                  "publication_allowed":False}
+          else:
+              editorial_erratum_status="corrected_in_downstream_authoring_manifest"
+              title_record={"schema":"saeit.factory.stage3-edition-title-verification.v1",
+                  "order_id":ident,"revision":1,"stage3_design_sha256":designlib.digest(design),
+                  "stage1_work_order_sha256":designlib.digest(order),
+                  "erratum_kind":"stage3_local_chapter_loop_variable_shadowed_book_title",
+                  "recorded_stage3_edition_title":recorded_title,
+                  "verified_book_title":true_title,
+                  "correction_applies_to":"All authoring, typesetting, metadata, and eventual publication",
+                  "immutable_stage3_design_preserved":True,
+                  "publication_allowed":False}
+          chapter_jobs=[]
+          for chapter in design["chapters"]:
+              if chapter["content_status"]!="NOT_YET_AUTHORED" or chapter["verified_actual_words"]!=0:
+                  raise SystemExit("LEECH_STAGE4_FALSE_AUTHORING_STATUS")
+              chapter_jobs.append({
+                  "chapter_number":chapter["unit"],
+                  "chapter_title":chapter["title_en"],
+                  "four_mandatory_sections":chapter["section_plan"],
+                  "individually_assessed_professional_output":chapter["practical_capstone"],
+                  "original_substantive_word_target":chapter["target_substantive_words"],
+                  "research_claim_ids":chapter["source_claim_ids"],
+                  "original_exercises_and_solved_cases_required":True,
+                  "scientific_primary_sources_to_extend":chapter["additional_primary_research_required"],
+                  "source_links_and_claim_limitations_required":True,
+                  "licensed_figures_and_reproducible_tables_required":True,
+                  "independent_biology_veterinary_safety_legal_editorial_review_required":True,
+                  "production_state":"queued_for_full_original_authorship",
+                  "verified_manuscript_word_count":0,
+                  "released":False
+              })
+          if len(chapter_jobs)!=30 or sum(x["original_substantive_word_target"] for x in chapter_jobs)!=159000:
+              raise SystemExit("LEECH_INVALID_AUTHORING_JOBS")
+          authoring_manifest={
+              "schema":"saeit.factory.leech-professional-original-authoring-intake.v1",
+              "order_id":ident,"revision":1,"source_product_id":product_key,
+              "official_title":true_title,"locale":"en-GB","publisher_site":"mojplaywin.com",
+              "source_work_order_sha256":designlib.digest(order),
+              "stage2_research_sha256":designlib.digest(research),
+              "stage3_design_sha256":designlib.digest(design),
+              "title_verification_sha256":designlib.digest(title_record),
+              "edition_title_from_stage1_is_authoritative":True,
+              "full_original_chapter_jobs":chapter_jobs,
+              "chapters_queued":30,"minimum_original_manuscript_words":150001,
+              "target_original_manuscript_words":159000,
+              "verified_original_manuscript_words":0,
+              "coverage_requirement":"Professional from zero to competent operator, with evidence linked at claim level",
+              "source_gaps_pending":design["chapter_evidence_gaps"],
+              "no_automated_approval_or_concocted_expert_identity":True,
+              "queue_semantics":"Manufacturing instruction only; not completed manuscript or proof of automatic authoring",
+              "manuscript_complete":False,"independent_review_complete":False,
+              "quality1000_approved":False,"public_distribution_allowed":False
+          }
+          with lock3.open("a+b") as lock_handle:
+              os.fchmod(lock_handle.fileno(),0o600)
+              fcntl.flock(lock_handle.fileno(),fcntl.LOCK_EX)
+              verified_title_file=area/"stage-03/errata"/name
+              erratum_written=designlib.once(verified_title_file,title_record)
+              stage4_jobs_file=area/"stage-04/authoring-inbox"/name
+              jobs_created=designlib.once(stage4_jobs_file,authoring_manifest)
+          print("LEECH_STAGE4_FULL_AUTHORING_QUEUE="+json.dumps({
+              "order_id":ident,"jobs_created":jobs_created,
+              "chapter_jobs":len(chapter_jobs),
+              "target_original_words":authoring_manifest["target_original_manuscript_words"],
+              "currently_verified_original_words":0,
+              "stage3_title_erratum_status":editorial_erratum_status,
+              "title_verification_written":erratum_written,
+              "title_verification_sha256":sha(verified_title_file),
+              "private_authoring_manifest_sha256":sha(stage4_jobs_file),
+              "qc1000":False,"publication":False},sort_keys=True))
           PY
           echo LEECH_OWNER_SINGLE_PRODUCT_VPS_HANDOFF_COMPLETED=true
