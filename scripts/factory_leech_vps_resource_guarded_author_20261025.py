@@ -95,54 +95,37 @@ def assignment():
 
 
 def build_prompt(d, retry=0):
-    """Bound source-scoped prompt prefill on the owner's legacy SSE2-only CPU.
-
-    No live drafts or protected customer data are included. Every section
-    receives the same safety boundaries and documented source limitations.
-    """
+    """Source-scoped short-context leech SOP prompt for very slow old SSE2 VPS."""
     focus_list = d.get("section_plan", [])
     if not isinstance(focus_list, list) or not focus_list:
         raise RuntimeError("MISSING_OPERATIONAL_SECTION_PLAN")
     part = int(d["part_number"])
-    focus = str(focus_list[(part - 1 + retry) % len(focus_list)])[:200]
+    focus = " ".join(str(focus_list[(part - 1 + retry) % len(focus_list)]).split())[:125]
     angles = (
-        "site layout, staff tasks and operator checklist",
-        "record-keeping, water observation and escalation decision",
-        "hypothetical equipment cost or staffing calculation",
-        "quarantine, containment and veterinary referral",
-        "traceability, packaging risk and buyer specification",
-        "procurement, work scheduling and failure diagnosis",
-    )
-    sources = []
-    for row in d.get("foundational_source_records", [])[:9]:
-        if isinstance(row, dict):
-            ident = str(row.get("id", ""))[:30]
-            title = " ".join(str(row.get("title", "")).split())[:48]
-            scope = " ".join(str(row.get("limitation", "")).split())[:95]
-            if ident:
-                sources.append("%s: %s; scope: %s" % (ident, title, scope))
-    source_context = " | ".join(sources)[:1600]
-    deliverable = " ".join(str(d.get("practical_deliverable", "")).split())[:175]
+        "layout and daily staff duties", "water-monitoring records and response",
+        "hypothetical operating costs", "quarantine and veterinary referral",
+        "traceable harvest and buyer specification", "equipment failure response")
+    refs = []
+    for row in d.get("foundational_source_records", [])[:5]:
+        if isinstance(row, dict) and row.get("id"):
+            scope = str(row.get("limitation") or row.get("title") or "")
+            scope = " ".join(scope.split())[:65]
+            refs.append(str(row["id"])[:20] + ":" + scope)
     return (
-        "/no_think\nWrite 400-560 original, non-repetitive English words for a "
-        "professional medicinal LEECH BREEDING FARM operator handbook, "
-        "not clinical treatment and not general zoology. "
-        "Chapter %s: %s. Specific new topic: %s. Practical angle: %s. "
-        "Required vocational output: %s. "
-        "Start with a descriptive heading. Include an actionable farm SOP, "
-        "specific monitoring-log fields, accountable decisions, a clearly "
-        "HYPOTHETICAL worked farm example with explicit assumptions, hazards "
-        "and a trained-veterinarian/regulator escalation decision. Explain "
-        "species identity: Hirudo medicinalis, H. verbana and H. orientalis "
-        "are not interchangeable. No wild capture, human or animal blood-feeding "
-        "methods, pathogen culture, invented temperatures/densities, clinical "
-        "advice, fabricated citations or unsupported regulations. Claim only "
-        "what the following bounded source notes support, name an ID only for "
-        "a grounded claim, and flag uncertainties. Sources: %s. "
-        "Write textbook prose directly, no opening boilerplate or repetition."
-    ) % (d["chapter_number"], str(d["chapter_title"])[:95],
-         focus, angles[(part - 1 + 2 * retry) % len(angles)],
-         deliverable, source_context)
+        "/no_think\n"
+        "Write 335-460 ORIGINAL English vocational textbook words about "
+        "OPERATING a lawful medicinal-leech breeding FARM. No clinical advice. "
+        "Chapter %s, %s. Section: %s. Angle: %s. "
+        "Explain a practical SOP, named monitoring-log fields, decision thresholds "
+        "only if sourced, one explicitly HYPOTHETICAL operational calculation, "
+        "staff responsibility, biosecurity hazard, and licensed specialist referral. "
+        "Distinguish Hirudo medicinalis, H. verbana and H. orientalis. "
+        "No wild capture, human/animal feeding protocol, pathogen culture, "
+        "fake citations, unsourced fixed limits or padding. "
+        "Bound evidence by these source IDs and scopes: %s. "
+        "Acknowledge unknowns; use a concrete section heading and fresh prose."
+    ) % (d["chapter_number"], str(d["chapter_title"])[:72],
+         focus, angles[(part - 1 + retry) % len(angles)], " | ".join(refs)[:620])
 
 
 def low_priority_preexec():
@@ -168,7 +151,7 @@ def call_model(doc, process, error, retry=0):
                 "OPERATOR prose. Never invent empirical thresholds or approvals. "
                 "Write ONLY substantive textbook text, without internal reasoning. /no_think")},
             {"role": "user", "content": prompt}],
-        "max_tokens": 1150, "temperature": round(0.69 + retry * 0.05, 2),
+        "max_tokens": 900, "temperature": round(0.69 + retry * 0.05, 2),
         "top_p": 0.9, "chat_template_kwargs": {"enable_thinking": False},
         "stream": True,
     }
@@ -238,7 +221,7 @@ def call_model(doc, process, error, retry=0):
                 continue
             body = "".join(chunks).strip()
             last_checked_bytes = len(body)
-            if good_segment(body, 355):
+            if good_segment(body, 315):
                 return body
     if error:
         raise RuntimeError("LOW_MEMORY_ABORT")
