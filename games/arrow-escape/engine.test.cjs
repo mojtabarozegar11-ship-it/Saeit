@@ -40,5 +40,10 @@ assert.equal(game.generate(Infinity).level,1,'infinite level must be rejected sa
 assert.equal(game.generate(NaN).level,1,'NaN level must be rejected safely');
 assert.equal(game.generate(-20).level,1,'negative level must normalize to first level');
 assert.equal(game.generate(1e30).level,1000000,'extreme level must be bounded');
+assert.equal(game.canExit(null,[],7),false,'missing arrow must fail closed');
+assert.equal(game.canExit({id:1,dir:99,path:[{x:1,y:1}]},[],7),false,'unknown exit direction must not crash');
+assert.equal(game.canExit({id:1,dir:0,path:null},[],7),false,'corrupt arrow body must fail closed');
+assert.equal(game.solve(null,7),null,'malformed board must not crash solver');
+assert.equal(game.solve([],Infinity),null,'nonfinite board size must be rejected');
 assert.ok(withBlockers > 10, 'levels contain no challenging dependencies');
 console.log('ARROW_SOLVABLE_LEVELS=PASS', { tested, withBlockers, min, max });
