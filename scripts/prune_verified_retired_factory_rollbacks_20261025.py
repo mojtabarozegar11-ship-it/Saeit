@@ -74,6 +74,7 @@ def verify_newer() -> list[str]:
         if st2.st_ino != st.st_ino or st2.st_size != st.st_size or st2.st_mtime_ns != st.st_mtime_ns:
             raise RuntimeError("NEWER_RESTORE_POINT_CHANGED")
         verified.append(folder.name)
+        print("NEWER_BACKUP_INTEGRITY_OK=" + str(len(verified)), flush=True)
     return verified
 
 def candidates() -> list[dict]:
@@ -125,6 +126,7 @@ def candidates() -> list[dict]:
         st2 = archive.stat()
         if st2.st_ino != st.st_ino or st2.st_size != st.st_size or st2.st_mtime_ns != st.st_mtime_ns:
             raise RuntimeError("ARCHIVE_MODIFIED_DURING_VERIFICATION")
+        print("RETIRED_ARCHIVE_HASH_OK=" + str(len(output) + 1), flush=True)
         output.append({"name": name, "path": archive, "sha256": archive_sha, "bytes": compressed_bytes,
                        "ino": st.st_ino, "mtime_ns": st.st_mtime_ns})
     return output
