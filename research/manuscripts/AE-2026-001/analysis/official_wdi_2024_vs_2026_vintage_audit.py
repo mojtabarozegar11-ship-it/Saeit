@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import re
 import statistics
@@ -18,7 +19,7 @@ import tempfile
 import urllib.request
 import zipfile
 
-ARCHIVE = "https://databankfiles.worldbank.org/public/ddpext_download/Archive/WDI_excel_2024_10_24.zip"
+ARCHIVE = os.environ.get("WDI_ARCHIVE_URL", "https://databankfiles.worldbank.org/public/ddpext_download/Archive/WDI_excel_2024_10_24.zip")
 INDICATOR = "NV.AGR.EMPL.KD"
 YEARS = (2000, 2019, 2023)
 ROOT = Path(__file__).resolve().parent.parent
@@ -28,7 +29,7 @@ COLUMN = {
     2019: "ag_value_added_per_worker_2019_constant2015usd",
     2023: "ag_value_added_per_worker_2023_constant2015usd",
 }
-OUTPUT = ROOT / "AE-2026-001_OFFICIAL_2024_VS_2026_WDI_VINTAGE_EMPIRICAL_AUDIT_2026-10-26.json"
+OUTPUT = ROOT / os.environ.get("WDI_OUTPUT_FILENAME", "AE-2026-001_OFFICIAL_2024_VS_2026_WDI_VINTAGE_EMPIRICAL_AUDIT_2026-10-26.json")
 
 def maybe_pos(x):
     try:
@@ -169,7 +170,7 @@ def main():
         meta=fetch_archive(scratch/"official_archive.zip")
         older,sheets=load_original_wdi_excel(scratch/"official_archive.zip",scratch)
     report={
-      "comparison":"Official World Bank 2024-10-24 historical Excel archive versus source-archived official WDI 2026-10-25 API",
+      "comparison":"Official World Bank historical Excel archive "+ARCHIVE.rsplit("/",1)[-1]+" versus source-archived official WDI 2026-10-25 API",
       "retrieved_utc":datetime.now(timezone.utc).isoformat(),
       "indicator":INDICATOR,
       "units":"agriculture, forestry and fishing value added per worker; constant 2015 USD",
