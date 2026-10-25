@@ -4,11 +4,14 @@ on:
     branches: [main]
     paths:
       - .github/workflows/factory-leech-vps-inference-capacity-20261025.yml
+      - scripts/factory_leech_vps_capacity_probe_20261025.py
+  schedule:
+    - cron: '29 * * * *'
   workflow_dispatch:
 permissions: {contents: read}
 jobs:
   inspect-own-vps-without-model-load:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && contains(github.event.head_commit.message, '[owner-leech-vps-capacity-20261025]')
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[owner-leech-vps-capacity-20261025]'))
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
