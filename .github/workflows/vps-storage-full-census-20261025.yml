@@ -1,0 +1,105 @@
+name: VPS capacity and biggest consumers forensic audit READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/vps-storage-full-census-20261025.yml
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Measure VPS disk and inode usage, top consumers, and large files without changes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-owner-reset-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 550s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          import collections,json,os,shutil,subprocess,stat
+          home=Path('/home/githubops')
+          runtime=home/'factory-runtime'
+          ops=runtime/'operations'
+          private=runtime/'private'
+          factory=private/'autonomous-product-cycle'
+          backups=ops/'backups'
+          django=runtime/'django-app'
+          for p in (home,runtime,ops,private,factory,backups,django):
+              if p.is_symlink() or not p.is_dir():raise SystemExit('VPS_STORAGE_ROOT_TOPOLOGY_UNSAFE')
+          if os.geteuid()==0 or os.environ.get('USER')!='githubops':
+              raise SystemExit('UNEXPECTED_AUDIT_USER')
+          def summarize_children(folder,max_items=40):
+              children=[p for p in folder.iterdir() if not p.is_symlink()]
+              if len(children)>2500:raise SystemExit('TOO_MANY_IMMEDIATE_CHILDREN')
+              cmd=subprocess.run(['du','-sx','-B1','--']+[str(p) for p in children],capture_output=True,text=True,timeout=210)
+              if cmd.returncode:raise SystemExit('DISK_USAGE_SCAN_FAILURE:'+folder.name)
+              all_sizes={}
+              for line in cmd.stdout.splitlines():
+                  n,path=line.split('\t',1)
+                  all_sizes[Path(path).name]=int(n)
+              total=sum(all_sizes.values())
+              top=[]
+              excluded=0
+              for name,b in sorted(all_sizes.items(),key=lambda x:-x[1]):
+                  if name.startswith('.') and name not in ('.venv',):
+                      excluded+=b;continue
+                  if any(token in name.lower() for token in ('secret','credential','token','ssh','private-key')):
+                      excluded+=b;continue
+                  top.append({'name':name,'bytes':b})
+              return {'child_count':len(children),'total_child_bytes':total,'top':top[:max_items],
+                      'masked_sensitive_and_dotfiles_bytes':excluded}
+          usage=shutil.disk_usage('/')
+          vfs=os.statvfs('/')
+          def fs_usage(where):
+              u=shutil.disk_usage(where)
+              v=os.statvfs(where)
+              return {'total_bytes':u.total,'used_bytes':u.used,'free_bytes_available_to_account':u.free,
+                      'inode_total':v.f_files,'inode_free':v.f_favail}
+          # Read-only top consumers, with no file bodies or credentials.
+          trees={}
+          for label,folder in [('user_home',home),('factory_runtime',runtime),('operations',ops),
+                               ('private',private),('production_private',factory),
+                               ('operations_backups',backups),('django_app',django)]:
+              trees[label]=summarize_children(folder,45 if label in ('operations','production_private') else 30)
+          large=[]
+          for base,dirs,files in os.walk(runtime,followlinks=False):
+              dirs[:]=[d for d in dirs if not (Path(base)/d).is_symlink()]
+              for name in files:
+                  p=Path(base)/name
+                  if p.is_symlink() or not p.is_file():continue
+                  s=p.stat()
+                  if s.st_size>=50*2**20:
+                      rel=str(p.relative_to(runtime))
+                      if any(t in rel.lower() for t in ('.ssh','secret','credential','private-key')):
+                          continue
+                      large.append({'relative_path':rel,'file_bytes':s.st_size})
+          large.sort(key=lambda x:-x['file_bytes'])
+          deleted_open={'scan_available':False}
+          if shutil.which('lsof'):
+              # Restrict to the factory account's visible file handles; never print paths.
+              cp=subprocess.run(['lsof','-nP','+L1','-u','githubops'],capture_output=True,text=True,timeout=25)
+              if cp.returncode in (0,1):
+                  lines=cp.stdout.splitlines()
+                  deleted_open={'scan_available':True,'deleted_open_handle_rows_visible_to_account':max(0,len(lines)-1)}
+          df=subprocess.run(['df','-P','-hT','/'],capture_output=True,text=True,timeout=10)
+          di=subprocess.run(['df','-Pi','/'],capture_output=True,text=True,timeout=10)
+          print('VPS_STORAGE_EXACT_CENSUS='+json.dumps({'filesystem':fs_usage('/'),
+              'home_filesystem':fs_usage(home),'du_trees':trees,'large_files_over_50mib':large[:35],
+              'large_file_count':len(large),'deleted_open':deleted_open,
+              'df_hT_summary':df.stdout.splitlines()[-1] if df.returncode==0 else None,
+              'df_inode_summary':di.stdout.splitlines()[-1] if di.returncode==0 else None,
+              'read_only':True,'mutations':0},sort_keys=True),flush=True)
+
+          PY
+          echo VPS_STORAGE_EXACT_CENSUS_READONLY=PASS
