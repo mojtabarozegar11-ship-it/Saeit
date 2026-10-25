@@ -1,0 +1,62 @@
+name: Diagnose current English-only single product manufacturing live state
+on:
+  pull_request:
+    paths:
+      - .github/workflows/factory-english-single-product-state-readonly-20261025.yml
+permissions: {contents: read}
+jobs:
+  single-item-readonly:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: VPS private single-order status only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/single-product-state"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 160s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 python3 - <<'PY'
+          import json,shutil,subprocess
+          from pathlib import Path
+          ops=Path("/home/githubops/factory-runtime/operations/production-instructions")
+          area=Path("/home/githubops/factory-runtime/private/autonomous-product-cycle/production-instructions")
+          assert ops.is_dir() and area.is_dir() and not ops.is_symlink() and not area.is_symlink()
+          def doc(p):
+            if p.is_file() and not p.is_symlink():return json.loads(p.read_text())
+            return {}
+          state=doc(area/"stage-06/english-first-active-v1.json")
+          item=state.get("active_order") or "WO-00001496"
+          if item!="WO-00001496":raise SystemExit("UNEXPECTED_ACTIVE_ITEM")
+          order=doc(area/"orders"/(item+".json"))
+          source=order.get("source_product_id","")
+          log=ops/"english-first-serial.log"
+          messages=[]
+          if log.is_file() and not log.is_symlink():
+            with log.open("rb") as stream:
+              stream.seek(max(0,log.stat().st_size-9000))
+              excerpt=stream.read().decode("utf8","replace").splitlines()
+              messages=[x[:350] for x in excerpt[-17:]]
+          stage2=doc(area/"stage-02/status.json")
+          proof={"free_bytes":shutil.disk_usage(ops).free,
+            "active_order":item,
+            "item_source_product_id":str(source)[:65],
+            "item_status":order.get("status"),
+            "item_editions":[x.get("locale") for x in order.get("editions",[]) if isinstance(x,dict)],
+            "state":{k:state.get(k) for k in ("tick","stage2","last_stage1_created","updated_utc","quality_approved")},
+            "stage2_worker_exists":(ops/"stage2-research-serial.py").is_file(),
+            "stage2_research_needed_exists":(area/"stage-02/research-needed"/(item+"--r001.json")).is_file(),
+            "stage2_receipt_exists":(area/"stage-02/receipts"/(item+"--r001.json")).is_file(),
+            "stage2_current_status":{k:stage2.get(k) for k in ("newly_completed_research_dossiers","newly_documented_missing_sources","scanned_new_or_changed_this_run","checked_utc")},
+            "recent_serial_log_lines":messages,"read_only":True}
+          print("ENGLISH_SINGLE_PRODUCT_LIVE_STATUS="+json.dumps(proof,sort_keys=True))
+          PY
