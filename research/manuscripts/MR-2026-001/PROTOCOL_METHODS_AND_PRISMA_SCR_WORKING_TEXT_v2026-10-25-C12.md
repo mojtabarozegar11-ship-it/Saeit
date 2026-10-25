@@ -1,5 +1,5 @@
 # MR-2026-001 — original protocol/manuscript METHODS working text
-Version 2026-10-25/C12-v1 | Not a completed review or publisher-ready manuscript.
+Version 2026-10-25/C12-v2 (search-retrieval and source-provenance update; supersedes v1 readiness claims) | Not a completed review or publisher-ready manuscript.
 **Author-approved PCC scope**: AUTHOR_APPROVED_SCOPE_DECISION_2026-10-25.md.
 **Reporting framework**: PRISMA-ScR, 20 essential + 2 optional items, https://www.prisma-statement.org/scoping ; Tricco et al., Ann Intern Med 2018;169:467–473, DOI 10.7326/M18-0850.
 The text below is a **prospective methodological specification**, NOT a claim that every described procedure has been executed. Distinguish *will* from *was* in any future final manuscript.
@@ -28,11 +28,14 @@ Although formal risk-of-bias scoring is not mandatory for a scoping review, the 
 ### Source-specific pilot charting note — NOT formal included-study synthesis
 Amini, Emami and Dehghanisanij (2025; DOI 10.1038/s41598-025-26567-z) provides a relevant **candidate** primary-stratum case: within-farm control/treatment comparisons on eight farms in Iran, operator-facing DSS recommendations, field water measurements and participatory appraisals. Publisher Results discuss both reduced and increased irrigation depth across farms. The study's workshop scores are self-reported, and longitudinal post-trial uptake is not established. Within-article water-productivity values for F6/F7 require Table 5 reconciliation. The extraction is recorded in CYCLE12_AMINI_2025_FULLTEXT_EXTRACTION_NOVELTY_AND_PROVENANCE_2026-10-25.md. This pilot record cannot support a PRISMA flow, prevalence estimate, or final review conclusion.
 
+### Additional candidate source: human adoption contrasted with scenario modeling
+Cvejić et al. (2020), *Agronomy* 10(9), 1238, DOI https://doi.org/10.3390/agronomy10091238, reports a multi-year farmer-facing irrigation recommendation initiative in the Vipava Valley (35 farms originally expressed interest). In 2020, **83% of responding farmers reported using the system**, while **91% had earlier failed to regularly complete irrigation diaries**. Thus these uptake and behavior categories have important self-report / missingness qualifications and should not be treated as independent usage telemetry. The paper's prominent **25% potential reduction in irrigation volume and 24% reduction in energy and CO₂ are conditional simulations**, not empirically demonstrated post-implementation resource savings. The official HTML also contains an unresolved statement referring to "Forty-six farmers" in the context of 35 initial farms; do not convert this to "46%" without a publisher correction or denominator clarification. Source anchoring and caution notes: `PRIMARY_SOURCE_CVEJIC_2020_FIELD_ADOPTION_PROVENANCE_2026-10-25.md`. **Candidate only; never counted as formally included without human screening.**
+
 ## PRISMA-ScR readiness gate (current)
 - Items related to title/rationale/objectives and eligibility **working draft**: prepared, not yet peer-reviewed.
 - Protocol registration and version freeze: **not done**; no false registry ID.
-- Search sources/complete strings/dates: **not done for indexed databases**; targeted public discovery logged separately.
-- Record counts: retrieved **UNKNOWN**, deduplicated **UNKNOWN**, screened **UNKNOWN**, excluded **UNKNOWN**, included **UNKNOWN**; unknown does NOT mean zero.
+- Search sources/complete strings/dates: **three preliminary indexed retrievals executed on 2026-10-25** (Europe PMC 95, OpenAlex 52, Europe PMC restricted to AGRICOLA-source 525); query-specific snapshot sources are preserved under `index_search_2026-10-25/`. **Protocol-frozen systematic search: NOT DONE**; not an independent live USDA portal query.
+- Pilot bibliographic retrieval: **672 source entries, 604 machine-deduplicated unique candidate records** with 68 duplicate entries across sources. These are real preliminary retrieval counts, **not a final PRISMA flow**. Human title/abstract screened: **UNKNOWN / NOT PERFORMED**, full text assessed: **NOT PERFORMED**, excluded: **UNKNOWN**, included: **UNKNOWN**. Automated keyword priority tiers do not constitute screening.
 - Charting, appraisal, full evidence synthesis: **not completed**. Only pilot extraction exists.
 - Plagiarism/similarity software: **not run**; human-source checking remains required.
 - Authors, CRediT, affiliations, disclosures, journal selection and fees: **not approved for final submission**.
