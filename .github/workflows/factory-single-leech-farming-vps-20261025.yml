@@ -48,8 +48,6 @@ jobs:
               if p.is_symlink() or not p.is_dir(): raise SystemExit("LEECH_BLOCKED_UNSAFE_OR_MISSING_VPS_PATH")
           for p in (worker,stage2):
               if p.is_symlink() or not p.is_file(): raise SystemExit("LEECH_BLOCKED_EXISTING_WORKER_UNAVAILABLE")
-          py=base/".venv/bin/python"
-          if not py.is_file() or py.is_symlink(): raise SystemExit("LEECH_BLOCKED_VENV_UNAVAILABLE")
           free=shutil.disk_usage(root).free
           if free<reserve:
               print("LEECH_VPS_START_BLOCKED="+json.dumps({"reason":"BELOW_2_GIB_RESERVE","free_gib":round(free/2**30,3),"mutations":0}))
