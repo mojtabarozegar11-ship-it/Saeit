@@ -247,7 +247,7 @@ def main():
                "PYTHONDONTWRITEBYTECODE": "1",
                "LEECH_OFFLINE_INFERENCE_BACKEND": "owner-vps-qwen3-1.7b-q4km"}
         cmd = [str(SERVER), "-m", str(MODEL), "--host", "127.0.0.1",
-               "--port", str(PORT), "-c", "4096", "-t", "1", "-ngl", "0", "--parallel", "1", "--reasoning", "off"]
+               "--port", str(PORT), "-c", "4096", "-t", "2", "-ngl", "0", "--parallel", "1", "--reasoning", "off"]
         with open(os.devnull, "wb") as sink:
             proc = subprocess.Popen(cmd, env=env, stdin=subprocess.DEVNULL,
                                     stdout=sink, stderr=sink, preexec_fn=low_priority_preexec)
