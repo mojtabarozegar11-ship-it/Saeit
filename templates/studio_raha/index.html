@@ -149,12 +149,13 @@ function jungleRunGame(stage){
  // Four of each hazard ensure a complete movement-skills course in every run.
  const course=Array.from({length:12},(_,i)=>hazards[i%hazards.length]);
  for(let i=course.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[course[i],course[j]]=[course[j],course[i]]}
- let step=0,lives=3,stars=0,streak=0,finished=false;
+ let step=0,lives=3,stars=0,streak=0,finished=false,best=0;
+ try{const n=Number(localStorage.getItem('studio-raha-jungle-best-v1'));if(Number.isFinite(n)&&n>0)best=Math.floor(n)}catch(e){}
  function paint(){
   const won=finished&&lives>0,over=finished;
   const hazard=course[step];
   stage.innerHTML='<div class="stage-message" role="status" aria-live="polite">'+(over?(won?'🏆 Jungle cleared!':'🌱 The jungle wins this round.'):hazard.icon+' '+hazard.hint)+'</div>'+
-   '<div class="stage-message">Obstacle '+Math.min(step+1,12)+' / 12 · Hearts '+('❤️'.repeat(lives)||'0')+' · Stars '+stars+' · Streak '+streak+'</div>'+
+   '<div class="stage-message">Obstacle '+Math.min(step+1,12)+' / 12 · Hearts '+('❤️'.repeat(lives)||'0')+' · Stars '+stars+' · Streak '+streak+' · Best '+best+'</div>'+
    '<div class="stage-actions" id="jungleActions"></div>'+
    '<small style="display:block;margin-top:12px;color:#536581">Space / ↑ = Jump · ↓ = Duck · → = Sidestep. Touch controls work on phones.</small>';
   const actions=stage.querySelector('#jungleActions');
@@ -167,7 +168,7 @@ function jungleRunGame(stage){
   if(move===course[step].safe){streak++;stars+=10+step+Math.min(streak,5)*2}else{streak=0;lives--;stars=Math.max(0,stars-5)}
   step++;
   if(lives===0||step===course.length){finished=true;
-   try{const key='studio-raha-jungle-best-v1',oldBest=Number(localStorage.getItem(key)||0);if(stars>(Number.isFinite(oldBest)?oldBest:0))localStorage.setItem(key,String(stars))}catch(e){}
+   if(stars>best){best=stars;try{localStorage.setItem('studio-raha-jungle-best-v1',String(best))}catch(e){}}
   }
   paint();
  }
