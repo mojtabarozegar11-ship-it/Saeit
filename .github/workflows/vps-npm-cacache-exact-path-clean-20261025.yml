@@ -1,0 +1,75 @@
+name: VPS exact unused npm download cache removal once
+on:
+  pull_request:
+    types: [opened]
+    paths:
+      - .github/workflows/vps-npm-cacache-exact-path-clean-20261025.yml
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Remove only exact inactive npm cache after device and handle checks
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/vps-npm-cacache-reclaim"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 550s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          import os,stat,shutil,json,subprocess
+          home=Path('/home/githubops')
+          root=home/'.npm'
+          cache=root/'_cacache'
+          npx=root/'_npx'
+          if os.geteuid()==0 or os.environ.get('USER')!='githubops':
+              raise SystemExit('UNSAFE_USER')
+          if root.is_symlink() or cache.is_symlink() or npx.is_symlink() or not cache.is_dir() or not npx.is_dir():
+              raise SystemExit('UNSAFE_NPM_PATH')
+          if sorted(x.name for x in root.iterdir())!=['_cacache','_logs','_npx','_update-notifier-last-checked']:
+              raise SystemExit('UNEXPECTED_NPM_DIRECTORY')
+          def diskbytes(p):
+              if not p.exists():return 0
+              q=subprocess.run(['du','-sb','--',str(p)],capture_output=True,text=True,timeout=60)
+              if q.returncode!=0:raise SystemExit('DU_FAILED')
+              return int(q.stdout.split()[0])
+          old=diskbytes(cache)
+          npx_before=diskbytes(npx)
+          if not (165000000<=old<=190000000) or npx_before<170000000:
+              raise SystemExit('CACHE_SIZE_CHANGED')
+          if not shutil.which('lsof'):
+              raise SystemExit('MISSING_NPM_OR_OPEN_FILE_CHECK')
+          q=subprocess.run(['lsof','-nP','+D',str(cache)],capture_output=True,text=True,timeout=100)
+          if q.returncode!=1 or q.stdout.strip():
+              raise SystemExit('NPM_CACHE_IN_USE_OR_LSOF_FAILED')
+          free_before=shutil.disk_usage(str(home)).free
+          cache_device=cache.lstat().st_dev
+          for walkroot,dirnames,filenames in os.walk(str(cache),followlinks=False):
+              for name in dirnames+filenames:
+                  child=Path(walkroot)/name
+                  if child.lstat().st_dev!=cache_device:
+                      raise SystemExit('NPM_CACHE_CROSSES_FILESYSTEM_BOUNDARY')
+          shutil.rmtree(str(cache))
+          new=diskbytes(cache)
+          npx_after=diskbytes(npx)
+          if new>old//10 or npx_after!=npx_before:
+              raise SystemExit('POST_NPM_CACHE_CLEAN_INVARIANT_FAILED')
+          for x in ('factory-runtime','comfyui-isolated'):
+              if not (home/x).is_dir():
+                  raise SystemExit('PROTECTED_FACTORY_OR_IMAGE_GENERATOR_MISSING')
+          free_after=shutil.disk_usage(str(home)).free
+          print('VPS_NPM_CACHE_CLEAN='+json.dumps({'previous_cache_bytes':old,'remaining_cache_bytes':new,'npx_install_bytes_preserved':npx_after,'free_bytes_before':free_before,'free_bytes_after':free_after,'factory_and_photo_project_present':True,'clean_tool':'exact cache folder removal'},sort_keys=True),flush=True)
+
+          PY
+          echo VPS_NATIVE_NPM_CACHE_CLEAN_VERIFIED=PASS
