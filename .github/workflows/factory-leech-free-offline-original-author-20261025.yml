@@ -1,0 +1,181 @@
+name: Free offline source-bounded leech book original authoring to private VPS
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-leech-free-offline-original-author-20261025.yml
+      - scripts/factory_leech_free_offline_original_author_20261025.py
+  schedule:
+    - cron: '*/20 * * * *'
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: owner-leech-single-original-book-no-api-20261025
+  cancel-in-progress: false
+jobs:
+  genuinely-author-one-private-segment:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.event_name != 'push' || contains(github.event.head_commit.message, '[owner-leech-offline-author-20261025]'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      HF_HUB_DISABLE_PROGRESS_BARS: '1'
+      HF_HUB_ENABLE_HF_TRANSFER: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify zero-cost leech writer software
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/factory_leech_free_offline_original_author_20261025.py
+          python3 - <<'PY'
+          import ast,pathlib
+          p=pathlib.Path("scripts/factory_leech_free_offline_original_author_20261025.py")
+          source=p.read_text(encoding="utf-8")
+          ast.parse(source)
+          assert "MODEL_ENDPOINT" not in source
+          assert "OPENAI_API_KEY" not in source
+          assert "commercial_release" in source and "quality1000_approved" in source
+          print("LEECH_OFFLINE_WRITER_STATIC_QA=passed")
+          PY
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub
+          key: owner-leech-qwen3-4b-gguf-q4km-apache2-20261025-v1
+      - name: Generate genuine chapter prose on free public CPU runner and transport privately
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          work="$RUNNER_TEMP/leech-free-private-author"
+          install -d -m 700 "$work"
+          server_pid=""
+          cleanup() {
+            if test -n "$server_pid"; then kill "$server_pid" 2>/dev/null || true; fi
+            if test -f "$work/key"; then rm -f -- "$work/key"; fi
+          }
+          trap cleanup EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 "$@"
+          }
+          ops="/home/githubops/factory-runtime/operations/production-instructions"
+          worker="$ops/leech-professional-author.py"
+          ssh_vps "test \"\$(id -un)\" = githubops && test -d '$ops' && test -d '/home/githubops/factory-runtime/private/autonomous-product-cycle/production-instructions'"
+          ssh_vps "umask 077; cat > '$worker'; chmod 600 '$worker'" < scripts/factory_leech_free_offline_original_author_20261025.py
+          expected="$(sha256sum scripts/factory_leech_free_offline_original_author_20261025.py | awk '{print $1}')"
+          ssh_vps "test \"\$(sha256sum '$worker' | awk '{print \$1}')\" = '$expected'"
+          ssh_vps "PYTHONDONTWRITEBYTECODE=1 python3 -B '$worker' prepare" > "$work/assignment.json"
+          python3 - "$work/assignment.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1],encoding="utf8"))
+          if d.get("next_chapter") is None:
+              print("LEECH_PRIVATE_MANUSCRIPT_LENGTH_COMPLETE="+str(d.get("total_verified_draft_words",0)))
+          else:
+              assert d["order_id"]=="WO-26102501" and 1<=d["chapter_number"]<=30
+              assert 1<=d["part_number"]<=999 and d["locale"]=="en-GB"
+              print("LEECH_NEXT_UNFINISHED_CHAPTER="+str(d["chapter_number"]))
+              print("LEECH_NEXT_UNFINISHED_PART="+str(d["part_number"]))
+          PY
+          if python3 - "$work/assignment.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1],encoding="utf8"))
+          sys.exit(0 if d.get("next_chapter") is None else 1)
+          PY
+          then
+            echo LEECH_OFFLINE_AUTHOR_LENGTH_DONE_AWAITING_INDEPENDENT_QC=true
+            exit 0
+          fi
+          python3 - "$work" <<'PY'
+          import pathlib,shutil,sys
+          space=shutil.disk_usage(sys.argv[1]).free
+          if space < 5*1024**3: raise SystemExit("LEECH_RUNNER_FREE_SPACE_BELOW_5_GIB")
+          print("LEECH_FREE_PUBLIC_RUNNER_CPU_INFERENCE=true")
+          PY
+          git clone --quiet --filter=blob:none --depth=1 --branch b10488 https://github.com/ggml-org/llama.cpp.git "$work/llama"
+          test "$(git -C "$work/llama" rev-parse HEAD)" = '9d77fa17254e1dee4b9e92504c91611a60b1359f'
+          cmake -S "$work/llama" -B "$work/llama/build" -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=ON
+          cmake --build "$work/llama/build" -j 4 --target llama-server
+          test -x "$work/llama/build/bin/llama-server"
+          python3 -m venv "$work/venv"
+          "$work/venv/bin/pip" -q install 'huggingface_hub>=0.27,<2'
+          model_path="$("$work/venv/bin/python" - <<'PY'
+          import os,sys
+          from huggingface_hub import HfApi,hf_hub_download
+          repo="Qwen/Qwen3-4B-GGUF"
+          info=HfApi().model_info(repo,files_metadata=True)
+          names=[f.rfilename for f in info.siblings if "Q4_K_M" in f.rfilename and f.rfilename.endswith(".gguf")]
+          if len(names)!=1:
+              print("LEECH_EXACT_Q4_MODEL_NOT_UNIQUE",file=sys.stderr)
+              raise SystemExit(3)
+          filename=names[0]
+          path=hf_hub_download(repo_id=repo,filename=filename,revision=info.sha,token=False)
+          if os.stat(path).st_size < 1_500_000_000:
+              raise SystemExit("LEECH_MODEL_BYTES_TOO_SMALL")
+          print(path)
+          PY
+          )"
+          test -f "$model_path"
+          "$work/llama/build/bin/llama-server" -m "$model_path" --host 127.0.0.1 --port 18766 -c 4096 -t 4 -ngl 0 --parallel 1 > "$work/model-internal.log" 2>&1 &
+          server_pid="$!"
+          for step in $(seq 1 100); do
+            if curl -fsS --max-time 3 http://127.0.0.1:18766/health > /dev/null 2>&1; then break; fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then echo LEECH_MODEL_SERVER_EXITED; exit 2; fi
+            sleep 2
+          done
+          curl -fsS --max-time 5 http://127.0.0.1:18766/health > /dev/null
+          python3 - "$work/assignment.json" "$work/generated-private.md" <<'PY'
+          import json, pathlib, sys, urllib.request
+          assignment=json.load(open(sys.argv[1],encoding="utf8"))
+          if assignment.get("next_chapter") is None:raise SystemExit("LEECH_NO_PENDING_CHAPTER")
+          prompt=(
+            "Write the next ORIGINAL, coherent, professionally structured textbook section in excellent English. "
+            "Target 800-1100 substantive words of prose now. This is a manuscript fragment, not an outline, "
+            "not a proposal, not a status report. Fully explain subject-specific mechanisms, "
+            "realistic operating decisions, a transparent worked hypothetical case, "
+            "auditable records or assessment, and failure/escalation conditions. "
+            "Use one descriptive Markdown subheading, then rigorous paragraphs, unique examples and "
+            "one practical calculation or decision table if suited. "
+            "No invention of empirical study outcomes, permits, citations, standards, safety limits or "
+            "professional approval. Reference exact source IDs only when they support the particular claim. "
+            "Never repeat prior chapter context. No clinical advice, feeding instructions involving humans, "
+            "microbial culturing instructions, unapproved wildlife capture, or medical efficacy claims. "
+            "Avoid introduction and conclusion boilerplate. "
+            "Use these supplied verified factory facts and topic constraints, treating limitations seriously: "
+            +json.dumps(assignment,ensure_ascii=False)
+          )
+          payload={"model":"local-offline-qwen3","messages":[
+             {"role":"system","content":"You are an original English vocational-textbook author supervised by strict human-facing publishing gates. Create substantive new text; never invent sources. Write the answer only."},
+             {"role":"user","content":prompt}],
+             "max_tokens":2400,"temperature":0.62,"top_p":0.88,
+             "chat_template_kwargs":{"enable_thinking":False},"stream":False}
+          request=urllib.request.Request("http://127.0.0.1:18766/v1/chat/completions",
+              data=json.dumps(payload).encode("utf8"),
+              headers={"Content-Type":"application/json"},method="POST")
+          with urllib.request.urlopen(request,timeout=1450) as response:
+              data=json.load(response)
+          body=str(data.get("choices",[{}])[0].get("message",{}).get("content") or "").strip()
+          if not body or "<think>" in body or "</think>" in body:
+              raise SystemExit("LEECH_LOCAL_MODEL_DID_NOT_RETURN_ONLY_PROSE")
+          pathlib.Path(sys.argv[2]).write_text(body+"\n",encoding="utf8")
+          print("LEECH_PRIVATE_GENERATED_TEXT_BYTES="+str(len(body.encode("utf8"))))
+          PY
+          ssh_vps "PYTHONDONTWRITEBYTECODE=1 python3 -B '$worker' accept" < "$work/generated-private.md" > "$work/receipt.json"
+          python3 - "$work/receipt.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1],encoding="utf8"))
+          assert d["original_prose_accepted"] is True and d["quality1000_approved"] is False
+          print("LEECH_FREE_REAL_MANUSCRIPT_SEGMENT_ACCEPTED="+json.dumps({
+              "order_id":d["order_id"],"accepted_words":d["accepted_words"],
+              "total_unreviewed_original_words":d["total_unreviewed_original_words"],
+              "chapter_completed":d["chapter_completed"],"next_chapter":d["next_chapter"],
+              "private_full_manuscript_assembled":d["full_private_unreviewed_manuscript_assembled"],
+              "published":False,"paid_api_cost_usd":0},sort_keys=True))
+          PY
