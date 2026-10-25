@@ -34,8 +34,9 @@ assert.equal(Object.keys(cases[0].best).length,1);
 assert.equal(cases[1].unlocked,150);
 assert.equal(cases[2].unlocked,1);
 const jungle=between(rah,'function jungleRunGame(stage){','function runnerGame(stage){');
-function runJungle(choices,random=()=>0){
+function runJungle(choices,random=()=>0,storedBest=null){
  const listeners=new Map(),storage=new Map(),stage={isConnected:true,buttons:[],_html:'',get innerHTML(){return this._html},set innerHTML(v){this._html=v;this.buttons=[]},querySelector(){return {append(...items){stage.buttons.push(...items)}}}};
+ if(storedBest!==null)storage.set('studio-raha-jungle-best-v1',storedBest);
  const sandbox={Math:Object.assign(Object.create(Math),{random}),localStorage:{getItem(k){return storage.get(k)||'0'},setItem(k,v){storage.set(k,v)}},document:{
   getElementById(){return {classList:{contains(){return true}}}},
   addEventListener(event,fn){listeners.set(event,fn)},
@@ -56,6 +57,9 @@ function runJungle(choices,random=()=>0){
 const win=runJungle(Array(12).fill(hint=>hint));
 for(const hazard of ['jump','duck','sidestep'])assert.equal(win.seen.filter(x=>x===hazard).length,4,'every jungle course must balance '+hazard);
 assert.ok(win.stage.innerHTML.includes('Jungle cleared!'),'12 correct jumps should win');
+assert.equal(win.listeners.has('keydown'),false,'completed jungle runs must release keyboard listeners');
+assert.ok(runJungle([hint=>hint],()=>0,'999999999').stage.innerHTML.includes('Best 0'),'impossible stored jungle records must be rejected');
+assert.ok(runJungle([hint=>hint],()=>0,'180').stage.innerHTML.includes('Best 180'),'legitimate personal records must be retained');
 assert.ok(Number(win.storage.get('studio-raha-jungle-best-v1'))>0,'jungle personal best must persist');
 assert.ok(win.stage.innerHTML.includes('Best '+win.storage.get('studio-raha-jungle-best-v1')),'jungle UI must display saved record');
 const lose=runJungle(Array(3).fill(hint=>hint==='jump'?'duck':'jump'));
