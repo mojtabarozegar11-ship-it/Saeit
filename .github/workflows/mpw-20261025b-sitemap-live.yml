@@ -1,0 +1,117 @@
+name: Register six live MojPlayWin learning guides in main sitemap
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-20261025b-sitemap-live.yml"
+      - "scripts/mpw_20261025b_sitemap_add.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-main-sitemap-learning-b
+  cancel-in-progress: false
+jobs:
+  register:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate six canonical pages and current sitemap without changing anything
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_20261025b_sitemap_add.py
+          python3 - <<'PY'
+          import urllib.request,xml.etree.ElementTree as ET
+          base='https://mojplaywin.com/mpw-learning/20261025b/'
+          slugs=('chess-error-review','taniya-creative-retelling','atelier-accessibility-acceptance','browser-game-retention-diagnostics','digital-product-license-check','research-data-audit-trail')
+          for slug in slugs:
+              url=base+slug+'/'
+              with urllib.request.urlopen(url,timeout=22) as r:
+                  body=r.read(100000).decode('utf8','replace')
+                  assert r.status==200 and '<link rel="canonical" href="'+url+'"' in body,url
+              print('MPW_CANONICAL_LIVE',url)
+          with urllib.request.urlopen('https://mojplaywin.com/sitemap.xml',timeout=25) as r:
+              locs=[n.text for n in ET.fromstring(r.read(2000000)).iter() if n.tag.endswith('loc')]
+          assert len(locs)==len(set(locs))
+          assert all(not x.startswith('https://mojplaywin.com/mpw-editorial/revenue/') for x in locs)
+          assert len(locs)>=33
+          print('CURRENT_SITEMAP_VALID',len(locs))
+          PY
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-b-route-ssh";install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Atomically register six pages in isolated sitemap PHP include
+        id: install
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/zm-b-route-ssh/config" saeit-cpanel "python3 - apply '$GITHUB_RUN_ID'" < scripts/mpw_20261025b_sitemap_add.py
+      - name: Verify exact six sitemap additions and protected commerce
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,xml.etree.ElementTree as ET,time
+          base='https://mojplaywin.com/mpw-learning/20261025b/'
+          slugs=('chess-error-review','taniya-creative-retelling','atelier-accessibility-acceptance','browser-game-retention-diagnostics','digital-product-license-check','research-data-audit-trail')
+          url='https://mojplaywin.com/sitemap.xml?verify='+str(time.time_ns())
+          with urllib.request.urlopen(url,timeout=25) as r:
+              locs=[n.text for n in ET.fromstring(r.read(2000000)).iter() if n.tag.endswith('loc')]
+          assert len(locs)==len(set(locs))
+          for slug in slugs:
+              target=base+slug+'/'
+              assert locs.count(target)==1,target
+              print('MPW_NEW_SITEMAP_CANONICAL',target)
+          assert not any(x.startswith('https://mojplaywin.com/mpw-editorial/revenue/') for x in locs)
+          for url in ('https://mojplaywin.com/','https://mojplaywin.com/store/','https://mojplaywin.com/store/product/72/','https://mojplaywin.com/store/product/225/','https://mojplaywin.com/store/product/879/','https://zomorodmelal.ir/'):
+              with urllib.request.urlopen(url,timeout=20) as r:assert r.status==200,url
+          print('SIX_CANONICAL_GUIDES_IN_LIVE_SITEMAP_AND_STORE_UNCHANGED')
+          PY
+      - name: Restore only matching prior sitemap PHP on failed verification
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/zm-b-route-ssh/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_20261025b_sitemap_add.py
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zm-b-route-ssh"
