@@ -145,34 +145,34 @@ function colorGame(stage,g){const colors=[['Coral','#ff6b76'],['Sunshine','#ffd9
 function reactionGame(stage){stage.innerHTML='<div class="stage-message">Ready? Wait for green, then tap fast!</div>';let b=button('Wait for it…',()=>{if(!b.dataset.ready){showToast('Too soon! Try again.');reactionGame(stage);return}message(stage,'🚀 Lightning fast! Want another round?');b.textContent='Play again';b.dataset.ready='';b.onclick=()=>reactionGame(stage)},'alt');b.style.minWidth='190px';stage.append(b);let delay=1000+Math.random()*2400;setTimeout(()=>{if(!$('#gameOverlay').classList.contains('open'))return;b.dataset.ready='1';b.textContent='TAP NOW!';b.classList.remove('alt')},delay)}
 function drawGame(stage){stage.innerHTML='<div class="stage-message">Draw anything you can imagine.</div><canvas class="draw-pad" width="600" height="250" aria-label="Drawing canvas"></canvas><div class="stage-actions"></div>';const c=stage.querySelector('canvas'),ctx=c.getContext('2d');ctx.lineWidth=8;ctx.lineCap='round';ctx.strokeStyle='#1670e8';let down=false;function pos(e){const r=c.getBoundingClientRect();return[(e.clientX-r.left)*c.width/r.width,(e.clientY-r.top)*c.height/r.height]}c.onpointerdown=e=>{down=true;c.setPointerCapture(e.pointerId);const p=pos(e);ctx.beginPath();ctx.moveTo(...p)};c.onpointermove=e=>{if(down){const p=pos(e);ctx.lineTo(...p);ctx.stroke()}};c.onpointerup=()=>down=false;stage.querySelector('.stage-actions').append(button('Clear canvas',()=>ctx.clearRect(0,0,c.width,c.height),'alt'))}
 function jungleRunGame(stage){
- const hazards=[{name:'fallen log',icon:'🪵',safe:'jump',hint:'Jump over the log!'},{name:'hanging vines',icon:'🌿',safe:'duck',hint:'Duck under the vines!'}];
+ const hazards=[{name:'fallen log',icon:'🪵',safe:'jump',hint:'Jump over the log!'},{name:'hanging vines',icon:'🌿',safe:'duck',hint:'Duck under the vines!'},{name:'mud pool',icon:'🟤',safe:'sidestep',hint:'Step around the mud!'}];
  const course=Array.from({length:12},()=>hazards[Math.floor(Math.random()*hazards.length)]);
- let step=0,lives=3,stars=0,finished=false;
+ let step=0,lives=3,stars=0,streak=0,finished=false;
  function paint(){
   const won=finished&&lives>0,over=finished;
   const hazard=course[step];
   stage.innerHTML='<div class="stage-message" role="status" aria-live="polite">'+(over?(won?'🏆 Jungle cleared!':'🌱 The jungle wins this round.'):hazard.icon+' '+hazard.hint)+'</div>'+
-   '<div class="stage-message">Obstacle '+Math.min(step+1,12)+' / 12 · Hearts '+('❤️'.repeat(lives)||'0')+' · Stars '+stars+'</div>'+
+   '<div class="stage-message">Obstacle '+Math.min(step+1,12)+' / 12 · Hearts '+('❤️'.repeat(lives)||'0')+' · Stars '+stars+' · Streak '+streak+'</div>'+
    '<div class="stage-actions" id="jungleActions"></div>'+
-   '<small style="display:block;margin-top:12px;color:#536581">Space / ↑ = Jump · ↓ = Duck. Touch controls work on phones.</small>';
+   '<small style="display:block;margin-top:12px;color:#536581">Space / ↑ = Jump · ↓ = Duck · → = Sidestep. Touch controls work on phones.</small>';
   const actions=stage.querySelector('#jungleActions');
   if(over){actions.append(button('Run again',()=>jungleRunGame(stage),'alt'));return}
   actions.append(button('Jump ↑',()=>choose('jump')));
-  actions.append(button('Duck ↓',()=>choose('duck'),'alt'));
+  actions.append(button('Duck ↓',()=>choose('duck'),'alt'));actions.append(button('Sidestep →',()=>choose('sidestep'),'alt'));
  }
  function choose(move){
   if(finished)return;
-  if(move===course[step].safe){stars+=10+step}else{lives--;stars=Math.max(0,stars-5)}
+  if(move===course[step].safe){streak++;stars+=10+step+Math.min(streak,5)*2}else{streak=0;lives--;stars=Math.max(0,stars-5)}
   step++;
   if(lives===0||step===course.length){finished=true;
-   try{const key='studio-raha-jungle-best-v1',oldBest=Number(localStorage.getItem(key)||0);if(stars>oldBest)localStorage.setItem(key,String(stars))}catch(e){}
+   try{const key='studio-raha-jungle-best-v1',oldBest=Number(localStorage.getItem(key)||0);if(stars>(Number.isFinite(oldBest)?oldBest:0))localStorage.setItem(key,String(stars))}catch(e){}
   }
   paint();
  }
  function key(e){
   if(!stage.isConnected||!document.getElementById('gameOverlay').classList.contains('open')||finished)return;
-  if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault();choose('jump')}
-  else if(e.code==='ArrowDown'){e.preventDefault();choose('duck')}
+  if(e.repeat)return;if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault();choose('jump')}
+  else if(e.code==='ArrowDown'){e.preventDefault();choose('duck')}else if(e.code==='ArrowRight'){e.preventDefault();choose('sidestep')}
  }
  jungleCleanup();document.addEventListener('keydown',key);
  jungleCleanup=()=>document.removeEventListener('keydown',key);
