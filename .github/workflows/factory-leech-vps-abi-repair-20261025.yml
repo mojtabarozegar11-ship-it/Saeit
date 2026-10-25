@@ -1,0 +1,65 @@
+name: Repair leech owner VPS glibc 2.31 offline engine ABI without paid API
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-leech-vps-abi-repair-20261025.yml
+permissions: {contents: read}
+concurrency:
+  group: owner-vps-leech-legacy-abi-repair-20261025
+  cancel-in-progress: false
+jobs:
+  rebuild-on-matching-legacy-glibc-and-deploy:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && contains(github.event.head_commit.message, '[owner-leech-glibc231-repair-20261025]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Compile llama.cpp under old-glibc container as a deployable software binary only
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/leech-glibc231-build"
+          mkdir -p "$work/build"
+          git clone --quiet --filter=blob:none --depth=1 --branch b10488 https://github.com/ggml-org/llama.cpp.git "$work/src"
+          test "$(git -C "$work/src" rev-parse HEAD)" = '9d77fa17254e1dee4b9e92504c91611a60b1359f'
+          docker run --rm --network bridge -v "$work/src:/src:ro" -v "$work/build:/build" ubuntu:20.04 bash -ec '
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq
+            apt-get install -qq -y --no-install-recommends cmake g++ make ca-certificates
+            cmake -S /src -B /build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DLLAMA_CURL=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_UI=OFF -DLLAMA_BUILD_TESTS=OFF
+            cmake --build /build -j 3 --target llama-server
+            test -x /build/bin/llama-server
+          '
+          tar -czf "$RUNNER_TEMP/leech-glibc231-cpu-engine.tar.gz" -C "$work/build/bin" .
+          test "$(stat -c %s "$RUNNER_TEMP/leech-glibc231-cpu-engine.tar.gz")" -lt 50000000
+          echo LEECH_GLIBC231_COMPATIBLE_SOURCE_BUILD_READY=true
+      - name: Verify native ABI on VPS before isolated engine swap
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          local_dir="$RUNNER_TEMP/leech-legacy-abi-transport"
+          install -d -m 700 "$local_dir"
+          trap 'rm -f -- "$local_dir/key" "$local_dir/known"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$local_dir/key"
+          chmod 600 "$local_dir/key"
+          ssh-keygen -y -P '' -f "$local_dir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$local_dir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$local_dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$local_dir/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$local_dir/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 "$@"
+          }
+          eng="/home/githubops/factory-runtime/operations/production-instructions/leech-offline-engine-20261025"
+          ops="/home/githubops/factory-runtime/operations/production-instructions"
+          ssh_vps "test \"\$(id -un)\" = githubops && test -d '$eng/bin' && test -f '$eng/models/Qwen3-1.7B-Q4_K_M.gguf' && test ! -e '$eng/bin-glibc231' && test ! -e '$eng/bin-ubuntu22-abi-incompatible-20261025' && install -d -m 700 '$eng/bin-glibc231'"
+          ssh_vps "umask 077; cat > '$eng/glibc231-engine-transfer.tar.gz'" < "$RUNNER_TEMP/leech-glibc231-cpu-engine.tar.gz"
+          ssh_vps "set -eu; tar -xzf '$eng/glibc231-engine-transfer.tar.gz' -C '$eng/bin-glibc231'; test -x '$eng/bin-glibc231/llama-server'; LD_LIBRARY_PATH='$eng/bin-glibc231' '$eng/bin-glibc231/llama-server' --help >/dev/null"
+          echo LEECH_VPS_LEGACY_ENGINE_NATIVE_SMOKE_PASSED=true
+          ssh_vps "set -eu; mv '$eng/bin' '$eng/bin-ubuntu22-abi-incompatible-20261025'; mv '$eng/bin-glibc231' '$eng/bin'; rm -- '$eng/glibc231-engine-transfer.tar.gz'; test -x '$eng/bin/llama-server'; LD_LIBRARY_PATH='$eng/bin' '$eng/bin/llama-server' --help >/dev/null"
+          ssh_vps "nohup /usr/bin/python3 -B '$ops/leech-vps-resource-guarded-author.py' </dev/null >/dev/null 2>&1 &"
+          echo LEECH_OWNER_VPS_SELFHOSTED_GLIBC231_ABI_REPAIRED_AND_RESTARTED=true
