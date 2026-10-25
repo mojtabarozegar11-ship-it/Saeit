@@ -6,6 +6,7 @@ on:
       - .github/workflows/ae-2026-001-archive-backed-sensitivity.yml
       - research/manuscripts/AE-2026-001/analysis/wdi_geographic_robustness_from_archived_real_panel.py
       - research/manuscripts/AE-2026-001/analysis/official_wdi_2024_vs_2026_vintage_audit.py
+      - research/manuscripts/AE-2026-001/analysis/wdi_three_vintage_fixed_cohort_revisions.py
       - research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv
   workflow_dispatch:
 permissions:
@@ -77,5 +78,28 @@ jobs:
         with:
           name: AE-2026-001-official-2025-versus-2026-historical-vintage-audit
           path: research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_2025_VS_2026_WDI_VINTAGE_EMPIRICAL_AUDIT_2026-10-26.json
+          retention-days: 7
+          if-no-files-found: error
+
+  three-vintage-fixed-country-cohort-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install source archive Excel reader
+        run: python -m pip install --disable-pip-version-check openpyxl==3.1.5
+      - name: Independently download two official historical archives and compare identical economies across three vintages
+        run: |
+          python research/manuscripts/AE-2026-001/analysis/wdi_three_vintage_fixed_cohort_revisions.py
+      - name: Preserve exact archive hashes and fixed-country empirical revisions
+        uses: actions/upload-artifact@v4
+        with:
+          name: AE-2026-001-2024-2025-2026-fixed-cohort-real-WDI-audit
+          path: research/manuscripts/AE-2026-001/AE-2026-001_THREE_VINTAGE_FIXED_COHORT_AUDIT_2026-10-26.json
           retention-days: 7
           if-no-files-found: error
