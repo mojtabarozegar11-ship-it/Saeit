@@ -1,0 +1,154 @@
+name: cPanel isolated sandbox disposability read-only audit
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/cpanel-isolated-sandbox-audit-20261025.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cpanel-isolated-sandbox-audit-20261025
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Inspect three fixed staging sandbox roots without modification
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 180s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import json, os, stat, time, subprocess
+          from pathlib import Path
+          home=Path("/home/zomorod2")
+          root=home/"Saeit-staging"
+          targets=("moj-commerce-v10-sandbox","moj-commerce-v12-sandbox","admin-smoke")
+          if Path.home()!=home or root.is_symlink() or not root.is_dir():
+              raise SystemExit("STAGING_ROOT_UNSAFE")
+          cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=8)
+          crontxt=cron.stdout if cron.returncode==0 else ""
+          files_to_check=(
+            home/"mojplaywin.com"/".htaccess",
+            home/"Saeit"/"passenger_wsgi.py",
+            home/"Saeit-staging"/"passenger_wsgi.py",
+            home/"Saeit"/".htaccess",
+          )
+          config_text=[]
+          for p in files_to_check:
+              if p.is_file() and not p.is_symlink() and p.stat().st_size<200000:
+                  config_text.append(p.read_text(errors="replace"))
+          configs="\n".join(config_text)
+          try:
+              passenger=subprocess.run(["uapi","--output=json","PassengerApps","list_applications"],capture_output=True,text=True,timeout=20)
+              appinfo=json.dumps(json.loads(passenger.stdout).get("result",{}).get("data",[])) if passenger.returncode==0 else ""
+          except Exception:
+              appinfo=""
+          now=time.time()
+          for name in targets:
+              p=root/name
+              report={"name":name,"exists":False,"symlink":False}
+              if p.is_symlink():
+                  report["symlink"]=True
+                  print("SANDBOX_AUDIT="+json.dumps(report,sort_keys=True));continue
+              if not p.is_dir():
+                  print("SANDBOX_AUDIT="+json.dumps(report,sort_keys=True));continue
+              report["exists"]=True
+              report["owned_by_current_user"]=p.stat().st_uid==os.geteuid()
+              report["mtime_age_days"]=round((now-p.stat().st_mtime)/86400,2)
+              report["cron_references"]=name in crontxt
+              report["web_config_references"]=name in configs
+              report["passenger_references"]=name in appinfo
+              report["live_process_cwd_count"]=0
+              for proc in Path("/proc").iterdir():
+                  if not proc.name.isdigit():continue
+                  try:
+                      cwd=os.readlink(proc/"cwd")
+                      if cwd==str(p) or cwd.startswith(str(p)+"/"):
+                          report["live_process_cwd_count"]+=1
+                  except OSError:pass
+              report.update({"file_count":0,"directory_count":0,"symlink_entries":0,"recent_7d_file_count":0,"db_like_files":0,"sensitive_config_files":0,"max_file_age_days":0,"scan_capped":False})
+              for base,dirs,files in os.walk(p,followlinks=False):
+                  report["directory_count"]+=1
+                  if report["file_count"]>150000 or report["directory_count"]>20000:
+                      report["scan_capped"]=True;break
+                  keep=[]
+                  for dname in dirs:
+                      dp=Path(base)/dname
+                      if dp.is_symlink():report["symlink_entries"]+=1
+                      else:keep.append(dname)
+                  dirs[:]=keep
+                  for fname in files:
+                      f=Path(base)/fname
+                      try:
+                          st=f.lstat()
+                          if not stat.S_ISREG(st.st_mode):
+                              report["symlink_entries"]+=1;continue
+                          report["file_count"]+=1
+                          age=(now-st.st_mtime)/86400
+                          report["max_file_age_days"]=max(report["max_file_age_days"],round(age,1))
+                          if age<7:report["recent_7d_file_count"]+=1
+                          if f.suffix.lower() in (".sqlite",".sqlite3",".db",".sql",".sql.gz"):report["db_like_files"]+=1
+                          if fname.lower() in (".env",".env.production",".env.local","credentials.json","secrets.json"):report["sensitive_config_files"]+=1
+                      except OSError:continue
+              try:
+                  du=subprocess.run(["du","-sxB1","--",str(p)],capture_output=True,text=True,timeout=35)
+                  report["du_bytes"]=int(du.stdout.split()[0]) if du.returncode==0 else None
+              except (OSError,ValueError,IndexError,subprocess.TimeoutExpired):
+                  report["du_bytes"]=None
+              report["deleted"]=False
+              print("SANDBOX_AUDIT="+json.dumps(report,sort_keys=True))
+          PY
+      - name: Remove runner SSH identities
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
