@@ -1,0 +1,42 @@
+name: One-shot private leech manuscript count (read-only)
+on:
+  pull_request:
+    types: [opened]
+    paths:
+      - .github/workflows/leech-private-progress-readonly-20261026.yml
+permissions: {contents: read}
+jobs:
+  verify-private-words:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Read private original word count and single-writer cron without modifying VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/leech-readonly-progress"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -B -' <<'PY'
+          import datetime, json, os, pathlib, subprocess
+          base = pathlib.Path("/home/githubops/factory-runtime/operations/production-instructions")
+          script = base / "leech-professional-author.py"
+          assert script.is_file() and not script.is_symlink()
+          out = subprocess.run(["/usr/bin/python3", "-B", str(script), "status"], capture_output=True, text=True, timeout=90, check=True)
+          data = json.loads(out.stdout)
+          assert data.get("order_id") == "WO-26102501"
+          cr = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=10)
+          assert cr.returncode == 0
+          leech_lines = [line for line in cr.stdout.splitlines() if "leech-vps-resource-guarded-author.py" in line and not line.lstrip().startswith("#")]
+          assert len(leech_lines) == 1, "LEECH_CRON_NOT_SINGLE"
+          print("LEECH_PRIVATE_READONLY=" + json.dumps({"checked_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(), "order_id": data["order_id"], "verified_unreviewed_prose_words": data.get("verified_unreviewed_prose_words"), "next_chapter": data.get("next_chapter"), "next_part": data.get("next_part"), "single_cron": True, "quality1000_approved": False, "published": False}, sort_keys=True))
+          PY
