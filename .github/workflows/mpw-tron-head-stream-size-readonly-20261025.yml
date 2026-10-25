@@ -287,6 +287,25 @@ jobs:
               outcome['elapsed_seconds']=round(time.monotonic()-start,2)
               print('MPW_TRONGRID_INDEXER_TRANSPORT='+json.dumps(outcome,sort_keys=True))
           PY
+      - name: Check only presence of configured TronGrid indexer credentials
+        run: |
+          set -euo pipefail
+          timeout 25s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json
+          from pathlib import Path
+          root=Path('/home/zomorod2/Saeit-staging')
+          if root.is_symlink() or not root.is_dir():raise SystemExit('BAD_APP_ROOT')
+          os.chdir(root);sys.path.insert(0,str(root))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.conf import settings
+          names=('TRON_PRO_API_KEY','TRONGRID_API_KEY','TRON_API_KEY','MPW_TRONGRID_API_KEY',
+                 'MPW_TRON_RPC_A_API_KEY')
+          result={'read_only':True,'raw_values_disclosed':False}
+          for name in names:
+              result[name+'_configured']=bool(os.environ.get(name) or getattr(settings,name,None))
+          print('MPW_TRONGRID_KEY_PRESENCE='+json.dumps(result,sort_keys=True))
+          PY
       - name: Remove temporary SSH relay keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
