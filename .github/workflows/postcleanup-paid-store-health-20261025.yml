@@ -16,7 +16,7 @@ jobs:
           d="$RUNNER_TEMP/paid-store-health"
           install -d -m 700 "$d"
           i=0
-          for url in "https://mojplaywin.com/" "https://mojplaywin.com/store/" "https://zomorodmelal.ir/" "https://zomorodmelal.ir/agents/"; do
+          for url in "https://mojplaywin.com/" "https://mojplaywin.com/store/" "https://mojplaywin.com/store/product/225/" "https://mojplaywin.com/store/product/72/" "https://mojplaywin.com/store/product/879/" "https://zomorodmelal.ir/" "https://zomorodmelal.ir/agents/"; do
             i=$((i+1))
             code="$(curl --retry 1 --max-time 25 --max-redirs 4 -sSL -o "$d/page-$i.html" -w '%{http_code}' "$url" || true)"
             printf 'LIVE_PROTECTED_ROUTE=%s:%s\n' "$url" "$code"
