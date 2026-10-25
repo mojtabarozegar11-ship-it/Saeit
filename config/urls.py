@@ -91,8 +91,25 @@ urlpatterns = [
     path("api/", include("core.urls")),
 ]
 
-from core.newsletter_views import newsletter_home, newsletter_archive, newsletter_detail
-urlpatterns += [path("newsletter/", newsletter_home, name="newsletter"), path("newsletter/archive/", newsletter_archive, name="newsletter_archive"), path("newsletter/<slug:slug>/", newsletter_detail, name="newsletter_detail")]
+from core.newsletter_views import newsletter_home as zomorod_newsletter_home, newsletter_archive as zomorod_newsletter_archive, newsletter_detail as zomorod_newsletter_detail
+from core.mojplaywin_newsletter_views import homepage as mojplaywin_newsletter_home, archive as mojplaywin_newsletter_archive, detail as mojplaywin_newsletter_detail, staff_dashboard as mojplaywin_newsletter_staff
+from core.mojplaywin_newsroom import is_mojplaywin
+
+def newsletter_home(request):
+    return (mojplaywin_newsletter_home if is_mojplaywin(request.get_host()) else zomorod_newsletter_home)(request)
+
+def newsletter_archive(request):
+    return (mojplaywin_newsletter_archive if is_mojplaywin(request.get_host()) else zomorod_newsletter_archive)(request)
+
+def newsletter_detail(request, slug):
+    return (mojplaywin_newsletter_detail if is_mojplaywin(request.get_host()) else zomorod_newsletter_detail)(request, slug)
+
+urlpatterns += [
+    path("newsletter/", newsletter_home, name="newsletter"),
+    path("newsletter/archive/", newsletter_archive, name="newsletter_archive"),
+    path("newsletter/<slug:slug>/", newsletter_detail, name="newsletter_detail"),
+    path("staff/mojplaywin-newsletter/", mojplaywin_newsletter_staff, name="mojplaywin_newsletter_staff"),
+]
 
 from core.blog_views import blog_home, blog_page
 urlpatterns += [path("blog/", blog_home, name="blog"), path("blog/<path:slug>/", blog_page, name="blog_page")]

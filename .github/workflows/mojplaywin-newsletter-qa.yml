@@ -1,0 +1,45 @@
+name: MojPlayWin isolated newsletter QA (no deploy)
+on:
+  pull_request:
+    paths:
+      - "core/mojplaywin_newsroom.py"
+      - "core/mojplaywin_newsletter_views.py"
+      - "core/templates/mojplaywin/newsletter*.html"
+      - "config/urls.py"
+      - "scripts/mpw_newsletter_cli.py"
+      - "tests/test_mojplaywin_newsroom.py"
+      - ".github/workflows/mojplaywin-newsletter-qa.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile isolated components
+        run: |
+          python3 -m py_compile core/mojplaywin_newsroom.py core/mojplaywin_newsletter_views.py scripts/mpw_newsletter_cli.py config/urls.py
+      - name: Verify independent editorial gates and storage
+        run: |
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_newsroom.py' -v
+      - name: Protect existing Zomorod newsletter and personal subsites
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          urls=Path('config/urls.py').read_text()
+          assert 'zomorod_newsletter_home' in urls
+          assert 'mojplaywin_newsletter_home if is_mojplaywin' in urls
+          assert 'zomorod_newsletter_detail' in urls
+          assert 'staff/mojplaywin-newsletter/' in urls
+          a=Path('core/mojplaywin_newsroom.py').read_text()
+          assert '"published"' in a and 'approved_by' in a
+          assert 'MIN_SCORE = 90' in a
+          assert 'public_html' in a
+          assert 'NewsletterStory.objects' not in a
+          print('DOMAIN_SPLIT_AND_LEGACY_NEWSLETTER_PRESERVED=yes')
+          PY

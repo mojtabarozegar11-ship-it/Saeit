@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ story.title }} | MojPlayWin Newsroom{% endblock %}
+{% block meta_description %}{{ story.summary|truncatechars:155 }}{% endblock %}
+{% block body_class %}mojplaywin-section{% endblock %}
+{% block content %}
+{% include "mojplaywin/theme.html" %}
+<div class="mw-shell" id="mpw-newsroom-article">
+  <article class="mw-section">
+    <a class="mw-button" href="/newsletter/">← Back to MojPlayWin Newsroom</a>
+    <header class="mw-page-hero" style="margin-top:16px">
+      <span class="mw-kicker">{{ story.category|upper }} · {{ story.event_date|default:story.published_at|slice:":10" }}</span>
+      <h1>{{ story.title }}</h1>
+      <p>{{ story.summary }}</p>
+      <small>Editorial quality: {{ story.score }}/100 · MojPlayWin editorial review</small>
+    </header>
+    <div style="max-width:84ch;line-height:1.9;padding-top:22px">
+      <h2>Report and context</h2>
+      {{ story.body|linebreaks }}
+      <h2>Independent analysis and practical implications</h2>
+      {{ story.analysis|linebreaks }}
+      <h2>Source and verification</h2>
+      {% if story.source_url %}
+      <p>{{ story.publisher }} — <a rel="noopener noreferrer nofollow" target="_blank" href="{{ story.source_url }}">{{ story.source_title }}</a></p>
+      {% else %}
+      <p>Original internal MojPlayWin editorial record, subject to the same evidence and approval standards.</p>
+      {% endif %}
+      <p>Evidence, source checks and review notes are held in the private editorial record.</p>
+      {% if story.keywords %}<p><strong>Topics:</strong> {{ story.keywords|join:", " }}</p>{% endif %}
+    </div>
+  </article>
+</div>
+{% endblock %}

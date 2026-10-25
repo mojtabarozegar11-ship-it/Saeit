@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Private MojPlayWin Newsroom | Staff{% endblock %}
+{% block body_class %}mojplaywin-section{% endblock %}
+{% block content %}
+{% include "mojplaywin/theme.html" %}
+<div class="mw-shell" id="mpw-newsroom-staff">
+  <section class="mw-page-hero">
+    <span class="mw-kicker">PRIVATE STAFF ACCESS · MOJPLAYWIN</span>
+    <h1>Editorial quality & performance</h1>
+    <p>This independent dashboard displays MojPlayWin's private editorial states. It contains no Zomorod records or cross-subsite controls.</p>
+  </section>
+  <section class="mw-section">
+    <h2>Newsroom status</h2>
+    <div class="mw-grid">
+    {% for key, value in stats.items %}
+      <article class="mw-card"><div class="mw-card-copy">
+        <small>{{ key|upper }}</small>
+        <h3>{{ value }}</h3>
+        <div role="img" aria-label="{{ key }} count {{ value }}"
+          style="height:9px;border-radius:9px;background:rgba(180,180,180,.16);overflow:hidden">
+          <div style="width:{% widthratio value 1 2 %}%;max-width:100%;height:100%;background:#cfac61"></div>
+        </div>
+      </div></article>
+    {% endfor %}
+    </div>
+    <p>Publication minimum: {{ minimum_quality }}/100. Editorial approval is mandatory and unapproved content remains private. Draft creation and publication are performed only by controlled staff/agent commands.</p>
+  </section>
+</div>
+{% endblock %}
