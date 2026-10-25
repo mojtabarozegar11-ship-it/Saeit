@@ -1,0 +1,182 @@
+name: MojPlayWin missing checkout CSS two-asset guarded repair
+on:
+  push:
+    branches: [fix/mpw-tron-provider-auth-20261022]
+    paths:
+      - .github/workflows/mpw-checkout-repair-two-css-assets-20261022.yml
+      - scripts/mpw_checkout_css_missing_assets_repair_20261022.py
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: mpw-20261022-two-css-exact-asset-repair
+  cancel-in-progress: false
+jobs:
+  repair:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/fix/mpw-tron-provider-auth-20261022'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Locally verify reversible two-asset repair script and CSS checksum
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_checkout_css_missing_assets_repair_20261022.py
+          python3 scripts/mpw_checkout_css_missing_assets_repair_20261022.py selftest
+          test "$(sha256sum content/mpw-fintech-checkout-v2-20261021.css | awk '{print $1}')" = '2eaa44985afddd5b840f60d0f1c04a48ab76126f632e167e255592b86847ed47'
+      - name: Read-only baseline of store, checkout and protected sibling routes
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error,os,time
+          paths=('/','/store/','/store/product/72/checkout/',
+                 '/store/product/225/checkout/','/store/product/879/checkout/',
+                 '/farnaz/','/saman/','/picm/')
+          data={}
+          for p in paths:
+            for attempt in range(4):
+              req=urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache'})
+              try:
+                with urllib.request.urlopen(req,timeout=16) as res:data[p]=res.status
+                break
+              except urllib.error.HTTPError as ex:
+                data[p]=ex.code
+                break
+              except (urllib.error.URLError,TimeoutError) as ex:
+                print('MPW_CSS_BASELINE_TLS_RETRY='+p+' attempt '+str(attempt+1))
+                if attempt==3:raise RuntimeError('Baseline inaccessible after four attempts: '+p) from ex
+                time.sleep(2)
+          print('MPW_CSS_REPAIR_BEFORE='+json.dumps(data,sort_keys=True))
+          if any(v!=200 for v in data.values()):raise RuntimeError('Baseline not healthy; stop without write')
+          with open(os.environ['RUNNER_TEMP']+'/mpw-css-before.json','w') as f:json.dump(data,f)
+          PY
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-css-repair-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPersist 20m
+            ControlPath $d/cpanel-master.sock
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 3
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          for attempt in 1 2 3; do
+            if timeout 60s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null && test -s "$d/host.candidate"; then
+              break
+            fi
+            echo "MPW_CSS_PINNED_RELAY_RETRY=$attempt"
+            sleep 3
+          done
+          test -s "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+          # Authenticate cPanel once and keep the pinned, encrypted connection
+          # open for all later SSH commands. A failed handshake cannot publish.
+          for attempt in 1 2 3; do
+            if timeout 75s ssh -M -fNT -F "$d/config" saeit-cpanel && timeout 10s ssh -F "$d/config" -O check saeit-cpanel >/dev/null 2>&1; then
+              echo 'MPW_CSS_PINNED_CPANEL_CONTROL_MASTER=READY'
+              break
+            fi
+            echo "MPW_CSS_CPANEL_MASTER_RETRY=$attempt"
+            sleep 3
+          done
+          timeout 10s ssh -F "$d/config" -O check saeit-cpanel >/dev/null
+      - name: Put reviewed fintech CSS in private staging, never public yet
+        run: |
+          set -euo pipefail
+          staged="/home/zomorod2/.private_mojplaywin_main_agents/mpw-two-css-$GITHUB_RUN_ID.fintech.staged.css"
+          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-css-repair-ssh/config" saeit-cpanel "set -e; umask 077; test ! -e '$staged'; cat > '$staged'" < content/mpw-fintech-checkout-v2-20261021.css
+      - name: Preflight both exact targets and homepage source on real cPanel
+        run: |
+          set -euo pipefail
+          timeout 85s ssh -T -F "$RUNNER_TEMP/mpw-css-repair-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - preview '$GITHUB_RUN_ID'" < scripts/mpw_checkout_css_missing_assets_repair_20261022.py
+      - name: Publish only two missing CSS files after sealed recovery manifest
+        id: publish
+        run: |
+          set -euo pipefail
+          timeout 85s ssh -T -F "$RUNNER_TEMP/mpw-css-repair-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - publish '$GITHUB_RUN_ID'" < scripts/mpw_checkout_css_missing_assets_repair_20261022.py
+      - name: Verify restored files and SHA hashes on cPanel
+        run: |
+          set -euo pipefail
+          timeout 85s ssh -T -F "$RUNNER_TEMP/mpw-css-repair-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify '$GITHUB_RUN_ID'" < scripts/mpw_checkout_css_missing_assets_repair_20261022.py
+      - name: Check exact CSS links are publicly accessible and never HTML fallbacks
+        run: |
+          set -euo pipefail
+          origin=https://mojplaywin.com/mpw-editorial/revenue/assets
+          curl --fail --silent --show-error --location --retry 4 --retry-all-errors --retry-delay 2 --max-time 24 --header 'Cache-Control: no-cache' "$origin/mpw-fintech-checkout-v2.css?v=20261021" -o "$RUNNER_TEMP/mpw-fintech-public.css"
+          test "$(sha256sum "$RUNNER_TEMP/mpw-fintech-public.css" | awk '{print $1}')" = '2eaa44985afddd5b840f60d0f1c04a48ab76126f632e167e255592b86847ed47'
+          curl --fail --silent --show-error --location --retry 4 --retry-all-errors --retry-delay 2 --max-time 24 --header 'Cache-Control: no-cache' "$origin/home-shared-v1.css?v=20261020" -o "$RUNNER_TEMP/mpw-home-public.css"
+          test "$(wc -c < "$RUNNER_TEMP/mpw-home-public.css")" -gt 1500
+          grep -Fq 'Exact native CSS extracted' "$RUNNER_TEMP/mpw-home-public.css"
+          echo 'MPW_CSS_BOTH_PUBLIC_LINKS=200_VERIFIED'
+      - name: Confirm existing store, checkout and sibling routes did not regress
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error,os,time
+          with open(os.environ['RUNNER_TEMP']+'/mpw-css-before.json') as f:original=json.load(f)
+          now={}
+          for p in original:
+            for attempt in range(4):
+              req=urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache'})
+              try:
+                with urllib.request.urlopen(req,timeout=16) as res:now[p]=res.status
+                break
+              except urllib.error.HTTPError as ex:
+                now[p]=ex.code
+                break
+              except (urllib.error.URLError,TimeoutError) as ex:
+                print('MPW_CSS_POST_TLS_RETRY='+p+' attempt '+str(attempt+1))
+                if attempt==3:raise RuntimeError('Postrelease inaccessible after four attempts: '+p) from ex
+                time.sleep(2)
+          print('MPW_CSS_REPAIR_AFTER='+json.dumps(now,sort_keys=True))
+          if now!=original:raise RuntimeError('Site regression, trigger exact CSS rollback')
+          print('MPW_CSS_SIBLINGS_UNCHANGED=PASS')
+          PY
+      - name: Roll back only our two generated CSS assets on failure
+        if: failure() && steps.publish.outcome == 'success'
+        run: |
+          set -euo pipefail
+          timeout 85s ssh -T -F "$RUNNER_TEMP/mpw-css-repair-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'" < scripts/mpw_checkout_css_missing_assets_repair_20261022.py
+      - name: Erase private staged CSS and temporary SSH relay keys
+        if: always()
+        run: |
+          staged="/home/zomorod2/.private_mojplaywin_main_agents/mpw-two-css-$GITHUB_RUN_ID.fintech.staged.css"
+          if [ -f "$RUNNER_TEMP/mpw-css-repair-ssh/config" ]; then
+            ssh -T -F "$RUNNER_TEMP/mpw-css-repair-ssh/config" saeit-cpanel "rm -f -- '$staged'" || true
+            ssh -F "$RUNNER_TEMP/mpw-css-repair-ssh/config" -O exit saeit-cpanel || true
+          fi
+          rm -rf -- "$RUNNER_TEMP/mpw-css-repair-ssh"
