@@ -118,6 +118,13 @@ Total output lines: 1
 }
 function mountCake(){
  let icing='#ff79b8',topping='🍓',candles=0,greeting='My celebration cake';
+ const storageKey='taniya-cake-design-v1';
+ try{const raw=localStorage.getItem(storageKey);if(raw&&raw.length<512){const d=JSON.parse(raw);if(d&&typeof d==='object'&&!Array.isArray(d)){
+  if(typeof d.icing==='string'&&/^#[0-9a-f]{6}$/i.test(d.icing))icing=d.icing;
+  if(['🍓','🌼','🍬'].includes(d.topping))topping=d.topping;
+  if(Number.isInteger(d.candles))candles=Math.max(0,Math.min(12,d.candles));
+  if(['My celebration cake','Happy Birthday','Congratulations','Just Because'].includes(d.greeting))greeting=d.greeting;
+ }}}catch(e){}
  function draw(){
   stage('<div class="game-toolbar"><b>Design a celebration cake</b><span>Layers, toppings and up to 12 candles</span></div>'+
    '<div class="play-preview" id="cakepreview" role="img" aria-label="Cake preview" style="min-height:230px"></div>'+
@@ -129,8 +136,11 @@ function mountCake(){
    '<div class="game-actions">'+btn('Add a candle 🕯️','candle')+btn('Remove last candle','cake-remove')+btn('Download this cake card','cake-download')+btn('Start over','cake-reset')+'</div>'+
    '<p class="game-message" aria-live="polite">Your design is saved in the downloaded SVG card.</p>');
   const preview=$('#cakepreview',gamebody);
-  function renderPreview(){preview.innerHTML='<svg viewBox="150 400 600 620" width="230" height="230" aria-hidden="true">'+cakeCardMarkup(icing,topping,candles,greeting)+'</svg>'}
+  function renderPreview(){preview.innerHTML='<svg viewBox="150 400 600 620" width="230" height="230" aria-hidden="true">'+cakeCardMarkup(icing,topping,candles,greeting)+'</svg>';
+   try{localStorage.setItem(storageKey,JSON.stringify({icing,topping,candles,greeting}))}catch(e){}
+  }
   renderPreview();
+  $('#cakeGreeting',gamebody).value=greeting;
   $('#icing',gamebody).oninput=e=>{icing=e.target.value;renderPreview()};
   $('#cakeGreeting',gamebody).onchange=e=>{greeting=e.target.value;renderPreview();say('Your card greeting is updated.')};
   gamebody.querySelectorAll('[data-top]').forEach(b=>b.onclick=()=>{topping=b.dataset.top;renderPreview();say('Topping selected. Add candles or download your cake.')});
