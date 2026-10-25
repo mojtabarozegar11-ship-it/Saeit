@@ -152,6 +152,31 @@ jobs:
               sz,pth=line.split(None,1)
               b_sizes[Path(pth).name]=int(sz)
           print('OWNER_RESET_BACKUP_TOP='+json.dumps({'largest':sorted(b_sizes.items(),key=lambda x:-x[1])[:35], 'sum_bytes':sum(b_sizes.values()), 'mutations':0},sort_keys=True))
+          # Schema-only SQLite census: never emit table contents or customer values.
+          import sqlite3
+          db_rows=[]
+          samples=[runtime/'private/factory-isolated.sqlite3',runtime/'private/factory-fresh-isolated.sqlite3']
+          samples.extend(backups/n for n in ['master-before-20261024T000721Z.sqlite3','master-before-20261023T181806Z.sqlite3','factory-before-owner-20261014T065724Z.sqlite3'])
+          for p in samples:
+              if p.is_symlink() or not p.is_file():raise SystemExit('EXPECTED_DATABASE_NOT_REGULAR')
+              try:
+                  conn=sqlite3.connect('file:'+str(p)+'?mode=ro&immutable=1',uri=True,timeout=5)
+                  names=[x[0] for x in conn.execute("select name from sqlite_master where type='table' order by name")]
+                  conn.close()
+                  db_rows.append({'name':p.name,'tables':names[:110],'table_count':len(names),'truncated':len(names)>110})
+              except sqlite3.Error as exc:db_rows.append({'name':p.name,'schema_read_error':type(exc).__name__})
+          print('OWNER_RESET_SQLITE_SCHEMAS='+json.dumps(db_rows,sort_keys=True))
+          cron_scripts=[]
+          for line in active:
+              py=re.findall(r'[a-z0-9_-]+\\.py',line,re.I)
+              cron_scripts.append(py[-1] if py else 'NO_PY_SCRIPT')
+          print('OWNER_RESET_SCHEDULER_SCRIPT_BASENAMES='+json.dumps(cron_scripts))
+          backup_folder_summaries=[]
+          for name in ['native-master-20261022T100951Z-2216076','f41-master-20261022T101121Z-2216944']:
+              p=backups/name
+              if p.is_symlink() or not p.is_dir():continue
+              backup_folder_summaries.append({'name':name,'top_child_names':sorted(x.name for x in p.iterdir())[:70]})
+          print('OWNER_RESET_BACKUP_DIR_SHAPE='+json.dumps(backup_folder_summaries,sort_keys=True))
           print('OWNER_RESET_DEPENDENCY_DETAIL='+json.dumps({
              'cron_markers':cron_markers,
              'factory_process_script_classes':dict(process_scripts),
