@@ -46,6 +46,14 @@ def main():
     executable = engine / "bin/llama-server"
     result["selfhosted_engine_binary_ready"] = executable.is_file() and os.access(executable, os.X_OK)
     result["selfhosted_model_bytes"] = model.stat().st_size if model.is_file() and not model.is_symlink() else 0
+    partial = engine / "models/Qwen3-1.7B-Q4_K_M.gguf.partial"
+    result["selfhosted_model_partial_bytes"] = partial.stat().st_size if partial.is_file() and not partial.is_symlink() else 0
+    try:
+        import subprocess
+        cron = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=4)
+        result["selfhosted_cron_installed"] = ("saeit-private-leech-vps-selfhosted-author-20261025" in cron.stdout)
+    except (OSError, subprocess.TimeoutExpired):
+        result["selfhosted_cron_installed"] = False
     if status.is_file() and not status.is_symlink() and status.stat().st_size < 12000:
         try:
             current = json.loads(status.read_text(encoding="utf-8"))
