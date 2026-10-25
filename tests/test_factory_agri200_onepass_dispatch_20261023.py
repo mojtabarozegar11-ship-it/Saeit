@@ -49,6 +49,12 @@ class OnePassTests(unittest.TestCase):
             (area / "owner-agri200-p0-index.json").write_text(json.dumps({
                 "topic_count": 200, "edition_goal_count": 400,
                 "order_ids_ranked": orders}), encoding="utf8")
+            # Fully valid intake is required before the genuine workers may run.
+            (area / "orders").mkdir()
+            for ident in orders:
+                (area / "orders" / (ident + ".json")).write_text(json.dumps({
+                    "id": ident, "status": "issued", "fingerprint": "a" * 64
+                }), encoding="utf8")
             with mock.patch.object(module, "worker_command", return_value=["true"]):
                 with mock.patch.object(module.subprocess, "run",
                                        return_value=SimpleNamespace(returncode=0)):
@@ -65,6 +71,28 @@ class OnePassTests(unittest.TestCase):
                     failed = module.dispatch(root, ops)
             self.assertEqual(failed["production_outcome"], "worker_failure")
             self.assertFalse(failed["public_sites_modified"])
+
+    def test_owner_cleanup_missing_intake_skips_all_mutating_workers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "private"
+            area = root / "production-instructions"
+            ops = Path(directory) / "operations/production-instructions"
+            area.mkdir(parents=True)
+            ops.mkdir(parents=True)
+            names = ["WO-%08d" % i for i in range(1, 201)]
+            (area / "owner-agri200-p0-index.json").write_text(json.dumps({
+                "topic_count": 200, "edition_goal_count": 400,
+                "order_ids_ranked": names}), encoding="utf8")
+            with mock.patch.object(module, "worker_command",
+                                   side_effect=AssertionError("MUST_NOT_RUN")):
+                report = module.dispatch(root, ops)
+            self.assertEqual(report["production_outcome"],
+                             "blocked_incomplete_stage1_intake")
+            self.assertEqual(report["intake_integrity"]["missing"], 200)
+            self.assertEqual(report["intake_integrity"]["valid"], 0)
+            self.assertFalse(report["automated_factory_progress_confirmed"])
+            self.assertEqual(report["worker_results"], {})
+            self.assertFalse(report["public_sites_modified"])
 
     def test_duplicate_internal_orders_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
