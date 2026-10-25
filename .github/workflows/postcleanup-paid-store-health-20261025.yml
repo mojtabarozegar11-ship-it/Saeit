@@ -1,0 +1,41 @@
+name: Independent live stores after private-only cleanup
+on:
+  pull_request:
+    paths:
+      - .github/workflows/postcleanup-paid-store-health-20261025.yml
+permissions: {contents: read}
+jobs:
+  readonly-live:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Check public stores without payment or account mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/paid-store-health"
+          install -d -m 700 "$d"
+          i=0
+          for url in "https://mojplaywin.com/" "https://mojplaywin.com/store/" "https://zomorodmelal.ir/" "https://zomorodmelal.ir/agents/"; do
+            i=$((i+1))
+            code="$(curl --retry 1 --max-time 25 --max-redirs 4 -sSL -o "$d/page-$i.html" -w '%{http_code}' "$url" || true)"
+            printf 'LIVE_PROTECTED_ROUTE=%s:%s\n' "$url" "$code"
+            test "$code" = 200
+            test "$(wc -c < "$d/page-$i.html")" -gt 300
+          done
+          python3 - "$d/page-2.html" <<'PY'
+          from html.parser import HTMLParser
+          import json,sys
+          from urllib.parse import urljoin, urlparse
+          class L(HTMLParser):
+              def __init__(self):super().__init__();self.urls=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag=="a":
+                      link=dict(attrs).get("href","")
+                      if link and any(k in link.lower() for k in ("product","store","shop","book","guide")):
+                          self.urls.append(urljoin("https://mojplaywin.com/store/",link))
+          p=L()
+          p.feed(open(sys.argv[1],encoding="utf-8",errors="replace").read())
+          print("STORE_VISIBLE_LINKS="+json.dumps(sorted(set(p.urls))[:30]))
+          PY
+          echo NO_STORE_OR_CUSTOMER_WRITES=true
