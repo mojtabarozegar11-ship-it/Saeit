@@ -83,6 +83,9 @@ function validSavedWorld(s){
  if(s.objective!=null){
    const o=s.objective;
    if(typeof o!=='object'||Array.isArray(o)||!Number.isInteger(o.done)||!within(o.done,0,10)||!within(o.hold,0,3600)||typeof o.bossDefeated!=='boolean')return false;
+   // A restored objective cannot claim more activated sites or defense time than this mission permits.
+   const missionPlan=OPERATIONS[s.mission];
+   if(o.done>missionPlan.sites.length||o.hold>(missionPlan.seconds||0))return false;
  }
  if(s.enemies.length>20||!s.enemies.every(e=>e&&within(e.x,1,14)&&within(e.y,1,14)&&within(e.hp,-1000,10000)))return false;
  return [['pickups',200],['hostile',300],['missiles',200]].every(([k,cap])=>s[k]===undefined||(Array.isArray(s[k])&&s[k].length<=cap));
