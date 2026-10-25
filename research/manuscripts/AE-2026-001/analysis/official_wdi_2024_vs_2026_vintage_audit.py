@@ -180,7 +180,7 @@ def main():
                      "Only source-confirmed same-definition/same-price-base indicators may be compared.",
                      "Revisions can reflect ILO-modelled employment and national accounts, not measured farm productivity changes.",
                      "Methodological evidence of vintage sensitivity does not itself prove first-ever or publication novelty.",
-                     "When fewer than 100 common country pairs exist, a descriptive result may be retained but MUST NOT be generalized as a 153-economy cross-vintage result."]]
+                     "When fewer than 100 common country pairs exist, a descriptive result may be retained but MUST NOT be generalized as a 153-economy cross-vintage result."]
     }
     report["quality_gate"] = {
       "all_growth_periods_have_100_common_pairs": all(
