@@ -1,0 +1,77 @@
+name: cPanel MySQL 11GB storage table breakdown READ ONLY
+on:
+  pull_request:
+    types: [opened]
+    paths:
+      - .github/workflows/cpanel-mysql-eleven-gb-table-breakdown-readonly-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Read schema/table sizes of MySQL without modifying customer or factory records
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 400s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,json,subprocess,hashlib
+          h=Path('/home/zomorod2')
+          if os.geteuid()==0 or Path.home()!=h or h.is_symlink():raise SystemExit('INVALID_ACCOUNT')
+          c=subprocess.run(['uapi','--output=json','Mysql','list_databases'],capture_output=True,text=True,timeout=35)
+          q=subprocess.run(['uapi','--output=json','Quota','get_quota_info'],capture_output=True,text=True,timeout=35)
+          database_info={}
+          if c.returncode==0:
+           try:
+            data=json.loads(c.stdout).get('result',{}).get('data',[])
+            if isinstance(data,list):
+             database_info={'count':len(data),'entries':[{'name_hash':hashlib.sha256(str(d.get('database','')).encode()).hexdigest()[:12],'metric_fields':{k:v for k,v in d.items() if k in ('disk_usage','size','size_bytes','disk_usage_bytes','disk_usage_mb','disk_usage_kb')}} for d in data]}
+            else:database_info={'data_type':type(data).__name__}
+           except Exception as e:database_info={'parse_error_type':type(e).__name__}
+          quota={}
+          if q.returncode==0:
+           try:
+            data=json.loads(q.stdout).get('result',{}).get('data',{})
+            quota={k:v for k,v in data.items() if k in ['megabytes_used','megabyte_limit','inodes_used']}
+           except Exception:pass
+          exe=h/'Saeit/.venv/bin/python'
+          probe="import os,json,hashlib\nos.environ.setdefault(\"DJANGO_SETTINGS_MODULE\",\"config.settings\")\nos.environ[\"PYTHONDONTWRITEBYTECODE\"]=\"1\"\nout={\"attempt\":\"django_default\",\"mutations\":0}\ntry:\n import django\n django.setup()\n from django.db import connections\n c=connections[\"default\"]\n out[\"engine\"]=c.settings_dict.get(\"ENGINE\",\"unknown\")\n out[\"connected\"]=False\n if \"mysql\" in out[\"engine\"]:\n  with c.cursor() as cur:\n   cur.execute(\"SELECT DATABASE()\")\n   schema=cur.fetchone()[0]\n   out[\"schema_id_sha256_prefix\"]=hashlib.sha256(str(schema).encode()).hexdigest()[:12]\n   cur.execute(\"SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, DATA_FREE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() ORDER BY (DATA_LENGTH+INDEX_LENGTH) DESC LIMIT 60\")\n   rows=cur.fetchall()\n   out[\"largest_tables\"]=[{\"table\":r[0][:100],\"engine\":r[1],\"approx_rows\":int(r[2] or 0),\"data_bytes\":int(r[3] or 0),\"index_bytes\":int(r[4] or 0),\"free_bytes\":int(r[5] or 0)} for r in rows]\n   cur.execute(\"SELECT COUNT(*), COALESCE(SUM(DATA_LENGTH),0),COALESCE(SUM(INDEX_LENGTH),0),COALESCE(SUM(DATA_FREE),0) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()\")\n   total=cur.fetchone()\n   out[\"table_totals\"]={\"count\":int(total[0]),\"data_bytes\":int(total[1]),\"index_bytes\":int(total[2]),\"free_bytes\":int(total[3])}\n   out[\"connected\"]=True\n elif \"sqlite\" in out[\"engine\"]:\n  from pathlib import Path\n  nm=str(c.settings_dict.get(\"NAME\",\"\"))\n  out[\"sqlite_file_size_bytes\"]=Path(nm).stat().st_size if nm and Path(nm).is_file() else None\n  out[\"connected\"]=True\nexcept Exception as e:\n out[\"error_type\"]=type(e).__name__\nprint(\"DJANGO_READONLY_MYSQL_TABLES=\"+json.dumps(out,sort_keys=True),flush=True)"
+          result={}
+          if exe.is_file() and not exe.is_symlink():
+           env=os.environ.copy()
+           env['PYTHONDONTWRITEBYTECODE']='1'
+           env['PYTHONPATH']=str(h/'Saeit')
+           sub=subprocess.run([str(exe),'-B','-c',probe],capture_output=True,text=True,cwd=str(h/'Saeit'),env=env,timeout=150)
+           result={'exit_code':sub.returncode}
+           for line in sub.stdout.splitlines():
+            if line.startswith('DJANGO_READONLY_MYSQL_TABLES='):
+             try:result['data']=json.loads(line.split('=',1)[1])
+             except Exception:result['error']='result_parse_failed'
+           if not result.get('data'):result['stderr_error_type']='startup_failed_no_credentials_printed'
+          else:result={'error':'django_interpreter_absent'}
+          print('CPANEL_MYSQL_SCHEMA_STORAGE_AUDIT='+json.dumps({'mysql_uapi':database_info,'quota':quota,'django_probe':result,'mutations':0,'read_only':True},sort_keys=True),flush=True)
+
+          PY
+          echo CPANEL_MYSQL_SCHEMA_STORAGE_AUDIT_READONLY=PASS
