@@ -138,8 +138,17 @@ def main():
                 for slot in slots[:2]:
                     if not isinstance(slot, dict):
                         continue
-                    counters.append({str(k)[:60]: v for k, v in list(slot.items())[:65]
-                                     if isinstance(v, (int, float, bool))})
+                    row = {str(k)[:60]: v for k, v in list(slot.items())[:65]
+                           if isinstance(v, (int, float, bool))}
+                    for key in ("generated_text", "prompt"):
+                        if isinstance(slot.get(key), str):
+                            row[key + "_char_count_only"] = len(slot[key])
+                    for key in ("timings", "generation", "task"):
+                        if isinstance(slot.get(key), dict):
+                            row[key + "_numbers_only"] = {str(k)[:40]: v
+                                for k, v in list(slot[key].items())[:24]
+                                if isinstance(v, (int, float, bool))}
+                    counters.append(row)
             result["selfhosted_token_progress"] = counters
         except (OSError, ValueError, TypeError):
             result["selfhosted_token_progress"] = "slots_endpoint_unavailable"
