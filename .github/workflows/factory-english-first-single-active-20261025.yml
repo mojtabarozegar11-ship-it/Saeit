@@ -1,0 +1,95 @@
+name: Activate English-first single-active private factory order intake
+on:
+  pull_request:
+    paths:
+      - scripts/factory_english_first_serial_intake_v1.py
+      - tests/test_factory_english_first_serial_intake_v1.py
+      - deploy/install_factory_english_first_serial_intake_v1.sh
+      - .github/workflows/factory-english-first-single-active-20261025.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_english_first_serial_intake_v1.py
+      - tests/test_factory_english_first_serial_intake_v1.py
+      - deploy/install_factory_english_first_serial_intake_v1.sh
+      - .github/workflows/factory-english-first-single-active-20261025.yml
+permissions: {contents: read}
+concurrency:
+  group: factory-english-first-single-active-20261025
+  cancel-in-progress: false
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify English-first priority, one-active state and no-store policies
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_factory_english_first_serial_intake_v1.py' -v
+          bash -n deploy/install_factory_english_first_serial_intake_v1.sh
+  preview:
+    needs: regression
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Read-only real-VPS first English order preflight
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/english-serial-preview"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 120s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 - --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --operations /home/githubops/factory-runtime/operations/production-instructions --dry-run' < scripts/factory_english_first_serial_intake_v1.py
+          echo PREVIEW=NO_FACTORY_OR_STORE_WRITES
+  activate:
+    needs: regression
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-english-first-serial-20261025]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Deploy private English-first queue through pinned VPS SSH
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/english-serial-activation"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_vps() {
+            ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 "$@"
+          }
+          target="/home/githubops/factory-runtime/operations/.english-first-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh_vps "umask 077; test ! -e '$target'; install -d -m 700 '$target/scripts' '$target/deploy'"
+          for f in scripts/factory_english_first_serial_intake_v1.py scripts/factory_stage1_handoff.py deploy/install_factory_english_first_serial_intake_v1.sh; do
+            ssh_vps "umask 077; cat > '$target/$f'; chmod 600 '$target/$f'" < "$f"
+            checksum="$(sha256sum "$f" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$target/$f' | awk '{print \$1}')\" = '$checksum'"
+          done
+          ssh_vps "GITHUB_RUN_ID='$GITHUB_RUN_ID' GITHUB_RUN_ATTEMPT='$GITHUB_RUN_ATTEMPT' timeout 260s bash '$target/deploy/install_factory_english_first_serial_intake_v1.sh' '$target'"
+          ssh_vps "/home/githubops/factory-runtime/.venv/bin/python -B /home/githubops/factory-runtime/operations/production-instructions/english-first-serial-intake-v1.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --operations /home/githubops/factory-runtime/operations/production-instructions --dry-run"
+          echo ENGLISH_FIRST_PRIVATE_SINGLE_ACTIVE=INSTALLED
+          echo COMMERCIAL_RELEASE_UNCHANGED=true
