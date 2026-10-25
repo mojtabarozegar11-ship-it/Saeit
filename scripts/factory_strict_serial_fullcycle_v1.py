@@ -134,7 +134,7 @@ def immutable_tick_receipt(area, document):
         raise RuntimeError("STRICT_SERIAL_RECEIPT_PATH_UNSAFE")
     filename = "tick-" + uuid.uuid4().hex + ".json"
     payload = (json.dumps(document, sort_keys=True, ensure_ascii=False,
-                          separators=(",", ":")) + "\\n").encode("utf8")
+                          separators=(",", ":")) + "\n").encode("utf8")
     target = folder / filename
     fd = os.open(str(target), os.O_WRONLY | os.O_CREAT | os.O_EXCL |
                  getattr(os, "O_NOFOLLOW", 0), 0o600)
