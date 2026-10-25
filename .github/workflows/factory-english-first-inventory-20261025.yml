@@ -73,3 +73,5 @@ jobs:
             'active_cron_count':len(active),
             'active_cron_markers':[x.rsplit('#',1)[-1].strip()[:90] if '#' in x else 'UNMARKED' for x in active]},sort_keys=True))
           PY
+
+# Read-only scheduler inventory after clean; find potential incomplete artifact rewriters.
