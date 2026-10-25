@@ -1,0 +1,39 @@
+name: Leech private manuscript stream QC regression
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-leech-stream-qc-regression-20261026.yml
+      - scripts/factory_leech_vps_resource_guarded_author_20261025.py
+      - tests/test_factory_leech_stream_reasoning_gate_20261026.py
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-leech-stream-qc-regression-20261026.yml
+      - scripts/factory_leech_vps_resource_guarded_author_20261025.py
+      - tests/test_factory_leech_stream_reasoning_gate_20261026.py
+permissions: {contents: read}
+jobs:
+  reject-reasoning-leaks-and-wrong-orders:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify production author source compiles without touching VPS
+        run: python3 -B -m py_compile scripts/factory_leech_vps_resource_guarded_author_20261025.py
+      - name: Reject streamed reasoning and mismatched work orders
+        run: python3 -B -m unittest discover -s tests -p 'test_factory_leech_stream_reasoning_gate_20261026.py' -v
+      - name: Confirm safety boundaries remain explicit
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          code = Path('scripts/factory_leech_vps_resource_guarded_author_20261025.py').read_text()
+          for required in ('fcntl.LOCK_EX | fcntl.LOCK_NB',
+                           'SAFE_START_AVAILABLE_MIB = 2700',
+                           'STOP_AVAILABLE_MIB = 1250',
+                           '"published": False',
+                           'stream_segment_is_acceptable(body, 300)'):
+              assert required in code, required
+          print('LEECH_STREAM_QC_SAFETY_GATE=passed')
+          PY

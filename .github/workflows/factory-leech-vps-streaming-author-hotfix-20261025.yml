@@ -22,6 +22,7 @@ jobs:
           set -euo pipefail
           python3 -B -m py_compile scripts/factory_leech_vps_resource_guarded_author_20261025.py
           python3 -B -m unittest discover -s tests -p test_factory_leech_free_offline_original_author_20261025.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_leech_stream_reasoning_gate_20261026.py -v
           python3 - <<'PY'
           from pathlib import Path
           s = Path("scripts/factory_leech_vps_resource_guarded_author_20261025.py").read_text()
@@ -57,11 +58,39 @@ jobs:
           ops="/home/githubops/factory-runtime/operations/production-instructions"
           file="$ops/leech-vps-resource-guarded-author.py"
           stage="$ops/.leech-vps-resource-guarded-author-streaming-next.py"
-          ssh_vps "test \"\$(id -un)\" = githubops && test -d '$ops' && test ! -L '$ops' && test -f '$file' && test ! -L '$file' && test ! -e '$stage'"
+          backup="$ops/.leech-vps-resource-guarded-author-rollback-20261026.py"
+          # Do not modify the running writer or its cron/lock; only replace future script bytes.
+          ssh_vps "test \"\$(id -un)\" = githubops && test -d '$ops' && test ! -L '$ops' && test -f '$file' && test ! -L '$file' && test ! -e '$stage' && test ! -e '$backup'"
           ssh_vps "umask 077; cat > '$stage'; chmod 600 '$stage'" < scripts/factory_leech_vps_resource_guarded_author_20261025.py
           expected="$(sha256sum scripts/factory_leech_vps_resource_guarded_author_20261025.py | awk '{print $1}')"
-          ssh_vps "test \"\$(sha256sum '$stage' | awk '{print \$1}')\" = '$expected' && /usr/bin/python3 -B -m py_compile '$stage' && mv -- '$stage' '$file' && chmod 700 '$file' && test \"\$(sha256sum '$file' | awk '{print \$1}')\" = '$expected'"
+          ssh_vps "EXPECTED_SHA=$expected bash -se" <<'REMOTE'
+          set -euo pipefail
+          ops="/home/githubops/factory-runtime/operations/production-instructions"
+          file="$ops/leech-vps-resource-guarded-author.py"
+          stage="$ops/.leech-vps-resource-guarded-author-streaming-next.py"
+          backup="$ops/.leech-vps-resource-guarded-author-rollback-20261026.py"
+          test -f "$file" && test ! -L "$file" && test -f "$stage" && test ! -L "$stage"
+          test ! -e "$backup"
+          test "$(sha256sum "$stage" | awk '{print $1}')" = "$EXPECTED_SHA"
+          /usr/bin/python3 -B -m py_compile "$stage"
+          original_sha="$(sha256sum "$file" | awk '{print $1}')"
+          cp -p -- "$file" "$backup"
+          chmod 600 "$backup"
+          test -s "$backup"
+          test "$(sha256sum "$backup" | awk '{print $1}')" = "$original_sha"
+          mv -- "$stage" "$file"
+          chmod 700 "$file"
+          if ! test "$(sha256sum "$file" | awk '{print $1}')" = "$EXPECTED_SHA"; then
+            cp -p -- "$backup" "$file"
+            chmod 700 "$file"
+            echo "LEECH_OPERATOR_RESTORED_FROM_PRIVATE_ROLLBACK=true"
+            exit 1
+          fi
+          echo "LEECH_OWNER_VPS_AUTHOR_SOURCE_SHA256=$EXPECTED_SHA"
+          echo "LEECH_OWNER_VPS_PREVIOUS_AUTHOR_BACKUP=private-recoverable"
+          REMOTE
           echo LEECH_OWNER_VPS_STREAMING_AUTHOR_HOTFIX_INSTALLED=true
           echo LEECH_PREEXISTING_PRIVATE_MANUSCRIPT_AND_RUNNING_WORKER_PRESERVED=true
-          ssh_vps "nohup /usr/bin/python3 -B '$file' </dev/null >/dev/null 2>&1 &"
-          echo LEECH_OWNER_VPS_STREAMING_AUTHOR_KICK_SUBMITTED=true
+          echo LEECH_CRON_AND_SINGLE_WRITER_LOCK_UNCHANGED=true
+          # Never kick an extra writer: the existing one-minute single-lock cron loads
+          # the verified replacement naturally after the current process finishes.
