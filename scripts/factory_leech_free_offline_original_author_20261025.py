@@ -138,6 +138,7 @@ def make_prompt(work, chapters, sources, chunks):
     return {
         "order_id": ORDER, "title": work["official_title"], "locale": "en-GB",
         "chapter_number": chapter, "part_number": part,
+        "next_chapter": chapter, "next_part": part, "complete_length_only": False,
         "chapter_title": ch["chapter_title"],
         "section_plan": ch["four_mandatory_sections"],
         "practical_deliverable": ch["individually_assessed_professional_output"],
