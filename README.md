@@ -148,3 +148,17 @@ These **six new public GitHub resources** are freely available, distinct from ex
 - [Research data dictionary CSV template](docs/marketing/resources/research-data-dictionary-template-20261025.csv) — transparent variable definitions, units, validation and privacy classification. [Research profile](https://mojplaywin.com/mojtaba.roozegar/?utm_source=github&utm_medium=resource_directory&utm_campaign=research_dictionary_20261025).
 
 **Measurement disclosure:** publication is confirmed by public repository commits, not by measured visits, leads, purchases, game retention, research outcomes, or publication in independent social accounts. No use of prohibited social accounts is authorized.
+
+
+## New live learning resources — 25 October 2026 (second release)
+
+These six new English-language guides are publicly accessible on MojPlayWin and offer practical, evidence-first learning. The URLs below point to the **live site**, not to unpublished drafts. Links are tagged for campaign attribution; analytics and sales outcomes are not yet established.
+
+- **Chess players:** [Review post-game errors with a six-step evidence log](https://mojplaywin.com/mpw-learning/20261025b/chess-error-review/?utm_source=github&utm_medium=organic_referral&utm_campaign=learning_guides_20261025b&utm_content=chess).
+- **Parents and readers:** [Try six original story-retelling activities](https://mojplaywin.com/mpw-learning/20261025b/taniya-creative-retelling/?utm_source=github&utm_medium=organic_referral&utm_campaign=learning_guides_20261025b&utm_content=taniya).
+- **Website owners:** [Run accessibility acceptance checks before handover](https://mojplaywin.com/mpw-learning/20261025b/atelier-accessibility-acceptance/?utm_source=github&utm_medium=organic_referral&utm_campaign=learning_guides_20261025b&utm_content=accessibility).
+- **Game developers:** [Diagnose day-one and day-seven player retention](https://mojplaywin.com/mpw-learning/20261025b/browser-game-retention-diagnostics/?utm_source=github&utm_medium=organic_referral&utm_campaign=learning_guides_20261025b&utm_content=retention).
+- **Digital buyers:** [Check license, assets and delivery conditions before purchasing](https://mojplaywin.com/mpw-learning/20261025b/digital-product-license-check/?utm_source=github&utm_medium=organic_referral&utm_campaign=learning_guides_20261025b&utm_content=buyer_license).
+- **Research collaborators:** [Build a reproducible research-data audit trail](https://mojplaywin.com/mpw-learning/20261025b/research-data-audit-trail/?utm_source=github&utm_medium=organic_referral&utm_campaign=learning_guides_20261025b&utm_content=research).
+
+[Browse the new live resource directory](https://mojplaywin.com/mpw-learning/20261025b/?utm_source=github&utm_medium=organic_referral&utm_campaign=learning_guides_20261025b&utm_content=index). The separate Persian release has unresolved canonical directory routing and is intentionally not promoted here until repaired and verified. No social-media account, payment gateway or third-party advertising platform was used for this release.
