@@ -122,7 +122,7 @@ for label,model in (("Order",Order),("PaymentIntent",PaymentIntent)):
     print("MPW_LIVE_ORDER_AGGREGATE="+json.dumps(aggregate,ensure_ascii=False))
 
 # Privacy-preserving product-level funnel counts; never emit customer identifiers.
-from django.db.models import Sum,Min,Max
+from django.db.models import Sum,Min,Max,Q
 from core.models import OrderItem,LedgerEntry,PaymentWebhookEvent
 for pid in (72,225):
     rows=OrderItem.objects.filter(product_id=pid).values(
@@ -131,7 +131,17 @@ for pid in (72,225):
     ).annotate(
         order_count=Count("order_id",distinct=True),
         units=Sum("quantity"),
+        # Keep legacy account-holder count for compatibility, but never present
+        # staff-owned checkout attempts as independent external customers.
         distinct_buyers=Count("order__customer_id",distinct=True),
+        nonstaff_orders=Count(
+            "order_id", distinct=True,
+            filter=Q(order__customer__is_staff=False,
+                     order__customer__is_superuser=False)),
+        distinct_nonstaff_buyers=Count(
+            "order__customer_id", distinct=True,
+            filter=Q(order__customer__is_staff=False,
+                     order__customer__is_superuser=False)),
         first_order=Min("order__created_at"),
         last_order=Max("order__created_at"),
     ).order_by("order__status","order__payment_intent__status")
@@ -144,6 +154,9 @@ for pid in (72,225):
             "provider_reference_present":bool(row["order__payment_intent__provider_reference"]),
             "orders":row["order_count"],"units":row["units"],
             "distinct_buyers":row["distinct_buyers"],
+            "nonstaff_orders":row["nonstaff_orders"],
+            "distinct_nonstaff_buyers":row["distinct_nonstaff_buyers"],
+            "buyer_count_scope": "nonstaff excludes is_staff and is_superuser; not proof of human purchase",
             "first_order":row["first_order"].isoformat() if row["first_order"] else None,
             "last_order":row["last_order"].isoformat() if row["last_order"] else None,
         })
