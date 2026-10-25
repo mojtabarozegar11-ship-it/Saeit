@@ -177,9 +177,17 @@ jobs:
           print("LEECH_STAGE2_ONE_ORDER="+json.dumps(step,sort_keys=True))
           # One-order-only evidence adapter: the existing 200-item bilingual
           # source validator remains unchanged on disk and for all other orders.
-          s2spec=importlib.util.spec_from_file_location("single_leech_stage2_adapter",stage2)
-          s2=importlib.util.module_from_spec(s2spec)
-          s2spec.loader.exec_module(s2)
+          # The installed Python 3.8 lacks str.removeprefix: one exact,
+          # in-memory compatibility substitution for this isolated invocation.
+          import types
+          worker_source=stage2.read_text(encoding="utf8")
+          py39_only='domains.add(domain.removeprefix("www."))'
+          compatible='domains.add(domain[4:] if domain.startswith("www.") else domain)'
+          if worker_source.count(py39_only)!=1:
+              raise SystemExit("LEECH_STAGE2_COMPAT_SOURCE_CHANGED")
+          s2=types.ModuleType("single_leech_stage2_adapter")
+          s2.__file__=str(stage2)
+          exec(compile(worker_source.replace(py39_only,compatible),str(stage2),"exec"),s2.__dict__)
           s2.TOPIC_ID=re.compile(re.escape(product_key)+r"\Z")
           s2.LOCALES={"en-GB"}
           pkt,verified_order=s2.verified_stage1_packet(area,ident+"--r001.json")
