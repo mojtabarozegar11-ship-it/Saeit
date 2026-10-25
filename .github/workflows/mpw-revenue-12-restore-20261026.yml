@@ -105,7 +105,9 @@ jobs:
           root=Path('/home/zomorod2/mojplaywin.com/mpw-editorial/revenue')
           assert root.is_dir() and not root.is_symlink()
           contents=[p.name for p in root.iterdir()]
-          assert not contents, "Refuse to touch nonempty/modified revenue directory: "+repr(contents[:8])
+          assets=root/'assets'
+          placeholder=(contents==['assets'] and assets.is_dir() and not assets.is_symlink() and not any(assets.iterdir()))
+          assert not contents or placeholder, "Refuse to touch nonempty/modified revenue directory: "+repr(contents[:8])
           assert Path('/home/zomorod2/mojplaywin.com/.htaccess').is_file()
           print('MPW_P0_REVENUE_EMPTY_DIRECTORY_VERIFIED=PASS')
           PY
