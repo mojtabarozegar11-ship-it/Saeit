@@ -34,3 +34,19 @@ A mere statement that DSS advice does not guarantee field adoption is **not new*
 - Conduct human author-led appraisal and approve manuscript-specific search scope and final conclusions.
 
 **Status:** an actual, dated supplementary discovery log exists; **SANRA search-description item improves in transparency but does not automatically receive 2/2**, because the original selection pathway remains incompletely documented.
+
+## 2026-10-25 additional independently executed targeted searches and prior-art adjudication
+
+Queries actually run against a public search index (not Scopus, not a systematic database export):
+- `Mabhaudhi Dirwai Taguta 2023 Mapping Decision Support Tools agricultural water productivity full text pdf IWMI CGIAR`
+- `Lorite Garcia Vila 2012 assessment irrigation advisory services recommendations farmers irrigation management pdf full text`
+- `Baroni Drastig Lichtenfeld Jost Claas 2019 irrigation scheduling systems Germany pdf full text`
+- `"10.1007/s44279-025-00190-y" Ofosu-Ampong Abera`
+
+Source checks actually completed:
+- [FAO AGRIS, 2023 Mabhaudhi et al.](https://agris.fao.org/search/en/records/67235753b605bda15e0a4869) identifies the original `Agricultural Water Management` 290:108590 review, DOI `10.1016/j.agwat.2023.108590`, open-access CC BY metadata and an abstract reporting **81 DSTs**, **51%** not readily publicly available, and limited scaling evidence. [IWMI institutional bibliography](https://ideas.repec.org/a/iwt/jounls/134899.html) confirms author/title/DOI and provides a handle to the repository. **Only the abstract and bibliographic record were verified in this pass; the full PDF was not read.** This record materially narrows novelty: prior mapping explicitly included availability and uptake, though it did not prove advice-event/metered-outcome evidence was exhaustively assessed.
+- [Original Springer publisher article, Ofosu-Ampong et al. 2025](https://link.springer.com/article/10.1007/s44279-025-00190-y), DOI `10.1007/s44279-025-00190-y`, published in *Discover Agriculture*, explicitly covers digital advisory **adoption, behavioral typologies and trust**. **This is direct same-journal prior art**; the present manuscript must not claim the behavioral/adoption framing as a novel first.
+- [Original Wiley publisher abstract, Baroni et al. 2019](https://onlinelibrary.wiley.com/doi/10.1002/ird.2337) again confirms **six** irrigation scheduling methods, generally positive user feedback and recommendations **rarely implemented**. This is an abstract-level claim, not an extracted count of observed adherence events.
+- [RePEc/Springer bibliographic abstract, Lorite et al. 2012](https://ideas.repec.org/a/spr/waterr/v26y2012i8p2397-2419.html) confirms crop-specific economic interpretation and original article citation; restricted full methods remain unverified.
+
+**Independent editorial implication:** the candidate Perspective now explicitly acknowledges the **81-tool scoping review** and **same-journal behavioral adoption paper** in both manuscript versions. The evidence-class worksheet may remain a useful proposal, but novelty is still a hypothesis until an author-led comparison establishes what existing review methods did or did not classify at event level. This update is a new documented source-level comparison, not final scientific clearance, not a reconstructed PRISMA screen, and not proof of human authorship.
