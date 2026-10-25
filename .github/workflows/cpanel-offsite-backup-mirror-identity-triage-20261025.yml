@@ -1,0 +1,74 @@
+name: cPanel versus VPS independent backup mirror triage READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/cpanel-offsite-backup-mirror-identity-triage-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Compare complete site-backup topology on cPanel and offsite VPS without moving private data
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 200s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PYCP'
+          from pathlib import Path
+          import os,json,subprocess,collections
+          root=Path('/home/zomorod2/.backups/zomorodmelal-complete')
+          if os.geteuid()==0 or root.is_symlink() or not root.is_dir() or str(Path.home())!='/home/zomorod2':
+              raise SystemExit('CPANEL_BACKUP_ROOT_INVALID')
+          rows=[]
+          for p in root.iterdir():
+              if p.is_symlink():continue
+              if p.is_file():sz=p.stat().st_size
+              else:
+                  q=subprocess.run(['du','-sb','--',str(p)],capture_output=True,text=True,timeout=55)
+                  sz=int(q.stdout.split()[0]) if q.returncode==0 else None
+              rows.append({'name':p.name[:100],'is_dir':p.is_dir(),'bytes':sz})
+          d=subprocess.run(['du','-sb','--',str(root)],capture_output=True,text=True,timeout=80)
+          print('CPANEL_BACKUP_MIRROR_CANDIDATE='+json.dumps({'root_size':int(d.stdout.split()[0]),'children':sorted(rows,key=lambda v:-(v['bytes'] or 0))[:50],
+          'files_top':[(p.name[:80],p.stat().st_size) for p in sorted(root.glob('*'),key=lambda x:-(x.stat().st_size if x.is_file() else 0)) if p.is_file()][:20],
+          'read_only':True},sort_keys=True),flush=True)
+          PYCP
+          timeout 200s ssh -T -F "$d/config" saeit-vps 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PYVP'
+          from pathlib import Path
+          import os,json,subprocess
+          h=Path('/home/githubops')
+          roots=[h/'offsite-zomorod-20261018',h/'offsite-zomorod-20261018-gzip',h/'factory-runtime/operations/backups']
+          if os.geteuid()==0 or str(Path.home())!=str(h):raise SystemExit('VPS_OPERATOR_UNSAFE')
+          data={}
+          for root in roots:
+              if root.is_symlink() or not root.is_dir():continue
+              rows=[]
+              for sub in (root,root/'.backups',root/'.backups/zomorodmelal-complete'):
+                  if not sub.is_dir() or sub.is_symlink():continue
+                  q=subprocess.run(['du','-sb','--',str(sub)],capture_output=True,text=True,timeout=80)
+                  rows.append({'path':str(sub.relative_to(h)),'bytes':int(q.stdout.split()[0]) if q.returncode==0 else None,
+                   'children':sorted(p.name[:100] for p in sub.iterdir())[:45]})
+              data[str(root.relative_to(h))]=rows
+          print('VPS_OFFSITE_MIRROR_CANDIDATES='+json.dumps({'roots':data,'read_only':True},sort_keys=True),flush=True)
+          PYVP
+          echo CPANEL_OFFSITE_READONLY=PASS
