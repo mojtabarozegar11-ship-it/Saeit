@@ -1,0 +1,48 @@
+name: VPS npm cache safe reclaim census READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/vps-node-cache-reclamation-readonly-20261025.yml
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Classify npm cache on VPS and whether active production services are using it
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-owner-reset-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 550s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          import json,os,subprocess,shutil
+          home=Path('/home/githubops')
+          root=home/'.npm'
+          if os.geteuid()==0 or os.environ.get('USER')!='githubops' or root.is_symlink() or not root.is_dir():
+              raise SystemExit('BAD_CACHE_ROOT')
+          result=[]
+          for p in sorted(root.iterdir()):
+              out=subprocess.run(['du','-sb','--',str(p)],capture_output=True,text=True,timeout=45)
+              result.append({'name':p.name,'is_dir':p.is_dir(),'is_symlink':p.is_symlink(),
+                  'bytes':int(out.stdout.split()[0]) if out.returncode==0 else None})
+          opencheck={'available':False}
+          target=root/'_cacache'
+          if shutil.which('lsof') and target.is_dir():
+              cmd=subprocess.run(['lsof','-nP','+D',str(target)],capture_output=True,text=True,timeout=90)
+              opencheck={'available':cmd.returncode in (0,1),'active_open_files':len(cmd.stdout.splitlines())-1 if cmd.returncode==0 else 0}
+          print('VPS_NPM_CACHE_RECLAIM_CENSUS='+json.dumps({'root_files':result,'cache_open_handles':opencheck,'read_only':True,'mutations':0},sort_keys=True),flush=True)
+
+          PY
+          echo VPS_NPM_CACHE_READONLY=PASS
