@@ -46,6 +46,20 @@ class LeechStreamAcceptanceRegression(unittest.TestCase):
             with self.subTest(text=text[:30]):
                 self.assertFalse(self.operator.stream_segment_is_acceptable(text))
 
+    def test_completed_writer_assignment_retains_order_identity(self):
+        writer_path = Path(__file__).resolve().parents[1] / "scripts/factory_leech_free_offline_original_author_20261025.py"
+        spec = importlib.util.spec_from_file_location("leech_private_writer", writer_path)
+        writer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(writer)
+        with patch.object(writer, "state", return_value=({}, writer.MIN_WORDS, None, None)):
+            complete = writer.make_prompt({}, [], [], {})
+        self.assertEqual(complete["order_id"], "WO-26102501")
+        self.assertTrue(complete["complete_length_only"])
+        self.assertIsNone(complete["next_chapter"])
+        fake = SimpleNamespace(stdout=json.dumps(complete))
+        with patch.object(self.operator.subprocess, "run", return_value=fake):
+            self.assertEqual(self.operator.assignment(), complete)
+
     def test_wrong_order_rejected_even_when_book_length_complete(self):
         fake = SimpleNamespace(stdout=json.dumps({
             "order_id": "WRONG-ORDER", "next_chapter": None}))
