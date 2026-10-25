@@ -149,7 +149,7 @@ jobs:
           if b_du.returncode:raise SystemExit('BACKUP_DU_FAILURE')
           b_sizes={}
           for line in b_du.stdout.splitlines():
-              sz,pth=line.split('\\t',1)
+              sz,pth=line.split(None,1)
               b_sizes[Path(pth).name]=int(sz)
           print('OWNER_RESET_BACKUP_TOP='+json.dumps({'largest':sorted(b_sizes.items(),key=lambda x:-x[1])[:35], 'sum_bytes':sum(b_sizes.values()), 'mutations':0},sort_keys=True))
           print('OWNER_RESET_DEPENDENCY_DETAIL='+json.dumps({
