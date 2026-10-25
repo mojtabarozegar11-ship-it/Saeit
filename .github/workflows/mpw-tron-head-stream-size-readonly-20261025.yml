@@ -87,6 +87,49 @@ jobs:
               item['elapsed']=round(time.monotonic()-t,2)
               print('MPW_TRON_HEAD_STREAM='+json.dumps(item,sort_keys=True))
           PY
+      - name: Validate bounded JSON header extraction from both independent operators
+        run: |
+          set -euo pipefail
+          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import json,re,time,hashlib,urllib.request,sys,os
+          from datetime import datetime,timezone
+          from pathlib import Path
+          app=Path('/home/zomorod2/Saeit-staging')
+          if app.is_symlink() or not app.is_dir():raise SystemExit('UNSAFE_APP_ROOT')
+          os.chdir(app);sys.path.insert(0,str(app))
+          from scripts.mpw_tron_public_dual_probe_readonly_20261023 import NODES
+          from scripts.mpw_tron_public_dual_probe_readonly_20261023 import head_height_and_age
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*a,**kw):return None
+          for label,url in NODES:
+              item={'operator':label,'valid_bounded_head':False,'read_only':True}
+              t=time.monotonic()
+              try:
+                  req=urllib.request.Request(url+'/walletsolidity/getnowblock',method='GET',
+                      headers={'Accept':'application/json','User-Agent':'MojPlayWin-Readonly-Diagnostic/1.0'})
+                  with urllib.request.build_opener(NoRedirect()).open(req,timeout=9) as h:
+                      if h.status!=200 or h.headers.get_content_type()!='application/json':raise ValueError('Bad provider HTTP response')
+                      sample=b''
+                      for _ in range(8):
+                          sample+=h.read(4096)
+                          preview=sample.decode('utf8','ignore')
+                          match=re.search(r'"block_header"\s*:\s*',preview)
+                          if not match:continue
+                          try:header,offset=json.JSONDecoder().raw_decode(preview[match.end():])
+                          except json.JSONDecodeError:continue
+                          if type(header) is not dict:raise ValueError('Invalid header object')
+                          head_height_and_age({'block_header':header},datetime.now(timezone.utc))
+                          item['valid_bounded_head']=True
+                          item['bytes_for_header']=len(sample)
+                          break
+                      else:raise ValueError('Bounded header unavailable')
+              except Exception as exc:item['error_type']=type(exc).__name__
+              item['seconds']=round(time.monotonic()-t,2)
+              print('MPW_TRON_BOUNDED_HEAD='+json.dumps(item,sort_keys=True))
+          live=app/'services/mpw_trx_commercial_chain.py'
+          if live.is_file() and not live.is_symlink():
+              print('MPW_TRON_LIVE_CHAIN_SOURCE_SHA256='+hashlib.sha256(live.read_bytes()).hexdigest())
+          PY
       - name: Remove temporary SSH relay keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
