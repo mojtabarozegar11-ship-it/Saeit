@@ -13,7 +13,7 @@ jobs:
     # Standard public-repository runner: no larger paid runners, no VPS,
     # no persistent biological files or website changes.
     runs-on: ubuntu-22.04
-    timeout-minutes: 55
+    timeout-minutes: 330
     env:
       SRR: SRR33083355
       GSM: GSM8904963
