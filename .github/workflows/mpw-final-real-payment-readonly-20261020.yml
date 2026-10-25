@@ -187,7 +187,7 @@ jobs:
               from services.mpw_trx_commercial_chain import read_only_independent_pair
               pair=read_only_independent_pair()
               emit('MPW_P0_TRON_PROVIDERS',{'available':True,'provider_a_type':type(getattr(pair,'identifier_a',None)).__name__,'provider_b_type':type(getattr(pair,'identifier_b',None)).__name__,'no_tx_broadcast':True})
-          except (OSError,ValueError,TypeError,RuntimeError) as exc:
+          except Exception as exc:
               emit('MPW_P0_TRON_PROVIDERS',{'available':False,'error_type':type(exc).__name__,'no_tx_broadcast':True})
           print('MPW_P0_PRIVATE_DIAGNOSTIC_READONLY=PASS')
           PY
