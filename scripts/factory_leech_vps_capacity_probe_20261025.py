@@ -64,7 +64,9 @@ def main():
             result["selfhosted_last_cycle"] = {
                 k: current.get(k) for k in
                 ("result", "reason", "verified_words", "accepted_words", "next_chapter",
-                 "next_part", "checked_utc", "paid_inference_api_cost_usd", "published")
+                 "next_part", "checked_utc", "paid_inference_api_cost_usd", "published",
+                 "stream_elapsed_seconds", "stream_content_chars", "stream_content_events",
+                 "stream_reasoning_events", "stream_event_lines")
             }
         except (OSError, ValueError):
             result["selfhosted_last_cycle"] = "unreadable"
