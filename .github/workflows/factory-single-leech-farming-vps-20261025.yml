@@ -1,0 +1,139 @@
+name: Owner single English leech-farming F01 VPS manufacturing intake
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-single-leech-farming-vps-20261025.yml
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: owner-single-leech-farming-private-20261025
+  cancel-in-progress: false
+jobs:
+  single-private-intake:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[owner-leech-vps-start-20261025]'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Start exactly one private F01 order on pinned VPS if previous queue was cleared
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/leech-private-intake"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 190s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import fcntl, hashlib, importlib.util, json, os, re, shutil, sys
+          from pathlib import Path
+          base=Path("/home/githubops/factory-runtime")
+          root=base/"private/autonomous-product-cycle"
+          area=root/"production-instructions"
+          orders=area/"orders"
+          ops=base/"operations/production-instructions"
+          worker=ops/"stage1-english-first-worker.py"
+          stage2=ops/"stage2-research-serial.py"
+          ident="WO-26102501"
+          product_key="vocational-leech-farming-en-20261025"
+          reserve=2*1024**3
+          for p in (base,root,area,orders,ops):
+              if p.is_symlink() or not p.is_dir(): raise SystemExit("LEECH_BLOCKED_UNSAFE_OR_MISSING_VPS_PATH")
+          for p in (worker,stage2):
+              if p.is_symlink() or not p.is_file(): raise SystemExit("LEECH_BLOCKED_EXISTING_WORKER_UNAVAILABLE")
+          py=base/".venv/bin/python"
+          if not py.is_file() or py.is_symlink(): raise SystemExit("LEECH_BLOCKED_VENV_UNAVAILABLE")
+          free=shutil.disk_usage(root).free
+          if free<reserve:
+              print("LEECH_VPS_START_BLOCKED="+json.dumps({"reason":"BELOW_2_GIB_RESERVE","free_gib":round(free/2**30,3),"mutations":0}))
+              raise SystemExit(2)
+          title="The Professional Leech Farming Handbook: Biology, Breeding, Biosecurity, Farm Economics and Responsible Commercial Operations"
+          scope={
+            "title":title,"product_key":product_key,"family_id":"F01",
+            "language":"en-GB","market":"mojplaywin.com","minimum_original_words":150001,
+            "format":["accessible PDF","EPUB","editable source","original diagrams","economic workbook","SOPs","assessment and answers"],
+            "chapters":["species identification and traceability","physiology and ecology","responsible facility design","water physicochemistry and monitoring","breeding and cocoons","juvenile care and welfare","feeding and lawful sourcing","biosecurity and pathogen surveillance","quarantine and veterinary management","population and batch analytics","waste and environmental protection","conservation and CITES","jurisdiction-specific regulatory approvals","medical-use regulatory separation","farm operations and staffing","CAPEX OPEX unit economics","risk analysis and case studies","professional competency assessment"],
+            "primary_sources":[
+              "Aminov et al. 2025 DOI:10.17420/ap71.549",
+              "Ceylan 2026 DOI:10.3389/fvets.2026.1969385",
+              "FDA CBER Medicinal Leeches NRN 2024-12-30 transfer",
+              "CITES official trade and appendices (jurisdiction verification required)"
+            ]}
+          digest=lambda x:hashlib.sha256(json.dumps(x,sort_keys=True,ensure_ascii=False,separators=(",",":")).encode()).hexdigest()
+          instruction=("Professionally author exactly ONE complete original English vocational specialist book of at least 150001 verified substantive words, not a prototype. Cover species-specific Hirudo biology, controlled breeding, biosecurity, zoonoses and Aeromonas risk, traceable lawful husbandry, reproductive substrates, care, QC, plant design, cost model, welfare, CITES, clinical marketing limitations and jurisdictional permits. Include assessments, solved cases, professional SOPs and editable operational records. Cite authentic current peer-reviewed primary evidence and official authorities, reject invented statistics, citations, certification or legal permissions. Prohibit unapproved wild collection, direct human feeding, clinical treatment claims and unsupported husbandry instructions. Deliver accessible PDF/EPUB, original source and model, figures, glossary/index and full rights/provenance. Apply existing 12-stage independent QC1000 and per-defect rework; never auto-publish.")
+          order={
+           "schema":"saeit.factory.production-instructions.v1","id":ident,
+           "origin":"owner_requested_single_leech_english_20261025",
+           "source_product_id":product_key,"source_sha256":digest(scope),
+           "priority":"P0","priority_rank":1,"priority_group":"OWNER_SINGLE_PRODUCT",
+           "priority_reason":"OWNER_DIRECTIVE_2026_10_25",
+           "family_id":"F01","related_learning_family":"F07","phase":"engineering_specification",
+           "slot":1,"subject":title,"instruction":instruction,"scope":scope,
+           "editions":[{"locale":"en-GB","site":"mojplaywin.com","title_working":title,"currency":"USD"}],
+           "minimum_original_prose_words":150001,"authoring_target_original_words":160000,
+           "required_chapters":30,"actual_chapters_verified":0,
+           "acceptance":[
+              "Substantive original English coverage at least 150001 words; independent chapter-by-chapter technical review",
+              "Verify species, evidence per claim and dated primary source provenance",
+              "Real safe husbandry SOPs, pathogen/biosecurity management, lawful feed and welfare protocols",
+              "Jurisdiction-specific CITES, wildlife and medicinal-use regulatory compliance review",
+              "Accessible original PDF and EPUB, editable source, diagrams, glossary, assessment and financial model",
+              "Independent authenticated specialist and legal-rights review, 12-stage receipts and QC1000 before finished goods",
+              "No store, customer order, payment or commercial release before owner exact-version approval"
+            ],
+           "product_goal_count":1,"technical_product_release":False,
+           "status":"issued","instruction_kind":"private_factory_work_order",
+           "independent_of_websites":True,"requires_customer_order":False,"api_required":False,
+           "manufacturing_qa_passed":False,"publication_approved":False,
+           "public_distribution_allowed":False,"warehouse_goods_created":False,
+           "commercial_release":False,"pricing_authority":"CHATGPT_FAIR_BASE_PRICE_SUBJECT_TO_REVIEW",
+           "discount_authority":"OWNER_ONLY","discount_percent":0
+          }
+          order["fingerprint"]=digest({k:v for k,v in order.items() if k not in ("schema","status","instruction_kind","fingerprint")})
+          target=orders/(ident+".json")
+          lockpath=area/".orders.lock"
+          if lockpath.is_symlink(): raise SystemExit("LEECH_BLOCKED_UNSAFE_LOCK")
+          with lockpath.open("a+b") as mutex:
+              os.fchmod(mutex.fileno(),0o600)
+              fcntl.flock(mutex.fileno(),fcntl.LOCK_EX)
+              prior=sorted(orders.iterdir())
+              if any(x.is_symlink() or not x.is_file() or re.fullmatch(r"WO-[0-9]{8}\.json",x.name) is None for x in prior):
+                  raise SystemExit("LEECH_BLOCKED_UNSAFE_OLD_QUEUE")
+              if prior and [x.name for x in prior]!=[target.name]:
+                  print("LEECH_VPS_START_BLOCKED="+json.dumps({"reason":"OLD_WORK_ORDERS_NOT_CLEARED","old_queue_count":len(prior),"mutations":0}))
+                  raise SystemExit(2)
+              if target.exists():
+                  old=json.loads(target.read_text(encoding="utf8"))
+                  if old!=order: raise SystemExit("LEECH_BLOCKED_PREEXISTING_ORDER_COLLISION")
+                  created=False
+              else:
+                  fd=os.open(str(target),os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,"O_NOFOLLOW",0),0o600)
+                  with os.fdopen(fd,"w",encoding="utf8") as out:
+                      json.dump(order,out,sort_keys=True,ensure_ascii=False,indent=2)
+                      out.write("\n");out.flush();os.fsync(out.fileno())
+                  created=True
+              module_spec=importlib.util.spec_from_file_location("stage1_leech_existing",worker)
+              module=importlib.util.module_from_spec(module_spec)
+              module_spec.loader.exec_module(module)
+              module.validate_order(order,ident)
+              forwarded=module.forward(root,order,revision=1)
+          receipt=area/"stage-01/receipts"/(ident+"--r001.json")
+          inbox=area/"stage-02/inbox"/(ident+"--r001.json")
+          if not receipt.is_file() or not inbox.is_file():
+              raise SystemExit("LEECH_STAGE1_RECEIPT_MISSING")
+          sha=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
+          print("LEECH_SINGLE_PRODUCT_VPS="+json.dumps({
+            "product_key":product_key,"order_id":ident,"order_created":created,
+            "stage1_forwarded":forwarded,"stage1_receipt_sha256":sha(receipt),
+            "stage2_inbox_sha256":sha(inbox),"private_only":True,
+            "quality1000_certified":False,"published":False,
+            "free_gib_at_preflight":round(free/2**30,3)},sort_keys=True))
+          PY
+          echo LEECH_OWNER_SINGLE_PRODUCT_VPS_HANDOFF_COMPLETED=true
