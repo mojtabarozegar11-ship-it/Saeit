@@ -1,0 +1,109 @@
+name: MR-2026-001 publisher-format Word author-review package
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/mr-2026-001-build-author-review-docx.yml
+      - research/manuscripts/MR-2026-001/MR-2026-001_DISCOVER_AGRICULTURE_PERSPECTIVE_AUTHOR_REVIEW_CANDIDATE_2026-10-25.md
+      - research/manuscripts/MR-2026-001/C20_DISCOVER_AGRICULTURE_COVER_LETTER_AND_DECLARATIONS_FOR_AUTHOR_REVIEW_2026-10-25.md
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  produce-author-review-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install open document production tools
+        run: |
+          if ! command -v pandoc >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq pandoc
+          fi
+          python -m pip install --disable-pip-version-check python-docx==1.2.0
+      - name: Build journal-style manuscript Word from source-locked candidate
+        shell: bash
+        run: |
+          mkdir -p /tmp/mr-2026-001-review
+          pandoc research/manuscripts/MR-2026-001/MR-2026-001_DISCOVER_AGRICULTURE_PERSPECTIVE_AUTHOR_REVIEW_CANDIDATE_2026-10-25.md \
+            --from=gfm --to=docx --standalone \
+            -o /tmp/mr-2026-001-review/MR-2026-001_MANUSCRIPT_AUTHOR_REVIEW.docx
+          python - <<'PY'
+          from docx import Document
+          from docx.shared import Inches, Pt
+          from pathlib import Path
+          p=Path('/tmp/mr-2026-001-review/MR-2026-001_MANUSCRIPT_AUTHOR_REVIEW.docx')
+          doc=Document(p)
+          for section in doc.sections:
+              section.top_margin=Inches(1)
+              section.bottom_margin=Inches(1)
+              section.left_margin=Inches(1)
+              section.right_margin=Inches(1)
+          for style in doc.styles:
+              if style.type==1:
+                  style.font.name='Arial'
+                  if style.name.startswith('Heading'):
+                      style.font.size=Pt(12)
+                  else:
+                      style.font.size=Pt(12)
+          for paragraph in doc.paragraphs:
+              for run in paragraph.runs:
+                  run.font.name='Arial'
+                  if not paragraph.style.name.startswith('Heading'):
+                      run.font.size=Pt(12)
+          for table in doc.tables:
+              for row in table.rows:
+                  for cell in row.cells:
+                      for paragraph in cell.paragraphs:
+                          for run in paragraph.runs:
+                              run.font.name='Arial'
+                              run.font.size=Pt(12)
+          doc.core_properties.title='From Irrigation Recommendations to Field Outcomes'
+          doc.core_properties.author='Mojtaba Roozegar'
+          doc.save(p)
+          assert p.stat().st_size>20000
+          assert len(doc.tables)>=2
+          assert len(doc.paragraphs)>80
+          print('AUTHOR REVIEW DOCX CREATED',p.stat().st_size,'bytes',len(doc.tables),'tables')
+          PY
+      - name: Build cover letter and approvals file for author review only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from docx import Document
+          from docx.shared import Pt
+          from pathlib import Path
+          source=Path('research/manuscripts/MR-2026-001/C20_DISCOVER_AGRICULTURE_COVER_LETTER_AND_DECLARATIONS_FOR_AUTHOR_REVIEW_2026-10-25.md').read_text()
+          assert 'Dear Editors,' in source and '## Declarations' in source
+          letter=source.split('Dear Editors,',1)[1].split('## Declarations',1)[0].strip()
+          d=Document()
+          d.add_heading('Cover letter — AUTHOR REVIEW ONLY',0)
+          d.add_paragraph('Dear Editors,')
+          for para in letter.split('\n\n'):
+              d.add_paragraph(para.strip())
+          d.styles['Normal'].font.name='Arial'
+          d.styles['Normal'].font.size=Pt(12)
+          d.save('/tmp/mr-2026-001-review/MR-2026-001_COVER_LETTER_AUTHOR_REVIEW.docx')
+          checklist='''MR-2026-001: separate mandatory approvals BEFORE journal submission
+          1. Human author substantive scientific inspection, revision, contribution and final manuscript version.
+          2. Exact name, affiliation, corresponding email and ORCID (if any).
+          3. Journal, article type, APC/waiver decision and no unauthorized payment.
+          4. Actual funding, competing interests, AI use, ethics/data and author contribution disclosures.
+          5. Rights/permissions, exclusive submission and final cover letter.
+          STATUS: NOT SUBMITTED; no publisher manuscript ID.
+          '''
+          Path('/tmp/mr-2026-001-review/AUTHOR_APPROVAL_REQUIRED.txt').write_text(checklist)
+          PY
+      - name: Preserve author-review files (no journal submission, deployment or payment)
+        uses: actions/upload-artifact@v4
+        with:
+          name: MR-2026-001-author-review-publisher-format
+          path: /tmp/mr-2026-001-review/
+          retention-days: 7
+          if-no-files-found: error
