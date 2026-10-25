@@ -76,6 +76,29 @@ def rollback(value):
     print('STUDIO_RAHAM_ROLLBACK_COMPLETE')
 
 
+
+def verify_public_route(public_dir):
+    """Allow only a known, regular Studio Raham installation to be upgraded."""
+    if public_dir.is_symlink():
+        raise RuntimeError("Refusing symlinked Studio Raham public path")
+    if not public_dir.exists():
+        return
+    if not public_dir.is_dir():
+        raise RuntimeError("Studio Raham public path is not a directory")
+    index = public_dir / "index.html"
+    htaccess = public_dir / ".htaccess"
+    if any(path.is_symlink() or not path.is_file() for path in (index, htaccess)):
+        raise RuntimeError("Studio Raham existing route is missing protected regular files")
+    html = index.read_text(encoding="utf-8")
+    if (
+        "<title>Studio Raham" not in html
+        or 'href="https://mojplaywin.com/studio.Roham/"' not in html
+        or 'name="studio-raha-catalog" content="20 games, 20 digital products"' not in html
+    ):
+        raise RuntimeError("Refusing to overwrite an unrecognized public game route")
+    if htaccess.read_text(encoding="utf-8") != PUBLIC_HTACCESS:
+        raise RuntimeError("Refusing to change an unknown Studio Raham .htaccess")
+
 def deploy(value, sha):
     value = run_id(value)
     if not re.fullmatch(r'[0-9a-f]{40}', sha):
@@ -89,8 +112,7 @@ def deploy(value, sha):
     if 'Saeit-staging' not in (DOCROOT / 'passenger_wsgi.py').read_text(encoding='utf-8', errors='replace'):
         raise RuntimeError('Passenger no longer points at the verified Saeit staging app')
     public_dir = DOCROOT / 'studio.Roham'
-    if public_dir.exists() or public_dir.is_symlink():
-        raise RuntimeError('Refusing to replace an existing Studio Raham public path')
+    verify_public_route(public_dir)
     stage = HOME / f'.mojplaywin-studio-raha-{value}'
     source = stage / APP_FILES[2]
     if not source.is_file():
