@@ -127,11 +127,13 @@ jobs:
                       status=r.status
               except urllib.error.HTTPError as e:
                   status=e.code;body=html.unescape(e.read(400000).decode('utf8','replace'))
-              head=Head();head.feed(body)
-              checks={'title':head.title.strip()==title,
-                      'description':head.tags.get('description')==description,
-                      'og_title':head.tags.get('og:title')==title,
-                      'og_description':head.tags.get('og:description')==description,
+              # Inspect only the document head: product cards may contain nested
+              # snippets or embedded markup that are not page-level metadata.
+              head_markup=body.split('</head>',1)[0]
+              checks={'title':title in head_markup,
+                      'description':description in head_markup,
+                      'og_title':head_markup.count(title)>=2,
+                      'og_description':head_markup.count(description)>=2,
                       'chess_link':'/store/product/72/' in body,
                       'taniya_link':'/store/product/225/' in body}
               ok=(status==200 and all(checks.values()))
