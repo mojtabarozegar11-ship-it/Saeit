@@ -93,9 +93,10 @@ Total output lines: 1
     function stage(html){gamebody.innerHTML='<div class="game-stage">'+html+'</div>'}function say(text){const m=$('.game-message',gamebody);if(m)m.textContent=text}function btn(label,action,extra=''){return '<button class="game-action" type="button" data-action="'+action+'" '+extra+'>'+label+'</button>'}
     function mountMemory(){const deck=['🐰','🐱','🦄','🌸','🎀','⭐','🍰','🌈', '🐰','🐱','🦄','🌸','🎀','⭐','🍰','🌈'].sort(()=>Math.random()-.5);let open=[],matched=0,moves=0;stage('<div class="game-toolbar"><b>Find all eight matching pairs</b><span>Moves: <strong id="moves">0</strong></span></div><div class="memory-grid">'+deck.map((x,i)=>'<button class="memory-card" aria-label="Hidden card" data-card="'+i+'">?</button>').join('')+'</div><p class="game-message" aria-live="polite">Tap two cards to find a pair.</p><div class="game-actions">'+btn('Shuffle and restart','memory-reset')+'</div>');gamebody.querySelectorAll('.memory-card').forEach(c=>c.onclick=()=>{if(c.disabled||open.length===2)return;c.textContent=deck[+c.dataset.card];c.classList.add('flipped');open.push(c);if(open.length===2){moves++;$('#moves',gamebody).textContent=moves;if(deck[+open[0].dataset.card]===deck[+open[1].dataset.card]){open.forEach(x=>{x.disabled=true;x.classList.add('matched')});matched+=2;open=[];if(matched===16)say('You found every friend in '+moves+' moves! 🌟')}else setTimeout(()=>{open.forEach(x=>{x.textContent='?';x.classList.remove('flipped')});open=[]},750)}});gameCleanup=()=>{} }
     function mountPuzzle(){let a=[1,2,3,4,5,6,7,8,0];for(let i=0;i<80;i++){const z=a.indexOf(0),opts=[z-3,z+3,...(z%3?[z-1]:[]),...(z%3<2?[z+1]:[])].filter(n=>n>=0&&n<9);const n=opts[Math.floor(Math.random()*opts.length)];[a[z],a[n]]=[a[n],a[z]]}let moves=0;function draw(){stage('<div class="game-toolbar"><b>Put the numbers in order; the empty square is last.</b><span>Moves: <strong>'+moves+'</strong></span></div><div class="puzzle-grid">'+a.map((n,i)=>'<button class="puzzle-tile '+(!n?'blank':'')+'" data-tile="'+i+'">'+(n||'·')+'</button>').join('')+'</div><p class="game-message">Tap a tile beside the empty space to slide it.</p><div class="game-actions">'+btn('New puzzle','puzzle-reset')+'</div>');gamebody.querySelectorAll('[data-tile]').forEach(b=>b.onclick=()=>{const i=+b.dataset.tile,z=a.indexOf(0);if([z-3,z+3,...(z%3?[z-1]:[]),...(z%3<2?[z+1]:[])].includes(i)){[a[z],a[i]]=[a[i],a[z]];moves++;draw();if(a.join(',')==='1,2,3,4,5,6,7,8,0')say('Puzzle solved! Great thinking. ✨')}})}draw()}
-    function cakeCardMarkup(icing,topping,candles){
+    function cakeCardMarkup(icing,topping,candles,greeting='My celebration cake'){
  const color=/^#[0-9a-f]{6}$/i.test(icing)?icing:'#ff79b8';
  const theme=['🍓','🌼','🍬'].includes(topping)?topping:'🍓';
+ const title=['My celebration cake','Happy Birthday','Congratulations','Just Because'].includes(greeting)?greeting:'My celebration cake';
  const count=Math.max(0,Math.min(12,Math.floor(Number(candles)||0)));
  let decorations='';
  for(let i=0;i<5;i++){
@@ -113,10 +114,10 @@ Total output lines: 1
   '<rect x="250" y="540" width="400" height="160" rx="32" fill="#fff0d8" stroke="#b17c94" stroke-width="8"/>'+
   '<path d="M250 590 Q280 645 310 590 T370 590 T430 590 T490 590 T550 590 T610 590 L650 590 L650 540 L250 540Z" fill="'+color+'"/>'+
   decorations+candlesSvg+
-  '<text x="450" y="955" text-anchor="middle" font-family="sans-serif" font-size="48" fill="#6c2757">My celebration cake</text>';
+  '<text x="450" y="955" text-anchor="middle" font-family="sans-serif" font-size="48" fill="#6c2757">'+title+'</text>';
 }
 function mountCake(){
- let icing='#ff79b8',topping='🍓',candles=0;
+ let icing='#ff79b8',topping='🍓',candles=0,greeting='My celebration cake';
  function draw(){
   stage('<div class="game-toolbar"><b>Design a celebration cake</b><span>Layers, toppings and up to 12 candles</span></div>'+
    '<div class="play-preview" id="cakepreview" role="img" aria-label="Cake preview" style="min-height:230px"></div>'+
@@ -124,15 +125,17 @@ function mountCake(){
    '<button class="game-action" type="button" data-top="🍓">🍓 berries</button>'+
    '<button class="game-action" type="button" data-top="🌼">🌼 flowers</button>'+
    '<button class="game-action" type="button" data-top="🍬">🍬 sweets</button></div>'+
+   '<div class="choice-row"><label class="game-action">Card message <select id="cakeGreeting" aria-label="Choose card greeting"><option>My celebration cake</option><option>Happy Birthday</option><option>Congratulations</option><option>Just Because</option></select></label></div>'+ 
    '<div class="game-actions">'+btn('Add a candle 🕯️','candle')+btn('Download this cake card','cake-download')+btn('Start over','cake-reset')+'</div>'+
    '<p class="game-message" aria-live="polite">Your design is saved in the downloaded SVG card.</p>');
   const preview=$('#cakepreview',gamebody);
-  function renderPreview(){preview.innerHTML='<svg viewBox="150 400 600 620" width="230" height="230" aria-hidden="true">'+cakeCardMarkup(icing,topping,candles)+'</svg>'}
+  function renderPreview(){preview.innerHTML='<svg viewBox="150 400 600 620" width="230" height="230" aria-hidden="true">'+cakeCardMarkup(icing,topping,candles,greeting)+'</svg>'}
   renderPreview();
   $('#icing',gamebody).oninput=e=>{icing=e.target.value;renderPreview()};
+  $('#cakeGreeting',gamebody).onchange=e=>{greeting=e.target.value;renderPreview();say('Your card greeting is updated.')};
   gamebody.querySelectorAll('[data-top]').forEach(b=>b.onclick=()=>{topping=b.dataset.top;renderPreview();say('Topping selected. Add candles or download your cake.')});
   gamebody.querySelector('[data-action="candle"]').onclick=()=>{if(candles>=12){say('Your cake already has twelve candles.');return}candles++;renderPreview();say(candles+' candle'+(candles===1?'':'s')+' added.')};
-  gamebody.querySelector('[data-action="cake-download"]').onclick=()=>{downloadSvg('taniya-custom-cake-card',cakeCardMarkup(icing,topping,candles));say('Your customized cake card has been downloaded.')};
+  gamebody.querySelector('[data-action="cake-download"]').onclick=()=>{downloadSvg('taniya-custom-cake-card',cakeCardMarkup(icing,topping,candles,greeting));say('Your customized cake card has been downloaded.')};
  }
  draw();
 }
