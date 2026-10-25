@@ -1,0 +1,5 @@
+variable_name,plain_language_definition,unit_or_scale,allowed_values,missing_value_code,collection_method,collection_timepoint,quality_rule,privacy_classification,source_or_protocol,example_only
+plot_id,Random plot identifier,text,unique alphanumeric,NA,field log,baseline,must be unique,pseudonymous,protocol section 2,P001
+area_m2,Measured plot area,square metre,positive number,NA,tape or GPS,baseline,must be >0,nonpersonal,protocol section 3,25
+irrigation_mm,Applied irrigation depth,millimetre,nonnegative number,NA,flow meter,each event,must be >=0,nonpersonal,protocol section 4,12
+marketable_yield_kg,Harvested marketable mass,kilogram,nonnegative number,NA,calibrated scale,harvest,must be >=0,nonpersonal,protocol section 5,18
