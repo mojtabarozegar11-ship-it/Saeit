@@ -119,11 +119,23 @@ jobs:
                   cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=6,check=False)
                   active=[x.strip().rsplit("#",1)[-1].strip()[:100] for x in cron.stdout.splitlines()
                       if x.strip() and not x.lstrip().startswith("#")]
-                  print("LEECH_VPS_START_BLOCKED="+json.dumps({"reason":"OLD_WORK_ORDERS_NOT_CLEARED",
-                      "old_queue_count":len(prior),"origin_counts":dict(origin),
-                      "status_counts":dict(status),"requesting_site_counts":dict(sites),
-                      "active_cron_markers":active,"mutations":0},sort_keys=True))
-                  raise SystemExit(2)
+                  expected_origins={"mojplaywin-site-qa-return":15,"owner_requested_education700_p0":1,"site-topic-snapshot":54}
+                  expected_status={"blocked_rework":15,"issued":55}
+                  expected_sites={"internal":1,"mojplaywin.com":15,"zomorodmelal.ir":54}
+                  if (len(prior)!=70 or dict(origin)!=expected_origins
+                      or dict(status)!=expected_status or dict(sites)!=expected_sites):
+                      print("LEECH_VPS_START_BLOCKED="+json.dumps({"reason":"UNEXPECTED_LEGACY_QUEUE",
+                          "old_queue_count":len(prior),"origin_counts":dict(origin),
+                          "status_counts":dict(status),"requesting_site_counts":dict(sites),
+                          "mutations":0},sort_keys=True))
+                      raise SystemExit(2)
+                  for file in prior:
+                      doc=json.loads(file.read_text(encoding="utf8"))
+                      if doc.get("source_product_id")==product_key:
+                          raise SystemExit("LEECH_BLOCKED_DUPLICATE_PRODUCT_KEY")
+                  print("LEECH_PROTECTED_LEGACY_ORDERS="+json.dumps({"preserved":len(prior),
+                      "known_origins":dict(origin),"legacy_queue_modified":False,
+                      "existing_english_first_cron_present":("SAEIT_ENGLISH_FIRST_SINGLE_ACTIVE_20261025" in active)},sort_keys=True))
               if target.exists():
                   old=json.loads(target.read_text(encoding="utf8"))
                   if old!=order: raise SystemExit("LEECH_BLOCKED_PREEXISTING_ORDER_COLLISION")
