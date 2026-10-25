@@ -113,3 +113,24 @@ irrigat* AND ("decision support" OR "decision-support" OR "irrigation scheduling
 5. **Next scientifically necessary execution:** expand synonyms to cover farmer-facing irrigation advisory, on-farm scheduling and adoption; validate seed-paper recall; add independent agricultural coverage using AGRIS/AGRICOLA or licensed CAB/Scopus/WoS when available; retrieve missing abstracts/full texts; freeze query versions after expert review; conduct genuine human eligibility screening and resolve DOI/title collisions; retain source IDs and PRISMA-ScR audit trail. The approved scope decision is separately documented in `AUTHOR_APPROVED_SCOPE_DECISION_2026-10-25.md`.
 
 **Submission remains NOT SUBMITTED**. Existence of an index-export queue does not constitute a complete review.
+
+---
+
+## 2026-10-25 extended AGRICOLA-sourced index / screening-readiness amendment
+
+**Versioned evidence update, not a fully executed scoping-review search:**
+
+- A third **actually executed** search used the Europe PMC index restricted to the **AGRICOLA source (SRC:AGR)**, exact query:
+  `SRC:AGR AND TITLE_ABS:irrigat* AND (TITLE_ABS:"decision support" OR TITLE_ABS:"irrigation scheduling" OR TITLE_ABS:"irrigation advisory")`.
+  The API returned **525 matches**, all 525 archived across **seven cursor pages of 75 records** in `index_search_2026-10-25/AGRICOLA_SOURCE_EXTENDED_SEARCH_ALL_RECORDS_2026-10-25.json`. This IS access to AGRICOLA-coded metadata mirrored by Europe PMC, but is **not** a separate direct search in the live USDA/NAL catalogue.
+- Existing Europe PMC indexed search (95 records), original OpenAlex (52), and the AGRICOLA-restricted expansion (525) generated **672 source records**. Machine matching on normalized DOI (or title/year when DOI absent) generated **604 unique bibliographic candidates** and **68 candidate duplicate source entries**. Retained **one missing-title source record** instead of silently excluding it; two duplicate groups show differing raw title strings/encodings. See `index_search_2026-10-25/DEDUPLICATION_AND_SCOPE_SENSITIVITY_QA_2026-10-25.json`.
+- `index_search_2026-10-25/CANDIDATE_QUEUE_604_METADATA_TRIAGE_2026-10-25.csv` has **13 high / 159 medium / 432 low keyword-priority records**, expressly **NOT human inclusion/exclusion decisions**. All human decision, exclusion and adjudication fields remain blank. Automated priority sorting requires human oversight because some reviews and unrelated DSS can be ranked high.
+- Additional exact DOI-filter enrichment in the OpenAlex index retrieved **83 reconstructed abstracts among the 604 unique candidate records**; **521 lacked a retrievable abstract from these particular sources**. Exact sources are in `OPENALEX_RECONSTRUCTED_ABSTRACTS_2026-10-25.json`, `EUROPEPMC_DOI_OPENALEX_ABSTRACT_SUPPLEMENT_2026-10-25.json`, and `PRIORITY_DOI_ABSTRACT_LOOKUP_2026-10-25.json`. Indexed inverted-index abstracts are not guaranteed publisher-verbatim; ensure rights compliance before redistribution or literal quotation.
+
+### Pilot recall failure (do not erase)
+
+Among five diagnostic DOI seeds, the union **retrieved 3/5**, including Amini 2025 `10.1038/s41598-025-26567-z`, IrrigaSys 2020 `10.1016/j.compag.2020.105822`, and Li et al. 2018 `10.1016/j.agwat.2018.08.025`. **Two seeds were missed**: Jamal et al. 2023 `10.1029/2023WR035810` (title mentions real-time irrigation scheduling, human–machine interactions) and Bounajra et al. 2024 `10.1016/j.agwat.2024.108758` (overlapping systematic review). **Both DOI identities can be recovered by exact DOI lookup via OpenAlex**, so absence from the queries represents a **search recall/sensitivity gap**, not source non-existence. The latter is a background-review seed and is not required to meet primary-study inclusion, but must appear in deliberate review-overlap searching. Recommended amendments to be tested and version-controlled: separate review-overlap query; expand scheduling, advisory, decision-support synonyms; do not require `farmer*` in all branches; retain agriculture-specific database source variants; piloted seed retrieval across platform queries.
+
+### Remaining gating work
+
+Complete abstract/full-text retrieval for missing citations, journal/correction verification for high-priority field papers, human duplicate adjudication and formal independent (or transparently single) human screening, then final eligibility and actual PRISMA-ScR counts. Search syntax/platforms need independent review and version freeze. No Scopus, Web of Science Core Collection or CAB direct indexed export is claimed; no paper has been submitted. **Status: NOT SUBMITTED.**
