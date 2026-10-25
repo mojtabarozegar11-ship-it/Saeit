@@ -1,0 +1,10 @@
+# MR-2026-001 | Cycle 10 | Primary full-text extraction: Jamal et al. (2023)
+Source: https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2023WR035810 ; DOI https://doi.org/10.1029/2023WR035810; *Water Resources Research*, 2023, 59(12), e2023WR035810. Full-text anchors §3 (Case Study), §4.1.2/Table 1, §4.2.1/Table 2, §4.2.2, Appendix B/Table B1.
+**Design and setting:** 2019 maize season, two Eastern Nebraska fields. Field soil-water probes and leaf area index observations used in data assimilation; optimized schedules calculated and contrasted with recorded actual irrigation. A **virtual** workshop was later used to elicit farmer choices and feedback.
+**Denominators:** §3 says 10 farmers attended workshop. §4.2.1 says two groups of four (8 in group exercise). Appendix B/Table B1 displays eight farmer rows. Do not silently equate attendance with individual decisions, or interpret two group choices as 8 independent treatment replicates.
+**Table 1, units as printed:**
+- Field A: actual 8.1 inches irrigation, 324 bushels/acre dry matter, USD 648/acre profit; optimized **counterfactual** 3.1 inches, 365, USD 971.
+- Field B: actual 6.9 inches, 335, USD 729; optimized **counterfactual** 3.4 inches, 373, USD 983.
+**Table 2, virtual exercise:** model 2.71 inches/237 bushels per acre/USD 602 per acre; Group 1 2.29/235/613, 3 rejected decisions out of 115 days; Group 2 3.65/237/565, 9/115; actual field reference 7.00/240/440. Group values are simulation outcomes from participant-selected hypothetical schedules, **not** field-measured intervention outcomes.
+**Evidence codes:** M=soil moisture/LAI and historical field irrigation inputs; O=virtual exercise choice logs (NOT on-farm adherence); S=workshop feedback; P=optimized and virtual schedule yields/profits/irrigation counterfactuals.
+**Unresolved:** source methods do not establish longitudinal independent farmer use after workshop. No raw record-level workshop data reanalysis, license export or formal human screening occurred here. Do not convert the comparison into measured causal savings.
