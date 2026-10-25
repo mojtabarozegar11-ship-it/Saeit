@@ -1,0 +1,111 @@
+name: MojPlayWin revenue lead mailbox routing to owner Gmail 2026-10-26
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-revenue-lead-forwarder-20261026.yml"]
+permissions: {contents: read}
+concurrency:
+  group: mpw-email-support-owner-forwarder-only
+  cancel-in-progress: false
+jobs:
+  link-support-leads:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Confirm public intake is published before adding owner mailbox relay
+        run: |
+          python3 - <<'PY'
+          import urllib.request
+          for url in ("https://mojplaywin.com/contact/","https://mojplaywin.com/mpw-editorial/revenue/website-doctor/index.html"):
+            with urllib.request.urlopen(url,timeout=18) as r:
+              assert r.status==200
+          print("MPW_LEAD_PUBLIC_ENTRY=VERIFIED")
+          PY
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-revenue-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Add idempotent one-address forwarder only if safe, never alter domain routing
+        run: |
+          set -euo pipefail
+          timeout 65s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel python3 - <<'PY'
+          import json,subprocess
+          address="support@mojplaywin.com"
+          owner="mojtaba.rozegar11@gmail.com"
+          def uapi(*args):
+            p=subprocess.run(["uapi","--output=json","Email",*args],capture_output=True,text=True,timeout=22,check=False)
+            if p.returncode:raise RuntimeError("UAPI process failed")
+            data=json.loads(p.stdout)["result"]
+            if not data.get("status") or data.get("errors"):
+              raise RuntimeError("UAPI rejected request")
+            return data.get("data")
+          mail=uapi("list_pops")
+          if not isinstance(mail,list) or not any(isinstance(x,dict) and str(x.get("email","")).lower()==address for x in mail):
+            raise RuntimeError("Official MojPlayWin support mailbox is missing")
+          def listed():
+            rows=uapi("list_forwarders")
+            if not isinstance(rows,list):raise RuntimeError("Could not safely inspect forwarders")
+            return rows
+          def matches(rows):
+            return [x for x in rows if isinstance(x,dict) and address.lower() in str(x).lower()]
+          old=matches(listed())
+          print("MPW_EXISTING_SUPPORT_FORWARDER_COUNT="+str(len(old)))
+          if old:
+            if len(old)!=1 or owner.lower() not in str(old[0]).lower():
+              raise RuntimeError("Conflicting existing support forwarder; no change made")
+            print("MPW_SUPPORT_TO_OWNER_GMAIL=ALREADY_CONFIGURED")
+          else:
+            uapi("add_forwarder","domain=mojplaywin.com","email="+address,"fwdopt=fwd","fwdemail="+owner)
+            current=matches(listed())
+            if len(current)!=1 or owner.lower() not in str(current[0]).lower():
+              raise RuntimeError("New forwarder not independently confirmed")
+            print("MPW_SUPPORT_TO_OWNER_GMAIL=CONFIGURED_AND_READBACK_VERIFIED")
+          print("MPW_DOMAIN_MX_ROUTING_UNCHANGED=TRUE")
+          print("MPW_MAILBOX_DELETED=FALSE")
+          print("MPW_CUSTOMER_MESSAGE_CONTENT_READ=FALSE")
+          PY
+      - name: Destroy temporary SSH connection files
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
