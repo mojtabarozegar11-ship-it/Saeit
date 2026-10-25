@@ -1,0 +1,73 @@
+name: cPanel MySQL connection key and driver availability READ ONLY
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - .github/workflows/cpanel-staging-db-driver-and-environment-keys-readonly-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Inspect only database environment variable names and installed drivers without secrets
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 400s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,json,re,subprocess
+          h=Path('/home/zomorod2')
+          if os.geteuid()==0 or Path.home()!=h or h.is_symlink():raise SystemExit('INVALID_ACCOUNT')
+          stage=h/'Saeit-staging'
+          f=stage/'.env'
+          keys=[]
+          if f.is_file() and not f.is_symlink() and f.stat().st_size<100000:
+           for raw in f.read_text(errors='replace').splitlines():
+            raw=raw.strip()
+            if raw.startswith('export '):raw=raw[7:].lstrip()
+            if '=' not in raw or raw.startswith('#'):continue
+            k=raw.split('=',1)[0].strip()
+            if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*',k) and re.search(r'(?i)DB|MYSQL|DATABASE|SECRET|DJANGO',k):keys.append(k)
+          src=stage/'config/settings.py'
+          lines=[]
+          if src.is_file() and src.stat().st_size<150000:
+           for i,line in enumerate(src.read_text(errors='replace').splitlines(),1):
+            if re.search(r'(?i)DATABASES|DATABASE_URL|DB_HOST|MYSQL|db_url|dotenv|ImproperlyConfigured|environ\.',line):
+             atoms=re.findall(r'[A-Za-z_][A-Za-z0-9_]{2,}',line)
+             atoms=[z for z in atoms if not re.search(r'(?i)password|secret|token|key',z)]
+             lines.append({'line':i,'identifiers_only':atoms[:16]})
+          drivers={}
+          exe=h/'Saeit/.venv/bin/python'
+          if exe.is_file():
+           code="import importlib.util,json;result={};names=['pymysql','MySQLdb','mysql','django'];\nfor n in names:\n try: result[n]=importlib.util.find_spec(n) is not None\n except Exception: result[n]=False\nprint('DRIVERS='+json.dumps(result))"
+           x=subprocess.run([str(exe),'-B','-c',code],capture_output=True,text=True,timeout=25,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
+           for row in x.stdout.splitlines():
+            if row.startswith('DRIVERS='):
+             try:drivers=json.loads(row.split('=',1)[1])
+             except Exception:pass
+          print('CPANEL_MYSQL_CONNECTION_METADATA='+json.dumps({'database_related_env_keys':sorted(keys),'stage_database_setting_identifiers':lines[:55],'driver_availability':drivers,'read_only':True,'mutations':0},sort_keys=True),flush=True)
+
+          PY
+          echo CPANEL_MYSQL_CONNECTION_METADATA_READONLY=PASS
