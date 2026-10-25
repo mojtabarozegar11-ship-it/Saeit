@@ -245,6 +245,42 @@ jobs:
                       if not all_done:break
                   print("SANDBOX_BUNDLE="+json.dumps({"parent":name,"bundle":bundle.name,"age_days":round((now-bundle.stat().st_mtime)/86400,2),"top":tops[:9],"db_like_count_sampled":db,"sensitive_config_count_sampled":secrets,"file_scan_complete":all_done,"file_count_sampled":total,"latest_file_age_days":round((now-newest)/86400,2) if newest else None},sort_keys=True))
           PY
+      - name: Classify aged smoke archives and complete-backup children without modifications
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 175s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import os,json,subprocess,time,stat
+          from pathlib import Path
+          h=Path("/home/zomorod2")
+          if Path.home()!=h:raise SystemExit("INVALID_ACCOUNT")
+          roots={"admin_smoke":h/"Saeit-staging"/"admin-smoke","complete_backup":h/".backups"/"zomorodmelal-complete"}
+          now=time.time()
+          for label,root in roots.items():
+              if not root.is_dir() or root.is_symlink():raise SystemExit("INVALID_ROOT")
+              info=[]
+              for p in list(root.iterdir())[:80]:
+                  if p.is_symlink():info.append({"name":p.name[:70],"symlink":True});continue
+                  if not (p.is_dir() or p.is_file()):continue
+                  try:
+                      x=subprocess.run(["du","-sxB1","--",str(p)],capture_output=True,text=True,timeout=30)
+                      size=int(x.stdout.split()[0]) if x.returncode==0 else None
+                  except Exception:size=None
+                  db=0;env=0;files=0;sample_capped=False
+                  if p.is_dir():
+                      for base,dirs,names in os.walk(p,followlinks=False):
+                          dirs[:]=[n for n in dirs if not (Path(base)/n).is_symlink()]
+                          for f in names:
+                              files+=1
+                              if files>40000:sample_capped=True;break
+                              if Path(f).suffix.lower() in (".sqlite",".sqlite3",".db",".sql"):db+=1
+                              if f.lower() in (".env",".env.production",".env.local","credentials.json","secrets.json"):env+=1
+                          if sample_capped:break
+                  info.append({"name":p.name[:70],"directory":p.is_dir(),"bytes":size,"age_days":round((now-p.stat().st_mtime)/86400,2),"database_like_count_sampled":db,"config_count_sampled":env,"files_sampled":files,"scan_capped":sample_capped})
+              info.sort(key=lambda d:d.get("bytes") or 0,reverse=True)
+              print("AGED_STORAGE_CHILDREN="+json.dumps({"category":label,"top":info[:45],"seen":len(info)},sort_keys=True))
+          PY
       - name: Remove runner SSH identities
         if: always()
         shell: bash
