@@ -1,0 +1,31 @@
+name: AE-2026-001 archived real-WDI sensitivity and science checks
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/ae-2026-001-archive-backed-sensitivity.yml
+      - research/manuscripts/AE-2026-001/analysis/wdi_geographic_robustness_from_archived_real_panel.py
+      - research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reproducibility-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Independent regeneration from archived ORIGINAL World Bank dataset
+        run: python research/manuscripts/AE-2026-001/analysis/wdi_geographic_robustness_from_archived_real_panel.py
+      - name: Preserve actual robustness output, not a published article
+        uses: actions/upload-artifact@v4
+        with:
+          name: AE-2026-001-WDI-geographical-robustness
+          path: research/manuscripts/AE-2026-001/AE-2026-001_REAL_WDI_REGION_EXCLUSION_SENSITIVITY_2026-10-25.json
+          retention-days: 7
+          if-no-files-found: error
