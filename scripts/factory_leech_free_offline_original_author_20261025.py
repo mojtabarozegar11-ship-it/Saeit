@@ -127,7 +127,8 @@ def state(chunks):
 def make_prompt(work, chapters, sources, chunks):
     counts, total, chapter, part = state(chunks)
     if chapter is None:
-        return {"complete_length_only": total >= MIN_WORDS, "total_verified_draft_words": total,
+        return {"order_id": ORDER, "complete_length_only": total >= MIN_WORDS,
+                "total_verified_draft_words": total,
                 "next_chapter": None, "next_part": None}
     ch = chapters[chapter - 1]
     citation_ids = set(ch.get("research_claim_ids", []))
