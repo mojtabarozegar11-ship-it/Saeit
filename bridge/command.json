@@ -1,7 +1,7 @@
 {
   "protocol_version": 1,
-  "command_id": "comfyui-key-prepare-20261015-0956",
-  "action": "comfyui_key_prepare",
-  "issued_at": "2026-10-15T09:56:47Z",
-  "expires_at": "2026-10-16T09:56:47Z"
+  "command_id": "termux-live-ping-20261025-1639",
+  "action": "ping",
+  "issued_at": "2026-10-25T16:39:58Z",
+  "expires_at": "2026-10-25T18:09:58Z"
 }
