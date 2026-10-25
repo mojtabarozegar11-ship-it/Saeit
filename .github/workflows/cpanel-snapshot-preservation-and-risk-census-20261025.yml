@@ -1,0 +1,71 @@
+name: cPanel code snapshot preservation risk census READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/cpanel-snapshot-preservation-and-risk-census-20261025.yml
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Identify executable references, valuable content, and DB files in retired code snapshots
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-incomplete-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          timeout 420s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,json,stat,subprocess,time
+          h=Path('/home/zomorod2')
+          if os.geteuid()==0 or Path.home()!=h or h.is_symlink():raise SystemExit('UNSAFE_USER')
+          roots=['Saeit-staging/admin-smoke','Saeit-staging/releases','Saeit-staging/v91_personnel_isolated','Saeit-staging/zomorod_json_admin_stage','Saeit-staging/var/factory/astra-backups','Saeit/backups']
+          p=subprocess.run(['ps','-u','zomorod2','-o','args='],capture_output=True,text=True,timeout=15)
+          c=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=15)
+          active=p.stdout+'\n'+c.stdout
+          result={}
+          for name in roots:
+           root=h/name
+           if root.is_symlink() or not root.is_dir():result[name]={'error':'not_real_dir'};continue
+           children=[]
+           for child in sorted(root.iterdir()):
+            if child.is_symlink():children.append({'name':child.name,'error':'symlink'});continue
+            if child.is_dir():
+             b=0;n=0;big=[];risky=[];ages=[]
+             for here,dirs,names in os.walk(child,followlinks=False):
+              for nm in names:
+               f=Path(here)/nm
+               if f.is_symlink() or not f.is_file():continue
+               st=f.stat();b+=st.st_size;n+=1;ages.append(st.st_mtime)
+               rel=str(f.relative_to(child))
+               if st.st_size>900000:big.append((st.st_size,rel))
+               if any(x in nm.lower() for x in ['sqlite','database','customer','order','private','media','product','game','chess','.sql','.pem','.key','.zip','.tar.gz']):risky.append((st.st_size,rel))
+             children.append({'name':child.name,'bytes':b,'files':n,'oldest_file_days':round((time.time()-min(ages))/86400,1) if ages else None,'newest_file_days':round((time.time()-max(ages))/86400,1) if ages else None,
+             'active_ref':child.name in active or str(child) in active,'largest':sorted(big,reverse=True)[:5],'risk_names_count':len(risky),'risk_names':sorted(risky,reverse=True)[:12]})
+            elif child.is_file():
+             st=child.stat();children.append({'name':child.name,'bytes':st.st_size,'file':True,'age_days':round((time.time()-st.st_mtime)/86400,1),'active_ref':child.name in active})
+           result[name]=children
+          print('CPANEL_CODE_SNAPSHOT_RISK='+json.dumps({'roots':result,'mutations':0},sort_keys=True),flush=True)
+
+          PY
+          echo CPANEL_CODE_SNAPSHOT_READONLY=PASS
