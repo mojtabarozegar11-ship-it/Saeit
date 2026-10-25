@@ -140,17 +140,27 @@ def compare(old):
         new_growth={iso:math.log(current[iso][str(end)]/current[iso]["2000"])/(end-2000)
                     for iso in aligned if current[iso]["2000"] is not None and current[iso][str(end)] is not None}
         both=sorted(set(old_growth)&set(new_growth))
-        if len(both)<100:
-            raise RuntimeError("Insufficient common vintage growth pairs")
+        # A 2024 vintage may not report the later endpoint for enough economies.
+        # Low coverage is a substantive finding, not a reason to invent pairs.
+        # Preserve all available pairs and explicitly suppress strong inference.
         d=[new_growth[iso]-old_growth[iso] for iso in both]
         result["by_growth_period"]["2000_"+str(end)]={
             "old_vintage_available_growth_pairs":len(old_growth),
             "new_vintage_available_growth_pairs":len(new_growth),
             "common_country_pairs":len(both),
-            "old_median_growth_common":statistics.median(old_growth[iso] for iso in both),
-            "new_median_growth_common":statistics.median(new_growth[iso] for iso in both),
-            "median_individual_annual_growth_revision":statistics.median(d),
-            "sign_change_of_annual_growth":sum((old_growth[iso]>0)!=(new_growth[iso]>0) for iso in both)}
+            "coverage_gate_min_100": "PASS" if len(both)>=100 else "INSUFFICIENT_COVERAGE_NO_GENERALIZATION",
+            "old_median_growth_common":statistics.median(old_growth[iso] for iso in both) if both else None,
+            "new_median_growth_common":statistics.median(new_growth[iso] for iso in both) if both else None,
+            "median_individual_annual_growth_revision":statistics.median(d) if d else None,
+            "sign_change_of_annual_growth":sum((old_growth[iso]>0)!=(new_growth[iso]>0) for iso in both),
+            "actual_country_codes":both,
+            "actual_country_growth_revisions":[
+                {"country_iso3":iso,
+                 "old_vintage_annual_log_growth":old_growth[iso],
+                 "new_vintage_annual_log_growth":new_growth[iso],
+                 "new_minus_old_annual_log_growth":new_growth[iso]-old_growth[iso]}
+                for iso in both
+            ]}
     return result
 
 def main():
@@ -169,7 +179,14 @@ def main():
       "limitations":["World Bank warns historical WDI estimates are revised; differing country-years must not be backfilled.",
                      "Only source-confirmed same-definition/same-price-base indicators may be compared.",
                      "Revisions can reflect ILO-modelled employment and national accounts, not measured farm productivity changes.",
-                     "Methodological evidence of vintage sensitivity does not itself prove first-ever or publication novelty."]
+                     "Methodological evidence of vintage sensitivity does not itself prove first-ever or publication novelty.",
+                     "When fewer than 100 common country pairs exist, a descriptive result may be retained but MUST NOT be generalized as a 153-economy cross-vintage result."]]
+    }
+    report["quality_gate"] = {
+      "all_growth_periods_have_100_common_pairs": all(
+          v["coverage_gate_min_100"]=="PASS" for v in report["outcome"]["by_growth_period"].values()),
+      "valid_country_pairs_not_imputed": True,
+      "editorial_decision": "DESCRIPTIVE_ONLY; cross-vintage novelty not established"
     }
     OUTPUT.write_text(json.dumps(report,indent=2,ensure_ascii=False)+"\n",encoding="utf-8")
     print(json.dumps(report,indent=2,ensure_ascii=False))
