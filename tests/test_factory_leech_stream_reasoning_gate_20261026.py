@@ -64,11 +64,11 @@ class LeechStreamAcceptanceRegression(unittest.TestCase):
         writer = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(writer)
         disguised = (
-            "<th\\u200bink>private reasoning</th\\u200bink>",
-            "<\\uff54hink>private reasoning</\\uff54hink>",
-            "<th\\u202eink>private reasoning</th\\u202eink>",
-            "<|im_\\u2060start|>",
-            "[\\uff29NST]",
+            "<th\u200bink>private reasoning</th\u200bink>",
+            "<\uff54hink>private reasoning</\uff54hink>",
+            "<th\u202eink>private reasoning</th\u202eink>",
+            "<|im_\u2060start|>",
+            "[\uff29NST]",
         )
         for marker in disguised:
             with self.subTest(marker=repr(marker)):
