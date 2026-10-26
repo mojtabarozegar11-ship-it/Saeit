@@ -80,7 +80,7 @@ if (!extension_loaded('mbstring') || !extension_loaded('openssl')) {
   http_response_code(503);echo '<h1>Inquiry temporarily unavailable</h1><p>Please email support@mojplaywin.com.</p>';exit;
 }
 ini_set('session.use_strict_mode','1');
-session_set_cookie_params(['lifetime'=>0,'path'=>'/mpw-editorial/revenue/','secure'=>true,'httponly'=>true,'samesite'=>'Lax']);
+session_set_cookie_params(['lifetime'=>0,'path'=>'/mpw-editorial/revenue' . '/','secure'=>true,'httponly'=>true,'samesite'=>'Lax']);
 if (!@session_start()) {http_response_code(503);echo '<h1>Secure session unavailable</h1>';exit;}
 $slug=(string)($_POST['service']??$_GET['service']??'');
 if (!array_key_exists($slug,$allowed)) {http_response_code(404);echo '<h1>Unknown service</h1>';exit;}
