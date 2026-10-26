@@ -258,7 +258,7 @@ class PrivateAuditTests(unittest.TestCase):
     def test_zero_width_reasoning_marker_cannot_bypass_private_gate(self):
         with tempfile.TemporaryDirectory() as d:
             p = self.make(d, "chapter-01-part-001.md",
-                          tail="<th\\u200bink>internal reasoning</th\\u200bink>")
+                          tail="<th\u200bink>internal reasoning</th\u200bink>")
             before = p.read_bytes()
             result = module.audit(Path(d), chapters=1,
                                   chapter_target=300, total_target=300)
@@ -271,7 +271,7 @@ class PrivateAuditTests(unittest.TestCase):
     def test_fullwidth_reasoning_and_invisible_citation_markers_fail_closed(self):
         with tempfile.TemporaryDirectory() as d:
             p = self.make(d, "chapter-01-part-001.md",
-                          tail="<\\uff54\\uff48\\uff49\\uff4e\\uff4b>hidden</\\uff54\\uff48\\uff49\\uff4e\\uff4b> [citat\\u200bion needed]")
+                          tail="<\uff54\uff48\uff49\uff4e\uff4b>hidden</\uff54\uff48\uff49\uff4e\uff4b> [citat\u200bion needed]")
             before = p.read_bytes()
             result = module.audit(Path(d), chapters=1,
                                   chapter_target=300, total_target=300)
