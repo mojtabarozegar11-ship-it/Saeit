@@ -34,6 +34,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_onboarding_20261026.py' -v
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_public_official_20261026.py' -v
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_readonly_diagnostics_20261026.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojtaba_social_connection_plan_20261026.py' -v
   deploy:
     needs: preflight
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
@@ -178,11 +179,22 @@ jobs:
           owner_request.user=staff
           owner_response=dashboard(owner_request)
           if (owner_response.status_code!=200 or b'manifest_json' not in owner_response.content
-              or b'connection_probe' not in owner_response.content):
+              or b'connection_probe' not in owner_response.content
+              or b'suspend_account' not in owner_response.content):
               raise RuntimeError('Authorized social batch-onboarding UI not rendered')
           api_response=read_status(owner_request)
           if api_response.status_code!=200:
               raise RuntimeError('Authorized private connection status unavailable')
+          from social_hub.portal import connection_plan
+          activation_response=connection_plan(owner_request)
+          if (activation_response.status_code!=200 or
+              activation_response.json().get('credentials_included') is not False):
+              raise RuntimeError('Private token-free API activation plan unavailable')
+          anonymous_plan=Client(HTTP_HOST='mojplaywin.com').get(
+              reverse('mojtaba_social_connection_plan'),secure=True)
+          if anonymous_plan.status_code not in (302,403):
+              raise RuntimeError('Private API activation checklist exposed to public')
+          print('SOCIAL_PRIVATE_NO_SECRETS_ACTIVATION_PLAN=PASS',flush=True)
           print('PERSONAL_STAFF_PROTECTED_ROUTE=PASS',flush=True)
           print('SOCIAL_AUTHENTICATED_DASHBOARD=PASS',flush=True)
           directory_path=reverse('mojtaba_official_channels')
