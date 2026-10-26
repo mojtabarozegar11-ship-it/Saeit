@@ -1,0 +1,39 @@
+name: Mojtaba omnichannel control center offline regression
+on:
+  pull_request:
+    paths:
+      - 'social_hub/**'
+      - 'scripts/mojtaba_social_hub_cli_20261026.py'
+      - 'scripts/mojtaba_social_hub_install_personal_20261026.py'
+      - 'tests/test_mojtaba_social_hub_installer_20261026.py'
+      - 'tests/test_mojtaba_social_ai_20261026.py'
+      - 'tests/test_mojtaba_social_hub_20261026.py'
+      - '.github/workflows/mojtaba-social-control-center-tests-20261026.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safe-no-network-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile project module without live secrets
+        run: python -m compileall -q social_hub scripts/mojtaba_social_hub_cli_20261026.py
+      - name: No-network API and queue regression
+        env:
+          MPW_SOCIAL_OUTBOUND_ENABLED: '0'
+        run: python -m unittest discover -s tests -p 'test_mojtaba_social_hub_20261026.py' -v
+      - name: Personal-only transactional installer and rollback tests
+        run: python -m unittest discover -s tests -p 'test_mojtaba_social_hub_installer_20261026.py' -v
+      - name: ChatGPT drafting never-autopublish regression
+        run: python -m unittest discover -s tests -p 'test_mojtaba_social_ai_20261026.py' -v
+      - name: Existing limited two-network regression
+        env:
+          MPW_SOCIAL_EXECUTION_ENABLED: '0'
+        run: python -m unittest discover -s tests -p 'test_mojtaba_direct_social_publisher_20261026.py' -v
