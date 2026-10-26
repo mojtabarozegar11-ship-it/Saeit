@@ -36,6 +36,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_readonly_diagnostics_20261026.py' -v
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_connection_plan_20261026.py' -v
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_private_bulk_credentials_20261026.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojtaba_social_activation_matrix_20261026.py' -v
   deploy:
     needs: preflight
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
@@ -213,6 +214,27 @@ jobs:
               reverse('mojtaba_social_connection_plan'),secure=True)
           if noauth.status_code not in (302,403):
               raise RuntimeError('Private API readiness plan exposed to unauthenticated public')
+          from social_hub.activation_views import activation_page, activation_json
+          activated=activation_page(owner_request)
+          if (activated.status_code!=200 or
+              b'activation' not in activated.content or
+              b'dr.mojtaba.rozegar' in activated.content):
+              raise RuntimeError('Private allowed-social onboarding matrix is unavailable or unsafe')
+          activation_data=activation_json(owner_request)
+          if activation_data.status_code!=200:
+              raise RuntimeError('Private provider activation JSON unavailable')
+          activated_json=json.loads(activation_data.content)
+          from social_hub.catalog import PLATFORMS
+          if (activated_json.get('catalogue_platform_count')!=len(PLATFORMS)
+              or activated_json.get('tokens_included') is not False
+              or activated_json.get('provider_posting_permissions_confirmed')!=0):
+              raise RuntimeError('Activation view advertises unverified network permissions')
+          forbidden_client=Client(HTTP_HOST='mojplaywin.com')
+          for route in ('mojtaba_social_activation','mojtaba_social_activation_json'):
+              denied=forbidden_client.get(reverse(route),secure=True)
+              if denied.status_code not in (302,403):
+                  raise RuntimeError('Social onboarding matrix is publicly visible')
+          print('PERSONAL_OWNER_SOCIAL_ACTIVATION_MATRIX=PASS',flush=True)
           print('PERSONAL_API_READINESS_SECRET_FREE=PASS',flush=True)
           print('PERSONAL_STAFF_PROTECTED_ROUTE=PASS',flush=True)
           print('SOCIAL_AUTHENTICATED_DASHBOARD=PASS',flush=True)
