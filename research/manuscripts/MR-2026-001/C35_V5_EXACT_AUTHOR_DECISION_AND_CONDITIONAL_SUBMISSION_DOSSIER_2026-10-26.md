@@ -2,6 +2,13 @@
 
 **Prepared 2026-10-26.** **Status: author scientific review candidate, not submission-authorized.** All evidence in this packet is for the actual V5 text, not V4 or a hypothetical future version.
 
+## 26 October C40 superseding source-integrity addendum — latest review artifact
+
+**Latest source after C40 scientific correction:** commit `3bf74d25532ed707a14d632fb2d762d66a50e2ec`, with a carefully bounded **Cvejić 2020 83% respondent-denominator** statement. A new deterministic gate [run 40275708232](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40275708232) completed **SUCCESS**, [artifact 12630206545](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40275708232/artifacts/12630206545). Under the *untested* common-base, n≤46 and nearest-whole-percent assumptions, the eight reported percentages plus 6% (two dissatisfied farmers) uniquely admit hypothetical n=35; this **does not verify** that the 83% was 29/35 survey respondents because the publisher also reports 46 farmers and 35 farms.
+
+**Latest source-locked Word after C40:** [run 40275729622](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40275729622), **COMPLETED/SUCCESS**, [artifact 12630350798](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40275729622/artifacts/12630350798). This **supersedes** prior Word artifact 12628106528. Internal scientific verdict remains **MAJOR REVISION / NOT SUBMITTED**, and neither the new conditional denominator consistency nor the Word rebuild proves journal-level novelty, external validation, a verified human contribution or approval to submit.
+
+
 ## Exact manuscript package and integrity
 
 - Proposed article title: **What Does an Irrigation Recommendation Actually Change? An Evidence-Chain Perspective on Farmer Decisions and Water Outcomes**.
