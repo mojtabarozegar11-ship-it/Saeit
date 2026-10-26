@@ -201,3 +201,14 @@ jobs:
           print('MPW_INVOICE_RENDERER_FILE='+json.dumps({'module':fn.__module__,'file':inspect.getfile(fn),'length':len(src)}))
           print('MPW_INVOICE_RENDERER_SOURCE='+json.dumps(src[:28500]))
           PY
+      - name: Inspect exact responsive HTML template and wallet button CSS
+        run: |
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,inspect,json
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          import services.mpw_trx_walletless_one_tap_ui as one
+          print('MPW_BUTTONS='+json.dumps(one.BUTTONS[:8000]))
+          src=inspect.getsource(one.render_invoice_page)
+          print('MPW_INVOICE_BASE_RENDER='+json.dumps({'module':one.render_invoice_page.__module__,'source':src[:30000]}))
+          PY
