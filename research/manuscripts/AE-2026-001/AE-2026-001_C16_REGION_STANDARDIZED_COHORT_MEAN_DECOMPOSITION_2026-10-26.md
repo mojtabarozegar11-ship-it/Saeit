@@ -40,3 +40,5 @@ The previously identified added-cohort observations CAF (+28.1538) and DJI (+17.
 - Sample selection is nonrandom; the equal-country mean is not global worker-weighted or population-weighted growth. No sampling standard errors, causal mechanisms, confirmatory hypothesis test, preregistration or methodological priority claim.
 - The prior C15 153/169 medians and high-leverage checks remain valid; the current exercise decomposes **means**, not medians, and is a separate post-hoc sensitivity.
 - Human author scientific review, actual originality and journal submission gates remain open. **MAJOR REVISION / NO SUBMISSION**.
+
+**Integration:** The main manuscript and Word require separate source-locked verification after this supplementary audit.
