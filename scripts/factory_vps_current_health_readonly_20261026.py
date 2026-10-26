@@ -77,6 +77,9 @@ def inventory():
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             invalid += 1
     order_status = collections.Counter()
+    order_origins = collections.Counter()
+    known_origins = {"site-topic-snapshot", "mojplaywin-site-qa-return",
+                     "owner_requested_education700_p0"}
     unsafe = 0
     for path in ORDERS.iterdir():
         if path.suffix != ".json":
@@ -85,6 +88,8 @@ def inventory():
             doc = safe_json(path)
             status = doc.get("status")
             order_status[status if isinstance(status, str) else "UNSET"] += 1
+            origin = doc.get("origin")
+            order_origins[origin if origin in known_origins else "other"] += 1
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             unsafe += 1
     serial = OPS / "strict-serial-fullcycle-v1.py"
@@ -140,6 +145,7 @@ def inventory():
         "agri_index_entries": len(ids),
         "agri_existing_valid": valid, "agri_missing": missing, "agri_invalid": invalid,
         "current_order_file_status_counts": dict(order_status),
+        "current_order_origin_counts": dict(order_origins),
         "current_order_unsafe": unsafe,
         "serial_worker_deployed_sha256": sha,
         "serial_tick": state_summary,
