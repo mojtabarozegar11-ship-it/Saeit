@@ -2,6 +2,9 @@
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
 const html=fs.readFileSync(path.join(__dirname,'../../games/air-supremacy/index.html'),'utf8');
 assert.match(html,/MAX_MISSION=12/);
+assert.match(html,/<link rel="canonical" href="https:\/\/mojplaywin\.com\/air-supremacy\/">/);
+assert.match(html,/<meta property="og:url" content="https:\/\/mojplaywin\.com\/air-supremacy\/">/);
+assert.match(html,/hreflang="fa" href="https:\/\/zomorodmelal\.ir\/games\/air-supremacy\/"/);
 assert.match(html,/missionKills>=missionGoal/);
 assert.doesNotMatch(html,/missionT>58/);
 assert.doesNotMatch(html,/fetch\(/);
