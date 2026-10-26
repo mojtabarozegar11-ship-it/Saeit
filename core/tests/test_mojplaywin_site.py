@@ -15,7 +15,18 @@ class MojPlayWinSiteTests(TestCase):
         response=self.client.get("/store/",HTTP_HOST="mojplaywin.com")
         self.assertEqual(response.status_code,200)
         html=response.content.decode("utf-8")
-        for marker in ("DIGITAL STORE","The Science and Practice of Chess Improvement","Taniya and the Little Baker Worms","Farm Enterprise Economics Toolkit","/static/site/heroes/","Applied AI Learning Path"):
+        # The live three-SKU catalog intentionally replaced obsolete mock entries.
+        # Assert current product titles, order-specific links, and delivery guidance.
+        for marker in (
+            "DIGITAL STORE",
+            "The Science and Practice of Chess Improvement",
+            "Taniya and the Little Baker Worms",
+            "Atelier Interior — Client-Ready Website Kit",
+            'href="/store/product/72/"',
+            'href="/store/product/225/"',
+            'href="/store/product/879/"',
+            "How checkout and delivery work",
+        ):
             self.assertIn(marker,html)
         self.assertNotIn("در حال حاضر محصول فعالی",html)
 
