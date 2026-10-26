@@ -1,0 +1,144 @@
+name: MojPlayWin repair 13 service directory URLs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-service-directory-index-20261026.yml
+      - scripts/mpw_service_directory_index_20261026.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mpw-only-revenue-directory-index
+  cancel-in-progress: false
+
+jobs:
+  publish-service-index:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate isolated index repair and confirm 404 baseline
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_service_directory_index_20261026.py
+          python3 scripts/mpw_service_directory_index_20261026.py selftest
+          python3 - <<'PY'
+          import urllib.request,urllib.error
+          for path in ('/mpw-editorial/revenue/', '/mpw-editorial/revenue/website-doctor/'):
+              try:
+                  urllib.request.urlopen('https://mojplaywin.com'+path,timeout=30)
+                  raise AssertionError('Unexpected existing directory alias: '+path)
+              except urllib.error.HTTPError as err:
+                  assert err.code==404,(path,err.code)
+          for path in ('/mpw-editorial/revenue/index.html',
+                       '/mpw-editorial/revenue/website-doctor/index.html'):
+              with urllib.request.urlopen('https://mojplaywin.com'+path,timeout=30) as r:
+                  assert r.status==200,path
+          print('SCOPED_SERVICES_DIRECTORY_ALIAS_BASELINE_CONFIRMED')
+          PY
+      - name: Establish pinned SSH relay through VPS to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-learning-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 35s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Publish one isolated services-directory configuration
+        id: install
+        run: |
+          set -euo pipefail
+          timeout 125s ssh -T -F "$RUNNER_TEMP/mpw-learning-ssh/config" saeit-cpanel "python3 - publish '$GITHUB_RUN_ID'" < scripts/mpw_service_directory_index_20261026.py
+      - name: Verify all 13 short URLs and original file URLs
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import concurrent.futures,re,time,urllib.request,urllib.error
+          slugs=('website-doctor','landing-page-studio','ai-automation',
+              'business-spreadsheets','website-templates','social-media-kits',
+              'resume-builder','logo-studio','browser-games','marketing-ai',
+              'business-calculators','website-care')
+          paths=['/mpw-editorial/revenue/']+[
+                   '/mpw-editorial/revenue/'+x+'/' for x in slugs]
+          def get(path):
+              req=urllib.request.Request('https://mojplaywin.com'+path,
+                              headers={'Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=35) as r:
+                  assert r.status==200,path
+                  doc=r.read(100000).decode('utf-8','replace')
+              assert 'data-mpw-one-shell="20261026"' in doc,path
+              assert '<main' in doc and '</main>' in doc,path
+              assert doc.count('rel="canonical"')==1,path
+              return doc
+          for attempt in range(8):
+              try:
+                  get(paths[0])
+                  break
+              except (urllib.error.HTTPError,AssertionError) as err:
+                  if attempt==7:raise
+                  time.sleep(2)
+          with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+              docs=list(pool.map(get,paths))
+          for path,doc in zip(paths,docs):
+              expected=path+'index.html'
+              assert 'href="https://mojplaywin.com'+expected+'"' in doc,path
+              original=get(expected)
+              assert re.search(r'<title[^>]*>.*?</title>',doc,re.I|re.S).group(0)==re.search(r'<title[^>]*>.*?</title>',original,re.I|re.S).group(0),path
+          print('ALL_13_SHORT_SERVICE_URLS_AND_ORIGINAL_URLS_PASS')
+          PY
+      - name: Verify the 25 protected commerce, child and personal routes did not change
+        run: |
+          set -euo pipefail
+          python3 scripts/mpw_subsite_continuity_guard_20261026.py
+      - name: Remove only the new index configuration on any smoke failure
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          timeout 105s ssh -T -F "$RUNNER_TEMP/mpw-learning-ssh/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_service_directory_index_20261026.py
+      - name: Remove temporary relay keys
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-learning-ssh"
+          if [ -d "$d" ]; then rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/config"; rmdir "$d"; fi
