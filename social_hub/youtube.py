@@ -20,6 +20,8 @@ def checked_file(media_root, path):
     if not root.is_dir():
         raise Blocked("Private media root unavailable")
     candidate = Path(path)
+    if ".." in candidate.parts:
+        raise Blocked("Media path traversal forbidden")
     if not candidate.is_absolute():
         candidate = root / candidate
     # Reject symlinks in the entire provided path, not just the final file.
@@ -30,7 +32,10 @@ def checked_file(media_root, path):
                                for i in range(1, len(tentative.relative_to(root).parts) + 1)]):
         if component.is_symlink():
             raise Blocked("Video symlink or symlinked directory forbidden")
-    real = tentative.resolve(strict=True)
+    try:
+        real = tentative.resolve(strict=True)
+    except (OSError, RuntimeError):
+        raise Blocked("Video file missing or inaccessible") from None
     if not real.is_relative_to(root) or not stat.S_ISREG(real.stat().st_mode):
         raise Blocked("Video must be a regular private file")
     size = real.stat().st_size
