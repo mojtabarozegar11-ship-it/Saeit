@@ -33,7 +33,7 @@ jobs:
                          '10.1016', 'NOT FINAL'):
               if phrase=='10.1016': continue
               assert phrase.lower() in t.lower(), phrase
-          assert 'The 2024 archive did not contain comparable 2023' in t
+          assert 'The October 2024 archived series provides **no comparable 2023 endpoint observations**' in t
           assert '2000–2023 is not three-vintage estimable' in t
           assert '**not** an accepted or submitted journal article' in t
           review=Path('research/manuscripts/AE-2026-001/AE-2026-001_THREE_VINTAGE_FIXED_COHORT_INDEPENDENT_AI_REVIEW_2026-10-26.md')
