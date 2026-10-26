@@ -66,7 +66,8 @@ class PrivateThreeTests(unittest.TestCase):
                 self.assertFalse(receipt["quality_certified"])
                 self.assertTrue(receipt["storefront_unchanged"])
             with contextlib.redirect_stdout(io.StringIO()):
-                second = mod.vps_ingest(dest, bundle()[0])
+                src.seek(0)
+                second = mod.vps_ingest(dest, src)
             self.assertEqual(result, second)
 
     def test_hash_mismatch_fails_before_copy(self):
