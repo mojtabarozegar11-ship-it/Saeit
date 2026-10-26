@@ -215,3 +215,17 @@ jobs:
             tokens=line.split()
             print('MPW_CRON_RELEVANT='+json.dumps({'ordinal':i+1,'schedule':tokens[:5],'keywords':{k:(k in line.lower()) for k in ('trx','commerce','invoice','payment','wallet','settle')}}))
           PY
+      - name: Classify existing payment crons by basename only
+        run: |
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,re,subprocess,json
+          from pathlib import Path
+          cp=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=8)
+          if cp.returncode!=0:raise RuntimeError('crontab not readable')
+          for i,line in enumerate(cp.stdout.splitlines(),1):
+           if not line.strip() or line.lstrip().startswith('#'):continue
+           low=line.lower()
+           if not any(k in low for k in ('commerce','trx','wallet','payment','invoice','settle')):continue
+           paths=re.findall(r'(?<![A-Za-z0-9_])(?:/[A-Za-z0-9_.-]+)+\.(?:py|sh|php)|(?<![A-Za-z0-9_])[A-Za-z0-9_.-]+\.(?:py|sh|php)',line)
+           print('MPW_CRON_PATH='+json.dumps({'line':i,'schedule':line.split()[:5],'scripts':[Path(x).name for x in paths][:8],'contains_reconcile':('reconcil' in low),'contains_settle':('settl' in low),'contains_trx':('trx' in low)}))
+          PY
