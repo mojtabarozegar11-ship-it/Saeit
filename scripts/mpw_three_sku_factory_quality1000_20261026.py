@@ -228,11 +228,11 @@ def run(root=BASE):
             dst = root / "quality1000-rework" / str(ident) / sha / (doc_hash + ".json")
             immutable_write(dst, raw)
             versions.append({"sha256": sha, "format": facts["format"],
-                             "pdf_parser_available": facts.get("pdfinfo_available"),
+                             "pdf_parser_available": bool(facts.get("pdfinfo_available") or facts.get("python_backend")),
                              "pdf_parser_passed": facts.get("pdf_validation_passed"),
                              "pdf_python_backend": facts.get("python_backend"),
                              "pdf_pages": facts.get("page_count"),
-                             "pdf_parser_failure": facts.get("pdfinfo_failure"),
+                             "pdf_parser_failure": facts.get("pdfinfo_failure") or facts.get("python_parser_failure"),
                              "zip_crc_passed": facts.get("valid"),
                              "quality1000_verified": False,
                              "rework_ticket_sha256": doc_hash})

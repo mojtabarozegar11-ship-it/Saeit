@@ -21,10 +21,31 @@ def make_zip():
             bundle.writestr("README.md","original source records not included")
         return buffer.getvalue()
 
+def make_pdf():
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << >> /Contents 4 0 R >>",
+        b"<< /Length 0 >>\nstream\n\nendstream"
+    ]
+    output = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for number, body in enumerate(objects, 1):
+        offsets.append(len(output))
+        output.extend(f"{number} 0 obj\n".encode())
+        output.extend(body + b"\nendobj\n")
+    xref = len(output)
+    output.extend(f"xref\n0 {len(offsets)}\n".encode())
+    output.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        output.extend(f"{offset:010d} 00000 n \n".encode())
+    output.extend(f"trailer\n<< /Size {len(offsets)} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode())
+    return bytes(output)
+
 def install_fixture(root):
     hashes={}
     for ident in qc.IDS:
-        data=(b"%PDF-1.4\n1 0 obj<<>>endobj\n%%EOF" if ident !=879 else make_zip())
+        data=(make_pdf() if ident !=879 else make_zip())
         h=hashlib.sha256(data).hexdigest()
         hashes[ident]=h
         folder=root/"copies"/str(ident)
@@ -91,6 +112,9 @@ class Qc1000Tests(unittest.TestCase):
             pdf=result[0]["versions"][0]
             web=result[2]["versions"][0]
             self.assertEqual(pdf["format"],"pdf")
+            self.assertTrue(pdf["pdf_parser_available"])
+            self.assertTrue(pdf["pdf_parser_passed"])
+            self.assertEqual(pdf["pdf_pages"], 1)
             self.assertEqual(web["format"],"zip")
             self.assertTrue(web["zip_crc_passed"])
             self.assertFalse(pdf["quality1000_verified"])
