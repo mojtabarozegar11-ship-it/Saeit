@@ -1,6 +1,9 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const html=fs.readFileSync(path.join(__dirname,'../../games/air-supremacy-fa/index.html'),'utf8');
+assert.match(html,/<link rel="canonical" href="https:\/\/zomorodmelal\.ir\/games\/air-supremacy\/">/);
+assert.match(html,/<meta property="og:url" content="https:\/\/zomorodmelal\.ir\/games\/air-supremacy\/">/);
+assert.match(html,/hreflang="en" href="https:\/\/mojplaywin\.com\/air-supremacy\/"/);
 const raw=html.split('<script>')[1].split('</script>')[0];
 const vm=require('node:vm');
 new vm.Script(raw);
