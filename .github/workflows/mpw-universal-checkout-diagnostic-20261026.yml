@@ -1,0 +1,101 @@
+name: MojPlayWin universal TRX purchase and invoice audit
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-universal-checkout-diagnostic-20261026.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-universal-checkout-diagnostic
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read-only routes, product gates, and invoice implementation
+        run: |
+          timeout 145s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,inspect,re
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.urls import resolve
+          from django.apps import apps
+          from django.test import Client
+          from django.conf import settings
+          ROUTES=('/store/','/store/product/779/','/store/product/72/','/store/product/225/','/store/product/879/','/commerce/book/779/','/commerce/book/72/','/commerce/book/225/','/commerce/book/879/','/commerce/trx-easy/purchases/','/commerce/trx-easy/invoice/14/','/accounts/login/','/commerce/my-purchases/')
+          for route in ROUTES:
+            try:
+              v=resolve(route).func; resp=Client(raise_request_exception=False).get(route,secure=True,HTTP_HOST='mojplaywin.com')
+              print('MPW_ALL_ROUTE='+json.dumps({'route':route,'view':v.__module__+'.'+v.__name__,'status':resp.status_code,'redirect':str(resp.get('Location',''))[:200]}))
+            except Exception as e: print('MPW_ALL_ROUTE_ERROR='+json.dumps({'route':route,'error':str(e)[:220]}))
+          from core.models import PaymentIntent
+          print('MPW_INTENT_FIELDS='+json.dumps([f.name for f in PaymentIntent._meta.fields]))
+          for m in apps.get_models():
+            if m.__name__.lower() in ('product','order','orderitem','paymentintent','commercialrights','productright','purchasereceipt','transaction'):
+              try:count=m.objects.count()
+              except Exception:count=-1
+              print('MPW_MODEL='+json.dumps({'model':m._meta.label,'count':count,'fields':[f.name for f in m._meta.fields][:45]}))
+          import services.mpw_trx_commercial_web as w
+          from pathlib import Path
+          print('MPW_COMMERCE_FILE='+str(Path(inspect.getfile(w)).relative_to('/home/zomorod2/Saeit-staging')))
+          for name,obj in inspect.getmembers(w,inspect.isfunction):
+            if obj.__module__ != w.__name__: continue
+            if any(term in name.lower() for term in ('invoice','checkout','pay','create','start','status','confirm','settle','receipt','fulfil','deliver','download','complete','transfer','book','price','guard','rights')):
+              try:src=inspect.getsource(obj)
+              except Exception as e:src=str(e)
+              print('MPW_COMMERCE_FUNCTION='+json.dumps({'name':name,'source':src[:13000]}))
+          for modname in ('services.mpw_trx_walletless_one_tap_ui','services.mpw_trx_walletless_checkout_ui'):
+            try:
+              mod=__import__(modname,fromlist=['dummy'])
+              for name,obj in inspect.getmembers(mod,inspect.isfunction):
+                if obj.__module__==modname and any(x in name for x in ('render','verify','wallet','intent','amount','status','purchase')):
+                  src=inspect.getsource(obj)
+                  print('MPW_UI_FUNC='+json.dumps({'module':modname,'name':name,'source':src[:4500]}))
+            except Exception as e: print('MPW_UI_ERROR='+json.dumps({'module':modname,'err':type(e).__name__}))
+          PY
