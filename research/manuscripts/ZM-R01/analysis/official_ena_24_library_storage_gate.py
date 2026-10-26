@@ -41,7 +41,7 @@ def main():
         for i in (1,2):
             if not re.fullmatch(r"[0-9a-fA-F]{32}",e[f"fastq{i}_md5"]):
                 raise RuntimeError("Malformed MD5 string")
-            if not e[f"fastq{i}_ftp"].startswith("ftp.sra.ebi.ac.uk/"):
+            if not e[f"fastq{i}_url"].startswith("https://ftp.sra.ebi.ac.uk/"):
                 raise RuntimeError("Unexpected FASTQ host")
         size=sum(int(e[f"fastq{i}_bytes"]) for i in (1,2))
         if size<=0:
