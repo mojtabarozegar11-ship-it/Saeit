@@ -13,9 +13,9 @@ from pathlib import Path
 import tempfile
 
 SCHEMA = "saeit.factory.master-agent-genome.v1"
-BASE = {"source_evolution_quota": 2, "quality_return_priority": True}
-QUOTA_MIN = 1
-QUOTA_MAX = 5
+BASE = {"recovery_attempt_limit": 2, "qa_confirmation_passes": 1}
+GENE_MIN = 1
+GENE_MAX = 3
 HISTORY_LIMIT = 24
 
 
@@ -25,9 +25,8 @@ def _path(root):
 
 def _valid_genome(value):
     return (isinstance(value, dict)
-            and type(value.get("source_evolution_quota")) is int
-            and QUOTA_MIN <= value["source_evolution_quota"] <= QUOTA_MAX
-            and type(value.get("quality_return_priority")) is bool)
+            and all(type(value.get(key)) is int and GENE_MIN <= value[key] <= GENE_MAX
+                    for key in BASE))
 
 
 def _read(path):
@@ -110,16 +109,12 @@ def _mutate(parent, generation, fitness):
     seed = hashlib.sha256(json.dumps(
         {"parent": parent, "generation": generation, "fitness": fitness},
         sort_keys=True, separators=(",", ":")).encode("utf8")).digest()
-    if seed[0] % 2 == 0:
-        step = 1 if seed[1] % 2 == 0 else -1
-        candidate = child["source_evolution_quota"] + step
-        if candidate < QUOTA_MIN or candidate > QUOTA_MAX:
-            candidate = child["source_evolution_quota"] - step
-        child["source_evolution_quota"] = candidate
-        gene = "source_evolution_quota"
-    else:
-        child["quality_return_priority"] = not child["quality_return_priority"]
-        gene = "quality_return_priority"
+    gene = "recovery_attempt_limit" if seed[0] % 2 == 0 else "qa_confirmation_passes"
+    step = 1 if seed[1] % 2 == 0 else -1
+    candidate = child[gene] + step
+    if candidate < GENE_MIN or candidate > GENE_MAX:
+        candidate = child[gene] - step
+    child[gene] = candidate
     return child, gene
 
 
