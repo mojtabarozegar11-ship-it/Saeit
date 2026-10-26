@@ -43,7 +43,7 @@ def stream_segment_is_acceptable(body, minimum=300):
     # Preserve original body bytes for word counts and downstream acceptance.
     safety_view = unicodedata.normalize("NFKC", body)
     safety_view = re.sub(
-        r"[\u00ad\u200b\u200c\u200d\u2060\ufeff\u202a-\u202e\u2066-\u2069]",
+        r"[\u00ad\u061c\u200b\u200c\u200d\u200e\u200f\u2060\ufeff\u202a-\u202e\u2066-\u2069]",
         "", safety_view)
     lowered = safety_view.casefold()
     if any(marker in lowered for marker in (
