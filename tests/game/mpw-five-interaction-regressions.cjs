@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
-function boot(slug, stored = {}) {
+function boot(slug, stored = {}, transform = source => source) {
   const html = fs.readFileSync(path.join(__dirname, '../../site_releases/mojplaywin/games-20261021', slug, 'index.html'), 'utf8');
   const match = html.match(/<script>([\s\S]*?)<\/script>/);
   assert.ok(match, 'inline game script missing: ' + slug);
@@ -46,9 +46,8 @@ function boot(slug, stored = {}) {
     getItem(k) { return Object.hasOwn(stored, k) ? stored[k] : null; },
     setItem(k, v) { stored[k] = String(v); }
   };
-  vm.runInNewContext(match[1], {
-    document, window, localStorage, requestAnimationFrame(cb) { raf = cb; }, console, Math
-  }, {timeout: 5000, filename: slug + '.js'});
+  const sandbox = {document, window, localStorage, requestAnimationFrame(cb) { raf = cb; }, console, Math};
+  vm.runInNewContext(transform(match[1]), sandbox, {timeout: 5000, filename: slug + '.js'});
   const el = id => document.getElementById(id);
   function click(id) {
     for (const callback of el(id).listeners.click || []) callback({target: el(id)});
@@ -63,7 +62,7 @@ function boot(slug, stored = {}) {
     for (let i = 0; i < maxFrames; i++) { if (predicate()) return; frame(); }
     assert.fail('game state did not become reachable');
   }
-  return {el, click, press, frame, until, document, stored};
+  return {el, click, press, frame, until, document, stored, sandbox};
 }
 
 function testPulse() {
@@ -116,7 +115,27 @@ function testSkyline() {
   console.log('PASS skyline-keeper: three distinct keyboard tower deployments');
 }
 
+function testNebula() {
+  const needle = 'return{start,update,draw,pointer(x,y){fire(x,y)}';
+  const g = boot('nebula-salvage', {}, source => {
+    assert.ok(source.includes(needle), 'Nebula internals probe anchor changed');
+    return source.replace(needle, 'globalThis.__nebulaDebug=()=>({balls,orbs,hull,progress});' + needle);
+  });
+  g.click('playButton');
+  g.frame(); // first frame has zero delta; advance time before injecting expired probes
+  const state = g.sandbox.__nebulaDebug();
+  state.orbs.splice(0, state.orbs.length, {r: 115, theta: 0, speed: 0, size: 18, color: '#fff', live: true});
+  state.balls.push({x: 595, y: 255, vx: 0, vy: 0, life: .01, trail: []});
+  state.balls.push({x: 480, y: 255, vx: 0, vy: 0, life: .01, trail: []});
+  g.frame();
+  const after = g.sandbox.__nebulaDebug();
+  assert.equal(after.progress, 0, 'expired probe cannot collect cargo');
+  assert.equal(after.hull, 4, 'expired probe cannot damage the gravity-well hull');
+  console.log('PASS nebula-salvage: expired probes have no collision side effects');
+}
+
 testPulse();
 testCipher();
 testSkyline();
+testNebula();
 console.log('MPW_FIVE_INTERACTION_REGRESSION_PASS');
