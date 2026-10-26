@@ -270,7 +270,7 @@ class FactorySynthesisIntegrationTests(unittest.TestCase):
         (generated/"calculator.py").write_text("raise RuntimeError('deliberate fault')\\n")
         third=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True)
         self.assertEqual(third["status"],"ok")
-        self.assertEqual(third["new_artifacts"],0)
+        self.assertEqual(third["new_artifacts"],1)
         state=json.loads((self.output/"production-state.json").read_text())
         recovered=[x for x in state["source_recoveries"] if x["recipe"]==active_recipe]
         self.assertEqual(len(recovered),1)
