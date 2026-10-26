@@ -155,6 +155,7 @@ function jungleRunGame(stage){
   const won=finished&&lives>0,over=finished,medal=won?(lives===3?'GOLD':lives===2?'SILVER':'BRONZE'):'';
   const hazard=course[step];
   stage.innerHTML='<div class="stage-message" role="status" aria-live="polite">'+(over?(won?'🏆 Jungle cleared! · '+medal+' medal':'🌱 The jungle wins this round.'):hazard.icon+' '+hazard.hint)+'</div>'+
+   '<progress class="jungle-progress" value="'+step+'" max="12" aria-label="Jungle course progress"></progress>'+ 
    '<div class="stage-message">Obstacle '+Math.min(step+1,12)+' / 12 · Hearts '+('❤️'.repeat(lives)||'0')+' · Stars '+stars+' · Streak '+streak+' · Best '+best+'</div>'+
    '<div class="stage-actions" id="jungleActions"></div>'+
    '<small style="display:block;margin-top:12px;color:#536581">Space / ↑ = Jump · ↓ = Duck · → = Sidestep. Touch controls work on phones.</small>';
