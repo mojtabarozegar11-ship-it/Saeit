@@ -128,7 +128,7 @@ def _cleanup_completed_product_extras(root, recipe):
         root / "quality-excellence" / "rework" / recipe,
         root / "qa-rework" / recipe,
         root / "research-dossiers" / recipe,
-        root / "engineering-workorders" / recipe,
+        root / "quality-excellence" / "engineering-workorders" / recipe,
     ]
     revisions = root / "generated-source-revisions"
     if revisions.exists():
@@ -220,8 +220,19 @@ def _maintain_product_slots(root, recipe_names):
             continue
         queue.append(recipe)
         queued.add(recipe)
-    if not active and queue:
+    while not active and queue:
         next_recipe = queue.pop(0)
+        clearance = _verified_quality_exit(root, next_recipe)
+        if clearance:
+            exited[next_recipe] = dict(clearance)
+            _cleanup_completed_product_extras(root, next_recipe)
+            continue
+        manifest = _read_private_json(Path(root) / "digital-products" / next_recipe
+                                      / "manufacturing_manifest.json")
+        current_artifact = manifest.get("artifact_sha256") if manifest else None
+        prior_exit = exited.get(next_recipe)
+        if isinstance(prior_exit, dict) and prior_exit.get("artifact_sha256") == current_artifact:
+            continue
         active = [{"recipe": next_recipe, "status": "active"}]
         cursor = next_recipe
     state = {"schema": SLOT_SCHEMA, "line_id": 41, "capacity": 1,
