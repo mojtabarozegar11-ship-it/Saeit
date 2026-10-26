@@ -38,6 +38,10 @@ def main(argv=None):
     reg.add_argument("--public-url",default="")
     reg.add_argument("--instance",default="")
     reg.add_argument("--actor",required=True)
+    suspension = sub.add_parser("suspend-account")
+    suspension.add_argument("--account",required=True)
+    suspension.add_argument("--confirm",action="store_true")
+    suspension.add_argument("--actor",default="owner-cli:suspend")
     verify = sub.add_parser("verify")
     verify.add_argument("--account",required=True)
     verify.add_argument("--proof",required=True)
@@ -87,6 +91,10 @@ def main(argv=None):
                 result = {"account_id":db.add_account(brand=args.brand,
                     platform_key=args.platform,destination=args.destination,
                     public_url=args.public_url,instance=args.instance,actor=args.actor)}
+            elif args.command == "suspend-account":
+                if not args.confirm:
+                    raise Blocked("Explicit --confirm required before suspending an owned account")
+                result=db.suspend_account(args.account,actor=args.actor)
             elif args.command == "verify":
                 db.verify_account(args.account,proof=args.proof,actor=args.actor)
                 result = {"status":"verified","account_id":args.account}
