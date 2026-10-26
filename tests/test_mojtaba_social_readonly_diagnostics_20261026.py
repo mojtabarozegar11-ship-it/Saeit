@@ -212,6 +212,27 @@ class ProbeLedgerTests(unittest.TestCase):
                 self.store.account(other)["token_env"]:"12345botsecret"},transport=Mocks())
         self.assertIsNone(self.store.api_check(other))
 
+    def test_account_suspension_revokes_public_link_and_cancels_approved_queue(self):
+        from social_hub.public_links import official_links
+        from social_hub.service import run_one
+        self.assertEqual(official_links(self.store)["total"],1)
+        pid=self.store.draft(account_id=self.aid,content={"text":"Approved; do not send"},
+                             actor="staff")
+        self.store.approve(pid,actor="owner")
+        self.store.record_api_check(self.aid,status="identity_verified",identity="123456789",
+                                    note="bot_and_channel_admin_checked",actor="owner")
+        outcome=self.store.suspend_account(self.aid,actor="owner")
+        self.assertEqual(outcome["approved_posts_cancelled"],1)
+        self.assertTrue(outcome["provider_token_revocation_required"])
+        self.assertEqual(self.store.post(pid)["state"],"cancelled")
+        self.assertEqual(self.store.account(self.aid)["verified"],0)
+        self.assertEqual(official_links(self.store)["total"],0)
+        self.assertIsNone(self.store.api_check(self.aid))
+        self.assertTrue(self.store.account(self.aid)["proof"])
+        with self.assertRaises(Blocked):
+            run_one(self.store,pid,env={**self.token_env(),"MPW_SOCIAL_OUTBOUND_ENABLED":"1"},
+                    execute=True,transport=Mocks())
+
     def test_invalid_status_or_note_cannot_be_written(self):
         with self.assertRaises(Blocked):
             self.store.record_api_check(self.aid,status="published",identity="",note="ok",actor="owner")
