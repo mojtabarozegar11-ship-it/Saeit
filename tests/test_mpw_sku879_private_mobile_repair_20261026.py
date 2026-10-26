@@ -73,7 +73,13 @@ class MobileRepairTests(unittest.TestCase):
                 mobile.inject(src, mobile.BASE_STYLE), encoding="utf-8"
             )
             repaired = mobile.browser_views(extracted, entry)
-            self.assertTrue(mobile.passes(repaired))
+            self.assertTrue(mobile.passes(repaired), [
+                {k: v[k] for k in (
+                    "requested_viewport", "viewport_width", "viewport_height",
+                    "device_screen_width", "visual_viewport_width",
+                    "horizontal_overflow_px", "broken_images", "screenshot_valid",
+                    "body_char_count", "ready", "title_present"
+                )} for v in repaired])
             self.assertTrue(all(row["broken_images"] == 0 for row in repaired))
 
 
