@@ -229,7 +229,7 @@ jobs:
                   for item in data.get(key,[])[:8]:
                       if isinstance(item,dict):
                           print("FAILURE_CODE="+str(item.get("code",item.get("type","unknown"))))
-          for filename in ("factory-minute-cycle.log","autonomous-product-cycle.log"):
+          for filename in ("factory-minute-cycle.log","autonomous-product-cycle.log","production-warehouse.log"):
               path=base/"operations"/filename
               if path.is_file():
                   print("LOG="+filename+" AGE_SECONDS="+str(round(time.time()-path.stat().st_mtime)))
@@ -413,9 +413,13 @@ jobs:
               if not proc.name.isdigit():continue
               try:
                   args=(proc/"cmdline").read_bytes().decode(errors="replace").replace("\x00"," ")
-                  if str(base) not in args or not any(x in args for x in ("run-minute-cycle","run-local-cycle","factory_vps_product_cycle","factory_build_50","factory_customer_packager","run-warehouse")): continue
+                  if str(base) not in args or not any(x in args for x in ("run-minute-cycle","run-local-cycle","factory_vps_product_cycle","factory_build_50","factory_customer_packager","run-warehouse","factory_production_warehouse","factory_specialist_pilots","factory_build50_workbook","factory_research_triage")): continue
                   comm=(proc/"comm").read_text().strip()
                   wait=(proc/"wchan").read_text().strip()
-                  print("FACTORY_PROCESS pid="+proc.name+" comm="+comm+" wait="+wait)
+                  details=subprocess.run(["ps","-o","etimes=,time=,%cpu=","-p",proc.name],
+                                         capture_output=True,text=True,timeout=2,check=False)
+                  phase=next((Path(x).name for x in args.split() if x.endswith(".py") and "factory_" in x),"shell")
+                  print("FACTORY_PROCESS pid="+proc.name+" comm="+comm+" wait="+wait+
+                        " phase="+phase+" elapsed_cpu="+details.stdout.strip()[:48])
               except (OSError,PermissionError):pass
           PY
