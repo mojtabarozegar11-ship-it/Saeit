@@ -147,7 +147,12 @@ class Store:
             if not account:
                 raise Blocked("Account not found")
             if not platform(account["platform"]).sendable:
-                raise Blocked("Platform has no supported writer")
+                # Scientific and commerce profiles may have no sanctioned posting
+                # API, but can still be owner-attested and listed publicly.
+                if not account["public_url"]:
+                    raise Blocked("Manual-only network requires a genuine public profile URL")
+                from .onboarding import _valid_url
+                _valid_url(account["public_url"],account["platform"],account["instance"])
             self.db.execute("UPDATE accounts SET verified=1,proof=?,verified_at=? WHERE id=?",
                             (proof.strip()[:500], utc_now(), account_id))
             self.event(account_id,account["brand"],actor,"account_verified","")
