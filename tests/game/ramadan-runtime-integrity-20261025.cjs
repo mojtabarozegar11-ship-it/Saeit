@@ -104,3 +104,21 @@ keyboard.handleGameKeydown(event('Escape'));
 assert.equal(keyboard.calls.pause,1,'Escape must still pause active play');
 
 console.log('RAMADAN_RUNTIME_INTEGRITY_PASS save-validation=13 stable-missiles controls visibility');
+
+// Privacy modes can throw SecurityError on every storage operation.
+const storageSource=slice('const storage={','let hero=');
+const deniedStorage=new Proxy({}, {get(){throw new Error('SecurityError')}});
+const blocked=vm.runInNewContext(storageSource+'storage',{localStorage:deniedStorage});
+assert.equal(blocked.get('rwHero'),null,'privacy mode hero preference falls back safely');
+assert.doesNotThrow(()=>blocked.set('rwHero',3),'privacy mode hero selection remains playable');
+assert.doesNotThrow(()=>blocked.remove('rwNativeCampaign'),'privacy mode completion must not crash');
+const values=new Map();
+const allowed=vm.runInNewContext(storageSource+'storage',{localStorage:{
+  getItem:key=>values.get(key)??null,
+  setItem:(key,value)=>values.set(key,value),
+  removeItem:key=>values.delete(key)
+}});
+allowed.set('rwHero',5);
+assert.equal(allowed.get('rwHero'),'5','normal storage preserves hero choice');
+allowed.remove('rwHero');
+assert.equal(allowed.get('rwHero'),null,'normal storage supports cleanup');
