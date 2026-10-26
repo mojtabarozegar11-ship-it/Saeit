@@ -28,10 +28,10 @@ class ReadOnlyFactoryHealthTests(unittest.TestCase):
                 "id": ids[0], "status": "issued", "fingerprint": "a" * 64
             }), encoding="utf8")
             (ops / "strict-serial-fullcycle-v1.py").write_text("# benign\n", encoding="utf8")
-            with patch.object(audit, "BASE", base), patch.object(audit, "PRIVATE", private), \\
-                 patch.object(audit, "OPS", ops), patch.object(audit, "ORDERS", orders), \\
-                 patch.object(audit, "INDEX", index), \\
-                 patch.object(audit.os, "geteuid", return_value=1000), \\
+            with patch.object(audit, "BASE", base), patch.object(audit, "PRIVATE", private), \
+                 patch.object(audit, "OPS", ops), patch.object(audit, "ORDERS", orders), \
+                 patch.object(audit, "INDEX", index), \
+                 patch.object(audit.os, "geteuid", return_value=1000), \
                  patch.object(audit, "command", return_value=""):
                 result = audit.inventory()
             self.assertTrue(result["read_only"])
@@ -48,8 +48,8 @@ class ReadOnlyFactoryHealthTests(unittest.TestCase):
     def test_missing_private_root_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "nonexistent"
-            with patch.object(audit, "BASE", root), patch.object(audit, "PRIVATE", root), \\
-                 patch.object(audit, "OPS", root), patch.object(audit, "ORDERS", root), \\
+            with patch.object(audit, "BASE", root), patch.object(audit, "PRIVATE", root), \
+                 patch.object(audit, "OPS", root), patch.object(audit, "ORDERS", root), \
                  patch.object(audit.os, "geteuid", return_value=1000):
                 with self.assertRaisesRegex(RuntimeError, "UNSAFE_OR_MISSING"):
                     audit.inventory()
