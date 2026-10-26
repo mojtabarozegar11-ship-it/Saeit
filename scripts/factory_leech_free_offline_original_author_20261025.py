@@ -211,7 +211,10 @@ def accept(chunks, body):
         reject("MODEL_REASONING_OR_CONTROL_TOKEN")
     if len(body.encode("utf-8")) > 48000 or len(body.encode("utf-8")) < 1200:
         reject("SEGMENT_BYTES_OUT_OF_RANGE")
-    if any(marker in body.casefold() for marker in
+    # Apply the same NFKC/invisible-control canonicalization as the reasoning
+    # gate: otherwise a zero-width mark can hide an unverified citation or
+    # placeholder from the pre-write integrity check.
+    if any(marker in canonical_reasoning_view(body) for marker in
            ("lorem ipsum", "as an ai language model", "[insert ", "[citation needed]",
             "this is a placeholder", "## references", "bibliography\n")):
         reject("CONTENT_INTEGRITY_MARKER")
