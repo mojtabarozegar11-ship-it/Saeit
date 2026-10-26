@@ -121,3 +121,44 @@ jobs:
                       print('MPW_INVOICE_ACCESSLOG='+json.dumps({'file':p.name,'lines':lines[-50:]}))
                   except Exception as e:print('MPW_LOG_READ_ERROR='+json.dumps({'file':p.name,'error':type(e).__name__}))
           PY
+      - name: Inspect invoice view guards and complete commerce rewrites
+        run: |
+          timeout 85s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          from pathlib import Path
+          import os,sys,json,inspect,re
+          p=Path('/home/zomorod2/mojplaywin.com/.htaccess')
+          for i,line in enumerate(p.read_text(errors='replace').splitlines(),1):
+              if re.search(r'commerce|invoice|query_string|cookie|referer|user.agent|RewriteRule|RewriteCond|Passenger|Fallback',line,re.I):
+                  print('MPW_REWRITE_FULL='+json.dumps({'line':i,'text':line[:280]}))
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.conf import settings
+          from django.urls import resolve
+          for route in ('/commerce/trx-easy/invoice/14/','/commerce/book/779/','/accounts/login/'):
+              view=resolve(route).func
+              try: src=inspect.getsource(view)
+              except Exception as e:src=str(e)
+              print('MPW_VIEW='+json.dumps({'route':route,'view':view.__module__+'.'+view.__name__,'source':src[:10500]}))
+          for modname in settings.MIDDLEWARE:
+              mod,cls=modname.rsplit('.',1)
+              if not any(x in modname.lower() for x in ('commerce','mpw','brand','canonical','host','auth','redirect')):continue
+              try:
+                  modobj=__import__(mod,fromlist=[cls]);src=inspect.getsource(getattr(modobj,cls))
+                  selected=[(i+1,line.strip()[:300]) for i,line in enumerate(src.splitlines()) if any(s in line.lower() for s in ('invoice','commerce','query','404','referer','utm','redirect','request.path'))]
+                  if selected:print('MPW_MIDDLEWARE='+json.dumps({'class':modname,'selected':selected[:65]}))
+              except Exception:pass
+          PY
+      - name: Compare clean and UTM-linked invoices from independent network
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json
+          for route in ('/commerce/trx-easy/invoice/14/','/commerce/trx-easy/invoice/14/?utm_source=chatgpt.com'):
+              for ua in ('Mozilla/5.0 (Linux; Android 10; SM-A920F)','MojPlayWinInvoiceAudit/1'):
+                  req=urllib.request.Request('https://mojplaywin.com'+route,headers={'User-Agent':ua})
+                  try:
+                      with urllib.request.urlopen(req,timeout=13) as r:
+                          print('MPW_QUERY_COMPARISON='+json.dumps({'route':route,'ua':ua[:20],'status':r.status,'final':r.url}))
+                  except urllib.error.HTTPError as e:
+                      print('MPW_QUERY_COMPARISON='+json.dumps({'route':route,'ua':ua[:20],'status':e.code,'body':e.read(80).decode('utf-8','replace')}))
+                  except Exception as e:print('MPW_QUERY_ERROR='+repr(e))
+          PY
