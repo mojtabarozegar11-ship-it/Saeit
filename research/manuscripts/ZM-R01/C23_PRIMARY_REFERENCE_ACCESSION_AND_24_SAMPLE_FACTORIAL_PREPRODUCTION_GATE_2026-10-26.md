@@ -30,3 +30,8 @@ The checked treatment ordering is control; D; H; C; H+D; C+D; C+H; C+H+D. A dete
 6. Source code and scientific results stay on the research branch. No paid compute, VPS changes, journal submission, PR #1054 merge or live-site change.
 
 **Current outcome:** original one-sample pilot counts exist but strict unique mapping was refuted by C22; no publication-grade 24-sample matrix, differential expression, FDR or biological novelty conclusion exists.
+
+
+## 26 October 2026 source-mapping resolution (C24 supersedes the mapping gap only)
+
+The earlier 23-unverified-GSM-to-SRR statement above describes the **earlier C23 checkpoint**, not the current state. A subsequent independent run **40260457907** successfully parsed all 24 deposited GEO family SOFT sample BioSample relationships and joined them to the original ENA manifest without accession-order inference. The verified 24-row crosswalk is preserved in `GSE294406_24_GSM_BIOSAMPLE_SRR_VERIFIED_CROSSWALK_2026-10-26.tsv`, with SHA256 source records and the downloadable run artifact documented in `C24_OFFICIAL_GEO_24_BIOSAMPLE_SRR_SOURCE_CROSSWALK_COMPLETED_2026-10-26.md`. **24/24 sample identities are now resolved.** This does not verify the actual bytes of all 48 FASTQ files or remove the unresolved reference, multimapping, 24-count matrix, DESeq2, FDR, or biological-novelty gates.
