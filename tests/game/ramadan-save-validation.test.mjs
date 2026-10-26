@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {validateCampaignSave, resumeCampaignScreen} from '../../games/ramadan-war/save-validation.mjs';
+import {validateCampaignSave, resumeCampaignScreen, readHeroChoice} from '../../games/ramadan-war/save-validation.mjs';
 
 const fresh = () => ({
   hero: 0, mission: 0, lives: 100, x: 2.5, y: 7.5, angle: 0,
@@ -50,7 +50,7 @@ test('preserves valid objective progress while refusing corrupted mission comple
 test('reversible release manifest ships and checks every new imported save module', () => {
   const deploy = readFileSync(new URL('../../games/ramadan-war/deploy.py', import.meta.url), 'utf8');
   const client = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
-  assert.match(client, /import \{validateCampaignSave(?:,\s*resumeCampaignScreen)?\} from '\.\/save-validation\.mjs'/);
+  assert.match(client, /import \{validateCampaignSave, resumeCampaignScreen, readHeroChoice\} from '\.\/save-validation\.mjs'/);
   assert.match(deploy, /ASSETS=\[[^\n]*'save-validation\.mjs'/);
   assert.match(deploy, /b'\.\/save-validation\.mjs' in new\['game\.js'\]/);
 });
@@ -103,4 +103,13 @@ test('rejects corrupt saved clocks and drone impact coordinates without breaking
   }
   for (const patch of [{strikeX: NaN}, {strikeY: Infinity}, {strikeX: '5'}])
     assert.equal(validateCampaignSave({...fresh(), ...patch}), false);
+});
+
+test('corrupt or manipulated hero preference never breaks initial character rendering', () => {
+  for (const [input,expected] of [['0',0],['5',5],['29',29],[8,8],[' 2 ',2]])
+    assert.equal(readHeroChoice(input),expected,String(input));
+  for (const input of [null,undefined,'','30','-1','NaN','Infinity','1e1','3.5',{},[],1/0])
+    assert.equal(readHeroChoice(input),0,String(input));
+  const game = readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
+  assert.match(game,/let hero=readHeroChoice\(localStorage\.rwHero\),world=null/);
 });
