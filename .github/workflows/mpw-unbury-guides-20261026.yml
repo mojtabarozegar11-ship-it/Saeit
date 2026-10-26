@@ -1,4 +1,4 @@
-name: MojPlayWin unbury ten original guides and standalone site directory
+name: MojPlayWin expose 50 legacy guides and unbury ten original homepage guides
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: mpw-only-unbury-legacy-guides
+  group: mpw-only-expose-sixty-guides
   cancel-in-progress: false
 
 jobs:
@@ -37,15 +37,17 @@ jobs:
           assert doc.count('data-mpw-fold="site-directory"')==1
           assert doc.count('id="home-guide-')==10
           assert 'data-mpw-unburied-guides="20261026"' not in doc
-          for path in ('/mpw-editorial/field-guides/',
+          for path in ('/mpw-editorial/field-guides/original-ten/',
                        '/mpw-editorial/site-directory/',
-                       '/mpw-editorial/field-guides/vertical-slice/'):
+                       '/mpw-editorial/field-guides/original-ten/vertical-slice/'):
               try:
                   urllib.request.urlopen('https://mojplaywin.com'+path,timeout=25)
                   raise AssertionError('Standalone path already exists '+path)
               except urllib.error.HTTPError as e:
                   assert e.code==404,(path,e.code)
-          print('TEN_HIDDEN_ARTICLES_AND_DIRECTORY_BASELINE_VERIFIED')
+          with urllib.request.urlopen('https://mojplaywin.com/mpw-editorial/field-guides/20261023/index.html',timeout=35) as r:
+              assert r.status==200
+          print('TEN_HIDDEN_AND_FIFTY_PRESERVED_GUIDES_BASELINE_VERIFIED')
           PY
       - name: Establish pinned SSH relay through VPS to cPanel
         env:
@@ -91,12 +93,12 @@ jobs:
           timeout 35s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
-      - name: Publish twelve independent pages and visible homepage entries atomically
+      - name: Publish twelve independent pages, expose 50 existing guides and visible home links
         id: install
         run: |
           set -euo pipefail
           timeout 150s ssh -T -F "$RUNNER_TEMP/mpw-learning-ssh/config" saeit-cpanel "python3 - publish '$GITHUB_RUN_ID'" < scripts/mpw_unbury_guides_20261026.py
-      - name: Validate ten complete guides, directory, homepage and sitemap
+      - name: Validate ten new guides, 50 existing guides, directory, homepage and sitemap
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -105,8 +107,8 @@ jobs:
           slugs=('vertical-slice','accessible-play','ai-workflow-risk','ai-privacy',
               'demo-proof','product-readiness','web-discovery','support-library',
               'vancouver-pilot-plan','agro-scenario-dashboard')
-          pages=['/mpw-editorial/field-guides/','/mpw-editorial/site-directory/']+[
-                 '/mpw-editorial/field-guides/'+v+'/' for v in slugs]
+          pages=['/mpw-editorial/field-guides/original-ten/','/mpw-editorial/site-directory/']+[
+                 '/mpw-editorial/field-guides/original-ten/'+v+'/' for v in slugs]
           def get(path):
               req=urllib.request.Request(origin+path,headers={'Cache-Control':'no-cache'})
               with urllib.request.urlopen(req,timeout=35) as r:
@@ -138,13 +140,29 @@ jobs:
           assert home.count('id="home-guide-')==10
           assert 'data-mpw-fold="mpw-home-ten-guides"' not in home
           assert 'data-mpw-fold="site-directory"' not in home
-          assert home.count('href="/mpw-editorial/field-guides/')>=11
+          assert home.count('href="/mpw-editorial/field-guides/original-ten/')>=11
           assert 'href="/mpw-editorial/site-directory/"' in home
+          assert 'href="/mpw-editorial/field-guides/20261023/index.html"' in home
           with urllib.request.urlopen(origin+'/sitemap.xml',timeout=35) as r:
               xml=ET.fromstring(r.read(2500000))
           locs=[a.text for a in xml.findall('.//{http://www.sitemaps.org/schemas/sitemap/0.9}loc')]
-          assert len(locs)>=81 and len(locs)==len(set(locs)),len(locs)
+          assert len(locs)>=133 and len(locs)==len(set(locs)),len(locs)
           for path in pages:assert locs.count(origin+path)==1,path
+          import json,re
+          old='/mpw-editorial/field-guides/20261023/'
+          with urllib.request.urlopen(origin+old+'release.json',timeout=35) as r:
+              release=json.load(r)
+          keys=sorted(k for k in release['files_sha256'] if re.fullmatch(r'guides/[a-z0-9-]+/index\.html',k))
+          assert len(keys)==release['guide_count']==50
+          legacy=[old+'index.html',old+'prism-relay/index.html']+[old+k for k in keys]
+          for path in legacy:
+              assert locs.count(origin+path)==1,path
+          oldshort=[old]+[old+k[:-len('index.html')] for k in keys]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+              olddocs=list(pool.map(get,oldshort))
+          assert len(olddocs)==51
+          print('FIFTY_EXISTING_GUIDES_AND_ORIGINAL_HUB_SHORT_URLS_PASS')
+
           for path in ('/services/','/store/','/mpw-editorial/revenue/'):
               assert '<main' in get(path),path
           print('TEN_INDEPENDENT_GUIDES_AND_DIRECTORY_ALL_LIVE_AND_INDEXABLE')
