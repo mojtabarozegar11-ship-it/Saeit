@@ -189,3 +189,15 @@ jobs:
               if 'intent' in model.__name__.lower() and 'payment' in model.__name__.lower():
                   print('MPW_INTENT_MODEL='+json.dumps({'model':model._meta.label,'fields':[f.name for f in model._meta.fields]}))
           PY
+      - name: Inspect one tap invoice QR, buttons and mobile CSS source
+        run: |
+          timeout 65s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,inspect
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          import services.mpw_trx_commercial_web as w
+          fn=w.render_one_tap_invoice
+          src=inspect.getsource(fn)
+          print('MPW_INVOICE_RENDERER_FILE='+json.dumps({'module':fn.__module__,'file':inspect.getfile(fn),'length':len(src)}))
+          print('MPW_INVOICE_RENDERER_SOURCE='+json.dumps(src[:28500]))
+          PY
