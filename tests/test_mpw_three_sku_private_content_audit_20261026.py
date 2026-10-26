@@ -43,13 +43,28 @@ class PrivateContentAuditTests(unittest.TestCase):
                 writer.write(stream)
             result=audit.audit_pdf(path,expected_page_count=1,require_illustrations=True)
             self.assertTrue(result["checks"]["page_count_matches_declared_product_spec"])
-            self.assertFalse(result["checks"]["embedded_illustrations_present"])
+            self.assertFalse(result["checks"]["graphic_drawing_signals_present"])
             self.assertNotIn("bibliography_or_reference_markers_found", result["checks"])
             self.assertNotIn("structure_markers_found", result["checks"])
             self.assertIn("read_aloud_rhythm", result["needs_specialist_review"])
             self.assertNotIn("citation_validity", result["needs_specialist_review"])
             self.assertIn("image_scan_errors",result)
             self.assertNotIn("extracted_text",result)
+
+    def test_picturebook_accepts_vector_drawing_signals(self):
+        from PyPDF2.generic import DecodedStreamObject, NameObject
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/"vector_picturebook.pdf"
+            writer=PdfWriter()
+            page=writer.add_blank_page(width=612,height=792)
+            stream=DecodedStreamObject()
+            stream.set_data(b"0 0 m 10 10 l S " * 10)
+            page[NameObject("/Contents")]=writer._add_object(stream)
+            with path.open("wb") as output:
+                writer.write(output)
+            result=audit.audit_pdf(path,expected_page_count=1,require_illustrations=True)
+            self.assertTrue(result["checks"]["graphic_drawing_signals_present"])
+            self.assertEqual(result["pages_with_vector_drawing"],1)
 
     def test_pdf_audit_reports_vector_graphics_metrics_without_content(self):
         with tempfile.TemporaryDirectory() as tmp:
