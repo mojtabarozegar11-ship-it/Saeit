@@ -86,12 +86,15 @@ def verified_progress(root, ident):
         ticket_bytes = read_private(ticket_path, 1000000)
         ticket = json.loads(ticket_bytes)
         if (ticket.get("schema") != TICKET_SCHEMA or ticket.get("product_id") != ident
-                or ticket.get("source_file_sha256") != digest
-                or ticket.get("legal_dossier_status") != "owner_confirmed_complete"
+                or ticket.get("source_file_sha256") != digest):
+            raise RuntimeError("PRIVATE_QA_BASE_TICKET_IDENTITY_INVALID")
+        if (ticket.get("legal_dossier_status") != "owner_confirmed_complete"
                 or ticket.get("legal_execution_status") != "active"
                 or ticket.get("legal_dossier_reopened") is not False):
-            raise RuntimeError("PRIVATE_QA_BASE_TICKET_IDENTITY_INVALID")
+            continue
         ticket_hashes.append(sha(ticket_bytes))
+    if not ticket_hashes:
+        raise RuntimeError("PRIVATE_QA_CURRENT_ACTIVE_LEGAL_TICKET_MISSING")
     ticket_hashes.sort()
     audit_dir = ticket_dir / "content-audits"
     audit_files = sorted(audit_dir.glob("*.json"))
