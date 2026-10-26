@@ -81,7 +81,7 @@ def audit(root: Path, *, chapters: int = 30, chapter_target: int = 5300,
         ).strip()
         # Markdown emphasis/code delimiters do not change substantive prose.
         # Keep underscores within identifiers; strip only standalone markup.
-        prose = re.sub(r"(?<!\\w)[*_`]+|[*_`]+(?!\\w)", "", prose)
+        prose = re.sub(r"(?<!\w)[*_`]+|[*_`]+(?!\w)", "", prose)
         if len(prose) >= 500:
             prose_hash = hashlib.sha256(prose.encode("utf-8")).hexdigest()
             first_prose = seen_prose_hashes.setdefault(prose_hash, path.name)
