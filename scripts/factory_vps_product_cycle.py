@@ -34,7 +34,8 @@ SCRIPTS = Path(__file__).resolve().parent
 
 
 
-PRODUCT_SLOT_CAPACITY = 5
+PRODUCT_SLOT_CAPACITY = 1
+PRODUCT_LINE_ID = 41
 SLOT_SCHEMA = "saeit.factory.product-slots.v1"
 CLEARANCE_SCHEMA = "saeit.factory.signed-quality-clearance.v1"
 PRODUCT_SLUG = re.compile(r"^[a-z][a-z0-9_]{1,65}$")
@@ -111,8 +112,41 @@ def _verified_quality_exit(root, recipe):
             "clearance_sha256": hashlib.sha256(clearance_path.read_bytes()).hexdigest()}
 
 
+def _cleanup_completed_product_extras(root, recipe):
+    """Free per-product working files only after exact signed 1000 clearance.
+
+    Keep the certified deliverable, its manufacturing manifest, exact-version
+    clearance and exit receipt. Remove disposable source/rework candidates.
+    """
+    import shutil
+    root = Path(root)
+    if root.is_symlink():
+        raise RuntimeError("PRODUCT_CLEANUP_ROOT_UNSAFE")
+    targets = [
+        root / "generated-product-recipes" / recipe,
+        root / "quality-excellence" / "evolved-source-technical-products" / recipe,
+        root / "quality-excellence" / "rework" / recipe,
+        root / "qa-rework" / recipe,
+        root / "research-dossiers" / recipe,
+        root / "engineering-workorders" / recipe,
+    ]
+    revisions = root / "generated-source-revisions"
+    if revisions.exists():
+        if revisions.is_symlink() or not revisions.is_dir():
+            raise RuntimeError("PRODUCT_CLEANUP_REVISION_ROOT_UNSAFE")
+        targets.extend(p for p in revisions.iterdir()
+                       if p.name.startswith(recipe + "-") and p.is_dir())
+    for target in targets:
+        if target.is_symlink():
+            raise RuntimeError("PRODUCT_CLEANUP_SYMLINK_BLOCKED")
+        if target.is_dir():
+            shutil.rmtree(target)
+        elif target.exists():
+            raise RuntimeError("PRODUCT_CLEANUP_NON_DIRECTORY_BLOCKED")
+
+
 def _maintain_product_slots(root, recipe_names):
-    """Maintain five active work slots; only signed 1000/1000 outputs exit."""
+    """Line 41 runs one product at a time; exact signed 1000 exits the line."""
     state_path = (Path(root) / "quality-excellence" / "product-flow"
                   / "active-slots" / "current.json")
     if state_path.is_symlink():
@@ -121,33 +155,49 @@ def _maintain_product_slots(root, recipe_names):
     if state is None and state_path.exists():
         raise RuntimeError("PRODUCT_SLOT_STATE_INVALID")
     if state is None:
-        state = {"schema": SLOT_SCHEMA, "active": [], "exited": {},
-                 "last_admitted_recipe": ""}
+        state = {"schema": SLOT_SCHEMA, "active": [], "waiting": [],
+                 "exited": {}, "last_admitted_recipe": ""}
     if state.get("schema") != SLOT_SCHEMA or not isinstance(state.get("active"), list):
         raise RuntimeError("PRODUCT_SLOT_STATE_SCHEMA_INVALID")
     active = []
-    known_active = set()
+    seen = set()
     for item in state["active"]:
         if (not isinstance(item, dict) or not isinstance(item.get("recipe"), str)
                 or not PRODUCT_SLUG.fullmatch(item["recipe"])):
             raise RuntimeError("PRODUCT_SLOT_ENTRY_INVALID")
-        if item["recipe"] not in known_active:
+        if item["recipe"] not in seen:
             active.append(item)
-            known_active.add(item["recipe"])
-    if len(active) > PRODUCT_SLOT_CAPACITY:
-        raise RuntimeError("PRODUCT_SLOT_CAPACITY_EXCEEDED")
+            seen.add(item["recipe"])
+    if len(active) > 100:
+        raise RuntimeError("PRODUCT_SLOT_MIGRATION_LIMIT_EXCEEDED")
     exited = state.get("exited", {})
-    if not isinstance(exited, dict):
-        raise RuntimeError("PRODUCT_SLOT_EXIT_LEDGER_INVALID")
-    still_active = []
-    for item in active:
+    waiting = state.get("waiting", [])
+    if not isinstance(exited, dict) or not isinstance(waiting, list):
+        raise RuntimeError("PRODUCT_SLOT_QUEUE_INVALID")
+    queue = []
+    queued = set()
+    for recipe in waiting:
+        if not isinstance(recipe, str) or not PRODUCT_SLUG.fullmatch(recipe):
+            raise RuntimeError("PRODUCT_SLOT_WAITING_ENTRY_INVALID")
+        if recipe not in seen and recipe not in queued:
+            queue.append(recipe)
+            queued.add(recipe)
+    # Migrate the former five-slot roster into one active item plus a FIFO queue.
+    for item in active[1:]:
+        recipe = item["recipe"]
+        if recipe not in queued:
+            queue.append(recipe)
+            queued.add(recipe)
+    retained = []
+    for item in active[:1]:
         recipe = item["recipe"]
         clearance = _verified_quality_exit(root, recipe)
         if clearance:
             exited[recipe] = dict(clearance)
+            _cleanup_completed_product_extras(root, recipe)
         else:
-            still_active.append(item)
-    active = still_active
+            retained.append(item)
+    active = retained
     candidates = sorted({name for name in recipe_names
                          if isinstance(name, str) and PRODUCT_SLUG.fullmatch(name)})
     cursor = state.get("last_admitted_recipe", "")
@@ -155,11 +205,8 @@ def _maintain_product_slots(root, recipe_names):
         cursor = ""
     rotated = [name for name in candidates if name > cursor] + [
         name for name in candidates if name <= cursor]
-    active_names = {item["recipe"] for item in active}
     for recipe in rotated:
-        if len(active) >= PRODUCT_SLOT_CAPACITY:
-            break
-        if recipe in active_names:
+        if recipe in seen or recipe in queued or any(x["recipe"] == recipe for x in active):
             continue
         clearance = _verified_quality_exit(root, recipe)
         if clearance:
@@ -171,13 +218,17 @@ def _maintain_product_slots(root, recipe_names):
         prior_exit = exited.get(recipe)
         if isinstance(prior_exit, dict) and prior_exit.get("artifact_sha256") == current_artifact:
             continue
-        active.append({"recipe": recipe, "status": "active"})
-        active_names.add(recipe)
-        cursor = recipe
-    state = {"schema": SLOT_SCHEMA, "capacity": PRODUCT_SLOT_CAPACITY,
-             "active": active, "exited": exited,
+        queue.append(recipe)
+        queued.add(recipe)
+    if not active and queue:
+        next_recipe = queue.pop(0)
+        active = [{"recipe": next_recipe, "status": "active"}]
+        cursor = next_recipe
+    state = {"schema": SLOT_SCHEMA, "line_id": 41, "capacity": 1,
+             "active": active, "waiting": queue, "exited": exited,
              "last_admitted_recipe": cursor,
-             "exit_rule": "current signed clearance bound to exact passed artifact at 1000/1000"}
+             "exit_rule": "exact passed artifact with valid signed 1000/1000 clearance",
+             "cleanup_rule": "remove per-product intermediates only; retain certified artifact and proof"}
     _write_private_json(state_path, state)
     return [item["recipe"] for item in active]
 
@@ -454,8 +505,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "depends_on_orders": False,
             "api_usage": "none",
             "token_usage": 0,
-            "build_policy": "five_signed-1000-gated_product_slots",
+            "build_policy": "line_41_single_product_signed-1000-gated",
             "active_product_slot_capacity": PRODUCT_SLOT_CAPACITY,
+            "active_production_line_id": PRODUCT_LINE_ID,
             "active_product_slot_recipes": active_recipe_names,
             "registered_recipe_count": len(recipe_catalog),
             "recipe_designer": design_state,
