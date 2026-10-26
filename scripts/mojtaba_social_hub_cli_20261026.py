@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from social_hub.catalog import catalogue
 from social_hub.store import Store
-from social_hub.service import connection_status, run_one
+from social_hub.service import connection_status, run_one, run_due
 from social_hub.adapters import Blocked, Uncertain
 
 def main(argv=None):
@@ -46,6 +46,9 @@ def main(argv=None):
     do.add_argument("--post",required=True)
     do.add_argument("--execute",action="store_true")
     do.add_argument("--actor",default="private-worker")
+    due = sub.add_parser("dispatch-due")
+    due.add_argument("--execute",action="store_true")
+    due.add_argument("--limit",type=int,default=5)
     args = parser.parse_args(argv)
     if args.command == "catalog":
         print(json.dumps(catalogue(),ensure_ascii=False,indent=2))
@@ -78,6 +81,8 @@ def main(argv=None):
                 result = {"status":"cancelled","post_id":args.post}
             elif args.command == "dispatch-one":
                 result = run_one(db,args.post,execute=args.execute,actor=args.actor)
+            elif args.command == "dispatch-due":
+                result = run_due(db,limit=args.limit,execute=args.execute)
             else: raise Blocked("Unsupported operation")
         finally:
             db.close()
