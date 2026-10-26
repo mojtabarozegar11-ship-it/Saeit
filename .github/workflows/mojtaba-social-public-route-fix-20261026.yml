@@ -101,7 +101,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          stage="/home/zomorod2/.mpw-social-public-route-$GITHUB_RUN_ID"
+          stage="/home/zomorod2/.mpw-social-public-route-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           timeout 40s ssh -T -F "$SOCIAL_SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
           timeout 60s scp -q -F "$SOCIAL_SSH_CONFIG" scripts/mojtaba_social_hub_public_route_fix_20261026.py "saeit-host:$stage/mojtaba_social_hub_public_route_fix_20261026.py"
           timeout 60s scp -q -F "$SOCIAL_SSH_CONFIG" scripts/mojtaba_social_hub_install_personal_20261026.py "saeit-host:$stage/mojtaba_social_hub_install_personal_20261026.py"
