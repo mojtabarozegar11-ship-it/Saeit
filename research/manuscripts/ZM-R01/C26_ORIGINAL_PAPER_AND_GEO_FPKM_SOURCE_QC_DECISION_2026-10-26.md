@@ -1,0 +1,21 @@
+# ZM-R01 C26 — original-paper and GEO FPKM source-QC scientific decision (26 October 2026)
+
+**Scientific status:** original source identity/QC improved; **NO publication-grade integer count matrix**, no DESeq2, no FDR, no validated new biological mechanism. This is a source-audit record, not a separate manuscript.
+
+## Independent reproducible primary-source outputs
+
+- Public GEO series: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE294406 .
+- Original deposited FPKM workbook downloaded and SHA256 checked in GitHub Actions [run 40270616630](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40270616630), **completed/success**, [source/QC artifact 12628146783](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40270616630/artifacts/12628146783). SHA256 of source workbook: `751c80defdc09b180f6174d6bbb3c7234570e8f15725f4c47cfcc9565b2f7e7b`.
+- Reproducible audit script `analysis/audit_fpkm_matrix.py` requires **105,200 unique gene rows × 24 samples** and nonnegative finite FPKM values. The actual run reported minimum within-treatment Pearson correlation on log2(FPKM+1) of **0.9718118588070164**; this is a *within-group descriptive correlation*, not proof of correct sample labels or independence.
+- Separate filtered descriptive PCA/nearest-neighbor audit `analysis/exploratory_filtered_fpkm_qc.py` requires **45,359 genes** with FPKM ≥1 in ≥3 samples; in this run **24/24** sample nearest neighbors had the same workbook-defined treatment label. This is a **label-consistency screen**, not an independent verification of GEO GSM ↔ FASTQ identity.
+- Full original Milec et al. Methods context was extracted and retained as a small source-context artifact [12628825652](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40270616630/artifacts/12628825652), without redistributing the full paper. Original primary PDF: https://repository.rothamsted.ac.uk/id/eprint/33667/2/1-s2.0-S2667064X25003823-main.pdf ; DOI 10.1016/j.stress.2025.101115 . Original methods name Trim Galore v0.4.1, HISAT2, **RefSeq v2.0 (EnsemblPlants)**, DESeq2 and FPKM expression summaries. Exact assembly accession, versioned annotation checksum and fragment counting policy remain unidentified.
+- A descriptive log2(FPKM+1) three-factor contrast was computed in the same run, explicitly labeled **hypothesis generation only**; it is not a DESeq2/edgeR result, no valid differential-expression significance or FDR follows from it.
+
+## Source-identity and statistical interpretation gates
+
+1. The GEO spreadsheet is **normalized FPKM**, and must never be rounded or multiplied to fabricate gene-level integer fragment counts. The one-sample original Bowtie2 transcriptome pilot is **not** source-equivalent to the published HISAT2 genome method and was previously shown to include ambiguous/multimapped fragments (C22).
+2. A high within-group correlation and same-treatment nearest neighbors can coexist with technical artifacts, treatment-confounded batches, mislabeled GSM mappings, or shared technical replicates. Retain the verified independent 24-row GEO/BioSample/ENA crosswalk (C24) as the identity authority, and cross-check workbook column labels against GEO descriptions without using workbook order as an identity proof.
+3. RefSeq v2.0 is independently announced by IWGSC at https://www.wheatgenome.org/resources/sequences/iwgsc-refseq-v2.0-now-available-at-urgi . The currently accessible Ensembl `refseqv2` record says **v2.1**, not automatically the same as the original study. Require exact FASTA/GTF accession, checksum and gene-ID namespace before a final alignment.
+4. Before any 24-library run, use paired-end fragment counting with a declared multimapper/ambiguous-gene policy and validated strandedness; verify actual mate MD5 bytes, resource headroom and a consistent 24-sample integer matrix. Only then is `DESeq2 ~ D*H*C` with prespecified contrasts and adjusted FDR permissible.
+
+**Outcome of this checkpoint:** the real original FPKM source and original full-paper method have been independently inspected; source workbook dimensions and descriptive QC pass. The research is **still blocked at reference/annotation reconciliation and publication-grade raw counting**. No new DEG, novel mechanism, article acceptance or site publication is claimed.
