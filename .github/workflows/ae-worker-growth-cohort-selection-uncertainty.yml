@@ -1,0 +1,52 @@
+name: AE-2026-001 original worker-growth cohort selection and uncertainty
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - analysis/ae_worker_growth_cohort_selection_uncertainty.py
+      - .github/workflows/ae-worker-growth-cohort-selection-uncertainty.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  source-locked-empirical-sensitivity:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Retrieve prior actual 73-country original-source comparison
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ae_selection"
+          gh run download 40301314822 --repo "$GITHUB_REPOSITORY" \
+            --name AE-2026-001-source-locked-ILO-WDI-worker-growth-consistency \
+            --dir "$RUNNER_TEMP/ae_selection"
+          test -s "$RUNNER_TEMP/ae_selection/AE_ILOSTAT_WDI_WORKER_GROWTH_CONSISTENCY.json"
+      - name: Execute country-level missingness and source-stability bootstrap
+        run: |
+          set -euo pipefail
+          python analysis/ae_worker_growth_cohort_selection_uncertainty.py \
+            --growth-json "$RUNNER_TEMP/ae_selection/AE_ILOSTAT_WDI_WORKER_GROWTH_CONSISTENCY.json" \
+            --wdi-panel research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv \
+            --out "$RUNNER_TEMP/ae_selection/AE_WORKER_GROWTH_COHORT_SELECTION_UNCERTAINTY.json"
+          python - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path(os.environ["RUNNER_TEMP"])/"ae_selection"/"AE_WORKER_GROWTH_COHORT_SELECTION_UNCERTAINTY.json"
+          x=json.loads(p.read_text())
+          assert x["worker_growth_comparison_countries"]==73
+          assert x["source_stable_n"]==60 and x["source_changed_n"]==13
+          assert x["causal_historical_vintage_inference"] is False
+          assert x["publication_gate"]=="MAJOR_REVISION_NO_SUBMISSION"
+          print("PASS: original-country-level cohort and uncertainty audit, no causal inference")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AE-2026-001-original-country-selection-and-bootstrap-uncertainty
+          path: ${{ runner.temp }}/ae_selection/AE_WORKER_GROWTH_COHORT_SELECTION_UNCERTAINTY.json
+          retention-days: 14
+          if-no-files-found: error
