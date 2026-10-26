@@ -12,6 +12,14 @@
 
 **Future topics:** [46 English research questions](../future/FUTURE_ENGLISH_RESEARCH_QUESTION_REGISTRY_2026-10-26.md) are only a gated candidate queue; zero newly completed studies.
 
+## Additional source-locked research updates — 26 October 2026 (staging only)
+
+**AE C19 added-economy mean attribution:** The manuscript now includes [Methods 2.12 and Results 3.22](../manuscripts/AE-2026-001/AE-2026-001_FIRST_FULL_EMPIRICAL_MANUSCRIPT_DRAFT_2026-10-25.md) based on the [16-economy C19 source-locked audit](../manuscripts/AE-2026-001/AE-2026-001_C19_EXACT_16_ADDED_ECONOMY_MEAN_ATTRIBUTION_2026-10-26.md). The two largest added-economy baseline-relative terms, CAF and DJI, sum to 97.73% of the *net arithmetic mean gap*; this is **not a causal effect or evidence of publication novelty**. [C20 internal AI review](../manuscripts/AE-2026-001/AE-2026-001_C20_INTERNAL_AI_CRITICAL_REVIEW_C19_INFLUENCE_AND_SUBMISSION_GATES_2026-10-26.md) retains MAJOR REVISION / NO SUBMISSION. A GitHub Actions workflow for C19 has been committed, but **no successful run/artifact or updated source-aligned Word is yet independently verified**. Earlier Word references are historical, **not current after C19**.
+
+**ZM C29 original NCBI experimental metadata:** [BioProject PRJNA1249400 provenance audit](../manuscripts/ZM-R01/C29_NCBI_BIOPROJECT_ORIGINAL_FACTORIAL_TREATMENT_AND_SRA_VOLUME_PROVENANCE_2026-10-26.md) confirms the eight arms from drought, temperature up to 31 °C and elevated CO₂ 700 ppm, third/fourth main-tiller leaves at GS61, and 24 SRA experiments. Labels do not independently establish biological-unit independence. SRA archive volume and ENA compressed FASTQ byte totals are different representations, not proven corrupt files. No count matrix, DESeq2 or FDR exists.
+
+**No article has advanced to author-approved, journal-submitted, reviewed, accepted or published status.** This is a public GitHub staging-only update, not a live website edit.
+
 ## Identity and publication controls
 
 No independently verified degree, institutional affiliation, ORCID, residence, indexed journal article or citation metric is asserted. AI is an internal research assistant/reviewer, **not a human author or human peer reviewer**. **0 submissions, 0 Manuscript IDs, 0 acceptances, 0 publication-stage transfers.** Human author contribution, identity, funding/COI/AI disclosures, rights, journal/APC and cover letter require explicit owner approval before submission.
