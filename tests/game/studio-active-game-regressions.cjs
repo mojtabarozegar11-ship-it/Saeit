@@ -31,6 +31,9 @@ jungleContext.jungleCleanup();
 
 const taniya=fs.readFileSync('templates/taniya_studio/index.html','utf8');
 const cake=taniya.slice(taniya.indexOf('function mountCake(){'),taniya.indexOf('    function mountPet()'));
+assert.match(taniya, /<link rel="canonical" href="https:\/\/mojplaywin\.com\/taniya\/">/);
+assert.match(taniya, /<meta property="og:url" content="https:\/\/mojplaywin\.com\/taniya\/">/);
+assert.match(taniya, /<meta name="twitter:card" content="summary">/);
 assert(cake.startsWith('function mountCake('),'Cake Maker source missing');
 const preview={textContent:'',style:{}},icing={value:'#ff79b8'},tops=['🍓','🌼','🍬'].map(top=>({dataset:{top},onclick:null}));
 const candle={onclick:null},download={onclick:null},reset={onclick:null},cakeBody={
