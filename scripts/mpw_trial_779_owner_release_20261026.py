@@ -23,6 +23,7 @@ FILES = {
     "view": APP / "core/brand_views.py",
     "settings": APP / "config/settings.py",
     "store": APP / "core/templates/mojplaywin/store.html",
+    "detail": APP / "core/templates/brands/mojplaywin/product.html",
 }
 TRIAL_MARKER = "mpw-native-trx-micro-trial-20261020-v1"
 OLD_VIEW = "    if product.pk in canary_ids or not _eligible(product): raise Http404"
@@ -36,12 +37,23 @@ NEW_VIEW = (
     "        and product.metadata.get('rights_cleared') is True\n"
     "        and product.metadata.get('checkout_enabled') is True\n"
     "    )\n"
-    "    if (product.pk in canary_ids and not owner_approved_micro_trial) or not _eligible(product): raise Http404"
+    "    if (product.pk in canary_ids and not owner_approved_micro_trial) or not _eligible(product): raise Http404\n"
+    "    if owner_approved_micro_trial:\n"
+    "        product.metadata = dict(product.metadata)\n"
+    "        product.metadata['summary'] = 'Original one-page educational PDF on the secure TRX checkout process.'\n"
+    "        product.metadata['seo_description'] = 'Three-cent MojPlayWin TRX digital PDF trial: invoice, safe payment and private download.'"
 )
 OLD_SETTINGS = "MPW_TRX_PUBLIC_PRODUCT_IDS = (72, 225, 879)"
 NEW_SETTINGS = "MPW_TRX_PUBLIC_PRODUCT_IDS = (72, 225, 879, 779)"
 ANCHOR = "<!-- MPW_TWO_BOOKS_PUBLIC_CATALOG_V1_START -->"
 CARD_MARKER = 'id="mpw-trx-micro-trial-779-20261026"'
+DETAIL_ANCHOR = "{% elif product.pk == 72 or product.pk == 225 %}"
+DETAIL_MARKER = 'id="mpw-trial-779-buy"'
+DETAIL_BLOCK = """{% elif product.pk == 779 %}
+<p>This one-page original PDF costs USD 0.03. Sign in to request the native TRX invoice. Network fees are extra, and private delivery follows verified payment.</p>
+<a class="primary" id="mpw-trial-779-buy" href="/commerce/book/779/">Buy USD 0.03 PDF with TRX</a>
+<a href="/accounts/register/?next=/commerce/book/779/">New customer? Create an account</a>
+"""
 CARD = """<section class="mpw-store-section" id="mpw-trx-micro-trial-779-20261026" aria-labelledby="mpw-trial-779-title" style="border:1px solid rgba(212,175,55,.65);border-radius:18px;padding:clamp(18px,3vw,34px);background:linear-gradient(125deg,#172025,#121512);margin-top:28px">
 <span class="mpw-store-label">LOW-COST DIGITAL PDF · NATIVE TRX</span>
 <h2 id="mpw-trial-779-title">MojPlayWin Secure TRX Purchase — One-Page Digital PDF Trial</h2>
@@ -114,10 +126,13 @@ def proposed(current):
     view = current["view"].decode("utf-8")
     settings = current["settings"].decode("utf-8")
     store = current["store"].decode("utf-8")
-    if all((NEW_VIEW in view, NEW_SETTINGS in settings, CARD_MARKER in store)):
+    detail = current["detail"].decode("utf-8")
+    if all((NEW_VIEW in view, NEW_SETTINGS in settings, CARD_MARKER in store,
+            DETAIL_MARKER in detail)):
         return current, "already_installed"
     if (view.count(OLD_VIEW) != 1 or settings.count(OLD_SETTINGS) != 1
             or store.count(ANCHOR) != 1 or CARD_MARKER in store
+            or detail.count(DETAIL_ANCHOR) != 1 or DETAIL_MARKER in detail
             or NEW_VIEW in view or NEW_SETTINGS in settings):
         raise RuntimeError("LIVE_SOURCE_DRIFT_OR_PARTIAL_RELEASE")
     for key in ('id="catalog"', 'id="mpw-original-books"', '/store/product/72/',
@@ -128,13 +143,13 @@ def proposed(current):
         "view": view.replace(OLD_VIEW, NEW_VIEW, 1).encode(),
         "settings": settings.replace(OLD_SETTINGS, NEW_SETTINGS, 1).encode(),
         "store": store.replace(ANCHOR, CARD + ANCHOR, 1).encode(),
+        "detail": detail.replace(DETAIL_ANCHOR, DETAIL_BLOCK + DETAIL_ANCHOR, 1).encode(),
     }
     for name in ("view", "settings"):
         compile(output[name], str(FILES[name]), "exec")
-    if output["store"].count(CARD_MARKER.encode()) != 1:
-        raise RuntimeError("TRIAL_STORE_CARD_PATCH_INVALID")
+    if output["store"].count(CARD_MARKER.encode()) != 1 or output["detail"].count(DETAIL_MARKER.encode()) != 1:
+        raise RuntimeError("TRIAL_CARD_OR_CHECKOUT_CTA_PATCH_INVALID")
     return output, "new_install"
-
 
 def atomic_write(path, data):
     mode = stat.S_IMODE(path.stat().st_mode)
@@ -245,6 +260,9 @@ def verify():
         checks[str(pk)] = status
         if status != 200:
             raise RuntimeError("STORE_PRODUCT_ROUTE_BAD:" + str(pk))
+    detail_response = client.get("/store/product/779/", secure=True, HTTP_HOST="mojplaywin.com")
+    if DETAIL_MARKER.encode() not in detail_response.content or b'/commerce/book/779/' not in detail_response.content:
+        raise RuntimeError("TRIAL_779_PURCHASE_BUTTON_MISSING")
     store = client.get("/store/", secure=True, HTTP_HOST="mojplaywin.com")
     if store.status_code != 200 or b'/store/product/779/' not in store.content:
         raise RuntimeError("TRIAL_MISSING_FROM_STORE_LISTING")
