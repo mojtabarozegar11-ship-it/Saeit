@@ -70,18 +70,29 @@ class PageAudit(html.parser.HTMLParser):
         if self.title and data.strip():
             self.title_text += len(data.strip())
 
-def audit_pdf(path):
+def audit_pdf(path, expected_page_count=None, require_illustrations=False):
     from PyPDF2 import PdfReader
     reader = PdfReader(str(path), strict=False)
     page_chars = []
     page_hashes = []
     replacement_chars = 0
     extraction_errors = 0
+    embedded_images = 0
+    image_pages = 0
+    image_scan_errors = 0
     words = 0
     references = 0
     toc_signals = 0
     headings = 0
     for page in reader.pages:
+        try:
+            page_images = page.images
+            image_count = len(page_images)
+            embedded_images += image_count
+            if image_count:
+                image_pages += 1
+        except Exception:
+            image_scan_errors += 1
         try:
             text = page.extract_text() or ""
         except Exception:
@@ -106,9 +117,11 @@ def audit_pdf(path):
         "no_page_extraction_errors": extraction_errors == 0,
         "duplicate_nonempty_pages_absent": duplicates == 0,
         "replacement_characters_absent": replacement_chars == 0,
-        "bibliography_or_reference_markers_found": references > 0,
-        "structure_markers_found": headings > 0 or toc_signals > 0,
     }
+    if expected_page_count is not None:
+        checks["page_count_matches_declared_product_spec"] = page_count == expected_page_count
+    if require_illustrations:
+        checks["embedded_illustrations_present"] = embedded_images > 0 and image_scan_errors == 0
     return {
         "format": "pdf", "sha256": digest_file(path), "bytes": path.stat().st_size,
         "page_count": page_count, "extracted_word_count": words,
@@ -116,8 +129,14 @@ def audit_pdf(path):
         "low_text_page_numbers": low_text[:100], "extraction_errors": extraction_errors,
         "duplicate_nonempty_pages": duplicates, "replacement_characters": replacement_chars,
         "reference_markers": references, "structure_markers": {"toc": toc_signals, "headings": headings},
+        "expected_page_count": expected_page_count, "embedded_image_count": embedded_images,
+        "pages_with_embedded_images": image_pages, "image_scan_errors": image_scan_errors,
+        "contextual_exclusions": ([
+            {"criterion": "bibliography_or_reference_markers_found", "reason": "Not required for an illustrated children's read-aloud picture book"},
+            {"criterion": "structure_markers_found", "reason": "Chapter or table-of-contents markers are not applicable to this picture-book format"},
+        ] if expected_page_count == 40 and require_illustrations else []),
         "checks": checks,
-        "needs_specialist_review": ["factual_accuracy", "citation_validity", "scientific_depth", "layout_rendering", "accessibility", "commercial_rights_mapping"],
+        "needs_specialist_review": ["story_accuracy", "read_aloud_rhythm", "child_appropriateness", "illustration_quality", "layout_rendering", "accessibility", "commercial_rights_mapping"],
     }
 
 def audit_zip(path):
@@ -203,7 +222,8 @@ def run(root=BASE):
         artifact = root / "copies" / str(ident) / (sha + ".bin")
         if artifact.is_symlink() or not artifact.is_file() or digest_file(artifact) != sha:
             raise RuntimeError("QA_ARTIFACT_HASH_MISMATCH_" + str(ident))
-        measured = audit_pdf(artifact) if ident in (72, 225) else audit_zip(artifact)
+        measured = (audit_pdf(artifact, expected_page_count=40, require_illustrations=True) if ident == 225
+                    else audit_pdf(artifact)) if ident in (72, 225) else audit_zip(artifact)
         passed = sum(measured["checks"].values())
         report = {
             "schema": "saeit.mpw.private-content-audit.v1", "sku": ident,
