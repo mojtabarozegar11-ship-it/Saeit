@@ -63,9 +63,12 @@ class PublicDirectoryTests(unittest.TestCase):
                destination="verified_researcher",
                public_url="https://www.researchgate.net/profile/Verified-Researcher",actor="owner")
         self.assertEqual(official_links(self.store)["total"],0)
-        self.store.verify_account(aid,proof="owner-evidence-platform-123456",actor="owner") if False else None
-        # The account verification flow currently disallows API-less platforms.
-        self.assertEqual(official_links(self.store)["total"],0)
+        self.store.verify_account(aid,proof="owner-evidence-platform-123456",actor="owner")
+        directory=official_links(self.store)
+        self.assertEqual(directory["total"],1)
+        self.assertEqual(directory["brands"][0]["links"][0]["platform"],"ResearchGate")
+        with self.assertRaises(Blocked):
+            self.store.draft(account_id=aid,content={"text":"Unauthorized automation"},actor="staff")
 
 if __name__ == "__main__":
     unittest.main()
