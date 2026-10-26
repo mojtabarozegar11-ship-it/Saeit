@@ -1,0 +1,158 @@
+name: MojPlayWin one-shot production inquiry session path repair
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-inquiry-cookie-session-repair-20261026.yml"
+      - "scripts/mpw_inquiry_cookie_session_repair_20261026.py"
+      - "mpw_revenue_20261020/earn/inquiry.php"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-inquiry-cookie-session-repair-20261026.yml"
+      - "scripts/mpw_inquiry_cookie_session_repair_20261026.py"
+      - "mpw_revenue_20261020/earn/inquiry.php"
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: mpw-owned-inquiry-cookie-repair
+  cancel-in-progress: false
+jobs:
+  source-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify PHP syntax and prevent path rewrite regression
+        run: |
+          set -euo pipefail
+          php -l mpw_revenue_20261020/earn/inquiry.php
+          python3 -m py_compile scripts/mpw_inquiry_cookie_session_repair_20261026.py
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('mpw_revenue_20261020/earn/inquiry.php').read_text()
+          assert "'path'=>'/mpw-editorial/revenue' . '/'" in s
+          assert "'path'=>'/mpw-editorial/revenue/'" not in s
+          assert 'openssl_encrypt' in s and 'store_inquiry' in s
+          print('MPW_FORM_COOKIE_PATH_SOURCE=PASS')
+          PY
+  repair:
+    needs: [source-quality]
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Preserve evidence of core customer routes
+        run: |
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error,os
+          paths=('/','/store/','/contact/','/farnaz/','/saman/','/taniya/')
+          statuses={}
+          for path in paths:
+            try:
+              with urllib.request.urlopen('https://mojplaywin.com'+path,timeout=18) as r:statuses[path]=r.status
+            except urllib.error.HTTPError as e:statuses[path]=e.code
+          assert all(statuses[p]==200 for p in ('/','/store/','/contact/'))
+          with open(os.environ['RUNNER_TEMP']+'/mpw-cookie-protected.json','w') as f:json.dump(statuses,f)
+          print('MPW_CUSTOMER_ROUTES_PRE_REPAIR=VERIFIED')
+          PY
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-revenue-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Apply exact owned PHP form replacement with private backup
+        id: publish
+        run: |
+          set -euo pipefail
+          py_source="$(base64 -w0 scripts/mpw_inquiry_cookie_session_repair_20261026.py)"
+          timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$py_source\"))' publish '$GITHUB_RUN_ID'" < mpw_revenue_20261020/earn/inquiry.php
+      - name: Verify persistent session, valid CSRF, invalid-input rejection, and unchanged customer routes
+        run: |
+          python3 - <<'PY'
+          import html,http.cookiejar,json,os,re,urllib.request,urllib.parse,urllib.error
+          uri='https://mojplaywin.com/mpw-editorial/revenue/inquiry.php?service=website-doctor'
+          endpoint='https://mojplaywin.com/mpw-editorial/revenue/inquiry.php'
+          jar=http.cookiejar.CookieJar()
+          o=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+          tokens=[]
+          for i in range(2):
+            with o.open(urllib.request.Request(uri,headers={'Cache-Control':'no-cache'}),timeout=22) as r:
+              page=r.read(90000).decode('utf-8','replace')
+              assert r.status==200 and '<form class="inquiry-form"' in page
+            m=re.search(r'name="csrf" value="([^"]+)"',page)
+            assert m,'Missing CSRF field'
+            tokens.append(m.group(1))
+          assert tokens[0]==tokens[1],'Session token not preserved'
+          assert len(jar)==1 and next(iter(jar)).path=='/mpw-editorial/revenue/','Session cookie path regression'
+          data=urllib.parse.urlencode({
+            'csrf':tokens[-1],'service':'website-doctor','name':'X',
+            'email':'qa@example.com',
+            'details':'Production validation of form input checks without storing an inquiry.',
+            'consent':'yes'
+          }).encode('utf-8')
+          with o.open(urllib.request.Request(endpoint,data=data,headers={'Content-Type':'application/x-www-form-urlencoded'},method='POST'),timeout=22) as r:
+            post=r.read(90000).decode('utf-8','replace')
+            assert r.status==200
+          assert 'Enter your name.' in post and 'The form expired.' not in post
+          assert 'Inquiry received' not in post
+          print('MPW_SESSION_PERSISTENCE_AND_CSRF_VALIDATION=PASS')
+          old=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-cookie-protected.json'))
+          for path,status in old.items():
+            try:
+              with urllib.request.urlopen('https://mojplaywin.com'+path,timeout=20) as r:new=r.status
+            except urllib.error.HTTPError as e:new=e.code
+            assert new==status,(path,status,new)
+          print('MPW_CUSTOMER_SITES_UNCHANGED=PASS')
+          PY
+      - name: Restore previous managed form if live verification fails
+        if: failure() && steps.publish.outcome == 'success'
+        run: |
+          set -euo pipefail
+          py_source="$(base64 -w0 scripts/mpw_inquiry_cookie_session_repair_20261026.py)"
+          timeout 85s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$py_source\"))' rollback '$GITHUB_RUN_ID'"
+      - name: Remove temporary pinned relay keys
+        if: always()
+        run: |
+          rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
