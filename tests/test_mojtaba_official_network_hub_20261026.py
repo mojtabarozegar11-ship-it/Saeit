@@ -41,6 +41,7 @@ class NetworkHubTests(unittest.TestCase):
         self.assertIn("https://zomorodmelal.ir/", new)
         self.assertIn("https://mojplaywin.com/store/", new)
         self.assertIn("/mojtaba.roozegar/contact/", new)
+        self.assertIn("/mojtaba.roozegar/social-command/official/", new)
         self.assertNotIn('href="https://instagram.com/"', new)
         self.assertEqual(old.count("{%"), new.count("{%"))
         self.assertEqual(new, module.patch(new, module.registry(REGISTRY)))
