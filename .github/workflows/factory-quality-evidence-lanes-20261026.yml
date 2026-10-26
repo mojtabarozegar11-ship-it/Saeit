@@ -36,8 +36,8 @@ jobs:
           from pathlib import Path
           import subprocess,textwrap
           yml=Path(".github/workflows/factory-quality-evidence-lanes-20261026.yml").read_text()
-          segment=yml.split("      - name: Refresh real evidence workorders without sales or site contact",1)[1]
-          segment=segment.split("      - name: Remove temporary runner credential",1)[0]
+          segment=yml.split("\n      - name: Refresh real evidence workorders without sales or site contact",1)[1]
+          segment=segment.split("\n      - name: Remove temporary runner credential",1)[0]
           script=textwrap.dedent(segment.split("        run: |",1)[1]).lstrip("\n")
           subprocess.run(["bash","-n"],input=script,text=True,check=True)
           remote=script.split("<<'REMOTE'\n",1)[1].split("\nREMOTE",1)[0]+"\n"
