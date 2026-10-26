@@ -1,0 +1,81 @@
+name: VPS factory BUILD50 unchanged-ticket IO optimization
+on:
+  pull_request:
+    paths:
+      - "scripts/factory_build_50.py"
+      - "tests/test_factory_build_50.py"
+      - "deploy/install_factory_build50_idempotent_io_20261026.sh"
+      - ".github/workflows/vps-factory-build50-io-20261026.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_build_50.py"
+      - "tests/test_factory_build_50.py"
+      - "deploy/install_factory_build50_idempotent_io_20261026.sh"
+      - ".github/workflows/vps-factory-build50-io-20261026.yml"
+permissions:
+  contents: read
+concurrency:
+  group: saeit-factory-build50-io
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate BUILD50 real 48-stage work protocol and warehouse integrity
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check 'openpyxl==3.1.5'
+          python3 -B -m unittest tests.test_factory_build_50 tests.test_factory_production_warehouse -v
+          bash -n deploy/install_factory_build50_idempotent_io_20261026.sh
+  deploy:
+    needs: validate
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-factory-warehouse-io-20261026]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Replace only BUILD50 audit script in two factory runtime directories
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-build50-io"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh_vps() {
+            ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          stage="/home/githubops/factory-runtime/operations/.factory-build50-io-$GITHUB_SHA"
+          ssh_vps "umask 077; test ! -e '$stage'; install -d -m 700 '$stage'"
+          tar -cf - scripts/factory_build_50.py deploy/install_factory_build50_idempotent_io_20261026.sh | ssh_vps "umask 077; tar -xf - -C '$stage'"
+          for file in scripts/factory_build_50.py deploy/install_factory_build50_idempotent_io_20261026.sh; do
+            digest="$(sha256sum "$file" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$stage/$file' | awk '{print \$1}')\" = '$digest'"
+          done
+          ssh_vps "bash -n '$stage/deploy/install_factory_build50_idempotent_io_20261026.sh' && bash '$stage/deploy/install_factory_build50_idempotent_io_20261026.sh' '$stage' '$GITHUB_SHA'"
+          ssh_vps 'python3 -u -' <<'PY'
+          import hashlib
+          from pathlib import Path
+          ops=Path.home()/"factory-runtime/operations"
+          paths=(ops/"autonomous-product-runtime/scripts/factory_build_50.py",
+                 ops/"production-warehouse/factory_build_50.py")
+          assert all(p.is_file() and not p.is_symlink() for p in paths)
+          sums=[hashlib.sha256(p.read_bytes()).hexdigest() for p in paths]
+          assert len(set(sums))==1
+          assert all(b"def save_if_changed(path,value):" in p.read_bytes() for p in paths)
+          print("FACTORY_BUILD50_IO_BOTH_RUNTIME_COPIES=PASS",flush=True)
+          print("FACTORY_BUILD50_IO_SITE_PUBLICATION=UNCHANGED",flush=True)
+          PY

@@ -55,6 +55,26 @@ def save(path,value):
         if os.path.exists(tmp):os.unlink(tmp)
 
 
+
+def save_if_changed(path,value):
+    """Avoid repeated fsync for an unchanged, hash-bound planning receipt.
+
+    Never skip the underlying source/ZIP integrity audit; this only suppresses
+    rewriting the same verified JSON. Unsafe existing files still fail closed.
+    """
+    path=Path(path)
+    if path.is_symlink() or path.parent.is_symlink():
+        raise ValueError('BUILD50_UNSAFE_STATE')
+    raw=json.dumps(value,sort_keys=True,ensure_ascii=False,indent=2)
+    if path.exists():
+        if not path.is_file() or path.stat().st_size>2_000_000:
+            raise ValueError('BUILD50_UNSAFE_STATE')
+        if path.read_text(encoding='utf8')==raw:
+            return False
+    save(path,value)
+    return True
+
+
 def validate_plan(plan):
     if plan.get('schema')!=SCHEMA or not PRODUCT.fullmatch(str(plan.get('product_id',''))):
         raise ValueError('BUILD50_PLAN_ID_INVALID')
@@ -311,7 +331,7 @@ def audit(root):
                     'source_snapshot_sha256':snapshot,'technical_artifact_integrity':integrity,
                     'original_artifact_retained':True,'quality_approved':False,
                     'commercial_release':False,'lifetime_attempt_limit':None}
-            save(folder/'planning-request.json',ticket)
+            save_if_changed(folder/'planning-request.json',ticket)
         rows.append({'product_id':product,'build_50_verified':accepted,
                      'source_receipt_sha256':source_hash,'source_sha256':receipt.get('source_sha256'),
                      'artifact_sha256':receipt.get('artifact_sha256'),
@@ -320,7 +340,7 @@ def audit(root):
             'requiring_replanning':sum(not x['build_50_verified'] for x in rows),
             'verified_50_stage_builds':sum(x['build_50_verified'] for x in rows),
             'quality_multiplier_measured':None,'commercial_release':False}
-    save(root/'build-50-status.json',result);return result
+    save_if_changed(root/'build-50-status.json',result);return result
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--factory-private',required=True)
