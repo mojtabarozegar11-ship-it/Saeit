@@ -99,3 +99,32 @@ jobs:
                   print('MPW_UI_FUNC='+json.dumps({'module':modname,'name':name,'source':src[:4500]}))
             except Exception as e: print('MPW_UI_ERROR='+json.dumps({'module':modname,'err':type(e).__name__}))
           PY
+      - name: Read-only product readiness gates and payment provider inventory
+        run: |
+          timeout 130s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,inspect
+          from collections import Counter
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.conf import settings
+          from core.models import Product,Order,PaymentIntent
+          import services.mpw_trx_commercial_web as w
+          import services.mpw_trx_public_pages as pages
+          for func in ('_select_order','_ensure_live','_decode','_verify_purchase','_check_product','_select_price','commercial_buyer_status'):
+            obj=getattr(w,func,None)
+            if obj is None:continue
+            try:src=inspect.getsource(obj)
+            except Exception as e:src=str(e)
+            print('MPW_CHECKOUT_FN='+json.dumps({'name':func,'source':src[:15000]}))
+          for func in ('product_checkout','purchases'):
+            obj=getattr(pages,func,None)
+            if obj is None:continue
+            print('MPW_PUBLIC_FN='+json.dumps({'name':func,'source':inspect.getsource(obj)[:16000]}))
+          print('MPW_PUBLIC_ALLOWLIST='+json.dumps({'value':str(getattr(settings,'MPW_TRX_PUBLIC_PRODUCT_IDS','UNSPECIFIED'))[:250]}))
+          print('MPW_PRODUCT_BREAKDOWN='+json.dumps({'active':Product.objects.filter(active=True).count(),'inactive':Product.objects.filter(active=False).count(),'factory_managed_active':Product.objects.filter(active=True,factory_managed=True).count(),'types':list(Product.objects.values('product_type','active').order_by().annotate(c=django.db.models.Count('id')).values('product_type','active','c')[:30])}))
+          for prod in Product.objects.filter(pk__in=(72,225,779,879)).order_by('pk'):
+            print('MPW_KEY_PRODUCT='+json.dumps({'id':prod.pk,'active':prod.active,'type':prod.product_type,'factory_managed':prod.factory_managed,'price':str(prod.price),'currency':prod.currency,'metadata_keys':list((prod.metadata or {}).keys())[:50]}))
+          print('MPW_PAYMENT_INTENT_AGG='+json.dumps(list(PaymentIntent.objects.values('provider','status','currency').order_by().annotate(count=django.db.models.Count('id')).values('provider','status','currency','count')[:45])))
+          for name in ('MPW_TRX_PUBLIC_PRODUCT_IDS','MPW_TRX_LIVE','MPW_TRX_ENABLED','MPW_TRX_GATEWAY_ENABLED','MPW_TRX_CATALOG_ENABLED'):
+            print('MPW_PAYMENT_FLAG='+json.dumps({'name':name,'value':str(getattr(settings,name,'UNSPECIFIED'))[:100]}))
+          PY
