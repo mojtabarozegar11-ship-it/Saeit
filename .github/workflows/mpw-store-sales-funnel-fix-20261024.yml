@@ -27,7 +27,7 @@ jobs:
           actual_sha="$(python3 -c 'import hashlib,pathlib; data=pathlib.Path("core/templates/mojplaywin/store.html").read_bytes().replace(bytes([13,10]),bytes([10])); print(hashlib.sha256(data).hexdigest())')"
           echo "MPW_STORE_SOURCE_SHA=$actual_sha"
           echo "MPW_STORE_MARKERS=$(grep -cE 'mpw-store-ten-guides|Explore this collection' core/templates/mojplaywin/store.html || true)"
-          test "$actual_sha" = "b44cc7df0442cf1139febd220ab2e338b7381ffb51fe1b1ab6bb9352f567d9d0"
+          test "$actual_sha" = "704d7d338caa51d89addaf14934886005b359a9016b37ebb443c396c4f315cc0"
           test "$(grep -cE 'mpw-store-ten-guides|Explore this collection' core/templates/mojplaywin/store.html || true)" = "0"
           echo MPW_STORE_SOURCE_VALID=true
       - name: Capture baseline storefront and protected-route health
@@ -133,7 +133,6 @@ jobs:
           remote="/home/zomorod2/.mpw-store-sales-stage-$GITHUB_RUN_ID"
           timeout 30s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$remote' && install -d -m 700 '$remote'"
           timeout 50s scp -q -F "$d/config" core/templates/mojplaywin/store.html "saeit-cpanel:$remote/store.html"
-          timeout 50s scp -q -F "$d/config" core/templates/mojplaywin/site_base.html "saeit-cpanel:$remote/site_base.html"
           timeout 50s scp -q -F "$d/config" scripts/mpw_store_sales_funnel_fix_20261024.py "saeit-cpanel:$remote/install.py"
       - name: Atomically install and test the isolated store template
         id: install
@@ -162,7 +161,7 @@ jobs:
           if store.is_symlink() or not store.is_file():
               raise SystemExit('STORE_TEMPLATE_NOT_REGULAR')
           digest=hashlib.sha256(store.read_bytes().replace(bytes([13,10]),bytes([10]))).hexdigest()
-          if digest!='b44cc7df0442cf1139febd220ab2e338b7381ffb51fe1b1ab6bb9352f567d9d0':
+          if digest!='704d7d338caa51d89addaf14934886005b359a9016b37ebb443c396c4f315cc0':
               raise SystemExit('STORE_TEMPLATE_HASH_NOT_PINNED')
           if site_base.is_symlink() or not site_base.is_file():
               raise SystemExit('MOJPLAYWIN_PAGE_SHELL_NOT_REGULAR')
@@ -205,19 +204,25 @@ jobs:
                 body=response.read(400000).decode("utf8","replace")
             except urllib.error.HTTPError as exc:
               code=exc.code;body=exc.read(100000).decode("utf8","replace")
-            okay=(code==200 and "Shop available books" in body
-              and 'id="mpw-original-books"' in body
-              and "/store/product/72/" in body and "/store/product/225/" in body
-              and "View book & purchase" in body and "mpw-store-book" in body
+            expected=("Digital products with a clear purpose.", "The Science and Practice of Chess Improvement",
+              "Taniya and the Little Baker Worms", "Atelier Interior — Client-Ready Website Kit",
+              "US $7.50", "US $4.00", "US $6.80", "84-day training plan",
+              "English illustrated PDF · 40 pages", "five original SVG illustrations",
+              "/store/product/72/", "/store/product/225/", "/store/product/879/",
+              "Open the live demo", "order-specific TRX invoice", "Sign-in is required")
+            stale=("Farm Enterprise Economics Toolkit", "Applied AI Learning Path",
+              "Original Browser Games", "Research & Digital Project Services",
+              "Explore our books, learning, games & tools", "INITIAL COLLECTION",
+              "FEATURED PICKS", "mpw-store-ten-guides", "mpw-original-books")
+            okay=(code==200 and all(token in body for token in expected)
+              and not any(token in body for token in stale)
+              and body.count('class="mpw-product ') == 3
+              and "Never send funds" in body
               and "<html lang=\"en\" dir=\"ltr\">" in body
-              and "site/heroes/store.webp" not in body
-              and "mpw-store-ten-guides" not in body
-              and "INITIAL COLLECTION" not in body
-              and "FEATURED PICKS" in body and "account required" in body
-              and "Sign in or create an account" in body and "no account required" not in body)
+              and "mpw-shop-catalog" in body)
             print("MPW_STORE_PUBLIC_ATTEMPT="+json.dumps({"attempt":attempt,"status":code,"fixed":okay,
-          "has_store_hero":"mpw-store-book" in body,"has_new_catalog":"Shop available books" in body,
-          "has_old_guides":"mpw-store-ten-guides" in body,"has_old_hero":"site/heroes/store.webp" in body,
+          "product_cards":body.count('class="mpw-product '),"has_three_products":all(x in body for x in ('/store/product/72/','/store/product/225/','/store/product/879/')),
+          "has_legacy_catalog":any(x in body for x in stale),
           "english_shell":"<html lang=\\\"en\\\" dir=\\\"ltr\\\">" in body}))
             if okay:break
             time.sleep(5)
@@ -258,7 +263,7 @@ jobs:
           if store.is_symlink() or not store.is_file():
               raise SystemExit('STORE_TEMPLATE_NOT_REGULAR')
           digest=hashlib.sha256(store.read_bytes().replace(bytes([13,10]),bytes([10]))).hexdigest()
-          if digest!='af09b7b17f8b3ee991893a1d9303c3df74353cd3dd179d26b95a4aea3b8cad7a':
+          if digest!='b44cc7df0442cf1139febd220ab2e338b7381ffb51fe1b1ab6bb9352f567d9d0':
               raise SystemExit('ROLLBACK_HASH_NOT_VERIFIED')
           if ht.is_symlink() or not ht.is_file():
               raise SystemExit('HTACCESS_NOT_REGULAR')

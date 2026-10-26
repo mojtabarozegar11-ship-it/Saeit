@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
-"""Install the reviewed MojPlayWin store presentation and its missing page shell."""
+"""Atomically install the corrected three-product MojPlayWin store template."""
 from pathlib import Path
-import hashlib, json, os, re, stat, sys, tempfile
+import hashlib
+import json
+import os
+import re
+import stat
+import sys
+import tempfile
 
 APP = Path("/home/zomorod2/Saeit-staging")
 STORE = APP / "core/templates/mojplaywin/store.html"
@@ -10,11 +16,10 @@ SITE = Path("/home/zomorod2/mojplaywin.com")
 HTACCESS = SITE / ".htaccess"
 WSGI = SITE / "passenger_wsgi.py"
 HOME = Path("/home/zomorod2")
-OLD_SHA = "af09b7b17f8b3ee991893a1d9303c3df74353cd3dd179d26b95a4aea3b8cad7a"
-NEW_SHA = "b44cc7df0442cf1139febd220ab2e338b7381ffb51fe1b1ab6bb9352f567d9d0"
+OLD_SHA = "b44cc7df0442cf1139febd220ab2e338b7381ffb51fe1b1ab6bb9352f567d9d0"
+NEW_SHA = "704d7d338caa51d89addaf14934886005b359a9016b37ebb443c396c4f315cc0"
 SITE_BASE_SHA = "70d1ff928d0660c7ba612d80796027dfc66a371918d8b779544c9d80a6a15771"
-ROUTE_OLD = b"RewriteCond %{REQUEST_URI} ^/(store|games|ai|contact|support|privacy|terms|cookies|products|blockchain|commerce|crypto-payments|global-business|research-lab|canada-vision|agro-industry|agriculture|education|weather)/$"
-ROUTE_NEW = ROUTE_OLD.replace(b"/(store|", b"/(")
+ROUTE_NEW = b"RewriteCond %{REQUEST_URI} ^/(games|ai|contact|support|privacy|terms|cookies|products|blockchain|commerce|crypto-payments|global-business|research-lab|canada-vision|agro-industry|agriculture|education|weather)/$"
 
 
 def sha(data):
@@ -41,7 +46,7 @@ def backup(run):
 
 def atomic_write(path, data, mode):
     if path.is_symlink() or not path.is_file():
-        raise RuntimeError("Target path is no longer a regular file")
+        raise RuntimeError("Store template is no longer a regular file")
     fd, name = tempfile.mkstemp(prefix=".mpw-store-sales-", dir=path.parent)
     try:
         os.fchmod(fd, mode)
@@ -63,24 +68,21 @@ def atomic_write(path, data, mode):
 def guard():
     if APP.is_symlink() or not APP.is_dir() or SITE.is_symlink() or not SITE.is_dir():
         raise RuntimeError("Verified MojPlayWin app/site root changed")
-    for path in (STORE, HTACCESS, WSGI):
+    for path in (STORE, SITE_BASE, HTACCESS, WSGI):
         if path.is_symlink() or not path.is_file():
-            raise RuntimeError("Store or routing file path is unsafe")
-    if STORE.parent.is_symlink():
-        raise RuntimeError("Store template parent is unsafe")
+            raise RuntimeError("Store runtime or routing file path is unsafe")
+    if STORE.parent.is_symlink() or SITE_BASE.parent.is_symlink():
+        raise RuntimeError("Template directory is unsafe")
     if "APP='/home/zomorod2/Saeit-staging'" not in WSGI.read_text("utf8", "replace"):
         raise RuntimeError("Passenger app no longer targets the verified MojPlayWin root")
     if not (APP / "config/settings.py").is_file():
         raise RuntimeError("Django app root does not match verified app")
     if sha(STORE.read_bytes()) != OLD_SHA:
         raise RuntimeError("Live store template changed since audit; refusing overwrite")
-    if SITE_BASE.is_symlink():
-        raise RuntimeError("MojPlayWin page shell path is unsafe")
-    if SITE_BASE.exists() and (not SITE_BASE.is_file() or sha(SITE_BASE.read_bytes()) != SITE_BASE_SHA):
-        raise RuntimeError("Existing MojPlayWin page shell does not match the pinned version")
-    ht=HTACCESS.read_bytes()
-    if ht.count(ROUTE_NEW) != 1 or ROUTE_OLD in ht:
-        raise RuntimeError("Previously repaired store route is no longer verified")
+    if sha(SITE_BASE.read_bytes()) != SITE_BASE_SHA:
+        raise RuntimeError("MojPlayWin page shell changed since audit; refusing overwrite")
+    if HTACCESS.read_bytes().count(ROUTE_NEW) != 1:
+        raise RuntimeError("MojPlayWin Apache route no longer matches audited route")
 
 
 def reset_template_loaders(engine):
@@ -107,23 +109,36 @@ def check_django_pages(expect_fixed):
     if page.status_code != 200:
         raise RuntimeError("Store Django route is not HTTP 200")
     body = page.content.decode("utf8", "replace")
+    products = ("/store/product/72/", "/store/product/225/", "/store/product/879/")
     if expect_fixed:
-        required = ("Shop available books", "/store/product/72/", "/store/product/225/",
-                    "View book & purchase", "order-specific TRX invoice", "FEATURED PICKS", "account required")
+        required = (
+            "Digital products with a clear purpose.", "id=\"mpw-products\"",
+            "The Science and Practice of Chess Improvement", "Taniya and the Little Baker Worms",
+            "Atelier Interior — Client-Ready Website Kit", "US $7.50", "US $4.00", "US $6.80",
+            "84-day training plan", "English illustrated PDF · 40 pages", "five original SVG illustrations",
+            "order-specific TRX invoice", "Open the live demo", *products,
+        )
         if any(token not in body for token in required):
-            raise RuntimeError("Updated store render is missing purchase content")
-        if "Sign in or create an account" not in body or "no account required" in body:
-            raise RuntimeError("Store purchase instructions do not match account checkout")
-        if "mpw-store-ten-guides" in body or "INITIAL COLLECTION" in body:
-            raise RuntimeError("Low-conversion guide block or misleading heading remains")
-    elif ("Shop available books" not in body or "View book & purchase" not in body
+            raise RuntimeError("Corrected three-product store content is missing")
+        for token in ("Farm Enterprise Economics Toolkit", "Applied AI Learning Path",
+                      "Original Browser Games", "Research & Digital Project Services",
+                      "Explore our books, learning, games & tools", "mpw-original-books",
+                      "INITIAL COLLECTION", "FEATURED PICKS", "mpw-store-ten-guides"):
+            if token in body:
+                raise RuntimeError("Misleading, duplicate, or legacy store content remains: " + token)
+        if body.count('class="mpw-product ') != 3:
+            raise RuntimeError("Store must render exactly three purchasable product cards")
+        if "Sign-in is required" not in body or "Never send funds" not in body:
+            raise RuntimeError("Checkout and payment guidance is missing")
+    elif ("Shop available books" not in body or "FEATURED PICKS" not in body
           or "mpw-store-ten-guides" in body):
-        raise RuntimeError("Current deployed store baseline does not match audit")
-    for route in ("/store/product/72/", "/store/product/225/"):
+        raise RuntimeError("Current store baseline does not match the audited version")
+    for route in ("/store/product/72/", "/store/product/225/", "/store/product/879/"):
         response = client.get(route, secure=True, HTTP_HOST="mojplaywin.com")
         if response.status_code != 200:
             raise RuntimeError("Existing product detail route failed: " + route)
-    for route in ("/store/product/72/checkout/", "/store/product/225/checkout/"):
+    for route in ("/store/product/72/checkout/", "/store/product/225/checkout/",
+                  "/store/product/879/checkout/"):
         response = client.get(route, secure=True, HTTP_HOST="mojplaywin.com")
         if response.status_code != 302 or "login" not in response.get("Location", "").lower():
             raise RuntimeError("Checkout sign-in/return route changed: " + route)
@@ -147,104 +162,76 @@ def install(run):
     check_django_pages(expect_fixed=False)
     incoming_dir = stage(run)
     incoming = incoming_dir / "store.html"
-    incoming_base = incoming_dir / "site_base.html"
-    if (not incoming_dir.is_dir() or incoming_dir.is_symlink() or not incoming.is_file()
-        or incoming.is_symlink() or not incoming_base.is_file() or incoming_base.is_symlink()):
-        raise RuntimeError("Private stage is missing or unsafe")
+    if (not incoming_dir.is_dir() or incoming_dir.is_symlink()
+        or not incoming.is_file() or incoming.is_symlink()):
+        raise RuntimeError("Private store-template stage is missing or unsafe")
     new = incoming.read_bytes()
-    new_base = incoming_base.read_bytes()
-    if (sha(new) != NEW_SHA or sha(new_base) != SITE_BASE_SHA
-        or b"mpw-store-ten-guides" in new or b"Explore this collection" in new
-        or b"site/heroes/store.webp" in new):
-        raise RuntimeError("Staged templates failed pinned content checks")
+    if (sha(new) != NEW_SHA or b"mpw-store-ten-guides" in new
+        or b"Explore this collection" in new or b"INITIAL COLLECTION" in new):
+        raise RuntimeError("Staged store template failed its pinned content checks")
     old = STORE.read_bytes()
     old_ht = HTACCESS.read_bytes()
-    if old_ht.count(ROUTE_NEW) != 1 or ROUTE_OLD in old_ht:
-        raise RuntimeError("Previously repaired Apache store route is not intact")
     destination = backup(run)
     if destination.exists() or destination.is_symlink():
         raise RuntimeError("Backup collision; refusing overwrite")
     destination.mkdir(mode=0o700)
     save_private(destination / "store.original.html", old)
     save_private(destination / "htaccess.original", old_ht)
-    info = {"run":run,"store_path":str(STORE),"site_base_path":str(SITE_BASE),
-            "htaccess_path":str(HTACCESS),"old_sha":OLD_SHA,"new_sha":NEW_SHA,
-            "site_base_sha":SITE_BASE_SHA,"site_base_created":not SITE_BASE.exists(),"htaccess_sha":raw_sha(old_ht)}
+    info = {"run": run, "store_path": str(STORE), "old_sha": OLD_SHA,
+            "new_sha": NEW_SHA, "site_base_sha": SITE_BASE_SHA,
+            "htaccess_sha": raw_sha(old_ht), "scope": "MojPlayWin store template only"}
     with open(destination / "manifest.json", "x", encoding="utf8") as stream:
-        os.chmod(destination / "manifest.json", 0o600)
+        os.chmod(stream.fileno(), 0o600)
         json.dump(info, stream, sort_keys=True)
         stream.flush()
         os.fsync(stream.fileno())
-    store_mode = stat.S_IMODE(STORE.stat().st_mode)
-    base_created = not SITE_BASE.exists()
+    mode = stat.S_IMODE(STORE.stat().st_mode)
     try:
-        if base_created:
-            with open(SITE_BASE, "xb") as stream:
-                os.fchmod(stream.fileno(), 0o644)
-                stream.write(new_base)
-                stream.flush()
-                os.fsync(stream.fileno())
-            base_dir_fd = os.open(SITE_BASE.parent, os.O_RDONLY)
-            try:
-                os.fsync(base_dir_fd)
-            finally:
-                os.close(base_dir_fd)
-        elif SITE_BASE.is_symlink() or not SITE_BASE.is_file() or sha(SITE_BASE.read_bytes()) != SITE_BASE_SHA:
-            raise RuntimeError("Pinned MojPlayWin page shell changed during install")
-        atomic_write(STORE, new, store_mode)
+        if sha(STORE.read_bytes()) != OLD_SHA or raw_sha(HTACCESS.read_bytes()) != raw_sha(old_ht):
+            raise RuntimeError("Store or route changed during install")
+        atomic_write(STORE, new, mode)
         if sha(STORE.read_bytes()) != NEW_SHA or sha(SITE_BASE.read_bytes()) != SITE_BASE_SHA:
             raise RuntimeError("Post-write template hashes mismatch")
         if raw_sha(HTACCESS.read_bytes()) != raw_sha(old_ht):
-            raise RuntimeError("Apache route changed during isolated template install")
+            raise RuntimeError("Apache route changed during isolated store install")
         check_django_pages(expect_fixed=True)
     except BaseException:
         if STORE.is_file() and not STORE.is_symlink() and sha(STORE.read_bytes()) == NEW_SHA:
-            atomic_write(STORE, old, store_mode)
-        if base_created and SITE_BASE.is_file() and not SITE_BASE.is_symlink() and sha(SITE_BASE.read_bytes()) == SITE_BASE_SHA:
-            SITE_BASE.unlink()
+            atomic_write(STORE, old, mode)
         raise
-    print(json.dumps({"status":"MPW_STORE_SALES_FIX_INSTALLED",
-        "old_sha":OLD_SHA,"new_sha":NEW_SHA,
-        "site_base_sha":SITE_BASE_SHA,"htaccess_sha":raw_sha(old_ht),
-        "scope":"MojPlayWin store template and missing page shell only",
-        "apache_routes_changed":0,"order_payment_product_database_changes":0,
-        "backup":str(destination)}, sort_keys=True))
+    print(json.dumps({"status": "MPW_THREE_PRODUCT_STORE_INSTALLED", "old_sha": OLD_SHA,
+                      "new_sha": NEW_SHA, "site_base_sha": SITE_BASE_SHA,
+                      "htaccess_sha": raw_sha(old_ht), "scope": "MojPlayWin store template only",
+                      "database_payment_checkout_and_other_site_changes": 0,
+                      "backup": str(destination)}, sort_keys=True))
 
 
 def rollback(run):
-    run=run_id(run)
-    destination=backup(run)
+    run = run_id(run)
+    destination = backup(run)
     if not destination.is_dir() or destination.is_symlink():
         raise RuntimeError("Store-only backup missing or unsafe")
-    info=json.loads((destination/"manifest.json").read_text("utf8"))
-    old=(destination/"store.original.html").read_bytes()
-    old_ht=(destination/"htaccess.original").read_bytes()
-    if (info.get("run")!=run or info.get("old_sha")!=OLD_SHA or sha(old)!=OLD_SHA
-        or info.get("site_base_sha")!=SITE_BASE_SHA or raw_sha(old_ht)!=info.get("htaccess_sha")):
+    info = json.loads((destination / "manifest.json").read_text("utf8"))
+    old = (destination / "store.original.html").read_bytes()
+    old_ht = (destination / "htaccess.original").read_bytes()
+    if (info.get("run") != run or info.get("old_sha") != OLD_SHA or sha(old) != OLD_SHA
+        or info.get("new_sha") != NEW_SHA or info.get("site_base_sha") != SITE_BASE_SHA
+        or raw_sha(old_ht) != info.get("htaccess_sha")):
         raise RuntimeError("Store-only backup integrity failure")
-    current_store=sha(STORE.read_bytes())
-    if current_store==NEW_SHA:
-        atomic_write(STORE,old,stat.S_IMODE(STORE.stat().st_mode))
-    elif current_store!=OLD_SHA:
+    current = sha(STORE.read_bytes())
+    if current == NEW_SHA:
+        atomic_write(STORE, old, stat.S_IMODE(STORE.stat().st_mode))
+    elif current != OLD_SHA:
         raise RuntimeError("Concurrent store template edit detected; refusing rollback")
-    if raw_sha(HTACCESS.read_bytes())!=info.get("htaccess_sha"):
-        raise RuntimeError("Apache route changed during store-only deployment; refusing rollback")
-    if info.get("site_base_created") is True:
-        if SITE_BASE.is_file() and not SITE_BASE.is_symlink():
-            if sha(SITE_BASE.read_bytes())!=SITE_BASE_SHA:
-                raise RuntimeError("Concurrent MojPlayWin page shell edit detected; refusing rollback")
-            SITE_BASE.unlink()
-        elif SITE_BASE.is_symlink():
-            raise RuntimeError("Unsafe MojPlayWin page shell; refusing rollback")
-    elif SITE_BASE.is_symlink() or not SITE_BASE.is_file() or sha(SITE_BASE.read_bytes())!=SITE_BASE_SHA:
-        raise RuntimeError("Pre-existing MojPlayWin page shell changed; refusing rollback")
-    check_django_pages(expect_fixed=False)
-    print(json.dumps({"status":"MPW_STORE_SALES_FIX_ROLLED_BACK",
-        "restored_store_sha":OLD_SHA,"restored_htaccess_sha":raw_sha(old_ht),
-        "removed_site_base":info.get("site_base_created") is True,"scope":"MojPlayWin store template only; pre-existing page shell preserved"},sort_keys=True))
+    if (raw_sha(HTACCESS.read_bytes()) != info.get("htaccess_sha")
+        or sha(SITE_BASE.read_bytes()) != SITE_BASE_SHA):
+        raise RuntimeError("Protected routing or page shell changed; refusing rollback")
+    if sha(STORE.read_bytes()) != OLD_SHA:
+        raise RuntimeError("Store rollback hash mismatch")
+    print("MPW_STORE_TEMPLATE_ROLLBACK_VERIFIED")
 
 
 if __name__ == "__main__":
-    if len(sys.argv)!=3 or sys.argv[1] not in ("install","rollback"):
-        raise SystemExit("Usage: mpw_store_sales_funnel_fix_20261024.py install|rollback RUN_ID")
-    {"install":install,"rollback":rollback}[sys.argv[1]](sys.argv[2])
+    if len(sys.argv) != 3 or sys.argv[1] not in {"install", "rollback"}:
+        raise SystemExit("usage: script.py install|rollback RUN_ID")
+    globals()[sys.argv[1]](sys.argv[2])
