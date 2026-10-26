@@ -147,6 +147,41 @@ jobs:
             "read_only":True,
             "no_invoice_fields_printed":True},sort_keys=True))
           PY
+      - name: Verify actual closed-invoice HTTP response using synthetic expired quote
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 55s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import json,os,sys
+          from datetime import timedelta
+          from pathlib import Path
+          from types import SimpleNamespace
+          from unittest.mock import patch
+          root=Path("/home/zomorod2/Saeit-staging")
+          os.chdir(root);sys.path.insert(0,str(root))
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.test import RequestFactory
+          from django.utils import timezone
+          from services import mpw_trx_commercial_web as m
+          request=RequestFactory().get("/commerce/trx-easy/invoice/9/",secure=True,HTTP_HOST="mojplaywin.com")
+          request.user=SimpleNamespace(is_authenticated=True,is_active=True,pk=12345)
+          expired=SimpleNamespace(expires_at=timezone.now()-timedelta(minutes=40))
+          mock_intent=SimpleNamespace(status=m.WAITING)
+          result={"synthetic_quote":True,"read_only":True,"buyer_records_used":0}
+          try:
+            with patch.object(m,"_ensure_live"),patch.object(m,"_get_owner_invoice",return_value=mock_intent),patch.object(m,"_decode",return_value=expired):
+              response=m._show_invoice(request,9)
+            body=response.content.lower()
+            result.update({"status_code":response.status_code,
+              "has_expired_explanation":b"no longer payable" in body,
+              "has_purchases_recovery":b"/commerce/trx-easy/purchases/" in body,
+              "has_stale_pay_address":b"send exact" in body})
+          except Exception as exc:
+            result["raised_exception_type"]=type(exc).__name__
+          print("MPW_SYNTHETIC_CLOSED_INVOICE="+json.dumps(result,sort_keys=True))
+          PY
       - name: Diagnose live TRX invoice routing and expiry without reading buyer details
         shell: bash
         run: |
