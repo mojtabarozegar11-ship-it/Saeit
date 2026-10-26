@@ -234,6 +234,7 @@ class DurableQueueTests(unittest.TestCase):
 
     def test_reject_world_readable_database(self):
         with tempfile.TemporaryDirectory() as root:
+            os.chmod(root,0o755)
             open_db=Path(root)/"unsafe.sqlite"
             with self.assertRaises(Blocked):
                 Store(str(open_db))
