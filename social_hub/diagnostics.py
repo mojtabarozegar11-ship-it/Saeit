@@ -275,10 +275,10 @@ def record_one(store, account_id, *, env=None, transport=None,
     if recent and not force:
         try:
             checked=datetime.fromisoformat(recent["checked_at"].replace("Z","+00:00"))
-            if checked >= datetime.now(timezone.utc)-timedelta(minutes=10):
-                raise Blocked("Provider check already completed recently")
         except ValueError:
-            pass
+            raise Blocked("Previous diagnostic timestamp invalid; manual review required") from None
+        if checked >= datetime.now(timezone.utc)-timedelta(minutes=10):
+            raise Blocked("Provider check already completed recently")
     if allowed_instances is None:
         allowed_instances=[v.strip() for v in env.get(
             "MPW_SOCIAL_ALLOWED_MASTODON_ORIGINS","").split(",") if v.strip()]
