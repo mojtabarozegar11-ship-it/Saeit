@@ -33,7 +33,8 @@ def connection_status(store, env=None):
             # scope, recognizes account ownership, or permits publishing.
             "configuration_ready": bool(account["verified"]) and bool(env.get(token_alias, "")),
             "connected": False,  # Sending permissions require separate publish receipt.
-            "provider_verified": bool(check and fresh and check["state"]=="identity_verified"),
+            "provider_verified": bool(account["verified"] and env.get(token_alias) and
+                                      check and fresh and check["state"]=="identity_verified"),
             "provider_check_state": check["state"] if check and fresh else ("stale" if check else "not_checked"),
             "provider_checked_at": check["checked_at"] if check else "",
             "publishing_scope_verified": False,
