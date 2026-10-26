@@ -43,6 +43,14 @@ class StrictSerialInstallerSafetyTests(unittest.TestCase):
             with self.subTest(mutation=mutation):
                 self.assertLess(gate, self.source.index(mutation))
 
+    def test_full_index_guard_is_before_worker_and_cron_mutation(self):
+        guard = self.source.index("--verify-complete-intake")
+        for mutation in ('install -d -m 700 "$backup"',
+                         'install -m 600 "$source" "$temp"',
+                         'crontab "$temp_cron"'):
+            with self.subTest(mutation=mutation):
+                self.assertLess(guard, self.source.index(mutation))
+
     def test_installer_is_configuration_only_not_a_product_tick(self):
         self.assertIn('--operations "$ops" --dry-run', self.source)
         self.assertNotIn('/usr/bin/timeout 56s "$python"', self.source)
