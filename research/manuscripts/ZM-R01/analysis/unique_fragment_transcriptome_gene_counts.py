@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Conservative genuine integer fragment counts from Bowtie2 transcriptome SAM.
+"""Source-derived integer pilot counts from Bowtie2 transcriptome SAM (NOT unique mapping).
 
 This is a REFERENCE-VALIDATION pilot. No FPKM/TPM or count imputation.
 Input SAM should be primary alignments of proper read pairs to wheat cDNAs.
 Each primary first mate contributes at most one fragment at MAPQ >= 20.
+A MAPQ threshold does NOT establish a single concordant placement; original
+Bowtie2 pilot QC found extensive multimapping. This is NOT a validated unique
+fragment assignment or a publication-grade count pipeline.
 Transcript-to-gene map is extracted from the exact reference FASTA headers.
 The resulting conservative gene counts are not claimed identical to the
 original genome-HISAT2/featureCounts matrix or a completed 24-sample study.
@@ -73,7 +76,9 @@ def main():
         for gene,n in sorted(counts.items()):w.writerow([gene,n])
     with open(args.provenance_json,"w",encoding="utf-8") as f:
         json.dump({"GSM":args.sample_gsm,"reference_transcripts_mapped":len(mapping),
-                   "MAPQ_min":args.mapq,"counts_type":"integer conservative uniquely mapped proper paired fragments",
+                   "MAPQ_min":args.mapq,"counts_type":"observed integer gene assignments from MAPQ-filtered primary first mates; strict concordant uniqueness NOT established",
+                   "unique_concordant_mapping_verified":False,
+                   "publication_grade_gene_counts":False,
                    "counted_genes":len(counts),"metrics":dict(stats),
                    "not_equivalent_to_original_authors_raw_counts":True,
                    "not_a_complete_matrix_or_statistical_DESeq2_result":True},f,indent=2)
