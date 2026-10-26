@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import hashlib
+import zipfile
 
 spec=importlib.util.spec_from_file_location(
     "mpw_private_progress",
@@ -88,6 +89,43 @@ class PrivateProgressTests(unittest.TestCase):
                 progress.verified_progress(root,72)
             progress_dir=root/"quality1000-rework"/"72"/digest/"progress"
             self.assertFalse(progress_dir.exists())
+
+    def test_v2_candidate_requires_exact_zip_and_independent_twelve_view_receipt(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source_sha = hashlib.sha256(b"original-private").hexdigest()
+            blob = root / "private.zip"
+            with zipfile.ZipFile(blob, "w") as archive:
+                archive.writestr("index.html", "<html><title>Responsive</title></html>")
+            candidate_bytes = blob.read_bytes()
+            candidate_sha = hashlib.sha256(candidate_bytes).hexdigest()
+            folder = root / "quality1000-rework" / "879" / source_sha / "mobile-candidates"
+            folder.mkdir(parents=True)
+            (folder / (candidate_sha + ".zip")).write_bytes(candidate_bytes)
+            self.assertIsNone(progress.candidate_browser_evidence(root, source_sha, candidate_sha))
+            payload = {
+                "schema": progress.CANDIDATE_12VIEW_SCHEMA,
+                "source_sha256": source_sha,
+                "candidate_sha256": candidate_sha,
+                "quality1000_verified": False,
+                "commercial_release_allowed": False,
+                "live_product_modified": False,
+                "browser_and_accessibility_smoke_passed": True,
+                "checks": {"gate_%02d" % i: True for i in range(13)},
+                "viewports": [{"size":[320+i*10,720]} for i in range(12)],
+            }
+            raw = (json.dumps(payload,sort_keys=True,ensure_ascii=False,indent=2)+"\n").encode()
+            name = hashlib.sha256(raw).hexdigest() + ".json"
+            target = folder / "browser-audits" / candidate_sha / name
+            target.parent.mkdir(parents=True)
+            target.write_bytes(raw)
+            result = progress.candidate_browser_evidence(root, source_sha, candidate_sha)
+            self.assertEqual(result["real_browser_viewports_passed"],12)
+            self.assertEqual(result["candidate_sha256"],candidate_sha)
+            self.assertFalse(result["quality1000_verified"])
+            (folder / (candidate_sha + ".zip")).write_bytes(b"tampered")
+            with self.assertRaisesRegex(RuntimeError,"PRIVATE_QA_CANDIDATE_HASH_MISMATCH"):
+                progress.candidate_browser_evidence(root, source_sha, candidate_sha)
 
 if __name__=="__main__":
     unittest.main()

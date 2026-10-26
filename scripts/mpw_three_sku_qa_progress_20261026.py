@@ -17,6 +17,8 @@ HEX = re.compile(r"^[0-9a-f]{64}$")
 SCHEMA = "saeit.mpw.private-quality1000-progress.v1"
 TICKET_SCHEMA = "saeit.mpw.three-retail-artifact-qa1000-rework.v1"
 AUDIT_SCHEMA = "saeit.mpw.private-content-audit.v1"
+CANDIDATE_12VIEW_SCHEMA = "saeit.mpw.sku879.private-candidate-multiview-qa.v1"
+SKU879_PRIVATE_CANDIDATE_SHA = "b6f171affcafcafc777279e70649dbebda87a0f7fd45389252423ffb0d1066f3"
 
 
 def sha(raw):
@@ -60,6 +62,54 @@ def write_once(path, raw):
     finally:
         if os.path.exists(temp):
             os.unlink(temp)
+
+
+def candidate_browser_evidence(root, source_sha, candidate_sha=SKU879_PRIVATE_CANDIDATE_SHA):
+    if not HEX.fullmatch(candidate_sha):
+        raise RuntimeError("PRIVATE_QA_CANDIDATE_SHA_INVALID")
+    folder = root / "quality1000-rework" / "879" / source_sha / "mobile-candidates"
+    candidate = folder / (candidate_sha + ".zip")
+    if not candidate.exists():
+        return None
+    if candidate.is_symlink() or not candidate.is_file() or candidate.stat().st_size <= 0:
+        raise RuntimeError("PRIVATE_QA_CANDIDATE_FILE_UNSAFE")
+    digest = hashlib.sha256()
+    with candidate.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    if digest.hexdigest() != candidate_sha:
+        raise RuntimeError("PRIVATE_QA_CANDIDATE_HASH_MISMATCH")
+    audits = folder / "browser-audits" / candidate_sha
+    if audits.is_symlink() or not audits.is_dir():
+        return None
+    passing = []
+    for path in sorted(audits.glob("*.json")):
+        raw = read_private(path, 60000)
+        report = json.loads(raw)
+        checks = report.get("checks")
+        if (path.stem != sha(raw) or
+                report.get("schema") != CANDIDATE_12VIEW_SCHEMA or
+                report.get("source_sha256") != source_sha or
+                report.get("candidate_sha256") != candidate_sha or
+                report.get("quality1000_verified") is not False or
+                report.get("commercial_release_allowed") is not False or
+                report.get("live_product_modified") is not False):
+            raise RuntimeError("PRIVATE_QA_CANDIDATE_RECEIPT_IDENTITY_INVALID")
+        if (report.get("browser_and_accessibility_smoke_passed") is True and
+                isinstance(checks, dict) and len(checks) >= 10 and
+                all(v is True for v in checks.values()) and
+                len(report.get("viewports", [])) == 12):
+            passing.append(sha(raw))
+    if not passing:
+        return None
+    return {
+        "candidate_sha256": candidate_sha,
+        "browser_a11y_receipt_sha256": sorted(passing)[0],
+        "real_browser_viewports_passed": 12,
+        "browser_a11y_checks_passed": len(checks),
+        "quality1000_verified": False,
+        "commercial_release_allowed": False,
+    }
 
 
 def verified_progress(root, ident):
@@ -165,6 +215,12 @@ def verified_progress(root, ident):
             879: "isolated responsive-browser, navigation, accessibility and security review, then create a version-bound improved website-kit candidate",
         }[ident],
     }
+    if ident == 879:
+        candidate = candidate_browser_evidence(root, digest)
+        if candidate is not None:
+            evidence["verified_private_responsive_candidate"] = candidate
+            evidence["completed_next_operation"] = "independent 12-viewport browser and accessibility smoke QA passed for private candidate"
+            evidence["next_private_operation"] = "professional visual/content review, real navigation and security review before any commercial release"
     raw = (json.dumps(evidence, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     evidence_hash = sha(raw)
     output = ticket_dir / "progress" / (evidence_hash + ".json")
