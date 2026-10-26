@@ -280,6 +280,22 @@ class PrivateAuditTests(unittest.TestCase):
             self.assertFalse(result["commercial_release_allowed"])
             self.assertEqual(p.read_bytes(), before)
 
+    def test_bidi_controls_cannot_hide_private_reasoning_tokens(self):
+        # The final accept gate already strips bidi controls. The independent
+        # private read-only auditor must not allow the same evasion.
+        with tempfile.TemporaryDirectory() as d:
+            p = self.make(d, "chapter-01-part-001.md",
+                          tail="<th\u202eink>internal</th\u202eink> "
+                               "<\u2066think\u2069>hidden</think>")
+            before = p.read_bytes()
+            result = module.audit(Path(d), chapters=1,
+                                  chapter_target=300, total_target=300)
+            self.assertTrue(any(flag.startswith("unsafe_content_marker:")
+                                for flag in result["integrity_flags"]))
+            self.assertFalse(result["length_and_structure_ready_for_independent_review"])
+            self.assertFalse(result["commercial_release_allowed"])
+            self.assertEqual(p.read_bytes(), before)
+
     def test_gap_and_reasoning_marker_fail_closed(self):
         with tempfile.TemporaryDirectory() as d:
             self.make(d, "chapter-01-part-002.md", tail="<think>secret</think>")
