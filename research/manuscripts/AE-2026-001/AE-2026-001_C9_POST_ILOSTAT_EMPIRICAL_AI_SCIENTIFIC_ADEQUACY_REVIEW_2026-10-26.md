@@ -1,0 +1,35 @@
+# AE-2026-001 C9 — independent-pass internal AI scientific adequacy review after original ILOSTAT/WDI source reconciliation
+
+**Date:** 26 October 2026. **Role:** internal AI methodological/editorial review in a separate critical pass; **NOT** independent human peer review or author attestation. **Verdict:** **MAJOR REVISION / NO SUBMISSION**. No Manuscript ID.
+
+## Verified scientific progress (actual executed data, not merely QA)
+
+1. The core **155-economy** 2000–2019 fixed-country **three-historical-vintage** WDI audit remains a genuine source-hashed empirical result; its 6/6/10 release-induced growth-sign flips and rank/magnitude statistics must not be confused with changes of observation horizon.
+2. A new **153-economy** 2026-only balanced horizon check found a median **paired** annual log-growth difference of **−0.003349272374** for 2000–2023 minus 2000–2019, with 109 negative, 44 positive paired changes and 10 *horizon-induced*, not vintage-induced, sign changes. [Run 40299175110](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40299175110) **SUCCESS**, [artifact 12639591781](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40299175110/artifacts/12639591781).
+3. Original ILOSTAT annual absolute agricultural employment RDS `EMP_TEMP_SEX_ECO_NB_A` **actually retrieved** and SHA256 verified: `956f6d27cbf9a6cba969cf7ceb37b1715b40704c984fdcc76ea6aff2a48ae0cb`, **2,306,384 bytes**; [run 40299957865](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40299957865) **SUCCESS**. Actual source has 617,241 rows; a 2000/2019 unfiltered subset 40,947 rows; these are **not** 40,947 agricultural-employment observations.
+4. Original ILOSTAT total-sex broad-agriculture best-source extraction yielded **402 unambiguous country-year records** (182 for 2000; 220 for 2019), 164 country codes with both endpoints and **73** exact two-year overlaps with the positive 2026 WDI per-worker cohort; 60 of the 73 retained the same ILO source code. [Run 40300545351](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40300545351) **SUCCESS**, [artifact 12640451010](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40300545351/artifacts/12640451010).
+5. A separately fetched official WDI `NV.AGR.TOTL.KD` API response (lastupdated **2026-10-08**; SHA256 `7df780de72f5cfa5951501f4be88b4a7fa112bd95f08814d3f5d844393a84323`) was matched to ILOSTAT and the archived 2026 WDI `NV.AGR.EMPL.KD` panel: **200 matched positive country-year observations across 127 economies**, **73** with both endpoints; median absolute relative ILOSTAT/WDI-implied worker-count discrepancy **5.805%**; 128/200 within ±10%. [Run 40300738631](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40300738631) **SUCCESS**, [artifact 12640371610](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40300738631/artifacts/12640371610).
+6. The matched **73-economy** two-endpoint worker-growth comparison found median absolute annual log-growth discrepancy **0.004104257605** (0.4104 log-percentage points/year), **6/73** growth-sign disagreements; stable-source subgroup n=60 median 0.003171747600; changed-source subgroup n=13 median 0.007737715507. [Run 40301314822](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40301314822) **SUCCESS**, [artifact 12640686025](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40301314822/artifacts/12640686025).
+
+## Independent critical findings and remaining scientific blockers
+
+**Critical source-lineage qualification:** the World Bank's own `NV.AGR.EMPL.KD` metadata names ILOSTAT as a source. The ILO file was **independently retrieved and audited**, but the underlying labor estimates may share provenance with WDI. Therefore the 5.805% level discrepancy is a **source-consistency diagnostic, not independent field validation**. The inferred WDI denominator `L*=V/P` remains an identity, not a causal estimate. The actual 200 country-year comparisons involve repeated economies and a nonrandom intersection, not 200 independent country units or the 155-economy fixed historical-vintage cohort.
+
+**Historical-revision identification remains unresolved:** the new ILOSTAT data are from a **current release**, not independently verified 2024 and 2025 ILOSTAT archives. The level and two-endpoint growth checks **cannot identify which component caused WDI 2024→2025→2026 revisions**. No stronger causal language is permitted.
+
+**Novelty remains limited:** `countryatlas::compare_vintages` already performs WDI release comparisons. The source-hashed three-vintage fixed-cohort case, the nonconflated horizon negative control and cross-source worker-level audit may form a useful **specific empirical research note**, but **do not establish a new general estimator or priority over existing vintage-comparison software**. A direct reproducible comparator benchmark and a journal-specific contribution argument remain necessary.
+
+**Source/comparability limitations:** ISIC Rev.3 agriculture requires A+B whereas Rev.4 uses A; the actual `ECO_AGGREGATE_AGR` aggregate avoids naively mixing component codes, but does not prove identical national survey scope or age/sex/industry definitions. Source-code stability does not prove a constant survey methodology. Missingness, country heterogeneity and source changes remain material.
+
+**Human publication gate:** human author's actual contributions, identity/affiliation, funding, COI, AI use, copyright/permissions, journal/APC, final version and cover letter remain unverified and cannot be impersonated by the AI manager.
+
+## Explicit pass/fail disposition
+
+- **Data provenance and source-level reproducibility:** **PASS** for the newly executed audits with immutable source hashes and artifacts; this does not imply historical ILO release coverage.
+- **Separation of horizon, release, source level and causal estimands:** **PASS with continuing monitoring** in the latest manuscript; the shared ILOSTAT/WDI source-lineage warning is mandatory.
+- **Complete historical 2024/2025 ILO employment revision mechanism:** **FAIL / NOT ESTABLISHED**.
+- **Independent, journal-defensible originality over direct software prior art:** **NOT ESTABLISHED**.
+- **Scientific adequacy for immediate journal submission:** **FAIL — MAJOR REVISION**.
+- **Actual human author approval and journal submission:** **NOT DONE**.
+
+**Required next scientific work:** obtain authentic 2024/2025 ILOSTAT archived employment releases if they exist and are lawfully accessible, or explicitly restrict the paper to a descriptive WDI release-revision case without an employment-causation claim; benchmark directly against the existing `countryatlas` estimand; provide cohort attrition, source-stability and uncertainty checks with transparent limitations. A successful Word build is an administrative artifact only, not an editorial ACCEPT.
