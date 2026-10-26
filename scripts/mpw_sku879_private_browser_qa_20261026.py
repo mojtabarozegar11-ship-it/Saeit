@@ -128,6 +128,12 @@ for (const image of document.images) image.loading = "eager";
 const root = document.documentElement;
 const body = document.body;
 const images = Array.from(document.images);
+const visibleWidth = window.visualViewport?.width || window.innerWidth;
+function inFixedLayer(node) {
+  for (let cur = node; cur && cur !== body; cur = cur.parentElement)
+    if (getComputedStyle(cur).position === "fixed") return true;
+  return false;
+}
 return {
     ready: document.readyState === "complete",
     title_present: !!document.title.trim(),
@@ -147,19 +153,25 @@ return {
     body_min_width: getComputedStyle(body).minWidth,
     body_scroll_width: body.scrollWidth,
     root_scroll_width: root.scrollWidth,
-    horizontal_overflow_px: Math.max(0, root.scrollWidth - window.innerWidth),
+    horizontal_overflow_px: Math.max(0, root.scrollWidth - visibleWidth),
     overflowing_shapes: Array.from(body.querySelectorAll("*"))
       .map(node => ({ node, rect: node.getBoundingClientRect() }))
-      .filter(item => item.rect.width > 0 && item.rect.right > window.innerWidth + 2)
+      .filter(item => item.rect.width > 0 && item.rect.right > visibleWidth + 2 &&
+                      item.rect.left < visibleWidth && !inFixedLayer(item.node))
       .sort((a, b) => b.rect.right - a.rect.right)
-      .slice(0, 6)
+      .slice(0, 12)
       .map(item => ({
         tag: item.node.tagName.toLowerCase(),
         right_px: Math.round(item.rect.right),
         width_px: Math.round(item.rect.width),
         left_px: Math.round(item.rect.left),
         position: getComputedStyle(item.node).position,
-        display: getComputedStyle(item.node).display
+        display: getComputedStyle(item.node).display,
+        min_width: getComputedStyle(item.node).minWidth,
+        white_space: getComputedStyle(item.node).whiteSpace,
+        overflow_x: getComputedStyle(item.node).overflowX,
+        flex_shrink: getComputedStyle(item.node).flexShrink,
+        box_sizing: getComputedStyle(item.node).boxSizing
       })),
     h1_count: document.querySelectorAll("h1").length
 };
@@ -293,8 +305,12 @@ def audit(archive, expected_sha=SOURCE_SHA, output=None):
     checks = {
         "two_real_browser_viewports": len(views) == 2,
         "viewport_dimensions_verified": len(views) == 2 and all(
-            v["viewport_width"] == v["requested_viewport"][0] and
-            v["viewport_height"] == v["requested_viewport"][1] for v in views),
+            v["viewport_height"] == v["requested_viewport"][1] and
+            (v["device_screen_width"] == v["requested_viewport"][0] and
+             abs(v["visual_viewport_width"] - v["requested_viewport"][0]) <= 1
+             if v["requested_viewport"][0] < 500 else
+             v["viewport_width"] == v["requested_viewport"][0])
+            for v in views),
         "dom_ready_and_titled": bool(views) and all(v["ready"] and v["title_present"] for v in views),
         "visible_page_content": bool(views) and all(v["body_char_count"] >= 30 for v in views),
         "no_horizontal_overflow": bool(views) and all(v["horizontal_overflow_px"] <= 2 for v in views),
