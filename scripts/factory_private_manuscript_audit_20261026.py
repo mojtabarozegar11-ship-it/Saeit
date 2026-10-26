@@ -79,9 +79,9 @@ def audit(root: Path, *, chapters: int = 30, chapter_target: int = 5300,
             for row in text.splitlines()
             if row.strip() and not row.lstrip().startswith("#")
         ).strip()
-        # Markdown emphasis/code delimiters do not change substantive prose.
-        # Keep underscores within identifiers; strip only standalone markup.
-        prose = re.sub(r"(?<!\w)[*_`]+|[*_`]+(?!\w)", "", prose)
+        # Strip Markdown emphasis/backticks even within words, but retain
+        # underscores between identifier characters (term_0000 != term0000).
+        prose = re.sub(r"[*`]|(?<!\w)_+|_+(?!\w)", "", prose)
         if len(prose) >= 500:
             prose_hash = hashlib.sha256(prose.encode("utf-8")).hexdigest()
             first_prose = seen_prose_hashes.setdefault(prose_hash, path.name)
