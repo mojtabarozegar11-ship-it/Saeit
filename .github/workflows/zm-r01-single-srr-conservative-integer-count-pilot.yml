@@ -1,11 +1,7 @@
 name: ZM-R01 first real-SRR paired-read conservative gene-count pilot
+# Completed historical pilot; expensive original-FASTQ transfer must not repeat on source edits.
+# Future full 24-sample work requires an assembly-verified, separate production workflow.
 on:
-  push:
-    branches: [research/mr-2026-001-novelty-audit]
-    paths:
-      - .github/workflows/zm-r01-single-srr-conservative-integer-count-pilot.yml
-      - research/manuscripts/ZM-R01/analysis/unique_fragment_transcriptome_gene_counts.py
-      - research/manuscripts/ZM-R01/analysis/verified_resumable_ena_pair_download.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -67,8 +63,9 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/zm_counts"
           # Reference index was checked and built before FASTQ download.
-          # Only primary first mates of proper pairs at MAPQ >=20 can contribute
-          # once each; no FPKM/TPM or fabricated integer conversions.
+          # Only primary first mates of proper pairs at MAPQ >=20 contribute
+          # once each; MAPQ is NOT proof of unique concordant mapping.
+          # This remains a non-publication transcriptome pilot, no FPKM/TPM conversions.
           bowtie2 -x wheat_cdna_idx -1 R1.fastq.gz -2 R2.fastq.gz \
             --very-sensitive --no-unal --no-mixed --no-discordant -p 3 \
             2> alignment_summary.txt \
