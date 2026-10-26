@@ -33,8 +33,8 @@ jobs:
           doi=re.findall(r'https://doi.org/(10\.\S+)',refs)
           nums=[int(x) for x in re.findall(r'^(\d+)\. ',refs,re.M)]
           assert len(a.split())<250
-          assert len(doi)==21 and len(set(doi))==21
-          assert nums==list(range(1,22))
+          assert len(doi)==22 and len(set(doi))==22
+          assert nums==list(range(1,23))
           assert '6. **Counterfactual attribution:**' in t
           assert '**Cross-cutting follow-up:**' in t
           assert '45/72 = 62.5%' in t
@@ -45,8 +45,8 @@ jobs:
           assert '10.48130/tia-0026-0009' in t and '10.1016/j.agsy.2026.104867' in t
           assert all(x in t for x in ['10.1016/j.agwat.2024.108838','10.3390/w18172174','10.1002/ird.70098'])
           assert 'TIDieR/Carroll-informed extraction form' in t
-          assert 'Darouich' in t and 'Tapsuwan' in t
-          assert '10.3390/agronomy14010066' in t and '10.1002/ird.1887' in t
+          assert 'Darouich' in t and 'Tapsuwan' in t and 'MAGDA' in t
+          assert '10.3390/agronomy14010066' in t and '10.1002/ird.1887' in t and '10.3390/rs17111855' in t
           assert 'weekly surveys' in t and 'not automatically an independently calibrated meter' in t
           assert 'not a validated' in t.lower()
           assert Path('research/manuscripts/MR-2026-001/C34_V5_DIRECT_ADHERENCE_PREDECESSOR_ADVERSARIAL_AI_REVIEW_2026-10-26.md').exists()
