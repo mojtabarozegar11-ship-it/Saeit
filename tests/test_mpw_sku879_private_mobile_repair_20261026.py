@@ -60,6 +60,34 @@ class MobileRepairTests(unittest.TestCase):
                 self.assertIn(mobile.MARKER.encode(), c.read("index.html"))
                 self.assertNotIn(mobile.MARKER.encode(), s.read("index.html"))
 
+    def test_narrow_mobile_nowrap_caption_is_unwrapped_without_affecting_desktop(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = Path(temp) / "nowrap.zip"
+            html = ("<!doctype html><html><head><meta charset='utf-8'>"
+                    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+                    "<title>Responsive Interior Design</title>"
+                    "<style>body{margin:0}span{display:block;margin-left:39px;"
+                    "white-space:nowrap;font:16px monospace}</style></head>"
+                    "<body><h1>Interior Design</h1><span>"
+                    "ResponsiveDesignForSmallMobileSizes"
+                    "</span><p>Interior design services and portfolio.</p></body></html>")
+            with zipfile.ZipFile(archive, "w") as package:
+                package.writestr("index.html", html)
+            extracted = Path(temp) / "unpacked"
+            extracted.mkdir()
+            entry = mobile.safe_extract(archive, extracted)
+            sizes = ((320, 720), (390, 844), (1440, 900))
+            baseline = mobile.browser_views(extracted, entry, sizes)
+            self.assertGreater(baseline[0]["horizontal_overflow_px"], 2)
+            self.assertEqual(baseline[1]["horizontal_overflow_px"], 0)
+            (extracted / entry).write_text(
+                mobile.inject(html, mobile.BASE_STYLE + mobile.ADDITIONAL_STYLE +
+                              mobile.NARROW_SPAN_STYLE), encoding="utf-8"
+            )
+            repaired = mobile.browser_views(extracted, entry, sizes)
+            self.assertTrue(all(row["horizontal_overflow_px"] == 0 for row in repaired),
+                            [(r["requested_viewport"], r["horizontal_overflow_px"]) for r in repaired])
+
     def test_real_browser_can_repair_intrinsic_text_overflow(self):
         with tempfile.TemporaryDirectory() as temp:
             source = Path(temp) / "source.zip"
