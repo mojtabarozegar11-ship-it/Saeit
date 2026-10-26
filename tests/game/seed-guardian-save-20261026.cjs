@@ -31,7 +31,8 @@ assert.deepEqual(plain(load(null,true)),{stage:1,best:0,clears:0},
  'blocked browser storage must not crash the game');
 console.log('SEED_GUARDIAN_SAVE_INTEGRITY=PASS: strict bounded records and private mode');
 
-\n// Runtime regression: stage 120 must be a genuine ending, not an endless replay of stage 120.
+
+// Runtime regression: stage 120 must be a genuine ending, not an endless replay of stage 120.
 const finishStart=script.indexOf('function finish(success){');
 const finishEnd=script.indexOf('function nextStage(){',finishStart);
 assert.ok(finishStart>=0&&finishEnd>finishStart,'finish transition must be available');
