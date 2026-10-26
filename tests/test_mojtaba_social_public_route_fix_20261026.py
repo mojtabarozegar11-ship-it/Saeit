@@ -61,6 +61,24 @@ class PersonalPublicRouteFixTests(unittest.TestCase):
         with self.assertRaises(initial.InstallationBlocked):
             fix.install(self.app,self.backup,"fixture_public_789")
 
+    def test_runtime_removes_only_old_social_path_and_preserves_unrelated_routes(self):
+        class Pattern:
+            def __init__(self, route): self.route=route
+            def __str__(self): return self.route
+        class Entry:
+            def __init__(self,route): self.pattern=Pattern(route)
+        original=[Entry("mojtaba.roozegar/"),Entry("company/"),Entry("social-command/")]
+        def path(route, included): return Entry(route)
+        namespace={"urlpatterns":original,"_mpw_social_path":path,
+                   "_mpw_social_include":lambda value:value}
+        exec(fix.PUBLIC_ROUTE,namespace)
+        observed=[str(x.pattern) for x in namespace["urlpatterns"]]
+        self.assertEqual(observed.count("mojtaba.roozegar/social-command/"),1)
+        self.assertNotIn("social-command/",observed)
+        self.assertIn("mojtaba.roozegar/",observed)
+        self.assertIn("company/",observed)
+        self.assertEqual(observed[0],"mojtaba.roozegar/social-command/")
+
     def test_rollback_restores_exactly_original_routes_not_private_db(self):
         fix.install(self.app,self.backup,self.fix_id)
         result=fix.rollback(self.app,self.backup,self.fix_id)

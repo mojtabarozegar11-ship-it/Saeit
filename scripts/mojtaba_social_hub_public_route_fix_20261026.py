@@ -25,11 +25,14 @@ PUBLIC_PREFIX = "mojtaba.roozegar/social-command/"
 MARKER_BEGIN = "# MPW_SOCIAL_EXTERNAL_PUBLIC_ROUTE_BEGIN_20261026"
 MARKER_END = "# MPW_SOCIAL_EXTERNAL_PUBLIC_ROUTE_END_20261026"
 # Django's urlpatterns.insert(0, ...) guarantees the exact personal-only
-# prefix takes priority even if old patterns include broad slug catchalls.
+# prefix takes priority even if old patterns include broad slug catchalls;\n# remove the unreachable legacy path so Django reverse() selects the public one.
 PUBLIC_ROUTE = (
     "\n" + MARKER_BEGIN + "\n"
     "urlpatterns.insert(0, _mpw_social_path('mojtaba.roozegar/social-command/',"
     " _mpw_social_include('social_hub.urls')))\n"
+    "# The legacy naked /social-command/ route was internal and unreachable.\n"
+    "# Retire it only in this isolated personal URLconf, avoiding reverse-name duplicates.\n"
+    "urlpatterns[:] = [p for p in urlpatterns if str(p.pattern) != 'social-command/']\n"
     + MARKER_END + "\n"
 )
 
