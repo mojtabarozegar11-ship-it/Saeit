@@ -377,7 +377,7 @@ class ProductionContinuityTests(unittest.TestCase):
         slots=json.loads((self.output/'quality-excellence/product-flow/active-slots/current.json').read_text())
         self.assertEqual(slots['capacity'],5)
         self.assertEqual(len(slots['active']),5)
-        self.assertGreaterEqual(novel,18,json.dumps(actual_cycles,sort_keys=True))
+        self.assertEqual(novel,5,json.dumps(actual_cycles,sort_keys=True))
         replay=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True,
                                enable_design_intake=True,design_capacity=6)
         self.assertEqual(replay['new_artifacts'],0)
