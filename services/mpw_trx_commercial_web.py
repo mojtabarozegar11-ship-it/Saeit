@@ -140,7 +140,18 @@ def _show_invoice(request, invoice_id):
     except PaymentHold as exc:
         raise Http404("Invoice could not be verified") from exc
     if intent.status!=WAITING or invoice.expires_at<=timezone.now():
-        raise Http404("This invoice is no longer payable")
+        # An old invoice must never remain payable, but a paid or expired
+        # customer's own invoice URL should still explain the next step.
+        # No rate, receiving address or stale payment amount is displayed.
+        from services.mpw_trx_public_pages import _page
+        return _page("Invoice no longer payable",
+            '<p>This payment quote has expired or is no longer awaiting payment. '
+            'Do not send TRX to an expired quote.</p>'
+            '<p>If you already paid, do not pay again. Check payment status in '
+            '<a href="/commerce/trx-easy/purchases/">My TRX purchases</a> '
+            'or contact support with your order number.</p>'
+            '<p>For a fresh quote, open the product again from the '
+            '<a href="/store/">store</a>.</p>')
     html,csp=render_one_tap_invoice(invoice,
         status_path=f"/commerce/trx-easy/status/{invoice_id}/")
     # Include a same-origin, CSRF-protected POST path. The GET status endpoint
