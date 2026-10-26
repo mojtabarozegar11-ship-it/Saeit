@@ -1,0 +1,20 @@
+name: Game mobile reduced-motion regression
+on:
+  pull_request:
+    paths:
+      - 'games/ramadan-war/game.css'
+      - 'games/arrow-escape/style.css'
+      - 'games/arrow-escape/nexus.css'
+      - 'tests/game/mobile-reduced-motion-20261026.cjs'
+      - '.github/workflows/game-mobile-reduced-motion-20261026.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  accessibility-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate reduced-motion rules for three gameplay surfaces
+        run: node tests/game/mobile-reduced-motion-20261026.cjs
