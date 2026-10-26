@@ -25,6 +25,26 @@ jobs:
         run: python -m pip install --disable-pip-version-check openpyxl==3.1.5
       - name: Audit historical source series, SHA256, matched countries and algebraic residual
         run: python research/manuscripts/AE-2026-001/analysis/official_wdi_two_vintage_value_added_implied_labor_decomposition.py
+      - name: Fail closed if published draft overstates or misquotes source-locked component output
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('research/manuscripts/AE-2026-001')
+          j=json.loads((root/'AE-2026-001_2024_2025_COMPONENT_REVISION_IDENTITY_AUDIT_2026-10-26.json').read_text())
+          t=(root/'AE-2026-001_FIRST_FULL_EMPIRICAL_MANUSCRIPT_DRAFT_2026-10-25.md').read_text()
+          assert j['country_count']==155
+          stats=j['descriptive_revision_statistics']
+          assert abs(stats['per_worker']['median_abs']*100-0.166532)<0.000001
+          assert abs(stats['value_added']['median_abs']*100)<1e-8
+          assert abs(stats['implied_denominator']['median_abs']*100-0.093273)<0.000001
+          assert stats['value_added_abs_revision_larger_than_implied_denominator_count']==40
+          assert j['quality_gates']['identity_residual_max']<1e-12
+          assert all(q in t for q in ['### 3.13','0.166532','0.093273','40 of 155','countryatlas','algebraically implied'])
+          assert 'NOT_ESTABLISHED'==j['quality_gates']['publication_novelty']
+          assert 'NOT_IDENTIFIED'==j['quality_gates']['causal_source_attribution']
+          print('AE_COMPONENT_MANUSCRIPT_SOURCE_LOCK=PASS')
+          PY
       - name: Archive numerical results, not an editorial novelty claim
         uses: actions/upload-artifact@v4
         with:
