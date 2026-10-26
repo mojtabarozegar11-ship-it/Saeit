@@ -44,6 +44,8 @@ class PrivateBrowserQaTests(unittest.TestCase):
             views = qa.browser_views(extraction, entry)
             self.assertEqual(len(views), 2)
             self.assertEqual([v["requested_viewport"][0] for v in views], [390, 1440])
+            self.assertEqual([v["viewport_width"] for v in views], [390, 1440])
+            self.assertEqual([v["viewport_height"] for v in views], [844, 900])
             for view in views:
                 self.assertTrue(view["ready"])
                 self.assertTrue(view["title_present"])
