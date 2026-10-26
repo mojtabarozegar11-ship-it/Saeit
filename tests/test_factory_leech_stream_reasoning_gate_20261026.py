@@ -41,6 +41,21 @@ class LeechStreamAcceptanceRegression(unittest.TestCase):
                 self.assertFalse(self.operator.stream_segment_is_acceptable(
                     marker + " " + self.valid))
 
+    def test_invisible_and_compatibility_controls_cannot_hide_reasoning(self):
+        # The live streaming acceptance gate must reject these before any
+        # private author 'accept' subprocess receives the generated text.
+        disguised = (
+            "<th\u200bink>internal reasoning</th\u200bink>",
+            "<\uff54hink>hidden chain</\uff54hink>",
+            "<th\u202eink>reversed control</th\u202eink>",
+            "<|im_\u2060start|>",
+            "[\uff29NST]",
+        )
+        for marker in disguised:
+            with self.subTest(marker=repr(marker)):
+                self.assertFalse(self.operator.stream_segment_is_acceptable(
+                    marker + " " + self.valid))
+
     def test_short_repetitive_or_incomplete_text_is_rejected(self):
         for text in ("word " * 400 + ".", "Only a short sentence.", self.valid[:-1]):
             with self.subTest(text=text[:30]):
