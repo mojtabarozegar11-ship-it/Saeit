@@ -344,6 +344,25 @@ jobs:
                           "commercial_release":False,
                           "latest_stock_evidence":str(family[-1].get("customer_archive_qa","unknown"))[:60]})
           print("FACTORY_FIRST_FIVE_TARGETS="+json.dumps(candidate_rows,ensure_ascii=False,sort_keys=True))
+          # Sanitized independent QA defect codes for these five only;
+          # never print private evidence passages, full source, or customer info.
+          for candidate in candidate_rows:
+              product=candidate["product_id"]
+              for label,filename in (
+                  ("quality_assessment",private/"quality-excellence/rework"/product/"current.json"),
+                  ("production_workorder",private/"quality-excellence/production-workorders"/product/"current.json")):
+                  if filename.is_symlink() or not filename.is_file() or filename.stat().st_size>2_000_000:continue
+                  value=json.loads(filename.read_text(encoding="utf8"))
+                  print("FACTORY_FIRST_FIVE_QA_KEYS "+product+" "+label+"="+
+                        ",".join(sorted(str(k) for k in value.keys())))
+                  for key in ("failed_checks","defect_codes","return_reasons","failed_dimensions","quality_defects",
+                              "rework_codes","required_actions","release_gate"):
+                      found=value.get(key)
+                      if isinstance(found,(list,dict)) and len(found)<=25:
+                          codes=list(found.keys()) if isinstance(found,dict) else found
+                          safe=[str(x)[:100] for x in codes if isinstance(x,(str,int))]
+                          print("FACTORY_FIRST_FIVE_QA_CODES "+product+" "+label+" "+key+"="+json.dumps(safe))
+
           print("FACTORY_DIAGNOSTICS_READ_ONLY=true")
           for proc in Path("/proc").iterdir():
               if not proc.name.isdigit():continue
