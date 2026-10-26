@@ -20,10 +20,15 @@ def active_product_allowlist(path):
         raise ValueError("ACTIVE_PRODUCT_SLOTS_REQUIRED")
     state = json.loads(state_path.read_text(encoding="utf8"))
     active = state.get("active") if isinstance(state, dict) else None
-    if (state.get("schema") != "saeit.factory.product-slots.v1"
-            or state.get("line_id") != 41 or state.get("capacity") != 1
-            or not isinstance(active, list) or len(active) != 1):
-        raise ValueError("EXACTLY_ONE_ACTIVE_FACTORY_PRODUCT_REQUIRED")
+    if state.get("schema") != "saeit.factory.product-slots.v1" or not isinstance(active, list):
+        raise ValueError("ACTIVE_PRODUCT_SLOTS_REQUIRED")
+    # During rollout, serve only the first legacy slot until the VPS cycle
+    # migrates the prior five-slot ledger into line 41's FIFO queue.
+    legacy = state.get("capacity") == 5 and len(active) == 5
+    current = state.get("line_id") == 41 and state.get("capacity") == 1 and len(active) == 1
+    if not (legacy or current):
+        raise ValueError("LINE_41_SINGLE_ACTIVE_PRODUCT_REQUIRED")
+    active = active[:1]
     recipes = [item.get("recipe") if isinstance(item, dict) else None for item in active]
     if (len(set(recipes)) != 1 or any(not isinstance(recipe, str)
             or not re.fullmatch(r"[a-z][a-z0-9_]{1,65}", recipe) for recipe in recipes)):
