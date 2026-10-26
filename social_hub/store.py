@@ -82,6 +82,15 @@ class Store:
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS api_checks (
+          account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+          state TEXT NOT NULL,
+          provider_identity TEXT NOT NULL DEFAULT '',
+          note_code TEXT NOT NULL DEFAULT '',
+          checked_at TEXT NOT NULL,
+          checked_by TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS api_checks_checked_at ON api_checks(checked_at);
         CREATE TABLE IF NOT EXISTS events (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           subject TEXT NOT NULL, brand TEXT NOT NULL,
@@ -170,6 +179,45 @@ class Store:
             q += " WHERE brand=?"
             args = (brand,)
         return [dict(row) for row in self.db.execute(q + " ORDER BY created_at DESC",args)]
+
+    def api_check(self, account_id):
+        row=self.db.execute("SELECT state,provider_identity,note_code,checked_at,checked_by "
+                            "FROM api_checks WHERE account_id=?",(account_id,)).fetchone()
+        return dict(row) if row else None
+
+    def record_api_check(self, account_id, *, status, identity, note, actor):
+        if status not in ("identity_verified","credential_valid_only","failed"):
+            raise Blocked("Unrecognized provider check result")
+        if not isinstance(identity,str) or len(identity)>160 or any(ord(c)<32 for c in identity):
+            raise Blocked("Invalid diagnostic identity")
+        if not isinstance(note,str) or not re.fullmatch(r"[a-z0-9_]{3,100}",note):
+            raise Blocked("Invalid diagnostic code")
+        with self.transaction():
+            account=self.account(account_id)
+            if not account:
+                raise Blocked("Account not found")
+            if status=="identity_verified" and not account["verified"]:
+                raise Blocked("Cannot verify an unattested account")
+            now=utc_now()
+            self.db.execute(
+                "INSERT INTO api_checks(account_id,state,provider_identity,note_code,checked_at,checked_by) "
+                "VALUES (?,?,?,?,?,?) ON CONFLICT(account_id) DO UPDATE SET "
+                "state=excluded.state,provider_identity=excluded.provider_identity,"
+                "note_code=excluded.note_code,checked_at=excluded.checked_at,"
+                "checked_by=excluded.checked_by",
+                (account_id,status,identity,note,now,_safe(actor)))
+            self.event(account_id,account["brand"],actor,"provider_read_only_check",status)
+
+    def api_checks(self, brand=None):
+        q=("SELECT c.account_id,c.state,c.note_code,c.checked_at,a.brand,a.platform "
+           "FROM api_checks c JOIN accounts a ON a.id=c.account_id")
+        args=()
+        if brand:
+            if brand not in BRANDS:
+                raise Blocked("Brand not in scope")
+            q+=" WHERE a.brand=?"
+            args=(brand,)
+        return [dict(x) for x in self.db.execute(q,args)]
 
     def draft(self, *, account_id, content, schedule_at=None, actor):
         account = self.account(account_id)
