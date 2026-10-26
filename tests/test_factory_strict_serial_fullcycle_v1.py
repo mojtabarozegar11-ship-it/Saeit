@@ -88,18 +88,39 @@ class StrictSerialTests(unittest.TestCase):
             self.assertEqual(state["ticks"], 3)
             self.assertEqual(state["active_order"], "WO-00000601")
 
-    def test_low_disk_only_triages_selected_sources(self):
+    def test_low_disk_prevents_all_workers_including_source(self):
         with tempfile.TemporaryDirectory() as folder:
             root, ops = workspace(Path(folder))
             calls = []
             result = cycle.tick(root, ops, runner=lambda argv, **k: (
                 calls.append(argv) or Successful()), disk_usage=lambda _:SmallDisk(),
                 monotonic=lambda:0)
-            self.assertEqual(result["stages_executed"], 1)
-            self.assertEqual(len(calls), 1)
-            self.assertIn("--only-order-file", calls[0])
+            self.assertEqual(result["stages_executed"], 0)
+            self.assertEqual(calls, [])
             self.assertTrue(result["storage_hold"])
-            self.assertEqual(result["stage_results"]["strict_qc"], "STORAGE_RESERVE_HOLD")
+            self.assertTrue(all(status == "STORAGE_RESERVE_HOLD"
+                                for status in result["stage_results"].values()))
+            self.assertFalse(result["certified_to_private_finished_goods"])
+
+    def test_mid_cycle_disk_drop_blocks_later_workers(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, ops = workspace(Path(folder))
+            calls = []
+            checks = [Disk(), Disk(), SmallDisk()]
+            def disk_usage(_):
+                return checks.pop(0) if checks else SmallDisk()
+            def runner(argv, **kwargs):
+                calls.append(argv)
+                return Successful()
+            result = cycle.tick(root, ops, runner=runner,
+                                disk_usage=disk_usage, monotonic=lambda:0)
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(result["stages_executed"], 1)
+            self.assertEqual(result["stage_results"]["source_discovery"],
+                             "STORAGE_RESERVE_HOLD")
+            self.assertTrue(result["storage_hold"])
+            self.assertFalse(result["certified_to_private_finished_goods"])
+            self.assertEqual(result["active_order_after_cycle"], "WO-00000601")
 
     def test_certified_real_stock_is_only_path_to_next_order(self):
         with tempfile.TemporaryDirectory() as folder:
