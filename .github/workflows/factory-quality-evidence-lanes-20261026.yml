@@ -28,6 +28,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Syntax-check the exact local and nested VPS bridge before running
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess,textwrap
+          yml=Path(".github/workflows/factory-quality-evidence-lanes-20261026.yml").read_text()
+          segment=yml.split("\n      - name: Refresh real evidence workorders without sales or site contact",1)[1]
+          segment=segment.split("\n      - name: Remove temporary runner credential",1)[0]
+          script=textwrap.dedent(segment.split("        run: |",1)[1]).lstrip("\n")
+          subprocess.run(["bash","-n"],input=script,text=True,check=True)
+          remote=script.split("<<'REMOTE'\n",1)[1].split("\nREMOTE",1)[0]+"\n"
+          subprocess.run(["bash","-n"],input=remote,text=True,check=True)
+          print("FACTORY_QA_VPS_LOCAL_AND_REMOTE_SHELL_SYNTAX=PASS")
+          PY
       - name: Verify real quality routing, immutable receipts and non-release
         shell: bash
         run: |
@@ -76,7 +92,7 @@ jobs:
             remote_file="${spec#*:}"
             scp -q "${opts[@]}" "$local_file" "$host:$stage/$remote_file"
             expected="$(sha256sum "$local_file" | awk '{print $1}')"
-            actual="$(timeout 35s ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$remote_file' | awk '{print $1}')"
+            actual="$(timeout 35s ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$remote_file' | cut -d ' ' -f 1")"
             test "$expected" = "$actual"
           done
           timeout 600s ssh -T "${opts[@]}" "$host" "bash -se -- '$stage' '$GITHUB_RUN_ID'" <<'REMOTE'
