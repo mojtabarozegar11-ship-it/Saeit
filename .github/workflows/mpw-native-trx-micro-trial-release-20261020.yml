@@ -19,6 +19,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile scripts/mpw_native_trx_micro_trial_release_20261020.py
+          python3 -m py_compile scripts/mpw_trial_779_owner_release_20261026.py
           python3 scripts/mpw_native_trx_micro_trial_release_20261020.py selftest
       - name: Baseline main and sibling public sites
         run: |
@@ -142,6 +143,11 @@ jobs:
               else:
                   print("MPW_TRIAL_SETTINGS_LINES="+json.dumps([line.strip() for line in src.splitlines() if "MPW_TRX_PUBLIC_PRODUCT_IDS" in line][:5]))
           PY
+      - name: Release verified owner-owned 3-cent trial in three isolated MojPlayWin files
+        id: scoped_release
+        run: |
+          set -euo pipefail
+          timeout 160s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - apply '${{ github.run_id }}'" < scripts/mpw_trial_779_owner_release_20261026.py
       - name: Create real test listing, never modify originals or payment ledger
         id: publish_sample
         run: |
@@ -151,6 +157,10 @@ jobs:
         run: |
           set -euo pipefail
           timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify" < scripts/mpw_native_trx_micro_trial_release_20261020.py
+      - name: Independently verify the three-cent item, original SKUs, and TRX allowlist
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify" < scripts/mpw_trial_779_owner_release_20261026.py
       - name: Verify main and sibling websites remain intact
         run: |
           python3 - <<'PY'
@@ -163,10 +173,6 @@ jobs:
               print("MPW_MICRO_POST_HTTP="+json.dumps({"route":route,"status":status}))
               if status!=200 and not (route=="/zahra/" and status==404):raise RuntimeError("Protected sibling changed unexpectedly: "+route)
           PY
-      - name: Roll back only unsold trial listing on failed release
-        if: failure() && steps.publish_sample.outcome == 'success'
-        run: |
-          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback" < scripts/mpw_native_trx_micro_trial_release_20261020.py
       - name: Locate exact active product-detail CTA template for trial only
         run: |
           timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
@@ -195,6 +201,32 @@ jobs:
                           break
           print('MPW_MICRO_CTA_INSPECTION=PASS')
           PY
+      - name: Verify public three-cent store and protected siblings
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error
+          routes=("/store/","/store/product/779/","/commerce/book/779/","/store/product/72/","/store/product/225/","/store/product/879/")
+          for route in routes:
+              req=urllib.request.Request("https://mojplaywin.com"+route,headers={"User-Agent":"MPWTrial779OwnerRelease/1","Cache-Control":"no-cache"})
+              try:
+                  with urllib.request.urlopen(req,timeout=25) as response:
+                      status=response.status
+                      final=response.url
+                      body=response.read(160000).decode("utf8","replace")
+              except urllib.error.HTTPError as exc:
+                  status=exc.code
+                  final=req.full_url
+                  body=""
+              print("MPW_TRIAL_779_PUBLIC_SMOKE="+json.dumps({"route":route,"http":status,"final_url":final,"listed":"/store/product/779/" in body if route=="/store/" else None}))
+              if status!=200 or (route=="/store/" and "/store/product/779/" not in body):
+                  raise RuntimeError("TRIAL_OR_ORIGINAL_PUBLIC_ROUTE_FAILED:"+route)
+          PY
+      - name: Roll back only the three isolated code files if owner release failed
+        if: failure() && steps.scoped_release.outcome == 'success'
+        run: |
+          set -euo pipefail
+          timeout 120s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '${{ github.run_id }}'" < scripts/mpw_trial_779_owner_release_20261026.py
       - name: Remove temporary SSH relay keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
