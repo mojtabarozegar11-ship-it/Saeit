@@ -4,9 +4,11 @@ on:
     paths:
       - 'games/ramadan-war/index.html'
       - 'games/ramadan-war/game.js'
+      - 'games/ramadan-war/input-guard.mjs'
       - 'games/ramadan-war/deploy.py'
       - 'games/ramadan-war/save-validation.mjs'
       - 'tests/game/ramadan-save-validation.test.mjs'
+      - 'tests/game/ramadan-input-guard.test.mjs'
       - 'tests/game/ramadan-seo.test.mjs'
       - '.github/workflows/ramadan-save-integrity.yml'
 permissions:
@@ -23,7 +25,9 @@ jobs:
         run: node --test tests/game/ramadan-save-validation.test.mjs
       - name: Check game canonical and social sharing metadata
         run: node --test tests/game/ramadan-seo.test.mjs
+      - name: Check keyboard focus and finite-resource regressions
+        run: node --test tests/game/ramadan-input-guard.test.mjs
       - name: Check reversible deployment script syntax
         run: python -m py_compile games/ramadan-war/deploy.py
       - name: Check browser module syntax
-        run: node --check games/ramadan-war/game.js && node --check games/ramadan-war/save-validation.mjs
+        run: node --check games/ramadan-war/game.js && node --check games/ramadan-war/save-validation.mjs && node --check games/ramadan-war/input-guard.mjs
