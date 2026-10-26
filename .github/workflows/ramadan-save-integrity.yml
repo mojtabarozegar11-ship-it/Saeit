@@ -1,0 +1,22 @@
+name: Ramadan War save integrity (read-only)
+on:
+  pull_request:
+    paths:
+      - 'games/ramadan-war/game.js'
+      - 'games/ramadan-war/save-validation.mjs'
+      - 'tests/game/ramadan-save-validation.test.mjs'
+      - '.github/workflows/ramadan-save-integrity.yml'
+permissions:
+  contents: read
+jobs:
+  save-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check campaign save integrity regressions
+        run: node --test tests/game/ramadan-save-validation.test.mjs
+      - name: Check browser module syntax
+        run: node --check games/ramadan-war/game.js && node --check games/ramadan-war/save-validation.mjs
