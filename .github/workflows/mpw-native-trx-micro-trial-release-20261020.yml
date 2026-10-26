@@ -136,3 +136,4 @@ jobs:
       - name: Remove temporary SSH relay keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
+# Owner-directed revalidation of the existing USD 0.03 native-TRX test SKU, 2026-10-26.
