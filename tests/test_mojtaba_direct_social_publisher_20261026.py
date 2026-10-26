@@ -34,7 +34,10 @@ class DirectSocialPublishingTests(unittest.TestCase):
     def test_default_readiness_is_false_and_no_io(self):
         report = pub.readiness(job(), {})
         self.assertFalse(report["can_execute"])
-        self.assertFalse(any(report["checks"].values()))
+        self.assertTrue(report["checks"]["operator_approval"])
+        self.assertFalse(report["checks"]["owner_verified_destination"])
+        self.assertFalse(report["checks"]["brand_token_configured"])
+        self.assertFalse(report["checks"]["execution_gate_enabled"])
         self.assertEqual(report["mode"], "preview_only")
 
     def test_brand_target_isolation(self):
