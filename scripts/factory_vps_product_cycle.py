@@ -281,7 +281,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                     generated[recipe] = maker.inspect_recipe(generated_root / recipe)
             if set(generated) & set(recipe_catalog):
                 raise RuntimeError("GENERATED_RECIPE_COLLIDES_WITH_STATIC_SOURCE")
-                        recipe_catalog.update(generated)
+            recipe_catalog.update(generated)
             recipe_roots.update({key: generated_root for key in generated})
             active_recipe_names = _maintain_product_slots(root, recipe_catalog)
             # Quality-driven product evolution: compiler-owned goods really gain
