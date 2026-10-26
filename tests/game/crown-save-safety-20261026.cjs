@@ -121,4 +121,23 @@ assert.equal(interruption.padHeld.fire,false,'hidden tab must release gamepad fi
 assert.equal(interruption.getDash(),false,'hidden tab must reset gamepad dash edge');
 assert.equal(interruption.getTarget(),null,'hidden tab must clear pointer steering');
 
+// Manual tactical pause must release every active input, not only window-blur interruptions.
+const pauseStart=js.indexOf('function clearFlightControls(){'),pauseEnd=js.indexOf('function gameOver(',pauseStart);
+assert.ok(pauseStart>=0&&pauseEnd>pauseStart,'manual pause input reset must exist');
+const pauseCode=js.slice(pauseStart,pauseEnd);
+const manualPause=vm.runInNewContext(
+ "let state='playing',overlayState='none',padDashDown=true,touchTarget={x:5},dragAnchor={x:1},pointer=7;"+
+ "const keys=new Set(['Space','ArrowLeft']);const held={left:true,fire:true},padHeld={right:true,fire:true};"+
+ "const canvas={focus(){}};const nodes={};const $=id=>(nodes[id]??={hidden:false,textContent:''});"+
+ "function hidePanes(){}function showOverlay(){}"+
+ pauseCode+"pause();({state,keys,held,padHeld,padDashDown,touchTarget,dragAnchor,pointer})"
+);
+assert.equal(manualPause.state,'paused','manual pause must stop the flight');
+assert.equal(manualPause.keys.size,0,'manual pause must release keyboard thrust');
+assert.equal(manualPause.held.fire,false,'manual pause must release touch firing');
+assert.equal(manualPause.padHeld.fire,false,'manual pause must release gamepad firing');
+assert.equal(manualPause.padDashDown,false,'manual pause must reset gamepad dash');
+assert.equal(manualPause.touchTarget,null,'manual pause must clear touch steering');
+assert.equal(manualPause.pointer,null,'manual pause must clear captured pointer state');
+
 console.log('CROWN_SAVE_SAFETY_PASS: scoreboard validation, date safety, achievements and backward-compatible progress');
