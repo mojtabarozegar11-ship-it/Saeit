@@ -23,7 +23,10 @@ HEX = re.compile(r"[0-9a-f]{64}\Z")
 def safe_json(path, maximum=LIMIT):
     if path.is_symlink() or not path.is_file() or path.stat().st_size > maximum:
         raise ValueError("unsafe_or_missing")
-    return json.loads(path.read_text(encoding="utf8"))
+    decoded = json.loads(path.read_text(encoding="utf8"))
+    if not isinstance(decoded, dict):
+        raise ValueError("invalid_json_object_root")
+    return decoded
 
 
 def command(args):
