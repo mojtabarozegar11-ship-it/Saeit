@@ -153,6 +153,38 @@ class PrivateAuditTests(unittest.TestCase):
             self.assertFalse(result["commercial_release_allowed"])
             self.assertEqual((first.read_bytes(), second.read_bytes()), before)
 
+    def test_long_paragraph_intraword_markdown_cannot_hide_copy(self):
+        with tempfile.TemporaryDirectory() as d:
+            repeated = " ".join("distinctword%04d" % i for i in range(140))
+            first = Path(d) / "chapter-01-part-001.md"
+            second = Path(d) / "chapter-02-part-001.md"
+            first.write_text("# First\n\n" + repeated +
+                             "\n\n" + " ".join("first%04d" % i for i in range(150)))
+            second.write_text("# Second\n\n" +
+                              repeated.replace("distinctword0000", "distinctword*0000*") +
+                              "\n\n" + " ".join("second%04d" % i for i in range(150)))
+            before = (first.read_bytes(), second.read_bytes())
+            result = module.audit(Path(d), chapters=2, chapter_target=250, total_target=500)
+            self.assertTrue(any(flag.startswith("duplicate_long_paragraph:")
+                                for flag in result["integrity_flags"]))
+            self.assertFalse(result["length_and_structure_ready_for_independent_review"])
+            self.assertEqual((first.read_bytes(), second.read_bytes()), before)
+
+    def test_long_paragraph_identifier_underscore_stays_distinct(self):
+        with tempfile.TemporaryDirectory() as d:
+            repeated = " ".join("distinctword%04d" % i for i in range(140))
+            first = Path(d) / "chapter-01-part-001.md"
+            second = Path(d) / "chapter-02-part-001.md"
+            first.write_text("# First\n\n" + repeated +
+                             "\n\n" + " ".join("first%04d" % i for i in range(150)))
+            second.write_text("# Second\n\n" +
+                              repeated.replace("distinctword0000", "distinctword_0000") +
+                              "\n\n" + " ".join("second%04d" % i for i in range(150)))
+            result = module.audit(Path(d), chapters=2, chapter_target=250, total_target=500)
+            self.assertFalse(any(flag.startswith("duplicate_long_paragraph:")
+                                 for flag in result["integrity_flags"]))
+            self.assertFalse(result["commercial_release_allowed"])
+
     def test_distinct_long_paragraphs_are_not_falsely_flagged(self):
         with tempfile.TemporaryDirectory() as d:
             for chapter in (1, 2):
