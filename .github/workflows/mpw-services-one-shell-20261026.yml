@@ -1,0 +1,141 @@
+name: MojPlayWin unify services shell and 12 standalone offers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-services-one-shell-20261026.yml
+      - scripts/mpw_services_one_shell_20261026.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mpw-main-services-one-shell-release
+  cancel-in-progress: false
+
+jobs:
+  unified-services-release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify exact scoped transform and public baseline
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_services_one_shell_20261026.py
+          python3 scripts/mpw_services_one_shell_20261026.py selftest
+          python3 - <<'PY'
+          import urllib.request
+          origin='https://mojplaywin.com'
+          for path in ('/','/services/','/mpw-editorial/revenue/index.html',
+                       '/mpw-editorial/revenue/website-doctor/index.html',
+                       '/farnaz/','/saman/','/taniya/','/picm/',
+                       '/mojtaba.roozegar/','/store/'):
+              with urllib.request.urlopen(origin+path,timeout=28) as response:
+                  assert response.status==200,(path,response.status)
+          print('PRE_RELEASE_MAIN_AND_PROTECTED_BASELINE_OK')
+          PY
+      - name: Configure verified fingerprint-pinned VPS to cPanel SSH relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-one-shell-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 35s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Publish only services page and 13 editorial HTML shells
+        id: install
+        run: |
+          set -euo pipefail
+          timeout 125s ssh -T -F "$RUNNER_TEMP/mpw-one-shell-ssh/config" saeit-cpanel "python3 - publish '$GITHUB_RUN_ID'" < scripts/mpw_services_one_shell_20261026.py
+      - name: Confirm unified navigation and all standalone offers on live site
+        run: |
+          python3 - <<'PY'
+          import concurrent.futures,time,urllib.request
+          origin='https://mojplaywin.com'
+          slugs=('website-doctor','landing-page-studio','ai-automation','business-spreadsheets',
+                 'website-templates','social-media-kits','resume-builder','logo-studio',
+                 'browser-games','marketing-ai','business-calculators','website-care')
+          def get(path):
+              req=urllib.request.Request(origin+path,headers={'Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=35) as response:
+                  assert response.status==200,(path,response.status)
+                  return response.read(900000).decode('utf-8','replace')
+          for trial in range(8):
+              service=get('/services/?shell_release='+str(time.time_ns()))
+              if 'id="mpw-service-offers-20261026"' in service:
+                  break
+              time.sleep(2)
+          assert service.count('id="mpw-service-offers-20261026"')==1
+          for slug in slugs:
+              assert service.count('/mpw-editorial/revenue/'+slug+'/index.html')>=1,slug
+          paths=['/mpw-editorial/revenue/index.html']+[
+              '/mpw-editorial/revenue/'+slug+'/index.html' for slug in slugs]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+              htmls=list(pool.map(get,paths))
+          for path,html in zip(paths,htmls):
+              assert html.count('data-mpw-one-shell="20261026"')==1,path
+              assert html.count('class="mw-site-nav mpw-unified-shell"')==1,path
+              assert html.count('<header')==1,path
+              assert html.count('<main')==1,path
+              assert html.count('<footer')==1,path
+              assert 'href="/services/#mpw-service-offers-20261026"' in html,path
+              assert 'href="https://mojplaywin.com'+path+'"' in html,path
+          style=get('/mpw-editorial/revenue/assets/mpw-one-shell-20261026.css')
+          assert '.mpw-unified-shell' in style
+          print('MPW_SERVICES_ONE_SHELL_AND_12_STANDALONE_PAGES_LIVE_PASS')
+          PY
+      - name: Confirm the personal website, all child apps, sitemap and checkout guards remain intact
+        run: |
+          set -euo pipefail
+          python3 scripts/mpw_subsite_continuity_guard_20261026.py
+      - name: Roll back only own verified files if live safety checks fail
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          timeout 110s ssh -T -F "$RUNNER_TEMP/mpw-one-shell-ssh/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_services_one_shell_20261026.py
+      - name: Erase ephemeral relay SSH credentials
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-one-shell-ssh"
+          if [ -d "$d" ]; then rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/config"; rmdir "$d"; fi
