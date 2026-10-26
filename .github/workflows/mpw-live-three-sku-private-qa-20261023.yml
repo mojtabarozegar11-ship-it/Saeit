@@ -1,4 +1,6 @@
 name: Private QA copies of three existing MojPlayWin store products
+# Owner-directed 2026-10-26: preserve all three live listings, copy existing
+# immutable bytes to the private VPS factory, and require proof before any replacement.
 on:
   pull_request:
     paths:
