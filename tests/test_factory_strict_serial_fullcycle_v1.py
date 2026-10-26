@@ -154,6 +154,52 @@ class StrictSerialTests(unittest.TestCase):
             self.assertEqual(result["active_order_after_cycle"], "WO-00000601")
             self.assertEqual(result["stage_results"]["strict_qc"], "DEFERRED_TO_NEXT_MINUTE")
 
+    def test_full_index_preflight_rejects_missing_later_orders(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, ops = workspace(Path(folder))
+            area = root / "production-instructions"
+            for pos in (1, 2, 200):
+                ident = "WO-%08d" % (600 + pos)
+                (area / "orders" / (ident + ".json")).write_text(json.dumps({
+                    "id": ident, "status": "issued", "fingerprint": "a"*64,
+                    "origin": "owner_requested_agri200_p0",
+                    "source_product_id": "AGRI-%03d" % pos,
+                }), encoding="utf8")
+            with self.assertRaisesRegex(
+                    RuntimeError, "STRICT_SERIAL_COMPLETE_INDEX_MISSING_OR_INVALID"):
+                cycle.tick(root, ops, dry_run=True, verify_complete_intake=True,
+                           disk_usage=lambda _:Disk())
+            self.assertFalse((ops / ".strict-serial-fullcycle.lock").exists())
+
+    def test_full_index_preflight_accepts_only_real_agri_cohort(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, ops = workspace(Path(folder))
+            area = root / "production-instructions"
+            for pos in range(1, 201):
+                ident = "WO-%08d" % (600 + pos)
+                (area / "orders" / (ident + ".json")).write_text(json.dumps({
+                    "id": ident, "status": "issued", "fingerprint": "a"*64,
+                    "origin": "owner_requested_agri200_p0",
+                    "source_product_id": "AGRI-%03d" % pos,
+                }), encoding="utf8")
+            okay = cycle.tick(root, ops, dry_run=True,
+                              verify_complete_intake=True,
+                              disk_usage=lambda _:Disk())
+            self.assertEqual(okay["active_order"], "WO-00000601")
+            changed = area / "orders" / "WO-00000602.json"
+            value = json.loads(changed.read_text(encoding="utf8"))
+            value["origin"] = "site-topic-snapshot"
+            changed.write_text(json.dumps(value), encoding="utf8")
+            with self.assertRaisesRegex(RuntimeError,
+                                        "STRICT_SERIAL_COMPLETE_INDEX_COHORT_MISMATCH"):
+                cycle.tick(root, ops, dry_run=True,
+                           verify_complete_intake=True,
+                           disk_usage=lambda _:Disk())
+            with self.assertRaisesRegex(RuntimeError,
+                                        "STRICT_SERIAL_COMPLETE_INDEX_ONLY_DRY_RUN"):
+                cycle.tick(root, ops, verify_complete_intake=True,
+                           disk_usage=lambda _:Disk())
+
     def test_dry_run_never_writes_private_state(self):
         with tempfile.TemporaryDirectory() as folder:
             root, ops = workspace(Path(folder))
