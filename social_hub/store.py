@@ -166,6 +166,28 @@ class Store:
                             (proof.strip()[:500], utc_now(), account_id))
             self.event(account_id,account["brand"],actor,"account_verified","")
 
+    def suspend_account(self, account_id, *, actor):
+        """Immediately remove public profile, invalidate read check and stop queued sends.
+
+        Keep private evidence and in-flight records intact for audit. The social
+        provider's own token must also be revoked at its official developer portal.
+        """
+        with self.transaction():
+            account=self.account(account_id)
+            if not account:
+                raise Blocked("Account to suspend not found")
+            self.db.execute("UPDATE accounts SET verified=0 WHERE id=?",(account_id,))
+            self.db.execute("DELETE FROM api_checks WHERE account_id=?",(account_id,))
+            count=self.db.execute(
+                "UPDATE posts SET state='cancelled',updated_at=? WHERE account_id=? "
+                "AND state='approved'",(utc_now(),account_id)).rowcount
+            inflight=self.db.execute("SELECT COUNT(*) FROM posts WHERE account_id=? "
+                "AND state='dispatching'",(account_id,)).fetchone()[0]
+            self.event(account_id,account["brand"],actor,"account_suspended",
+                       "queued_cancelled="+str(count)+";inflight_manual_review="+str(inflight))
+        return {"account_id":account_id,"state":"suspended","approved_posts_cancelled":count,
+                "inflight_requires_review":inflight,"provider_token_revocation_required":True}
+
     def account(self, account_id):
         row = self.db.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone()
         return dict(row) if row else None
