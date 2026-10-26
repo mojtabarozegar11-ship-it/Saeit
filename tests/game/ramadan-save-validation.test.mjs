@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {validateCampaignSave} from '../../games/ramadan-war/save-validation.mjs';
 
 const fresh = () => ({
@@ -44,4 +45,12 @@ test('preserves valid objective progress while refusing corrupted mission comple
     assert.equal(validateCampaignSave({...fresh(), objective}), false);
   assert.equal(validateCampaignSave({...fresh(), endless: true}), false);
   assert.equal(validateCampaignSave({...fresh(), gameOver: true}), false);
+});
+
+test('reversible release manifest ships and checks every new imported save module', () => {
+  const deploy = readFileSync(new URL('../../games/ramadan-war/deploy.py', import.meta.url), 'utf8');
+  const client = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
+  assert.match(client, /import \{validateCampaignSave\} from '\.\/save-validation\.mjs'/);
+  assert.match(deploy, /ASSETS=\[[^\n]*'save-validation\.mjs'/);
+  assert.match(deploy, /b'\.\/save-validation\.mjs' in new\['game\.js'\]/);
 });
