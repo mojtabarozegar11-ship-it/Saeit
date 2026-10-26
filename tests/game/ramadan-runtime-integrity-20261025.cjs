@@ -10,14 +10,15 @@ const slice=(from,to)=>{
 };
 const helper=slice('const safeHero=v=>','let enemySerial=0;');
 const operations=slice('const OPERATIONS=[','function plan(){');
+const tileCode=slice('function tile(', 'function newWorld(');
 const validator=slice('function validSavedWorld(s){','function restore(){');
-const check=vm.runInNewContext('const NAMES=Array(30).fill("Hero");\n'+helper+operations+validator+'\nvalidSavedWorld');
+const check=vm.runInNewContext('const NAMES=Array(30).fill("Hero");\n'+helper+operations+tileCode+validator+'\nvalidSavedWorld');
 const base={hero:0,mission:0,endless:false,victory:false,gameOver:false,x:2.5,y:7.5,angle:0,hp:100,maxHp:100,lives:100,ammo:8,rockets:12,drones:3,score:0,enemies:[{x:8.5,y:7.5,hp:39}],hostile:[],missiles:[],pickups:[]};
 assert.equal(check(base),true,'normal persisted campaign must remain resumable');
 assert.equal(check({...base,mission:0,objective:{done:2,hold:0,bossDefeated:false}}),true,'completed activation mission must remain resumable');
 assert.equal(check({...base,mission:1,objective:{done:1,hold:22,bossDefeated:false}}),true,'completed defense timer must remain resumable');
 for(const [label,bad] of [
- ['zero-health resume',{hp:0}],['bad hero',{hero:999}],['negative hero',{hero:-1}],['nonfinite x',{x:Infinity}],['bad health',{hp:200}],['negative lives',{lives:-2}],['impossible ammo',{ammo:999}],['nonfinite score',{score:NaN}],['out-of-bounds mission',{mission:6}],['endless campaign',{endless:true}],['invalid enemy',{enemies:[{x:NaN,y:7.5,hp:39}]}],['too many enemies',{enemies:Array(21).fill({x:8,y:8,hp:39})}],['invalid missiles',{missiles:{}}],
+ ['saved player inside crate wall',{x:3.5,y:3.5}],['saved player inside mission barrier',{mission:1,x:7.5,y:4.5}],['zero-health resume',{hp:0}],['bad hero',{hero:999}],['negative hero',{hero:-1}],['nonfinite x',{x:Infinity}],['bad health',{hp:200}],['negative lives',{lives:-2}],['impossible ammo',{ammo:999}],['nonfinite score',{score:NaN}],['out-of-bounds mission',{mission:6}],['endless campaign',{endless:true}],['invalid enemy',{enemies:[{x:NaN,y:7.5,hp:39}]}],['too many enemies',{enemies:Array(21).fill({x:8,y:8,hp:39})}],['invalid missiles',{missiles:{}}],
  ['nonfinite mission kills',{missionKills:NaN}],
  ['negative mission kills',{missionKills:-1}],
  ['invalid time',{time:Infinity}],
