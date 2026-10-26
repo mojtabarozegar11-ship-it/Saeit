@@ -188,3 +188,9 @@ footer a{color:#587565}
  .face-pip{width:11px}
 }
 @media(prefers-reduced-motion:reduce){.cube-arrow.hinted .arrow-stroke,.arrow-burst i{animation:none!important}}
+
+/* Accessible feedback: static color and outlines replace shaking/pulsing for reduced-motion players. */
+@media (prefers-reduced-motion: reduce) {
+  .cube-arrow.blocked, .cube-arrow.hinted .arrow-stroke, .arrow-burst i { animation: none !important; }
+  .cube-rotator, .cube-stage, .face-pip { transition: none !important; }
+}
