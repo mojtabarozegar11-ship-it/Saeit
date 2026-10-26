@@ -111,6 +111,7 @@ jobs:
           from django.conf import settings
           for path in ("/commerce/book/779/","/store/product/779/"):
               match=resolve(path)
+              if path=="/commerce/book/779/": print("MPW_TRIAL_PUBLIC_CHECKOUT_SOURCE="+inspect.getsource(match.func)[:8500].replace(chr(10),"\\n"))
               print("MPW_TRIAL_GATE_ROUTE="+json.dumps({"path":path,"func":match.func.__module__+"."+match.func.__name__,"anonymous_http":Client(raise_request_exception=False).get(path,secure=True,HTTP_HOST="mojplaywin.com").status_code}))
           from mpw_commerce.product_checkout_page import approved_for_checkout,product_checkout_page
           print("MPW_TRIAL_CHECKOUT_APPROVAL_SOURCE="+inspect.getsource(approved_for_checkout)[:5500].replace(chr(10),"\\n"))
