@@ -173,12 +173,32 @@ return {
         flex_shrink: getComputedStyle(item.node).flexShrink,
         box_sizing: getComputedStyle(item.node).boxSizing
       })),
-    h1_count: document.querySelectorAll("h1").length
+    h1_count: document.querySelectorAll("h1").length,
+    images_missing_alt: images.filter(i => !i.hasAttribute("alt")).length,
+    unlabeled_buttons: Array.from(document.querySelectorAll("button")).filter(
+      b => !(b.getAttribute("aria-label") || "").trim() &&
+           !(b.getAttribute("title") || "").trim() &&
+           !(b.innerText || "").trim()).length,
+    unlabeled_form_controls: Array.from(document.querySelectorAll("input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=reset]):not([type=image]),textarea,select")).filter(
+      el => !(el.getAttribute("aria-label") || "").trim() &&
+            !(el.getAttribute("aria-labelledby") || "").trim() &&
+            !(el.labels && el.labels.length)).length,
+    unsafe_blank_links: Array.from(document.querySelectorAll('a[target="_blank"]')).filter(
+      a => !(a.relList && a.relList.contains("noopener"))).length,
+    broken_same_page_anchors: Array.from(document.querySelectorAll('a[href^="#"]')).filter(
+      a => a.getAttribute("href").length > 1 &&
+           !document.getElementById(a.getAttribute("href").slice(1))).length
 };
 """
 
 
-def browser_views(destination, entrypoint):
+def browser_views(destination, entrypoint, sizes=None):
+    sizes = ((390, 844), (1440, 900)) if sizes is None else tuple(sizes)
+    if not sizes or len(sizes) > 16 or any(
+            not isinstance(w, int) or not isinstance(h, int) or
+            w < 280 or w > 2400 or h < 400 or h > 1600
+            for w, h in sizes):
+        raise RuntimeError("BROWSER_VIEWPORT_SET_INVALID")
     chrome = shutil.which("google-chrome") or shutil.which("chromium")
     driver = shutil.which("chromedriver")
     if not chrome or not driver:
@@ -234,7 +254,7 @@ def browser_views(destination, entrypoint):
             url = ("http://127.0.0.1:" + str(server.server_port) + "/" +
                    urllib.parse.quote(entrypoint, safe="/"))
             rows = []
-            for width, height in ((390, 844), (1440, 900)):
+            for width, height in sizes:
                 webdriver_request(driver_port, "POST", route + "/window/rect",
                                   {"width": max(width, 850), "height": max(height, 900)})
                 webdriver_request(driver_port, "POST", route + "/goog/cdp/execute", {
@@ -273,6 +293,11 @@ def browser_views(destination, entrypoint):
                     "overflowing_shapes": metrics.get("overflowing_shapes", []),
                     "horizontal_overflow_px": int(metrics.get("horizontal_overflow_px", 100000)),
                     "h1_count": int(metrics.get("h1_count", 0)),
+                    "images_missing_alt": int(metrics.get("images_missing_alt", 0)),
+                    "unlabeled_buttons": int(metrics.get("unlabeled_buttons", 0)),
+                    "unlabeled_form_controls": int(metrics.get("unlabeled_form_controls", 0)),
+                    "unsafe_blank_links": int(metrics.get("unsafe_blank_links", 0)),
+                    "broken_same_page_anchors": int(metrics.get("broken_same_page_anchors", 0)),
                     "screenshot_valid": screenshot_is_png(png),
                 })
             return rows
