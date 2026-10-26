@@ -184,7 +184,7 @@ jobs:
                   except (OSError,ValueError) as err:
                       issues.append({'recipe':p.name,'reason':type(err).__name__})
                       continue
-                  if receipt.get('generator_capability_revision')=='verified-summary-v3':
+                  if receipt.get('generator_capability_revision')=='verified-distribution-v4':
                       continue
                   examined+=1
                   try:

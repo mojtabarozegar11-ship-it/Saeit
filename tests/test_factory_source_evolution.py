@@ -30,6 +30,9 @@ def make_legacy_source(source):
     start=body.index('# BATCH_API_V2_START')
     end=body.index('# BATCH_API_V2_END',start)+len('# BATCH_API_V2_END')
     body=body[:start]+body[end:]
+    start=body.index('# DISTRIBUTION_API_V4_START')
+    end=body.index('# DISTRIBUTION_API_V4_END',start)+len('# DISTRIBUTION_API_V4_END')
+    body=body[:start]+body[end:]
     start=body.index('# STATS_API_V3_START')
     end=body.index('# STATS_API_V3_END',start)+len('# STATS_API_V3_END')
     body=body[:start]+body[end:]
@@ -48,11 +51,14 @@ def make_legacy_source(source):
     cases=re.sub(r'(?ms)^# STATS_TESTS_V3_START\n.*?^# STATS_TESTS_V3_END\n','',cases)
     cases=re.sub(r'(?ms)^    # STATS_TESTS_V3_START\n.*?^    # STATS_TESTS_V3_END\n','',cases)
     assert 'calculate_batch' not in cases
+    cases=re.sub(r'(?ms)^# DISTRIBUTION_TESTS_V4_START\n.*?^# DISTRIBUTION_TESTS_V4_END\n','',cases)
+    cases=re.sub(r'(?ms)^    # DISTRIBUTION_TESTS_V4_START\n.*?^    # DISTRIBUTION_TESTS_V4_END\n','',cases)
     assert 'calculate_statistics' not in cases
+    assert 'calculate_distribution' not in cases
     tests.write_text(cases,encoding='utf8')
     receipt=source/'design_receipt.json'
     evidence=json.loads(receipt.read_text(encoding='utf8'))
-    assert evidence.pop('generator_capability_revision')=='verified-summary-v3'
+    assert evidence.pop('generator_capability_revision')=='verified-distribution-v4'
     receipt.write_text(json.dumps(evidence,sort_keys=True,indent=2)+'\n',encoding='utf8')
     return body
 
@@ -75,10 +81,11 @@ class SourceEvolutionTests(unittest.TestCase):
         result=designer.evolve_recipe(self.name,self.recipes)
         self.assertTrue(result['changed'])
         self.assertEqual(result['previous_source_sha256'],before)
-        self.assertEqual(result['implemented_feature'],'verified_decimal_customer_batch_statistics_v3')
+        self.assertEqual(result['implemented_feature'],'verified_decimal_customer_batch_distribution_v4')
         self.assertNotEqual(result['previous_source_sha256'],result['revised_source_sha256'])
         self.assertIn('def calculate_batch', (self.source/'calculator.py').read_text())
         self.assertIn('def calculate_statistics', (self.source/'calculator.py').read_text())
+        self.assertIn('def calculate_distribution', (self.source/'calculator.py').read_text())
         retained=Path(result['previous_source_retained'])
         self.assertEqual((retained/'calculator.py').read_text(),old_code)
         self.assertGreaterEqual(result['measured_acceptance']['successful_tests'],5)
@@ -91,14 +98,19 @@ class SourceEvolutionTests(unittest.TestCase):
         self.assertFalse(again['changed'])
         self.assertEqual(again['reason'],'already_evolved')
 
-    def test_v2_existing_product_upgrades_to_v3_without_relabeling_as_new_recipe(self):
+    def test_v2_existing_product_upgrades_to_v4_without_relabeling_as_new_recipe(self):
         calculator=self.source/'calculator.py'
         code=calculator.read_text(encoding='utf8')
+        first=code.index('# DISTRIBUTION_API_V4_START')
+        last=code.index('# DISTRIBUTION_API_V4_END',first)+len('# DISTRIBUTION_API_V4_END')
+        code=code[:first]+code[last:]
         first=code.index('# STATS_API_V3_START')
         last=code.index('# STATS_API_V3_END',first)+len('# STATS_API_V3_END')
         calculator.write_text(code[:first]+code[last:],encoding='utf8')
         tests=self.source/'test_calculator.py'
         content=tests.read_text(encoding='utf8')
+        content=re.sub(r'(?ms)^# DISTRIBUTION_TESTS_V4_START\n.*?^# DISTRIBUTION_TESTS_V4_END\n','',content)
+        content=re.sub(r'(?ms)^    # DISTRIBUTION_TESTS_V4_START\n.*?^    # DISTRIBUTION_TESTS_V4_END\n','',content)
         content=re.sub(r'(?ms)^# STATS_TESTS_V3_START\n.*?^# STATS_TESTS_V3_END\n','',content)
         content=re.sub(r'(?ms)^    # STATS_TESTS_V3_START\n.*?^    # STATS_TESTS_V3_END\n','',content)
         tests.write_text(content,encoding='utf8')
@@ -113,9 +125,39 @@ class SourceEvolutionTests(unittest.TestCase):
         self.assertEqual(change['previous_source_sha256'],old_digest)
         self.assertTrue(Path(change['previous_source_retained']).is_dir())
         self.assertEqual(json.loads((self.source/'design_receipt.json').read_text())['generator_capability_revision'],
-                         'verified-summary-v3')
+                         'verified-distribution-v4')
         maker.verify_recipe(self.source,minimum_tests=7)
         self.assertFalse(designer.evolve_recipe(self.name,self.recipes)['changed'])
+
+    def test_real_v3_source_gains_v4_distribution_with_retained_old_bytes(self):
+        calculator=self.source/'calculator.py'
+        code=calculator.read_text(encoding='utf8')
+        start=code.index('# DISTRIBUTION_API_V4_START')
+        finish=code.index('# DISTRIBUTION_API_V4_END',start)+len('# DISTRIBUTION_API_V4_END')
+        calculator.write_text(code[:start]+code[finish:],encoding='utf8')
+        tests=self.source/'test_calculator.py'
+        prior=tests.read_text(encoding='utf8')
+        prior=re.sub(r'(?ms)^# DISTRIBUTION_TESTS_V4_START\n.*?^# DISTRIBUTION_TESTS_V4_END\n','',prior)
+        prior=re.sub(r'(?ms)^    # DISTRIBUTION_TESTS_V4_START\n.*?^    # DISTRIBUTION_TESTS_V4_END\n','',prior)
+        tests.write_text(prior,encoding='utf8')
+        receipt=self.source/'design_receipt.json'
+        data=json.loads(receipt.read_text())
+        data['generator_capability_revision']='verified-summary-v3'
+        receipt.write_text(json.dumps(data,sort_keys=True),encoding='utf8')
+        maker.verify_recipe(self.source,minimum_tests=7)
+        before=maker.source_digest(self.source,maker.inspect_recipe(self.source)[1])
+        evolved=designer.evolve_recipe(self.name,self.recipes)
+        self.assertTrue(evolved['changed'])
+        self.assertEqual(evolved['previous_source_sha256'],before)
+        self.assertIn('def calculate_distribution',calculator.read_text())
+        self.assertIn('def calculate_distribution',
+                      (self.source/'calculator.py').read_text())
+        prior_source=Path(evolved['previous_source_retained'])
+        self.assertNotIn('def calculate_distribution',
+                         (prior_source/'calculator.py').read_text())
+        self.assertGreaterEqual(evolved['measured_acceptance']['successful_tests'],9)
+        self.assertFalse(designer.evolve_recipe(self.name,self.recipes)['changed'])
+        self.assertFalse(evolved['commercial_release'])
 
     def test_owner_modified_or_unknown_extra_files_cannot_be_silently_replaced(self):
         make_legacy_source(self.source)

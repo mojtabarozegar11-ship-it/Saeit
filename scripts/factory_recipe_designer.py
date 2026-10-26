@@ -205,7 +205,7 @@ def compile_recipe(spec, recipes):
                   'search_states_evaluated':searched,'training_examples':len(train),
                   'heldout_examples_passed':len(holdout),'general_ai_invention':False,
                   'scientific_review_completed':False,'commercial_release':False,
-                   'generator_capability_revision':'verified-summary-v3'}
+                   'generator_capability_revision':'verified-distribution-v4'}
     if destination.exists():
         saved = read(destination/'design_receipt.json')
         if saved.get('functional_sha256') != functional_hash:
@@ -269,6 +269,33 @@ def calculate_statistics(records):
             'maximum':str(max(results)), 'mean':str(mean)}
 # STATS_API_V3_END
 
+# DISTRIBUTION_API_V4_START
+def calculate_distribution(records):
+    """Exact-Decimal empirical dispersion and interpolated quartiles.
+
+    These describe the supplied records only, without invented probabilities
+    or claims about future prices, crop yields or market risk.
+    """
+    batch = calculate_batch(records)
+    values = sorted(Decimal(item['result']) for item in batch['results'])
+    with localcontext() as context:
+        context.prec = 50
+        count = Decimal(len(values))
+        mean = sum(values, Decimal(0)) / count
+        variance = sum(((value - mean) ** 2 for value in values), Decimal(0)) / count
+        def percentile(level):
+            position = (count - 1) * Decimal(level) / Decimal(100)
+            low = int(position)
+            part = position - Decimal(low)
+            high = min(low + 1, len(values) - 1)
+            return values[low] * (Decimal(1) - part) + values[high] * part
+        quartiles = {label: str(percentile(level))
+                     for label, level in (('p25', 25), ('median', 50), ('p75', 75))}
+    return {'count': len(values), 'unit': batch['results'][0]['unit'],
+            'minimum': str(values[0]), 'maximum': str(values[-1]),
+            'population_variance': str(variance), **quartiles}
+# DISTRIBUTION_API_V4_END
+
 if __name__ == '__main__':
     incoming=json.load(sys.stdin)
     print(json.dumps(calculate_batch(incoming) if isinstance(incoming,list)
@@ -284,6 +311,9 @@ from calculator import calculate_batch
 # STATS_TESTS_V3_START
 from calculator import calculate_statistics
 # STATS_TESTS_V3_END
+# DISTRIBUTION_TESTS_V4_START
+from calculator import calculate_distribution
+# DISTRIBUTION_TESTS_V4_END
 EXAMPLES = %r
 class GeneratedAcceptanceTests(unittest.TestCase):
     def test_reference_cases(self):
@@ -335,6 +365,37 @@ class GeneratedAcceptanceTests(unittest.TestCase):
         for bad in ([], [{}], [{}]*101, None, 'broken'):
             with self.assertRaises(ValueError): calculate_statistics(bad)
     # STATS_TESTS_V3_END
+    # DISTRIBUTION_TESTS_V4_START
+    def test_distribution_quartiles_and_variance_independent_reference(self):
+        rows = [item['inputs'] for item in EXAMPLES[:3]]
+        values = sorted(Decimal(calculate(row)['result']) for row in rows)
+        actual = calculate_distribution(rows)
+        self.assertEqual(actual['count'], len(values))
+        self.assertEqual(actual['unit'], calculate(rows[0])['unit'])
+        with localcontext() as ctx:
+            ctx.prec = 50
+            mean = sum(values, Decimal(0)) / Decimal(len(values))
+            variance = sum(((value - mean)**2 for value in values), Decimal(0)) / Decimal(len(values))
+            def q(level):
+                pos = Decimal(len(values)-1) * Decimal(level) / Decimal(100)
+                low = int(pos)
+                weight = pos - Decimal(low)
+                return values[low]*(Decimal(1)-weight)+values[min(low+1,len(values)-1)]*weight
+            self.assertEqual(Decimal(actual['population_variance']), variance)
+            for key,percent in (('p25',25),('median',50),('p75',75)):
+                self.assertEqual(Decimal(actual[key]), q(percent))
+        self.assertGreaterEqual(Decimal(actual['p75']), Decimal(actual['median']))
+        self.assertGreaterEqual(Decimal(actual['median']), Decimal(actual['p25']))
+    def test_distribution_singleton_and_invalid_records_fail_closed(self):
+        record = EXAMPLES[0]['inputs']
+        one = calculate_distribution([record])
+        self.assertEqual(Decimal(one['population_variance']), Decimal(0))
+        self.assertEqual(one['p25'], one['median'])
+        self.assertEqual(one['median'], one['p75'])
+        for invalid in ([], [{}], [{}]*101, None, 'broken'):
+            with self.assertRaises(ValueError):
+                calculate_distribution(invalid)
+    # DISTRIBUTION_TESTS_V4_END
 ''' % examples
     readme = '# '+spec['title']+'\n\n'+spec['problem']+'\n\n'
     readme += 'Method: bounded arithmetic program synthesis; not a general AI invention.\n\n'
@@ -342,7 +403,7 @@ class GeneratedAcceptanceTests(unittest.TestCase):
     readme += 'Output unit: '+spec['output_unit']+'\n\n'+spec['limitations']+'\n\n'
     readme += 'Run: python calculator.py < example_inputs.json\n\n'
     readme += 'Bounded batch usage: provide a JSON array of 1-100 complete input objects on stdin; invalid entries reject the whole batch.\n\n'
-    readme += 'Python API: calculator.calculate_statistics(records) returns count, unit, exact-Decimal sum, minimum, maximum and mean for 1-100 validated customer rows.\n\n'
+    readme += 'Python API: calculate_statistics(records) and calculate_distribution(records) provide exact-Decimal descriptive summaries, interpolated p25/median/p75, and population variance for 1-100 validated customer rows. Descriptions are not predictive risk estimates.\n\n'
     readme += 'Technical prototype; scientific, usability and commercial review remain pending.\n'
     stage = Path(tempfile.mkdtemp(prefix='.candidate-',dir=str(recipes)))
     try:
@@ -545,8 +606,8 @@ def evolve_recipe(recipe, recipes):
     prior_code=calculator.read_text(encoding='utf8')
     if not prior_code.startswith('"""Generated deterministic arithmetic planning tool;'):
         raise ValueError('EVOLUTION_SOURCE_NOT_COMPILER_OWNED')
-    if ('# STATS_API_V3_START' in prior_code
-            and receipt.get('generator_capability_revision')=='verified-summary-v3'):
+    if ('# DISTRIBUTION_API_V4_START' in prior_code
+            and receipt.get('generator_capability_revision')=='verified-distribution-v4'):
         return {'schema':'saeit.factory.source-evolution.v1',
                 'recipe':recipe,'changed':False,
                 'reason':'already_evolved','commercial_release':False}
@@ -592,7 +653,7 @@ def evolve_recipe(recipe, recipes):
             'revised_source_sha256':new_digest,
             'previous_source_retained':str(saved),
             'measured_acceptance':measurements,
-            'implemented_feature':'verified_decimal_customer_batch_statistics_v3',
+            'implemented_feature':'verified_decimal_customer_batch_distribution_v4',
             'independent_specialist_approval_verified':False,
             'quality_1000_certified':False,'commercial_release':False}
 
