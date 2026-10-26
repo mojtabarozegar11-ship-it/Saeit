@@ -23,6 +23,10 @@ class PrivateContentAuditTests(unittest.TestCase):
             result=audit.audit_pdf(path)
             self.assertEqual(result["format"],"pdf")
             self.assertEqual(result["page_count"],1)
+            if not result["visual_render"]["renderer_available"]:
+                self.skipTest("PDF renderer is provisioned by the private QA workflow")
+            self.assertEqual(result["visual_render"]["rendered_page_count"],1)
+            self.assertIsNone(result["visual_render"]["render_failure"])
             self.assertIn("page_text_extraction_coverage_ge_95pct",result["checks"])
             self.assertNotIn("text",result)
             self.assertNotIn("extracted_text",result)
