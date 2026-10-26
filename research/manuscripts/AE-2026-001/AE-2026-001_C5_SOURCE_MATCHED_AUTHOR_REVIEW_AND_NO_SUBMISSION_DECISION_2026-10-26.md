@@ -5,9 +5,9 @@
 ## Exact version for review
 
 - Article: *Historical-Release Sensitivity of Agricultural Value Added per Worker in World Development Indicators: A Three-Vintage Fixed-Country Audit*.
-- Canonical manuscript: `AE-2026-001_FIRST_FULL_EMPIRICAL_MANUSCRIPT_DRAFT_2026-10-25.md`, revised on 26 October 2026 at commit **`1030146352c9f376d70db608e8074d847131e934`**.
-- Exact post-component-audit Word and review bundle: [GitHub Actions run 40266090146](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40266090146), completed **success**, [artifact 12626566192](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40266090146/artifacts/12626566192).
-- **Do not substitute** earlier Word artifacts 12623863060 or 12620821908 for this revised manuscript.
+- Canonical manuscript: `AE-2026-001_FIRST_FULL_EMPIRICAL_MANUSCRIPT_DRAFT_2026-10-25.md`, scientifically revised at commit **`1030146352c9f376d70db608e8074d847131e934`** and subsequently repaired for one literal escaped paragraph break at commit **`12edb0feb43d362872ae0851524d2246e4b9a842`**.
+- **Latest exact source-matched Word after paragraph-break QA repair:** [GitHub Actions run 40271128021](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40271128021), completed **success**, [artifact 12628986033](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40271128021/artifacts/12628986033). Source SHA256 `59685b98bed260a083ece26772bf5dc8a0e2504661f14e8165a27aecb03bf5d0`; 8 Word tables. This repairs one literal escaped paragraph break without changing empirical results.
+- **Do not substitute** earlier Word artifacts 12626566192, 12623863060 or 12620821908 for this revised manuscript.
 - Source-locked independent numerical job: [run 40265858307](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40265858307), completed **success**, [artifact 12626477210](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40265858307/artifacts/12626477210). Both official 2024/2025 ZIP SHA256 gates and constant-2015-unit labels passed.
 
 ## Real empirical evidence and strict interpretation
