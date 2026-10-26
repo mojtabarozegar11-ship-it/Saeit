@@ -143,7 +143,9 @@ function mountCake(){
   }
   renderPreview();
   $('#cakeGreeting',gamebody).value=greeting;
-  $('#icing',gamebody).oninput=e=>{remember();icing=e.target.value;renderPreview()};
+  let colorEditing=false;
+  $('#icing',gamebody).oninput=e=>{if(!colorEditing){remember();colorEditing=true}icing=e.target.value;renderPreview()};
+  $('#icing',gamebody).onchange=e=>{if(!colorEditing&&icing!==e.target.value)remember();icing=e.target.value;colorEditing=false;renderPreview()};
   $('#cakeGreeting',gamebody).onchange=e=>{remember();greeting=e.target.value;renderPreview();say('Your card greeting is updated.')};
   gamebody.querySelectorAll('[data-top]').forEach(b=>b.onclick=()=>{remember();topping=b.dataset.top;renderPreview();say('Topping selected. Add candles or download your cake.')});
   gamebody.querySelector('[data-action="candle"]').onclick=()=>{if(candles>=12){say('Your cake already has twelve candles.');return}remember();candles++;renderPreview();say(candles+' candle'+(candles===1?'':'s')+' added.')};
