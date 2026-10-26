@@ -28,6 +28,19 @@ class PrivateContentAuditTests(unittest.TestCase):
             self.assertNotIn("extracted_text",result)
             self.assertGreater(len(result["needs_specialist_review"]),0)
 
+    def test_picturebook_uses_product_specific_page_and_illustration_checks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/"picturebook.pdf"
+            writer=PdfWriter()
+            writer.add_blank_page(width=612,height=792)
+            with path.open("wb") as stream:
+                writer.write(stream)
+            result=audit.audit_pdf(path,expected_page_count=1,require_illustrations=True)
+            self.assertTrue(result["checks"]["page_count_matches_declared_product_spec"])
+            self.assertFalse(result["checks"]["embedded_illustrations_present"])
+            self.assertIn("image_scan_errors",result)
+            self.assertNotIn("extracted_text",result)
+
     def test_zip_audit_checks_assets_and_accessibility_without_releasing(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/"site.zip"
