@@ -16,8 +16,8 @@ ORDERS = PRIVATE / "production-instructions/orders"
 INDEX = PRIVATE / "production-instructions/owner-agri200-p0-index.json"
 OPS = BASE / "operations/production-instructions"
 LIMIT = 250000
-ORDER_PATTERN = re.compile(r"WO-[0-9]{8}\\Z")
-HEX = re.compile(r"[0-9a-f]{64}\\Z")
+ORDER_PATTERN = re.compile(r"WO-[0-9]{8}\Z")
+HEX = re.compile(r"[0-9a-f]{64}\Z")
 
 
 def safe_json(path, maximum=LIMIT):
