@@ -1,0 +1,36 @@
+name: AGRI-001 150k private authoring and immutable ingest regression
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/factory_agri150k_english_private_gate_v1.py
+      - scripts/factory_agri150k_private_chunk_ingest_v1.py
+      - tests/test_factory_agri150k_english_private_gate_v1.py
+      - tests/test_factory_agri150k_private_chunk_ingest_v1.py
+      - .github/workflows/factory-agri150k-private-authoring-20261024.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_agri150k_english_private_gate_v1.py
+      - scripts/factory_agri150k_private_chunk_ingest_v1.py
+      - tests/test_factory_agri150k_english_private_gate_v1.py
+      - tests/test_factory_agri150k_private_chunk_ingest_v1.py
+      - .github/workflows/factory-agri150k-private-authoring-20261024.yml
+permissions: {contents: read}
+concurrency:
+  group: agri001-private-authoring-regression
+  cancel-in-progress: false
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify 150001 minimum, private plan and safe idempotent segment import
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_factory_agri150k_english_private_gate_v1.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_factory_agri150k_private_chunk_ingest_v1.py' -v
+          python3 -B -m py_compile scripts/factory_agri150k_english_private_gate_v1.py scripts/factory_agri150k_private_chunk_ingest_v1.py
+          echo AGRI001_PRIVATE_AUTHORING_REGRESSION=PASS
