@@ -133,6 +133,40 @@ class PrivateAuditTests(unittest.TestCase):
             self.assertFalse(r["commercial_release_allowed"])
             self.assertEqual(second.read_bytes(), before)
 
+    def test_reused_long_paragraph_blocks_review_even_with_new_surrounding_prose(self):
+        with tempfile.TemporaryDirectory() as d:
+            repeated = " ".join("distinctword%04d" % i for i in range(140))
+            first = Path(d) / "chapter-01-part-001.md"
+            second = Path(d) / "chapter-02-part-001.md"
+            first.write_text("# Chapter one\n\n" + repeated +
+                             "\n\n" + " ".join("first%04d" % i for i in range(150)))
+            second.write_text("# Chapter two\n\n" + repeated +
+                              "\n\n" + " ".join("second%04d" % i for i in range(150)))
+            before = (first.read_bytes(), second.read_bytes())
+            result = module.audit(Path(d), chapters=2,
+                                  chapter_target=250, total_target=500)
+            self.assertFalse(any(x.startswith("duplicate_prose_body:")
+                                 for x in result["integrity_flags"]))
+            self.assertTrue(any(x.startswith("duplicate_long_paragraph:")
+                                for x in result["integrity_flags"]))
+            self.assertFalse(result["length_and_structure_ready_for_independent_review"])
+            self.assertFalse(result["commercial_release_allowed"])
+            self.assertEqual((first.read_bytes(), second.read_bytes()), before)
+
+    def test_distinct_long_paragraphs_are_not_falsely_flagged(self):
+        with tempfile.TemporaryDirectory() as d:
+            for chapter in (1, 2):
+                p = Path(d) / ("chapter-%02d-part-001.md" % chapter)
+                p.write_text("# Chapter\n\n" +
+                             " ".join("chapter%dterm%04d" % (chapter, i)
+                                      for i in range(150)))
+            result = module.audit(Path(d), chapters=2,
+                                  chapter_target=100, total_target=200)
+            self.assertFalse(any(x.startswith("duplicate_long_paragraph:")
+                                 for x in result["integrity_flags"]))
+            self.assertTrue(result["length_and_structure_ready_for_independent_review"])
+            self.assertFalse(result["commercial_release_allowed"])
+
     def test_gap_and_reasoning_marker_fail_closed(self):
         with tempfile.TemporaryDirectory() as d:
             self.make(d, "chapter-01-part-002.md", tail="<think>secret</think>")
