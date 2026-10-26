@@ -14,6 +14,7 @@ from social_hub.store import Store
 from social_hub.service import connection_status, run_one, run_due
 from social_hub.adapters import Blocked, Uncertain
 from social_hub.diagnostics import record_one, SUPPORTED as READ_ONLY_PROVIDERS
+from social_hub.credential_vault import load_private_import, plan_import, import_batch, disconnect_batch
 from social_hub.onboarding import preview as preview_onboarding, register as register_onboarding
 
 def main(argv=None):
@@ -28,6 +29,21 @@ def main(argv=None):
         batch.add_argument("--manifest-file",required=True,
                            help="Owner-authored token-free JSON; NEVER contains private OAuth credentials")
         batch.add_argument("--actor",default="owner-cli:manual")
+    for name in ("credential-import-preview","credential-import"):
+        provision=sub.add_parser(name)
+        provision.add_argument("--input-private-file",required=True,
+                 help="Root-owned mode-0600 JSON input; never pass secrets on the command line")
+        provision.add_argument("--vault-file",required=True,
+                 help="Private mode-0600 JSON vault outside public_html")
+        provision.add_argument("--replace",action="store_true",
+                 help="Explicitly rotate credentials that already exist")
+        provision.add_argument("--confirm",action="store_true")
+        provision.add_argument("--actor",default="owner-cli:credential-import")
+    disconnect=sub.add_parser("credential-disconnect")
+    disconnect.add_argument("--account",action="append",required=True)
+    disconnect.add_argument("--vault-file",required=True)
+    disconnect.add_argument("--confirm",action="store_true")
+    disconnect.add_argument("--actor",default="owner-cli:credential-disconnect")
     diagnostics = sub.add_parser("test-readonly")
     diagnostics.add_argument("--account",required=True)
     diagnostics.add_argument("--confirm",action="store_true")
@@ -76,6 +92,21 @@ def main(argv=None):
         db = Store(location)
         try:
             if args.command == "summary": result = db.summary()
+            elif args.command in ("credential-import-preview","credential-import"):
+                manifest=load_private_import(args.input_private_file)
+                if args.command=="credential-import-preview":
+                    result=plan_import(db,manifest,vault_file=args.vault_file,
+                                       replace=args.replace)
+                else:
+                    if not args.confirm:
+                        raise Blocked("Explicit --confirm required for private credential provisioning")
+                    result=import_batch(db,manifest,vault_file=args.vault_file,
+                                        actor=args.actor,replace=args.replace)
+            elif args.command == "credential-disconnect":
+                if not args.confirm:
+                    raise Blocked("Explicit --confirm required for credential disconnection")
+                result=disconnect_batch(db,args.account,vault_file=args.vault_file,
+                                        actor=args.actor)
             elif args.command == "test-readonly":
                 if not args.confirm:
                     raise Blocked("Read-only API test requires explicit --confirm")
