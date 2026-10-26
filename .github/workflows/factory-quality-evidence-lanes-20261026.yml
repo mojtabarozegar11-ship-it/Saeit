@@ -1,0 +1,145 @@
+name: Factory quality evidence lanes - real routing and private workorder refresh
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/factory_quality_production_workorders_v1.py
+      - tests/test_factory_quality_production_workorders_v1.py
+      - .github/workflows/factory-quality-evidence-lanes-20261026.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_quality_production_workorders_v1.py
+      - tests/test_factory_quality_production_workorders_v1.py
+      - .github/workflows/factory-quality-evidence-lanes-20261026.yml
+permissions:
+  contents: read
+concurrency:
+  group: factory-quality-evidence-lanes-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  strict-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify real quality routing, immutable receipts and non-release
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_factory_quality_production_workorders_v1.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_factory_quality_100_criteria.py -v
+          python3 -m py_compile scripts/factory_quality_production_workorders_v1.py
+          echo FACTORY_REAL_EVIDENCE_LANES_CONTRACT=PASS
+  private-vps-refresh:
+    needs: strict-tests
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Authenticate exact private VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/quality-lanes"
+          install -d -m 700 "$d"
+          test -n "$VPS_KEY"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          echo FACTORY_EVIDENCE_LANES_SSH_PIN=PASS
+      - name: Refresh real evidence workorders without sales or site contact
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/quality-lanes"
+          opts=(-i "$d/key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          host="githubops@178.239.147.150"
+          stage="/home/githubops/factory-runtime/operations/.quality-lanes-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          timeout 35s ssh -T "${opts[@]}" "$host" "umask 077; test ! -e '$stage' && mkdir -m 700 '$stage'"
+          for spec in "scripts/factory_quality_production_workorders_v1.py:workorders.py" "scripts/factory_quality_1000_v2.py:quality.py" "factory_config/quality_100_criteria.json:quality_100_criteria.json"; do
+            local_file="${spec%%:*}"
+            remote_file="${spec#*:}"
+            scp -q "${opts[@]}" "$local_file" "$host:$stage/$remote_file"
+            expected="$(sha256sum "$local_file" | awk '{print $1}')"
+            actual="$(timeout 35s ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$remote_file' | awk '{print $1}')"
+            test "$expected" = "$actual"
+          done
+          timeout 600s ssh -T "${opts[@]}" "$host" "bash -se -- '$stage' '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          stage="$1"; run_id="$2"
+          base="$HOME/factory-runtime"
+          ops="$base/operations"
+          private="$base/private/autonomous-product-cycle"
+          python="$base/.venv/bin/python"
+          target="$ops/autonomous-product-runtime/scripts/factory_quality_production_workorders_v1.py"
+          test "$(id -un)" = githubops
+          test -x "$python" && test -d "$private/quality-excellence/rework"
+          test -f "$target" && test ! -L "$target"
+          test -f "$stage/workorders.py" && test -f "$stage/quality.py"
+          # Keep the evaluator's catalogue dependency beside its staged module.
+          cp -p "$stage/quality.py" "$stage/factory_quality_1000_v2.py"
+          "$python" -B -m py_compile "$stage/workorders.py" "$stage/quality.py"
+          exec 8>"$ops/autonomous-product-cycle.lock"
+          flock -w 180 8
+          exec 9>"$private/.production-cycle.lock"
+          flock -w 90 9
+          backup="$ops/backups/quality-lanes-$run_id"
+          install -d -m 700 "$backup"
+          cp -p "$target" "$backup/workorders.py"
+          test "$(sha256sum "$target" | awk '{print $1}')" = "$(sha256sum "$backup/workorders.py" | awk '{print $1}')"
+          # Run once with fresh, hash-matched source; immutable queue receipts remain.
+          "$python" -B "$stage/workorders.py" --private-root "$private" --quality-module "$stage/quality.py" --catalog "$stage/quality_100_criteria.json" --run-id "quality-lanes-$run_id"
+          tmp="$(mktemp "$(dirname "$target")/.workorders.XXXXXXXX")"
+          cp "$stage/workorders.py" "$tmp"
+          chmod 600 "$tmp"
+          mv -f -- "$tmp" "$target"
+          test "$(sha256sum "$target" | awk '{print $1}')" = "$(sha256sum "$stage/workorders.py" | awk '{print $1}')"
+          "$python" -B - "$private" <<'PY'
+          from pathlib import Path
+          import json
+          root=Path(__import__("sys").argv[1])/"quality-excellence"
+          targets=("capacity_planning_workbook","farm_enterprise_economics","fieldwork_animated_motion_48","fieldwork_developer_text_tools","fieldwork_engineering_calculators")
+          observed=[]
+          for product in targets:
+              engineering=root/"engineering-workorders"/product/"current.json"
+              external=root/"independent-certification-queue"/product/"current.json"
+              if not engineering.is_file() or not external.is_file():
+                  observed.append({"product":product,"status":"MISSING"});continue
+              a=json.loads(engineering.read_text())
+              b=json.loads(external.read_text())
+              assert a["quality_1000_certified"] is False
+              assert a["commercial_release_allowed"] is False
+              assert b["blocks_new_commercial_release"] is True
+              observed.append({"product":product,"engineering_status":a["status"],
+                               "engineering_gaps":a["technical_evidence_gap_count"],
+                               "external_gaps":b["external_evidence_gap_count"],
+                               "nonengineering_defects":len(b["pending_nonengineering_defects"])})
+          print("FACTORY_FIRST_FIVE_REAL_ROUTING="+json.dumps(observed,sort_keys=True))
+          print("FACTORY_PUBLIC_RELEASES=0")
+          print("FACTORY_QUALITY_1000_AUTO_APPROVALS=0")
+          PY
+          echo FACTORY_EVIDENCE_LANES_PRIVATE_REFRESH=PASS
+          REMOTE
+      - name: Remove temporary runner credential
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/quality-lanes"
+          if test -d "$d"; then rm -f -- "$d/key" "$d/known"; rmdir "$d"; fi

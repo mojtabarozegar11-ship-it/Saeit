@@ -24,7 +24,35 @@ def load(path):
 EXTERNAL_SIGNATURE_ROLES = (
     "domain_specialist", "independent_quality_auditor", "rights_reviewer"
 )
-EXTERNAL_ONLY_DEFECTS = {"P0_INDEPENDENT_ATTESTATION_NOT_AUTHENTICATED"}
+EXTERNAL_ONLY_DEFECTS = {
+    "P0_INDEPENDENT_ATTESTATION_NOT_AUTHENTICATED",
+    "P0_WORLD_NUMBER_ONE_CLAIM_UNVERIFIED",
+    "P0_GLOBAL_TOP_FIVE_CURRENT_BENCHMARKS_MISSING",
+    "P0_MEASURED_SUPERIORITY_UNVERIFIED",
+}
+EXTERNAL_PROOF_AREAS = {
+    "global_comparative_advantage", "domain_depth_and_accuracy",
+    "user_customer_value", "independent_expert_review",
+    "legal_rights_and_provenance", "originality_and_non_derivativeness",
+}
+ENGINEERING_AREAS = {
+    "technology_and_technical_excellence", "distribution_support_reliability",
+    "real_world_performance_accessibility", "independent_adversarial_testing",
+    "security_ethics_regulatory_safety",
+}
+
+def external_only_defect(code):
+    return (code in EXTERNAL_ONLY_DEFECTS or
+            code.startswith("P0_PROOF_MISSING:") and
+            code.partition(":")[2] in EXTERNAL_PROOF_AREAS)
+
+def workstream(group_id, policy):
+    dimensions=policy.get("quality_dimensions",[])
+    if (group_id in ("Q068","Q092") or
+            any(x in ENGINEERING_AREAS for x in dimensions)):
+        return "engineering_evidence"
+    return "external_evidence_acquisition"
+
 
 
 def write_private_lane(base, lane, product, document, run_id):
@@ -69,7 +97,10 @@ def write_private_lane(base, lane, product, document, run_id):
 def separate_lanes(snapshot, findings, defects, source_receipt_sha256):
     """Human certification must not globally block private technical work."""
     external_pending = sorted(set(snapshot.get("external_audit_pending") or []))
-    engineering_defects = sorted(set(defects) - EXTERNAL_ONLY_DEFECTS)
+    engineering_defects = sorted(x for x in set(defects) if not external_only_defect(x))
+    external_defects = sorted(x for x in set(defects) if external_only_defect(x))
+    technical_findings = [x for x in findings if x["workstream"]=="engineering_evidence"]
+    external_findings = [x for x in findings if x["workstream"]=="external_evidence_acquisition"]
     technical_precheck = (
         snapshot.get("technical_qa_status") == "passed"
         and snapshot.get("verified_artifact_integrity") is True
@@ -94,8 +125,10 @@ def separate_lanes(snapshot, findings, defects, source_receipt_sha256):
         "status": engineering_status,
         "mechanical_precheck_verified": technical_precheck,
         "unresolved_engineering_defects": engineering_defects,
-        "technical_evidence_work_pending": findings,
-        "technical_evidence_gap_count": len(findings),
+        "technical_evidence_work_pending": technical_findings,
+        "technical_evidence_gap_count": len(technical_findings),
+        "external_only_defects_not_sent_to_engineering": external_defects,
+        "nontechnical_evidence_gaps_not_sent_to_engineering": len(external_findings),
         "next_action": (
             "RUN_SOURCE_BACKED_REPAIR_AND_RETEST"
             if engineering_status == "TECHNICAL_REPAIR_REQUIRED"
@@ -110,6 +143,9 @@ def separate_lanes(snapshot, findings, defects, source_receipt_sha256):
         "status": "AWAITING_VERIFIED_EXTERNAL_SPECIALISTS",
         "pending_roles": list(EXTERNAL_SIGNATURE_ROLES),
         "pending_external_audit_findings": external_pending,
+        "pending_nonengineering_defects": external_defects,
+        "external_evidence_work_pending": external_findings,
+        "external_evidence_gap_count": len(external_findings),
         "quality_criteria_requiring_independent_validation": [
             entry["group_id"] for entry in findings
         ],
@@ -129,6 +165,17 @@ def work_orders(root,quality_file,catalog_file,run_id,limit=300):
     module=load(quality_file)
     catalog=module.catalog()
     assert len(catalog)==100
+    # Bind --catalog to the exact policy used for the 100 orders.
+    policy_path=Path(catalog_file)
+    if (policy_path.is_symlink() or not policy_path.is_file()
+            or not 0<policy_path.stat().st_size<=200_000):
+        raise ValueError("QUALITY_CATALOG_FILE_MISSING_OR_UNSAFE")
+    policy_doc=json.loads(policy_path.read_text(encoding="utf8"))
+    if (not isinstance(policy_doc,dict)
+            or policy_doc.get("schema")!="saeit.factory.quality-100-groups.v2"
+            or policy_doc.get("groups")!=catalog):
+        raise ValueError("QUALITY_CATALOG_ARGUMENT_MISMATCH")
+    catalog_sha256=sha(policy_path)
     output=base/"quality-excellence"/"production-workorders"
     assert not output.is_symlink()
     output.mkdir(parents=True,mode=0o700,exist_ok=True)
@@ -151,6 +198,8 @@ def work_orders(root,quality_file,catalog_file,run_id,limit=300):
                 "group_id":number,
                 "criterion":policy["name"],
                 "max_points":10,
+                "quality_dimensions":list(policy["quality_dimensions"]),
+                "workstream":workstream(number,policy),
                 "observed_evidence_status":status or "NO_EVIDENCE",
                 "state":"AWAITING_REAL_MEASUREMENT_AND_REVIEW",
                 "action":"Produce reproducible test or specialist assessment, attach original source bytes with SHA256, and request independent fact/quality review.",
@@ -160,6 +209,7 @@ def work_orders(root,quality_file,catalog_file,run_id,limit=300):
           "schema":"saeit.factory.production-rework-order.v1",
           "recipe":folder.name,
           "source_quality_receipt_sha256":sha(current),
+          "quality_catalog_sha256":catalog_sha256,
           "artifact_sha256":snapshot.get("artifact_sha256"),
           "quality_score_required":1000,
           "group_count":100,"points_per_group":10,
@@ -203,10 +253,15 @@ def work_orders(root,quality_file,catalog_file,run_id,limit=300):
                      "engineering_order_sha256":engineering_digest,
                      "certification_order_sha256":certification_digest,
                      "source_receipt_sha256":sha(current),
+                     "engineering_evidence_gaps":engineering["technical_evidence_gap_count"],
+                     "external_evidence_gaps":certification["external_evidence_gap_count"],
                      "workorder_sha256":key})
     overview={"schema":"saeit.factory.workorder-index.v1",
               "products":len(jobs),"pending_groups_total":sum(x["groups_pending"] for x in jobs),
               "workorder_count":len(jobs),
+              "quality_catalog_sha256":catalog_sha256,
+              "engineering_evidence_gaps_total":sum(x["engineering_evidence_gaps"] for x in jobs),
+              "external_evidence_gaps_total":sum(x["external_evidence_gaps"] for x in jobs),
               "commercially_approved":0,
                "private_engineering_prechecks_passed":sum(
                    item["engineering_lane_status"]=="PRIVATE_TECHNICAL_PRECHECK_PASSED"
