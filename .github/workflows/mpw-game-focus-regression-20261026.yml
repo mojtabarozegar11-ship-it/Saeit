@@ -13,6 +13,7 @@ on:
       - 'site_releases/mojplaywin/games-20261021/beacon-labyrinth/index.html'
       - 'site_releases/mojplaywin/games-20261021/nebula-salvage/index.html'
       - 'tests/game/mpw-five-beta-mechanics-regressions.cjs'
+      - 'scripts/game_candidate_packager.py'
       - '.github/workflows/mpw-game-focus-regression-20261026.yml'
 permissions:
   contents: read
@@ -57,4 +58,15 @@ jobs:
           node --check /tmp/beacon-labyrinth-beta.js
           node --check /tmp/nebula-salvage-beta.js
           node tests/game/mpw-five-beta-mechanics-regressions.cjs
+      - name: Package and verify deterministic source-only candidate
+        run: |
+          set -euo pipefail
+          python3 scripts/game_candidate_packager.py build "$RUNNER_TEMP/game-source-candidate.zip"
+          python3 scripts/game_candidate_packager.py verify "$RUNNER_TEMP/game-source-candidate.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: game-source-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/game-source-candidate.zip
+          retention-days: 7
+          if-no-files-found: error
           echo 'GAME_FOCUS_LOSS_REGRESSION=PASS'
