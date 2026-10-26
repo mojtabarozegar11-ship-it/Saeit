@@ -44,6 +44,15 @@ class ExplicitRightsForSales(unittest.TestCase):
                 content = function_source(path, function)
                 self.assertIn(needle, content)
 
+    def test_expired_invoice_is_readable_without_reusing_stale_payment_quote(self):
+        source = function_source("services/mpw_trx_commercial_web.py", "_show_invoice")
+        self.assertIn("invoice.expires_at<=timezone.now()", source)
+        self.assertIn('return _page("Invoice no longer payable"', source)
+        self.assertIn("Do not send TRX to an expired quote", source)
+        self.assertIn("/commerce/trx-easy/purchases/", source)
+        self.assertNotIn('raise Http404("This invoice is no longer payable")', source)
+        self.assertLess(source.index("return _page("), source.index("render_one_tap_invoice("))
+
     def test_existing_paid_download_and_order_recovery_remain_available(self):
         # New sale issuance is gated; older buyers must still be able to claim
         # a file after independent payment/accounting proof.
