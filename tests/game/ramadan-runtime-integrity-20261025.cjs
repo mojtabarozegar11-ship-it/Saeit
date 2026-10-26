@@ -64,4 +64,36 @@ assert(src.includes('world.hostile=cleanSavedProjectiles('),'resume must sanitiz
 assert(src.includes('world.missiles=cleanSavedProjectiles('),'resume must sanitize guided missiles');
 assert(src.includes('world.pickups=cleanSavedPickups('),'resume must sanitize pickups');
 
+// Exercise the production key handler rather than only asserting source text.
+const keyHandler=slice('function handleGameKeydown(e){',"addEventListener('keydown',handleGameKeydown);");
+const keyboard=vm.runInNewContext(
+ "let screen='game',fireHeld=false;const keys={};const calls={rocket:0,drone:0,special:0,reload:0,interact:0,pause:0};"+
+ "const $=()=>({click(){calls.pause++}});"+
+ "function launchRocket(){calls.rocket++}function droneStrike(){calls.drone++}"+
+ "function special(){calls.special++}function reload(){calls.reload++}"+
+ "function interactObjective(){calls.interact++}"+
+ keyHandler+"({handleGameKeydown,keys,calls,setScreen:s=>screen=s,getFire:()=>fireHeld})"
+);
+const event=(code,repeat=false,target={tagName:'BODY'})=>({code,repeat,target,preventDefault(){this.prevented=true}});
+keyboard.handleGameKeydown(event('KeyQ'));
+keyboard.handleGameKeydown(event('KeyQ',true));
+assert.equal(keyboard.calls.rocket,1,'held rocket shortcut must fire only once');
+keyboard.handleGameKeydown(event('KeyE'));
+keyboard.handleGameKeydown(event('KeyE',true));
+assert.equal(keyboard.calls.drone,1,'held drone shortcut must fire only once');
+keyboard.handleGameKeydown(event('KeyF'));
+keyboard.handleGameKeydown(event('KeyF',true));
+assert.equal(keyboard.calls.special,1,'held special shortcut must fire only once');
+const space=event('Space');keyboard.handleGameKeydown(space);
+assert.equal(space.prevented,true,'Space must not scroll the page while playing');
+assert.equal(keyboard.getFire(),true,'Space must still hold primary fire');
+keyboard.setScreen('home');
+keyboard.handleGameKeydown(event('KeyQ'));
+assert.equal(keyboard.calls.rocket,1,'home screen must not spend rockets');
+keyboard.setScreen('game');
+keyboard.handleGameKeydown(event('KeyQ',false,{tagName:'BUTTON'}));
+assert.equal(keyboard.calls.rocket,1,'focused UI buttons must keep native keyboard behavior');
+keyboard.handleGameKeydown(event('Escape'));
+assert.equal(keyboard.calls.pause,1,'Escape must still pause active play');
+
 console.log('RAMADAN_RUNTIME_INTEGRITY_PASS save-validation=13 stable-missiles controls visibility');
