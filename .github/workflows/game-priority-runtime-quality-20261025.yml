@@ -1,9 +1,9 @@
 name: Game priority runtime integrity
 on:
   push:
-    branches: [game/crown-pause-shop-return-20261026]
+    branches: [game/crown-pause-shop-return-20261026, game/crown-hangar-level-parity-20261026]
   pull_request:
-    branches: [main]
+    branches: [main, 'game/crown-*']
     paths:
       - games/ramadan-war/**
       - games/crown-defender/index.html
