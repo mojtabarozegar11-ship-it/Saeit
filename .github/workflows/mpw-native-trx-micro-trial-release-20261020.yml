@@ -237,3 +237,4 @@ jobs:
 # Owner-directed revalidation of the existing USD 0.03 native-TRX test SKU, 2026-10-26.
 # 2026-10-26: release after fixing trial-only product detail metadata and purchase CTA.
 # 2026-10-26: verify effective Django template origin for trial purchase CTA.
+# 2026-10-26: confirm rendered accessible 3-cent checkout anchor after template processing.
