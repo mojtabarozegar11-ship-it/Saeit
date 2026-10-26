@@ -438,12 +438,16 @@ class GeneratedAcceptanceTests(unittest.TestCase):
         self.assertEqual(len(observed['groups']), len(expected))
         for actual, key in zip(observed['groups'], sorted(expected)):
             values=expected[key]
+            with localcontext() as context:
+                context.prec=50
+                total=sum(values, Decimal(0))
+                mean=total/Decimal(len(values))
             self.assertEqual(Decimal(actual['group_value']), key)
             self.assertEqual(actual['count'], len(values))
-            self.assertEqual(Decimal(actual['sum']), sum(values, Decimal(0)))
+            self.assertEqual(Decimal(actual['sum']), total)
             self.assertEqual(Decimal(actual['minimum']), min(values))
             self.assertEqual(Decimal(actual['maximum']), max(values))
-            self.assertEqual(Decimal(actual['mean']), sum(values, Decimal(0))/Decimal(len(values)))
+            self.assertEqual(Decimal(actual['mean']), mean)
     def test_grouped_statistics_reject_invalid_field_and_batch(self):
         row=EXAMPLES[0]['inputs']
         group_by=next(iter(row))
