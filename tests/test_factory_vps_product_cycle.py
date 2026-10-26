@@ -375,8 +375,9 @@ class ProductionContinuityTests(unittest.TestCase):
                                          'designer_rework':designer_state.get('rework')},sort_keys=True))
         self.assertLessEqual(status['functional_products'],5)
         slots=json.loads((self.output/'quality-excellence/product-flow/active-slots/current.json').read_text())
-        self.assertEqual(slots['capacity'],5)
-        self.assertEqual(len(slots['active']),5)
+        self.assertEqual(slots['line_id'],41)
+        self.assertEqual(slots['capacity'],1)
+        self.assertEqual(len(slots['active']),1)
         self.assertEqual(novel,5,json.dumps(actual_cycles,sort_keys=True))
         replay=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True,
                                enable_design_intake=True,design_capacity=6)
