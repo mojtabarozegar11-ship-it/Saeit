@@ -177,6 +177,15 @@ jobs:
           candidates_root=private/'quality-excellence'/'evolved-source-technical-products'
           slot_file=private/'quality-excellence'/'product-flow'/'active-slots'/'current.json'
           slots=json.loads(slot_file.read_text(encoding='utf8'))
+          current_names=[item.get('recipe') for item in slots.get('active',[])
+                         if isinstance(item,dict) and isinstance(item.get('recipe'),str)]
+          if generated.is_dir() and not generated.is_symlink():
+              current_names.extend(p.name for p in generated.iterdir()
+                                   if p.is_dir() and not p.is_symlink())
+          cspec=importlib.util.spec_from_file_location('line_41_cycle',scripts/'factory_vps_product_cycle.py')
+          cycle=importlib.util.module_from_spec(cspec);cspec.loader.exec_module(cycle)
+          cycle._maintain_product_slots(private,current_names)
+          slots=json.loads(slot_file.read_text(encoding='utf8'))
           if (slots.get('schema')!='saeit.factory.product-slots.v1'
                   or slots.get('line_id')!=41 or slots.get('capacity')!=1 or len(slots.get('active',[]))!=1):
               raise RuntimeError('LINE_41_SINGLE_ACTIVE_PRODUCT_REQUIRED')
