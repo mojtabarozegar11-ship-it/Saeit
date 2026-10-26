@@ -10,6 +10,9 @@ on:
       - 'templates/studio_raha/index.html'
       - 'templates/taniya_studio/index.html'
       - 'tests/game/studio-active-game-regressions.cjs'
+      - 'site_releases/mojplaywin/games-20261021/beacon-labyrinth/index.html'
+      - 'site_releases/mojplaywin/games-20261021/nebula-salvage/index.html'
+      - 'tests/game/mpw-five-beta-mechanics-regressions.cjs'
       - '.github/workflows/mpw-game-focus-regression-20261026.yml'
 permissions:
   contents: read
@@ -45,4 +48,13 @@ jobs:
           node --check /tmp/raha-active-game.js
           node --check /tmp/taniya-active-game.js
           node tests/game/studio-active-game-regressions.cjs
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ('beacon-labyrinth','nebula-salvage'):
+              src=Path('site_releases/mojplaywin/games-20261021/'+name+'/index.html').read_text('utf-8')
+              Path('/tmp/'+name+'-beta.js').write_text(src.rsplit('<script>',1)[1].split('</script>',1)[0], 'utf-8')
+          PY
+          node --check /tmp/beacon-labyrinth-beta.js
+          node --check /tmp/nebula-salvage-beta.js
+          node tests/game/mpw-five-beta-mechanics-regressions.cjs
           echo 'GAME_FOCUS_LOSS_REGRESSION=PASS'
