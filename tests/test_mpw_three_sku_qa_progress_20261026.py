@@ -58,7 +58,7 @@ class PrivateProgressTests(unittest.TestCase):
     def test_rejects_failed_mechanical_gate_without_advancing(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
-            self.seed(root,failed=True)
+            digest=self.seed(root,failed=True)
             with self.assertRaisesRegex(RuntimeError,"PRIVATE_QA_MECHANICAL_CHECKS_NOT_PASSED"):
                 progress.verified_progress(root,72)
             progress_dir=root/"quality1000-rework"/"72"/digest/"progress"
