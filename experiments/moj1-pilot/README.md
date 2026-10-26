@@ -1,6 +1,12 @@
 # Moj 1 and Moj Digital Assets — pilot 0.8 (F02 capped reserve prototype)
 
-**Current status:** draft testnet code. The owner approved the project name `Moj 1`, ticker `MOJ1`, fixed 100-billion-unit supply, and the six allocation percentages on 21 October 2026. Uniqueness, trademarks, issuer identity, beneficiary addresses, release schedules and legal assessments remain open. No currency has been issued; no Mainnet contract or market has been launched. The artwork supplied by the owner is included as a reference image, not an on-chain identity claim.
+**Current status:** draft testnet code. The owner approved the project name `Moj 1`, ticker `MOJ1`, fixed 100-billion-unit supply, and the six allocation percentages on 21 October 2026. Uniqueness, trademarks, issuer identity, beneficiary addresses, release schedules and legal assessments remain open. Test-only V1 and guarded V2 token contracts are recorded on Shasta; no Mainnet token, public sale, or liquid market has launched. The artwork supplied by the owner is included as a reference image, not an on-chain identity claim.
+
+## Guarded V2 status and release gate (26 October 2026)
+
+The guarded **V2** testnet candidate has its own [Shasta V2 manifest](shasta-v2-deployment.json), separate from legacy V1 `shasta-deployment.json`: candidate token `TA8dcG3b9GByaY9vZ1LVjsFohZrZ4CveAY`, candidate factory/escrow `TCBNLE1ZgEcAWXRZ6jjYPSyUH7WiHpLyBm`. The source audit anchor is commit `4411b28325be44c54d7917b4c67786348521b6a9`; development hardening is not itself an external security attestation. The V2 manifest records the full 100-billion supply in escrow and no distribution, real payments, sale or Mainnet deployment.
+
+The zero-key, zero-network [V2 market gate](scripts/v2-market-readiness-offline.mjs) checks V1/V2 separation, the fixed supply, all six allocations, frozen audit anchor and closed distribution/sale flags. Run `node scripts/v2-market-readiness-offline.mjs --assert-blocked` only from this project directory; the script **always** reports `NO_GO` even when the manifests are consistent. It must not be used as a release authorization. The [offline liquidity calculator](tools/liquidity-scenario.mjs) is a hypothetical constant-product model and does not discover a live price or supply a market. Independent audit, real custody, beneficiaries, legal review, genuine paired liquidity and separate owner authorization remain mandatory gates.
 
 ## What is implemented
 
