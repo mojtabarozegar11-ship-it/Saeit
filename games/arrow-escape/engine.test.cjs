@@ -49,5 +49,21 @@ assert.equal(game.canExit({id:1,dir:0,path:[{x:1,y:1}]},[{id:2,path:null}],7),fa
 assert.equal(game.canExit({id:1,dir:0,path:[{x:1,y:1}]},[{id:2,path:[{x:100,y:1}]}],7),false,'off-board blocker geometry must be rejected');
 assert.equal(game.solve(null,7),null,'malformed board must not crash solver');
 assert.equal(game.solve([],Infinity),null,'nonfinite board size must be rejected');
+// Corrupt imported boards must not claim solvability or permit a duplicate-ID escape.
+const legitimate = game.generate(2);
+const first = legitimate.pieces[0];
+const impostor = { ...legitimate.pieces[1], id: first.id };
+assert.equal(game.canExit(first, [first, impostor], legitimate.size), false,
+  'a second arrow must not impersonate the selected arrow');
+assert.equal(game.solve([first, impostor], legitimate.size), null,
+  'duplicate arrow IDs must not produce a solution');
+const overlapping = [
+  { id: 1, dir: 0, path: [{ x: 1, y: 1 }, { x: 2, y: 1 }] },
+  { id: 2, dir: 0, path: [{ x: 2, y: 1 }, { x: 3, y: 1 }] }
+];
+assert.equal(game.solve(overlapping, 7), null,
+  'overlapping imported geometry must be rejected before solving');
+assert.equal(game.solve([{ id: '1', dir: 0, path: [{ x: 1, y: 1 }] }], 7), null,
+  'string IDs must not be accepted as puzzle identities');
 assert.ok(withBlockers > 10, 'levels contain no challenging dependencies');
 console.log('ARROW_SOLVABLE_LEVELS=PASS', { tested, withBlockers, min, max });

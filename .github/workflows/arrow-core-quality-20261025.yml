@@ -1,7 +1,8 @@
 name: Arrow Escape and Nexus deterministic quality
 on:
   pull_request:
-    branches: [main]
+    # Stacked game PRs also require deterministic tests before merging into their parent.
+    branches: [main, 'game/arrow-*']
     paths:
       - games/arrow-escape/engine.js
       - games/arrow-escape/nexus-core.js
