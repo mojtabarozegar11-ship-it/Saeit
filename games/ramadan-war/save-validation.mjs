@@ -20,10 +20,22 @@ export function validateCampaignSave(s) {
   )) return false;
   if (s.missionPassed !== undefined && typeof s.missionPassed !== 'boolean') return false;
   if (s.missionPassed === true && s.enemies.length !== 0) return false;
-  if (!group(s.hostile, 150, e => point(e) && finite(e.life, -10, 100))) return false;
-  if (!group(s.missiles, 80, e => point(e) && finite(e.life, -10, 100))) return false;
+  // Projectiles are integrated each frame; missing velocities poison the world with NaN.
+  if (!group(s.hostile, 150, e => point(e) && finite(e.life, -10, 100) &&
+      finite(e.vx, -50, 50) && finite(e.vy, -50, 50) && finite(e.hp, 0, 500))) return false;
+  if (!group(s.missiles, 80, e => point(e) && finite(e.life, -10, 100) &&
+      finite(e.vx, -50, 50) && finite(e.vy, -50, 50) &&
+      (e.targetId === undefined || integer(e.targetId, -1, 29)))) return false;
   if (!group(s.pickups, 60, e => point(e, 0, 16) && finite(e.life, -10, 4000) &&
     ['ammo', 'health', 'intel', 'mission-intel'].includes(e.type))) return false;
+  // Preserve old saves without optional timers; fail closed on nonfinite saved clocks.
+  for (const field of ['time', 'enemyTimer', 'shotTimer', 'reloadTimer', 'comboTimer',
+    'rocketTimer', 'droneTimer', 'skillTimer', 'shield', 'strikeTimer', 'hitFlash',
+    'explosionTimer', 'muzzle', 'freeze']) {
+    if (s[field] !== undefined && !finite(s[field], -1e8, 1e8)) return false;
+  }
+  if (s.strikeX !== undefined && !finite(s.strikeX, -50, 50)) return false;
+  if (s.strikeY !== undefined && !finite(s.strikeY, -50, 50)) return false;
   if (s.objective != null && (typeof s.objective !== 'object' || Array.isArray(s.objective) ||
       !integer(s.objective.done, 0, 3) || !finite(s.objective.hold, 0, 100) ||
       typeof s.objective.bossDefeated !== 'boolean')) return false;
