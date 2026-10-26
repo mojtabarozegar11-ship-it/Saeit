@@ -1,0 +1,59 @@
+name: AE-2026-001 original ILOSTAT absolute agriculture employment coverage
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/ae-2026-001-ilostat-absolute-employment-coverage.yml
+      - analysis/ae_ilostat_official_2000_2019_absolute_agriculture_coverage.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  source-backed-ilostat-coverage:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Retrieve actual ILOSTAT source from successful independent source acquisition
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ae_ilostat"
+          gh run download 40299957865 --repo "$GITHUB_REPOSITORY" \
+            --name AE-2026-001-official-ILOSTAT-absolute-employment-source-unfiltered \
+            --dir "$RUNNER_TEMP/ae_ilostat"
+          test -s "$RUNNER_TEMP/ae_ilostat/ILOSTAT_2000_2019_SOURCE_UNFILTERED.csv"
+          test -s "$RUNNER_TEMP/ae_ilostat/source_sha256.txt"
+          echo "Original RDS source SHA256:"
+          cat "$RUNNER_TEMP/ae_ilostat/source_sha256.txt"
+      - name: Independently quantify absolute agriculture employment source coverage and ambiguity
+        run: |
+          set -euo pipefail
+          python analysis/ae_ilostat_official_2000_2019_absolute_agriculture_coverage.py \
+            --ilostat-csv "$RUNNER_TEMP/ae_ilostat/ILOSTAT_2000_2019_SOURCE_UNFILTERED.csv" \
+            --wdi-panel research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv \
+            --out "$RUNNER_TEMP/ae_ilostat/AE_ILOSTAT_ABSOLUTE_AGRICULTURE_COVERAGE.json"
+          python - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path(os.environ["RUNNER_TEMP"])/"ae_ilostat"/"AE_ILOSTAT_ABSOLUTE_AGRICULTURE_COVERAGE.json"
+          x=json.loads(p.read_text())
+          assert x["input_endpoint_rows_all_categories"]==40947
+          assert x["observed_2000"]>0 and x["observed_2019"]>0
+          assert x["independent_wdi_worker_denominator_reconciliation"] is False
+          assert x["historical_ilostat_2024_2025_vintages_verified"] is False
+          print("PASS: REAL ILOSTAT ABSOLUTE EMPLOYMENT COVERAGE; NOT A WDI VINTAGE ATTRIBUTION")
+          PY
+      - name: Preserve source-locked absolute employment coverage and country-year records
+        uses: actions/upload-artifact@v4
+        with:
+          name: AE-2026-001-official-ILOSTAT-agriculture-employment-coverage
+          path: |
+            ${{ runner.temp }}/ae_ilostat/AE_ILOSTAT_ABSOLUTE_AGRICULTURE_COVERAGE.json
+            ${{ runner.temp }}/ae_ilostat/source_sha256.txt
+            ${{ runner.temp }}/ae_ilostat/endpoint_csv_sha256.txt
+          retention-days: 14
+          if-no-files-found: error
