@@ -136,12 +136,15 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];le
   if(!raw||raw.length>30000)return [];
   const saved=JSON.parse(raw);
   if(!Array.isArray(saved))return [];
-  return saved.slice(0,100).flatMap(item=>{
+  const counts=new Map();
+  for(const item of saved.slice(0,100)){
    const original=products.find(p=>p.name===item?.name);
-   if(!original)return [];
+   if(!original)continue;
    const qty=Number.isSafeInteger(item.qty)&&item.qty>=1&&item.qty<=20?item.qty:1;
-   return [{...original,qty}];
-  });
+   counts.set(original.name,Math.min(20,(counts.get(original.name)||0)+qty));
+  }
+  // Deduplicate saved lines in catalog order; no forged extra cart rows.
+  return products.filter(p=>counts.has(p.name)).map(p=>({...p,qty:counts.get(p.name)}));
  }catch(_){return []}
 }
 let cart=loadCart();let toastTimer;
