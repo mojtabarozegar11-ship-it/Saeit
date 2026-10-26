@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {validateCampaignSave} from '../../games/ramadan-war/save-validation.mjs';
+import {validateCampaignSave, resumeCampaignScreen} from '../../games/ramadan-war/save-validation.mjs';
 
 const fresh = () => ({
   hero: 0, mission: 0, lives: 100, x: 2.5, y: 7.5, angle: 0,
@@ -53,4 +53,27 @@ test('reversible release manifest ships and checks every new imported save modul
   assert.match(client, /import \{validateCampaignSave\} from '\.\/save-validation\.mjs'/);
   assert.match(deploy, /ASSETS=\[[^\n]*'save-validation\.mjs'/);
   assert.match(deploy, /b'\.\/save-validation\.mjs' in new\['game\.js'\]/);
+});
+
+test('completed campaign stage resumes to its result panel; ongoing stage resumes to play', () => {
+  const active = fresh();
+  assert.equal(resumeCampaignScreen(active), 'game');
+  assert.equal(resumeCampaignScreen({...active, missionPassed: false}), 'game');
+  const cleared = {...active, missionPassed: true};
+  assert.equal(validateCampaignSave(cleared), true);
+  assert.equal(resumeCampaignScreen(cleared), 'success');
+});
+
+test('rejects malformed completion flags and impossible cleared stage with living enemies', () => {
+  for (const missionPassed of [null, 'true', 1, [], {}])
+    assert.equal(validateCampaignSave({...fresh(), missionPassed}), false);
+  const enemy = {x: 8, y: 7, type: 1, hp: 30};
+  assert.equal(validateCampaignSave({...fresh(), missionPassed: true, enemies: [enemy]}), false);
+});
+
+test('restore branch presents completed stage results instead of trapping player in arena', () => {
+  const client = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
+  assert.match(client, /if\(resumeCampaignScreen\(world\)==='success'\)\{showResult\(/);
+  assert.match(client, /showResult\('منطقه پاکسازی شد'/);
+  assert.match(client, /showScreen\('game'\);last=performance\.now\(\);requestAnimationFrame\(frame\)/);
 });
