@@ -83,6 +83,39 @@ def inspect_pdf(path):
             result["pdfinfo_passed"] = bool(result["page_count"] and result["page_count"] > 0 and result["encrypted"] is False)
         else:
             result["pdfinfo_failure"] = "PARSER_REJECTED"
+    # VPS images may not include pdfinfo. Safely try already-installed Python parsers
+    # without fetching packages or moving private book bytes off the factory.
+    result["python_backend_passed"] = False
+    result["python_backend"] = None
+    if not result["pdfinfo_passed"]:
+        import importlib
+        import importlib.util
+        for backend in ("pypdf", "PyPDF2", "fitz"):
+            if importlib.util.find_spec(backend) is None:
+                continue
+            result["python_backend"] = backend
+            try:
+                module = importlib.import_module(backend)
+                if backend == "fitz":
+                    doc = module.open(str(path))
+                    try:
+                        count = len(doc)
+                        encrypted = bool(doc.is_encrypted)
+                    finally:
+                        doc.close()
+                else:
+                    doc = module.PdfReader(str(path), strict=False)
+                    encrypted = bool(doc.is_encrypted)
+                    count = 0 if encrypted else len(doc.pages)
+                if count > 0 and not encrypted:
+                    result["page_count"] = count
+                    result["encrypted"] = False
+                    result["python_backend_passed"] = True
+                    break
+            except Exception:
+                result["python_parser_failure"] = "PARSER_REJECTED"
+    result["pdf_validation_passed"] = bool(
+        result["pdfinfo_passed"] or result["python_backend_passed"])
     return result
 
 def inspect_zip(path):
@@ -196,7 +229,8 @@ def run(root=BASE):
             immutable_write(dst, raw)
             versions.append({"sha256": sha, "format": facts["format"],
                              "pdf_parser_available": facts.get("pdfinfo_available"),
-                             "pdf_parser_passed": facts.get("pdfinfo_passed"),
+                             "pdf_parser_passed": facts.get("pdf_validation_passed"),
+                             "pdf_python_backend": facts.get("python_backend"),
                              "pdf_pages": facts.get("page_count"),
                              "pdf_parser_failure": facts.get("pdfinfo_failure"),
                              "zip_crc_passed": facts.get("valid"),
