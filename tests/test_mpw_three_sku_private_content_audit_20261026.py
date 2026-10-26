@@ -107,6 +107,23 @@ class PrivateContentAuditTests(unittest.TestCase):
             self.assertTrue(result["checks"]["accessible_image_alt_present"])
             self.assertTrue(result["checks"]["local_asset_links_resolve"])
             self.assertNotIn("html_content",result)
+            self.assertIn("navigation_integrity",result["needs_specialist_review"])
+            self.assertNotIn("gameplay",result["needs_specialist_review"])
+
+    def test_zip_missing_media_and_srcset_assets_cannot_pass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/"site.zip"
+            with zipfile.ZipFile(path,"w") as archive:
+                archive.writestr("index.html",
+                    "<html><head><title>Kit</title></head><body>"
+                    "<img src='missing-hero.png' alt='Hero'>"
+                    "<picture><source srcset='absent-1.png 1x, absent-2.png 2x'></picture>"
+                    "<video poster='missing-poster.jpg'></video>"
+                    "</body></html>")
+            result=audit.audit_zip(path)
+            self.assertFalse(result["checks"]["local_asset_links_resolve"])
+            self.assertEqual(len(result["missing_local_refs"]),4)
+            self.assertNotIn("html_content",result)
 
     def test_unsafe_zip_paths_are_not_accepted(self):
         with tempfile.TemporaryDirectory() as tmp:
