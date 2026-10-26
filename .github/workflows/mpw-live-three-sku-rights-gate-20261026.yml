@@ -122,6 +122,31 @@ jobs:
             "matches_are_not_independent_legal_clearance":True
           },sort_keys=True))
           PY
+      - name: Identify exact installed expiry handler source fragment without sensitive values
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import hashlib,inspect,json,os,sys
+          from pathlib import Path
+          root=Path("/home/zomorod2/Saeit-staging")
+          os.chdir(root);sys.path.insert(0,str(root))
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from services.mpw_trx_commercial_web import _show_invoice
+          source=inspect.getsource(_show_invoice)
+          lines=source.splitlines()
+          excerpts=[]
+          for i,line in enumerate(lines):
+            if "expires_at" in line or "no longer payable" in line or "Invoice" in line and "404" in line:
+              excerpts.append(lines[max(0,i-2):min(len(lines),i+5)])
+          print("MPW_LIVE_EXPIRED_HANDLER_SOURCE="+json.dumps({
+            "source_sha256":hashlib.sha256(source.encode()).hexdigest(),
+            "expiry_fragments":excerpts[:4],
+            "read_only":True,
+            "no_invoice_fields_printed":True},sort_keys=True))
+          PY
       - name: Diagnose live TRX invoice routing and expiry without reading buyer details
         shell: bash
         run: |
