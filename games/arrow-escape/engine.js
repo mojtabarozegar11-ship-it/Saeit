@@ -24,8 +24,14 @@
     if (!piece || !Number.isInteger(piece.dir) || piece.dir < 0 || piece.dir >= DIRECTIONS.length ||
         !Array.isArray(piece.path) || !piece.path.length || !Array.isArray(others) ||
         !Number.isInteger(size) || size < 1 || size > 100) return false;
+    // Fail closed on damaged or imported puzzle data instead of allowing phantom exits.
+    const validPoint = p => p && Number.isInteger(p.x) && Number.isInteger(p.y) &&
+      p.x >= 0 && p.y >= 0 && p.x < size && p.y < size;
+    if (!piece.path.every(validPoint)) return false;
     const occupied = new Set();
     for (const other of others) {
+      if (!other || !Array.isArray(other.path) || !other.path.length ||
+          !other.path.every(validPoint)) return false;
       if (other.id === piece.id) continue;
       for (const p of other.path) occupied.add(key(p.x, p.y));
     }
