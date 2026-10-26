@@ -172,10 +172,16 @@ jobs:
           mspec=importlib.util.spec_from_file_location('verified_evolution_product_maker',maker_path)
           maker=importlib.util.module_from_spec(mspec);mspec.loader.exec_module(maker)
           candidates_root=private/'quality-excellence'/'evolved-source-technical-products'
+          slot_file=private/'quality-excellence'/'product-flow'/'active-slots'/'current.json'
+          slots=json.loads(slot_file.read_text(encoding='utf8'))
+          if (slots.get('schema')!='saeit.factory.product-slots.v1'
+                  or slots.get('capacity')!=5 or len(slots.get('active',[]))!=5):
+              raise RuntimeError('FIVE_ACTIVE_FACTORY_SLOTS_REQUIRED')
+          active={item.get('recipe') for item in slots['active']}
           if candidates_root.is_symlink():raise RuntimeError('EVOLUTION_CANDIDATE_ROOT_UNSAFE')
           if generated.is_dir() and not generated.is_symlink():
               candidates=sorted(p for p in generated.iterdir()
-                                if p.is_dir() and not p.is_symlink()
+                                if p.is_dir() and not p.is_symlink() and p.name in active
                                 and (p.name.startswith('synth_') or p.name.startswith('sheet_')))
               # Only pre-current candidates need regeneration; never repeatedly
               # spend the window on already-evolved products.
@@ -186,7 +192,7 @@ jobs:
                   except (OSError,ValueError) as err:
                       issues.append({'recipe':p.name,'reason':type(err).__name__})
                       continue
-                  if receipt.get('generator_capability_revision')=='verified-grouped-statistics-v5':
+                  if receipt.get('generator_capability_revision')=='verified-one-percent-sensitivity-v6':
                       continue
                   examined+=1
                   try:

@@ -205,7 +205,7 @@ def compile_recipe(spec, recipes):
                   'search_states_evaluated':searched,'training_examples':len(train),
                   'heldout_examples_passed':len(holdout),'general_ai_invention':False,
                   'scientific_review_completed':False,'commercial_release':False,
-                   'generator_capability_revision':'verified-grouped-statistics-v5'}
+                   'generator_capability_revision':'verified-one-percent-sensitivity-v6'}
     if destination.exists():
         saved = read(destination/'design_receipt.json')
         if saved.get('functional_sha256') != functional_hash:
@@ -320,6 +320,54 @@ def calculate_grouped_statistics(records, group_by):
             'groups': summaries}
 # GROUPED_STATISTICS_API_V5_END
 
+# SENSITIVITY_API_V6_START
+def calculate_sensitivity(data):
+    """Measure deterministic one-step input effects using the real calculator."""
+    baseline = calculate(data)
+    base_output = Decimal(baseline['result'])
+    scenarios = []
+    for name, field in zip(NAMES, FIELDS):
+        current = Decimal(str(data[name]))
+        step = Decimal(1) if field.get('integral') else max(
+            abs(current) * Decimal('0.01'), Decimal('0.000001'))
+        directions = {}
+        for label, delta in (('down', -step), ('up', step)):
+            candidate_value = current + delta
+            in_domain = (
+                ('minimum' not in field or candidate_value >= Decimal(str(field['minimum'])))
+                and ('maximum' not in field or candidate_value <= Decimal(str(field['maximum'])))
+            )
+            if not in_domain:
+                directions[label] = {'status': 'outside_declared_domain'}
+                continue
+            sample = dict(data)
+            sample[name] = str(candidate_value)
+            try:
+                candidate_output = Decimal(calculate(sample)['result'])
+            except ValueError:
+                directions[label] = {'status': 'calculation_rejected'}
+                continue
+            directions[label] = {
+                'status': 'measured',
+                'input_value': str(candidate_value),
+                'output_value': str(candidate_output),
+                'output_delta': str(candidate_output - base_output),
+            }
+        scenarios.append({
+            'input': name,
+            'base_value': str(current),
+            'step_size': str(step),
+            'unit': field['unit'],
+            'directions': directions,
+        })
+    return {
+        'unit': baseline['unit'],
+        'baseline_output': str(base_output),
+        'input_scenarios': scenarios,
+        'interpretation': 'deterministic local sensitivity only; not a forecast',
+    }
+# SENSITIVITY_API_V6_END
+
 if __name__ == '__main__':
     incoming=json.load(sys.stdin)
     print(json.dumps(calculate_batch(incoming) if isinstance(incoming,list)
@@ -342,6 +390,9 @@ from calculator import calculate_distribution
 # GROUPED_STATISTICS_TESTS_V5_START
 from calculator import calculate_grouped_statistics
 # GROUPED_STATISTICS_TESTS_V5_END
+# SENSITIVITY_TESTS_V6_START
+from calculator import calculate_sensitivity
+# SENSITIVITY_TESTS_V6_END
 EXAMPLES = %r
 class GeneratedAcceptanceTests(unittest.TestCase):
     def test_reference_cases(self):
@@ -456,6 +507,29 @@ class GeneratedAcceptanceTests(unittest.TestCase):
         for records in ([], [{}], [{}]*101, None, 'broken'):
             with self.assertRaises(ValueError): calculate_grouped_statistics(records, group_by)
     # GROUPED_STATISTICS_TESTS_V5_END
+    # SENSITIVITY_TESTS_V6_START
+    def test_sensitivity_matches_independent_recalculation(self):
+        inputs = EXAMPLES[0]['inputs']
+        observed = calculate_sensitivity(inputs)
+        self.assertEqual(Decimal(observed['baseline_output']),
+                         Decimal(calculate(inputs)['result']))
+        self.assertEqual(len(observed['input_scenarios']), len(inputs))
+        for scenario in observed['input_scenarios']:
+            name = scenario['input']
+            for direction in scenario['directions'].values():
+                if direction['status'] != 'measured':
+                    continue
+                changed = dict(inputs)
+                changed[name] = direction['input_value']
+                expected = Decimal(calculate(changed)['result'])
+                self.assertEqual(Decimal(direction['output_value']), expected)
+                self.assertEqual(Decimal(direction['output_delta']),
+                                 expected - Decimal(observed['baseline_output']))
+    def test_sensitivity_rejects_invalid_base_inputs(self):
+        for invalid in ({}, None, [], {'unknown': '1'}):
+            with self.assertRaises(ValueError):
+                calculate_sensitivity(invalid)
+    # SENSITIVITY_TESTS_V6_END
 ''' % examples
     readme = '# '+spec['title']+'\n\n'+spec['problem']+'\n\n'
     readme += 'Method: bounded arithmetic program synthesis; not a general AI invention.\n\n'
@@ -463,7 +537,7 @@ class GeneratedAcceptanceTests(unittest.TestCase):
     readme += 'Output unit: '+spec['output_unit']+'\n\n'+spec['limitations']+'\n\n'
     readme += 'Run: python calculator.py < example_inputs.json\n\n'
     readme += 'Bounded batch usage: provide a JSON array of 1-100 complete input objects on stdin; invalid entries reject the whole batch.\n\n'
-    readme += 'Python API: calculate_statistics(records) and calculate_distribution(records) provide exact-Decimal descriptive summaries, interpolated p25/median/p75, and population variance for 1-100 validated customer rows. calculate_grouped_statistics(records, group_by) provides ordered per-input totals, counts, ranges and means. Descriptions are not predictive risk estimates.\n\n'
+    readme += 'Python API: calculate_statistics(records), calculate_distribution(records) and calculate_grouped_statistics(records, group_by) provide exact-Decimal summaries of validated inputs. calculate_sensitivity(data) measures deterministic one-step effects for each declared input and reports domain or calculation rejections without extrapolating forecasts.\n\n'
     readme += 'Technical prototype; scientific, usability and commercial review remain pending.\n'
     stage = Path(tempfile.mkdtemp(prefix='.candidate-',dir=str(recipes)))
     try:
@@ -666,8 +740,8 @@ def evolve_recipe(recipe, recipes):
     prior_code=calculator.read_text(encoding='utf8')
     if not prior_code.startswith('"""Generated deterministic arithmetic planning tool;'):
         raise ValueError('EVOLUTION_SOURCE_NOT_COMPILER_OWNED')
-    if ('# GROUPED_STATISTICS_API_V5_START' in prior_code
-            and receipt.get('generator_capability_revision')=='verified-grouped-statistics-v5'):
+    if ('# SENSITIVITY_API_V6_START' in prior_code
+            and receipt.get('generator_capability_revision')=='verified-one-percent-sensitivity-v6'):
         return {'schema':'saeit.factory.source-evolution.v1',
                 'recipe':recipe,'changed':False,
                 'reason':'already_evolved','commercial_release':False}
@@ -713,7 +787,7 @@ def evolve_recipe(recipe, recipes):
             'revised_source_sha256':new_digest,
             'previous_source_retained':str(saved),
             'measured_acceptance':measurements,
-            'implemented_feature':'verified_decimal_grouped_customer_batch_statistics_v5',
+            'implemented_feature':'verified_decimal_one_step_input_sensitivity_analysis_v6',
             'independent_specialist_approval_verified':False,
             'quality_1000_certified':False,'commercial_release':False}
 
