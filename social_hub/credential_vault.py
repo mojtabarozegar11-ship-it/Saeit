@@ -125,6 +125,42 @@ def load_private_import(path):
     """Read owner-created one-time input file, refusing world-readable secrets."""
     return _private_json(path,limit=MAX_IMPORT_BYTES)
 
+def create_private_template(store,output_file):
+    """Write a token-free owner input template, exclusively mode 0600.
+
+    Only actual, administratively attested API-bearing accounts are included.
+    Blank token fields MUST be replaced offline before import can succeed.
+    """
+    rows=[]
+    for a in store.accounts():
+        if a["verified"] and platform(a["platform"]).sendable:
+            _account_alias(a)
+            if any(k in (a["destination"]+" "+a["public_url"]).casefold()
+                   for k in RESTRICTED_HANDLES):
+                continue
+            rows.append({"account_id":a["id"],"token":""})
+    if not rows:
+        raise Blocked("No owner-attested write-capable accounts are registered yet")
+    if len(rows)>MAX_ACCOUNTS:
+        raise Blocked("Template exceeds account import capacity")
+    target=_path(output_file)
+    if target.exists():
+        raise Blocked("Refusing to overwrite an existing private credential input file")
+    content=json.dumps({"schema_version":1,"owner_confirmed":True,
+                        "credentials":rows},ensure_ascii=True,
+                       sort_keys=True,indent=2).encode("utf-8")
+    flags=os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,"O_NOFOLLOW",0)
+    fd=os.open(target,flags,0o600)
+    try:
+        with os.fdopen(fd,"wb",closefd=False) as out:
+            out.write(content)
+            out.flush()
+            os.fsync(out.fileno())
+    finally:
+        os.close(fd)
+    return {"status":"private_template_created","account_count":len(rows),
+            "credentials_included":False,"outbound_enabled":False}
+
 def _validate_import(store,manifest,*,env=None):
     env=os.environ if env is None else env
     if (not isinstance(manifest,dict) or
