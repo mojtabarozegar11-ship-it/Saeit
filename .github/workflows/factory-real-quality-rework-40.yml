@@ -150,6 +150,21 @@ jobs:
             --additional-source-root /home/githubops/factory-runtime/private/autonomous-product-cycle/recovered-original-product-recipes \
             --rounds 2 --limit 3
           echo FACTORY_NATIVE_TECHNICAL_REBUILD_CANDIDATES_INSPECTED=YES
+          # Return every changed factory artifact to quality control in this same run.
+          timeout 125s ssh -T "${opts[@]}" githubops@178.239.147.150 \
+            python3 -B "$stage/rework.py" \
+            --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle \
+            --policy "$stage/quality.py" --registry "$stage/families.json" \
+            --scorecard "$stage/score1000.py" \
+            --run-reference "$GITHUB_RUN_ID-post-rework"
+          echo FACTORY_POST_REWORK_QUALITY_REINSPECTION=COMPLETED
+          timeout 100s ssh -T "${opts[@]}" githubops@178.239.147.150 \
+            python3 -B "$stage/workorders.py" \
+            --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle \
+            --quality-module "$stage/score1000.py" \
+            --catalog "$stage/quality_100_criteria.json" \
+            --run-id "$GITHUB_RUN_ID-post-rework"
+          echo FACTORY_POST_REWORK_WORKORDER_REFRESH=COMPLETED
           echo FACTORY_QUALITY_RELEASE_THRESHOLD=1000/1000
           echo FACTORY_PUBLIC_PRODUCT_UPLOAD=NONE
           echo FACTORY_PAYMENT_CHANGE=NONE
