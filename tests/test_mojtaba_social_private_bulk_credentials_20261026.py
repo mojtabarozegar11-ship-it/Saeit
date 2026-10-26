@@ -11,7 +11,7 @@ from social_hub.catalog import platform
 from social_hub.connection_plan import build_connection_plan
 from social_hub.credential_vault import (
     _vault, credential_for, has_credential, import_batch, plan_import,
-    disconnect_batch, load_private_import,
+    disconnect_batch, load_private_import, create_private_template,
 )
 from social_hub.service import connection_status
 from social_hub.store import Store
@@ -169,6 +169,23 @@ class PrivateCredentialVaultTests(unittest.TestCase):
         with self.assertRaises(Blocked):
             plan_import(self.store,self.manifest(),vault_file=self.vault,env={})
         Path(self.vault).unlink()
+
+    def test_owner_gets_only_real_account_ids_in_private_blank_input_template(self):
+        target=self.private/"one-stage-input.json"
+        result=create_private_template(self.store,str(target))
+        self.assertEqual(result["account_count"],2)
+        self.assertFalse(result["credentials_included"])
+        self.assertEqual(target.stat().st_mode & 0o777,0o600)
+        manifest=load_private_import(str(target))
+        self.assertEqual({v["account_id"] for v in manifest["credentials"]},
+                         set(self.accounts))
+        self.assertTrue(all(row["token"]=="" for row in manifest["credentials"]))
+        with self.assertRaises(Blocked):
+            import_batch(self.store,manifest,vault_file=self.vault,env={},
+                         actor="owner-cli:bulk")
+        self.assertFalse(Path(self.vault).exists())
+        with self.assertRaises(Blocked):
+            create_private_template(self.store,str(target))
 
     def test_local_revocation_clears_token_and_cached_probe_but_keeps_public_profile(self):
         import_batch(self.store,self.manifest(),vault_file=self.vault,
