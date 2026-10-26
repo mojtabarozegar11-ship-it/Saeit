@@ -100,8 +100,8 @@ jobs:
           flock -w 180 8
           exec 9>"$private/.production-cycle.lock"
           flock -w 60 9
-          # Bring one genuinely compiler-owned F28 source from its prior
-          # tested revision to v3 before admitting it to 10-genuine-generation QA.
+          # Admit authentic v3/v4 compiler sources; upgrade only older sources
+          # to the current revision before 10-generation QA.
           # The designer preserves the old source in private revisions and rolls back.
           "$python" -B - "$stage" "$private/generated-product-recipes" <<'PY'
           import importlib.util, json, sys
@@ -126,7 +126,7 @@ jobs:
                   receipt=designer.read(source/"design_receipt.json")
                   if receipt.get("family_id")!="F28":
                       continue
-                  if receipt.get("generator_capability_revision")!="verified-summary-v3":
+                  if receipt.get("generator_capability_revision") not in ("verified-summary-v3","verified-distribution-v4"):
                       if attempts>=6:continue
                       attempts+=1
                       designer.evolve_recipe(source.name,recipes)
