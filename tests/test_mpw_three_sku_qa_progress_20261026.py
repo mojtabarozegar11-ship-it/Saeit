@@ -47,6 +47,9 @@ class PrivateProgressTests(unittest.TestCase):
         report={"schema":"saeit.mpw.private-content-audit.v1","sku":sku,"source_sha256":digest,
             "professional_quality_score":None,"quality1000_verified":False,"measured_artifact":{**measured,"sha256":digest}}
         self.write_json(root/"quality1000-rework"/str(sku)/digest/"content-audits"/"audit.json",report)
+        second_report=json.loads(json.dumps(report))
+        second_report["measured_artifact"]["visual_render"]["pages_with_color_signal"]=402
+        self.write_json(root/"quality1000-rework"/str(sku)/digest/"content-audits"/"prior-audit.json",second_report)
         return digest
 
     def test_advances_only_source_bound_mechanical_stage_and_keeps_quality_uncertified(self):
@@ -63,12 +66,13 @@ class PrivateProgressTests(unittest.TestCase):
             self.assertFalse(saved["legal_dossier_reopened"])
             self.assertFalse(saved["commercial_release_allowed"])
             self.assertEqual(len(saved["base_rework_ticket_sha256s"]),2)
+            self.assertEqual(len(saved["technical_audit_sha256s"]),2)
 
     def test_rejects_failed_mechanical_gate_without_advancing(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
             digest=self.seed(root,failed=True)
-            with self.assertRaisesRegex(RuntimeError,"PRIVATE_QA_MECHANICAL_CHECKS_NOT_PASSED"):
+            with self.assertRaisesRegex(RuntimeError,"PRIVATE_QA_NO_PASSING_AUDIT_FOR_SOURCE_HASH"):
                 progress.verified_progress(root,72)
             progress_dir=root/"quality1000-rework"/"72"/digest/"progress"
             self.assertFalse(progress_dir.exists())
