@@ -17,6 +17,7 @@ on:
       - 'scripts/factory_agri200_source_grounded_v003_20261023.py'
       - 'scripts/factory_agri200_source_grounded_v003_qc_20261023.py'
       - 'tests/test_factory_strict_serial_fullcycle_v1.py'
+      - 'tests/test_factory_strict_serial_installer_config_only.py'
       - 'tests/test_factory_strict_serial_scope_v1.py'
       - 'tests/test_factory_strict_serial_cron_partition_v1.py'
       - 'tests/test_factory_sequential_scientific_casework_v1.py'
@@ -41,6 +42,7 @@ on:
       - 'scripts/factory_agri200_source_grounded_v003_20261023.py'
       - 'scripts/factory_agri200_source_grounded_v003_qc_20261023.py'
       - 'tests/test_factory_strict_serial_fullcycle_v1.py'
+      - 'tests/test_factory_strict_serial_installer_config_only.py'
       - 'tests/test_factory_strict_serial_scope_v1.py'
       - 'tests/test_factory_strict_serial_cron_partition_v1.py'
       - 'tests/test_factory_sequential_scientific_casework_v1.py'
@@ -62,6 +64,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -B -m unittest discover -s tests -p test_factory_strict_serial_fullcycle_v1.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_strict_serial_installer_config_only.py -v
           python3 -B -m unittest discover -s tests -p test_factory_strict_serial_scope_v1.py -v
           python3 -B -m unittest discover -s tests -p test_factory_strict_serial_cron_partition_v1.py -v
           python3 -B -m unittest discover -s tests -p test_factory_sequential_scientific_casework_v1.py -v
@@ -126,7 +129,7 @@ jobs:
           ssh_vps "timeout 60s '$py' -B -m unittest discover -s '$target/tests' -p test_factory_strict_serial_scope_v1.py -q"
           ssh_vps "timeout 60s '$py' -B -m unittest discover -s '$target/tests' -p test_factory_strict_serial_cron_partition_v1.py -q"
           ssh_vps "bash -n '$target/deploy/install_factory_strict_serial_fullcycle_v1.sh'"
-          ssh_vps "GITHUB_RUN_ID='$GITHUB_RUN_ID' GITHUB_RUN_ATTEMPT='$GITHUB_RUN_ATTEMPT' timeout 200s bash '$target/deploy/install_factory_strict_serial_fullcycle_v1.sh' '$target'"
+          ssh_vps "SAEIT_QC1000_INSTALL_APPROVED=1 GITHUB_RUN_ID='$GITHUB_RUN_ID' GITHUB_RUN_ATTEMPT='$GITHUB_RUN_ATTEMPT' timeout 200s bash '$target/deploy/install_factory_strict_serial_fullcycle_v1.sh' '$target'"
           ssh_vps "timeout 30s '$py' -B '/home/githubops/factory-runtime/operations/production-instructions/strict-serial-fullcycle-v1.py' --factory-private '/home/githubops/factory-runtime/private/autonomous-product-cycle' --operations '/home/githubops/factory-runtime/operations/production-instructions' --dry-run"
           echo 'FACTORY_ONE_ACTIVE_PRODUCT_PER_MINUTE=INSTALLED'
           echo 'INDEPENDENT_QC1000_NOT_AUTOMATICALLY_GRANTED'
