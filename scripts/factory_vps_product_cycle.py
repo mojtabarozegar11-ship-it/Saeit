@@ -252,6 +252,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         raise ValueError('BOUNDED_LIMIT_REQUIRED')
     if type(design_capacity) is not int or not 1 <= design_capacity <= 20:
         raise ValueError('DESIGN_CAPACITY_INVALID')
+    # Line 41 accepts only one product input per manufacturing cycle.
+    design_capacity = min(design_capacity, PRODUCT_SLOT_CAPACITY)
     started=time.time()
     root = Path(output).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -642,7 +644,7 @@ def main(argv=None):
     p.add_argument("--enable-designer", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--enable-design-intake", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--enable-invention-supply", action=argparse.BooleanOptionalAction, default=True)
-    p.add_argument("--design-capacity", type=int, default=6,
+    p.add_argument("--design-capacity", type=int, default=1,
                    help="Maximum validated synthesis requests per VPS tick (1-20).")
     p.add_argument(
         "--max-recipes", type=int, default=None,
