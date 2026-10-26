@@ -61,6 +61,67 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
+      - name: Search private factory evidence for exact live product hashes (read only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          hashes="$(timeout 55s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import hashlib,os,sys
+          from pathlib import Path
+          from types import SimpleNamespace
+          root=Path("/home/zomorod2/Saeit-staging")
+          os.chdir(root);sys.path.insert(0,str(root))
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from core.models import Product
+          from mpw_commerce.downloads import _private_file
+          values=[]
+          for sku in (72,225,879):
+            product=Product.objects.get(pk=sku)
+            asset=_private_file(SimpleNamespace(product=product))
+            if asset.is_symlink() or not asset.is_file():raise RuntimeError("UNSAFE_PRODUCT_FILE")
+            digest=hashlib.sha256()
+            with asset.open("rb") as stream:
+              for chunk in iter(lambda:stream.read(1048576),b""):digest.update(chunk)
+            values.append(digest.hexdigest())
+          print(" ".join(values))
+          PY
+          )"
+          read -r sha72 sha225 sha879 <<< "$hashes"
+          for value in "$sha72" "$sha225" "$sha879"; do
+            [[ "$value" =~ ^[0-9a-f]{64}$ ]] || exit 8
+          done
+          timeout 95s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-vps python3 - "$sha72" "$sha225" "$sha879" <<'PY'
+          import json,os,sys
+          from pathlib import Path
+          sha={72:sys.argv[1],225:sys.argv[2],879:sys.argv[3]}
+          base=Path("/home/githubops/factory-runtime/private/autonomous-product-cycle")
+          roots=[base/"quality-reviewer-console",base/"product-lifecycle",
+                 base/"production-warehouse"]
+          counts={sku:0 for sku in sha}
+          eligible_files=0
+          for root in roots:
+            if not root.is_dir() or root.is_symlink():continue
+            for directory,dirs,files in os.walk(str(root),followlinks=False):
+              dirs[:]=[name for name in dirs if not (Path(directory)/name).is_symlink()]
+              for name in files:
+                path=Path(directory)/name
+                if path.suffix.lower() not in (".json",".md",".txt"):continue
+                try:
+                  if path.is_symlink() or not path.is_file() or path.stat().st_size>2000000:continue
+                  with path.open("rb") as stream:contents=stream.read(2000001).lower()
+                except (OSError,PermissionError):continue
+                eligible_files+=1
+                for sku,digest in sha.items():
+                  if digest.encode("ascii") in contents:counts[sku]+=1
+                if eligible_files>12000:raise RuntimeError("PRIVATE_EVIDENCE_SCAN_LIMIT")
+          print("MPW_PRIVATE_RIGHTS_PROVENANCE_SCAN="+json.dumps({
+            "read_only":True,"scanned_eligible_documents":eligible_files,
+            "exact_artifact_hash_reference_counts":counts,
+            "matches_are_not_independent_legal_clearance":True
+          },sort_keys=True))
+          PY
       - name: Check all three publicly listed products without changing checkout or customer data
         run: |
           set -euo pipefail
