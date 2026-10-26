@@ -565,9 +565,9 @@ def main(argv=None):
     p.add_argument("--out", required=True)
     p.add_argument("--recipes", required=True)
     p.add_argument("--max-products", type=int, default=25)
-    p.add_argument("--enable-designer", action="store_true")
-    p.add_argument("--enable-design-intake", action="store_true")
-    p.add_argument("--enable-invention-supply", action="store_true")
+    p.add_argument("--enable-designer", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--enable-design-intake", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--enable-invention-supply", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--design-capacity", type=int, default=6,
                    help="Maximum validated synthesis requests per VPS tick (1-20).")
     p.add_argument(
