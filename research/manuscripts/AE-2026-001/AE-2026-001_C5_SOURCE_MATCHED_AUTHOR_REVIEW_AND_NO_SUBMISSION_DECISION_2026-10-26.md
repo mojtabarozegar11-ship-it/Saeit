@@ -6,6 +6,12 @@
 
 
 
+## NEW SOURCE-LOCK WARNING — C11 manuscript revision (26 October 2026)
+
+The [C11 regional-contribution audit](AE-2026-001_C11_REGIONAL_COVERAGE_CHI_SQUARE_CONTRIBUTION_AUDIT_2026-10-26.md) added a derived, post-hoc decomposition: Sub-Saharan Africa accounts for **57.3%** of the within-panel Pearson region/matching statistic; Europe/Central Asia **29.8%**; descriptive matched-coverage ratio **6.43**. This is derived from the **previously verified 157-economy regional table**, not new country observations or evidence of global representativeness. Sparse expected counts invalidate the ordinary asymptotic chi-square p-value. The main manuscript Results 3.18 and Limitations were substantively amended in commit `300cf414cd6dce5ab5ad51b1b6e62464bd47abf0`; C9 critical review was amended in commit `b651c766dec6048b87df2d9d769b399127c79f15`.
+
+**Word status after this manuscript edit:** the last *verified* Word remains run `40317784888` / artifact `12646949228`, but it now represents an **earlier manuscript revision** and must **NOT** be represented as a source-locked Word of the current C11-amended manuscript. A new post-C11 Word run and exact-source QA are **pending independent verification**. Do not claim it succeeded merely because an on-push workflow exists. This is an internal AI review packet, not human-author signoff. **MAJOR REVISION / NO SUBMISSION**.
+
 ## CURRENT author review — regional source-coverage bias and latest Word
 
 **New executed empirical evidence:** [regional-selection run 40317629788](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40317629788) **SUCCESS**, [artifact 12647203753](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40317629788/artifacts/12647203753). The **73** matched current-source ILOSTAT/WDI worker-growth economies are regionally concentrated within the **157** positive-endpoint WDI economies: Europe/Central Asia **32/46 (69.6%)**, Sub-Saharan Africa **4/37 (10.8%)**. Conditional 10,000-permutation region/coverage diagnostic: chi-square **33.0553**, Cramer's V **0.45885**, finite Monte Carlo tail estimate **1/10001**. This is **post hoc descriptive nonrandom selection**, not representative global inference, historical ILO vintage attribution, or novel estimation. [Internal AI critical review C9](AE-2026-001_C9_POST_ILOSTAT_EMPIRICAL_AI_SCIENTIFIC_ADEQUACY_REVIEW_2026-10-26.md) and manuscript Methods **2.9**, Results **3.18**, Discussion and Limitations were updated.
