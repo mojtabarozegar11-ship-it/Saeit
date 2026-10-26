@@ -106,6 +106,18 @@ def dashboard(request):
                         output=register_manifest(db,raw,actor=actor)
                         message=("Added "+str(len(output["registered"]))+
                                  " unverified account records. No posts were published.")
+                elif operation == "suspend_account":
+                    if not request.user.is_superuser:
+                        raise Blocked("Superuser required to revoke account posting eligibility")
+                    aid=request.POST.get("account_id","")
+                    account=db.account(aid)
+                    if not account or account["brand"] not in brands:
+                        raise Blocked("Cannot suspend an account outside permitted brands")
+                    if request.POST.get("confirm_suspend")!="yes":
+                        raise Blocked("Explicit suspension confirmation required")
+                    result=db.suspend_account(aid,actor=actor)
+                    message=("Account suspended: "+str(result["approved_posts_cancelled"])+
+                             " queued posts cancelled. Revoke tokens at the provider separately.")
                 elif operation == "connection_probe":
                     if not request.user.is_superuser:
                         raise Blocked("Owner superuser required to inspect private API tokens")
@@ -252,6 +264,18 @@ def dashboard(request):
         '<p class="hint">Requires an already-attested profile and an account-scoped '+
         'token configured privately on the host. Identity does not prove publishing scopes.</p>',
         "Test selected API without publishing") if request.user.is_superuser else ""
+    suspend_choices="".join(
+        '<option value="'+escape(a["id"])+'">'+
+        escape(a["brand"]+" / "+a["platform"]+" / "+a["destination"][:35])+
+        '</option>' for a in registered if a["verified"])
+    suspend_form=form("suspend_account",
+        '<label>Owned account<select name="account_id">'+suspend_choices+'</select></label>'+
+        '<label><input name="confirm_suspend" value="yes" type="checkbox" required '+
+        'style="width:auto"> Remove verified public listing and cancel approved, '+
+        'not-yet-dispatched posts. Keep audit evidence.</label>'+
+        '<p class="hint">Revoking access tokens at the provider is a separate task. '+
+        'An in-flight send cannot be recalled automatically.</p>',
+        "Suspend account and prevent future publishing") if request.user.is_superuser else ""
     composer = form("draft",
         '<label>Target<select name="account_id">'+opt_accounts+'</select></label>'+
         inp("title","Title for video/article/pin")+
@@ -325,7 +349,7 @@ td,th{padding:10px;border-bottom:1px solid #625940;text-align:right;word-break:b
 <main>""" + msg + '<div class="grid">'+stats+'</div><br><div class="grid">'+(
 '<section><h2>ثبت حساب رسمی</h2>'+register+'</section>' if register else "")+(
 '<section><h2>ثبت شاهد مالکیت</h2>'+verify+'</section>' if verify else "")+(
-'<section><h2>تهیه محتوای جدید</h2>'+composer+'</section><section><h2>دستیار هوشمند ChatGPT</h2>'+ai_form+'</section>')+('<section><h2>ورود گروهی حساب‌های رسمی</h2>'+bulk_form+bulk_save+'</section><section><h2>آزمون خواندنی اتصال API</h2>'+probe_form+'</section>' if request.user.is_superuser else '')+'</div>'+
+'<section><h2>تهیه محتوای جدید</h2>'+composer+'</section><section><h2>دستیار هوشمند ChatGPT</h2>'+ai_form+'</section>')+('<section><h2>ورود گروهی حساب‌های رسمی</h2>'+bulk_form+bulk_save+'</section><section><h2>آزمون خواندنی اتصال API</h2>'+probe_form+'</section><section><h2>تعلیق حساب رسمی</h2>'+suspend_form+'</section>' if request.user.is_superuser else '')+'</div>'+
 '<section><h2>حساب‌ها</h2><div class="scroll"><table><thead><tr><th>مجموعه</th><th>شبکه</th><th>شناسه</th><th>مالکیت</th><th>کلید خصوصی API</th><th>آزمون خواندنی</th></tr></thead><tbody>'+
 "".join(account_rows)+'</tbody></table></div></section>'+
 '<section><h2>صف انتشار و رسیدها</h2><div class="scroll"><table><thead><tr><th>مجموعه</th><th>شبکه</th><th>وضعیت</th><th>زمان UTC</th><th>رسید</th><th>اقدام</th></tr></thead><tbody>'+
