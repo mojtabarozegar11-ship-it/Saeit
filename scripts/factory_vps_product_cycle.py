@@ -201,6 +201,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             fcntl.flock(file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return {"status": "already_running", "processed": 0, "manufactured": 0}
+        genetics = load("saeit_factory_master_agent_genetics", SCRIPTS / "factory_master_agent_genetics_v1.py")
+        master_genome = genetics.begin_cycle(root)
         portfolio = load("saeit_factory_portfolio_cycle",
                          SCRIPTS / "factory_autonomous_portfolio.py")
         maker = load("saeit_factory_manufacturer_cycle",
@@ -297,11 +299,13 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             pending_evolution=sorted(r for r in generated if r in active_recipe_names)
             pending_evolution=[r for r in pending_evolution if r>last]+[
                 r for r in pending_evolution if r<=last]
-            # Prefer genuine quality returns within the existing rotating limit.
-            # Every other tick retains the normal rotation to prevent starvation.
-            if last not in quality_return_orders:
+            # The master-agent genome can only prioritize genuine QA returns
+            # and choose a bounded quota inside the five active product slots.
+            if master_genome["quality_return_priority"]:
                 pending_evolution.sort(key=lambda r: r not in quality_return_orders)
-            for candidate_recipe in pending_evolution[:2]:
+            evolution_attempted_count = 0
+            for candidate_recipe in pending_evolution[:master_genome["source_evolution_quota"]]:
+                evolution_attempted_count += 1
                 try:
                     outcome=designer.evolve_recipe(candidate_recipe,generated_root)
                     if outcome.get('changed') is True:
@@ -460,8 +464,11 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "research_failures": research_failures,
             "source_recoveries": source_recoveries,
             "source_evolutions": source_evolutions,
+            "source_evolution_attempted_count": evolution_attempted_count if enable_designer else 0,
             "genuinely_evolved_source_count": len(source_evolutions),
             "source_evolution_policy": "bounded_compiler_owned_verified_sources_only",
+            "master_agent_genome_generation": master_genome["generation"],
+            "master_agent_genome_policy": {k:v for k,v in master_genome.items() if k != "generation"},
             "recipe_admission_failures": admission_failures,
             "product_candidates_processed": dossier["processed_count"],
             "research_dossiers_updated": dossier["updated_count"],
@@ -505,6 +512,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "publication_locked_until_owner_approval": True,
             "store_distribution_state": "not_connected",
         }
+        # Select the next master-agent policy genome from measured private-cycle
+        # QA outcomes; this optimizer never scores products or grants clearance.
+        state["master_agent_evolution"] = genetics.finish_cycle(root, master_genome, state)
         # Persist actual activity, not merely a configured cron or a cached ZIP.
         health_path=root/'production-health.json'
         try:
