@@ -68,6 +68,18 @@ class PrivateProgressTests(unittest.TestCase):
             self.assertEqual(len(saved["base_rework_ticket_sha256s"]),2)
             self.assertEqual(len(saved["technical_audit_sha256s"]),2)
 
+    def test_website_kit_progress_requires_browser_review_not_gameplay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            self.seed(root,sku=879)
+            result=progress.verified_progress(root,879)
+            self.assertEqual(result["mechanical_stage"],"ZIP_INTEGRITY_AND_STATIC_ACCESSIBILITY_CHECKS_PASSED")
+            folder=root/"quality1000-rework"/"879"/result["source_sha256"]/"progress"
+            saved=json.loads(next(folder.glob("*.json")).read_text())
+            self.assertIn("website-kit",saved["next_private_operation"])
+            self.assertNotIn("gameplay",saved["next_private_operation"])
+            self.assertFalse(saved["commercial_release_allowed"])
+
     def test_rejects_failed_mechanical_gate_without_advancing(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
