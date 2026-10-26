@@ -14,6 +14,7 @@ def connection_status(store, env=None):
         out.append({
             "account_id": account["id"], "brand": account["brand"],
             "platform": account["platform"], "destination": account["destination"],
+            "credential_env_name": token_alias,
             "owner_verified": bool(account["verified"]),
             "token_present": bool(env.get(token_alias, "")),
             "outbound_enabled": env.get("MPW_SOCIAL_OUTBOUND_ENABLED") == "1",
