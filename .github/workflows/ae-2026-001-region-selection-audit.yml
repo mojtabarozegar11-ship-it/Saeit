@@ -1,0 +1,54 @@
+name: AE-2026-001 original-source regional cohort selection audit
+on:
+  push:
+    branches:
+      - research/mr-2026-001-novelty-audit
+    paths:
+      - analysis/ae_ilostat_region_selection_bias_audit.py
+      - .github/workflows/ae-2026-001-region-selection-audit.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  regional-selection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout research branch
+        uses: actions/checkout@v4
+      - name: Retrieve immutable 73-country source artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ae_region"
+          gh run download 40301314822 --repo "$GITHUB_REPOSITORY" \
+            --name AE-2026-001-source-locked-ILO-WDI-worker-growth-consistency \
+            --dir "$RUNNER_TEMP/ae_region"
+          test -s "$RUNNER_TEMP/ae_region/AE_ILOSTAT_WDI_WORKER_GROWTH_CONSISTENCY.json"
+      - name: Compute region coverage, effect size and conditional permutation
+        run: |
+          set -euo pipefail
+          python analysis/ae_ilostat_region_selection_bias_audit.py \
+            --growth-json "$RUNNER_TEMP/ae_region/AE_ILOSTAT_WDI_WORKER_GROWTH_CONSISTENCY.json" \
+            --wdi-panel research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv \
+            --out "$RUNNER_TEMP/ae_region/AE_REGION_SELECTION_ORIGINAL_COUNTRY_AUDIT.json"
+          python - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path(os.environ["RUNNER_TEMP"])/"ae_region"/"AE_REGION_SELECTION_ORIGINAL_COUNTRY_AUDIT.json"
+          x=json.loads(p.read_text())
+          assert x["n_wdi_positive_endpoints"]==157
+          assert x["n_matched"]==73 and x["n_unmatched"]==84
+          assert sum(r["matched_economies"] for r in x["regions"])==73
+          assert x["historical_wdi_revision_causality_identified"] is False
+          assert x["publication_gate"]=="MAJOR_REVISION_NO_SUBMISSION"
+          print("PASS: original-country regional selection audit, no historical-causality claim")
+          PY
+      - name: Retain empirical result
+        uses: actions/upload-artifact@v4
+        with:
+          name: AE-2026-001-region-selection-original-country-audit
+          path: ${{ runner.temp }}/ae_region/AE_REGION_SELECTION_ORIGINAL_COUNTRY_AUDIT.json
+          if-no-files-found: error
+          retention-days: 14
