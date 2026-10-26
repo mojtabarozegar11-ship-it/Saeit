@@ -226,7 +226,7 @@ let upgrades=Object.fromEntries(upgradeData.map(x=>[x.id,0]));let bullets=[],ene
 let chronoCharge=0,chronoTime=0,chronoUses=0,combatDirective=0;
 const directiveLabels=['SALVAGE BONUS','SHIELD REGEN','ACE CONTRACT'];
 function pickDirective(){combatDirective=(Math.floor((wave-1)/2)+sector-1)%3;}
-const keys=new Set(),held={left:false,right:false,up:false,down:false,fire:false},padHeld={left:false,right:false,up:false,down:false,fire:false};let padDashDown=false;let touchTarget=null,soundOn=save.settings.sound,autoFire=save.settings.autofire,reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const keys=new Set(),held={left:false,right:false,up:false,down:false,fire:false},padHeld={left:false,right:false,up:false,down:false,fire:false};let padDashDown=false;let touchTarget=null,soundOn=save.settings.sound,autoFire=save.settings.autofire,motionPreference=matchMedia('(prefers-reduced-motion: reduce)'),reduced=motionPreference.matches;
 let audioCtx=null,notifyTime=0,overlayState='home',overlayOrigin='menu';
 function sound(freq=410,dur=.1,type='sine',volume=.022){if(!soundOn)return;try{audioCtx=audioCtx||new(window.AudioContext||window.webkitAudioContext)();const osc=audioCtx.createOscillator(),vol=audioCtx.createGain();osc.type=type;osc.frequency.setValueAtTime(freq,audioCtx.currentTime);osc.frequency.exponentialRampToValueAtTime(Math.max(80,freq*.68),audioCtx.currentTime+dur);vol.gain.setValueAtTime(volume,audioCtx.currentTime);vol.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+dur);osc.connect(vol);vol.connect(audioCtx.destination);osc.start();osc.stop(audioCtx.currentTime+dur)}catch{}}
 function announce(str){$('announcement').textContent=str;$('toast').textContent=str;$('toast').classList.add('visible');notifyTime=2.3}
@@ -242,6 +242,8 @@ function difficultyFactor(){return difficulty==='hard'?1.16:difficulty==='easy'?
 function startingLives(){return 100}
 function waveGoal(){return Math.max(6,Math.round((6+Math.ceil(wave*1.5))*(difficulty==='easy'?.85:difficulty==='hard'?1.2:1)))}
 function makeStars(){stars=Array.from({length:reduced?60:160},()=>({x:rnd(0,W),y:rnd(0,H),size:rnd(.5,2.1),speed:rnd(8,92),twinkle:rnd(0,TAU)}));dust=Array.from({length:30},()=>({x:rnd(0,W),y:rnd(0,H),r:rnd(.7,2.7),speed:rnd(5,28)}));}
+function updateMotionPreference(event){reduced=event.matches===true;modeLow=save.settings.quality==='low'||(save.settings.quality==='auto'&&(reduced||navigator.hardwareConcurrency<=2));if(reduced)shake=0;makeStars()}
+if(typeof motionPreference.addEventListener==='function')motionPreference.addEventListener('change',updateMotionPreference);
 function reset(){if(!trialJet)activeJet=ownedJet(selectedJet)?selectedJet:'falcon';$('loadoutName').textContent=(trialJet?'TEST FLIGHT · ': '')+fleetById(activeJet).name.toUpperCase();mode=$('mode').value;difficulty=$('difficulty').value;factor=difficultyFactor();state='playing';
  sector=mode==='campaign'?clamp(Number($('startSector').value)||1,1,save.campaign.unlockedSector):1;wave=mode==='campaign'?(sector-1)*5+1:mode==='bossrush'?5:1;pickDirective();chronoCharge=55;chronoTime=0;chronoUses=0;
  combatFX=[];muzzleFlash=0;missionBanner=0;score=0;bank=save.credits;runKills=0;runBosses=0;combo=0;comboTimer=0;waveKills=0;waveTarget=waveGoal();clock=0;fireClock=0;spawnClock=1;shake=0;empCharge=100;empCooldown=0;empBursts=0;empBlocked=0;wingClock=0;railClock=0;hazards=[];hazardClock=7;shockRings=[];prismCharge=45;prismTime=0;formations=0;
