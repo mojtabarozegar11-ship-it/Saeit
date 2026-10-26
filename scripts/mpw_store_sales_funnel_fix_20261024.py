@@ -94,12 +94,8 @@ def patch_page_shell(data):
         if len(found) != 1:
             raise RuntimeError("Expected exactly one existing " + block + " meta tag")
         match = found[0]
-        tag = match.group(0)
-        content = re.search(r"\bcontent\s*=\s*(['\"])(.*?)\1", tag, re.I)
-        if content is None:
-            raise RuntimeError("Missing content attribute on " + block + " meta tag")
-        replacement = (tag[:content.start(2)] + "{% block " + block + " %}" + expression
-                       + "{% endblock %}" + tag[content.end(2):])
+        replacement = ('<meta ' + attribute + '="' + value + '" content="{% block '
+                       + block + ' %}' + expression + '{% endblock %}">')
         text = text[:match.start()] + replacement + text[match.end():]
     title_default = "{{ section_title|default:page.title|default:'MojPlayWin | Research, Games & Learning' }}"
     description_default = ("{{ section_lead|default:page.body|striptags|truncatechars:155|"
