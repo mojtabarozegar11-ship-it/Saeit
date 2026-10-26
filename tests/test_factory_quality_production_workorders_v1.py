@@ -79,7 +79,13 @@ class WorkOrders(unittest.TestCase):
             ).read_text())
             self.assertEqual(engineering["status"],"PRIVATE_TECHNICAL_PRECHECK_PASSED")
             self.assertFalse(engineering["independent_specialist_signature_required_to_continue_engineering"])
-            self.assertEqual(engineering["technical_evidence_gap_count"],100)
+            self.assertGreater(engineering["technical_evidence_gap_count"],0)
+            self.assertLess(engineering["technical_evidence_gap_count"],100)
+            self.assertEqual(engineering["technical_evidence_gap_count"]+
+                             external["external_evidence_gap_count"],100)
+            self.assertEqual(external["external_evidence_work_pending"][0]["group_id"],"Q001")
+            self.assertTrue(any(x["group_id"]=="Q068" for x in
+                                engineering["technical_evidence_work_pending"]))
             self.assertEqual(external["verified_external_signatures"],0)
             self.assertTrue(external["blocks_new_commercial_release"])
             self.assertFalse(external["blocks_private_engineering"])
@@ -110,5 +116,45 @@ class WorkOrders(unittest.TestCase):
             self.assertIn("P0_ARTIFACT_UNVERIFIED",engineering["unresolved_engineering_defects"])
             self.assertFalse(engineering["quality_1000_certified"])
             self.assertFalse(engineering["commercial_release_allowed"])
+
+
+    def test_external_benchmarks_and_rights_do_not_enter_technical_rework(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);bucket=root/"quality-excellence/rework/ready_technical_build"
+            bucket.mkdir(parents=True)
+            defects=["P0_GLOBAL_TOP_FIVE_CURRENT_BENCHMARKS_MISSING",
+                     "P0_MEASURED_SUPERIORITY_UNVERIFIED",
+                     "P0_PROOF_MISSING:legal_rights_and_provenance",
+                     "P0_PROOF_MISSING:independent_expert_review"]
+            (bucket/"current.json").write_text(json.dumps({
+                "recipe":"ready_technical_build","technical_qa_status":"passed",
+                "verified_artifact_integrity":True,
+                "source_provenance_hash_present":True,
+                "defects":defects,"external_audit_pending":[],
+                "artifact_sha256":"e"*64,
+                "quality_1000_scorecard":{"criteria":{}}}))
+            result=jobs.work_orders(root,SCORER,CATALOG,"routing-qa")
+            engineering=json.loads((root/"quality-excellence/engineering-workorders/ready_technical_build/current.json").read_text())
+            review=json.loads((root/"quality-excellence/independent-certification-queue/ready_technical_build/current.json").read_text())
+            full=json.loads((root/"quality-excellence/production-workorders/ready_technical_build/current.json").read_text())
+            self.assertEqual(engineering["status"],"PRIVATE_TECHNICAL_PRECHECK_PASSED")
+            self.assertEqual(engineering["unresolved_engineering_defects"],[])
+            self.assertEqual(set(review["pending_nonengineering_defects"]),set(defects))
+            self.assertEqual(len(full["unresolved_technical_or_domain_defects"]),4)
+            self.assertTrue(review["blocks_professional_1000_certification"])
+            self.assertTrue(review["blocks_new_commercial_release"])
+            self.assertFalse(full["commercial_publish_allowed"])
+            self.assertEqual(result["engineering_evidence_gaps_total"]+
+                             result["external_evidence_gaps_total"],100)
+
+    def test_catalog_argument_cannot_be_silently_ignored(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);(root/"quality-excellence/rework").mkdir(parents=True)
+            policy=json.loads(CATALOG.read_text(encoding="utf8"))
+            policy["groups"]["Q001"]["name"]="unexpected_market"
+            different=root/"wrong-policy.json"
+            different.write_text(json.dumps(policy),encoding="utf8")
+            with self.assertRaisesRegex(ValueError,"QUALITY_CATALOG_ARGUMENT_MISMATCH"):
+                jobs.work_orders(root,SCORER,different,"routing-bad")
 
 if __name__=="__main__":unittest.main()
