@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MOJ1 · Nonfinancial Utility Discovery</title>
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="no-referrer">
+  <style>
+    :root {color-scheme:dark; --bg:#101523;--panel:#1b2435;--line:#36435a;--ink:#f0f3f9;--dim:#c2ccdd;--accent:#70e4be}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,sans-serif}
+    main{max-width:820px;margin:2rem auto;padding:0 1rem}header{border-bottom:1px solid var(--line);padding-bottom:1rem}
+    h1{font-size:clamp(1.5rem,4vw,2.35rem);margin:.25rem 0}h2{margin:0 0 .8rem;font-size:1.15rem}
+    .notice,.card{border:1px solid var(--line);background:var(--panel);border-radius:16px;padding:1.25rem;margin:1rem 0}
+    .notice{border-color:#bca45a}p{margin:.4rem 0 1rem;color:var(--dim)}fieldset{border:0;margin:0;padding:0}
+    legend{font-weight:700;margin-bottom:.7rem}label.option{display:block;padding:.45rem 0;cursor:pointer}
+    input[type=radio]{accent-color:var(--accent);margin-right:.65rem;transform:scale(1.2)}
+    .actions{display:flex;flex-wrap:wrap;gap:.75rem;margin:1.25rem 0}
+    button{border:0;background:var(--accent);color:#101523;border-radius:10px;padding:.75rem 1rem;font-weight:700;cursor:pointer}
+    button.secondary{border:1px solid var(--line);color:var(--ink);background:transparent}
+    button:focus-visible,input:focus-visible{outline:3px solid #f4da76;outline-offset:3px}
+    .muted{font-size:.88rem;color:var(--dim)}#status{min-height:1.6rem;font-weight:600}
+    ul{margin:.5rem 0;padding-left:1.5rem}strong{color:var(--ink)}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="muted">Internal evidence collection · MOJ1 V2 · 2026-10-26</div>
+    <h1>Product Utility Discovery</h1>
+    <p>Anonymous questions about game/store features. This is not a token sale, investment, giveaway, wallet registration or financial offer.</p>
+  </header>
+  <div class="notice" role="note">
+    <strong>Research-only safeguard</strong>
+    <p>MOJ1 is not offered, transferable, redeemable or assured of any cash value through this survey. No wallet addresses, personal details or contact data are requested. Responses stay in this browser until the operator explicitly exports them. No network requests or analytics are used.</p>
+  </div>
+  <form id="survey" autocomplete="off">
+    <section class="card">
+      <fieldset>
+        <legend>1. Which category would you most likely use?</legend>
+        <label class="option"><input type="radio" name="context" value="games" required> Games and challenges</label>
+        <label class="option"><input type="radio" name="context" value="digital_goods"> Digital books and tools</label>
+        <label class="option"><input type="radio" name="context" value="courses"> Courses and learning</label>
+        <label class="option"><input type="radio" name="context" value="none"> None of these</label>
+      </fieldset>
+    </section>
+    <section class="card">
+      <fieldset>
+        <legend>2. What would be most useful without monetary rewards?</legend>
+        <label class="option"><input type="radio" name="value" value="access" required> Access to a relevant feature</label>
+        <label class="option"><input type="radio" name="value" value="customization"> Cosmetic/customization options</label>
+        <label class="option"><input type="radio" name="value" value="recognition"> Nontransferable achievement badges</label>
+        <label class="option"><input type="radio" name="value" value="nothing"> Nothing; no added benefit</label>
+      </fieldset>
+    </section>
+    <section class="card">
+      <fieldset>
+        <legend>3. If no crypto token were ever launched, would you still try that feature?</legend>
+        <label class="option"><input type="radio" name="standalone" value="yes" required> Yes</label>
+        <label class="option"><input type="radio" name="standalone" value="maybe"> Maybe</label>
+        <label class="option"><input type="radio" name="standalone" value="no"> No</label>
+      </fieldset>
+    </section>
+    <section class="card">
+      <fieldset>
+        <legend>4. Which product improvement matters most?</legend>
+        <label class="option"><input type="radio" name="priority" value="reliability" required> Reliable checkout/access</label>
+        <label class="option"><input type="radio" name="priority" value="quality"> Higher quality content/gameplay</label>
+        <label class="option"><input type="radio" name="priority" value="languages"> More languages and accessibility</label>
+        <label class="option"><input type="radio" name="priority" value="community"> Community collaboration</label>
+      </fieldset>
+    </section>
+    <section class="card">
+      <fieldset>
+        <legend>5. Are you evaluating as a potential user or as a builder?</legend>
+        <label class="option"><input type="radio" name="role" value="user" required> Potential user</label>
+        <label class="option"><input type="radio" name="role" value="builder"> Developer or creator</label>
+        <label class="option"><input type="radio" name="role" value="observer"> Observer</label>
+      </fieldset>
+    </section>
+    <div class="actions">
+      <button type="submit">Record anonymous response</button>
+      <button class="secondary" id="export" type="button">Export evidence CSV</button>
+      <button class="secondary" id="clear" type="button">Clear local responses</button>
+    </div>
+  </form>
+  <p id="status" role="status" aria-live="polite"></p>
+  <section class="card">
+    <h2>Local evidence register</h2>
+    <p>Responses: <strong id="count">0</strong>. These are stated preferences, <em>not</em> verified demand, purchases, audit clearance, investment interest or financial commitments.</p>
+    <ul>
+      <li>Use a documented, consensual and non-coercive outreach method.</li>
+      <li>Do not add wallet, money, identity or personal-data questions.</li>
+      <li>Record sample origin/selection limitations separately before drawing conclusions.</li>
+      <li>Never publish or link this internally staged tool as token marketing without required review.</li>
+    </ul>
+  </section>
+</main>
+<script>
+"use strict";
+(function(){
+  const key="moj1_nonfinancial_research_v1";
+  const fields=["context","value","standalone","priority","role"];
+  const $=id=>document.getElementById(id);
+  function read(){
+    try {const rows=JSON.parse(localStorage.getItem(key)||"[]"); return Array.isArray(rows)?rows:[];}
+    catch {return [];}
+  }
+  function announce(message){$("status").textContent=message;}
+  function refresh(){$("count").textContent=String(read().length);}
+  $("survey").addEventListener("submit",event=>{
+    event.preventDefault();
+    const form=new FormData(event.currentTarget);
+    if(!fields.every(field=>form.has(field))){announce("Complete all five questions.");return;}
+    const row={schema_version:1,recorded_at:new Date().toISOString()};
+    for(const field of fields)row[field]=String(form.get(field));
+    const rows=read(); rows.push(row);
+    try {localStorage.setItem(key,JSON.stringify(rows));}
+    catch {announce("Browser local storage is unavailable. No response was saved.");return;}
+    event.currentTarget.reset();refresh();announce("One anonymous response saved in this browser.");
+  });
+  $("export").addEventListener("click",()=>{
+    const rows=read();if(!rows.length){announce("No responses to export.");return;}
+    const keys=["schema_version","recorded_at",...fields];
+    const esc=value=>'"'+String(value??"").replace(/"/g,'""')+'"';
+    const csv=[keys.join(","),...rows.map(row=>keys.map(k=>esc(row[k])).join(","))].join("\r\n");
+    const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+    const a=document.createElement("a");a.href=url;a.download="moj1-nonfinancial-utility-evidence.csv";a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    announce("CSV prepared locally. Protect research records.");
+  });
+  $("clear").addEventListener("click",()=>{
+    if(!read().length){announce("No local records exist.");return;}
+    if(!confirm("Permanently clear all locally stored survey responses? Export first if needed."))return;
+    localStorage.removeItem(key);refresh();announce("Local responses cleared.");
+  });
+  refresh();
+})();
+</script>
+</body>
+</html>
