@@ -5,15 +5,21 @@ on:
   pull_request:
     paths:
       - scripts/mpw_live_three_sku_qa_copy_20261023.py
+      - scripts/mpw_three_sku_factory_quality1000_20261026.py
+      - tests/test_mpw_three_sku_factory_quality1000_20261026.py
       - tests/test_mpw_live_three_sku_qa_copy_20261023.py
       - .github/workflows/mpw-live-three-sku-private-qa-20261023.yml
   push:
     branches: [main]
     paths:
       - scripts/mpw_live_three_sku_qa_copy_20261023.py
+      - scripts/mpw_three_sku_factory_quality1000_20261026.py
+      - tests/test_mpw_three_sku_factory_quality1000_20261026.py
       - tests/test_mpw_live_three_sku_qa_copy_20261023.py
       - .github/workflows/mpw-live-three-sku-private-qa-20261023.yml
   workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
 permissions: {contents: read}
 concurrency:
   group: mpw-existing-three-private-factory-quality-copy
@@ -31,7 +37,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 -B -m unittest discover -s tests -p test_mpw_live_three_sku_qa_copy_20261023.py -v
-          python3 -B -m py_compile scripts/mpw_live_three_sku_qa_copy_20261023.py
+          python3 -B -m unittest discover -s tests -p test_mpw_three_sku_factory_quality1000_20261026.py -v
+          python3 -B -m py_compile scripts/mpw_live_three_sku_qa_copy_20261023.py scripts/mpw_three_sku_factory_quality1000_20261026.py
 
   private-copy:
     needs: tests
@@ -99,6 +106,17 @@ jobs:
           echo 'MPW_THREE_EXISTING_STORE_PRODUCTS_PRIVATE_COPY_TRANSFER=PASS'
           echo 'MPW_THREE_LIVE_STORE_PRODUCTS_MODIFIED=false'
           echo 'MPW_THREE_STORE_PRICES_CHECKOUT_MODIFIED=false'
+      - name: Admit three exact hash-bound factory copies into 100-criterion, no-fake-1000 rework lane
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-live-three-private-qa"
+          script="$(base64 -w0 scripts/mpw_three_sku_factory_quality1000_20261026.py)"
+          test -n "$script"
+          timeout 155s ssh -T -F "$d/config" saeit-vps \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$script\"))'"
+          echo 'MPW_THREE_EXISTING_STORE_SKUS_FACTORY_QUALITY1000_REWORK_ADMITTED=PASS'
+          echo 'MPW_PROFESSIONAL_QUALITY_1000_PENDING_EXTERNAL_EVIDENCE=true'
       - name: Confirm public storefront routes remain reachable
         shell: bash
         run: |
