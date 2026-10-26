@@ -5,6 +5,10 @@
 **Latest internal AI editorial assessment (C6):** [direct functional comparison with documented countryatlas features](AE-2026-001_C6_DIRECT_COUNTRYATLAS_FUNCTIONAL_PRIOR_ART_AND_AI_EDITORIAL_GATE_2026-10-26.md) completed. The comparator already documents WDI vintage comparison, country selection, revision summaries and unit-rebasing warnings. AE's sign/rank/annualized-growth application is descriptive, not a validated new estimator. **Decision remains MAJOR REVISION / NO SUBMISSION**; no real head-to-head execution or independent ILO absolute employment validation was performed. This scientific gate does not alter the current manuscript source, so the Word artifact below remains source-matched.
 
 
+## 26 October C7 source-code comparator addendum — Word rebuild required
+
+Direct upstream R implementation of countryatlas::compare_vintages was inspected (not executed): the function computes **single-year indicator level revisions** and does not itself calculate AE's **two-endpoint annualised log-growth revision**, sign flips or rank stability. These are standard downstream calculations, not a new estimator or first-publication claim. [C7 source-code-level comparison](AE-2026-001_C7_COUNTRYATLAS_SOURCE_CODE_ESTIMAND_COMPARATOR_2026-10-26.md) records the precise boundary and lack of a matched numeric head-to-head benchmark. The **manuscript Discussion changed** in commit `7d1a13391f664036161697b25c067748cab6b4e9`; therefore the prior Word artifact **12628986033 is now superseded as a source-exact copy** until the on-push Word workflow completes successfully for the revised manuscript. This source clarification changes **no empirical results**. Scientific verdict remains **MAJOR REVISION / NO SUBMISSION**.
+
 ## Exact version for review
 
 - Article: *Historical-Release Sensitivity of Agricultural Value Added per Worker in World Development Indicators: A Three-Vintage Fixed-Country Audit*.
