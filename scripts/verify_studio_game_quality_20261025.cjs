@@ -57,6 +57,7 @@ function runJungle(choices,random=()=>0,storedBest=null){
 const win=runJungle(Array(12).fill(hint=>hint));
 for(const hazard of ['jump','duck','sidestep'])assert.equal(win.seen.filter(x=>x===hazard).length,4,'every jungle course must balance '+hazard);
 assert.ok(win.stage.innerHTML.includes('Jungle cleared!'),'12 correct jumps should win');
+assert.ok(win.stage.innerHTML.includes('class="jungle-progress" value="12" max="12"'),'finished course must expose complete native progress');
 assert.ok(win.stage.innerHTML.includes('GOLD medal'),'perfect 12-hazard course must award gold');
 assert.equal(win.listeners.has('keydown'),false,'completed jungle runs must release keyboard listeners');
 assert.ok(runJungle([hint=>hint],()=>0,'999999999').stage.innerHTML.includes('Best 0'),'impossible stored jungle records must be rejected');
@@ -93,6 +94,16 @@ const cakeSandbox={
  say(){},downloadSvg(name,svg){downloaded=svg}
 };
 vm.runInNewContext(cake+cakeUI+'mountCake();',cakeSandbox);
+// A continuous color-picker gesture is one edit, not twenty separate undo steps.
+cakeNodes['#icing'].oninput({target:{value:'#4488cc'}});
+cakeNodes['#icing'].oninput({target:{value:'#556677'}});
+cakeNodes['#icing'].oninput({target:{value:'#778899'}});
+cakeNodes['#icing'].onchange({target:{value:'#778899'}});
+cakeNodes['[data-action="cake-undo"]'].onclick();
+assert.ok(cakeNodes['#cakepreview'].innerHTML.includes('#ff79b8'),'one undo must restore the original color after a drag');
+cakeNodes['[data-action="cake-redo"]'].onclick();
+assert.ok(cakeNodes['#cakepreview'].innerHTML.includes('#778899'),'redo must restore the completed color choice');
+cakeNodes['[data-action="cake-reset"]'].onclick();
 cakeNodes['[data-action="candle"]'].onclick();
 cakeNodes['[data-action="candle"]'].onclick();
 assert.equal((cakeNodes['#cakepreview'].innerHTML.match(/y="480"/g)||[]).length,2,'candle additions must update preview');
