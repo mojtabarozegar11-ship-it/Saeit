@@ -177,16 +177,19 @@ def manifest_paths(run_id):
 
 
 def do_restart():
-    folder = APP / "tmp"
-    if folder.is_symlink():
-        raise RuntimeError("PASSENGER_RESTART_PATH_UNSAFE")
-    folder.mkdir(mode=0o700, exist_ok=True)
-    flag = folder / "restart.txt"
-    if flag.is_symlink():
-        raise RuntimeError("PASSENGER_RESTART_FLAG_UNSAFE")
-    fd = os.open(str(flag), os.O_CREAT | os.O_APPEND | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
-    os.close(fd)
-    os.utime(flag, None)
+    restart_flags = []
+    for folder in (APP / "tmp", WSGI.parent / "tmp"):
+        if folder.is_symlink():
+            raise RuntimeError("PASSENGER_RESTART_PATH_UNSAFE")
+        folder.mkdir(mode=0o700, exist_ok=True)
+        flag = folder / "restart.txt"
+        if flag.is_symlink():
+            raise RuntimeError("PASSENGER_RESTART_FLAG_UNSAFE")
+        fd = os.open(str(flag), os.O_CREAT | os.O_APPEND | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+        os.close(fd)
+        os.utime(flag, None)
+        restart_flags.append(str(flag))
+    report("MPW_TRIAL_779_PASSENGER_RESTART_REQUESTED", {"flags": restart_flags})
 
 
 def restore(root):
