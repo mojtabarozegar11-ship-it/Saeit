@@ -29,10 +29,17 @@
       p.x >= 0 && p.y >= 0 && p.x < size && p.y < size;
     if (!piece.path.every(validPoint)) return false;
     const occupied = new Set();
+    const identities = new Set();
     for (const other of others) {
-      if (!other || !Array.isArray(other.path) || !other.path.length ||
+      if (!other || !Number.isSafeInteger(other.id) || identities.has(other.id) ||
+          !Array.isArray(other.path) || !other.path.length ||
           !other.path.every(validPoint)) return false;
-      if (other.id === piece.id) continue;
+      identities.add(other.id);
+      // An imported second arrow cannot impersonate this arrow to bypass collision checks.
+      if (other.id === piece.id) {
+        if (other !== piece) return false;
+        continue;
+      }
       for (const p of other.path) occupied.add(key(p.x, p.y));
     }
     const [dx, dy] = DIRECTIONS[piece.dir];
@@ -50,7 +57,24 @@
     return false;
   }
   function solve(pieces, size) {
-    if (!Array.isArray(pieces) || !Number.isInteger(size) || size < 1 || size > 100) return null;
+    if (!Array.isArray(pieces) || !Number.isInteger(size) || size < 1 || size > 100 ||
+        pieces.length > size * size) return null;
+    // A board with duplicate identities or overlapping geometry has no trustworthy solution.
+    const identities = new Set();
+    const cells = new Set();
+    for (const piece of pieces) {
+      if (!piece || !Number.isSafeInteger(piece.id) || identities.has(piece.id) ||
+          !Number.isInteger(piece.dir) || piece.dir < 0 || piece.dir >= DIRECTIONS.length ||
+          !Array.isArray(piece.path) || !piece.path.length) return null;
+      identities.add(piece.id);
+      for (const p of piece.path) {
+        if (!p || !Number.isInteger(p.x) || !Number.isInteger(p.y) ||
+            p.x < 0 || p.y < 0 || p.x >= size || p.y >= size) return null;
+        const cell = key(p.x, p.y);
+        if (cells.has(cell)) return null;
+        cells.add(cell);
+      }
+    }
     const remaining = pieces.slice();
     const order = [];
     while (remaining.length) {
