@@ -41,6 +41,7 @@ def audit(root: Path, *, chapters: int = 30, chapter_target: int = 5300,
     hashes = []
     flags = []
     seen_segment_hashes = {}  # Detect exact repeated manuscript segments across chapters.
+    seen_prose_hashes = {}  # Catch copied bodies with changed headings or whitespace.
     total = 0
     for path in sorted(root.iterdir()):
         if path.name in ("status.json", "complete-unreviewed.md", ".authoring.lock"):
@@ -71,6 +72,18 @@ def audit(root: Path, *, chapters: int = 30, chapter_target: int = 5300,
         first_path = seen_segment_hashes.setdefault(digest, path.name)
         if first_path != path.name:
             flags.append("duplicate_segment_content:" + path.name + ":" + first_path)
+        # Headings and spacing must not conceal duplicated substantive prose.
+        # Fail closed on long identical bodies; keep this a mechanical gate only.
+        prose = " ".join(
+            re.sub(r"\\s+", " ", row.strip()).casefold()
+            for row in text.splitlines()
+            if row.strip() and not row.lstrip().startswith("#")
+        ).strip()
+        if len(prose) >= 500:
+            prose_hash = hashlib.sha256(prose.encode("utf-8")).hexdigest()
+            first_prose = seen_prose_hashes.setdefault(prose_hash, path.name)
+            if first_prose != path.name and first_path == path.name:
+                flags.append("duplicate_prose_body:" + path.name + ":" + first_prose)
         n = len(substantive_words(text))
         counts[str(chapter)] += n
         total += n
