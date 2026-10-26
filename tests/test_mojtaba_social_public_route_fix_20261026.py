@@ -1,5 +1,6 @@
 """No-network route fix regression: no modification outside personal URLconf."""
 import sys
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -12,6 +13,8 @@ import mojtaba_social_hub_public_route_fix_20261026 as fix
 
 class PersonalPublicRouteFixTests(unittest.TestCase):
     def setUp(self):
+        self.previous_test_flag=os.environ.get("MPW_SOCIAL_INSTALL_TEST")
+        os.environ["MPW_SOCIAL_INSTALL_TEST"]="1"
         self.tmp=tempfile.TemporaryDirectory()
         self.root=Path(self.tmp.name)
         self.app=self.root/"personal"
@@ -33,6 +36,10 @@ class PersonalPublicRouteFixTests(unittest.TestCase):
         self.old_package=initial._sources(self.app/"social_hub")
 
     def tearDown(self):
+        if self.previous_test_flag is None:
+            os.environ.pop("MPW_SOCIAL_INSTALL_TEST",None)
+        else:
+            os.environ["MPW_SOCIAL_INSTALL_TEST"]=self.previous_test_flag
         self.tmp.cleanup()
 
     def test_exact_prefix_installs_once_and_is_future_upgrade_compatible(self):
