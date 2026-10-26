@@ -1,0 +1,71 @@
+name: AE-2026-001 source-locked author-review Word (no deployment)
+on:
+  push:
+    branches:
+      - research/mr-2026-001-novelty-audit
+    paths:
+      - research/manuscripts/AE-2026-001/AE-2026-001_FIRST_FULL_EMPIRICAL_MANUSCRIPT_DRAFT_2026-10-25.md
+      - .github/workflows/ae-2026-001-source-locked-author-word-on-push.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ae-2026-001-author-word-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-locked-author-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate current source and provenance boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = "research/mr-2026-001-novelty-audit"
+          mkdir -p /tmp/ae-review
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          p=Path('research/manuscripts/AE-2026-001/AE-2026-001_FIRST_FULL_EMPIRICAL_MANUSCRIPT_DRAFT_2026-10-25.md')
+          s=p.read_text(encoding='utf-8')
+          for x in ['155','2024','2025','2026','3.13','NV.AGR.EMPL.KD','NV.AGR.TOTL.KD','countryatlas','L*=V/P','MAJOR REVISION']:
+              if x=='MAJOR REVISION': continue
+              assert x in s, f'Missing substantive source marker {x}'
+          assert '\\n\\n' not in s, 'Literal escaped paragraph break remains'
+          assert '## References' in s and '## 4. Discussion' in s
+          qa={'source_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),
+              'source_bytes':p.stat().st_size,'status':'NOT SUBMITTED; human author review required; publication novelty not established'}
+          Path('/tmp/ae-review/source_qa.json').write_text(json.dumps(qa,indent=2)+'\n')
+          print(json.dumps(qa))
+          PY
+      - name: Build Word and verify substantive content
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v pandoc >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq pandoc
+          fi
+          python -m pip install --disable-pip-version-check python-docx==1.2.0
+          pandoc --from=gfm --to=docx --standalone \
+            research/manuscripts/AE-2026-001/AE-2026-001_FIRST_FULL_EMPIRICAL_MANUSCRIPT_DRAFT_2026-10-25.md \
+            -o /tmp/ae-review/AE-2026-001_CURRENT_SOURCE_AUTHOR_REVIEW_NOT_SUBMITTED.docx
+          python - <<'PY'
+          from pathlib import Path
+          from docx import Document
+          p=Path('/tmp/ae-review/AE-2026-001_CURRENT_SOURCE_AUTHOR_REVIEW_NOT_SUBMITTED.docx')
+          d=Document(p)
+          t='\n'.join([x.text for x in d.paragraphs]+[c.text for tab in d.tables for row in tab.rows for c in row.cells])
+          for marker in ['NV.AGR.EMPL.KD','NV.AGR.TOTL.KD','countryatlas','155','2024','2025','2026']:
+              assert marker in t, f'Word missing {marker}'
+          assert len(d.tables)>=5 and p.stat().st_size>15000
+          print('AE source-matched Word QA PASS:',p.stat().st_size,'bytes',len(d.tables),'tables')
+          PY
+      - name: Upload review-only artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AE-2026-001-current-source-author-review-NOT-SUBMITTED
+          path: /tmp/ae-review/
+          retention-days: 14
+          if-no-files-found: error
