@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {validateCampaignSave, resumeCampaignScreen, readHeroChoice} from '../../games/ramadan-war/save-validation.mjs';
+import {validateCampaignSave, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove} from '../../games/ramadan-war/save-validation.mjs';
 
 const fresh = () => ({
   hero: 0, mission: 0, lives: 100, x: 2.5, y: 7.5, angle: 0,
@@ -50,7 +50,7 @@ test('preserves valid objective progress while refusing corrupted mission comple
 test('reversible release manifest ships and checks every new imported save module', () => {
   const deploy = readFileSync(new URL('../../games/ramadan-war/deploy.py', import.meta.url), 'utf8');
   const client = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
-  assert.match(client, /import \{validateCampaignSave, resumeCampaignScreen, readHeroChoice\} from '\.\/save-validation\.mjs'/);
+  assert.match(client, /import \{validateCampaignSave, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove\} from '\.\/save-validation\.mjs'/);
   assert.match(deploy, /ASSETS=\[[^\n]*'save-validation\.mjs'/);
   assert.match(deploy, /b'\.\/save-validation\.mjs' in new\['game\.js'\]/);
 });
@@ -111,5 +111,45 @@ test('corrupt or manipulated hero preference never breaks initial character rend
   for (const input of [null,undefined,'','30','-1','NaN','Infinity','1e1','3.5',{},[],1/0])
     assert.equal(readHeroChoice(input),0,String(input));
   const game = readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
-  assert.match(game,/let hero=readHeroChoice\(localStorage\.rwHero\),world=null/);
+  assert.match(game,/let hero=readHeroChoice\(storageRead\('rwHero'\)\),world=null/);
+});
+
+test('blocked or absent Web Storage cannot crash startup, pause, win or hero selection', () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  try {
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true, get() { throw new Error('SecurityError: storage denied'); }
+    });
+    assert.equal(storageRead('rwHero'), null);
+    assert.equal(storageWrite('rwHero', 2), false);
+    assert.equal(storageRemove('rwNativeCampaign'), false);
+    Object.defineProperty(globalThis, 'localStorage', {configurable: true, value: undefined});
+    assert.equal(storageRead('rwWin'), null);
+    assert.equal(storageWrite('rwWin', '1'), false);
+    assert.equal(storageRemove('rwWin'), false);
+    const data = new Map();
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: key => data.has(key) ? data.get(key) : null,
+        setItem: (key, value) => data.set(key, value),
+        removeItem: key => data.delete(key)
+      }
+    });
+    assert.equal(storageWrite('rwHero', 7), true);
+    assert.equal(storageRead('rwHero'), '7');
+    assert.equal(storageRemove('rwHero'), true);
+    assert.equal(storageRead('rwHero'), null);
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'localStorage', original);
+    else delete globalThis.localStorage;
+  }
+});
+
+test('game contains no direct localStorage access outside guarded helpers', () => {
+  const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(game, /localStorage/);
+  assert.match(game, /storageRead\('rwWin'\)/);
+  assert.match(game, /storageWrite\('rwHero',hero\)/);
+  assert.match(game, /storageRemove\(saveKey\)/);
 });
