@@ -303,6 +303,7 @@ jobs:
               ("stage01_proofs","stage-01/receipts"),
               ("stage02_sources","stage-02/receipts"),
               ("stage03_designs","stage-03/receipts"),
+              ("stage04_prototypes","stage-04/receipts"),
               ("stage05_manuscripts","stage-05/completed-drafts"),
               ("stage06_qc1000","stage-06/strict-qc1000")):
               d=area/folder
