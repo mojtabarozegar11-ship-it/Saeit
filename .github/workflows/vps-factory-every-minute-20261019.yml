@@ -266,7 +266,7 @@ jobs:
                       if p.is_symlink() or not p.is_file() or p.stat().st_size>250000:
                           raise ValueError("unsafe")
                       item=json.loads(p.read_text(encoding="utf8"))
-                      if not isinstance(item,dict) or not re.fullmatch(r"WO-[0-9]{8}\\.json",p.name):
+                      if not isinstance(item,dict) or not re.fullmatch(r"WO-[0-9]{8}[.]json",p.name):
                           raise ValueError("schema")
                       order_id_set.add(p.stem)
                       origin=item.get("origin")
