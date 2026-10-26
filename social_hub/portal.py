@@ -371,9 +371,9 @@ td,th{padding:10px;border-bottom:1px solid #625940;text-align:right;word-break:b
 </style></head><body>
 <header><h1>مرکز فرماندهی شبکه‌های اجتماعی و فعالیت‌های حرفه‌ای</h1>
 <p class="sub">شخصی · زمرد ملل · MojPlayWin | پیش‌نویس، مجوز انتشار، حساب رسمی، وضعیت اتصال و رسید</p>
-<nav><a href="/mojtaba.roozegar/">وب مرکزی</a> · <a href="status/">وضعیت JSON امن</a> · <a href="connection-plan/">فهرست راه‌اندازی یک‌مرحله‌ای APIها</a></nav></header>
+<nav><a href="/mojtaba.roozegar/">وب مرکزی</a> · <a href="status/">وضعیت JSON امن</a> · <a href="connection-plan/">فهرست راه‌اندازی یک‌مرحله‌ای APIها</a> · <a href="activation/">نقشه فعال‌سازی تمام شبکه‌ها</a></nav></header>
 <main>""" + msg + '<div class="grid">'+stats+'</div><br><div class="grid">'+(
-'<section><h2>ثبت حساب رسمی</h2>'+register+'</section>' if register else "")+(
+'<section id="register-account"><h2>ثبت حساب رسمی</h2>'+register+'</section>' if register else "")+(
 '<section><h2>ثبت شاهد مالکیت</h2>'+verify+'</section>' if verify else "")+(
 '<section><h2>تهیه محتوای جدید</h2>'+composer+'</section><section><h2>دستیار هوشمند ChatGPT</h2>'+ai_form+'</section>')+('<section><h2>ورود گروهی حساب‌های رسمی</h2>'+bulk_form+bulk_save+'</section><section><h2>آزمون خواندنی اتصال API</h2>'+probe_form+'</section><section><h2>تعلیق حساب رسمی</h2>'+suspend_form+'</section>' if request.user.is_superuser else '')+'</div>'+
 '<section><h2>حساب‌ها</h2><div class="scroll"><table><thead><tr><th>مجموعه</th><th>شبکه</th><th>شناسه</th><th>مالکیت</th><th>کلید خصوصی API</th><th>آزمون خواندنی</th></tr></thead><tbody>'+
