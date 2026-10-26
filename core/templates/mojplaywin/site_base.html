@@ -7,10 +7,12 @@
 <meta name="description" content="{% block meta_description %}Explore MojPlayWin research, games, AI, digital products and learning resources.{% endblock %}">
 <link rel="canonical" href="https://mojplaywin.com{{ request.path }}">
 <meta property="og:type" content="website"><meta property="og:site_name" content="MojPlayWin">
-<meta property="og:title" content="{% if section_title %}{{ section_title }} | MojPlayWin{% elif page.title %}{{ page.title }} | MojPlayWin{% else %}MojPlayWin | Research, Games &amp; Learning{% endif %}">
-<meta property="og:description" content="{% if section_lead %}{{ section_lead|striptags|truncatechars:155 }}{% elif page.body %}{{ page.body|striptags|truncatechars:155 }}{% else %}Original games, practical research, learning and digital products.{% endif %}">
+<meta property="og:title" content="{% block og_title %}{% if section_title %}{{ section_title }} | MojPlayWin{% elif page.title %}{{ page.title }} | MojPlayWin{% else %}MojPlayWin | Research, Games &amp; Learning{% endif %}{% endblock %}">
+<meta property="og:description" content="{% block og_description %}{% if section_lead %}{{ section_lead|striptags|truncatechars:155 }}{% elif page.body %}{{ page.body|striptags|truncatechars:155 }}{% else %}Original games, practical research, learning and digital products.{% endif %}{% endblock %}">
 <meta property="og:url" content="https://mojplaywin.com{{ request.path }}">
-<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:card" content="{% block twitter_card %}summary_large_image{% endblock %}">
+<meta name="twitter:title" content="{% block twitter_title %}{% if section_title %}{{ section_title }} | MojPlayWin{% elif page.title %}{{ page.title }} | MojPlayWin{% else %}MojPlayWin | Research, Games &amp; Learning{% endif %}{% endblock %}">
+<meta name="twitter:description" content="{% block twitter_description %}{% if section_lead %}{{ section_lead|striptags|truncatechars:155 }}{% elif page.body %}{{ page.body|striptags|truncatechars:155 }}{% else %}Original games, practical research, learning and digital products.{% endif %}{% endblock %}">
 <link rel="stylesheet" href="{% static 'site/mojplaywin.css' %}">
 {% block page_head %}{% endblock %}
 </head>

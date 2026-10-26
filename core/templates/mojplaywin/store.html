@@ -1,6 +1,59 @@
 {% extends "mojplaywin/site_base.html" %}
-{% block title %}Digital Store | MojPlayWin{% endblock %}
-{% block meta_description %}Shop three MojPlayWin digital products: a 415-page chess training book, an illustrated children’s story, and a responsive interior-design website kit.{% endblock %}
+{% block title %}Chess Books, Children’s Story &amp; Website Kit | MojPlayWin{% endblock %}
+{% block meta_description %}Shop a 415-page chess training guide, a 40-page illustrated children’s story, and an interior-design website kit. Compare formats and digital delivery.{% endblock %}
+{% block og_title %}Chess Books, Children’s Story &amp; Website Kit | MojPlayWin{% endblock %}
+{% block og_description %}Shop a 415-page chess training guide, a 40-page illustrated children’s story, and an interior-design website kit. Compare formats and digital delivery.{% endblock %}
+{% block twitter_card %}summary{% endblock %}
+{% block twitter_title %}Chess Books, Children’s Story &amp; Website Kit | MojPlayWin{% endblock %}
+{% block twitter_description %}Shop a 415-page chess training guide, a 40-page illustrated children’s story, and an interior-design website kit. Compare formats and digital delivery.{% endblock %}
+{% block page_head %}
+{{ block.super }}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  "name": "Chess Books, Children’s Story & Website Kit | MojPlayWin",
+  "url": "https://mojplaywin.com/store/",
+  "description": "Shop a 415-page chess training guide, a 40-page illustrated children’s story, and an interior-design website kit.",
+  "mainEntity": {
+    "@type": "ItemList",
+    "numberOfItems": 3,
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "item": {
+          "@type": "Product",
+          "name": "The Science and Practice of Chess Improvement",
+          "url": "https://mojplaywin.com/store/product/72/",
+          "description": "An English 415-page PDF chess study guide with an 84-day training plan, critical-position worksheets, game-review guidance, and progress tracking."
+        }
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "item": {
+          "@type": "Product",
+          "name": "Taniya and the Little Baker Worms",
+          "url": "https://mojplaywin.com/store/product/225/",
+          "description": "An English illustrated 40-page landscape-format digital storybook for young readers and families."
+        }
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "item": {
+          "@type": "Product",
+          "name": "Atelier Interior — Client-Ready Website Kit",
+          "url": "https://mojplaywin.com/store/product/879/",
+          "description": "A responsive interior-design website starter with editable studio details, project gallery, quote inquiry, and WhatsApp handoff."
+        }
+      }
+    ]
+  }
+}
+</script>
+{% endblock %}
 {% block body_class %}mojplaywin-store{% endblock %}
 {% block content %}
 <style id="mpw-store-catalog-20261026">
@@ -17,7 +70,7 @@
 </style>
 <main class="mpw-shop"><div class="mpw-shop-inner">
   <section class="mpw-shop-hero" aria-labelledby="mpw-shop-title">
-    <div><span class="mpw-shop-kicker">MOJPLAYWIN · DIGITAL STORE</span><h1 id="mpw-shop-title">Digital products with a clear purpose.</h1><p>Explore three original digital products: a structured chess-training book, an illustrated story for young readers, and a ready-to-customize website kit for interior-design studios. Each listing explains what is included before you continue to its product page.</p><a class="mpw-shop-primary" href="#mpw-products">Browse the three products <span aria-hidden="true">&nbsp;↓</span></a></div>
+    <div><span class="mpw-shop-kicker">MOJPLAYWIN · DIGITAL STORE</span><h1 id="mpw-shop-title">Chess books, illustrated stories &amp; website kits</h1><p>Explore three original digital products: a 415-page chess-training guide, an illustrated 40-page story for young readers, and a responsive website kit for interior-design studios. Review each product’s format and included features before visiting its details page.</p><a class="mpw-shop-primary" href="#mpw-products">Browse the three products <span aria-hidden="true">&nbsp;↓</span></a></div>
     <div class="mpw-shop-art" role="img" aria-label="Typographic previews of the chess-training book and Taniya illustrated story"><div class="mpw-shop-art-book"><small>Chess · Training Guide</small><strong>The Science and Practice of Chess Improvement</strong><small>Mojtaba Roozegar · 2026</small></div><div class="mpw-shop-art-book"><small>Illustrated Story · Ages 3–8</small><strong>Taniya and the Little Baker Worms</strong><small>English · 40 pages</small></div><p class="mpw-shop-art-note">TITLE ARTWORK PREVIEWS · DIGITAL EDITIONS</p></div>
   </section>
   <section class="mpw-shop-catalog" id="mpw-products" aria-labelledby="mpw-products-title">

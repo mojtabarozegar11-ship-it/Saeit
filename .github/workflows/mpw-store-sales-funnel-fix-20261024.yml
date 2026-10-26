@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/mpw-store-sales-funnel-fix-20261024.yml"
       - "core/templates/mojplaywin/store.html"
+      - "core/templates/mojplaywin/site_base.html"
       - "scripts/mpw_store_sales_funnel_fix_20261024.py"
 permissions: {contents: read}
 concurrency:
@@ -27,7 +28,7 @@ jobs:
           actual_sha="$(python3 -c 'import hashlib,pathlib; data=pathlib.Path("core/templates/mojplaywin/store.html").read_bytes().replace(bytes([13,10]),bytes([10])); print(hashlib.sha256(data).hexdigest())')"
           echo "MPW_STORE_SOURCE_SHA=$actual_sha"
           echo "MPW_STORE_MARKERS=$(grep -cE 'mpw-store-ten-guides|Explore this collection' core/templates/mojplaywin/store.html || true)"
-          test "$actual_sha" = "704d7d338caa51d89addaf14934886005b359a9016b37ebb443c396c4f315cc0"
+          test "$actual_sha" = "8ca116ae7ba02ee12441fd865b48fbc17e187c981709cff0ceec5015d414eef3"
           test "$(grep -cE 'mpw-store-ten-guides|Explore this collection' core/templates/mojplaywin/store.html || true)" = "0"
           echo MPW_STORE_SOURCE_VALID=true
       - name: Capture baseline storefront and protected-route health
@@ -106,17 +107,25 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
-      - name: Read-only audit of live store template baseline
+      - name: Read-only audit of live store template and page shell
+        id: audit
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-store-sales-ssh"
-          timeout 35s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          audit="$(timeout 35s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
           from pathlib import Path
           import hashlib,json
-          p=Path('/home/zomorod2/Saeit-staging/core/templates/mojplaywin/store.html')
+          root=Path('/home/zomorod2/Saeit-staging/core/templates/mojplaywin')
+          p=root/'store.html'; base=root/'site_base.html'
           if p.is_symlink() or not p.is_file(): raise SystemExit('LIVE_TEMPLATE_NOT_REGULAR')
+          if base.is_symlink() or not base.is_file(): raise SystemExit('LIVE_PAGE_SHELL_NOT_REGULAR')
           raw=p.read_bytes(); data=raw.replace(bytes([13,10]),bytes([10]))
+          shell=base.read_bytes().replace(bytes([13,10]),bytes([10]))
           print('MPW_LIVE_TEMPLATE_AUDIT='+json.dumps({'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(raw)}))
+          base_sha=hashlib.sha256(shell).hexdigest()
+          print('MPW_SITE_BASE_SHA='+base_sha)
+          if b'{% block og_title %}' in shell or b'{% block twitter_title %}' in shell:
+            raise SystemExit('LIVE_SEO_BLOCKS_ALREADY_PRESENT')
           for phrase in ('account required','Sign in or create an account','Secure purchase: sign in','DIGITAL PRODUCTS','FEATURED PICKS','Shop available books'):
             needle=phrase.encode()
             print('MPW_LIVE_TEMPLATE_MARKER='+json.dumps({'phrase':phrase,'count':data.count(needle)}))
@@ -126,6 +135,11 @@ jobs:
               snippet=data[max(0,i-160):min(len(data),i+240)].decode('utf8','replace').replace(chr(10),' ')
               print('MPW_LIVE_TEMPLATE_CONTEXT='+json.dumps({'phrase':phrase,'snippet':snippet}))
           PY
+          )"
+          printf '%s\n' "$audit"
+          base_sha="$(printf '%s\n' "$audit" | sed -n 's/^MPW_SITE_BASE_SHA=//p')"
+          test "${#base_sha}" = 64
+          echo "site_base_sha=$base_sha" >> "$GITHUB_OUTPUT"
       - name: Stage only the reviewed store template
         run: |
           set -euo pipefail
@@ -139,7 +153,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-store-sales-ssh"
-          timeout 75s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - install '$GITHUB_RUN_ID'" < scripts/mpw_store_sales_funnel_fix_20261024.py
+          timeout 75s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - install '$GITHUB_RUN_ID' '${{ steps.audit.outputs.site_base_sha }}'" < scripts/mpw_store_sales_funnel_fix_20261024.py
       - name: Gracefully refresh the isolated store template cache
         id: refresh
         run: |
@@ -161,10 +175,13 @@ jobs:
           if store.is_symlink() or not store.is_file():
               raise SystemExit('STORE_TEMPLATE_NOT_REGULAR')
           digest=hashlib.sha256(store.read_bytes().replace(bytes([13,10]),bytes([10]))).hexdigest()
-          if digest!='704d7d338caa51d89addaf14934886005b359a9016b37ebb443c396c4f315cc0':
+          if digest!='8ca116ae7ba02ee12441fd865b48fbc17e187c981709cff0ceec5015d414eef3':
               raise SystemExit('STORE_TEMPLATE_HASH_NOT_PINNED')
           if site_base.is_symlink() or not site_base.is_file():
               raise SystemExit('MOJPLAYWIN_PAGE_SHELL_NOT_REGULAR')
+          shell=site_base.read_text('utf8','replace')
+          if any(shell.count(marker)!=1 for marker in ('{% block og_title %}','{% block og_description %}','{% block twitter_card %}','{% block twitter_title %}','{% block twitter_description %}')):
+              raise SystemExit('STORE_SEO_PAGE_SHELL_BLOCKS_NOT_VERIFIED')
           if ht.is_symlink() or not ht.is_file():
               raise SystemExit('HTACCESS_NOT_REGULAR')
           config=ht.read_bytes()
@@ -201,12 +218,16 @@ jobs:
                 body=response.read(400000).decode("utf8","replace")
             except urllib.error.HTTPError as exc:
               code=exc.code;body=exc.read(100000).decode("utf8","replace")
-            expected=("Digital products with a clear purpose.", "The Science and Practice of Chess Improvement",
+            expected=("Chess Books, Children’s Story &amp; Website Kit | MojPlayWin", "Chess books, illustrated stories &amp; website kits", "The Science and Practice of Chess Improvement",
               "Taniya and the Little Baker Worms", "Atelier Interior — Client-Ready Website Kit",
               "US $7.50", "US $4.00", "US $6.80", "84-day training plan",
               "English illustrated PDF · 40 pages", "five original SVG illustrations",
               "/store/product/72/", "/store/product/225/", "/store/product/879/",
-              "Open the live demo", "order-specific TRX invoice", "Sign-in is required")
+              "Open the live demo", "order-specific TRX invoice", "Sign-in is required",
+              'name="description" content="Shop a 415-page chess training guide',
+              'property="og:description" content="Shop a 415-page chess training guide',
+              'name="twitter:card" content="summary"', '"@type": "CollectionPage"',
+              '"numberOfItems": 3')
             stale=("Farm Enterprise Economics Toolkit", "Applied AI Learning Path",
               "Original Browser Games", "Research & Digital Project Services",
               "Explore our books, learning, games & tools", "INITIAL COLLECTION",
@@ -260,7 +281,7 @@ jobs:
           if store.is_symlink() or not store.is_file():
               raise SystemExit('STORE_TEMPLATE_NOT_REGULAR')
           digest=hashlib.sha256(store.read_bytes().replace(bytes([13,10]),bytes([10]))).hexdigest()
-          if digest!='c5b8d28149b9c0cd07c4c8efef3b0f4c82b6659f76e93eecc5a3b581d80ea113':
+          if digest!='704d7d338caa51d89addaf14934886005b359a9016b37ebb443c396c4f315cc0':
               raise SystemExit('ROLLBACK_HASH_NOT_VERIFIED')
           if ht.is_symlink() or not ht.is_file():
               raise SystemExit('HTACCESS_NOT_REGULAR')
