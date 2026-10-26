@@ -9,7 +9,8 @@ const documentMock={
  removeEventListener(type,fn){if(type==='keydown'&&keyListener===fn)keyListener=null},
  getElementById(){return {classList:{contains:()=>true}}}
 };
-const jungleContext={document:documentMock,jungleCleanup:()=>{},button:(label,fn)=>({textContent:label,onclick:fn,id:''})};
+const jungleBestStore=new Map();
+const jungleContext={document:documentMock,jungleCleanup:()=>{},localStorage:{getItem:key=>jungleBestStore.get(key)||null,setItem:(key,value)=>jungleBestStore.set(key,value)},button:(label,fn)=>({textContent:label,onclick:fn,id:''})};
 vm.createContext(jungleContext);vm.runInContext(jungle,jungleContext);
 function makeStage(){
  const nodes={};for(const id of ['jungleStatus','jungleObstacle','jungleHint','jungleFeedback'])nodes[id]={textContent:''};
@@ -20,13 +21,19 @@ let stage=makeStage();jungleContext.jungleGame(stage);assert(keyListener,'keyboa
 const course=[0,1,2,0,1,2,1,0,2,0,2,1];
 for(const action of course)stage.buttons[action].handlers.click();
 assert.match(stage.nodes.jungleObstacle.textContent,/completed/);
+assert.equal(jungleBestStore.get('studioRahamJungleBestV1'),'12','only bounded best progress is saved');
 assert.equal(stage.buttons.every(b=>b.disabled),true);
 assert(stage.retry,'replay must be offered after finishing');
 jungleContext.jungleCleanup();assert.equal(keyListener,null,'closing game must release keyboard listener');
 stage=makeStage();jungleContext.jungleGame(stage);
+assert.match(stage.nodes.jungleStatus.textContent,/Best 12 \/ 12/,'replay shows persisted best');
 for(let i=0;i<3;i++)stage.buttons[1].handlers.click();
 assert.match(stage.nodes.jungleObstacle.textContent,/Rest and try again/);
 assert.equal(stage.buttons.every(b=>b.disabled),true);
+jungleContext.jungleCleanup();
+jungleContext.localStorage={getItem(){throw Error('blocked storage')},setItem(){throw Error('blocked storage')}};
+stage=makeStage();assert.doesNotThrow(()=>jungleContext.jungleGame(stage),'private mode cannot prevent starting the game');
+stage.buttons[0].handlers.click();assert.match(stage.nodes.jungleStatus.textContent,/Best 1 \/ 12/);
 jungleContext.jungleCleanup();
 
 const taniya=fs.readFileSync('templates/taniya_studio/index.html','utf8');
