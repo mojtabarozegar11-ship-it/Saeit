@@ -56,6 +56,15 @@ def run_one(store, post_id, *, env=None, transport=None, execute=False, actor="p
             raise Blocked("Mastodon instance is not in explicit private allowlist")
     if account["platform"] == "youtube" and not env.get("MPW_SOCIAL_MEDIA_ROOT"):
         raise Blocked("Private YouTube media root must be configured")
+    from datetime import datetime, timedelta, timezone
+    recent_hour = (datetime.now(timezone.utc)-timedelta(hours=1)).isoformat(timespec="seconds").replace("+00:00","Z")
+    recent_minute = (datetime.now(timezone.utc)-timedelta(minutes=1)).isoformat(timespec="seconds").replace("+00:00","Z")
+    recent = store.db.execute(
+        "SELECT e.at FROM events e JOIN posts p ON p.id=e.subject "
+        "WHERE p.account_id=? AND e.event='dispatch_claimed' AND e.at>=? ORDER BY e.at DESC LIMIT 20",
+        (account["id"], recent_hour)).fetchall()
+    if len(recent) >= 10 or sum(1 for row in recent if row["at"]>=recent_minute)>=2:
+        raise Blocked("Per-account rate budget exceeded; manual scheduling required")
     post, account = store.claim(post_id, actor=actor)
     transport = http_transport if transport is None else transport
     try:
@@ -75,3 +84,21 @@ def run_one(store, post_id, *, env=None, transport=None, execute=False, actor="p
     return {"post_id":post_id, "brand":post["brand"],
             "platform":account["platform"], "state":result.state,
             "remote_id":result.remote_id, "note":result.note}
+
+def run_due(store, *, limit=5, env=None, transport=None, execute=False):
+    """Bounded private scheduler: never auto-retries an ambiguous outcome."""
+    if execute is not True:
+        raise Blocked("Explicit scheduler execution required")
+    if not 1 <= int(limit) <= 5:
+        raise Blocked("Maximum 5 publications per invocation")
+    from .store import utc_now
+    due = store.db.execute(
+        "SELECT id FROM posts WHERE state='approved' AND scheduled_at<=? "
+        "ORDER BY scheduled_at,id LIMIT ?", (utc_now(),int(limit))).fetchall()
+    outcomes = []
+    for row in due:
+        try:
+            outcomes.append(run_one(store,row["id"],env=env,transport=transport,execute=True))
+        except (Blocked,Uncertain):
+            outcomes.append({"post_id":row["id"],"state":"blocked_or_needs_review"})
+    return outcomes
