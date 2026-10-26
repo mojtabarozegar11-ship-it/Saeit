@@ -1,6 +1,7 @@
 """Real ten-stage source+customer ZIP upgrades, immutable lineage and stop-on-tamper."""
 import importlib.util
 import json
+import re
 from pathlib import Path
 import tempfile
 import unittest
@@ -45,7 +46,7 @@ class RealTenGenerationTests(unittest.TestCase):
         self.assertEqual(state["public_uploads"],0)
         self.assertEqual({x["family_id"] for x in state["completed"]},{"F27","F28"})
         for recipe in self.names:
-            output=self.private/"quality-excellence"/"ten-generations"/recipe
+            output=engine.generation_root(self.private,self.recipes/recipe)
             hashes=[]
             for generation in range(1,11):
                 folder=output/("g%02d"%generation)
@@ -71,16 +72,62 @@ class RealTenGenerationTests(unittest.TestCase):
         self.assertEqual(result["selected"],1)
         self.assertEqual(result["new_real_generations"],10)
         self.assertTrue(any(x["recipe"]==self.names[0] for x in result["untrusted_sources"]))
-        self.assertFalse((self.private/"quality-excellence"/"ten-generations"/self.names[0]/"g01").exists())
+        self.assertFalse((self.private/"quality-excellence"/"ten-generations"/self.names[0]/"verified-distribution-v4"/"g01").exists())
 
     def test_archive_tampering_blocks_reuse_and_does_not_touch_original(self):
         state=engine.run(self.private,self.recipes,ROOT/"scripts/factory_product_maker.py",limit=2)
         recipe=self.names[0]
-        artifact=self.private/"quality-excellence"/"ten-generations"/recipe/"g03"/"product"/recipe/(recipe+"-internal-qa.zip")
+        artifact=engine.generation_root(self.private,self.recipes/recipe)/"g03"/"product"/recipe/(recipe+"-internal-qa.zip")
         with artifact.open("ab") as out:out.write(b"TAMPER")
         with self.assertRaisesRegex(ValueError,"ARTIFACT_TAMPERED"):
             engine.run(self.private,self.recipes,ROOT/"scripts/factory_product_maker.py",limit=2)
         self.assertEqual(maker.source_digest(self.recipes/recipe,
                          maker.inspect_recipe(self.recipes/recipe)[1]),self.sha[recipe])
+
+
+    def test_v3_generations_survive_a_verified_v4_source_upgrade(self):
+        recipe=self.names[0]
+        source=self.recipes/recipe
+        calculator=source/"calculator.py"
+        code=calculator.read_text(encoding="utf8")
+        code=re.sub(r"(?s)# DISTRIBUTION_API_V4_START.*?# DISTRIBUTION_API_V4_END", "", code)
+        calculator.write_text(code,encoding="utf8")
+        cases=source/"test_calculator.py"
+        tests=cases.read_text(encoding="utf8")
+        tests=re.sub(r"(?ms)^# DISTRIBUTION_TESTS_V4_START.*?^# DISTRIBUTION_TESTS_V4_END\n", "", tests)
+        tests=re.sub(r"(?ms)^    # DISTRIBUTION_TESTS_V4_START.*?^    # DISTRIBUTION_TESTS_V4_END\n", "", tests)
+        cases.write_text(tests,encoding="utf8")
+        receipt=source/"design_receipt.json"
+        data=json.loads(receipt.read_text(encoding="utf8"))
+        data["generator_capability_revision"]="verified-summary-v3"
+        receipt.write_text(json.dumps(data),encoding="utf8")
+        maker.verify_recipe(source,minimum_tests=7)
+
+        old=engine.run(self.private,self.recipes,ROOT/"scripts/factory_product_maker.py",limit=2)
+        self.assertEqual(old["new_real_generations"],20)
+        legacy=engine.generation_root(self.private,source)
+        self.assertTrue((legacy/"g10"/"receipt.json").is_file())
+        historical=(legacy/"g01"/"receipt.json").read_bytes()
+
+        upgrade=designer.evolve_recipe(recipe,self.recipes)
+        self.assertTrue(upgrade["changed"])
+        revised=engine.generation_root(self.private,self.recipes/recipe)
+        self.assertNotEqual(legacy,revised)
+        self.assertFalse((revised/"g01").exists())
+        outcome=engine.run(self.private,self.recipes,ROOT/"scripts/factory_product_maker.py",limit=2)
+        self.assertEqual(outcome["new_real_generations"],10)
+        self.assertTrue((revised/"g10"/"receipt.json").is_file())
+        self.assertEqual((legacy/"g01"/"receipt.json").read_bytes(),historical)
+        self.assertEqual(engine.run(self.private,self.recipes,
+                         ROOT/"scripts/factory_product_maker.py",limit=2)["new_real_generations"],0)
+
+    def test_v4_source_cannot_claim_to_be_a_v3_compiler_revision(self):
+        recipe=self.names[0]
+        receipt=self.recipes/recipe/"design_receipt.json"
+        document=json.loads(receipt.read_text(encoding="utf8"))
+        document["generator_capability_revision"]="verified-summary-v3"
+        receipt.write_text(json.dumps(document),encoding="utf8")
+        with self.assertRaisesRegex(ValueError,"TEN_VERIFIED_COMPILER_SOURCE_REQUIRED"):
+            engine.original_identity(self.recipes/recipe,maker)
 
 if __name__=="__main__":unittest.main()
