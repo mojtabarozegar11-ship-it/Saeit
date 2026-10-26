@@ -1,0 +1,32 @@
+name: ZM-R01 source-manifest three-factor design estimability
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/zm-r01-official-factorial-design-estimability.yml
+      - analysis/zm_r01_official_factorial_design_estimability_gate.py
+      - research/manuscripts/ZM-R01/GSE294406_24_SAMPLE_FACTORIZED_MANIFEST_2026-10-25.csv
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-geo-factorial-design:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compute rank and sample-dropout sensitivity from source-manifest GEO GSM rows
+        run: |
+          set -euo pipefail
+          python analysis/zm_r01_official_factorial_design_estimability_gate.py \
+            --manifest research/manuscripts/ZM-R01/GSE294406_24_SAMPLE_FACTORIZED_MANIFEST_2026-10-25.csv \
+            --out "$RUNNER_TEMP/ZM-R01_OFFICIAL_24_SAMPLE_FACTORIAL_ESTIMABILITY.json"
+      - name: Preserve source hash and scientific design gate
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZM-R01-24-GSM-factorial-design-rank-source-gate
+          path: ${{ runner.temp }}/ZM-R01_OFFICIAL_24_SAMPLE_FACTORIAL_ESTIMABILITY.json
+          retention-days: 14
+          if-no-files-found: error
