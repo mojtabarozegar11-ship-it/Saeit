@@ -1,5 +1,10 @@
 # MR-2026-001 V5 — exact-file scientific author decision and conditional journal dossier
 
+## VERIFIED POST-C42 AUTHOR WORD — source-locked, 26 October 2026
+
+After scientific MR V5 commit `605346f16e1559a9617f851323046700f98c8da8`, [GitHub Actions run 40344172230](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40344172230) **COMPLETED/SUCCESS**; artifact [12659259449](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40344172230/artifacts/12659259449) is the current source-locked author-review Word. The job log reports **186 abstract words, 22 DOIs, source SHA256 `bbf9ea505080ba9c589dc636d0e7cdb18d794339de7571048daeabde94ab4cd2`**, generated DOCX 30,299 bytes; artifact ZIP 36,332 bytes. This **supersedes** pre-C42 artifact 12640250744. C42 full-method evidence remains an internal AI research audit, **not external peer review**. **MAJOR REVISION / NO SUBMISSION**.
+
+
 ## C42 update — publisher full-method audit, 26 October 2026
 
 [Original-publisher full-method audit C42](MR-2026-001_C42_AMINI_2025_ORIGINAL_FULL_METHODS_F7_PROVENANCE_AUDIT_2026-10-26.md) independently verifies the Amini 2025 split-plot treatment/control description and physical water-measurement methods (WSC flume, timed sprinkler/nozzle and dripper measurements, gravimetric soil moisture). The paper explicitly says farmers attempted to follow the DSS schedule while adjusting event dates/times. **Measured seasonal outcomes (M) do not validate event-level independent action (O).** The F7 −1.3/−1.4/−0.1 kg/m³ inconsistency persists in the original publisher text; do not repair it without source-author raw data. MR V5 manuscript has been scientifically amended in commit `605346f16e1559a9617f851323046700f98c8da8`. The previously verified Word run 40299475900 / artifact 12640250744 now **predates this manuscript edit** and is **not** exact-source current Word. **MAJOR REVISION / NO SUBMISSION**; no author signoff or Manuscript ID.
