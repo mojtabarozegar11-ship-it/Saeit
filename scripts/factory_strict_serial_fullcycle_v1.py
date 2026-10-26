@@ -121,6 +121,23 @@ def verified_intake(area, order):
     return True
 
 
+def verify_complete_indexed_intake(area, orders):
+    """Installer-only preflight: inspect every order before replacing workers."""
+    if len(orders) != 200:
+        raise RuntimeError("STRICT_SERIAL_COMPLETE_INDEX_COUNT_INVALID")
+    for order in orders:
+        try:
+            verified_intake(area, order)
+            item = checked_json(area / "orders" / (order + ".json"), 250_000)
+        except (OSError, ValueError, TypeError, RuntimeError) as exc:
+            raise RuntimeError("STRICT_SERIAL_COMPLETE_INDEX_MISSING_OR_INVALID") from exc
+        if (item.get("origin") != "owner_requested_agri200_p0"
+                or re.fullmatch(r"AGRI-[0-9]{3}",
+                                str(item.get("source_product_id", ""))) is None):
+            raise RuntimeError("STRICT_SERIAL_COMPLETE_INDEX_COHORT_MISMATCH")
+    return len(orders)
+
+
 def selected_order(path, orders):
     if not path.exists() and not path.is_symlink():
         return orders[0], 0, 0
@@ -213,13 +230,17 @@ def worker_args(root, ops, order, stage):
 
 def tick(factory_private, operations, *, dry_run=False, runner=None,
          disk_usage=shutil.disk_usage, monotonic=time.monotonic, budget=51,
-         require_scheduler_scope=False):
+         require_scheduler_scope=False, verify_complete_intake=False):
     root = Path(factory_private)
     ops = Path(operations)
     area = root / "production-instructions"
     if any(p.is_symlink() or not p.is_dir() for p in (root, ops, area)):
         raise RuntimeError("STRICT_SERIAL_ROOT_UNSAFE")
     orders = index_orders(area)
+    if verify_complete_intake:
+        if not dry_run:
+            raise RuntimeError("STRICT_SERIAL_COMPLETE_INDEX_ONLY_DRY_RUN")
+        verify_complete_indexed_intake(area, orders)
     if require_scheduler_scope:
         assert_live_cron_partition()
     state = area / "stage-06/strict-serial-active-v1.json"
@@ -313,10 +334,12 @@ def main():
     p.add_argument("--operations", required=True)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--require-scheduler-scope", action="store_true")
+    p.add_argument("--verify-complete-intake", action="store_true")
     args = p.parse_args()
     try:
         print(json.dumps(tick(args.factory_private,args.operations,dry_run=args.dry_run,
-                              require_scheduler_scope=args.require_scheduler_scope),
+                              require_scheduler_scope=args.require_scheduler_scope,
+                              verify_complete_intake=args.verify_complete_intake),
                          ensure_ascii=False, sort_keys=True), flush=True)
     except Exception as exc:
         print("STRICT_SERIAL_CYCLE_ERROR="+type(exc).__name__+":"+str(exc)[:160], file=sys.stderr)
