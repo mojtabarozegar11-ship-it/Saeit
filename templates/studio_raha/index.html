@@ -149,7 +149,7 @@ function jungleRunGame(stage){
  // Four of each hazard ensure a complete movement-skills course in every run.
  const course=Array.from({length:12},(_,i)=>hazards[i%hazards.length]);
  for(let i=course.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[course[i],course[j]]=[course[j],course[i]]}
- let step=0,lives=3,stars=0,streak=0,finished=false,best=0;
+ let step=0,lives=3,stars=0,streak=0,correct=0,feedback='Choose the right move to protect your three hearts.',finished=false,best=0;
  try{const n=Number(localStorage.getItem('studio-raha-jungle-best-v1'));if(Number.isSafeInteger(n)&&n>=0&&n<=286)best=n}catch(e){}
  function paint(){
   const won=finished&&lives>0,over=finished,medal=won?(lives===3?'GOLD':lives===2?'SILVER':'BRONZE'):'';
@@ -157,6 +157,7 @@ function jungleRunGame(stage){
   stage.innerHTML='<div class="stage-message" role="status" aria-live="polite">'+(over?(won?'🏆 Jungle cleared! · '+medal+' medal':'🌱 The jungle wins this round.'):hazard.icon+' '+hazard.hint)+'</div>'+
    '<progress class="jungle-progress" value="'+step+'" max="12" aria-label="Jungle course progress"></progress>'+ 
    '<div class="stage-message">Obstacle '+Math.min(step+1,12)+' / 12 · Hearts '+('❤️'.repeat(lives)||'0')+' · Stars '+stars+' · Streak '+streak+' · Best '+best+'</div>'+
+   '<div class="stage-message" role="status" aria-live="polite">'+feedback+(over?' · Accuracy '+correct+' / '+step:'')+'</div>'+ 
    '<div class="stage-actions" id="jungleActions"></div>'+
    '<small style="display:block;margin-top:12px;color:#536581">Space / ↑ = Jump · ↓ = Duck · → = Sidestep. Touch controls work on phones.</small>';
   const actions=stage.querySelector('#jungleActions');
@@ -166,7 +167,7 @@ function jungleRunGame(stage){
  }
  function choose(move){
   if(finished)return;
-  if(move===course[step].safe){streak++;stars+=10+step+Math.min(streak,5)*2}else{streak=0;lives--;stars=Math.max(0,stars-5)}
+  if(move===course[step].safe){correct++;streak++;stars+=10+step+Math.min(streak,5)*2;feedback='Great '+move+'! You cleared the '+course[step].name+'.'}else{streak=0;lives--;stars=Math.max(0,stars-5);feedback='Not quite: the '+course[step].name+' needed '+course[step].safe+'. Try the next obstacle!'}
   step++;
   if(lives===0||step===course.length){finished=true;
    if(stars>best){best=stars;try{localStorage.setItem('studio-raha-jungle-best-v1',String(best))}catch(e){}}
