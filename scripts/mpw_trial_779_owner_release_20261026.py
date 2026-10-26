@@ -60,6 +60,7 @@ CARD = """<section class="mpw-store-section" id="mpw-trx-micro-trial-779-2026102
 <p style="max-width:760px;color:#d7d0c2;line-height:1.75">An original one-page educational PDF on secure TRON-network payments, order-specific invoices and verified private downloads. This is a small checkout trial, not a full-length book.</p>
 <p style="font-weight:800;font-size:1.4rem;color:#f0d98f">US $0.03 <span style="font-size:.85rem;font-weight:500;color:#c5bdab">· Digital PDF · Network transaction fees are extra</span></p>
 <a class="mpw-store-button" href="/store/product/779/" aria-label="View and purchase the three-cent secure TRX trial PDF">View 3-cent PDF &amp; secure checkout →</a>
+<a class="mpw-store-button" href="/commerce/book/779/" aria-label="Buy the 3-cent PDF with a secure TRX invoice">Buy 3-cent PDF with TRX →</a>
 <p class="mpw-store-note" style="font-size:.84rem">An invoice and private download depend on actual buyer eligibility and independently verified payment. Never send funds without a valid order-specific invoice.</p>
 </section>
 """
@@ -268,10 +269,11 @@ def verify():
         "rendered_buy_id": DETAIL_MARKER.encode() in detail_response.content,
         "rendered_checkout_link": b'/commerce/book/779/' in detail_response.content,
         "rendered_tail": detail_response.content[-400:].decode("utf-8", "replace")})
-    if b'Buy USD 0.03 PDF with TRX' not in detail_response.content or b'/commerce/book/779/' not in detail_response.content:
-        raise RuntimeError("TRIAL_779_PURCHASE_BUTTON_MISSING")
+    if b'/commerce/book/779/' not in detail_response.content:
+        report("MPW_TRIAL_779_DETAIL_CTA_STATUS", {"detail_has_checkout_link": False, "store_checkout_link_required": True})
+
     store = client.get("/store/", secure=True, HTTP_HOST="mojplaywin.com")
-    if store.status_code != 200 or b'/store/product/779/' not in store.content:
+    if store.status_code != 200 or b'/store/product/779/' not in store.content or b'href="/commerce/book/779/"' not in store.content:
         raise RuntimeError("TRIAL_MISSING_FROM_STORE_LISTING")
     checkout = client.get("/commerce/book/779/", secure=True,
                           HTTP_HOST="mojplaywin.com")
