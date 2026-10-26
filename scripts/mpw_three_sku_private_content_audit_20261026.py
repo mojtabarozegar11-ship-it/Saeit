@@ -118,6 +118,11 @@ def audit_pdf(path, expected_page_count=None, require_illustrations=False):
         "duplicate_nonempty_pages_absent": duplicates == 0,
         "replacement_characters_absent": replacement_chars == 0,
     }
+    is_picture_book = expected_page_count is not None and require_illustrations
+    if not is_picture_book:
+        # Preserve research-guide requirements for SKU 72 and all default PDF audits.
+        checks["bibliography_or_reference_markers_found"] = references > 0
+        checks["structure_markers_found"] = headings > 0 or toc_signals > 0
     if expected_page_count is not None:
         checks["page_count_matches_declared_product_spec"] = page_count == expected_page_count
     if require_illustrations:
@@ -134,9 +139,13 @@ def audit_pdf(path, expected_page_count=None, require_illustrations=False):
         "contextual_exclusions": ([
             {"criterion": "bibliography_or_reference_markers_found", "reason": "Not required for an illustrated children's read-aloud picture book"},
             {"criterion": "structure_markers_found", "reason": "Chapter or table-of-contents markers are not applicable to this picture-book format"},
-        ] if expected_page_count == 40 and require_illustrations else []),
+        ] if is_picture_book else []),
         "checks": checks,
-        "needs_specialist_review": ["story_accuracy", "read_aloud_rhythm", "child_appropriateness", "illustration_quality", "layout_rendering", "accessibility", "commercial_rights_mapping"],
+        "needs_specialist_review": (
+            ["story_accuracy", "read_aloud_rhythm", "child_appropriateness", "illustration_quality", "layout_rendering", "accessibility", "commercial_rights_mapping"]
+            if is_picture_book else
+            ["factual_accuracy", "citation_validity", "scientific_depth", "layout_rendering", "accessibility", "commercial_rights_mapping"]
+        ),
     }
 
 def audit_zip(path):
