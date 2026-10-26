@@ -6,6 +6,8 @@ on:
     paths:
       - scripts/mpw_live_three_sku_qa_copy_20261023.py
       - scripts/mpw_three_sku_factory_quality1000_20261026.py
+      - scripts/mpw_three_sku_qa_progress_20261026.py
+      - tests/test_mpw_three_sku_qa_progress_20261026.py
       - tests/test_mpw_three_sku_factory_quality1000_20261026.py
       - tests/test_mpw_live_three_sku_qa_copy_20261023.py
       - .github/requirements/mpw-pdf-parser.txt
@@ -20,6 +22,8 @@ on:
       - tests/test_mpw_three_sku_private_content_audit_20261026.py
       - scripts/mpw_live_three_sku_qa_copy_20261023.py
       - scripts/mpw_three_sku_factory_quality1000_20261026.py
+      - scripts/mpw_three_sku_qa_progress_20261026.py
+      - tests/test_mpw_three_sku_qa_progress_20261026.py
       - tests/test_mpw_three_sku_factory_quality1000_20261026.py
       - tests/test_mpw_live_three_sku_qa_copy_20261023.py
       - .github/requirements/mpw-pdf-parser.txt
@@ -59,6 +63,8 @@ jobs:
           PYTHONPATH="$RUNNER_TEMP/mpw-pdf-parser" python3 -B -m unittest discover -s tests -p test_mpw_three_sku_factory_quality1000_20261026.py -v
           PYTHONPATH="$RUNNER_TEMP/mpw-pdf-parser" python3 -B -m unittest discover -s tests -p test_mpw_three_sku_private_content_audit_20261026.py -v
           python3 -B -m py_compile scripts/mpw_live_three_sku_qa_copy_20261023.py scripts/mpw_three_sku_factory_quality1000_20261026.py scripts/mpw_three_sku_private_content_audit_20261026.py
+          python3 -B -m unittest discover -s tests -p test_mpw_three_sku_qa_progress_20261026.py -v
+          python3 -B -m py_compile scripts/mpw_three_sku_qa_progress_20261026.py
 
   private-copy:
     needs: tests
@@ -239,6 +245,15 @@ jobs:
           echo 'MPW_PRIVATE_CONTENT_BYTES_EMITTED=0'
           echo 'MPW_PRIVATE_CONTENT_AUDIT_REPORTS=3'
           echo 'MPW_QUALITY1000_CERTIFIED=0'
+      - name: Advance private QA stage using hash-bound render and package evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-live-three-private-qa"
+          script="$(base64 -w0 scripts/mpw_three_sku_qa_progress_20261026.py)"
+          test -n "$script"
+          timeout 150s ssh -T -F "$d/config" saeit-vps \
+            "PYTHONPATH=\"\$HOME/factory-runtime/private/dependencies/PyPDF2-3.0.1-pypdfium2-5.14.0-cfg1\" python3 -c 'import base64;exec(base64.b64decode(\"$script\"))'"
       - name: Confirm public storefront routes remain reachable
         shell: bash
         run: |
