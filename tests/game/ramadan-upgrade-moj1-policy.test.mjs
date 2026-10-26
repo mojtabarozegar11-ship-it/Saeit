@@ -55,3 +55,25 @@ test('web, Android and iOS cannot create a live MOJ1 purchase',()=>{
  assert.equal(checkMoj1Purchase({platform:'web',sku:'fake'}).code,'UNKNOWN_SKU');
  assert.equal(checkMoj1Purchase({platform:'desktop',sku}).code,'UNSUPPORTED_PLATFORM');
 });
+
+test('save validator accepts capped legitimate upgrade but rejects poisoned power/armor', async()=>{
+ const {validateCampaignSave}=await import('../../games/ramadan-war/save-validation.mjs');
+ const s={hero:4,mission:1,lives:99,x:2.5,y:7.5,angle:0,hp:200,maxHp:200,ammo:8,magazine:8,
+ rockets:24,drones:7,score:100,points:0,kills:1,missionKills:0,enemies:[],power:12,armor:5};
+ assert.equal(validateCampaignSave(s),true);
+ for(const patch of [{power:Infinity},{power:'12'},{armor:-1},{armor:NaN},{armor:1000}]){
+  assert.equal(validateCampaignSave({...s,...patch}),false,JSON.stringify(patch));
+ }
+});
+test('web runtime uses the earned-upgrade policy and ships its dependencies for rollback', async()=>{
+ const {readFileSync}=await import('node:fs');
+ const game=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
+ const html=readFileSync(new URL('../../games/ramadan-war/index.html',import.meta.url),'utf8');
+ const deploy=readFileSync(new URL('../../games/ramadan-war/deploy.py',import.meta.url),'utf8');
+ assert.match(game,/import \{canApplyEarnedUpgrade,applyEarnedUpgrade\} from '\.\/upgrade-policy\.mjs'/);
+ assert.match(game,/applyEarnedUpgrade\(world,k\)/);
+ assert.match(game,/world\.power=Math\.min\(12,world\.power\?\?0\)/);
+ assert.match(html,/id="moj1Status"/);
+ assert.match(deploy,/'upgrade-policy\.mjs','moj1-commerce-policy\.mjs'/);
+ assert.match(deploy,/checkoutEnabled:false/);
+});
