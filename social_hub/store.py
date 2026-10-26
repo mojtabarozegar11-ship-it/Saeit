@@ -124,6 +124,12 @@ class Store:
             raise Blocked("Public account URL must be HTTPS")
         if not isinstance(instance, str) or len(instance) > 200:
             raise Blocked("Invalid instance")
+        # Enforce exactly the same network-host and forbidden-handle checks for
+        # single registration as for atomic bulk import; no bypass through UI/CLI.
+        from .onboarding import validate_manifest
+        validate_manifest({"schema_version":1,"owner_confirmed":True,"accounts":[
+            {"brand":brand,"platform":platform_key,"destination":destination,
+             "public_url":public_url,"instance":instance}]})
         aid = uuid.uuid4().hex
         alias = "MPW_SOCIAL_" + brand.upper() + "_" + platform_key.upper() + "_" + aid.upper() + "_TOKEN"
         with self.transaction():

@@ -1,10 +1,10 @@
 name: Mojtaba private social console deploy
 on:
   pull_request:
-    paths: ['social_hub/**','scripts/mojtaba_social_hub_install_personal_20261026.py','.github/workflows/mojtaba-social-hub-private-deploy-20261026.yml']
+    paths: ['social_hub/**','scripts/mojtaba_social_hub_install_personal_20261026.py','scripts/mojtaba_social_hub_upgrade_personal_20261026.py','tests/test_mojtaba_social_hub_upgrade_20261026.py','.github/workflows/mojtaba-social-hub-private-deploy-20261026.yml']
   push:
     branches: [main]
-    paths: ['social_hub/**','scripts/mojtaba_social_hub_install_personal_20261026.py','.github/workflows/mojtaba-social-hub-private-deploy-20261026.yml']
+    paths: ['social_hub/**','scripts/mojtaba_social_hub_install_personal_20261026.py','scripts/mojtaba_social_hub_upgrade_personal_20261026.py','tests/test_mojtaba_social_hub_upgrade_20261026.py','.github/workflows/mojtaba-social-hub-private-deploy-20261026.yml']
 permissions:
   contents: read
 concurrency:
@@ -26,10 +26,12 @@ jobs:
           MPW_SOCIAL_OUTBOUND_ENABLED: '0'
         run: |
           set -euo pipefail
-          python3 -m compileall -q social_hub scripts/mojtaba_social_hub_install_personal_20261026.py
+          python3 -m compileall -q social_hub scripts/mojtaba_social_hub_install_personal_20261026.py scripts/mojtaba_social_hub_upgrade_personal_20261026.py
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_hub_20261026.py' -v
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_hub_installer_20261026.py' -v
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_ai_20261026.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojtaba_social_hub_upgrade_20261026.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojtaba_social_onboarding_20261026.py' -v
   deploy:
     needs: preflight
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
@@ -100,7 +102,8 @@ jobs:
           set -euo pipefail
           stage="/home/zomorod2/.mpw-social-command-stage-$GITHUB_RUN_ID"
           timeout 40s ssh -T -F "$SOCIAL_SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
-          timeout 60s scp -q -F "$SOCIAL_SSH_CONFIG" scripts/mojtaba_social_hub_install_personal_20261026.py "saeit-host:$stage/install.py"
+          timeout 60s scp -q -F "$SOCIAL_SSH_CONFIG" scripts/mojtaba_social_hub_install_personal_20261026.py "saeit-host:$stage/mojtaba_social_hub_install_personal_20261026.py"
+          timeout 60s scp -q -F "$SOCIAL_SSH_CONFIG" scripts/mojtaba_social_hub_upgrade_personal_20261026.py "saeit-host:$stage/mojtaba_social_hub_upgrade_personal_20261026.py"
           timeout 90s scp -q -r -F "$SOCIAL_SSH_CONFIG" social_hub "saeit-host:$stage/social_hub"
           timeout 900s ssh -T -F "$SOCIAL_SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
           set -euo pipefail
@@ -109,12 +112,17 @@ jobs:
           py="/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python"
           stage="/home/zomorod2/.mpw-social-command-stage-$id"
           installed=0
+          mode=none
           verified=0
           finalize() {
             code=$?
             trap - EXIT
             if test "$installed" = 1 && test "$verified" = 0; then
-              "$py" "$stage/install.py" rollback --run-id "$id" || echo "SOCIAL_MANUAL_RECOVERY_REQUIRED=YES"
+              if [ "$mode" = upgrade ]; then
+                "$py" "$stage/mojtaba_social_hub_upgrade_personal_20261026.py" rollback --run-id "$id" || echo "SOCIAL_MANUAL_RECOVERY_REQUIRED=YES"
+              else
+                "$py" "$stage/mojtaba_social_hub_install_personal_20261026.py" rollback --run-id "$id" || echo "SOCIAL_MANUAL_RECOVERY_REQUIRED=YES"
+              fi
               test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
             fi
             if test -d "$stage" && test ! -L "$stage"; then rm -rf -- "$stage"; fi
@@ -122,9 +130,22 @@ jobs:
           }
           trap finalize EXIT
           test -x "$py" && test -f "$app/manage.py" && test ! -L "$app"
-          "$py" "$stage/install.py" check --source "$stage/social_hub"
-          "$py" "$stage/install.py" install --source "$stage/social_hub" --run-id "$id"
-          installed=1
+          if test -d "$app/social_hub" && test ! -L "$app/social_hub"; then
+            mode=upgrade
+            "$py" "$stage/mojtaba_social_hub_upgrade_personal_20261026.py" check --source "$stage/social_hub"
+            result=$("$py" "$stage/mojtaba_social_hub_upgrade_personal_20261026.py" upgrade --source "$stage/social_hub" --run-id "$id")
+            printf '%s\n' "$result"
+            case "$result" in
+              *'"status": "upgraded"'*) installed=1 ;;
+              *'"status": "already_current"'*) installed=0 ;;
+              *) echo "SOCIAL_UNEXPECTED_UPGRADE_STATUS"; exit 1 ;;
+            esac
+          else
+            mode=initial
+            "$py" "$stage/mojtaba_social_hub_install_personal_20261026.py" check --source "$stage/social_hub"
+            "$py" "$stage/mojtaba_social_hub_install_personal_20261026.py" install --source "$stage/social_hub" --run-id "$id"
+            installed=1
+          fi
           cd "$app"
           "$py" manage.py check
           "$py" - <<'PY'
@@ -137,14 +158,30 @@ jobs:
           db=_db()
           try:
               summary=db.summary()
-              if summary['accounts'] or summary['recent_posts']:
-                  raise RuntimeError('Fresh unconnected panel expected')
+              if not isinstance(summary.get('accounts'),int):
+                  raise RuntimeError('Private social ledger inaccessible')
           finally:db.close()
           url=reverse('mojtaba_social_command')
           r=Client(HTTP_HOST='mojplaywin.com').get(url,secure=True)
           if r.status_code not in (302,403):
               raise RuntimeError('Social panel not restricted to staff: '+str(r.status_code))
+          # Exercise the *authenticated* rendering path, without creating any
+          # real Django users or changing any database/account credentials.
+          from types import SimpleNamespace
+          from django.test import RequestFactory
+          from social_hub.portal import dashboard, read_status
+          staff=SimpleNamespace(is_active=True,is_authenticated=True,
+                                is_staff=True,is_superuser=True,pk=99999)
+          owner_request=RequestFactory().get(url,secure=True,HTTP_HOST='mojplaywin.com')
+          owner_request.user=staff
+          owner_response=dashboard(owner_request)
+          if owner_response.status_code!=200 or b'manifest_json' not in owner_response.content:
+              raise RuntimeError('Authorized social batch-onboarding UI not rendered')
+          api_response=read_status(owner_request)
+          if api_response.status_code!=200:
+              raise RuntimeError('Authorized private connection status unavailable')
           print('PERSONAL_STAFF_PROTECTED_ROUTE=PASS',flush=True)
+          print('SOCIAL_AUTHENTICATED_DASHBOARD=PASS',flush=True)
           PY
           test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
           "$py" - <<'PY'
@@ -157,7 +194,7 @@ jobs:
               print('PRESERVED='+url,flush=True)
           PY
           verified=1
-          echo 'PERSONAL_SOCIAL_CONSOLE_INSTALLED_NO_API_CREDENTIALS'
+          echo 'PERSONAL_SOCIAL_CONSOLE_DEPLOYED_NO_AUTO_PUBLICATION'
           REMOTE
       - name: Remove relay credentials from runner
         if: always()

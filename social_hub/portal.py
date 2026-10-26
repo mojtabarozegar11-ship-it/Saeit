@@ -90,6 +90,22 @@ def dashboard(request):
                         public_url=request.POST.get("public_url",""),
                         instance=request.POST.get("instance",""),actor=actor)
                     message = "Account registered as unverified: " + aid
+                elif operation in ("bulk_preview","bulk_register"):
+                    if not request.user.is_superuser:
+                        raise Blocked("Owner superuser required for manifest onboarding")
+                    from .onboarding import preview as preview_manifest, register as register_manifest
+                    raw=request.POST.get("manifest_json","")
+                    if len(raw)>130000:
+                        raise Blocked("Manifest too large")
+                    if operation=="bulk_preview":
+                        plan=preview_manifest(db,raw)
+                        message=("Validated "+str(len(plan["to_register"]))+
+                                 " new and "+str(len(plan["already_registered"]))+
+                                 " existing accounts. NO APIs connected or credentials stored.")
+                    else:
+                        output=register_manifest(db,raw,actor=actor)
+                        message=("Added "+str(len(output["registered"]))+
+                                 " unverified account records. No posts were published.")
                 elif operation == "verify":
                     aid = request.POST.get("account_id","")
                     account = db.account(aid)
@@ -186,6 +202,16 @@ def dashboard(request):
     def inp(name,placeholder="",type_="text",required=False):
         return ('<label>'+escape(name)+'<input name="'+escape(name)+'" placeholder="'+escape(placeholder)+
                 '" type="'+escape(type_)+'" maxlength="1600"'+(' required' if required else '')+'></label>')
+    bulk_form = form("bulk_preview",
+        '<label>JSON manifest<textarea name="manifest_json" rows="7" maxlength="130000" required '
+        'placeholder=\'{"schema_version":1,"owner_confirmed":true,"accounts":[]}\'></textarea></label>'
+        '<p class="hint">Paste only genuine official accounts. Never paste API keys or passwords.</p>',
+        "Validate batch without saving")
+    bulk_save = form("bulk_register",
+        '<label>Confirmed JSON manifest<textarea name="manifest_json" rows="7" maxlength="130000" required '
+        'placeholder=\'{"schema_version":1,"owner_confirmed":true,"accounts":[]}\'></textarea></label>'
+        '<p class="hint">Atomic import: accounts remain unverified; API connections and publishing remain OFF.</p>',
+        "Register all valid account records")
     register = form("register",
         '<label>Brand<select name="brand">'+opt_brands+'</select></label>'+
         '<label>Platform<select name="platform">'+opt_platforms+'</select></label>'+
@@ -261,7 +287,7 @@ td,th{padding:10px;border-bottom:1px solid #625940;text-align:right;word-break:b
 <main>""" + msg + '<div class="grid">'+stats+'</div><br><div class="grid">'+(
 '<section><h2>ثبت حساب رسمی</h2>'+register+'</section>' if register else "")+(
 '<section><h2>ثبت شاهد مالکیت</h2>'+verify+'</section>' if verify else "")+(
-'<section><h2>تهیه محتوای جدید</h2>'+composer+'</section><section><h2>دستیار هوشمند ChatGPT</h2>'+ai_form+'</section>')+'</div>'+
+'<section><h2>تهیه محتوای جدید</h2>'+composer+'</section><section><h2>دستیار هوشمند ChatGPT</h2>'+ai_form+'</section>')+('<section><h2>ورود گروهی حساب‌های رسمی</h2>'+bulk_form+bulk_save+'</section>' if request.user.is_superuser else '')+'</div>'+
 '<section><h2>حساب‌ها</h2><div class="scroll"><table><thead><tr><th>مجموعه</th><th>شبکه</th><th>شناسه</th><th>مالکیت</th><th>API</th></tr></thead><tbody>'+
 "".join(account_rows)+'</tbody></table></div></section>'+
 '<section><h2>صف انتشار و رسیدها</h2><div class="scroll"><table><thead><tr><th>مجموعه</th><th>شبکه</th><th>وضعیت</th><th>زمان UTC</th><th>رسید</th><th>اقدام</th></tr></thead><tbody>'+
