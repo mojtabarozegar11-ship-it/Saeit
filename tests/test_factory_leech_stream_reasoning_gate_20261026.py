@@ -103,6 +103,9 @@ class LeechStreamAcceptanceRegression(unittest.TestCase):
             "this is a place\u2063holder",  # invisible separator, Cf
             "lorem \u180eipsum",  # Mongolian vowel separator, Cf
             "[citation\u2066 needed]",  # left-to-right isolate, Cf
+            "bibliography\r\n",  # CRLF line ending must not evade gate
+            "bibliography\u2028",  # Unicode line separator, Zl
+            "bibliography\u0085",  # next-line control, Cc
             "as an ai\u202e language model",  # right-to-left override, Cf
             "\uff4c\uff4f\uff52\uff45\uff4d \uff49\uff50\uff53\uff55\uff4d",  # fullwidth NFKC compatibility
         )
