@@ -86,6 +86,35 @@ class EconomicsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             enterprise(dict(self.example["enterprises"][0], unit_price="NaN"))
 
+    def test_large_local_currency_portfolio_precision(self):
+        # Farm budgets denominated in high-unit currencies must not fail
+        # Decimal.quantize after multiplying independently bounded inputs.
+        from decimal import Decimal
+        row = {
+            "name": "large-unit budget", "units_sold": "1e18",
+            "unit_price": "1e18", "variable_cost_per_unit": "1e17",
+            "allocated_fixed_cost": "1e18", "selling_fee_percent": "5",
+        }
+        data = {"currency": "IRR", "enterprises": [
+            dict(row, name="Enterprise " + str(i)) for i in range(100)
+        ]}
+        result = evaluate(data)
+        actual = Decimal(result["portfolio"]["sales_revenue"])
+        self.assertEqual(actual, Decimal("1e38"))
+        self.assertEqual(len(result["scenario_results"]), 900)
+        self.assertGreater(Decimal(result["portfolio"]["operating_profit"]), 0)
+
+    def test_invalid_extremes_fail_with_input_error(self):
+        row = self.example["enterprises"][0]
+        for value in ("1e21", "-1e21", "9" * 1000):
+            with self.subTest(value=value[:20]):
+                with self.assertRaises(ValueError):
+                    enterprise(dict(row, unit_price=value))
+        with self.assertRaises(ValueError):
+            enterprise(dict(row, units_sold=float("inf")))
+        with self.assertRaises(ValueError):
+            enterprise(dict(row, units_sold="NaN"))
+
     def test_duplicate_enterprise_names_rejected(self):
         bad = dict(self.example)
         bad["enterprises"] = self.example["enterprises"] * 2
