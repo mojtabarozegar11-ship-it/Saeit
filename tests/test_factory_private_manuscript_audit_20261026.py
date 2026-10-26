@@ -138,10 +138,10 @@ class PrivateAuditTests(unittest.TestCase):
             repeated = " ".join("distinctword%04d" % i for i in range(140))
             first = Path(d) / "chapter-01-part-001.md"
             second = Path(d) / "chapter-02-part-001.md"
-            first.write_text("# Chapter one\\n\\n" + repeated +
-                             "\\n\\n" + " ".join("first%04d" % i for i in range(150)))
-            second.write_text("# Chapter two\\n\\n" + repeated +
-                              "\\n\\n" + " ".join("second%04d" % i for i in range(150)))
+            first.write_text("# Chapter one\n\n" + repeated +
+                             "\n\n" + " ".join("first%04d" % i for i in range(150)))
+            second.write_text("# Chapter two\n\n" + repeated +
+                              "\n\n" + " ".join("second%04d" % i for i in range(150)))
             before = (first.read_bytes(), second.read_bytes())
             result = module.audit(Path(d), chapters=2,
                                   chapter_target=250, total_target=500)
@@ -157,7 +157,7 @@ class PrivateAuditTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             for chapter in (1, 2):
                 p = Path(d) / ("chapter-%02d-part-001.md" % chapter)
-                p.write_text("# Chapter\\n\\n" +
+                p.write_text("# Chapter\n\n" +
                              " ".join("chapter%dterm%04d" % (chapter, i)
                                       for i in range(150)))
             result = module.audit(Path(d), chapters=2,
