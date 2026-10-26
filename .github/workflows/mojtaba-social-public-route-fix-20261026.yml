@@ -1,0 +1,206 @@
+name: Mojtaba social public route isolated guarded repair
+on:
+  pull_request:
+    paths:
+      - 'scripts/mojtaba_social_hub_public_route_fix_20261026.py'
+      - 'tests/test_mojtaba_social_public_route_fix_20261026.py'
+      - '.github/workflows/mojtaba-social-public-route-fix-20261026.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/mojtaba_social_hub_public_route_fix_20261026.py'
+      - '.github/workflows/mojtaba-social-public-route-fix-20261026.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-personal-app-installation
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Ensure route is reversible and does not touch other websites or accounts
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q scripts/mojtaba_social_hub_public_route_fix_20261026.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_social_public_route_fix_20261026.py' -v
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Restrict site scope and measure existing baseline
+        run: |
+          python3 - <<'PY'
+          from urllib.request import urlopen,Request
+          for u in ("https://mojplaywin.com/mojtaba.roozegar/",
+                    "https://mojplaywin.com/","https://zomorodmelal.ir/"):
+              with urlopen(Request(u,headers={"Cache-Control":"no-cache"}),timeout=25) as r:
+                  if r.status!=200:raise RuntimeError("Unhealthy baseline")
+              print("SOCIAL_BASELINE_200",u)
+          PY
+      - name: Authenticate to known and fingerprint-pinned cPanel through VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-social-ssh"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]); t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SOCIAL_SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Fix ONLY personal-site public Django route, rollback if external smoke fails
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mpw-social-public-route-$GITHUB_RUN_ID"
+          timeout 40s ssh -T -F "$SOCIAL_SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 60s scp -q -F "$SOCIAL_SSH_CONFIG" scripts/mojtaba_social_hub_public_route_fix_20261026.py "saeit-host:$stage/mojtaba_social_hub_public_route_fix_20261026.py"
+          timeout 60s scp -q -F "$SOCIAL_SSH_CONFIG" scripts/mojtaba_social_hub_install_personal_20261026.py "saeit-host:$stage/mojtaba_social_hub_install_personal_20261026.py"
+          timeout 60s scp -q -F "$SOCIAL_SSH_CONFIG" scripts/mojtaba_social_hub_upgrade_personal_20261026.py "saeit-host:$stage/mojtaba_social_hub_upgrade_personal_20261026.py"
+          timeout 240s ssh -T -F "$SOCIAL_SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          run="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          stage="/home/zomorod2/.mpw-social-public-route-$run"
+          py="/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python"
+          installed=0
+          good=0
+          cleanup() {
+            rc=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$good" = 0; then
+              echo 'PERSONAL_ROUTE_FIX_SMOKE_FAILED_RESTORING_PREVIOUS_URLCONF'
+              "$py" "$stage/mojtaba_social_hub_public_route_fix_20261026.py" rollback --run-id "$run" || echo 'PERSONAL_ROUTE_MANUAL_RECOVERY_REQUIRED'
+              test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+            fi
+            if test -d "$stage" && test ! -L "$stage"; then rm -rf -- "$stage"; fi
+            exit "$rc"
+          }
+          trap cleanup EXIT
+          test -x "$py" && test -f "$app/manage.py"
+          "$py" "$stage/mojtaba_social_hub_public_route_fix_20261026.py" check
+          "$py" "$stage/mojtaba_social_hub_public_route_fix_20261026.py" install --run-id "$run"
+          installed=1
+          cd "$app"
+          "$py" manage.py check
+          "$py" - <<'PY'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django; django.setup()
+          from django.urls import reverse,resolve
+          from django.test import Client
+          import json
+          expected={
+              "mojtaba_social_command":"/mojtaba.roozegar/social-command/",
+              "mojtaba_official_channels":"/mojtaba.roozegar/social-command/official/",
+              "mojtaba_official_channels_json":"/mojtaba.roozegar/social-command/official.json",
+          }
+          for name,path in expected.items():
+              url=reverse(name)
+              if url!=path or resolve(path).view_name!=name:
+                  raise RuntimeError("Personal social route does not resolve to public prefix: "+name)
+              print("PERSONAL_PREFIX_DJANGO_RESOLVE_PASS",name,flush=True)
+          c=Client(HTTP_HOST="mojplaywin.com")
+          admin=c.get(expected["mojtaba_social_command"],secure=True)
+          if admin.status_code not in (302,403):
+              raise RuntimeError("Social admin endpoint is not protected")
+          public=c.get(expected["mojtaba_official_channels"],secure=True)
+          if public.status_code!=200 or b"Verified official channels" not in public.content:
+              raise RuntimeError("Official directory does not respond in Django")
+          print("SOCIAL_ADMIN_AUTH_PROTECTION_PASS",flush=True)
+          print("SOCIAL_PUBLIC_DIRECTORY_DJANGO_PASS",flush=True)
+          if os.environ.get("MPW_SOCIAL_OUTBOUND_ENABLED")=="1":
+              raise RuntimeError("Social outbound mode unexpectedly enabled")
+          PY
+          test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+          "$py" - <<'PY'
+          import time
+          import urllib.request,urllib.error
+          # Passenger worker recreation may need a brief delay after restart.
+          urls={
+            "https://mojplaywin.com/mojtaba.roozegar/":{200},
+            "https://mojplaywin.com/":{200},
+            "https://zomorodmelal.ir/":{200},
+            "https://mojplaywin.com/mojtaba.roozegar/social-command/":{302,303,403},
+            "https://mojplaywin.com/mojtaba.roozegar/social-command/official/":{200},
+            "https://mojplaywin.com/mojtaba.roozegar/social-command/official.json":{200},
+          }
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args):return None
+          opener=urllib.request.build_opener(NoRedirect)
+          for attempt in range(5):
+              states={}
+              for url in urls:
+                  try:
+                      with opener.open(urllib.request.Request(url,headers={
+                          "Cache-Control":"no-cache","User-Agent":"MPW-SocialRoute-Release-SafeProbe"}),
+                          timeout=15) as r:
+                          states[url]=r.status
+                  except urllib.error.HTTPError as e:
+                      states[url]=e.code
+                  except Exception:
+                      states[url]=0
+              print("SOCIAL_EXTERNAL_STATUS_ATTEMPT",attempt+1,states,flush=True)
+              if all(states[u] in allowed for u,allowed in urls.items()):
+                  print("PERSONAL_SOCIAL_WEB_ROUTE_READY=PASS",flush=True)
+                  break
+              if attempt==4:
+                  raise RuntimeError("Personal public route is not reachable externally; rollback")
+              time.sleep(3)
+          PY
+          good=1
+          echo 'PERSONAL_SOCIAL_PUBLIC_ROUTE_VERIFIED_FINAL=PASS'
+          REMOTE
+      - name: Remove runner-only SSH keys
+        if: always()
+        run: |
+          rm -rf -- "$RUNNER_TEMP/mpw-social-ssh"
