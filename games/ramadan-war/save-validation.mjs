@@ -18,6 +18,8 @@ export function validateCampaignSave(s) {
     point(e, 0, 16) && integer(e.type, 0, 3) && finite(e.hp, -10000, 10000) &&
     (e.route == null || (Array.isArray(e.route) && e.route.length === 2 && e.route.every(n => finite(n, 0, 16))))
   )) return false;
+  if (s.missionPassed !== undefined && typeof s.missionPassed !== 'boolean') return false;
+  if (s.missionPassed === true && s.enemies.length !== 0) return false;
   if (!group(s.hostile, 150, e => point(e) && finite(e.life, -10, 100))) return false;
   if (!group(s.missiles, 80, e => point(e) && finite(e.life, -10, 100))) return false;
   if (!group(s.pickups, 60, e => point(e, 0, 16) && finite(e.life, -10, 4000) &&
@@ -26,4 +28,9 @@ export function validateCampaignSave(s) {
       !integer(s.objective.done, 0, 3) || !finite(s.objective.hold, 0, 100) ||
       typeof s.objective.bossDefeated !== 'boolean')) return false;
   return true;
+}
+
+// A cleared mission must resume at its results panel, not in a non-interactive arena.
+export function resumeCampaignScreen(save) {
+  return save?.missionPassed === true ? 'success' : 'game';
 }
