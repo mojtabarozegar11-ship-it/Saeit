@@ -37,7 +37,15 @@ VIRTUAL_MEMORY_CAP_MIB = 2600
 def stream_segment_is_acceptable(body, minimum=300):
     """Fail closed on leaked reasoning/control tokens before early stream acceptance."""
     import re
-    lowered = body.casefold()
+    import unicodedata
+    # Inspect a canonical safety-only view: invisible format controls and
+    # compatibility glyphs must not conceal model reasoning delimiters.
+    # Preserve original body bytes for word counts and downstream acceptance.
+    safety_view = unicodedata.normalize("NFKC", body)
+    safety_view = re.sub(
+        r"[\u00ad\u200b\u200c\u200d\u2060\ufeff\u202a-\u202e\u2066-\u2069]",
+        "", safety_view)
+    lowered = safety_view.casefold()
     if any(marker in lowered for marker in (
             "<think", "</think", "<|im_start|>", "<|im_end|>",
             "<|assistant", "[/inst]", "[inst]")):
