@@ -118,7 +118,7 @@ def validate():
     from django.utils import timezone
     from core.models import PaymentIntent
     from mpw_commerce.customer_auth import CustomerLogin
-    from services.mpw_trx_commercial_web import _show_invoice, _decode, WAITING
+    from services.mpw_trx_commercial_web import _show_invoice, _decode, WAITING, PROVIDER
 
     rf = RequestFactory()
     cases = [
@@ -157,7 +157,7 @@ def validate():
     row = PaymentIntent.objects.select_related("order").filter(pk=14).first()
     if row:
         user = get_user_model().objects.filter(pk=row.order.customer_id).first()
-        if user and user.is_active and row.provider == "mpw_trx_walletless":
+        if user and user.is_active and row.provider == PROVIDER:
             inv = _decode(row)
             if row.status != WAITING or inv.expires_at <= timezone.now():
                 req = rf.get("/commerce/trx-easy/invoice/14/", secure=True,
