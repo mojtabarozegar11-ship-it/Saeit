@@ -228,7 +228,9 @@ def run(root=BASE):
             target.chmod(0o600)
         results.append({"sku": ident, "source_sha256": sha, "report_sha256": report_hash,
                         "format": measured["format"], "mechanical_pass": passed,
-                        "mechanical_total": len(measured["checks"]), "quality1000_verified": False})
+                        "mechanical_total": len(measured["checks"]),
+                        "failed_checks": [name for name, ok in measured["checks"].items() if not ok],
+                        "quality1000_verified": False})
     print("MPW_PRIVATE_CONTENT_AUDIT=" + json.dumps(results, sort_keys=True))
     print("MPW_CONTENT_BYTES_EMITTED=0;MPW_LIVE_MUTATIONS=0;MPW_QUALITY1000_CERTIFIED=0")
     return results
