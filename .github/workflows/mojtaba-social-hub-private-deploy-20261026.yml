@@ -166,6 +166,15 @@ jobs:
           r=Client(HTTP_HOST='mojplaywin.com').get(url,secure=True)
           if r.status_code not in (302,403):
               raise RuntimeError('Social panel not restricted to staff: '+str(r.status_code))
+          if r.status_code != 302:
+              raise RuntimeError('Social admin requires private login redirect')
+          login_path=r.headers.get('Location','')
+          if not login_path.startswith('/mojtaba.roozegar/social-command/login/?next='):
+              raise RuntimeError('Social admin redirect points outside its personal authentication')
+          own_login=Client(HTTP_HOST='mojplaywin.com').get(reverse('mojtaba_social_login'),secure=True)
+          if own_login.status_code!=200 or b'password' not in own_login.content.lower():
+              raise RuntimeError('Standalone social staff login form is not available')
+          print('PERSONAL_SOCIAL_LOGIN_FORM=PASS',flush=True)
           # Exercise the *authenticated* rendering path, without creating any
           # real Django users or changing any database/account credentials.
           from types import SimpleNamespace

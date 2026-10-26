@@ -4,7 +4,8 @@ from html import escape
 import json
 import os
 
-from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth.decorators import user_passes_test
+from django.urls import reverse
 from django.http import HttpResponse, JsonResponse
 from django.middleware.csrf import get_token
 from django.views.decorators.csrf import csrf_protect
@@ -14,6 +15,13 @@ from .catalog import BRANDS, PLATFORMS, catalogue
 from .store import Store
 from .service import connection_status
 from .adapters import Blocked, Uncertain
+
+# The personal site has its own authentication database and public prefix.
+# Never redirect users to the shared domain-root /admin/login/ application.
+staff_member_required_personal = user_passes_test(
+    lambda user: bool(user.is_authenticated and user.is_active and user.is_staff),
+    login_url="mojtaba_social_login",
+)
 
 def _allowed(user):
     if not user.is_authenticated or not user.is_active or not user.is_staff:
@@ -43,7 +51,7 @@ def _no_cache(response):
     response["Referrer-Policy"] = "no-referrer"
     return response
 
-@staff_member_required
+@staff_member_required_personal
 @require_GET
 def read_status(request):
     brands = _allowed(request.user)
@@ -61,7 +69,7 @@ def read_status(request):
     return _no_cache(JsonResponse({"accounts":accounts,"summary":info,
                                     "outbound_allowed_by_ui":False}))
 
-@staff_member_required
+@staff_member_required_personal
 @csrf_protect
 @require_http_methods(["GET","POST"])
 def dashboard(request):
@@ -283,7 +291,7 @@ td,th{padding:10px;border-bottom:1px solid #625940;text-align:right;word-break:b
 </style></head><body>
 <header><h1>مرکز فرماندهی شبکه‌های اجتماعی و فعالیت‌های حرفه‌ای</h1>
 <p class="sub">شخصی · زمرد ملل · MojPlayWin | پیش‌نویس، مجوز انتشار، حساب رسمی، وضعیت اتصال و رسید</p>
-<nav><a href="/mojtaba.roozegar/">وب مرکزی</a> · <a href="status/">وضعیت JSON امن</a></nav></header>
+<nav><a href="/mojtaba.roozegar/">وب مرکزی</a> · <a href="status/">وضعیت JSON امن</a> · <a href="login/">ورود مدیر</a></nav></header>
 <main>""" + msg + '<div class="grid">'+stats+'</div><br><div class="grid">'+(
 '<section><h2>ثبت حساب رسمی</h2>'+register+'</section>' if register else "")+(
 '<section><h2>ثبت شاهد مالکیت</h2>'+verify+'</section>' if verify else "")+(
