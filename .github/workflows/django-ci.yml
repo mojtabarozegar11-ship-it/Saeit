@@ -19,8 +19,11 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
-      - name: Install hash-pinned private PDF QA parser for shared regression tests
-        run: python -m pip install --require-hashes -r .github/requirements/mpw-pdf-parser.txt
+      - name: Install hash-pinned PDF parser in isolated target for shared tests
+        run: |
+          parser="$RUNNER_TEMP/mpw-pdf-parser"
+          install -d -m 700 "$parser"
+          python -m pip install --no-deps --require-hashes --target "$parser" -r .github/requirements/mpw-pdf-parser-ci.txt
       - name: Django deployment checks
         env:
           SECRET_KEY: ci-secret-key
@@ -35,6 +38,7 @@ jobs:
         run: python manage.py collectstatic --noinput
       - name: Run tests
         env:
+          PYTHONPATH: ${{ runner.temp }}/mpw-pdf-parser
           SECRET_KEY: ci-secret-key
           DEBUG: "False"
           ALLOWED_HOSTS: localhost,127.0.0.1
