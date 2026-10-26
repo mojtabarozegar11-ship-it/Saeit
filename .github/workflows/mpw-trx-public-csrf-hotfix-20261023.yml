@@ -10,6 +10,9 @@ on:
       - services/mpw_trx_walletless_checkout_ui.py
       - tests/test_mpw_trx_commercial_gateway.py
       - tests/test_mpw_trx_commercial_ui_contract.py
+      - tests/test_mpw_trx_commercial_real_mariadb_e2e.py
+      - tests/test_mpw_walletless_real_django_orm_e2e.py
+      - services/mpw_trx_commercial_context.py
 permissions: {contents: read}
 concurrency:
   group: mpw-public-trx-csrf-hotfix
