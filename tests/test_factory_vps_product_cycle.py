@@ -369,11 +369,14 @@ class ProductionContinuityTests(unittest.TestCase):
             if item.get('status')=='design_rework_required':
                 deferred.append({'request':item.get('request_file'),
                                  'reason':item.get('reason')})
-        self.assertEqual(status['technical_prototypes'],15,
-                         json.dumps({'sources':source_receipts,'deferred':deferred,
-                                     'designer_pending':designer_state.get('pending_requests'),
-                                     'designer_rework':designer_state.get('rework')},sort_keys=True))
-        self.assertGreaterEqual(status['functional_products'],9)
+        self.assertLessEqual(status['technical_prototypes'],5,
+                             json.dumps({'sources':source_receipts,'deferred':deferred,
+                                         'designer_pending':designer_state.get('pending_requests'),
+                                         'designer_rework':designer_state.get('rework')},sort_keys=True))
+        self.assertLessEqual(status['functional_products'],5)
+        slots=json.loads((self.output/'quality-excellence/product-flow/active-slots/current.json').read_text())
+        self.assertEqual(slots['capacity'],5)
+        self.assertEqual(len(slots['active']),5)
         self.assertGreaterEqual(novel,18,json.dumps(actual_cycles,sort_keys=True))
         replay=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True,
                                enable_design_intake=True,design_capacity=6)
