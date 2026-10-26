@@ -128,10 +128,10 @@ assert.equal(allowed.get('rwHero'),null,'normal storage supports cleanup');
 const stickSource=slice("const stick=$('#stick'),knob=$('#knob');","let aimY=0;");
 const mobile=vm.runInNewContext(
  "let screen='game',joyId=null,joyF=0,joyS=0;"+
- "const knob={style:{transform:''}};"+
- "const stick={captures:[],getBoundingClientRect(){return {left:0,top:0,width:0,height:0}},setPointerCapture(id){this.captures.push(id)}};"+
- "const $=id=>id==='#stick'?stick:knob;"+
- stickSource+"({stick,knob,get:()=>({joyId,joyF,joyS}),setScreen:s=>screen=s})"
+ "const joystickKnob={style:{transform:''}};"+
+ "const joystickElement={captures:[],getBoundingClientRect(){return {left:0,top:0,width:0,height:0}},setPointerCapture(id){this.captures.push(id)}};"+
+ "const $=id=>id==='#stick'?joystickElement:joystickKnob;"+
+ stickSource+"({stick:joystickElement,knob:joystickKnob,get:()=>({joyId,joyF,joyS}),setScreen:s=>screen=s})"
 );
 const touch=(pointerId,clientX=10,clientY=5)=>({pointerId,clientX,clientY});
 mobile.stick.onpointerdown(touch(1));
