@@ -111,8 +111,14 @@
     return choices;
   }
   function transition(state, action) {
+    if (!state || !Array.isArray(state.pieces) || !Array.isArray(state.removed) ||
+        !Number.isSafeInteger(state.twistsLeft) || state.twistsLeft < 0 ||
+        !Number.isInteger(state.phase) || state.phase < 0 || state.phase > 3 ||
+        !action || typeof action !== 'object') return null;
     if (action.type === 'remove') {
-      if (!canExit(action.id, state)) return null;
+      // Only canonical numeric IDs from the active puzzle can be removed.
+      if (!Number.isSafeInteger(action.id) || !state.pieces.some(p => p.id === action.id) ||
+          !canExit(action.id, state)) return null;
       return { ...state, removed: [...state.removed, action.id] };
     }
     if (action.type === 'twist') {
@@ -130,6 +136,8 @@
       state.twistsLeft, state.pieces.map(p => [p.face, p.u, p.v, p.dir].join(':')).join('|')].join('~');
   }
   function solve(levelData, start, maxVisited = 50000) {
+    if (!levelData || !Array.isArray(levelData.pieces) || !Number.isSafeInteger(maxVisited) || maxVisited < 1) return null;
+    maxVisited = Math.min(maxVisited, 100000);
     const state = start || initialState(levelData);
     const visited = new Set();
     function visit(current, path) {
@@ -191,7 +199,8 @@
     return best.path;
   }
   function generate(level) {
-    const number = Math.max(1, Math.min(100000, Math.floor(Number(level) || 1)));
+    const requested = Number(level);
+    const number = Number.isFinite(requested) ? Math.max(1, Math.min(100000, Math.floor(requested))) : 1;
     const random = rngFor((Math.imul(number, 2654435761) ^ 0x9e3779b9) >>> 0);
     const advanced = number >= 12;
     const count = Math.min(12, 5 + Math.floor(number / 3));

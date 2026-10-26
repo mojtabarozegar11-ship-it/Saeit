@@ -21,8 +21,17 @@
     };
   }
   function canExit(piece, others, size) {
+    if (!piece || !Number.isInteger(piece.dir) || piece.dir < 0 || piece.dir >= DIRECTIONS.length ||
+        !Array.isArray(piece.path) || !piece.path.length || !Array.isArray(others) ||
+        !Number.isInteger(size) || size < 1 || size > 100) return false;
+    // Fail closed on damaged or imported puzzle data instead of allowing phantom exits.
+    const validPoint = p => p && Number.isInteger(p.x) && Number.isInteger(p.y) &&
+      p.x >= 0 && p.y >= 0 && p.x < size && p.y < size;
+    if (!piece.path.every(validPoint)) return false;
     const occupied = new Set();
     for (const other of others) {
+      if (!other || !Array.isArray(other.path) || !other.path.length ||
+          !other.path.every(validPoint)) return false;
       if (other.id === piece.id) continue;
       for (const p of other.path) occupied.add(key(p.x, p.y));
     }
@@ -41,6 +50,7 @@
     return false;
   }
   function solve(pieces, size) {
+    if (!Array.isArray(pieces) || !Number.isInteger(size) || size < 1 || size > 100) return null;
     const remaining = pieces.slice();
     const order = [];
     while (remaining.length) {
@@ -88,7 +98,8 @@
     return path.length >= 2 ? { id, dir, path } : null;
   }
   function generate(level) {
-    const number = Math.max(1, Math.floor(Number(level) || 1));
+    const requested = Number(level);
+    const number = Number.isFinite(requested) ? Math.max(1, Math.min(1000000, Math.floor(requested))) : 1;
     const size = Math.min(11, 7 + Math.floor((number - 1) / 20));
     const target = Math.min(22, 6 + Math.floor((number - 1) * 0.62));
     const rng = seededRandom((Math.imul(number, 2654435761) ^ 0x6d2b79f5) >>> 0);

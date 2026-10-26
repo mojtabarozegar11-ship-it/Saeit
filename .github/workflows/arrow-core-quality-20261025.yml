@@ -1,0 +1,25 @@
+name: Arrow Escape and Nexus deterministic quality
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - games/arrow-escape/engine.js
+      - games/arrow-escape/nexus-core.js
+      - games/arrow-escape/engine.test.cjs
+      - games/arrow-escape/nexus-core.test.cjs
+      - .github/workflows/arrow-core-quality-20261025.yml
+permissions:
+  contents: read
+jobs:
+  deterministic-puzzles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node games/arrow-escape/engine.test.cjs
+      - run: node games/arrow-escape/nexus-core.test.cjs
