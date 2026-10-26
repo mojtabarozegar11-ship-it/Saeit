@@ -101,16 +101,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          stage="/home/zomorod2/.mpw-social-public-route-$GITHUB_RUN_ID"
+          stage="/home/zomorod2/.mpw-social-public-route-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           timeout 40s ssh -T -F "$SOCIAL_SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
           timeout 60s scp -q -F "$SOCIAL_SSH_CONFIG" scripts/mojtaba_social_hub_public_route_fix_20261026.py "saeit-host:$stage/mojtaba_social_hub_public_route_fix_20261026.py"
           timeout 60s scp -q -F "$SOCIAL_SSH_CONFIG" scripts/mojtaba_social_hub_install_personal_20261026.py "saeit-host:$stage/mojtaba_social_hub_install_personal_20261026.py"
           timeout 60s scp -q -F "$SOCIAL_SSH_CONFIG" scripts/mojtaba_social_hub_upgrade_personal_20261026.py "saeit-host:$stage/mojtaba_social_hub_upgrade_personal_20261026.py"
-          timeout 240s ssh -T -F "$SOCIAL_SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          timeout 240s ssh -T -F "$SOCIAL_SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID' '$GITHUB_RUN_ATTEMPT'" <<'REMOTE'
           set -euo pipefail
           run="$1"
+          attempt="$2"
+          release_id="$run-$attempt"
           app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
-          stage="/home/zomorod2/.mpw-social-public-route-$run"
+          stage="/home/zomorod2/.mpw-social-public-route-$run-$attempt"
           py="/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python"
           installed=0
           good=0
@@ -119,7 +121,7 @@ jobs:
             trap - EXIT
             if test "$installed" = 1 && test "$good" = 0; then
               echo 'PERSONAL_ROUTE_FIX_SMOKE_FAILED_RESTORING_PREVIOUS_URLCONF'
-              "$py" "$stage/mojtaba_social_hub_public_route_fix_20261026.py" rollback --run-id "$run" || echo 'PERSONAL_ROUTE_MANUAL_RECOVERY_REQUIRED'
+              "$py" "$stage/mojtaba_social_hub_public_route_fix_20261026.py" rollback --run-id "$release_id" || echo 'PERSONAL_ROUTE_MANUAL_RECOVERY_REQUIRED'
               test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
             fi
             if test -d "$stage" && test ! -L "$stage"; then rm -rf -- "$stage"; fi
@@ -128,7 +130,7 @@ jobs:
           trap cleanup EXIT
           test -x "$py" && test -f "$app/manage.py"
           "$py" "$stage/mojtaba_social_hub_public_route_fix_20261026.py" check
-          "$py" "$stage/mojtaba_social_hub_public_route_fix_20261026.py" install --run-id "$run"
+          "$py" "$stage/mojtaba_social_hub_public_route_fix_20261026.py" install --run-id "$release_id"
           installed=1
           cd "$app"
           "$py" manage.py check
