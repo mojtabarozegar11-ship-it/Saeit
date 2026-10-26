@@ -127,7 +127,8 @@ function mountCake(){
  const progressKey='taniya-cake-orders-v1';
  const history=[],future=[];
  let ordersCompleted=0,orderFulfilled=false,order=null;
- const orderColors=['#ff79b8','#4488cc','#73bc8b','#f2b36d'],orderTops=['🍓','🌼','🍬'],orderGreetings=['My celebration cake','Happy Birthday','Congratulations','Just Because'];
+ const orderColorNames={'#ff79b8':'pink','#4488cc':'blue','#73bc8b':'green','#f2b36d':'gold'};
+ const orderColors=Object.keys(orderColorNames),orderTops=['🍓','🌼','🍬'],orderGreetings=['My celebration cake','Happy Birthday','Congratulations','Just Because'];
  function persistOrderProgress(){
   try{localStorage.setItem(progressKey,JSON.stringify({ordersCompleted,orderFulfilled,order}))}catch(_){}
  }
@@ -158,7 +159,7 @@ function mountCake(){
  }}}catch(e){}
  function draw(){
   stage('<div class="game-toolbar"><b>Design a celebration cake</b><span>Orders completed: '+ordersCompleted+' · Up to 12 candles</span></div>'+
-   '<p class="game-message" id="cakeOrder" aria-live="polite">Customer order: frosting '+order.icing+' · '+order.topping+' · '+order.candles+' candle(s) · '+order.greeting+(orderFulfilled?' · COMPLETE ✓':'')+'</p>'+ 
+   '<p class="game-message" id="cakeOrder" aria-live="polite">Customer order: '+orderColorNames[order.icing]+' frosting · '+order.topping+' · '+order.candles+' candle(s) · '+order.greeting+(orderFulfilled?' · COMPLETE ✓':'')+'</p>'+ 
    '<div class="play-preview" id="cakepreview" role="img" aria-label="Cake preview" style="min-height:230px"></div>'+
    '<div class="choice-row"><label class="game-action">Frosting <input id="icing" type="color" value="'+icing+'" aria-label="Choose frosting color"></label>'+
    '<button class="game-action" type="button" data-icing="#ff79b8">Pink frosting</button><button class="game-action" type="button" data-icing="#4488cc">Blue frosting</button><button class="game-action" type="button" data-icing="#73bc8b">Green frosting</button><button class="game-action" type="button" data-icing="#f2b36d">Gold frosting</button>'+ 
