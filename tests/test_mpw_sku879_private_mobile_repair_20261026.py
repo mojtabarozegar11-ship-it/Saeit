@@ -28,6 +28,7 @@ class MobileRepairTests(unittest.TestCase):
             "<title>Interior Website Kit</title><style>"
             "body{margin:0}main{display:flex;max-width:960px;margin:auto;padding:12px}"
             "main div{min-width:auto}img{max-width:100%;height:auto}"
+            "@media(min-width:768px){main p{overflow-wrap:anywhere}}"
             "</style></head><body><main><div><h1>Interior Design Portfolio</h1>"
             "<p>" + long_word + "</p><img src='hero.png' alt='Hero'></div>"
             "</main></body></html>"
