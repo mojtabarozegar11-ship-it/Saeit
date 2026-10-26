@@ -21,8 +21,9 @@ namespace RamadanWar.Next
 
         private void Start()
         {
-            renderComponent = GetComponent<Renderer>();
-            originalColor = renderComponent.material.color;
+            renderComponent = GetComponentInChildren<Renderer>();
+            // Character prefabs may keep the visible mesh on a child. Missing art must not crash AI.
+            if (renderComponent != null) originalColor = renderComponent.material.color;
             destination = Home + new Vector3(Random.Range(-8f,8f),0,Random.Range(-8f,8f));
             nextFire = Time.time + Random.Range(.8f, 2.1f);
         }
