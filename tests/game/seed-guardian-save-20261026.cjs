@@ -11,7 +11,7 @@ const end=script.indexOf('let stage=saved.stage',start);
 assert.ok(start>=0&&end>start,'Seed Guardian save parser must exist');
 const parser=script.slice(start,end);
 function load(value,throws=false){
- return vm.runInNewContext(parser+'saved',{
+ return vm.runInNewContext("const storeKey='zm.seed.guardian.v1';"+parser+'saved',{
   localStorage:{getItem(){if(throws)throw Error('storage denied');return JSON.stringify(value)}},
   JSON,Number,Math
  });
