@@ -18,7 +18,10 @@ import tempfile
 
 SCHEMA="saeit.factory.ten-real-generations.v1"
 RECIPE=re.compile(r"^(?:sheet|synth)_[0-9a-f]{24}$")
-REVISION="verified-summary-v3"
+REVISIONS={
+    "verified-summary-v3": "# STATS_API_V3_START",
+    "verified-distribution-v4": "# DISTRIBUTION_API_V4_START",
+}
 HEADER='''"""Versioned offline features for a validated factory arithmetic tool."""
 from calculator import NAMES, calculate, calculate_batch
 from decimal import Decimal, localcontext
@@ -266,9 +269,10 @@ def original_identity(source,maker):
     request=read(source/"design_request.json")
     receipt=read(source/"design_receipt.json")
     digest=hashlib.sha256(json.dumps(request,sort_keys=True,ensure_ascii=False,separators=(",",":")).encode()).hexdigest()
+    revision=receipt.get("generator_capability_revision")
     if (receipt.get("schema")!="saeit.factory.synthesis-receipt.v1"
         or receipt.get("request_sha256")!=digest or receipt.get("recipe")!=source.name
-        or receipt.get("generator_capability_revision")!=REVISION
+        or revision not in REVISIONS
         or receipt.get("family_id") not in ("F27","F28")
         or receipt.get("family_id")!=request.get("family_id")):
         raise ValueError("TEN_COMPILER_PROVENANCE_NOT_VERIFIED")
@@ -276,10 +280,22 @@ def original_identity(source,maker):
     if "generation_features.py" in files or "test_generation_features.py" in files:
         raise ValueError("TEN_SOURCE_ALREADY_CUSTOMIZED")
     calculator=(source/"calculator.py").read_text(encoding="utf8")
-    if not calculator.startswith('"""Generated deterministic arithmetic planning tool;') or "# STATS_API_V3_START" not in calculator:
+    if (not calculator.startswith('"""Generated deterministic arithmetic planning tool;')
+        or "# STATS_API_V3_START" not in calculator
+        or REVISIONS[revision] not in calculator
+        or (revision=="verified-summary-v3" and "# DISTRIBUTION_API_V4_START" in calculator)):
         raise ValueError("TEN_VERIFIED_COMPILER_SOURCE_REQUIRED")
     maker.verify_recipe(source,minimum_tests=7)
     return maker.source_digest(source,files),receipt["family_id"]
+
+def generation_root(private,source):
+    """Keep original v3 lineages untouched when source upgrades to v4."""
+    source=Path(source)
+    revision=read(source/"design_receipt.json").get("generator_capability_revision")
+    if revision not in REVISIONS:
+        raise ValueError("TEN_UNSUPPORTED_COMPILER_REVISION")
+    legacy=Path(private)/"quality-excellence"/"ten-generations"/source.name
+    return legacy if revision=="verified-summary-v3" else legacy/revision
 
 def generate_feature_files(source,generation):
     if type(generation) is not int or not 1<=generation<=10:raise ValueError("TEN_GENERATION_RANGE")
@@ -317,7 +333,7 @@ def verify_prior(parent,recipe,gen,maker,upstream_hash):
 def one_line(source,private,maker):
     source=Path(source)
     original_hash,family=original_identity(source,maker)
-    work=safe_directory(private/"quality-excellence"/"ten-generations"/source.name)
+    work=safe_directory(generation_root(private,source))
     previous_source=source;previous_hash=original_hash
     new=[]
     for gen in range(1,11):
@@ -393,7 +409,7 @@ def run(private,sources,maker_path,*,limit=2):
         for family in ("F27","F28"):
             options=[s for s,f in eligible if f==family]
             options.sort(key=lambda s:((
-                private/"quality-excellence"/"ten-generations"/s.name/"g10"/"receipt.json"
+                generation_root(private,s)/"g10"/"receipt.json"
             ).is_file(),s.name))
             if options and len(selected)<limit:selected.append(options[0])
         completed=[]
