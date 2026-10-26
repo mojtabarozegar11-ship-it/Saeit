@@ -157,6 +157,14 @@ class StrictSerialTests(unittest.TestCase):
     def test_full_index_preflight_rejects_missing_later_orders(self):
         with tempfile.TemporaryDirectory() as folder:
             root, ops = workspace(Path(folder))
+            area = root / "production-instructions"
+            for pos in (1, 2, 200):
+                ident = "WO-%08d" % (600 + pos)
+                (area / "orders" / (ident + ".json")).write_text(json.dumps({
+                    "id": ident, "status": "issued", "fingerprint": "a"*64,
+                    "origin": "owner_requested_agri200_p0",
+                    "source_product_id": "AGRI-%03d" % pos,
+                }), encoding="utf8")
             with self.assertRaisesRegex(
                     RuntimeError, "STRICT_SERIAL_COMPLETE_INDEX_MISSING_OR_INVALID"):
                 cycle.tick(root, ops, dry_run=True, verify_complete_intake=True,
