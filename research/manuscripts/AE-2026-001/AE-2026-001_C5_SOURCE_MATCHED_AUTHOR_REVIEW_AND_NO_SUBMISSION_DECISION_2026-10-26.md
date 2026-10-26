@@ -1,5 +1,10 @@
 # AE-2026-001 C5 — source-matched scientific author review and publication decision
 
+## VERIFIED POST-C13 AUTHOR WORD — source-locked, 26 October 2026
+
+After scientific AE manuscript commit `bd05d290443e819695985d5913f8cb9edf47511f`, both Word workflows completed successfully. [Current-source author-review run 40344162803](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40344162803) / [artifact 12660237844](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40344162803/artifacts/12660237844): log reports source SHA256 **`fada60ccf62b45a785bb06ae4768b527d31e33f9fa078345a11a436812155a6a`**, 77,729 source bytes, generated Word **44,675 bytes / 8 tables**. [Three-vintage author-review run 40344162784](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40344162784) / [artifact 12661290036](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40344162784/artifacts/12661290036): same source SHA256, **200 abstract words, 8 tables**. These **supersede** artifact 12646949228 and older Word files. The new C13 result is descriptive attrition reconciliation, **not** a novel estimator or historical ILOSTAT validation. **MAJOR REVISION / NO SUBMISSION**.
+
+
 ## C13 update — country-level 2023 attrition, 26 October 2026
 
 [New original-source country-level audit C13](AE-2026-001_C13_FOUR_ECONOMY_2023_ATTRITION_ORDER_STATISTIC_AUDIT_2026-10-26.md) identifies **SDN, SYR, PSE and UKR** as the four 2000/2019-positive economies lacking a positive 2023 endpoint in the dated 2026 WDI panel. Two removed ranks are below and two above the sample median, leaving the same **BGR** central observation in both the 157 and 153 cohorts. This **explains the exact unchanged median** without proving ignorable missingness. Manuscript §3.2 was scientifically amended in commit `bd05d290443e819695985d5913f8cb9edf47511f`. Previous Word artifact 12646949228 predates C11/C12 **and** C13 and must not be used as an exact-source author Word. **MAJOR REVISION / NO SUBMISSION**, historical ILOSTAT vintages and countryatlas head-to-head numerical benchmark unresolved, no author attestation or submission.
