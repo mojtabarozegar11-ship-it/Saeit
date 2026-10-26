@@ -81,15 +81,15 @@ def ppm_pixel_metrics(raw):
     tokens = []
     while len(tokens) < 4:
         while pos < len(raw):
-            if raw[pos] in b" \\t\\r\\n":
+            if raw[pos] in b" \t\r\n":
                 pos += 1
             elif raw[pos] == 35:
-                end = raw.find(b"\\n", pos)
+                end = raw.find(b"\n", pos)
                 pos = len(raw) if end < 0 else end + 1
             else:
                 break
         start = pos
-        while pos < len(raw) and raw[pos] not in b" \\t\\r\\n#":
+        while pos < len(raw) and raw[pos] not in b" \t\r\n#":
             pos += 1
         if start == pos:
             raise ValueError("PPM_HEADER_INVALID")
@@ -98,9 +98,9 @@ def ppm_pixel_metrics(raw):
     width, height, maxval = int(width_raw), int(height_raw), int(maxval_raw)
     if magic != b"P6" or width <= 0 or height <= 0 or maxval != 255:
         raise ValueError("PPM_DIMENSIONS_OR_DEPTH_INVALID")
-    if pos >= len(raw) or raw[pos] not in b" \\t\\r\\n":
+    if pos >= len(raw) or raw[pos] not in b" \t\r\n":
         raise ValueError("PPM_HEADER_SEPARATOR_MISSING")
-    if raw[pos:pos + 2] == b"\\r\\n":
+    if raw[pos:pos + 2] == b"\r\n":
         pos += 2
     else:
         pos += 1
@@ -151,7 +151,7 @@ def render_pdf_pages(path, expected_page_count):
                     "pages_with_color_signal": 0, "mean_nonwhite_ratio": None,
                     "render_failure": "RENDERER_REJECTED_PDF"}
         files = sorted(prefix.parent.glob("page-*.ppm"),
-                       key=lambda p: int(re.search(r"-(\\d+)\\.ppm$", p.name).group(1)))
+                       key=lambda p: int(re.search(r"-(\d+)\.ppm$", p.name).group(1)))
         metrics = []
         render_errors = 0
         for image in files:
