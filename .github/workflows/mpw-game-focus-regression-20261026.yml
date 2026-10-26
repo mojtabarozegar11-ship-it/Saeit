@@ -7,6 +7,9 @@ on:
       - 'games/ramadan-war/site-smoke.cjs'
       - 'games/crown-defender/index.html'
       - 'tests/game/crown-v120.cjs'
+      - 'templates/studio_raha/index.html'
+      - 'templates/taniya_studio/index.html'
+      - 'tests/game/studio-active-game-regressions.cjs'
       - '.github/workflows/mpw-game-focus-regression-20261026.yml'
 permissions:
   contents: read
@@ -32,4 +35,14 @@ jobs:
           PY
           node --check /tmp/crown-focus-regression.js
           node tests/game/crown-v120.cjs
+          python3 - <<'PY'
+          from pathlib import Path
+          for label,path in [('raha','templates/studio_raha/index.html'),('taniya','templates/taniya_studio/index.html')]:
+              src=Path(path).read_text('utf-8')
+              assert src.count('<script>') == 1, path
+              Path('/tmp/'+label+'-active-game.js').write_text(src.split('<script>',1)[1].split('</script>',1)[0], 'utf-8')
+          PY
+          node --check /tmp/raha-active-game.js
+          node --check /tmp/taniya-active-game.js
+          node tests/game/studio-active-game-regressions.cjs
           echo 'GAME_FOCUS_LOSS_REGRESSION=PASS'
