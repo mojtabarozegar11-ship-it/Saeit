@@ -389,6 +389,25 @@ jobs:
                           "technical_tests":obj.get("measured_successful_tests"),
                           "commercial_release":obj.get("commercial_publication_allowed"),
                           "quality_1000":obj.get("professional_1000_quality_grade")},sort_keys=True))
+          # Compare the installed canonical VPS factory code with the intended
+          # exact-byte recurring QA mechanism. Read-only deployment evidence.
+          import hashlib
+          runtime=base/"operations/autonomous-product-runtime/scripts"
+          for filename,signature in (
+              ("factory_vps_product_cycle.py","inspect_product_scheduled"),
+              ("factory_verified_customer_cycle_20261021.py","customer-qa-cadence.v1")):
+              source=runtime/filename
+              if source.is_file() and not source.is_symlink() and source.stat().st_size<100000:
+                  raw=source.read_bytes()
+                  print("FACTORY_CADENCE_LIVE "+filename+" SHA256="+hashlib.sha256(raw).hexdigest()+
+                        " ENABLED="+str(signature.encode() in raw))
+              else:
+                  print("FACTORY_CADENCE_LIVE "+filename+"=MISSING_OR_UNSAFE")
+          checkpoints=private/"customer-qa-cadence"
+          if checkpoints.is_dir() and not checkpoints.is_symlink():
+              items=[x for x in checkpoints.iterdir() if x.is_file() and not x.is_symlink() and x.suffix==".json"]
+              print("FACTORY_CADENCE_CHECKPOINTS="+str(len(items)))
+          else: print("FACTORY_CADENCE_CHECKPOINTS=NONE")
           print("FACTORY_DIAGNOSTICS_READ_ONLY=true")
           for proc in Path("/proc").iterdir():
               if not proc.name.isdigit():continue
