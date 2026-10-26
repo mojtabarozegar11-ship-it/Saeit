@@ -136,7 +136,7 @@ function loadCart(){
  try{stored=JSON.parse(localStorage.getItem('studioRahamCart')||'[]')}catch{return []}
  if(!Array.isArray(stored))return [];
  const clean=[];
- for(const item of stored.slice(0,products.length)){
+ for(const item of stored.slice(0,products.length*3)){
   if(!item||typeof item.name!=='string'||!Number.isInteger(item.qty)||item.qty<1)continue;
   const product=products.find(p=>p.name===item.name);
   if(!product)continue;
