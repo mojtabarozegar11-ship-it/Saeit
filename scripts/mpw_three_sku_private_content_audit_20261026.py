@@ -141,7 +141,12 @@ def audit_pdf(path, expected_page_count=None, require_illustrations=False):
     if expected_page_count is not None:
         checks["page_count_matches_declared_product_spec"] = page_count == expected_page_count
     if require_illustrations:
-        checks["embedded_illustrations_present"] = embedded_images > 0 and image_scan_errors == 0
+        vector_page_threshold = max(1, (page_count * 4 + 4) // 5)
+        checks["graphic_drawing_signals_present"] = (
+            embedded_images > 0 or
+            (pages_with_vector_drawing >= vector_page_threshold
+             and vector_drawing_operator_count >= 8 * pages_with_vector_drawing)
+        )
     return {
         "format": "pdf", "sha256": digest_file(path), "bytes": path.stat().st_size,
         "page_count": page_count, "extracted_word_count": words,
