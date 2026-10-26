@@ -3,6 +3,19 @@ const html=fs.readFileSync('games/crown-defender/index.html','utf8'), code=html.
 assert.match(html, /<link rel="canonical" href="https:\/\/mojplaywin\.com\/games\/crown-defender\/">/);
 assert.match(html, /<meta property="og:url" content="https:\/\/mojplaywin\.com\/games\/crown-defender\/">/);
 assert.match(html, /<meta name="twitter:card" content="summary">/);
+// Legacy score migration is a separate untrusted storage channel.
+const legacyLine=code.split('\n').find(line=>line.startsWith('let save=loadSave();try{'));
+assert.ok(legacyLine,'legacy migration source is available for executable regression');
+function migratedLegacyBest(value){
+  const ctx={loadSave:()=>({best:0}),localStorage:{getItem:()=>value},JSON};
+  vm.createContext(ctx);vm.runInContext(legacyLine,ctx);
+  return vm.runInContext('save.best',ctx);
+}
+for(const value of ['Infinity','1e309','NaN','-12']){
+  assert.equal(migratedLegacyBest(value),0,'invalid legacy best: '+value);
+}
+assert.equal(migratedLegacyBest('2500'),2500,'finite legacy score remains compatible');
+assert.equal(migratedLegacyBest('1e15'),1e10,'legacy score is bounded by current save schema');
 let frame, fetchMode='offline', drawCalls=0;
 const pixels=new Proxy({createLinearGradient:()=>({addColorStop(){}}),createRadialGradient:()=>({addColorStop(){}})}, {get(o,k){return o[k]||function(...args){drawCalls++;for(const v of args)if(typeof v==='number')assert.ok(Number.isFinite(v),'finite canvas argument')}}});
 class Element{constructor(tag='DIV'){this.tagName=tag;this.children=[];this.hidden=false;this.value='';this.style={};this.classList={add(){},remove(){},toggle(){}};this.handlers={};if(tag==='IMG'&&!process.env.CROWN_NO_ASSETS){this.complete=true;this.naturalWidth=384;this.naturalHeight=512;}}getContext(){return pixels}append(...x){this.children.push(...x)}appendChild(x){this.children.push(x)}replaceChildren(...x){this.children=x}setAttribute(){}addEventListener(n,f){this.handlers[n]=f}focus(){}getBoundingClientRect(){return {left:0,top:0,width:540,height:960}}}
