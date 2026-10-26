@@ -25,6 +25,8 @@ def _data(user):
 @staff_member_required_personal
 @require_GET
 def activation_json(request):
+    if not _allowed(request.user):
+        return _no_cache(JsonResponse({"error":"Brand permission denied"},status=403))
     try:
         result=_data(request.user)
     except (Blocked,OSError) as e:
@@ -35,6 +37,8 @@ def activation_json(request):
 @staff_member_required_personal
 @require_GET
 def activation_page(request):
+    if not _allowed(request.user):
+        return _no_cache(HttpResponse("Access denied",status=403))
     try:
         result=_data(request.user)
     except (Blocked,OSError) as e:
