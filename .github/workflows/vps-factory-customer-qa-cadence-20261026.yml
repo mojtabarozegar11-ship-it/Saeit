@@ -1,0 +1,94 @@
+name: VPS factory SHA-bound customer QA cadence
+on:
+  pull_request:
+    paths:
+      - "scripts/factory_verified_customer_cycle_20261021.py"
+      - "scripts/factory_vps_product_cycle.py"
+      - "tests/test_factory_verified_customer_cycle_20261021.py"
+      - "deploy/install_factory_customer_qa_cadence_20261026.sh"
+      - ".github/workflows/vps-factory-customer-qa-cadence-20261026.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_verified_customer_cycle_20261021.py"
+      - "scripts/factory_vps_product_cycle.py"
+      - "tests/test_factory_verified_customer_cycle_20261021.py"
+      - "deploy/install_factory_customer_qa_cadence_20261026.sh"
+      - ".github/workflows/vps-factory-customer-qa-cadence-20261026.yml"
+permissions:
+  contents: read
+concurrency:
+  group: saeit-factory-customer-qa-cadence
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Run real archive QA and recovery regression
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check 'openpyxl==3.1.5'
+          python3 -B -m unittest tests.test_factory_verified_customer_cycle_20261021 tests.test_factory_vps_product_cycle -v
+          bash -n deploy/install_factory_customer_qa_cadence_20261026.sh
+  deploy:
+    needs: validate
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-factory-cadence-20261026]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Replace only two protected private VPS runtime scripts after hash preflight
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-qa-cadence"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh_vps() {
+            ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          stage="/home/githubops/factory-runtime/operations/.factory-cadence-$GITHUB_SHA"
+          ssh_vps "umask 077; test ! -e '$stage'; install -d -m 700 '$stage'"
+          tar -cf - scripts/factory_verified_customer_cycle_20261021.py scripts/factory_vps_product_cycle.py deploy/install_factory_customer_qa_cadence_20261026.sh | ssh_vps "umask 077; tar -xf - -C '$stage'"
+          for file in scripts/factory_verified_customer_cycle_20261021.py scripts/factory_vps_product_cycle.py deploy/install_factory_customer_qa_cadence_20261026.sh; do
+            digest="$(sha256sum "$file" | awk '{print $1}')"
+            ssh_vps "test \"\$(sha256sum '$stage/$file' | awk '{print \$1}')\" = '$digest'"
+          done
+          ssh_vps "bash -n '$stage/deploy/install_factory_customer_qa_cadence_20261026.sh' && bash '$stage/deploy/install_factory_customer_qa_cadence_20261026.sh' '$stage' '$GITHUB_SHA'"
+          ssh_vps 'python3 -u -' <<'PY'
+          import json,time
+          from pathlib import Path
+          root=Path.home()/"factory-runtime"
+          target=root/"operations/autonomous-product-runtime/scripts"
+          marker=root/"private/autonomous-product-cycle/production-state.json"
+          deadline=time.monotonic()+600
+          for filename in ("factory_verified_customer_cycle_20261021.py","factory_vps_product_cycle.py"):
+              assert (target/filename).is_file() and not (target/filename).is_symlink()
+          print("FACTORY_CANONICAL_QA_SCRIPTS_DEPLOYED=PASS",flush=True)
+          for _ in range(60):
+              if marker.is_file():
+                  state=json.loads(marker.read_text(encoding="utf8"))
+                  if ("fresh_extracted_customer_checks_passed" in state
+                          and "exact_sha_cached_customer_checks_passed" in state
+                          and state.get("professional_quality_1000_customer_checks_cannot_approve") is True):
+                      print("FACTORY_QA_CADENCE_STATE=PASS",flush=True)
+                      print("FACTORY_QA_FRESH="+str(state["fresh_extracted_customer_checks_passed"]),flush=True)
+                      print("FACTORY_QA_HASH_CACHED="+str(state["exact_sha_cached_customer_checks_passed"]),flush=True)
+                      print("FACTORY_QA_COMMERCIAL_RELEASE=DISABLED",flush=True)
+                      break
+              time.sleep(10)
+          else: raise SystemExit("FACTORY_QA_CADENCE_FRESH_STATE_TIMEOUT")
+          PY

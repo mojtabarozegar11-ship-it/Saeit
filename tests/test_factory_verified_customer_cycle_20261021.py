@@ -41,6 +41,46 @@ class ExtractedCustomerQATests(unittest.TestCase):
         self.assertFalse(doc["commercial_release"])
         self.assertTrue(all(x["verified_score"] is None for x in doc["rubric"].values()))
 
+    def test_exact_hash_cadence_avoids_repeated_extraction_without_approving_sales(self):
+        from unittest import mock
+        first, fresh = customer.inspect_product_scheduled(
+            self.output, self.recipe, now=1000)
+        self.assertTrue(fresh)
+        self.assertEqual(first["customer_zip_extract_test"], "passed")
+        with mock.patch.object(customer, "inspect_product", side_effect=AssertionError("duplicate unzip")):
+            same, fresh = customer.inspect_product_scheduled(
+                self.output, self.recipe, now=1005)
+        self.assertFalse(fresh)
+        self.assertEqual(same["artifact_sha256"], first["artifact_sha256"])
+        self.assertIs(same["professional_quality_1000_approved"], False)
+        ticket = self.output / "quality-excellence" / "customer-extracted-review"
+        ticket = ticket / self.recipe / first["source_sha256"] / "pending.json"
+        self.assertIsNone(json.loads(ticket.read_text())["verified_total_score"])
+
+    def test_cadence_expiry_or_manifest_change_reexecutes_full_zip_tests(self):
+        from unittest import mock
+        customer.inspect_product_scheduled(self.output, self.recipe, now=1000)
+        actual = customer.inspect_product
+        with mock.patch.object(customer, "inspect_product", wraps=actual) as call:
+            _, full = customer.inspect_product_scheduled(self.output, self.recipe, now=3001)
+        self.assertTrue(full)
+        self.assertEqual(call.call_count, 1)
+        manifest = self.product() / "manufacturing_manifest.json"
+        data = json.loads(manifest.read_text())
+        data["unrelated_revision_note"] = "new metadata, unchanged artifact"
+        manifest.write_text(json.dumps(data))
+        with mock.patch.object(customer, "inspect_product", wraps=actual) as call:
+            _, full = customer.inspect_product_scheduled(self.output, self.recipe, now=3002)
+        self.assertTrue(full)
+        self.assertEqual(call.call_count, 1)
+
+    def test_cached_cadence_rejects_corrupted_zip(self):
+        customer.inspect_product_scheduled(self.output, self.recipe, now=1000)
+        package = self.product() / (self.recipe + "-internal-qa.zip")
+        package.write_bytes(package.read_bytes() + b"changed")
+        with self.assertRaisesRegex(RuntimeError, "CUSTOMER_ZIP_HASH_MISMATCH"):
+            customer.inspect_product_scheduled(self.output, self.recipe, now=1001)
+
     def test_changed_zip_hash_blocks_without_rework_approval(self):
         file = self.product() / (self.recipe + "-internal-qa.zip")
         file.write_bytes(file.read_bytes() + b"bad")

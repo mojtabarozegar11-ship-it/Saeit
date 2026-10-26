@@ -224,6 +224,108 @@ def persist_pending(private_root, receipt):
     return str(target)
 
 
+
+def inspect_product_scheduled(private_root, recipe, *, now=None, max_age_seconds=1800):
+    """Reuse ONLY an exact-byte recent extracted-test proof; fail closed otherwise.
+
+    Every invocation verifies the actual ZIP SHA256 and the complete manufacturing
+    manifest SHA256. New versions, changed metadata, expired checks, changed QA
+    implementation or missing independent tickets trigger full ZIP extraction
+    and a fresh bounded subprocess. Cached evidence NEVER grants a sales grade.
+    """
+    import time
+    require(type(max_age_seconds) is int and 1 <= max_age_seconds <= 3600,
+            "INVALID_CADENCE_INTERVAL")
+    clock = time.time() if now is None else now
+    require(type(clock) in (int, float) and 0 <= clock < 1e12, "INVALID_CADENCE_TIME")
+    root = Path(private_root)
+    require(root.is_dir() and not root.is_symlink(), "INVALID_PRIVATE_ROOT")
+    require(isinstance(recipe, str) and RECIPE.fullmatch(recipe), "INVALID_RECIPE")
+    folder = root / "digital-products" / recipe
+    manifest_path = folder / "manufacturing_manifest.json"
+    manifest = read_manifest(manifest_path)
+    artifact = folder / (recipe + "-internal-qa.zip")
+    require(artifact.is_file() and not artifact.is_symlink()
+            and 0 < artifact.stat().st_size <= MAX_PACKAGE_BYTES, "MISSING_CUSTOMER_ZIP")
+    require(manifest.get("recipe") == recipe and manifest.get("qa_status") == "passed"
+            and manifest.get("professional_quality_approved") is False
+            and manifest.get("public_listing_enabled") is False
+            and manifest.get("owner_publication_approval") is False
+            and manifest.get("commercial_status") == "private_internal_qa_pass_not_published",
+            "PRIVATE_MANUFACTURING_GATE_INVALID")
+    actual_artifact_sha = checksum(artifact)
+    require(actual_artifact_sha == manifest.get("artifact_sha256"),
+            "CUSTOMER_ZIP_HASH_MISMATCH")
+    source_sha = manifest.get("source_sha256")
+    require(isinstance(source_sha, str) and HASH.fullmatch(source_sha),
+            "INVALID_MANUFACTURING_SOURCE_SHA")
+    proof = root / "customer-extracted-acceptance" / recipe / source_sha / "technical-receipt.json"
+    quality = root / "quality-excellence" / "customer-extracted-review" / recipe / source_sha / "pending.json"
+    checkpoint = root / "customer-qa-cadence" / (recipe + ".json")
+    implementation_sha = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    expected = {
+        "source_sha256": source_sha,
+        "artifact_sha256": actual_artifact_sha,
+        "manifest_sha256": checksum(manifest_path),
+        "implementation_sha256": implementation_sha,
+    }
+    for current in (proof, quality, checkpoint):
+        parent = current.parent
+        while parent != root and parent != parent.parent:
+            require(not parent.is_symlink(), "CACHED_PROOF_PATH_UNSAFE")
+            parent = parent.parent
+        require(not current.is_symlink(), "CACHED_PROOF_PATH_UNSAFE")
+    if all(p.is_file() and p.stat().st_size <= 100000 for p in (proof, quality, checkpoint)):
+        try:
+            state = json.loads(checkpoint.read_text(encoding="utf8"))
+            saved = json.loads(proof.read_text(encoding="utf8"))
+            ticket = json.loads(quality.read_text(encoding="utf8"))
+            recent = (state.get("schema") == "saeit.factory.customer-qa-cadence.v1"
+                      and all(state.get(k) == v for k, v in expected.items())
+                      and type(state.get("last_full_verification")) in (int, float)
+                      and 0 <= clock - state["last_full_verification"] <= max_age_seconds)
+            legitimate = (saved.get("schema") == SCHEMA
+                          and saved.get("recipe") == recipe
+                          and saved.get("source_sha256") == source_sha
+                          and saved.get("artifact_sha256") == actual_artifact_sha
+                          and saved.get("customer_zip_extract_test") == "passed"
+                          and saved.get("professional_quality_1000_approved") is False
+                          and saved.get("public_listing_enabled") is False
+                          and saved.get("commerce_enabled") is False
+                          and ticket.get("technical_customer_qa") == "passed"
+                          and ticket.get("source_sha256") == source_sha
+                          and ticket.get("artifact_sha256") == actual_artifact_sha
+                          and ticket.get("professional_quality_1000_approved") is False
+                          and ticket.get("commercial_release") is False
+                          and ticket.get("verified_total_score") is None
+                          and ticket.get("owner_publication_approval") is False)
+            if recent and legitimate:
+                return saved, False
+        except (ValueError, OSError, TypeError, AttributeError):
+            pass
+    fresh = inspect_product(folder, recipe)
+    persist_pending(root, fresh)
+    cadence = root / "customer-qa-cadence"
+    cadence.mkdir(parents=True, mode=0o700, exist_ok=True)
+    require(not cadence.is_symlink() and not checkpoint.is_symlink(),
+            "CADENCE_WRITE_PATH_UNSAFE")
+    payload = dict(expected, schema="saeit.factory.customer-qa-cadence.v1",
+                   last_full_verification=clock)
+    fd, temporary = tempfile.mkstemp(prefix=".cadence-", dir=str(cadence))
+    try:
+        with os.fdopen(fd, "w", encoding="utf8") as handle:
+            json.dump(payload, handle, sort_keys=True)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, str(checkpoint))
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return fresh, True
+
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser()
