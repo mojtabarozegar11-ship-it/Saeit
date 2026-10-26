@@ -178,8 +178,8 @@ jobs:
           slot_file=private/'quality-excellence'/'product-flow'/'active-slots'/'current.json'
           slots=json.loads(slot_file.read_text(encoding='utf8'))
           if (slots.get('schema')!='saeit.factory.product-slots.v1'
-                  or slots.get('capacity')!=5 or len(slots.get('active',[]))!=5):
-              raise RuntimeError('FIVE_ACTIVE_FACTORY_SLOTS_REQUIRED')
+                  or slots.get('line_id')!=41 or slots.get('capacity')!=1 or len(slots.get('active',[]))!=1):
+              raise RuntimeError('LINE_41_SINGLE_ACTIVE_PRODUCT_REQUIRED')
           active={item.get('recipe') for item in slots['active']}
           if candidates_root.is_symlink():raise RuntimeError('EVOLUTION_CANDIDATE_ROOT_UNSAFE')
           if generated.is_dir() and not generated.is_symlink():
