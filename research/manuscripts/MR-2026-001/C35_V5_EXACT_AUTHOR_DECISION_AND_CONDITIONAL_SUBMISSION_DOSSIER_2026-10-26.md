@@ -87,3 +87,12 @@ The source contains explicit, unresolved limitations: original typeset Car Table
 | Official Manuscript ID | No submission | **NONE** |
 
 **Decision:** the current 22-DOI post-C37 V5 **Markdown source** (after Lorite/Elia publisher-source corrections) is a *human scientific review candidate*, with **a matching Word now verified** at [run 40271013691, artifact 12628106528](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40271013691/artifacts/12628106528). Earlier artifact **12626203821** is superseded; the AI-only MAJOR REVISION and all personal author/publication attestations remain unresolved. Neither source nor Word is authorized for journal upload. If the author considers the novelty insufficient, the correct disposition is to revise the research question or document non-submission rather than manufacture a novel empirical result. ChatGPT remains a research/technical assistant and internal AI critic, not a human author or independent journal referee.
+
+
+## 26 October addendum — C43 economic prior-art correction and current Word status
+
+The original Lorite et al. (2012) bibliographic abstract (DOI [10.1007/s11269-012-0023-3](https://doi.org/10.1007/s11269-012-0023-3)) reports **both** ARIS LIAS farmer recommendation/practice ratios and crop-specific **Irrigation Water Productivity / Irrigation Water Benefit**. The source-bounded [C43 audit](C43_LORITE_2012_ECONOMIC_ADOPTION_PRIOR_ART_AND_EVENT_FIDELITY_LIMITS_2026-10-26.md) adds this prior-art collision; the V5 manuscript narrative and evidence table have been **actually revised** to avoid claiming novelty for joint economics and adoption. The full Lorite Methods remain uninspected; no event-level raw data or independent economic estimates were obtained.
+
+**Word version gate:** the last previously verified MR Word predates this C43 text correction. A fresh source-locked build was observed **queued** as GitHub Actions run [40380719533](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40380719533), then its job was observed **in_progress**. **Do not claim success or a matching artifact until a completed-success run and source hash are independently checked.** The previous Word remains a historical author-review packet, not a source-matched representation of this amended V5.
+
+**Scientific gate:** MAJOR REVISION / NO SUBMISSION; event-level G/D/R/A validation, full Lorite/Baroni/Elia methods, Car original Table 5, Cvejić denominator, Amini F7 and author declarations are unresolved. No publisher submission or human sign-off.
