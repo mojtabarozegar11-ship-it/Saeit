@@ -37,7 +37,7 @@ assert.equal(cases[1].unlocked,150);
 assert.equal(cases[2].unlocked,1);
 const jungle=between(rah,'function jungleRunGame(stage){','function runnerGame(stage){');
 function runJungle(choices,random=()=>0,storedBest=null){
- const listeners=new Map(),storage=new Map(),stage={isConnected:true,buttons:[],_html:'',get innerHTML(){return this._html},set innerHTML(v){this._html=v;this.buttons=[]},querySelector(){return {append(...items){stage.buttons.push(...items)}}}};
+ const listeners=new Map(),storage=new Map(),stage={isConnected:true,buttons:[],focusCount:0,focus(){this.focusCount++},_html:'',get innerHTML(){return this._html},set innerHTML(v){this._html=v;this.buttons=[]},querySelector(){return {append(...items){stage.buttons.push(...items)}}}};
  if(storedBest!==null)storage.set('studio-raha-jungle-best-v1',storedBest);
  const sandbox={Math:Object.assign(Object.create(Math),{random}),localStorage:{getItem(k){return storage.get(k)||'0'},setItem(k,v){storage.set(k,v)}},document:{
   getElementById(){return {classList:{contains(){return true}}}},
@@ -80,6 +80,7 @@ assert.ok(rah.includes("stage.focus({preventScroll:true})"),'opening Jungle Run 
 
 const oneMiss=runJungle([hint=>hint==='jump'?'duck':'jump']);
 assert.ok(oneMiss.stage.innerHTML.includes('Not quite:'),'wrong jungle moves must explain the correct movement');
+assert.equal(oneMiss.stage.focusCount,1,'replaced action buttons must return focus to the game region');
 const lose=runJungle(Array(3).fill(hint=>hint==='jump'?'duck':'jump'));
 assert.ok(lose.stage.innerHTML.includes('jungle wins'),'three wrong moves should end run');
 const sidestep=runJungle(Array(12).fill(hint=>hint),()=>.99);
