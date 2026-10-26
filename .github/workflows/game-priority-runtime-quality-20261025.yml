@@ -1,9 +1,9 @@
 name: Game priority runtime integrity
 on:
   push:
-    branches: [game/ramadan-hero-skills-consistency-20261026, game/ramadan-enemy-save-sanitizer-20261026]
+    branches: [game/ramadan-hero-skills-consistency-20261026, game/ramadan-enemy-save-sanitizer-20261026, game/ramadan-canonical-metadata-20261026]
   pull_request:
-    branches: [main, game/ramadan-crown-runtime-integrity-20261025, game/ramadan-hero-skills-consistency-20261026]
+    branches: [main, game/ramadan-crown-runtime-integrity-20261025, game/ramadan-hero-skills-consistency-20261026, game/ramadan-enemy-save-sanitizer-20261026]
     paths:
       - games/ramadan-war/**
       - games/crown-defender/index.html
@@ -12,6 +12,7 @@ on:
       - tests/game/ramadan-runtime-integrity-20261025.cjs
       - tests/game/ramadan-hero-skills-20261026.cjs
       - tests/game/ramadan-enemy-restore-20261026.cjs
+      - tests/game/ramadan-seo-20261026.cjs
       - .github/workflows/game-priority-runtime-quality-20261025.yml
   workflow_dispatch:
 permissions:
@@ -35,6 +36,8 @@ jobs:
         run: node tests/game/ramadan-hero-skills-20261026.cjs
       - name: Verify restored enemy health, timers and rendering state
         run: node tests/game/ramadan-enemy-restore-20261026.cjs
+      - name: Verify Ramadan War canonical and social URL metadata
+        run: node tests/game/ramadan-seo-20261026.cjs
       - name: Run Crown Defender complete simulation and trial isolation regression
         run: node tests/game/crown-v120.cjs
       - name: Validate Crown Defender saved records and achievements
