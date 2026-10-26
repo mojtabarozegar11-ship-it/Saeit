@@ -59,7 +59,7 @@ function makeGame(){
  'missionNotified,pendingMissionAdvance,upgrades:{...profile.upgrades}}),',
  'step:simulate,spawn:spawnEnemy,kill,fire:shoot,missile:launchMissile,',
  'hit,resolveMission,finish,pause:togglePause,',
- 'current:()=>({player,enemies,profile}),refreshHangar};',
+ 'current:()=>({player,enemies,missiles,profile}),refreshHangar};',
  ].join('\n');
  const insertPoint='spawnScenery();last=performance.now();requestAnimationFrame(loop);';
  assert.ok(raw.includes(insertPoint));
@@ -124,5 +124,49 @@ function makeGame(){
  const credits=api.snapshot().credits;
  api.finish(false);
  assert.equal(api.snapshot().credits,credits,'No repeat payout from finish');
+}
+// A guided missile must hit on the swept segment, not just at its previous position.
+{
+ const {api,el}=makeGame();
+ el('launch').onclick();
+ api.spawn();
+ const e=api.current().enemies.at(-1);
+ Object.assign(e,{x:0,y:3,z:-31,speed:0,shot:100,hp:5});
+ api.missile();
+ assert.equal(api.current().missiles.length,1,'missile launched after target lock');
+ e.z=-25; // 21 units ahead of missile; a 0.1s step travels 19 units.
+ api.step(.1);
+ assert.equal(api.current().enemies.includes(e),false,'swept missile must hit in same frame');
+}
+// An already-expired missile must not deal damage or survive another frame.
+{
+ const {api,el}=makeGame();
+ el('launch').onclick();
+ api.spawn();
+ const e=api.current().enemies.at(-1);
+ Object.assign(e,{x:0,y:3,z:-31,speed:0,shot:100,hp:5});
+ api.missile();
+ const m=api.current().missiles.at(-1);
+ m.life=0;e.z=-14;
+ api.step(.016);
+ assert.equal(e.hp,5,'expired missile must not deal damage');
+ assert.equal(api.current().missiles.length,0,'expired missile must be removed');
+}
+// A lethal aircraft collision must not award a post-sortie guided-missile kill.
+{
+ const {api,el}=makeGame();
+ el('launch').onclick();
+ api.spawn();
+ const lethal=api.current().enemies.at(-1);
+ Object.assign(lethal,{x:0,y:3,z:-5,speed:0,shot:100});
+ api.spawn();
+ const target=api.current().enemies.at(-1);
+ Object.assign(target,{x:0,y:3,z:-31,speed:0,shot:100,hp:5});
+ api.missile();
+ target.z=-14;
+ Object.assign(api.current().player,{hp:1,shield:0,inv:0});
+ api.step(.016);
+ assert.equal(api.snapshot().running,false,'lethal collision must end sortie');
+ assert.equal(target.hp,5,'missile must not damage target after sortie ends');
 }
 console.log('AIR_SUPREMACY_GAMEPLAY_PASS: 100 hull, actual cannon combat, 12 objective clears, 4 bosses, pause, credits, persistent upgrades, replay payout guard');
