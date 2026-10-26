@@ -1,5 +1,10 @@
 # Mojtaba Roozegar — Research and Project Portfolio (staging only)
 
+## Latest AE source lock after C14 — 26 October 2026 (staging only)
+
+AE-2026-001 now includes [C14 source-panel three-year availability census](../manuscripts/AE-2026-001/AE-2026-001_C14_THREE_ENDPOINT_AVAILABILITY_MASK_CENSUS_2026-10-26.md). Its current **unpublished author-review Word** is [run 40344985847 / artifact 12659908745](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40344985847/artifacts/12659908745), source commit `1f82e849b09086cc2fb76961039425eaa18a062b`. Previous AE artifact 12660237844 is superseded. MR current source-matched Word remains [artifact 12659259449](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40344172230/artifacts/12659259449). Both remain unpublished **MAJOR REVISION** drafts, not verified journal papers. No live-site deployment.
+
+
 ## Source-matched unpublished review files — verified 26 October 2026 (staging only)
 
 MR-2026-001 latest unpublished author-review Word: [run 40344172230 / artifact 12659259449](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40344172230/artifacts/12659259449), source commit `605346f16e1559a9617f851323046700f98c8da8`, **not submitted**. AE-2026-001 latest unpublished author-review Word: [run 40344162803 / artifact 12660237844](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40344162803/artifacts/12660237844), source commit `bd05d290443e819695985d5913f8cb9edf47511f`, **not submitted**. Both are internal draft documents, **not published journal papers or verified human referee decisions**. ZM-R01 remains blocked before a valid 24-sample integer count matrix. No live website change is authorized or claimed.
