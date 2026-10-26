@@ -10,6 +10,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import unicodedata
 
 PART = re.compile(r"chapter-(\d{2})-part-(\d{3})\.md\Z")
 WORD = re.compile(r"[A-Za-z][A-Za-z'-]*")
@@ -17,6 +18,19 @@ FORBIDDEN = ("<think", "</think", "<|im_start|>", "<|im_end|>",
              "<|assistant", "<|endoftext|>", "[inst]", "[/inst]",
              "lorem ipsum", "[citation needed]", "as an ai language model")
 MAX_SEGMENT_BYTES = 50000
+
+
+def normalize_similarity_text(text: str) -> str:
+    """Canonicalize visually identical English prose for duplicate checks.
+
+    Formatting controls and compatibility glyphs must not let copied text
+    evade the private QC gate. This affects hashes only, never source files,
+    substantive word counts, or scientific identifiers with underscores.
+    """
+    text = unicodedata.normalize("NFKC", text)
+    text = re.sub(r"[\u00ad\u200b\u200c\u200d\u2060\ufeff]", "", text)
+    text = re.sub(r"[*\x60]|(?<!\w)_+|_+(?!\w)", "", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def substantive_words(text: str) -> list[str]:
@@ -82,7 +96,7 @@ def audit(root: Path, *, chapters: int = 30, chapter_target: int = 5300,
         ).strip()
         # Strip Markdown emphasis/backticks even within words, but retain
         # underscores between identifier characters (term_0000 != term0000).
-        prose = re.sub(r"[*`]|(?<!\w)_+|_+(?!\w)", "", prose)
+        prose = normalize_similarity_text(prose)
         if len(prose) >= 500:
             prose_hash = hashlib.sha256(prose.encode("utf-8")).hexdigest()
             first_prose = seen_prose_hashes.setdefault(prose_hash, path.name)
@@ -97,7 +111,7 @@ def audit(root: Path, *, chapters: int = 30, chapter_target: int = 5300,
                             if line.strip() and not line.lstrip().startswith("#"))
             # Match the full-prose gate: inline emphasis must not split tokens.
             # Preserve underscores inside identifiers (term_0000 != term0000).
-            body = re.sub(r"[*`]|(?<!\w)_+|_+(?!\w)", "", body)
+            body = normalize_similarity_text(body)
             tokens = [word.casefold() for word in
                       re.findall(r"[A-Za-z][A-Za-z0-9_'-]*", body)]
             if len(tokens) < 100:
