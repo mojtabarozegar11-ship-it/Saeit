@@ -187,6 +187,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         failures = []
         customer_acceptances = []
         customer_repairs = []
+        fresh_customer_checks = 0
+        cached_customer_checks = 0
         for recipe in selected:
             source = recipe_roots[recipe] / recipe
             previous_product = root / 'digital-products' / recipe
@@ -217,8 +219,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             # Test the actual bytes delivered to a customer, from a fresh ZIP
             # extraction. Manufacturer test counts alone cannot pass this gate.
             try:
-                customer_receipt = customer.inspect_product(previous_product, recipe)
-                customer.persist_pending(root, customer_receipt)
+                customer_receipt, customer_fresh = customer.inspect_product_scheduled(root, recipe)
+                fresh_customer_checks += int(customer_fresh)
+                cached_customer_checks += int(not customer_fresh)
             except (RuntimeError, ValueError, OSError, ArithmeticError) as customer_error:
                 recorded = repair.record_failure(root, recipe, customer_error, str(source))
                 reason = str(customer_error)
@@ -230,8 +233,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                     try:
                         result = maker.manufacture(recipe, recipe_roots[recipe],
                                                    root / "digital-products")
-                        customer_receipt = customer.inspect_product(previous_product, recipe)
-                        customer.persist_pending(root, customer_receipt)
+                        customer_receipt, customer_fresh = customer.inspect_product_scheduled(root, recipe)
+                        fresh_customer_checks += int(customer_fresh)
+                        cached_customer_checks += int(not customer_fresh)
                         customer_repairs.append({"recipe": recipe,
                             "artifact_sha256": customer_receipt["artifact_sha256"],
                             "technical_repair_verified": True})
@@ -312,6 +316,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "unchanged_product_rechecks": sum(not bool(p.get("changed")) for p in produced),
             "built_product_recipes": [p["recipe"] for p in produced],
             "real_customer_zip_checks_passed": len(customer_acceptances),
+            "fresh_extracted_customer_checks_passed": fresh_customer_checks,
+            "exact_sha_cached_customer_checks_passed": cached_customer_checks,
             "real_customer_zip_technical_receipts": customer_acceptances,
             "mechanical_customer_zip_repairs_verified": customer_repairs,
             "professional_quality_1000_customer_checks_cannot_approve": True,
