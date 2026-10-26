@@ -261,6 +261,13 @@ def verify():
         if status != 200:
             raise RuntimeError("STORE_PRODUCT_ROUTE_BAD:" + str(pk))
     detail_response = client.get("/store/product/779/", secure=True, HTTP_HOST="mojplaywin.com")
+    from django.template.loader import get_template
+    selected_template = get_template("brands/mojplaywin/product.html")
+    report("MPW_TRIAL_779_TEMPLATE_ORIGIN", {"origin": selected_template.origin.name,
+        "edited": str(FILES["detail"]), "is_same_file": selected_template.origin.name == str(FILES["detail"]),
+        "rendered_buy_id": DETAIL_MARKER.encode() in detail_response.content,
+        "rendered_checkout_link": b'/commerce/book/779/' in detail_response.content,
+        "rendered_tail": detail_response.content[-400:].decode("utf-8", "replace")})
     if DETAIL_MARKER.encode() not in detail_response.content or b'/commerce/book/779/' not in detail_response.content:
         raise RuntimeError("TRIAL_779_PURCHASE_BUTTON_MISSING")
     store = client.get("/store/", secure=True, HTTP_HOST="mojplaywin.com")
