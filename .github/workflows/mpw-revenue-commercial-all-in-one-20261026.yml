@@ -7,12 +7,56 @@ on:
       - "scripts/mpw_revenue_integrated_upgrade_20261026.py"
       - "mpw_revenue_20261020/earn/**"
       - "mpw_revenue_tools_20261020/toolkit.js"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-revenue-commercial-all-in-one-20261026.yml"
+      - "scripts/mpw_revenue_integrated_upgrade_20261026.py"
+      - "mpw_revenue_20261020/earn/**"
+      - "mpw_revenue_tools_20261020/toolkit.js"
   workflow_dispatch:
 permissions: {contents: read}
 concurrency:
   group: mpw-main-revenue-commercial-all-in-one
   cancel-in-progress: false
 jobs:
+  source-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate all twelve pages, first-party form, tool JavaScript and publisher syntax
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_revenue_integrated_upgrade_20261026.py
+          php -l mpw_revenue_20261020/earn/inquiry.php
+          php -l mpw_revenue_20261020/earn/metrics.php
+          node --check mpw_revenue_tools_20261020/toolkit.js
+          python3 - <<'PY'
+          import json,pathlib,re
+          root=pathlib.Path("mpw_revenue_20261020/earn")
+          catalog=json.loads((root/"catalog.json").read_text())
+          slugs=[v["slug"] for v in catalog["offers"]]
+          assert len(slugs)==12 and len(set(slugs))==12
+          descriptions=[]
+          for slug in slugs:
+            html=(root/slug/"index.html").read_text()
+            assert 'data-offer="'+slug+'"' in html
+            assert 'inquiry.php?service='+slug in html
+            assert html.count('data-cta="quote"')>=2
+            assert 'No payment is collected on this page' in html
+            desc=re.search(r'<meta name="description" content="([^"]+)"',html)
+            assert desc and len(desc[1])>70
+            descriptions.append(desc[1])
+          assert len(set(descriptions))==12
+          assert 'inquiry.php?service=general' in (root/"index.html").read_text()
+          assert "store_inquiry" in (root/"inquiry.php").read_text()
+          assert "openssl_encrypt" in (root/"inquiry.php").read_text()
+          assert "$events" in (root/"metrics.php").read_text()
+          assert "sha256" in pathlib.Path("scripts/mpw_revenue_integrated_upgrade_20261026.py").read_text()
+          print("MPW_COMMERCIAL_SOURCE_QA_12_UNIQUE_SERVICE_PAGES=PASS")
+          PY
   release:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
