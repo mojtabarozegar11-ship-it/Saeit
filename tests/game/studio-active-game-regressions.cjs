@@ -31,10 +31,13 @@ jungleContext.jungleCleanup();
 
 const taniya=fs.readFileSync('templates/taniya_studio/index.html','utf8');
 const cake=taniya.slice(taniya.indexOf('function mountCake(){'),taniya.indexOf('    function mountPet()'));
+assert.match(taniya, /<link rel="canonical" href="https:\/\/mojplaywin\.com\/taniya\/">/);
+assert.match(taniya, /<meta property="og:url" content="https:\/\/mojplaywin\.com\/taniya\/">/);
+assert.match(taniya, /<meta name="twitter:card" content="summary">/);
 assert(cake.startsWith('function mountCake('),'Cake Maker source missing');
 const preview={textContent:'',style:{}},icing={value:'#ff79b8'},tops=['🍓','🌼','🍬'].map(top=>({dataset:{top},onclick:null}));
-const candle={onclick:null},download={onclick:null},cakeBody={
- querySelector(s){return s==='[data-action="candle"]'?candle:s==='[data-action="cake-download"]'?download:null},
+const candle={onclick:null},download={onclick:null},reset={onclick:null},cakeBody={
+ querySelector(s){return s==='[data-action="candle"]'?candle:s==='[data-action="cake-download"]'?download:s==='[data-action="cake-reset"]'?reset:null},
  querySelectorAll(s){assert.equal(s,'[data-top]');return tops}
 };
 let svg=null,lastMessage='';
@@ -54,6 +57,13 @@ assert.equal(svg.name,'taniya-cake-card');
 assert(svg.body.includes('#123abc'),'download must reflect frosting color');
 assert(svg.body.includes('2 candles'),'download must reflect candle count');
 assert(svg.body.includes('🍬'),'download must reflect topping');
+reset.onclick({stopPropagation(){}});
+assert.equal(icing.value,'#ff79b8','start over restores default frosting');
+assert.equal(preview.textContent,'🎂 🍓 ','start over clears toppings and candles');
+download.onclick({stopPropagation(){}});
+assert(svg.body.includes('#ff79b8'),'reset cake export uses default frosting');
+assert(svg.body.includes('0 candles'),'reset cake export clears candles');
+assert(svg.body.includes('🍓'),'reset cake export restores berries');
 for(let i=0;i<30;i++)candle.onclick({stopPropagation(){}});
 assert.equal((preview.textContent.match(/🕯️/g)||[]).length,12,'cap candles at 12');
 assert.match(lastMessage,/twelve/);

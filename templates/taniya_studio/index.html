@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#fff2f8">
   <meta name="description" content="Games, stories, and creative play from Taniya Studio — a playful world from MojPlayWin.">
+  <link rel="canonical" href="https://mojplaywin.com/taniya/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Taniya Studio — Play a little, imagine a lot">
+  <meta property="og:description" content="Creative family-friendly games, Cake Maker, stories and activities from Taniya Studio.">
+  <meta property="og:url" content="https://mojplaywin.com/taniya/">
+  <meta name="twitter:card" content="summary">
   <title>Taniya Studio — Play a little, imagine a lot</title>
   <style>
     :root{--ink:#3e1744;--muted:#7d5b7c;--pink:#eb3d96;--pink2:#ff78b8;--rose:#ffe2ef;--cream:#fff9fc;--lilac:#f2e8ff;--line:#f4d9e8;--shadow:0 16px 45px #b84b8020;--radius:28px}
@@ -101,6 +107,10 @@ Total output lines: 1
  $('#icing',gamebody).oninput=e=>{if(/^#[0-9a-f]{6}$/i.test(e.target.value))icing=e.target.value;render()};
  gamebody.querySelectorAll('[data-top]').forEach(b=>b.onclick=()=>{topping=b.dataset.top;render();say('Topping updated. Your candles are still here.')});
  gamebody.querySelector('[data-action="candle"]').onclick=e=>{e.stopPropagation();if(candles<12){candles++;render();say('Candle '+candles+' of 12 added.')}else say('Your cake already has twelve candles.')};
+ gamebody.querySelector('[data-action="cake-reset"]').onclick=e=>{
+  e.stopPropagation();icing='#ff79b8';topping='🍓';candles=0;
+  $('#icing',gamebody).value=icing;render();say('Cake reset. Start decorating again.');
+ };
  gamebody.querySelector('[data-action="cake-download"]').onclick=e=>{
   e.stopPropagation();
   const candlesSvg=Array.from({length:candles},(_,i)=>{const x=250+i*36;return '<rect x="'+x+'" y="438" width="8" height="64" rx="3" fill="#fff8cf"/><path d="M'+(x+4)+' 433 q-12 -20 0 -32 q12 12 0 32" fill="#f1a326"/>'}).join('');
