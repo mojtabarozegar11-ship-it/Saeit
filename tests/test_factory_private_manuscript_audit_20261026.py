@@ -202,6 +202,45 @@ class PrivateAuditTests(unittest.TestCase):
                                  for flag in result["integrity_flags"]))
             self.assertFalse(result["commercial_release_allowed"])
 
+    def test_invisible_unicode_and_compatibility_glyphs_cannot_hide_prose_copy(self):
+        with tempfile.TemporaryDirectory() as d:
+            first = self.make(d, "chapter-01-part-001.md")
+            second = Path(d) / "chapter-02-part-001.md"
+            altered = first.read_text().replace(
+                "# Heading", "# Independent heading")
+            altered = altered.replace("term0000", "term\u200b0000")
+            altered = altered.replace("term0001", "\uff54erm0001")
+            altered = altered.replace("term0002", "term\u00ad0002")
+            second.write_text(altered)
+            before = (first.read_bytes(), second.read_bytes())
+            result = module.audit(Path(d), chapters=2,
+                                  chapter_target=300, total_target=600)
+            self.assertTrue(any(x.startswith("duplicate_prose_body:")
+                                for x in result["integrity_flags"]))
+            self.assertFalse(result["length_and_structure_ready_for_independent_review"])
+            self.assertFalse(result["commercial_release_allowed"])
+            self.assertEqual((first.read_bytes(), second.read_bytes()), before)
+
+    def test_invisible_unicode_cannot_hide_long_paragraph_copy(self):
+        with tempfile.TemporaryDirectory() as d:
+            repeated = " ".join("distinctword%04d" % i for i in range(140))
+            first = Path(d) / "chapter-01-part-001.md"
+            second = Path(d) / "chapter-02-part-001.md"
+            first.write_text("# First\n\n" + repeated +
+                             "\n\n" + " ".join("first%04d" % i for i in range(150)))
+            altered = repeated.replace("distinctword0000", "distinct\u200bword0000")
+            altered = altered.replace("distinctword0001", "\uff44istinctword0001")
+            second.write_text("# Second\n\n" + altered +
+                              "\n\n" + " ".join("second%04d" % i for i in range(150)))
+            before = (first.read_bytes(), second.read_bytes())
+            result = module.audit(Path(d), chapters=2,
+                                  chapter_target=250, total_target=500)
+            self.assertTrue(any(x.startswith("duplicate_long_paragraph:")
+                                for x in result["integrity_flags"]))
+            self.assertFalse(result["length_and_structure_ready_for_independent_review"])
+            self.assertFalse(result["commercial_release_allowed"])
+            self.assertEqual((first.read_bytes(), second.read_bytes()), before)
+
     def test_distinct_long_paragraphs_are_not_falsely_flagged(self):
         with tempfile.TemporaryDirectory() as d:
             for chapter in (1, 2):
