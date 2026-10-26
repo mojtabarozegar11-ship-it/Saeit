@@ -86,3 +86,10 @@ test('scope toggle state and game feedback are exposed to assistive technology',
   assert.ok(game.includes("$('#scope').setAttribute('aria-pressed',String(scoped))"), 'scope toggles expose state');
   assert.ok(game.includes("$('#scope').setAttribute('aria-pressed','false')"), 'new game resets scope state');
 });
+
+
+test('lost pointer capture releases mobile movement and continuous fire', () => {
+  const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
+  assert.ok(game.includes("stick.onlostpointercapture=endStick"), 'joystick stops after pointer capture loss');
+  assert.ok(game.includes("$('#fire').onlostpointercapture=()=>fireHeld=false"), 'continuous fire stops after capture loss');
+});
