@@ -1,5 +1,8 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
 const html=fs.readFileSync('games/crown-defender/index.html','utf8'), code=html.split('<script>')[1].split('</script>')[0];
+assert.match(html, /<link rel="canonical" href="https:\/\/mojplaywin\.com\/games\/crown-defender\/">/);
+assert.match(html, /<meta property="og:url" content="https:\/\/mojplaywin\.com\/games\/crown-defender\/">/);
+assert.match(html, /<meta name="twitter:card" content="summary">/);
 let frame, fetchMode='offline', drawCalls=0;
 const pixels=new Proxy({createLinearGradient:()=>({addColorStop(){}}),createRadialGradient:()=>({addColorStop(){}})}, {get(o,k){return o[k]||function(...args){drawCalls++;for(const v of args)if(typeof v==='number')assert.ok(Number.isFinite(v),'finite canvas argument')}}});
 class Element{constructor(tag='DIV'){this.tagName=tag;this.children=[];this.hidden=false;this.value='';this.style={};this.classList={add(){},remove(){},toggle(){}};this.handlers={};if(tag==='IMG'&&!process.env.CROWN_NO_ASSETS){this.complete=true;this.naturalWidth=384;this.naturalHeight=512;}}getContext(){return pixels}append(...x){this.children.push(...x)}appendChild(x){this.children.push(x)}replaceChildren(...x){this.children=x}setAttribute(){}addEventListener(n,f){this.handlers[n]=f}focus(){}getBoundingClientRect(){return {left:0,top:0,width:540,height:960}}}
