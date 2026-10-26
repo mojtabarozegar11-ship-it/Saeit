@@ -76,6 +76,8 @@ assert.equal(activeArrow.prevented,true,'keyboard movement must prevent page scr
 assert.ok(keyboardJungle.stage.innerHTML.includes('Obstacle 2 / 12'),'active keyboard shortcut must advance one obstacle');
 assert.ok(rah.includes("stage.focus({preventScroll:true})"),'opening Jungle Run must focus the active game region');
 
+const oneMiss=runJungle([hint=>hint==='jump'?'duck':'jump']);
+assert.ok(oneMiss.stage.innerHTML.includes('Not quite:'),'wrong jungle moves must explain the correct movement');
 const lose=runJungle(Array(3).fill(hint=>hint==='jump'?'duck':'jump'));
 assert.ok(lose.stage.innerHTML.includes('jungle wins'),'three wrong moves should end run');
 const sidestep=runJungle(Array(12).fill(hint=>hint),()=>.99);
@@ -83,11 +85,11 @@ assert.ok(sidestep.stage.innerHTML.includes('Jungle cleared!'),'twelve sidesteps
 assert.ok(sidestep.stage.innerHTML.includes('Streak 12'),'perfect course should build a streak');
 // Exercise the actual Cake Maker UI callbacks, not only its SVG serializer.
 const cakeUI=between(tan,'function mountCake(){','function mountPet(){');
-let cakeNodes={},downloaded='';
+let cakeNodes={},downloaded='',cakeMarkup='';
 const cakeSandbox={
- stage(html){cakeNodes={'#cakepreview':{innerHTML:''},'#icing':{},'#cakeGreeting':{},
+ stage(html){cakeMarkup=html;cakeNodes={'#cakepreview':{innerHTML:''},'#icing':{},'#cakeGreeting':{},
   '[data-action="candle"]':{},'[data-action="cake-remove"]':{},
-  '[data-action="cake-reset"]':{},'[data-action="cake-undo"]':{},'[data-action="cake-redo"]':{},'[data-action="cake-surprise"]':{},'[data-action="cake-download"]':{}};},
+  '[data-action="cake-reset"]':{},'[data-action="cake-undo"]':{},'[data-action="cake-redo"]':{},'[data-action="cake-surprise"]':{},'[data-action="cake-download"]':{},'[data-action="cake-check"]':{},'[data-action="cake-order"]':{}};},
  gamebody:{querySelector(sel){return cakeNodes[sel]},querySelectorAll(sel){return sel==='[data-top]'?[{dataset:{top:'🌼'},onclick:null}]:[]}},
  $(sel){return cakeNodes[sel]},
  btn(label,action){return '<button data-action="'+action+'">'+label+'</button>'},
@@ -149,4 +151,15 @@ savedCake.set('taniya-cake-design-v1',JSON.stringify({icing:'url(javascript:aler
 vm.runInNewContext(cake+cakeUI+'mountCake();',cakeSandbox);
 assert.ok(!cakeNodes['#cakepreview'].innerHTML.includes('javascript'),'tampered cake color must be rejected');
 assert.ok(!cakeNodes['#cakepreview'].innerHTML.includes('<script>'),'tampered greeting must be rejected');
+ // Customer orders require all four attributes, and the same order cannot award points twice.
+ vm.runInNewContext(cake+cakeUI+'mountCake();',{...cakeSandbox,Math:Object.assign(Object.create(Math),{random:()=>0})});
+ assert.ok(cakeMarkup.includes('Customer order:'),'cake challenge must display a customer specification');
+ assert.ok(cakeMarkup.includes('Orders completed: 0'),'new session starts with no completed orders');
+ cakeNodes['[data-action="cake-check"]'].onclick();
+ assert.ok(cakeMarkup.includes('Orders completed: 1'),'matching a customer order must complete it');
+ cakeNodes['[data-action="cake-check"]'].onclick();
+ assert.ok(cakeMarkup.includes('Orders completed: 1'),'checking a completed order must not award twice');
+ cakeNodes['[data-action="cake-order"]'].onclick();
+ assert.ok(cakeMarkup.includes('Customer order:'),'new order must remain visible and playable');
+
 console.log('GAME_QUALITY_REGRESSION_PASS: Raham runner, Taniya cake SVG, Prism progress, three JS parsers');
