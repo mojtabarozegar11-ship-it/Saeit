@@ -69,7 +69,8 @@ def make_legacy_source(source):
     tests.write_text(cases,encoding='utf8')
     receipt=source/'design_receipt.json'
     evidence=json.loads(receipt.read_text(encoding='utf8'))
-    assert evidence.pop('generator_capability_revision')=='verified-grouped-statistics-v5'
+    assert evidence.pop('generator_capability_revision')=='verified-one-percent-sensitivity-v6'
+    evidence['generator_capability_revision']='verified-grouped-statistics-v5'
     receipt.write_text(json.dumps(evidence,sort_keys=True,indent=2)+'\n',encoding='utf8')
     return body
 
