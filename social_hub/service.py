@@ -8,9 +8,20 @@ from .youtube import upload_video
 
 def connection_status(store, env=None):
     env = os.environ if env is None else env
+    from datetime import datetime, timedelta, timezone
+    latest_checks={r["account_id"]:r for r in store.api_checks()}
+    now=datetime.now(timezone.utc)
     out = []
     for account in store.accounts():
         token_alias = account["token_env"]
+        check = latest_checks.get(account["id"])
+        fresh = False
+        if check:
+            try:
+                stamp=datetime.fromisoformat(check["checked_at"].replace("Z","+00:00"))
+                fresh = stamp > now-timedelta(hours=24)
+            except ValueError:
+                pass
         out.append({
             "account_id": account["id"], "brand": account["brand"],
             "platform": account["platform"], "destination": account["destination"],
@@ -21,8 +32,11 @@ def connection_status(store, env=None):
             # Configuration is not evidence that the provider accepted the OAuth
             # scope, recognizes account ownership, or permits publishing.
             "configuration_ready": bool(account["verified"]) and bool(env.get(token_alias, "")),
-            "connected": False,
-            "provider_verified": False,
+            "connected": False,  # Sending permissions require separate publish receipt.
+            "provider_verified": bool(check and fresh and check["state"]=="identity_verified"),
+            "provider_check_state": check["state"] if check and fresh else ("stale" if check else "not_checked"),
+            "provider_checked_at": check["checked_at"] if check else "",
+            "publishing_scope_verified": False,
         })
     return out
 
