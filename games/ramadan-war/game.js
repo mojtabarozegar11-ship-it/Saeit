@@ -1,7 +1,7 @@
 import {createEngine} from './engine3d.js';
 import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick} from './input-guard.mjs';
 import {removeEnemyAndRetargetMissiles} from './missile-targets.mjs';
-import {validateCampaignSave, resumeCampaignScreen} from './save-validation.mjs';
+import {validateCampaignSave, resumeCampaignScreen, readHeroChoice} from './save-validation.mjs';
 (()=>{'use strict';
 const NAMES=['سید علی خامنه‌ای','حاج قاسم — قاسم سلیمانی','عباس بابایی','علی صیاد شیرازی','مصطفی چمران','محمدابراهیم همت','مهدی باکری','حمید باکری','حسین خرازی','حسن باقری','احمد کاظمی','محمد جهان‌آرا','محمود کاوه','مهدی زین‌الدین','عباس دوران','حسین لشکری','مسعود منفرد نیاکی','ولی‌الله فلاحی','یوسف کلاهدوز','جواد فکوری','موسی نامجو','محمد بروجردی','احمد متوسلیان','عبدالحسین برونسی','ناصر کاظمی','علی هاشمی','منصور ستاری','ایرج رستمی','مصطفی اردستانی','حسین خلعتبری'];
 const SKILLS=['سپر انرژی','موج الکترومغناطیس','ترمیم زره','طوفان پالس','توقف زمان','پشتیبانی مداری'];
@@ -11,7 +11,7 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), rnd=(a,b)=>a+Math.random()*(b-a)
 const saveKey='rwNativeCampaign',stageNames=NAMES;
 const sceneFiles=['./scene-sniper-desert-v2.webp','./scene-night.webp','./scene-airbase.webp'];function setMissionScene(m){const el=$('#missionBackdrop'),file=sceneFiles[m%sceneFiles.length];if(el.dataset.scene!==file){el.style.backgroundImage=`url("${file}")`;el.dataset.scene=file}el.style.setProperty('--pan-x','0px');el.style.setProperty('--pan-y','0px')}
 
-let hero=+(localStorage.rwHero||0),world=null,screen='home',last=0,toastTimer=0,hitTimer=0,fireHeld=false,joyId=null,aimId=null,joyX=0,joyY=0,joyF=0,joyS=0,aimLast=0,keys={},effects=[],audioCtx=null;
+let hero=readHeroChoice(localStorage.rwHero),world=null,screen='home',last=0,toastTimer=0,hitTimer=0,fireHeld=false,joyId=null,aimId=null,joyX=0,joyY=0,joyF=0,joyS=0,aimLast=0,keys={},effects=[],audioCtx=null;
 const MAPSIZE=16,FOV=1.02;
 
 /* Each operation has a different win condition: objectives, not a recycled kill arena. */
