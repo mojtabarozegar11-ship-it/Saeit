@@ -255,6 +255,31 @@ class PrivateAuditTests(unittest.TestCase):
             self.assertTrue(result["length_and_structure_ready_for_independent_review"])
             self.assertFalse(result["commercial_release_allowed"])
 
+    def test_zero_width_reasoning_marker_cannot_bypass_private_gate(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = self.make(d, "chapter-01-part-001.md",
+                          tail="<th\\u200bink>internal reasoning</th\\u200bink>")
+            before = p.read_bytes()
+            result = module.audit(Path(d), chapters=1,
+                                  chapter_target=300, total_target=300)
+            self.assertTrue(any(x.startswith("unsafe_content_marker:")
+                                for x in result["integrity_flags"]))
+            self.assertFalse(result["length_and_structure_ready_for_independent_review"])
+            self.assertFalse(result["commercial_release_allowed"])
+            self.assertEqual(p.read_bytes(), before)
+
+    def test_fullwidth_reasoning_and_invisible_citation_markers_fail_closed(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = self.make(d, "chapter-01-part-001.md",
+                          tail="<\\uff54\\uff48\\uff49\\uff4e\\uff4b>hidden</\\uff54\\uff48\\uff49\\uff4e\\uff4b> [citat\\u200bion needed]")
+            before = p.read_bytes()
+            result = module.audit(Path(d), chapters=1,
+                                  chapter_target=300, total_target=300)
+            self.assertTrue(any(x.startswith("unsafe_content_marker:")
+                                for x in result["integrity_flags"]))
+            self.assertFalse(result["commercial_release_allowed"])
+            self.assertEqual(p.read_bytes(), before)
+
     def test_gap_and_reasoning_marker_fail_closed(self):
         with tempfile.TemporaryDirectory() as d:
             self.make(d, "chapter-01-part-002.md", tail="<think>secret</think>")
