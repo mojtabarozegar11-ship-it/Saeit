@@ -182,6 +182,36 @@ jobs:
             result["raised_exception_type"]=type(exc).__name__
           print("MPW_SYNTHETIC_CLOSED_INVOICE="+json.dumps(result,sort_keys=True))
           PY
+      - name: Check live login safe post-auth invoice return target without customer records
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,json
+          from pathlib import Path
+          p=Path("/home/zomorod2/Saeit-staging")
+          os.chdir(p);sys.path.insert(0,str(p))
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.test import RequestFactory
+          from mpw_commerce.customer_auth import CustomerLogin
+          cases=[
+            ("/commerce/trx-easy/invoice/14/?utm_source=chatgpt.com", "/commerce/trx-easy/invoice/14/?utm_source=chatgpt.com"),
+            ("/commerce/book/779/", "/commerce/book/779/"),
+            ("https://other.example/phish", "/commerce/my-purchases/")
+          ]
+          result=[]
+          rf=RequestFactory()
+          for target,expected in cases:
+            req=rf.get("/accounts/login/",{"next":target},secure=True,HTTP_HOST="mojplaywin.com")
+            obj=CustomerLogin();obj.setup(req)
+            try:
+              actual=obj.get_success_url()
+              result.append({"kind":"external_host" if "https:" in target else "same_site","passed":actual==expected,"safe_external_redirect":not actual.startswith("https://other.example"),"actual_destination_class":"invoice" if actual.startswith("/commerce/trx-easy/invoice/") else "product" if actual.startswith("/commerce/book/") else "purchases" if actual.startswith("/commerce/my-purchases/") else "other"})
+            except Exception as e:result.append({"kind":"exception","type":type(e).__name__})
+          print("MPW_LOGIN_RETURN_DIAG="+json.dumps({"synthetic":True,"customer_records_used":0,"cases":result},sort_keys=True))
+          PY
       - name: Diagnose live TRX invoice routing and expiry without reading buyer details
         shell: bash
         run: |
