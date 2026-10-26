@@ -258,15 +258,19 @@ class FactorySynthesisIntegrationTests(unittest.TestCase):
         self.assertEqual(second["registered_recipes"],5)
         self.assertEqual(second["new_recipe_count"],1)
         self.assertEqual(sorted(x.name for x in self.recipes.iterdir()),static_before)
-        generated=next((self.output/"generated-product-recipes").iterdir())
-        (generated/"calculator.py").write_text("raise RuntimeError('deliberate fault')\n")
-        third=cycle.run_cycle(self.db, self.output, self.recipes, enable_designer=True)
+        slots=json.loads((self.output/"quality-excellence/product-flow/active-slots/current.json").read_text())
+        self.assertEqual(len(slots["active"]),1)
+        active_recipe=slots["active"][0]["recipe"]
+        generated=self.output/"generated-product-recipes"/active_recipe
+        (generated/"calculator.py").write_text("raise RuntimeError('deliberate fault')\\n")
+        third=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True)
         self.assertEqual(third["status"],"ok")
         self.assertEqual(third["new_artifacts"],0)
         state=json.loads((self.output/"production-state.json").read_text())
-        self.assertEqual(len(state["source_recoveries"]),1)
-        self.assertTrue(Path(state["source_recoveries"][0]["retained_broken_source"]).is_dir())
-        ledger=json.loads((self.output/"qa-rework"/generated.name/"ledger.json").read_text())
+        recovered=[x for x in state["source_recoveries"] if x["recipe"]==active_recipe]
+        self.assertEqual(len(recovered),1)
+        self.assertTrue(Path(recovered[0]["retained_broken_source"]).is_dir())
+        ledger=json.loads((self.output/"qa-rework"/active_recipe/"ledger.json").read_text())
         self.assertEqual(ledger["current_status"],"technical_qa_pass_only_owner_and_content_review_pending")
         self.assertGreaterEqual(len(ledger["history"]),1)
 
