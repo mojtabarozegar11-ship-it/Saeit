@@ -165,4 +165,29 @@ assert.equal(activeShop.calls.focus,1,'resumed play must restore canvas focus');
 assert.equal(shopReturn('menu').state,'menu','shop opened from menu must return to menu');
 assert.ok(js.slice(js.indexOf('function backFromPane(){'),js.indexOf('function ',js.indexOf('function backFromPane(){')+20)).includes("state='paused'"),'pause overlay must be restored by backFromPane');
 
+// Opening the hangar from the menu must show saved upgrade levels and correct prices.
+// Otherwise an existing level-three purchase is silently reset to level one.
+const shopOpenStart=js.indexOf('function openShop(){');
+const shopOpenEnd=js.indexOf('function resumeFromShop(){',shopOpenStart);
+assert.ok(shopOpenStart>=0&&shopOpenEnd>shopOpenStart,'hangar entry must be testable');
+const shopOpenCode=js.slice(shopOpenStart,shopOpenEnd);
+function shopEntry(origin){
+ return vm.runInNewContext(
+  'let state='+JSON.stringify(origin)+",overlayOrigin='none',overlayState='none',bank=40;"+
+  'let upgrades={armor:0,cannons:0};const save={credits:300,hangar:{armor:3,cannons:2}};'+
+  'let displayed=null;const $=id=>({hidden:false,textContent:""});'+
+  'function hidePanes(){}function showOverlay(){}function shopButtons(){displayed={...upgrades}}'+
+  shopOpenCode+'openShop();({state,bank,upgrades,displayed,overlayOrigin})'
+ );
+}
+const menuHangar=shopEntry('menu');
+assert.equal(menuHangar.state,'paused');
+assert.equal(menuHangar.bank,300,'menu hangar must use saved earned credits');
+assert.equal(menuHangar.upgrades.armor,3,'menu hangar must restore purchased armor levels');
+assert.equal(menuHangar.displayed.cannons,2,'displayed prices must reflect saved cannon level');
+assert.equal(menuHangar.overlayOrigin,'menu','shop return destination must remain the menu');
+const combatHangar=shopEntry('playing');
+assert.equal(combatHangar.bank,40,'combat hangar must preserve the current run bank');
+assert.equal(combatHangar.upgrades.armor,0,'combat hangar must preserve active run upgrade state');
+
 console.log('CROWN_SAVE_SAFETY_PASS: scoreboard validation, date safety, achievements and backward-compatible progress');
