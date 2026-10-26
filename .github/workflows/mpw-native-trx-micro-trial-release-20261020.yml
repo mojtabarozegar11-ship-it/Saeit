@@ -80,6 +80,33 @@ jobs:
         run: |
           set -euo pipefail
           timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - preview" < scripts/mpw_native_trx_micro_trial_release_20261020.py
+      - name: Inspect current trial detail resolver and product state without writes
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,inspect,json
+          os.chdir("/home/zomorod2/Saeit-staging")
+          sys.path.insert(0,os.getcwd())
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.urls import resolve
+          from django.test import Client
+          from core.models import Product
+          for pk in (72,225,779,879):
+              v=Product.objects.filter(pk=pk).values("id","active","price","currency","knowledge_article__published","product_type").first()
+              path="/store/product/%s/"%pk
+              try:
+                  match=resolve(path)
+                  handler=match.func
+                  name=handler.__module__+"."+handler.__name__
+                  code=inspect.getsource(handler)
+                  selected=[line.strip() for line in code.splitlines() if any(term in line.lower() for term in ("get_object_or_404","filter(","404","active","published","product","redirect","allowlist","whitelist","guard","pk"))]
+                  status=Client(raise_request_exception=False).get(path,secure=True,HTTP_HOST="mojplaywin.com").status_code
+                  print("MPW_TRIAL_ROUTE_DIAGNOSTIC="+json.dumps({"pk":pk,"product":v,"handler":name,"code_lines":selected[:36],"status":status},default=str))
+              except Exception as e:
+                  print("MPW_TRIAL_ROUTE_DIAGNOSTIC_ERROR="+repr(e))
+          PY
       - name: Create real test listing, never modify originals or payment ledger
         id: publish_sample
         run: |
