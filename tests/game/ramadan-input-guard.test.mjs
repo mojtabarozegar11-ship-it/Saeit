@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {isInteractiveTarget, keyboardAction} from '../../games/ramadan-war/input-guard.mjs';
+import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick} from '../../games/ramadan-war/input-guard.mjs';
 
 const arena = {closest: () => null};
 const menuButton = {closest: selector => selector.includes('button') ? {} : null};
@@ -58,4 +58,21 @@ test('reversible release includes the new browser module and checks its import',
   const deploy = readFileSync(new URL('../../games/ramadan-war/deploy.py', import.meta.url), 'utf8');
   assert.match(deploy, /ASSETS=\[[^\n]*'input-guard\.mjs'/);
   assert.match(deploy, /b'\.\/input-guard\.mjs' in new\['game\.js'\]/);
+});
+
+
+test('keyboard and assistive button activation is accepted without replaying pointer clicks', () => {
+  assert.equal(isKeyboardOrAssistiveClick({detail: 0}), true);
+  assert.equal(isKeyboardOrAssistiveClick({detail: 1}), false);
+  assert.equal(isKeyboardOrAssistiveClick({detail: 2}), false);
+  assert.equal(isKeyboardOrAssistiveClick(null), false);
+});
+
+test('five HUD buttons preserve pointer activation and gain keyboard or screen-reader activation', () => {
+  const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
+  for (const id of ['rocket', 'drone', 'special', 'fire', 'interact']) {
+    assert.match(game, new RegExp(`\\$\\('#${id}'\\)\\.onpointerdown=`), `${id} pointer control`);
+    assert.match(game, new RegExp(`\\$\\('#${id}'\\)\\.onclick=e=>\\{if\\(isKeyboardOrAssistiveClick\\(e\\)\\)`), `${id} keyboard/AT control`);
+  }
+  assert.match(game, /import \{[^}]*isKeyboardOrAssistiveClick[^}]*\} from '\.\/input-guard\.mjs'/);
 });
