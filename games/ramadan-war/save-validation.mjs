@@ -11,6 +11,9 @@ export function validateCampaignSave(s) {
   if (!finite(s.maxHp, 1, 200) || !finite(s.hp, 0.01, s.maxHp)) return false;
   if (!integer(s.ammo, 0, 40) || !integer(s.magazine, 1, 40) || s.ammo > s.magazine) return false;
   if (!integer(s.rockets, 0, 24) || !integer(s.drones, 0, 7)) return false;
+  // Legacy high-but-finite earned upgrades are normalized on restore; corrupt values fail closed.
+  if (s.power !== undefined && !integer(s.power, 0, 100)) return false;
+  if (s.armor !== undefined && !integer(s.armor, 0, 100)) return false;
   for (const [name, max] of [['score', 1e10], ['points', 1e7], ['kills', 1e7], ['missionKills', 1e6]]) {
     if (!integer(s[name], 0, max)) return false;
   }
