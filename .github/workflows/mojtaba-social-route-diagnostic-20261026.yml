@@ -95,6 +95,22 @@ jobs:
           for item in sorted(pathlib.Path("/home/zomorod2/public_html").glob("*mojtaba*")):
               print("DIAG_PUBLIC_WEB_ROOT",str(item),item.is_dir(),item.is_symlink(),flush=True)
           print("DIAG_APP_PACKAGE_EXISTS",pathlib.Path("social_hub/urls.py").is_file(),flush=True)
+          from django.test import Client
+          c=Client(HTTP_HOST="mojplaywin.com")
+          for p in ("/","/mojtaba.roozegar/","/social-command/","/social-command/official/"):
+              try:
+                  response=c.get(p,secure=True)
+                  print("DIAG_PERSONAL_TEST_CLIENT",p,response.status_code,flush=True)
+              except Exception as e:
+                  print("DIAG_PERSONAL_TEST_ERROR",p,type(e).__name__,flush=True)
+          shared=pathlib.Path("/home/zomorod2/Saeit")
+          print("DIAG_SHARED_PASSENGER_APP_ROOT",shared.is_dir(),flush=True)
+          print("DIAG_SHARED_DJANGO_URLCONF_PRESENT",(shared/"config/urls.py").is_file(),flush=True)
+          for name in ("mojtaba_personal/passenger_wsgi.py",
+                       "mojtaba_personal/mojtaba_roozegar_personal_v17/passenger_wsgi.py",
+                       "public_html/mojtaba.roozegar/.htaccess"):
+              print("DIAG_PERSONAL_ROUTE_MOUNT",name,(pathlib.Path("/home/zomorod2")/name).is_file(),flush=True)
+
           for p in (pathlib.Path("/home/zomorod2/public_html/.htaccess"),
                     pathlib.Path("/home/zomorod2/public_html/mojtaba.roozegar/.htaccess"),
                     pathlib.Path("/home/zomorod2/mojtaba_personal/.htaccess"),
