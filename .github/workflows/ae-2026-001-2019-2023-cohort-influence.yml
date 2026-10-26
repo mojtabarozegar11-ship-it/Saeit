@@ -1,0 +1,32 @@
+name: AE 2026 001 source locked 2019 2023 cohort influence
+on:
+  push:
+    branches:
+      - research/mr-2026-001-novelty-audit
+    paths:
+      - analysis/wdi_2019_2023_unbalanced_cohort_sensitivity.py
+      - research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv
+      - .github/workflows/ae-2026-001-2019-2023-cohort-influence.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compute country-level cohort influence from official archived panel
+        run: |
+          python analysis/wdi_2019_2023_unbalanced_cohort_sensitivity.py \
+            --input research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv \
+            --output research_outputs/AE-2026-001/2019_2023_cohort_influence.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ae-2026-001-2019-2023-cohort-influence
+          path: research_outputs/AE-2026-001/2019_2023_cohort_influence.json
+          if-no-files-found: error
+          retention-days: 30
