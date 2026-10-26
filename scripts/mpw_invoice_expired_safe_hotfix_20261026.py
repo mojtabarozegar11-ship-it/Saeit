@@ -6,6 +6,7 @@ import fcntl
 import hashlib
 import json
 import os
+import pwd
 from pathlib import Path
 import re
 import stat
@@ -67,7 +68,7 @@ def selftest():
 
 
 def preflight():
-    if os.geteuid() == 0 or not APP.is_dir() or APP.is_symlink():
+    if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2" or not APP.is_dir() or APP.is_symlink():
         raise RuntimeError("WRONG_HOST_CONTEXT")
     if not PUBLIC.is_dir() or PUBLIC.is_symlink() or not PYTHON.is_file():
         raise RuntimeError("MISSING_MOJPLAYWIN_APP")
@@ -168,6 +169,8 @@ def perform(action, run_id):
                            patched_sha256=digest(changed_bytes), target="mpw_trx_commercial_web.py")
             create_private(original_path, raw)
             create_private(receipt_path, (json.dumps(receipt, sort_keys=True)+"\n").encode("utf-8"))
+            if digest(TARGET.read_bytes()) != digest(raw):
+                raise RuntimeError("CONCURRENT_LIVE_SOURCE_CHANGED")
             atomic_replace(TARGET, changed_bytes, mode)
             try:
                 if digest(TARGET.read_bytes()) != receipt["patched_sha256"]:
@@ -189,6 +192,8 @@ def perform(action, run_id):
                 raise RuntimeError("ROLLBACK_RECEIPT_INVALID")
             if digest(raw) != receipt.get("patched_sha256"):
                 raise RuntimeError("REFUSE_ROLLBACK_OVER_NEWER_VERSION")
+            if digest(TARGET.read_bytes()) != digest(raw):
+                raise RuntimeError("CONCURRENT_ROLLBACK_SOURCE_CHANGED")
             atomic_replace(TARGET, saved, mode)
             restart()
             print("MPW_INVOICE_PATCH_ROLLED_BACK=PASS")
