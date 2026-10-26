@@ -66,4 +66,37 @@ assert.equal(abandoned.state,'menu');
 const normal=menuTransition(false);
 assert.equal(normal.trialJet,false,'normal menu must remain normal');
 
+// Flight controls must never activate from menu overlays or consume actions while paused.
+const keyStart=js.indexOf("document.addEventListener('keydown',e=>{");
+const keyEnd=js.indexOf("document.addEventListener('keyup',",keyStart);
+assert.ok(keyStart>=0&&keyEnd>keyStart,'flight keyboard handler must be present');
+const keyCode=js.slice(keyStart,keyEnd);
+const keyboard=vm.runInNewContext(
+ "let state='menu',overlayState='none',keydown;const keys=new Set();"+
+ "const canvas={};const document={body:{},addEventListener(name,fn){if(name==='keydown')keydown=fn}};"+
+ "class HTMLElement{};const counts={dash:0,emp:0,prism:0,chrono:0,pause:0};"+
+ "function dash(){counts.dash++}function useEMP(){counts.emp++}"+
+ "function usePrism(){counts.prism++}function useChrono(){counts.chrono++}"+
+ "function pause(){counts.pause++}"+
+ keyCode+"({keys,counts,dispatch:e=>keydown(e),setState:s=>state=s,setOverlay:s=>overlayState=s,body:document.body})"
+);
+const flightEvent=(code,repeat=false)=>({code,repeat,target:keyboard.body,preventDefault(){this.prevented=true}});
+keyboard.dispatch(flightEvent('KeyE'));
+keyboard.dispatch(flightEvent('ShiftLeft'));
+assert.equal(keyboard.counts.emp,0,'menu must not discharge EMP');
+assert.equal(keyboard.counts.dash,0,'menu must not activate dash');
+assert.equal(keyboard.keys.size,0,'menu shortcuts must not queue held flight controls');
+const menuArrow=flightEvent('ArrowDown');keyboard.dispatch(menuArrow);
+assert.equal(menuArrow.prevented,undefined,'menu navigation must not be blocked by flight controls');
+keyboard.setState('playing');
+const flightArrow=flightEvent('ArrowDown');keyboard.dispatch(flightArrow);
+assert.equal(flightArrow.prevented,true,'playing must still suppress page scrolling');
+keyboard.dispatch(flightEvent('KeyE'));keyboard.dispatch(flightEvent('KeyE',true));
+assert.equal(keyboard.counts.emp,1,'active EMP must work once per key press');
+keyboard.setState('paused');keyboard.setOverlay('pause');
+keyboard.dispatch(flightEvent('KeyE'));
+assert.equal(keyboard.counts.emp,1,'paused flight must not consume EMP');
+keyboard.dispatch(flightEvent('Escape'));
+assert.equal(keyboard.counts.pause,1,'Escape must still resume from pause overlay');
+
 console.log('CROWN_SAVE_SAFETY_PASS: scoreboard validation, date safety, achievements and backward-compatible progress');
