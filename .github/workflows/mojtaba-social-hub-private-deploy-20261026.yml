@@ -184,6 +184,7 @@ jobs:
           print('PERSONAL_STAFF_PROTECTED_ROUTE=PASS',flush=True)
           print('SOCIAL_AUTHENTICATED_DASHBOARD=PASS',flush=True)
           directory_path=reverse('mojtaba_official_channels')
+          test=Client(HTTP_HOST='mojplaywin.com')
           public=test.get(directory_path,secure=True)
           if public.status_code!=200 or b'Verified official channels' not in public.content:
               raise RuntimeError('Public vetted social directory not available')
