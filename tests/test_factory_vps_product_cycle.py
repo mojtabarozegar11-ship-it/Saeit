@@ -102,7 +102,7 @@ class FactoryVPSCycleTests(unittest.TestCase):
         self.assertEqual(result["new_distinct_products"],0)
         self.assertEqual(result["updated_existing_versions"],1)
         health=json.loads((self.output/"production-health.json").read_text())
-        self.assertEqual(health["new_distinct_product_ids_total"],3)
+        self.assertEqual(health["new_distinct_product_ids_total"],1)
         self.assertEqual(health["updated_existing_product_versions_total"],1)
 
     def test_cycle_builds_a_recipe_added_after_the_factory_code(self):
@@ -113,9 +113,10 @@ class FactoryVPSCycleTests(unittest.TestCase):
         result = cycle.run_cycle(self.db, self.output, self.recipes)
         self.assertEqual(result["status"], "ok")
         self.assertEqual(result["manufactured"], 1)
-        self.assertTrue((self.output / "digital-products" / "new_product_family" /
-                         "new_product_family-internal-qa.zip").is_file())
         state = json.loads((self.output / "production-state.json").read_text(encoding="utf-8"))
+        slots=json.loads((self.output/"quality-excellence/product-flow/active-slots/current.json").read_text())
+        self.assertEqual(len(slots["active"]),1)
+        self.assertIn("new_product_family",slots["waiting"])
         self.assertEqual(state["registered_recipe_count"], 4)
         self.assertEqual(state["token_usage"], 0)
 
@@ -221,6 +222,11 @@ class FactorySynthesisIntegrationTests(unittest.TestCase):
         self.assertEqual(first['new_recipe_count'],1)
         generated=self.output/'generated-product-recipes'
         recipe=next(p.name for p in generated.iterdir() if p.is_dir())
+        slot_path=self.output/'quality-excellence/product-flow/active-slots/current.json'
+        slots=json.loads(slot_path.read_text())
+        slots['active']=[{'recipe':recipe,'status':'active'}]
+        slots['waiting']=[]
+        slot_path.write_text(json.dumps(slots))
         source=generated/recipe
         make_legacy_source(source)
         maker=cycle.load('legacy_maker_for_upgrade',ROOT/'scripts/factory_product_maker.py')
@@ -270,7 +276,7 @@ class ProductionContinuityTests(unittest.TestCase):
     def test_unavailable_research_database_does_not_stop_independent_manufacturing(self):
         result=cycle.run_cycle(self.home/'unavailable.db',self.output,self.recipes)
         self.assertEqual(result['status'],'needs_rework')
-        self.assertEqual(result['manufactured'],3)
+        self.assertEqual(result['manufactured'],1)
         state=json.loads((self.output/'production-state.json').read_text())
         self.assertTrue(state['research_failures'])
         self.assertEqual(state['product_candidates_processed'],0)
