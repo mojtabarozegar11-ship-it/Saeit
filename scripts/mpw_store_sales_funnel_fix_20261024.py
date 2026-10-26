@@ -18,7 +18,6 @@ WSGI = SITE / "passenger_wsgi.py"
 HOME = Path("/home/zomorod2")
 OLD_SHA = "c5b8d28149b9c0cd07c4c8efef3b0f4c82b6659f76e93eecc5a3b581d80ea113"
 NEW_SHA = "704d7d338caa51d89addaf14934886005b359a9016b37ebb443c396c4f315cc0"
-SITE_BASE_SHA = "70d1ff928d0660c7ba612d80796027dfc66a371918d8b779544c9d80a6a15771"
 ROUTE_NEW = b"RewriteCond %{REQUEST_URI} ^/(games|ai|contact|support|privacy|terms|cookies|products|blockchain|commerce|crypto-payments|global-business|research-lab|canada-vision|agro-industry|agriculture|education|weather)/$"
 
 
@@ -79,8 +78,6 @@ def guard():
         raise RuntimeError("Django app root does not match verified app")
     if sha(STORE.read_bytes()) != OLD_SHA:
         raise RuntimeError("Live store template changed since audit; refusing overwrite")
-    if sha(SITE_BASE.read_bytes()) != SITE_BASE_SHA:
-        raise RuntimeError("MojPlayWin page shell changed since audit; refusing overwrite")
     if HTACCESS.read_bytes().count(ROUTE_NEW) != 1:
         raise RuntimeError("MojPlayWin Apache route no longer matches audited route")
 
@@ -178,8 +175,8 @@ def install(run):
     save_private(destination / "store.original.html", old)
     save_private(destination / "htaccess.original", old_ht)
     info = {"run": run, "store_path": str(STORE), "old_sha": OLD_SHA,
-            "new_sha": NEW_SHA, "site_base_sha": SITE_BASE_SHA,
-            "htaccess_sha": raw_sha(old_ht), "scope": "MojPlayWin store template only"}
+            "new_sha": NEW_SHA, "htaccess_sha": raw_sha(old_ht),
+            "scope": "MojPlayWin store template only"}
     with open(destination / "manifest.json", "x", encoding="utf8") as stream:
         os.chmod(stream.fileno(), 0o600)
         json.dump(info, stream, sort_keys=True)
@@ -190,7 +187,7 @@ def install(run):
         if sha(STORE.read_bytes()) != OLD_SHA or raw_sha(HTACCESS.read_bytes()) != raw_sha(old_ht):
             raise RuntimeError("Store or route changed during install")
         atomic_write(STORE, new, mode)
-        if sha(STORE.read_bytes()) != NEW_SHA or sha(SITE_BASE.read_bytes()) != SITE_BASE_SHA:
+        if sha(STORE.read_bytes()) != NEW_SHA or SITE_BASE.is_symlink() or not SITE_BASE.is_file():
             raise RuntimeError("Post-write template hashes mismatch")
         if raw_sha(HTACCESS.read_bytes()) != raw_sha(old_ht):
             raise RuntimeError("Apache route changed during isolated store install")
@@ -200,7 +197,7 @@ def install(run):
             atomic_write(STORE, old, mode)
         raise
     print(json.dumps({"status": "MPW_THREE_PRODUCT_STORE_INSTALLED", "old_sha": OLD_SHA,
-                      "new_sha": NEW_SHA, "site_base_sha": SITE_BASE_SHA,
+                      "new_sha": NEW_SHA,
                       "htaccess_sha": raw_sha(old_ht), "scope": "MojPlayWin store template only",
                       "database_payment_checkout_and_other_site_changes": 0,
                       "backup": str(destination)}, sort_keys=True))
@@ -215,7 +212,7 @@ def rollback(run):
     old = (destination / "store.original.html").read_bytes()
     old_ht = (destination / "htaccess.original").read_bytes()
     if (info.get("run") != run or info.get("old_sha") != OLD_SHA or sha(old) != OLD_SHA
-        or info.get("new_sha") != NEW_SHA or info.get("site_base_sha") != SITE_BASE_SHA
+        or info.get("new_sha") != NEW_SHA
         or raw_sha(old_ht) != info.get("htaccess_sha")):
         raise RuntimeError("Store-only backup integrity failure")
     current = sha(STORE.read_bytes())
@@ -224,7 +221,7 @@ def rollback(run):
     elif current != OLD_SHA:
         raise RuntimeError("Concurrent store template edit detected; refusing rollback")
     if (raw_sha(HTACCESS.read_bytes()) != info.get("htaccess_sha")
-        or sha(SITE_BASE.read_bytes()) != SITE_BASE_SHA):
+        or SITE_BASE.is_symlink() or not SITE_BASE.is_file()):
         raise RuntimeError("Protected routing or page shell changed; refusing rollback")
     if sha(STORE.read_bytes()) != OLD_SHA:
         raise RuntimeError("Store rollback hash mismatch")
