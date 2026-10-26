@@ -43,7 +43,7 @@ jobs:
           parser="$RUNNER_TEMP/mpw-pdf-parser"
           install -d -m 700 "$parser"
           python3 -m pip install --disable-pip-version-check --no-deps --require-hashes --target "$parser" -r .github/requirements/mpw-pdf-parser.txt
-          PYTHONPATH="$parser" python3 -c 'import pypdf; assert pypdf.__version__ == "5.4.0"'
+          PYTHONPATH="$parser" python3 -c 'import PyPDF2; assert PyPDF2.__version__ == "3.0.1"'
       - name: Verify exact live SKU selection, hash receipts and no storefront replacement
         shell: bash
         run: |
@@ -70,9 +70,9 @@ jobs:
           d="$RUNNER_TEMP/mpw-live-three-private-qa"
           install -d -m 700 "$d" "$d/parser"
           python3 -m pip install --disable-pip-version-check --no-deps --require-hashes --target "$d/parser" -r .github/requirements/mpw-pdf-parser.txt
-          PYTHONPATH="$d/parser" python3 -c 'import pypdf; assert pypdf.__version__ == "5.4.0"'
-          tar -C "$d/parser" -czf "$d/pypdf-5.4.0.tar.gz" pypdf pypdf-5.4.0.dist-info
-          sha256sum "$d/pypdf-5.4.0.tar.gz" > "$d/pypdf-5.4.0.tar.gz.sha256"
+          PYTHONPATH="$d/parser" python3 -c 'import PyPDF2; assert PyPDF2.__version__ == "3.0.1"'
+          tar -C "$d/parser" -czf "$d/PyPDF2-3.0.1.tar.gz" PyPDF2 PyPDF2-3.0.1.dist-info
+          sha256sum "$d/PyPDF2-3.0.1.tar.gz" > "$d/PyPDF2-3.0.1.tar.gz.sha256"
       - name: Establish pinned no-agent-forwarding GitHub to VPS to cPanel relay
         shell: bash
         env:
@@ -121,10 +121,10 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-live-three-private-qa"
-          archive="/home/githubops/factory-runtime/private/dependencies/.pypdf-5.4.0-$GITHUB_RUN_ID.tar.gz"
-          expected="$(cut -d' ' -f1 "$d/pypdf-5.4.0.tar.gz.sha256")"
+          archive="/home/githubops/factory-runtime/private/dependencies/.PyPDF2-3.0.1-$GITHUB_RUN_ID.tar.gz"
+          expected="$(cut -d' ' -f1 "$d/PyPDF2-3.0.1.tar.gz.sha256")"
           timeout 45s ssh -T -F "$d/config" saeit-vps "install -d -m 700 /home/githubops/factory-runtime/private/dependencies && test ! -e '$archive'"
-          scp -F "$d/config" "$d/pypdf-5.4.0.tar.gz" "saeit-vps:$archive"
+          scp -F "$d/config" "$d/PyPDF2-3.0.1.tar.gz" "saeit-vps:$archive"
           timeout 20s ssh -T -F "$d/config" saeit-vps "chmod 600 '$archive'"
           installer="$(cat <<'PY'
           import hashlib, os, pathlib, shutil, subprocess, sys, tarfile
@@ -133,18 +133,20 @@ jobs:
           run_id = sys.argv[3]
           if hashlib.sha256(archive.read_bytes()).hexdigest() != expected:
               raise SystemExit("PARSER_BUNDLE_HASH_MISMATCH")
-          dest = pathlib.Path("/home/githubops/factory-runtime/private/dependencies/pypdf-5.4.0")
+          dest = pathlib.Path("/home/githubops/factory-runtime/private/dependencies/PyPDF2-3.0.1")
           if dest.exists():
-              check = subprocess.run(["python3", "-c", "import pypdf;assert pypdf.__version__=='5.4.0'"],
+              check = subprocess.run(["python3", "-c", "import PyPDF2;assert PyPDF2.__version__=='3.0.1'"],
                   env={**os.environ, "PYTHONPATH": str(dest)}, check=False)
               if check.returncode:
                   raise SystemExit("EXISTING_PARSER_VERSION_INVALID")
               archive.unlink()
               print("PINNED_PDF_PARSER_REUSED=true")
               raise SystemExit(0)
-          temp = dest.parent / (".pypdf-5.4.0-" + run_id)
+          temp = dest.parent / (".PyPDF2-3.0.1-" + run_id)
           if temp.exists():
-              raise SystemExit("PARSER_TEMP_PATH_EXISTS")
+              if temp.is_symlink():
+                  raise SystemExit("PARSER_TEMP_PATH_UNSAFE")
+              shutil.rmtree(temp)
           temp.mkdir(mode=0o700)
           total = 0
           with tarfile.open(archive, "r:gz") as bundle:
@@ -153,7 +155,7 @@ jobs:
                   raise SystemExit("PARSER_ARCHIVE_MEMBER_LIMIT")
               for member in members:
                   p = pathlib.PurePosixPath(member.name)
-                  if p.is_absolute() or ".." in p.parts or not p.parts or p.parts[0] not in {"pypdf", "pypdf-5.4.0.dist-info"}:
+                  if p.is_absolute() or ".." in p.parts or not p.parts or p.parts[0] not in {"PyPDF2", "PyPDF2-3.0.1.dist-info"}:
                       raise SystemExit("PARSER_ARCHIVE_PATH_INVALID")
                   if not (member.isdir() or member.isfile()) or member.issym() or member.islnk():
                       raise SystemExit("PARSER_ARCHIVE_TYPE_INVALID")
@@ -173,7 +175,7 @@ jobs:
                       os.chmod(target, 0o600)
           for directory, subdirs, _ in os.walk(temp):
               os.chmod(directory, 0o700)
-          check = subprocess.run(["python3", "-c", "import pypdf;assert pypdf.__version__=='5.4.0'"],
+          check = subprocess.run(["python3", "-c", "import PyPDF2;assert PyPDF2.__version__=='3.0.1'"],
               env={**os.environ, "PYTHONPATH": str(temp)}, check=False)
           if check.returncode:
               raise SystemExit("INSTALLED_PARSER_VERSION_INVALID")
@@ -208,7 +210,7 @@ jobs:
           script="$(base64 -w0 scripts/mpw_three_sku_factory_quality1000_20261026.py)"
           test -n "$script"
           timeout 155s ssh -T -F "$d/config" saeit-vps \
-            "PYTHONPATH=\"\$HOME/factory-runtime/private/dependencies/pypdf-5.4.0\" python3 -c 'import base64;exec(base64.b64decode(\"$script\"))'"
+            "PYTHONPATH=\"\$HOME/factory-runtime/private/dependencies/PyPDF2-3.0.1\" python3 -c 'import base64;exec(base64.b64decode(\"$script\"))'"
           echo 'MPW_THREE_EXISTING_STORE_SKUS_FACTORY_QUALITY1000_REWORK_ADMITTED=PASS'
           echo 'MPW_PROFESSIONAL_QUALITY_1000_PENDING_EXTERNAL_EVIDENCE=true'
       - name: Confirm public storefront routes remain reachable
