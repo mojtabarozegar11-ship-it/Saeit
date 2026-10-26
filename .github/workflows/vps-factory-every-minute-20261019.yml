@@ -310,6 +310,40 @@ jobs:
               count=sum(p.is_file() and not p.is_symlink() and p.suffix==".json"
                         for p in d.iterdir()) if d.is_dir() and not d.is_symlink() else 0
               print("FACTORY_GATE_RECEIPTS "+label+"="+str(count))
+          # Exactly five current, stocked factory product families; never resurrect
+          # previously purged historical order IDs. Report factual release blockers.
+          stocks=private/"production-warehouse/stock-register.json"
+          candidate_rows=[]
+          if stocks.is_file() and not stocks.is_symlink():
+              stock=json.loads(stocks.read_text(encoding="utf8"))
+              if isinstance(stock.get("records"),list):
+                  by_product={}
+                  for record in stock["records"]:
+                      if not isinstance(record,dict):continue
+                      product=record.get("product_id")
+                      if isinstance(product,str) and re.fullmatch(r"[a-z0-9]+(?:_[a-z0-9]+)*",product):
+                          by_product.setdefault(product,[]).append(record)
+                  for product in sorted(by_product)[:5]:
+                      family=by_product[product]
+                      manifest=private/"digital-products"/product/"manufacturing_manifest.json"
+                      title=product
+                      if manifest.is_file() and not manifest.is_symlink():
+                          meta=json.loads(manifest.read_text(encoding="utf8"))
+                          title=str(meta.get("name",product))[:100]
+                      customer=private/"customer-packs"/product
+                      packs=0
+                      if customer.is_dir() and not customer.is_symlink():
+                          packs=sum((v/"candidate_manifest.json").is_file() and
+                                    not (v/"candidate_manifest.json").is_symlink()
+                                    for v in customer.iterdir() if v.is_dir() and not v.is_symlink())
+                      qa_work=private/"quality-excellence/production-workorders"/product/"current.json"
+                      evidence=private/"quality-excellence/rework"/product/"current.json"
+                      candidate_rows.append({"product_id":product,"title":title,
+                          "stock_versions":len(family),"customer_packs":packs,
+                          "qa_return":qa_work.is_file() and evidence.is_file(),
+                          "commercial_release":False,
+                          "latest_stock_evidence":str(family[-1].get("customer_archive_qa","unknown"))[:60]})
+          print("FACTORY_FIRST_FIVE_TARGETS="+json.dumps(candidate_rows,ensure_ascii=False,sort_keys=True))
           print("FACTORY_DIAGNOSTICS_READ_ONLY=true")
           for proc in Path("/proc").iterdir():
               if not proc.name.isdigit():continue
