@@ -23,7 +23,7 @@
 | Importance | 2 | Claim-level conflation is a substantive reporting problem. |
 | Clear aims | 2 | Explicit unit-of-analysis question. |
 | Literature search | 1 | New direct prior art, but the original eight were selected purposively without reconstructible historical database search. |
-| Referencing | 1 | 21 unique DOI entries; Lorite, Baroni, Elia and parts of the other methods remain source-access bounded. |
+| Referencing | 1 | 22 unique DOI entries; Lorite, Baroni, Elia and parts of the other methods remain source-access bounded. |
 | Scientific reasoning | 2 | Contrasts self-report vs instrument and adds a strong active comparator; directly acknowledges older adherence evaluation. |
 | Outcomes | 1 | No empirical checklist validation, only illustrative primary studies. |
 | **Total** | **9/12** | Diagnostic only. |
@@ -39,3 +39,9 @@
 - **No submission, Manuscript ID, editorial review, PR merge, fee, contract or live-site change.**
 
 **Technical next step:** produce an exact V5 Word with the 21 DOI source and this C34 review, then request substantive human review. Mechanical QA is not a scientific acceptance decision.
+
+## 26 October 2026 addendum — additional direct irrigation comparator (22nd DOI)
+
+A subsequent source check identified **Lagasio M et al. (2025), Remote Sensing 17(11):1855, DOI 10.3390/rs17111855**, *Integrating Advanced Sensor Technologies for Enhanced Agricultural Weather Forecasts and Irrigation Advisories: The MAGDA Project Approach*. The full publisher text compares model-derived irrigation requirements with irrigation quotas **actually applied under a traditional farm method** but explicitly says the methods are **not fully comparable**. This is another direct predecessor to broad advice-versus-practice comparison claims. The sensor/model validation in that study is **not** automatically validation of individual farmer receipt, adherence, calibrated water metering or an event-level causal impact. The new manuscript paragraph correctly preserves those boundaries.
+
+**Revised independent AI verdict remains MAJOR REVISION, SANRA-style diagnostic 9/12 (unchanged):** adding a competitor improves contextual referencing but does not supply missing experimental validation, full-text evidence for other cases, author intellectual approval or a verified journal-level contribution. This addendum is a new AI-only critical pass, not external human review or a journal editorial decision. No Manuscript ID or publication is claimed.
