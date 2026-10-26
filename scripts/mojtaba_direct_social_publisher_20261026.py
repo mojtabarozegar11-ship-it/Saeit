@@ -143,6 +143,19 @@ def publish(job: dict, *, ledger_path, environ=None, transport=None) -> dict:
     path = Path(ledger_path)
     if not path.parent.is_dir():
         raise PublicationBlocked("ledger directory must already exist")
+    if path.parent.stat().st_mode & 0o077:
+        raise PublicationBlocked("ledger directory must deny group/world access")
+    if path.is_symlink():
+        raise PublicationBlocked("ledger cannot be a symlink")
+    if path.exists():
+        if not path.is_file() or path.stat().st_mode & 0o077:
+            raise PublicationBlocked("existing ledger must be a private regular file")
+    else:
+        try:
+            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+            os.close(fd)
+        except FileExistsError:
+            raise PublicationBlocked("ledger appeared during preflight") from None
     conn = sqlite3.connect(str(path), timeout=15, isolation_level=None)
     try:
         conn.execute("PRAGMA busy_timeout=15000")
