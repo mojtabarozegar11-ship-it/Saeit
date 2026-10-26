@@ -43,9 +43,12 @@ const assert=require('node:assert/strict');
    await page.evaluate(()=>window.RamadanWarDebug.spawnTestEnemy());
    await page.evaluate(()=>{window.RamadanWarDebug.fire();window.RamadanWarDebug.rocket();window.RamadanWarDebug.drone()});
    await page.evaluate(()=>{window.RamadanWarDebug.spawnTestPickup('ammo');window.RamadanWarDebug.tick(.04)});state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.shots,1);assert.equal(state.rockets,11);assert.equal(state.drones,2);assert.equal(state.ammo,8,'ammo pickup restores the magazine');
+   await page.locator('#soundToggle').click();assert.equal(await page.locator('#soundToggle').getAttribute('aria-pressed'),'false');
    await page.locator('#pause').click();await page.locator('#pausePanel:not(.hidden)').waitFor();await page.reload({waitUntil:'domcontentloaded'});
+   assert.equal(await page.locator('#soundHome').getAttribute('aria-pressed'),'false','sound preference survives reload');
    assert.match(await page.locator('#start').innerText(),/ادامه/);
    await page.locator('#start').click();
+   await page.locator('#soundToggle').click();assert.equal(await page.locator('#soundToggle').getAttribute('aria-pressed'),'true');
    state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.stage,0);assert.equal(state.rockets,11);assert.equal(state.drones,2);assert.equal(state.mode,'game');
 
    // Exercise the actual objective interactions on the local release candidate.
