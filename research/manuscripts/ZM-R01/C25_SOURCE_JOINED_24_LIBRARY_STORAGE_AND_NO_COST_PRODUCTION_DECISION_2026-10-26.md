@@ -22,6 +22,14 @@ Official GitHub documentation, checked 26 October 2026:
 
 **Go/no-go decision:** **NO-GO for downloading all 48 FASTQ files onto one standard runner or the nearly full VPS.** Even the largest *compressed* single pair consumes about half of the runner's nominal disk before reference index, temporary extraction, alignments, BAM, sort buffers and operating-system use. Thus a simple per-sample `download -> decompress -> align -> BAM` pipeline cannot be declared feasible on 14 GB without a measured preflight and streaming design. There is no scientific justification for a paid runner or a VPS transfer at this stage.
 
+## Actual free-runner measurement — correction to nominal-disk assumption
+
+The new source-joined, **no-download** executable gate was run on an actual `ubuntu-latest` public-repository runner: [run 40266561580](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40266561580), **completed/success**, [artifact 12626676170](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40266561580/artifacts/12626676170). It independently verified the same 24 joins, 8×3 design, 48 MD5 **strings**, 149,540,873,452 compressed bytes and 7,232,544,296-byte maximum pair, while downloading **zero** FASTQ bytes. The runner reported **91,628,306,432 bytes free on `/`** at execution time (approximately **85.33 GiB**). This is **larger than the documented standard-runner nominal 14 GB SSD specification**. Both observations must be preserved rather than assuming every runner has exactly 14 GB or 85 GiB. The available space is ephemeral and not a contractual guarantee for subsequent runs.
+
+**Updated capacity decision:** a single paired library *may* fit in the measured free space, but index, decompression, scratch peak, strandedness, multimapping and actual MD5 still require validation. All 48 compressed FASTQs **still exceed** the measured free space and must not be staged together. No-cost streamed/bounded single-library processing remains a **conditional option**, not a completed count.
+
+The first attempt [run 40266494653](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40266494653) **failed** because the new script assumed an ENA `fastq1_ftp` column; the actual verified manifest uses `fastq1_url` with HTTPS. The code was corrected in commit `87812c2184d5001cb594fff5dc30d9ab6451c545` and the subsequent run **passed**. The failure is not counted as a successful scientific action.
+
 ## Required non-destructive next execution
 
 1. **Reference first:** verify from Milec original Methods and primary FASTA/annotation records whether its `RefSeq v2.0 (EnsemblPlants)` means exactly the same assembly/transcript/GTF release as the selected download. Record FASTA/GTF source SHA256 and gene-ID namespace. **Do not equate v1.0, v2.0 and v2.1.**
