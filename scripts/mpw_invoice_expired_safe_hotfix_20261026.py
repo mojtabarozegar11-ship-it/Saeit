@@ -51,7 +51,7 @@ def transform(text):
 
 
 def selftest():
-    fake = "def _show_invoice(request, invoice_id):\n" + OLD + "\n    render_one_tap_invoice(invoice,\n"
+    fake = "def _show_invoice(request, invoice_id):\n" + OLD + "\n    render_one_tap_invoice(invoice,\n        status_path=\"x\")\n"
     new, changed = transform(fake)
     assert changed and "raise Http404(\"This invoice is no longer payable\")" not in new
     assert "Do not send TRX to an expired quote" in new
