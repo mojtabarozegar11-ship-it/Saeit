@@ -3,7 +3,7 @@
 **Decision: continue MOJ1 V2. Do not deploy a second token.**
 This file is a working internal analysis and does not authorize a token sale, Mainnet
 transaction, wallet signature, payout, DEX listing or liquidity provision.
-The immutable audit reference \`4411b28325be44c54d7917b4c67786348521b6a9\`
+The immutable audit reference `4411b28325be44c54d7917b4c67786348521b6a9`
 is not changed by this branch.
 
 ## Verified repository context and constraints
@@ -44,7 +44,7 @@ severe slippage. Never publish a claim of guaranteed liquidity or returns.
 
 The V2 constant-product calculator is strictly offline and hypothetical:
 
-\`\`\`sh
+```sh
 cd experiments/moj1-pilot
 node tools/liquidity-scenario.mjs \
   --token-reserve 15000000000 \
@@ -52,7 +52,7 @@ node tools/liquidity-scenario.mjs \
   --sell-tokens 1000000 \
   --fee-bps 30
 node --test tests/liquidity-scenario.test.mjs
-\`\`\`
+```
 
 These are **illustrative invented reserves**, not a discovered existing DEX pool,
 live token price, fund balance, funding plan, or intended allocation release.
