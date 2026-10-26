@@ -26,7 +26,9 @@ ROOT=ACCOUNT/"mojplaywin.com"
 HOME=ROOT/"design-preview-20261017/production-home-20261017.html"
 SITEMAP=ROOT/"design-preview-20261017/_mpw_sitemap_three_indexable_20261017.php"
 BASE=ROOT/"mpw-editorial"
-GUIDES=BASE/"field-guides"
+OLD=BASE/"field-guides/20261023"
+OLD_CONFIG=OLD/".htaccess"
+GUIDES=BASE/"field-guides/original-ten"
 DIRECTORY=BASE/"site-directory"
 NAV_CSS=BASE/"revenue/assets/mpw-one-shell-20261026.css"
 STYLESHEET=GUIDES/"assets/mpw-field-guides-20261026.css"
@@ -88,7 +90,7 @@ HOME_STYLE="""<style id="mpw-home-unburied-guides-css-20261026">
 def fail(msg):raise RuntimeError(msg)
 def sha(b):return hashlib.sha256(b).hexdigest()
 def clean(s):return re.sub(r"\s+"," ",html.unescape(re.sub(r"<[^>]+>"," ",s))).strip()
-def destination(slug):return "/mpw-editorial/field-guides/"+slug+"/"
+def destination(slug):return "/mpw-editorial/field-guides/original-ten/"+slug+"/"
 def title_and_desc(inner):
     m=re.search(r"<h3>([\s\S]*?)</h3>",inner,re.I)
     p=re.search(r"<p>([\s\S]*?)</p>",inner,re.I)
@@ -146,11 +148,11 @@ def doc_shell(title,description,url,header,content):
         '<meta property="og:description" content="'+escape(description[:200])+'">'
         '<meta property="og:type" content="article">'
         '<link rel="stylesheet" href="/mpw-editorial/revenue/assets/mpw-one-shell-20261026.css">'
-        '<link rel="stylesheet" href="/mpw-editorial/field-guides/assets/mpw-field-guides-20261026.css">'
+        '<link rel="stylesheet" href="/mpw-editorial/field-guides/original-ten/assets/mpw-field-guides-20261026.css">'
         '</head><body class="mpw-field-guide-site"><a class="fg-skip" href="#content">Skip to content</a>'
         +header+content+
         '<footer class="fg-footer" aria-label="MojPlayWin site navigation">'
-        '<a href="/">Home</a><a href="/mpw-editorial/field-guides/">Original guides</a>'
+        '<a href="/">Home</a><a href="/mpw-editorial/field-guides/original-ten/">Original guides</a>'
         '<a href="/mpw-editorial/site-directory/">Site directory</a>'
         '<a href="/services/">Services</a><a href="/store/">Store</a>'
         '<a href="/contact/">Contact</a></footer></body></html>')
@@ -167,10 +169,10 @@ def render_article(slug,inner,header):
     doc=doc.replace("</details>","</section>",1)
     doc=doc.replace("<h4>","<h2>").replace("</h4>","</h2>")
     content=('<main id="content" class="fg-main"><nav class="fg-breadcrumb" aria-label="Breadcrumb">'
-             '<a href="/">Home</a> / <a href="/mpw-editorial/field-guides/">Original guides</a>'
+             '<a href="/">Home</a> / <a href="/mpw-editorial/field-guides/original-ten/">Original guides</a>'
              ' / <span>'+escape(title)+'</span></nav>'
              '<article class="fg-article" data-mpw-full-guide="20261026">'+doc+'</article>'
-             '<div class="fg-next"><a href="/mpw-editorial/field-guides/">Browse all ten guides</a>'
+             '<div class="fg-next"><a href="/mpw-editorial/field-guides/original-ten/">Browse all ten guides</a>'
              '<a href="/mpw-editorial/site-directory/">Explore all site pages</a></div></main>')
     return doc_shell(title,description,destination(slug),header,content).encode("utf-8")
 
@@ -190,9 +192,10 @@ def render_guide_hub(cards,header):
         ' web services, international collaboration and agricultural decision-making.'
         ' Each contains a practical method, example and quality checklist.</p>'
         '<div class="fg-grid">'+''.join(listing)+'</div>'
+        '<p><a href="/mpw-editorial/field-guides/20261023/index.html">Browse the 50 existing technical field guides</a></p>'
         '<p><a href="/mpw-editorial/site-directory/">Browse all other MojPlayWin pages</a></p></main>')
     return doc_shell("Ten original field guides","Ten complete MojPlayWin practical learning guides.",
-                     "/mpw-editorial/field-guides/",header,content).encode("utf-8")
+                     "/mpw-editorial/field-guides/original-ten/",header,content).encode("utf-8")
 
 def render_site_directory(section,header):
     section=section.replace('<h2 id="mw-directory-title">','<h1 id="mw-directory-title">',1)
@@ -200,7 +203,10 @@ def render_site_directory(section,header):
     if section.count('<h1')!=1:fail("Site-directory heading duplication")
     content=('<main id="content" class="fg-main fg-index-page"><nav class="fg-breadcrumb" aria-label="Breadcrumb">'
              '<a href="/">Home</a> / Site directory</nav>'+section+
-             '<p><a href="/mpw-editorial/field-guides/">Ten original field guides</a></p></main>')
+             '<p><a href="/mpw-editorial/field-guides/original-ten/">Ten original field guides</a></p>'
+             '<section class="fg-card"><h2>Fifty existing Field Studio technical guides</h2>'
+             '<p>Browse the preserved 2026-10-23 collection of 50 independently published guides, with a related browser game.</p>'
+             '<p><a href="/mpw-editorial/field-guides/20261023/index.html">Open the original Field Studio collection</a></p></section></main>')
     return doc_shell("All MojPlayWin pages","Browse independent MojPlayWin pages and specialist sections.",
                      "/mpw-editorial/site-directory/",header,content).encode("utf-8")
 
@@ -219,7 +225,8 @@ def patch_home(home,cards,spans):
          '<p>Each original learning guide now has its own complete page,'
          ' including practical methods, examples and checklists.</p>'
          '<div class="mpw-unburied-grid">'+''.join(chunks)+'</div>'
-         '<p><a href="/mpw-editorial/field-guides/">Open the original field-guide library</a></p></section>')
+         '<p><a href="/mpw-editorial/field-guides/original-ten/">Open the original field-guide library</a></p>'
+         '<p><a href="/mpw-editorial/field-guides/20261023/index.html">Explore 50 earlier Field Studio guides</a></p></section>')
     directory=('<section class="mpw-unburied-section" id="site-directory" '
              'aria-labelledby="mpw-home-page-directory-title">'
              '<h2 id="mpw-home-page-directory-title">All MojPlayWin pages</h2>'
@@ -235,29 +242,46 @@ def patch_home(home,cards,spans):
     if after.count("</head>")!=1:fail("Unexpected homepage head")
     return after.replace("</head>",HOME_STYLE+"</head>",1).encode("utf-8")
 
-def patch_sitemap(original):
+def patch_sitemap(original,old_urls):
     src=original.decode("utf-8")
     if SITEMAP_MARK in src:fail("Guide sitemap already registered")
     if src.count(PREVIOUS_MAP)!=1:fail("Sitemap registration anchor differs")
-    urls=["/mpw-editorial/field-guides/","/mpw-editorial/site-directory/"]
+    urls=["/mpw-editorial/field-guides/original-ten/","/mpw-editorial/site-directory/"]
     urls += [destination(slug) for slug in SLUGS]
+    urls += old_urls
+    if len(urls)!=64 or len(set(urls))!=64:fail("Expected 12 new plus 52 legacy indexable URLs")
     insert='\n'+SITEMAP_MARK+'\n$paths = array_merge($paths, ['+','.join("'"+u+"'" for u in urls)+']);'
     newer=src.replace(PREVIOUS_MAP,PREVIOUS_MAP+insert,1)
     if newer.count(SITEMAP_MARK)!=1:fail("New sitemap marker not unique")
     return newer.encode("utf-8"),urls
 
+def old_collection_urls():
+    release=json.loads((OLD/"release.json").read_text("utf-8"))
+    files=release.get("files_sha256",{})
+    keys=sorted(key for key in files if re.fullmatch(r"guides/[a-z0-9-]+/index\.html",key))
+    if release.get("guide_count")!=50 or len(keys)!=50:
+        fail("Existing 50-guide collection manifest differs")
+    for relative in keys+["index.html","prism-relay/index.html"]:
+        target=OLD/relative
+        if not target.is_file() or target.is_symlink():fail("Old guide missing: "+relative)
+        if sha(target.read_bytes())!=files[relative]:fail("Old field-guide original hash changed: "+relative)
+    return ["/mpw-editorial/field-guides/20261023/"+p for p in ["index.html","prism-relay/index.html"]+keys]
+
 def paths_for_new_files():
-    expected={GUIDES/"index.html",GUIDES/".htaccess",STYLESHEET,DIRECTORY/"index.html",DIRECTORY/".htaccess"}
+    expected={GUIDES/"index.html",GUIDES/".htaccess",STYLESHEET,DIRECTORY/"index.html",DIRECTORY/".htaccess",OLD_CONFIG}
     expected.update(GUIDES/slug/"index.html" for slug in SLUGS)
     return expected
 
 def verify_root():
     if ROOT.is_symlink() or ROOT.resolve()!=ROOT or ROOT.name!="mojplaywin.com":fail("Wrong site root")
-    for path in (ROOT,BASE,HOME.parent,SITEMAP.parent,NAV_CSS.parent):
+    for path in (ROOT,BASE,OLD,HOME.parent,SITEMAP.parent,NAV_CSS.parent):
         if not path.is_dir() or path.is_symlink():fail("Unsafe main site directory "+str(path))
     for path in (HOME,SITEMAP,NAV_CSS,ROOT/".htaccess"):
         if not path.is_file() or path.is_symlink():fail("Missing main site source "+str(path))
     if not (120000<len(HOME.read_bytes())<850000):fail("Homepage size drift")
+    if OLD_CONFIG.exists() or OLD_CONFIG.is_symlink():fail("Old guide collection has existing local routing; will not overwrite")
+    for p in (OLD/"index.html",OLD/"release.json"):
+        if not p.is_file() or p.is_symlink():fail("Original 50-guide collection unavailable")
     if ".mpw-unified-shell" not in NAV_CSS.read_text("utf-8","replace"):
         fail("Unified navigation stylesheet is unavailable")
     for path in (GUIDES,DIRECTORY):
@@ -286,7 +310,7 @@ def php_lint(blob):
     finally:
         if os.path.exists(name):os.unlink(name)
 
-def planned(home_bytes,map_bytes):
+def planned(home_bytes,map_bytes,old_urls):
     home=home_bytes.decode("utf-8")
     s0,e0,s1,e1,cards,directory_section=parse_home(home)
     head=header_from_home(home)
@@ -295,14 +319,15 @@ def planned(home_bytes,map_bytes):
     output[DIRECTORY/"index.html"]=render_site_directory(directory_section,head)
     output[GUIDES/".htaccess"]=b"DirectoryIndex index.html\n"
     output[DIRECTORY/".htaccess"]=b"DirectoryIndex index.html\n"
+    output[OLD_CONFIG]=b"DirectoryIndex index.html\n"
     output[STYLESHEET]=STYLE.encode("utf-8")
     for identity,inner in cards:
         slug=identity.removeprefix("home-guide-")
         output[GUIDES/slug/"index.html"]=render_article(slug,inner,head)
     if set(output)!=paths_for_new_files():fail("Unexpected new file inventory")
     newhome=patch_home(home,cards,(s0,e0,s1,e1))
-    newmap,urls=patch_sitemap(map_bytes)
-    if len(urls)!=12:fail("Expected twelve distinct indexable URLs")
+    newmap,urls=patch_sitemap(map_bytes,old_urls)
+    if len(urls)!=64:fail("Expected 64 new-and-existing indexable URLs")
     for p in (GUIDES/"index.html",DIRECTORY/"index.html",*(GUIDES/s/"index.html" for s in SLUGS)):
         doc=output[p].decode("utf-8")
         if (doc.count("<h1")!=1 or doc.count('rel="canonical"')!=1
@@ -323,7 +348,8 @@ def cleanup_created(created,dirs,output):
 def publish(run):
     verify_root()
     before_home=HOME.read_bytes();before_map=SITEMAP.read_bytes()
-    output,after_home,after_map,urls=planned(before_home,before_map)
+    old_urls=old_collection_urls()
+    output,after_home,after_map,urls=planned(before_home,before_map,old_urls)
     php_lint(after_map)
     backup=backup_dir(run)
     if backup.exists() or backup.is_symlink():fail("Existing backup run")
@@ -399,7 +425,7 @@ def selftest():
     assert len(SLUGS)==10 and len(set(SLUGS))==10
     f='<details class="mpw-content-fold" data-mpw-fold="sample"><details>abc</details></details>'
     assert span_balanced_details(f,"sample")[:2]==(0,len(f))
-    assert len(paths_for_new_files())==15
+    assert len(paths_for_new_files())==16
     assert b"DirectoryIndex index.html" in b"DirectoryIndex index.html\n"
     print("MPW_GUIDE_EXTRACTION_SELFTEST_OK")
 
