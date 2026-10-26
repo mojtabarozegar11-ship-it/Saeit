@@ -18,6 +18,8 @@ on:
       - 'scripts/factory_agri200_source_grounded_v003_qc_20261023.py'
       - 'tests/test_factory_strict_serial_fullcycle_v1.py'
       - 'tests/test_factory_strict_serial_installer_config_only.py'
+      - 'scripts/factory_vps_current_health_readonly_20261026.py'
+      - 'tests/test_factory_vps_current_health_readonly.py'
       - 'tests/test_factory_strict_serial_scope_v1.py'
       - 'tests/test_factory_strict_serial_cron_partition_v1.py'
       - 'tests/test_factory_sequential_scientific_casework_v1.py'
@@ -43,6 +45,8 @@ on:
       - 'scripts/factory_agri200_source_grounded_v003_qc_20261023.py'
       - 'tests/test_factory_strict_serial_fullcycle_v1.py'
       - 'tests/test_factory_strict_serial_installer_config_only.py'
+      - 'scripts/factory_vps_current_health_readonly_20261026.py'
+      - 'tests/test_factory_vps_current_health_readonly.py'
       - 'tests/test_factory_strict_serial_scope_v1.py'
       - 'tests/test_factory_strict_serial_cron_partition_v1.py'
       - 'tests/test_factory_sequential_scientific_casework_v1.py'
@@ -65,6 +69,7 @@ jobs:
           set -euo pipefail
           python3 -B -m unittest discover -s tests -p test_factory_strict_serial_fullcycle_v1.py -v
           python3 -B -m unittest discover -s tests -p test_factory_strict_serial_installer_config_only.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_vps_current_health_readonly.py -v
           python3 -B -m unittest discover -s tests -p test_factory_strict_serial_scope_v1.py -v
           python3 -B -m unittest discover -s tests -p test_factory_strict_serial_cron_partition_v1.py -v
           python3 -B -m unittest discover -s tests -p test_factory_sequential_scientific_casework_v1.py -v
