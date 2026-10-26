@@ -37,7 +37,7 @@ def prepare(original: str) -> str:
     if "free_digital_products WHERE enabled=1" not in original:
         raise RuntimeError("FREE_PRODUCTS_CONTRACT_MISSING")
     if "پرداخت بانک شهر" not in original:
-        raise RuntimeError("BANK_SH AHR_NOTICE_MISSING".replace(" ", ""))
+        raise RuntimeError("BANK_SHAHR_NOTICE_MISSING")
     result = swap_once(original,
         "header('X-Content-Type-Options: nosniff');",
         "header('X-Content-Type-Options: nosniff');\n"
@@ -45,7 +45,7 @@ def prepare(original: str) -> str:
         "header('X-Frame-Options: DENY');\n"
         "header('Referrer-Policy: strict-origin-when-cross-origin');\n"
         "header('Permissions-Policy: camera=(), microphone=(), geolocation=()');\n"
-        "header(\\"Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'\\");")
+        "header(\"Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'\");")
     result = swap_once(result,
         '<link rel="icon" href="/favicon.ico">',
         '<link rel="icon" href="/favicon.ico"><link rel="canonical" href="https://zomorodmelal.ir/store/"><meta property="og:type" content="website"><meta property="og:locale" content="fa_IR"><meta property="og:url" content="https://zomorodmelal.ir/store/">')
