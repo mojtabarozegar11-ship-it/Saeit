@@ -159,6 +159,15 @@ jobs:
           from django.test import Client
           from django.urls import reverse
           from social_hub.portal import _db
+          from social_hub.credential_vault import default_private_vault_path
+          from social_hub.site_config import PRIVATE_DB
+          from pathlib import Path
+          safe_vault=Path(default_private_vault_path())
+          if safe_vault.parent != Path(PRIVATE_DB).parent or safe_vault.name != 'provider-api-vault.json':
+              raise RuntimeError('Unexpected personal API vault directory')
+          if safe_vault.exists() and (safe_vault.is_symlink() or safe_vault.stat().st_mode & 0o077):
+              raise RuntimeError('Unsafe private provider API credential file')
+          print('PERSONAL_API_CREDENTIAL_DEFAULT_PRIVATE_PATH=PASS',flush=True)
           db=_db()
           try:
               summary=db.summary()
