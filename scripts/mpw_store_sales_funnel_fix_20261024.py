@@ -86,35 +86,22 @@ def patch_page_shell(data):
     text = data.decode("utf8")
     if "{% block og_title %}" in text or "{% block twitter_title %}" in text:
         raise RuntimeError("Page shell already contains SEO override blocks")
-    def wrap(pattern, block, expression):
-        nonlocal text
-        tag_name, attribute, value = pattern
-        found = [m for m in re.finditer(r"<meta\b[^>]*>", text, re.I)
-                 if re.search(r"\b" + attribute + r"\s*=\s*(['\"])" + re.escape(value) + r"\1", m.group(0), re.I)]
-        if len(found) != 1:
-            raise RuntimeError("Expected exactly one existing " + block + " meta tag")
-        match = found[0]
-        replacement = ('<meta ' + attribute + '="' + value + '" content="{% block '
-                       + block + ' %}' + expression + '{% endblock %}">')
-        text = text[:match.start()] + replacement + text[match.end():]
+    meta_tags = list(re.finditer(r"<meta\b[^>]*>", text, re.I))
+    og_type = [m for m in meta_tags if re.search(r"\bproperty\s*=\s*(['\"])og:type\1", m.group(0), re.I)]
+    styles = list(re.finditer(r"<link\b[^>]*rel\s*=\s*(['\"])stylesheet\1[^>]*>", text, re.I))
+    if len(og_type) != 1 or len(styles) < 1 or og_type[0].start() >= styles[0].start():
+        raise RuntimeError("Could not safely locate the shared social-metadata section")
     title_default = "{{ section_title|default:page.title|default:'MojPlayWin | Research, Games & Learning' }}"
     description_default = ("{{ section_lead|default:page.body|striptags|truncatechars:155|"
                            "default:'Original games, practical research, learning and digital products.' }}")
-    wrap(("meta", "property", "og:title"), "og_title", title_default)
-    twitter_title = title_default
-    wrap(("meta", "property", "og:description"), "og_description", description_default)
-    twitter_description = description_default
-    card = wrap(("meta", "name", "twitter:card"), "twitter_card", "summary_large_image")
-    twitter = ('<meta name="twitter:title" content="{% block twitter_title %}' + twitter_title + '{% endblock %}">'
-               '<meta name="twitter:description" content="{% block twitter_description %}' + twitter_description + '{% endblock %}">')
-    card_tags = [m for m in re.finditer(r"<meta\b[^>]*>", text, re.I)
-                 if re.search(r"\bname\s*=\s*(['\"])twitter:card\1", m.group(0), re.I)]
-    if len(card_tags) != 1:
-        raise RuntimeError("Could not locate the shared Twitter card meta tag")
-    position = card_tags[0].end()
-    text = text[:position] + twitter + text[position:]
-    if text.count('name="twitter:title"') != 1 or text.count('name="twitter:description"') != 1:
-        raise RuntimeError("Could not add the shared Twitter metadata blocks")
+    metadata = ('<meta property="og:type" content="website"><meta property="og:site_name" content="MojPlayWin">\n'
+                '<meta property="og:title" content="{% block og_title %}' + title_default + '{% endblock %}">\n'
+                '<meta property="og:description" content="{% block og_description %}' + description_default + '{% endblock %}">\n'
+                '<meta property="og:url" content="https://mojplaywin.com{{ request.path }}">\n'
+                '<meta name="twitter:card" content="{% block twitter_card %}summary_large_image{% endblock %}">\n'
+                '<meta name="twitter:title" content="{% block twitter_title %}' + title_default + '{% endblock %}">\n'
+                '<meta name="twitter:description" content="{% block twitter_description %}' + description_default + '{% endblock %}">\n')
+    text = text[:og_type[0].start()] + metadata + text[styles[0].start():]
     return text.encode("utf8")
 
 
