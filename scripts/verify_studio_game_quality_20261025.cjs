@@ -155,6 +155,7 @@ assert.ok(!cakeNodes['#cakepreview'].innerHTML.includes('javascript'),'tampered 
 assert.ok(!cakeNodes['#cakepreview'].innerHTML.includes('<script>'),'tampered greeting must be rejected');
  // Customer orders require all four attributes, and the same order cannot award points twice.
  savedCake.delete('taniya-cake-design-v1'); // The previous tamper test deliberately stored 12 candles.
+ savedCake.delete('taniya-cake-orders-v1'); // Begin the deterministic order challenge with fresh progress.
  vm.runInNewContext(cake+cakeUI+'mountCake();',{...cakeSandbox,Math:Object.assign(Object.create(Math),{random:()=>0})});
  assert.ok(cakeMarkup.includes('Customer order:'),'cake challenge must display a customer specification');
  assert.ok(cakeMarkup.includes('Orders completed: 0'),'new session starts with no completed orders');
@@ -164,5 +165,27 @@ assert.ok(!cakeNodes['#cakepreview'].innerHTML.includes('<script>'),'tampered gr
  assert.ok(cakeMarkup.includes('Orders completed: 1'),'checking a completed order must not award twice');
  cakeNodes['[data-action="cake-order"]'].onclick();
  assert.ok(cakeMarkup.includes('Customer order:'),'new order must remain visible and playable');
+
+// Customer order completion is durable and cannot be re-awarded after a remount.
+const orderStorage=new Map();
+const orderSandbox={...cakeSandbox,localStorage:{
+  getItem:key=>orderStorage.get(key)||null,
+  setItem:(key,value)=>orderStorage.set(key,value)
+},Math:Object.assign(Object.create(Math),{random:()=>0})};
+vm.runInNewContext(cake+cakeUI+'mountCake();',orderSandbox);
+cakeNodes['[data-action="cake-check"]'].onclick();
+assert.ok(cakeMarkup.includes('Orders completed: 1'),'first valid order should earn one completion');
+assert.ok(orderStorage.has('taniya-cake-orders-v1'),'completed order must persist');
+vm.runInNewContext(cake+cakeUI+'mountCake();',orderSandbox);
+assert.ok(cakeMarkup.includes('Orders completed: 1'),'order count must survive a new session');
+cakeNodes['[data-action="cake-check"]'].onclick();
+assert.ok(cakeMarkup.includes('Orders completed: 1'),'reloading cannot award the same order twice');
+orderStorage.set('taniya-cake-orders-v1',JSON.stringify({
+ ordersCompleted:999999,orderFulfilled:true,
+ order:{icing:'<script>',topping:'🍓',candles:-1,greeting:'<svg>'}
+}));
+vm.runInNewContext(cake+cakeUI+'mountCake();',orderSandbox);
+assert.ok(cakeMarkup.includes('Orders completed: 0'),'forged order progress must be discarded');
+assert.ok(!cakeMarkup.includes('<script>'),'untrusted order markup must not be rendered');
 
 console.log('GAME_QUALITY_REGRESSION_PASS: Raham runner, Taniya cake SVG, Prism progress, three JS parsers');
