@@ -142,6 +142,10 @@ jobs:
                   print("MPW_TRIAL_STORE_ANCHORS="+json.dumps({"old_catalog_anchor_count":src.count("<!-- MPW_TWO_BOOKS_PUBLIC_CATALOG_V1_START -->"),"atelier_marker":src.count("mpw-atelier-discovery-20261025"),"existing_779_links":src.count("/store/product/779/"),"length":len(src)}))
               else:
                   print("MPW_TRIAL_SETTINGS_LINES="+json.dumps([line.strip() for line in src.splitlines() if "MPW_TRX_PUBLIC_PRODUCT_IDS" in line][:5]))
+          template=Path("/home/zomorod2/Saeit-staging/core/templates/brands/mojplaywin/product.html")
+          if template.is_file() and not template.is_symlink():
+              lines=template.read_text(errors="replace").splitlines()
+              print("MPW_TRIAL_779_TEMPLATE_VARIABLES="+json.dumps([{"line":i+1,"source":line[:320]} for i,line in enumerate(lines) if ("metadata" in line or "summary" in line or "checkout" in line or "product." in line)][:85]))
           PY
       - name: Release verified owner-owned 3-cent trial in three isolated MojPlayWin files
         id: scoped_release
