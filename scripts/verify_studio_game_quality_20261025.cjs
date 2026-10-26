@@ -165,4 +165,25 @@ assert.ok(!cakeNodes['#cakepreview'].innerHTML.includes('<script>'),'tampered gr
  cakeNodes['[data-action="cake-order"]'].onclick();
  assert.ok(cakeMarkup.includes('Customer order:'),'new order must remain visible and playable');
 
+// An untrusted cart cannot inject HTML, forge prices or crash the entire game studio.
+const cartLoader=between(rah,'function loadCart(){','let toastTimer;');
+const catalog=[{name:'Safe game art',price:12.5,emoji:'🎨',cat:'digital'}];
+const loadCartCase=storage=>vm.runInNewContext(
+  'const products='+JSON.stringify(catalog)+';'+cartLoader+'cart',
+  {localStorage:storage,JSON,Number}
+);
+const forgedCart=loadCartCase({getItem(){return JSON.stringify([
+  {name:'Safe game art',price:0.01,emoji:'<img onerror=alert(1)>',qty:2},
+  {name:'<script>alert(1)</script>',price:0,qty:999}
+])}});
+assert.equal(forgedCart.length,1,'unrecognized stored products must be dropped');
+assert.equal(forgedCart[0].price,12.5,'stored price must not override catalog price');
+assert.equal(forgedCart[0].qty,2,'legitimate cart quantity must survive');
+assert.equal(forgedCart[0].emoji,'🎨','stored HTML must never enter rendered cart');
+assert.equal(loadCartCase({getItem(){return '{broken'} }).length,0,'corrupt JSON must not crash the studio');
+assert.equal(loadCartCase({getItem(){throw Error('SecurityError')}}).length,0,'private browsing must not crash the studio');
+assert.equal(loadCartCase({getItem(){return JSON.stringify([{name:'Safe game art',qty:999999}])}})[0].qty,1,'oversized cart quantity must be clamped');
+assert.ok(rah.includes('found.qty=Math.min(20,found.qty+1)'),'add-to-cart must cap item quantity');
+assert.ok(rah.includes("try{localStorage.setItem('studioRahamCart'"),'blocked storage writes must not crash the studio');
+
 console.log('GAME_QUALITY_REGRESSION_PASS: Raham runner, Taniya cake SVG, Prism progress, three JS parsers');
