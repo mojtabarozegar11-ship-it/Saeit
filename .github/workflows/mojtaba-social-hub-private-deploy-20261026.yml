@@ -33,6 +33,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_hub_upgrade_20261026.py' -v
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_onboarding_20261026.py' -v
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_public_official_20261026.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojtaba_social_readonly_diagnostics_20261026.py' -v
   deploy:
     needs: preflight
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
@@ -176,7 +177,8 @@ jobs:
           owner_request=RequestFactory().get(url,secure=True,HTTP_HOST='mojplaywin.com')
           owner_request.user=staff
           owner_response=dashboard(owner_request)
-          if owner_response.status_code!=200 or b'manifest_json' not in owner_response.content:
+          if (owner_response.status_code!=200 or b'manifest_json' not in owner_response.content
+              or b'connection_probe' not in owner_response.content):
               raise RuntimeError('Authorized social batch-onboarding UI not rendered')
           api_response=read_status(owner_request)
           if api_response.status_code!=200:
