@@ -80,6 +80,13 @@ class Qc1000Tests(unittest.TestCase):
                 self.assertFalse(ticket["quality_1000_verified"])
                 self.assertFalse(ticket["can_replace_live_store_file"])
                 self.assertTrue(ticket["current_product_stays_published"])
+                self.assertEqual(ticket["legal_dossier_status"], "owner_confirmed_complete")
+                self.assertEqual(ticket["legal_execution_status"], "active")
+                self.assertFalse(ticket["legal_dossier_reopened"])
+                self.assertEqual(ticket["sku_version_mapping_status"], "execution_in_progress")
+                legal_stage=next(stage for stage in ticket["rework_stages"]
+                                 if stage["task"].startswith("reconcile the existing registered legal dossier"))
+                self.assertEqual(legal_stage["state"], "owner_confirmed_dossier_complete_execution_active")
                 self.assertEqual(ticket["source_file_sha256"],identities[ident])
                 self.assertEqual(ticket["factory_copy_sha256"],identities[ident])
                 self.assertEqual([t["approval"] for t in ticket["quality_criteria"]],
