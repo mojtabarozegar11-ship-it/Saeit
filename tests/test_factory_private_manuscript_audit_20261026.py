@@ -30,13 +30,27 @@ class PrivateAuditTests(unittest.TestCase):
     def test_length_ready_does_not_grant_commercial_approval(self):
         with tempfile.TemporaryDirectory() as d:
             self.make(d, "chapter-01-part-001.md")
-            self.make(d, "chapter-02-part-001.md")
+            self.make(d, "chapter-02-part-001.md", tail="Distinct chapter prose.")
             r = module.audit(Path(d), chapters=2, chapter_target=300, total_target=600)
             self.assertTrue(r["length_and_structure_ready_for_independent_review"])
             self.assertFalse(r["quality1000_approved"])
             self.assertFalse(r["independent_scientific_review_passed"])
             self.assertFalse(r["commercial_release_allowed"])
             self.assertEqual(len(r["part_evidence"]), 2)
+
+    def test_duplicate_segment_content_blocks_independent_review(self):
+        with tempfile.TemporaryDirectory() as d:
+            first = self.make(d, "chapter-01-part-001.md")
+            second = Path(d) / "chapter-02-part-001.md"
+            second.write_bytes(first.read_bytes())
+            before = second.read_bytes()
+            r = module.audit(Path(d), chapters=2, chapter_target=300, total_target=600)
+            self.assertEqual(r["chapters_below_target"], [])
+            self.assertTrue(any(x.startswith("duplicate_segment_content:")
+                                for x in r["integrity_flags"]))
+            self.assertFalse(r["length_and_structure_ready_for_independent_review"])
+            self.assertFalse(r["commercial_release_allowed"])
+            self.assertEqual(second.read_bytes(), before)
 
     def test_gap_and_reasoning_marker_fail_closed(self):
         with tempfile.TemporaryDirectory() as d:
