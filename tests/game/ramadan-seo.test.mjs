@@ -20,3 +20,10 @@ test('Ramadan War sharing metadata points to the real game without invented imag
   assert.match(head, /name="twitter:card" content="summary"/);
   assert.doesNotMatch(head, /property="og:image"/);
 });
+
+test('mobile viewport permits user zoom instead of locking page magnification', () => {
+  const viewport = head.match(/<meta name="viewport" content="([^"]+)"/)?.[1];
+  assert.ok(viewport, 'viewport metadata must exist');
+  assert.match(viewport, /width=device-width/);
+  assert.doesNotMatch(viewport, /user-scalable\s*=\s*(?:no|0)|maximum-scale\s*=\s*1/i);
+});

@@ -11,6 +11,8 @@ on:
       - 'tests/game/ramadan-save-validation.test.mjs'
       - 'tests/game/ramadan-input-guard.test.mjs'
       - 'tests/game/ramadan-missile-targets.test.mjs'
+      - 'tests/game/ramadan-special-resource.test.mjs'
+      - 'tests/game/ramadan-save-feedback.test.mjs'
       - 'tests/game/ramadan-seo.test.mjs'
       - '.github/workflows/ramadan-save-integrity.yml'
 permissions:
@@ -31,6 +33,10 @@ jobs:
         run: node --test tests/game/ramadan-input-guard.test.mjs
       - name: Check missile homing after enemy removal
         run: node --test tests/game/ramadan-missile-targets.test.mjs
+      - name: Check persistence failure feedback
+        run: node --test tests/game/ramadan-save-feedback.test.mjs
+      - name: Check support skill resource consumption and save persistence
+        run: node --test tests/game/ramadan-special-resource.test.mjs
       - name: Check reversible deployment script syntax
         run: python -m py_compile games/ramadan-war/deploy.py
       - name: Check browser module syntax
