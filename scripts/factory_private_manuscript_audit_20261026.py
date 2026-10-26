@@ -75,7 +75,7 @@ def audit(root: Path, *, chapters: int = 30, chapter_target: int = 5300,
         # Headings and spacing must not conceal duplicated substantive prose.
         # Fail closed on long identical bodies; keep this a mechanical gate only.
         prose = " ".join(
-            re.sub(r"\\s+", " ", row.strip()).casefold()
+            re.sub(r"\s+", " ", row.strip()).casefold()
             for row in text.splitlines()
             if row.strip() and not row.lstrip().startswith("#")
         ).strip()

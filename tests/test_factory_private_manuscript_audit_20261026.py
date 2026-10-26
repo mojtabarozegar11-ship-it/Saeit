@@ -66,6 +66,23 @@ class PrivateAuditTests(unittest.TestCase):
             self.assertFalse(r["commercial_release_allowed"])
             self.assertEqual(second.read_bytes(), before)
 
+    def test_reheaded_whitespace_variant_duplicate_blocks_review(self):
+        # Altering tabs or repeated spaces must not bypass the prose hash.
+        with tempfile.TemporaryDirectory() as d:
+            first = self.make(d, "chapter-01-part-001.md")
+            second = Path(d) / "chapter-02-part-001.md"
+            variant = first.read_text().replace(
+                "# Heading", "# A different heading")
+            second.write_text(variant.replace(" ", " \t  "))
+            before = second.read_bytes()
+            r = module.audit(Path(d), chapters=2,
+                             chapter_target=300, total_target=600)
+            self.assertTrue(any(x.startswith("duplicate_prose_body:")
+                                for x in r["integrity_flags"]))
+            self.assertFalse(r["length_and_structure_ready_for_independent_review"])
+            self.assertFalse(r["commercial_release_allowed"])
+            self.assertEqual(second.read_bytes(), before)
+
     def test_gap_and_reasoning_marker_fail_closed(self):
         with tempfile.TemporaryDirectory() as d:
             self.make(d, "chapter-01-part-002.md", tail="<think>secret</think>")
