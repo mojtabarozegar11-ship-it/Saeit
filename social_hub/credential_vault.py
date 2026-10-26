@@ -105,6 +105,27 @@ def _account_alias(account):
         raise Blocked("Stored account secret alias does not match its exact identity")
     return expected
 
+def default_private_vault_path():
+    """The standalone Django site's already-private DB directory is the trust root.
+
+    Never guesses a public path or creates a file. Development/test worktrees
+    without an installed site_config continue with explicit env-only tokens.
+    """
+    import importlib
+    try:
+        settings=importlib.import_module("social_hub.site_config")
+    except ModuleNotFoundError as exc:
+        if exc.name=="social_hub.site_config":
+            return ""
+        raise
+    db=getattr(settings,"PRIVATE_DB",None)
+    if not isinstance(db,str) or not Path(db).is_absolute():
+        raise Blocked("Installed personal private database path invalid")
+    path=Path(db).with_name("provider-api-vault.json")
+    # Existing parent already belongs to the private social SQLite installation.
+    _path(path)
+    return str(path)
+
 def credential_for(account, *, env=None, vault_file=None):
     """Resolve one account's privately scoped token, fail closed on ambiguity."""
     env=os.environ if env is None else env
@@ -112,7 +133,8 @@ def credential_for(account, *, env=None, vault_file=None):
     environment=env.get(alias,"")
     if environment:
         _token(environment)
-    path=vault_file if vault_file is not None else env.get("MPW_SOCIAL_CREDENTIAL_VAULT","")
+    path=(vault_file if vault_file is not None else
+          env.get("MPW_SOCIAL_CREDENTIAL_VAULT") or default_private_vault_path())
     local=_vault(path).get(alias,"") if path else ""
     if environment and local:
         raise Blocked("Same account configured in multiple secret stores")
