@@ -62,6 +62,23 @@ def read_status(request):
                                     "outbound_allowed_by_ui":False}))
 
 @staff_member_required
+@require_GET
+def connection_plan(request):
+    brands=_allowed(request.user)
+    if not brands:
+        return _no_cache(JsonResponse({"error":"Access denied"},status=403))
+    try:
+        from .connection_plan import build_connection_plan
+        store=_db()
+        try:
+            output=build_connection_plan(store,brands=brands)
+        finally:
+            store.close()
+    except (Blocked,OSError) as exc:
+        return _no_cache(JsonResponse({"error":str(exc)},status=503))
+    return _no_cache(JsonResponse(output,json_dumps_params={"ensure_ascii":False}))
+
+@staff_member_required
 @csrf_protect
 @require_http_methods(["GET","POST"])
 def dashboard(request):
@@ -345,7 +362,7 @@ td,th{padding:10px;border-bottom:1px solid #625940;text-align:right;word-break:b
 </style></head><body>
 <header><h1>مرکز فرماندهی شبکه‌های اجتماعی و فعالیت‌های حرفه‌ای</h1>
 <p class="sub">شخصی · زمرد ملل · MojPlayWin | پیش‌نویس، مجوز انتشار، حساب رسمی، وضعیت اتصال و رسید</p>
-<nav><a href="/mojtaba.roozegar/">وب مرکزی</a> · <a href="status/">وضعیت JSON امن</a></nav></header>
+<nav><a href="/mojtaba.roozegar/">وب مرکزی</a> · <a href="status/">وضعیت JSON امن</a> · <a href="connection-plan/">فهرست راه‌اندازی یک‌مرحله‌ای APIها</a></nav></header>
 <main>""" + msg + '<div class="grid">'+stats+'</div><br><div class="grid">'+(
 '<section><h2>ثبت حساب رسمی</h2>'+register+'</section>' if register else "")+(
 '<section><h2>ثبت شاهد مالکیت</h2>'+verify+'</section>' if verify else "")+(
