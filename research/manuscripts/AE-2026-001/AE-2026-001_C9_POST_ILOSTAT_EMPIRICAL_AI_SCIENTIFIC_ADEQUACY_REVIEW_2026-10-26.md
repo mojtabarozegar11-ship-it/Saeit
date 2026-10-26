@@ -2,6 +2,19 @@
 
 **Date:** 26 October 2026. **Role:** internal AI methodological/editorial review in a separate critical pass; **NOT** independent human peer review or author attestation. **Verdict:** **MAJOR REVISION / NO SUBMISSION**. No Manuscript ID.
 
+## C15 critical re-review — denominator shift and influential cases (26 October 2026)
+
+**Primary reproducible evidence:** [C15](AE-2026-001_C15_UNBALANCED_2019_2023_ENDPOINT_COHORT_SENSITIVITY_2026-10-26.md), [GitHub Actions run 40352237660](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40352237660) SUCCESS. The 2019–2023 sample increases from 153 complete three-endpoint economies to 169 when the 16 lacking a 2000 baseline are included. Its median changes only **+0.084671 log-pp/year**, but its mean changes **+0.268407**, largely attributable in a post-hoc influence analysis to CAF and DJI (both have exceptionally large positive four-year annualized rates).
+
+**Critical methodological judgement:**
+1. The 169-versus-153 comparison is an **unpaired change in sample composition**, not a paired economic-growth acceleration or a historical WDI revision effect. It cannot be presented as an independent validation of the three-vintage 155-country findings.
+2. Removing CAF and DJI after seeing their influence **does not justify dropping them from the primary descriptive panel**. They may reflect genuine changes, definitional discontinuities or data revisions; without source-country verification, no mechanism is proven.
+3. Country-equal weighting, the short 2019–2023 window and nonrandom data availability make global welfare, worker-weighted and causal interpretations impermissible. Extreme values make mean summaries unstable, but a robust median does not cure sample selection.
+4. The exact-source Word [run 40352421465](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40352421465), artifact 12664581585, was verified after the manuscript C15 edit; 8 tables and source SHA256 `3c1bba469809647122790ac70bc17220a15e42f5ca23931b7436496b4b383e94`.
+5. The contribution is a **transparent sensitivity and limitation**, not evidence of an original statistical estimator or publication-level novelty. Archived 2024/2025 ILOSTAT, countryatlas head-to-head execution, journal-specific originality and human author declarations remain unfulfilled.
+
+**Independent-pass AI verdict:** **MAJOR REVISION / NO SUBMISSION**. This is internal AI criticism, not human peer review, authorship or publication approval.
+
 ## C12 independent-pass critique — regional influence is not correction of selection (26 October 2026)
 
 [New derived sensitivity C12](AE-2026-001_C12_LEAVE_ONE_REGION_OUT_MATCHED_COVERAGE_SENSITIVITY_2026-10-26.md) recomputes all seven leave-one-region-out coverage tables from the source-locked 157-economy counts. Removing Sub-Saharan Africa reduces descriptive Cramer's V from **0.4588 to 0.2649** (69/120 matched), while excluding any other region gives V **0.4291–0.4963**. This reinforces that a specific region drives much of the source-availability imbalance, **but the residual imbalance is not zero**. The 4/37 vs 69/120 comparison is an observed within-panel coverage contrast, not a probability-sample estimate. No new source-country data, missingness mechanism, 2024/2025 archived ILOSTAT vintages or countryatlas matched benchmark were obtained. The 157-economy current-source eligibility panel must never be reported as the historical three-vintage **155-economy** fixed panel. A sensitivity analysis with changing N is not an independent confirmation of significance or novel estimator. **Internal AI verdict remains MAJOR REVISION / NO SUBMISSION**. This review is not an independent human referee report.
