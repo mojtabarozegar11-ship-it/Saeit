@@ -17,6 +17,8 @@ for(const [name,html] of [['Raham',rah],['Taniya',tan],['Prism',prism]]){
  js.forEach(code=>new vm.Script(code,{filename:name+'.js'}));
 }
 assert.equal((tan.match(/<article class="game"/g)||[]).length,20,'Taniya 20-game catalog must remain intact');
+assert.ok(tan.includes('<link rel="canonical" href="https://mojplaywin.com/taniya/">'),'Taniya canonical must point to its official studio route');
+assert.ok(tan.includes('<meta property="og:url" content="https://mojplaywin.com/taniya/">'),'Taniya share URL must be canonical');
 const cake=between(tan,'function cakeCardMarkup(', 'function mountCake(){');
 const cakeCases=vm.runInNewContext(cake+"[cakeCardMarkup('#ff79b8','🍓',0),cakeCardMarkup('#4488cc','🌼',4),cakeCardMarkup('unsafe','🍬',99),cakeCardMarkup('#4488cc','🍓',2,'Happy Birthday'),cakeCardMarkup('#4488cc','🍓',2,'<script>alert(1)</script>')]",{});
 assert.notEqual(cakeCases[0],cakeCases[1],'cake designs must change SVG');
