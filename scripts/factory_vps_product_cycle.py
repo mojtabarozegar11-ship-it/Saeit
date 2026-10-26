@@ -8,9 +8,12 @@ can update the DB at any time; next iteration detects changed products.
 """
 import argparse
 import fcntl
+import hashlib
 import importlib.util
 import json
 import os
+import re
+import tempfile
 from pathlib import Path
 import sys
 import sqlite3
@@ -28,6 +31,155 @@ def load(name, path):
 
 
 SCRIPTS = Path(__file__).resolve().parent
+
+
+
+PRODUCT_SLOT_CAPACITY = 5
+SLOT_SCHEMA = "saeit.factory.product-slots.v1"
+CLEARANCE_SCHEMA = "saeit.factory.signed-quality-clearance.v1"
+PRODUCT_SLUG = re.compile(r"^[a-z][a-z0-9_]{1,65}$")
+HEX_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _read_private_json(path):
+    path = Path(path)
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 2_000_000:
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf8"))
+        return value if isinstance(value, dict) else None
+    except (OSError, ValueError, UnicodeError):
+        return None
+
+
+def _write_private_json(path, value):
+    path = Path(path)
+    parent = path.parent
+    if parent.is_symlink():
+        raise RuntimeError("PRODUCT_SLOT_STATE_PATH_UNSAFE")
+    parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(parent, 0o700)
+    fd, temporary = tempfile.mkstemp(prefix=".product-slots-", dir=str(parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf8") as stream:
+            json.dump(value, stream, ensure_ascii=False, sort_keys=True, indent=2)
+            stream.write("\\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def _verified_quality_exit(root, recipe):
+    """Only a current, signed 1000/1000 clearance frees a production slot."""
+    manifest_path = root / "digital-products" / recipe / "manufacturing_manifest.json"
+    archive_path = root / "digital-products" / recipe / (recipe + "-internal-qa.zip")
+    clearance_path = root / "quality-excellence" / "signed-clearances" / recipe / "current.json"
+    manifest = _read_private_json(manifest_path)
+    clearance = _read_private_json(clearance_path)
+    if (not manifest or not clearance or archive_path.is_symlink()
+            or not archive_path.is_file()):
+        return None
+    artifact_sha = manifest.get("artifact_sha256")
+    if (manifest.get("recipe") != recipe or manifest.get("qa_status") != "passed"
+            or not isinstance(artifact_sha, str) or not HEX_SHA256.fullmatch(artifact_sha)):
+        return None
+    digest = hashlib.sha256()
+    try:
+        with archive_path.open("rb") as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(block)
+    except OSError:
+        return None
+    roles = clearance.get("valid_signed_roles")
+    roles = set(roles) if isinstance(roles, list) and all(isinstance(x, str) for x in roles) else set()
+    independent_roles = {"domain_specialist", "independent_quality_auditor", "rights_reviewer"}
+    if (digest.hexdigest() != artifact_sha
+            or clearance.get("schema") != CLEARANCE_SCHEMA
+            or clearance.get("eligible") is not True
+            or clearance.get("verified_grade_total") != 1000
+            or clearance.get("artifact_sha256") != artifact_sha
+            or not independent_roles.issubset(roles)
+            or clearance.get("owner_authorization_kind") not in ("direct_owner", "verified_delegated_agent")
+            or clearance.get("publication_executed") is not False
+            or clearance.get("payment_activated") is not False):
+        return None
+    return {"artifact_sha256": artifact_sha,
+            "clearance_sha256": hashlib.sha256(clearance_path.read_bytes()).hexdigest()}
+
+
+def _maintain_product_slots(root, recipe_names):
+    """Maintain five active work slots; only signed 1000/1000 outputs exit."""
+    state_path = (Path(root) / "quality-excellence" / "product-flow"
+                  / "active-slots" / "current.json")
+    if state_path.is_symlink():
+        raise RuntimeError("PRODUCT_SLOT_STATE_SYMLINK")
+    state = _read_private_json(state_path)
+    if state is None and state_path.exists():
+        raise RuntimeError("PRODUCT_SLOT_STATE_INVALID")
+    if state is None:
+        state = {"schema": SLOT_SCHEMA, "active": [], "exited": {},
+                 "last_admitted_recipe": ""}
+    if state.get("schema") != SLOT_SCHEMA or not isinstance(state.get("active"), list):
+        raise RuntimeError("PRODUCT_SLOT_STATE_SCHEMA_INVALID")
+    active = []
+    known_active = set()
+    for item in state["active"]:
+        if (not isinstance(item, dict) or not isinstance(item.get("recipe"), str)
+                or not PRODUCT_SLUG.fullmatch(item["recipe"])):
+            raise RuntimeError("PRODUCT_SLOT_ENTRY_INVALID")
+        if item["recipe"] not in known_active:
+            active.append(item)
+            known_active.add(item["recipe"])
+    if len(active) > PRODUCT_SLOT_CAPACITY:
+        raise RuntimeError("PRODUCT_SLOT_CAPACITY_EXCEEDED")
+    exited = state.get("exited", {})
+    if not isinstance(exited, dict):
+        raise RuntimeError("PRODUCT_SLOT_EXIT_LEDGER_INVALID")
+    still_active = []
+    for item in active:
+        recipe = item["recipe"]
+        clearance = _verified_quality_exit(root, recipe)
+        if clearance:
+            exited[recipe] = dict(clearance)
+        else:
+            still_active.append(item)
+    active = still_active
+    candidates = sorted({name for name in recipe_names
+                         if isinstance(name, str) and PRODUCT_SLUG.fullmatch(name)})
+    cursor = state.get("last_admitted_recipe", "")
+    if not isinstance(cursor, str):
+        cursor = ""
+    rotated = [name for name in candidates if name > cursor] + [
+        name for name in candidates if name <= cursor]
+    active_names = {item["recipe"] for item in active}
+    for recipe in rotated:
+        if len(active) >= PRODUCT_SLOT_CAPACITY:
+            break
+        if recipe in active_names:
+            continue
+        clearance = _verified_quality_exit(root, recipe)
+        if clearance:
+            exited[recipe] = dict(clearance)
+            continue
+        manifest = _read_private_json(Path(root) / "digital-products" / recipe
+                                      / "manufacturing_manifest.json")
+        current_artifact = manifest.get("artifact_sha256") if manifest else None
+        prior_exit = exited.get(recipe)
+        if isinstance(prior_exit, dict) and prior_exit.get("artifact_sha256") == current_artifact:
+            continue
+        active.append({"recipe": recipe, "status": "active"})
+        active_names.add(recipe)
+        cursor = recipe
+    state = {"schema": SLOT_SCHEMA, "capacity": PRODUCT_SLOT_CAPACITY,
+             "active": active, "exited": exited,
+             "last_admitted_recipe": cursor,
+             "exit_rule": "current signed clearance bound to exact passed artifact at 1000/1000"}
+    _write_private_json(state_path, state)
+    return [item["recipe"] for item in active]
 
 
 def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
@@ -71,6 +223,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         engineering_state={"enabled":False,"enqueued":0}
         design_state = {"enabled": False, "new_recipes": 0}
         designer_failures = []
+        active_recipe_names = None
         source_recoveries = []
         source_evolutions = []
         evolution_attempt_defects = []
@@ -128,6 +281,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                     generated[recipe] = maker.inspect_recipe(generated_root / recipe)
             if set(generated) & set(recipe_catalog):
                 raise RuntimeError("GENERATED_RECIPE_COLLIDES_WITH_STATIC_SOURCE")
+                        recipe_catalog.update(generated)
+            recipe_roots.update({key: generated_root for key in generated})
+            active_recipe_names = _maintain_product_slots(root, recipe_catalog)
             # Quality-driven product evolution: compiler-owned goods really gain
             # a bounded customer batch API, with holdout and real unit tests.
             # Rotate the bounded queue across ticks; never leave later product
@@ -138,7 +294,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                 if not isinstance(last,str):last=''
             except (OSError,ValueError,AttributeError):
                 last=''
-            pending_evolution=sorted(generated)
+            pending_evolution=sorted(r for r in generated if r in active_recipe_names)
             pending_evolution=[r for r in pending_evolution if r>last]+[
                 r for r in pending_evolution if r<=last]
             # Prefer genuine quality returns within the existing rotating limit.
@@ -168,7 +324,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         for item in admission_failures:
             repair.record_failure(root,item['recipe'],RuntimeError(item['reason']),
                                   str(recipe_roots.get(item['recipe'],Path(recipes))/item['recipe']))
-        selected = sorted(recipe_catalog)
+        if active_recipe_names is None:
+            active_recipe_names = _maintain_product_slots(root, recipe_catalog)
+        selected = [recipe for recipe in active_recipe_names if recipe in recipe_catalog]
         # Persist rotation: bounded cycles must not starve later recipe names.
         cursor_file = root / "recipe-cursor.json"
         try:
@@ -291,7 +449,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "depends_on_orders": False,
             "api_usage": "none",
             "token_usage": 0,
-            "build_policy": "all_registered_recipes_sequentially",
+            "build_policy": "five_signed-1000-gated_product_slots",
+            "active_product_slot_capacity": PRODUCT_SLOT_CAPACITY,
+            "active_product_slot_recipes": active_recipe_names,
             "registered_recipe_count": len(recipe_catalog),
             "recipe_designer": design_state,
             "engineering_intake":engineering_state,
