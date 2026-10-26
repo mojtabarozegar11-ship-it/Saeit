@@ -114,3 +114,9 @@ body[data-world="aurora"] .nexus-css3d-face{background:linear-gradient(155deg,#2
 .nexus-worm-tip.ready{filter:drop-shadow(0 0 7px #6fffe0)}
 @media(prefers-reduced-motion:no-preference){.nexus-worm-body.ready{animation:nexus-worm-breathe 1.8s ease-in-out infinite alternate}}
 @keyframes nexus-worm-breathe{to{stroke-width:17;filter:drop-shadow(0 0 11px #8effde)}}
+
+/* Reduced-motion mode also covers the later V3 worm, impact and reward animations. */
+@media (prefers-reduced-motion: reduce) {
+  .nexus-worm-body.ready, .nexus-burst-note, .viewport.nexus-impact, .nexus-css3d-arrow.ready { animation: none !important; }
+  .nexus-css3d-cube, .nexus-css3d-arrow { transition: none !important; }
+}
