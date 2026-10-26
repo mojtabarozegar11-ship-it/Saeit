@@ -14,7 +14,7 @@ from social_hub.store import Store
 from social_hub.service import connection_status, run_one, run_due
 from social_hub.adapters import Blocked, Uncertain
 from social_hub.diagnostics import record_one, SUPPORTED as READ_ONLY_PROVIDERS
-from social_hub.credential_vault import load_private_import, plan_import, import_batch, disconnect_batch
+from social_hub.credential_vault import load_private_import, plan_import, import_batch, disconnect_batch, create_private_template
 from social_hub.onboarding import preview as preview_onboarding, register as register_onboarding
 
 def main(argv=None):
@@ -29,6 +29,8 @@ def main(argv=None):
         batch.add_argument("--manifest-file",required=True,
                            help="Owner-authored token-free JSON; NEVER contains private OAuth credentials")
         batch.add_argument("--actor",default="owner-cli:manual")
+    template=sub.add_parser("credential-template")
+    template.add_argument("--output-private-file",required=True)
     for name in ("credential-import-preview","credential-import"):
         provision=sub.add_parser(name)
         provision.add_argument("--input-private-file",required=True,
@@ -92,6 +94,8 @@ def main(argv=None):
         db = Store(location)
         try:
             if args.command == "summary": result = db.summary()
+            elif args.command == "credential-template":
+                result=create_private_template(db,args.output_private_file)
             elif args.command in ("credential-import-preview","credential-import"):
                 manifest=load_private_import(args.input_private_file)
                 if args.command=="credential-import-preview":
