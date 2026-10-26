@@ -165,7 +165,23 @@ jobs:
           r=Client(HTTP_HOST='mojplaywin.com').get(url,secure=True)
           if r.status_code not in (302,403):
               raise RuntimeError('Social panel not restricted to staff: '+str(r.status_code))
+          # Exercise the *authenticated* rendering path, without creating any
+          # real Django users or changing any database/account credentials.
+          from types import SimpleNamespace
+          from django.test import RequestFactory
+          from social_hub.portal import dashboard, read_status
+          staff=SimpleNamespace(is_active=True,is_authenticated=True,
+                                is_staff=True,is_superuser=True,pk=99999)
+          owner_request=RequestFactory().get(url,secure=True,HTTP_HOST='mojplaywin.com')
+          owner_request.user=staff
+          owner_response=dashboard(owner_request)
+          if owner_response.status_code!=200 or b'manifest_json' not in owner_response.content:
+              raise RuntimeError('Authorized social batch-onboarding UI not rendered')
+          api_response=read_status(owner_request)
+          if api_response.status_code!=200:
+              raise RuntimeError('Authorized private connection status unavailable')
           print('PERSONAL_STAFF_PROTECTED_ROUTE=PASS',flush=True)
+          print('SOCIAL_AUTHENTICATED_DASHBOARD=PASS',flush=True)
           PY
           test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
           "$py" - <<'PY'
