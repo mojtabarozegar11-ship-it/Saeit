@@ -185,6 +185,23 @@ class PrivateAuditTests(unittest.TestCase):
                                  for flag in result["integrity_flags"]))
             self.assertFalse(result["commercial_release_allowed"])
 
+    def test_long_paragraph_distinct_numeric_scientific_identifiers(self):
+        # IDs with the same alphabetic prefix but different numeric suffixes
+        # must not collapse into identical tokens after an underscore.
+        with tempfile.TemporaryDirectory() as d:
+            first = Path(d) / "chapter-01-part-001.md"
+            second = Path(d) / "chapter-02-part-001.md"
+            prefix = " ".join("term_%04d" % i for i in range(140))
+            changed = prefix.replace("term_0000", "term_9999")
+            first.write_text("# First\n\n" + prefix +
+                             "\n\n" + " ".join("first%04d" % i for i in range(150)))
+            second.write_text("# Second\n\n" + changed +
+                              "\n\n" + " ".join("second%04d" % i for i in range(150)))
+            result = module.audit(Path(d), chapters=2, chapter_target=250, total_target=500)
+            self.assertFalse(any(flag.startswith("duplicate_long_paragraph:")
+                                 for flag in result["integrity_flags"]))
+            self.assertFalse(result["commercial_release_allowed"])
+
     def test_distinct_long_paragraphs_are_not_falsely_flagged(self):
         with tempfile.TemporaryDirectory() as d:
             for chapter in (1, 2):
