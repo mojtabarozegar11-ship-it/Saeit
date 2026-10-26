@@ -81,7 +81,10 @@ def audit(root: Path, *, chapters: int = 30, chapter_target: int = 5300,
         except UnicodeDecodeError:
             flags.append("invalid_utf8:" + path.name)
             continue
-        if any(token in text.casefold() for token in FORBIDDEN):
+        # Normalize only for the safety check; never modify manuscript bytes.
+        # Unicode format controls and compatibility glyphs must not conceal
+        # reasoning tokens or unverified citation placeholders.
+        if any(token in normalize_similarity_text(text).casefold() for token in FORBIDDEN):
             flags.append("unsafe_content_marker:" + path.name)
         digest = hashlib.sha256(raw).hexdigest()
         first_path = seen_segment_hashes.setdefault(digest, path.name)
