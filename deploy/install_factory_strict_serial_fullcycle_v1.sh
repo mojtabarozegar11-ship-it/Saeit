@@ -112,7 +112,7 @@ for row in active:
 # owner-deleted orders after the private factory cleanup.
 test -f "$source_root/scripts/factory_strict_serial_fullcycle_v1.py"
 "$python" -B "$source_root/scripts/factory_strict_serial_fullcycle_v1.py" \
-  --factory-private "$private" --operations "$ops" --dry-run
+  --factory-private "$private" --operations "$ops" --dry-run --verify-complete-intake
 
 # After read-only audit, serialize installers and reject concurrent cron edits.
 # This lock is an installer-only private operations file, not a product write.
