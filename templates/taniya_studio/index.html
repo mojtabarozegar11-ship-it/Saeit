@@ -174,13 +174,18 @@ function mountCake(){
    try{localStorage.setItem(storageKey,JSON.stringify({icing,topping,candles,greeting}))}catch(e){}
   }
   renderPreview();
+  function markSelectedDecorations(){
+   gamebody.querySelectorAll('[data-icing]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.icing===icing)));
+   gamebody.querySelectorAll('[data-top]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.top===topping)));
+  }
+  markSelectedDecorations();
   $('#cakeGreeting',gamebody).value=greeting;
   let colorEditing=false;
   $('#icing',gamebody).oninput=e=>{if(!colorEditing){remember();colorEditing=true}icing=e.target.value;renderPreview()};
   $('#icing',gamebody).onchange=e=>{if(!colorEditing&&icing!==e.target.value)remember();icing=e.target.value;colorEditing=false;renderPreview()};
   $('#cakeGreeting',gamebody).onchange=e=>{remember();greeting=e.target.value;renderPreview();say('Your card greeting is updated.')};
   gamebody.querySelectorAll('[data-icing]').forEach(b=>b.onclick=()=>{if(icing===b.dataset.icing)return;remember();icing=b.dataset.icing;draw();say('Frosting selected for the customer order.')});
-  gamebody.querySelectorAll('[data-top]').forEach(b=>b.onclick=()=>{remember();topping=b.dataset.top;renderPreview();say('Topping selected. Add candles or download your cake.')});
+  gamebody.querySelectorAll('[data-top]').forEach(b=>b.onclick=()=>{if(topping===b.dataset.top)return;remember();topping=b.dataset.top;markSelectedDecorations();renderPreview();say('Topping selected. Add candles or download your cake.')});
   gamebody.querySelector('[data-action="candle"]').onclick=()=>{if(candles>=12){say('Your cake already has twelve candles.');return}remember();candles++;renderPreview();say(candles+' candle'+(candles===1?'':'s')+' added.')};
   gamebody.querySelector('[data-action="cake-remove"]').onclick=()=>{if(candles===0){say('No candles to remove yet.');return}remember();candles--;renderPreview();say(candles+' candles remain.')};
   gamebody.querySelector('[data-action="cake-surprise"]').onclick=()=>{remember();
