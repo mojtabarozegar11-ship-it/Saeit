@@ -156,8 +156,8 @@ def dashboard(request):
                 '<input type="hidden" name="operation" value="'+escape(name)+'">' +
                 body + '<button type="submit">'+escape(button)+'</button></form>')
     def inp(name,placeholder="",type_="text",required=False):
-        return '<label>'+escape(name)+'<input name="'+escape(name)+'" placeholder="'+escape(placeholder)+
-               '" type="'+escape(type_)+'" maxlength="1600"'+(' required' if required else '')+'></label>'
+        return ('<label>'+escape(name)+'<input name="'+escape(name)+'" placeholder="'+escape(placeholder)+
+                '" type="'+escape(type_)+'" maxlength="1600"'+(' required' if required else '')+'></label>')
     register = form("register",
         '<label>Brand<select name="brand">'+opt_brands+'</select></label>'+
         '<label>Platform<select name="platform">'+opt_platforms+'</select></label>'+
