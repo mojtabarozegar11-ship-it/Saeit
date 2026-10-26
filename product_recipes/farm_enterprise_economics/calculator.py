@@ -7,22 +7,38 @@ Compatible with Python 3.8+.
 """
 import argparse
 import csv
-from decimal import Decimal, InvalidOperation, ROUND_CEILING
+from decimal import Decimal, InvalidOperation, ROUND_CEILING, localcontext
+from functools import wraps
 import json
 import math
 from pathlib import Path
 import sys
 
 
+def bounded_model_precision(function):
+    """Keep portfolio and sensitivity arithmetic exact for large local currencies."""
+    @wraps(function)
+    def run(*args, **kwargs):
+        with localcontext() as context:
+            context.prec = 80
+            return function(*args, **kwargs)
+    return run
+
+
 def decimal_number(value, field, *, min_value=None, max_value=None):
     if isinstance(value, bool) or value is None:
         raise ValueError(field + ": a finite number is required")
+    raw = str(value)
+    if len(raw) > 64:
+        raise ValueError(field + ": numeric input too long")
     try:
-        x = Decimal(str(value))
+        x = Decimal(raw)
     except (InvalidOperation, TypeError, ValueError):
         raise ValueError(field + ": invalid number")
     if not x.is_finite():
         raise ValueError(field + ": must be finite")
+    if abs(x) > Decimal("1e20"):
+        raise ValueError(field + ": above supported magnitude (1e20)")
     if min_value is not None and x < Decimal(str(min_value)):
         raise ValueError(field + ": below minimum")
     if max_value is not None and x > Decimal(str(max_value)):
@@ -34,6 +50,7 @@ def money(value):
     return str(value.quantize(Decimal("0.01")))
 
 
+@bounded_model_precision
 def enterprise(entry):
     if not isinstance(entry, dict):
         raise ValueError("enterprise must be an object")
@@ -90,6 +107,7 @@ def enterprise(entry):
     }
 
 
+@bounded_model_precision
 def evaluate(data):
     if not isinstance(data, dict):
         raise ValueError("input must be a JSON object")
