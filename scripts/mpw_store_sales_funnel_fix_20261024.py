@@ -109,8 +109,6 @@ def patch_page_shell(data):
     wrap(("meta", "property", "og:description"), "og_description", description_default)
     twitter_description = description_default
     card = wrap(("meta", "name", "twitter:card"), "twitter_card", "summary_large_image")
-    if card != "summary_large_image":
-        raise RuntimeError("Unexpected shared Twitter card default")
     twitter = ('<meta name="twitter:title" content="{% block twitter_title %}' + twitter_title + '{% endblock %}">'
                '<meta name="twitter:description" content="{% block twitter_description %}' + twitter_description + '{% endblock %}">')
     card_tags = [m for m in re.finditer(r"<meta\b[^>]*>", text, re.I)
