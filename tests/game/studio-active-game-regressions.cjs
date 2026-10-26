@@ -58,3 +58,26 @@ for(let i=0;i<30;i++)candle.onclick({stopPropagation(){}});
 assert.equal((preview.textContent.match(/🕯️/g)||[]).length,12,'cap candles at 12');
 assert.match(lastMessage,/twelve/);
 console.log('PASS: Super Jungle Run twelve-obstacle progression, loss/retry, listener cleanup; Cake Maker persistent decorations, personalized SVG, capped candles');
+
+const cartFn=raha.slice(raha.indexOf('function loadCart(){'),raha.indexOf('function showToast('));
+assert(cartFn.startsWith('function loadCart('),'cart sanitization helper must exist');
+const catalog=[{name:'Creative Play Starter Bundle',price:9.99,emoji:'🎁',desc:'catalog-only'}];
+function runCart(storage){
+ const context={products:catalog,localStorage:storage,JSON,Number,Array,Math};
+ vm.createContext(context);
+ return vm.runInContext(cartFn+';loadCart()',context);
+}
+assert.equal(runCart({getItem(){throw Error('SecurityError')}}).length,0,'blocked storage must not crash studio');
+assert.equal(runCart({getItem:()=>'{broken'}).length,0,'invalid JSON must not crash games');
+assert.equal(runCart({getItem:()=>JSON.stringify({name:'not an array'})}).length,0);
+const tampered=runCart({getItem:()=>JSON.stringify([
+ {name:'Creative Play Starter Bundle',price:0.01,emoji:'<img src=x onerror=alert(1)>',qty:19},
+ {name:'Creative Play Starter Bundle',price:0.01,qty:19},
+ {name:'Injected Product',price:0,qty:5}
+])});
+assert.equal(tampered.length,1,'unrecognized products must be discarded');
+assert.equal(tampered[0].price,9.99,'local cart cannot override catalog price');
+assert.equal(tampered[0].emoji,'🎁','local cart cannot inject HTML');
+assert.equal(tampered[0].qty,20,'duplicate quantity is bounded');
+assert.match(raha,/function saveCart\(\)\{try\{localStorage\.setItem/,'saving must tolerate blocked storage');
+console.log('PASS: Raham cart sanitization, blocked-storage fallback, price integrity, injection rejection, quantity cap');
