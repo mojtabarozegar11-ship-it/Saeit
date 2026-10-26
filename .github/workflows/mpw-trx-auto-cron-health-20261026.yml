@@ -1,0 +1,80 @@
+name: MojPlayWin live TRX automatic payment cron health
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-trx-auto-cron-health-20261026.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Verify existing minute-interval TRX reconciler source and recent logs without mutation
+        run: |
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import subprocess,os,sys,json,re,stat
+          from pathlib import Path
+          root=Path('/home/zomorod2')
+          r=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=8)
+          if r.returncode:raise RuntimeError('Cron inventory unavailable')
+          matched=[(i,l) for i,l in enumerate(r.stdout.splitlines(),1) if not l.strip().startswith('#') and 'mpw_trx_commercial_reconcile_cron.py' in l]
+          if len(matched)!=1:raise RuntimeError('Expected exactly one TRX scheduled reconciler')
+          ordinal,entry=matched[0]
+          paths=re.findall(r'/[A-Za-z0-9_./-]+mpw_trx_commercial_reconcile_cron\.py',entry)
+          if len(paths)!=1:raise RuntimeError('Cannot identify scheduled script')
+          path=Path(paths[0])
+          if not path.is_file() or path.is_symlink():raise RuntimeError('Cron script missing or symlink')
+          source=path.read_text(encoding='utf8',errors='replace')
+          print('MPW_TRX_CRON_STATE='+json.dumps({'line':ordinal,'schedule':entry.split()[:5],'name':path.name,'file_exists':True,'bytes':len(source),'mtime':path.stat().st_mtime,'imports_chain':('mpw_trx_commercial_chain' in source),'imports_candidates':('mpw_tron_readonly_deposit_candidates' in source),'uses_reconcile':('reconcile_commercial_intent_from_candidates' in source),'handles_paid':('paid' in source),'has_bounded_batch':('limit' in source.lower() or '[:' in source),'has_lock':('flock' in source or 'lock' in source.lower()),'key_lines':[line.strip()[:170] for line in source.splitlines() if any(k in line for k in ('print(', 'MPW_', 'argparse', 'def main(', 'if __name__'))][:35]}))
+          for file in list(path.parent.glob('*reconcile*.log'))+list((root/'logs').glob('*trx*log')):
+           if not file.is_file() or file.is_symlink() or file.stat().st_size>100000000:continue
+           age=__import__('time').time()-file.stat().st_mtime
+           text=file.read_text(errors='replace')[-6000:]
+           print('MPW_TRX_CRON_LOG='+json.dumps({'name':file.name,'age_seconds':round(age),'size':file.stat().st_size,'recent_error_count':len(re.findall(r'(?:exception|traceback|error|failed)',text,re.I)),'recent_success_count':len(re.findall(r'(?:pass|settled|complete|no candidates|awaiting)',text,re.I))}))
+          PY
