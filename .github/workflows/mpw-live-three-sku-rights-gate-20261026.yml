@@ -133,7 +133,15 @@ jobs:
                  "asset_sha256_prefix":artifact_sha[:16] if artifact_sha else None,
                  "rights_hash_reference_matches_asset":bool(artifact_sha and
                     any(fields.get(key)==artifact_sha for key in
-                    ("rights_asset_sha256","rights_artifact_sha256","rights_file_sha256","approved_artifact_sha256")))};
+                    ("rights_asset_sha256","rights_artifact_sha256","rights_file_sha256","approved_artifact_sha256"))),
+                 "existing_catalog_hash_matches_asset":[key for key in
+                    ("asset_sha256","final_pdf_sha256","pdf_sha256","sha256")
+                    if artifact_sha and type(fields.get(key)) is str
+                    and fields[key].lower()==artifact_sha],
+                 "existing_approval_flags":{key:fields.get(key) is True for key in
+                    ("license_verified","quality_approved","publication_approved")},
+                 "has_product_rights_review_status":bool(fields.get("rights_review_status")),
+                 "has_owner_registration_approval":bool(fields.get("owner_approved_inactive_registration"))};
               if not is_sellable:blocked.append(sku)
               else:sale_ready+=1
             print("MPW_PUBLIC_SKU_RIGHTS="+json.dumps(record,sort_keys=True))
