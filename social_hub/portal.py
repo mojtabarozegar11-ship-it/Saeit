@@ -28,6 +28,12 @@ def _approve_allowed(user, brand):
 def _db():
     path = os.getenv("SOCIAL_HUB_PRIVATE_DB", "")
     if not path:
+        try:
+            from .site_config import PRIVATE_DB
+            path = PRIVATE_DB
+        except ImportError:
+            pass
+    if not path:
         raise Blocked("Private database is not configured; no accounts connected")
     return Store(path)
 
