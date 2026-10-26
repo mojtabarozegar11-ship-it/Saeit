@@ -1,0 +1,172 @@
+name: MojPlayWin support Maildir safe one-time repair
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-support-maildir-safe-repair-20261026.yml"
+permissions: {contents: read}
+concurrency:
+  group: mpw-support-maildir-safe-repair
+  cancel-in-progress: false
+jobs:
+  diagnose-and-repair-scoped-account:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[MPW_SUPPORT_MAILDIR_SAFE_REPAIR_ONCE]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish pinned SSH relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-sales-audit-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Safely repair only suspended support-mailbox flags and verify deliveries
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-sales-audit-ssh"
+          timeout 150s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          from pathlib import Path
+          from email.parser import BytesHeaderParser
+          from email.header import decode_header, make_header
+          import json, subprocess, sys
+          
+          domain = "mojplaywin.com"
+          address = "support@" + domain
+          root = Path("/home/zomorod2/mail") / domain / "support"
+          
+          def report(key, value):
+              print("MPW_MAIL_REPAIR_" + key + "=" + json.dumps(value, ensure_ascii=False, sort_keys=True), flush=True)
+          
+          def call_uapi(fn, **fields):
+              cmd = ["uapi", "--output=json", "Email", fn] + [str(k) + "=" + str(v) for k,v in fields.items()]
+              try:
+                  p = subprocess.run(cmd, capture_output=True, timeout=25, check=False)
+                  if p.returncode != 0 or len(p.stdout) > 2000000:
+                      return False, None
+                  obj = json.loads(p.stdout.decode("utf-8"))
+                  res = obj.get("result") or {}
+                  return res.get("status") in (1,True), res.get("data")
+              except (OSError, ValueError, UnicodeError, subprocess.TimeoutExpired, TypeError):
+                  return False, None
+          
+          def target(rows):
+              if not isinstance(rows, list):
+                  return None
+              for row in rows:
+                  if isinstance(row,dict) and str(row.get("email") or row.get("login") or row.get("user") or "").lower() in ("support",address):
+                      return row
+              return None
+          
+          def flag(v):
+              if v in (True,1,"1","true","True"): return True
+              if v in (False,0,"0","false","False"): return False
+              return None
+          
+          ok, rows = call_uapi("list_pops",domain=domain)
+          r = target(rows) if ok else None
+          report("ACCOUNT_PRESENT",r is not None)
+          if r is None:
+              sys.exit(11)
+          
+          ok2, disk_rows = call_uapi("list_pops_with_disk",domain=domain)
+          rd = target(disk_rows) if ok2 else None
+          if rd is not None:
+              report("STORAGE_PERCENT",rd.get("diskusedpercent"))
+              report("QUOTA_STATUS_AVAILABLE",True)
+          else:
+              report("QUOTA_STATUS_AVAILABLE",False)
+          
+          changes = []
+          failures = []
+          for k,action in (("suspended_incoming","unsuspend_incoming"),("suspended_login","unsuspend_login"),("suspended_outgoing","unsuspend_outgoing")):
+              value = flag((rd or {}).get(k, r.get(k)))
+              report(k.upper(),value)
+              if value is True:
+                  passed,_ = call_uapi(action,email=address)
+                  changes.append(k if passed else "")
+                  if not passed: failures.append(k)
+          
+          report("UNSUSPEND_ACTIONS_SUCCEEDED",[v for v in changes if v])
+          report("UNSUSPEND_FAILURE_COUNT",len(failures))
+          report("MAILDIR_EXISTS",root.is_dir() and not root.is_symlink())
+          if not root.is_dir() or root.is_symlink():
+              sys.exit(12)
+          
+          counts = {}
+          matches = {"first_test":False,"second_test":False}
+          scanned = 0
+          for folder in ("new","cur"):
+              base = root / folder
+              count = 0
+              if base.is_dir() and not base.is_symlink():
+                  for f in base.iterdir():
+                      if count >= 30000: break
+                      if not f.is_file() or f.is_symlink(): continue
+                      count += 1
+                      if scanned >= 1000: continue
+                      scanned += 1
+                      try:
+                          with f.open("rb") as h: raw=h.read(16384)
+                          msg=BytesHeaderParser().parsebytes(raw,headersonly=True)
+                          subject=str(make_header(decode_header(str(msg.get("subject") or ""))))
+                          if "MojPlayWin support mailbox delivery verification" in subject:
+                              matches["first_test"]=True
+                          if "MPW-SUPPORT-VERIFY-20261026-02" in subject:
+                              matches["second_test"]=True
+                      except (OSError, UnicodeError, ValueError, TypeError):
+                          continue
+              counts[folder]=count
+          
+          report("INBOX_COUNTS",counts)
+          report("KNOWN_TEST_MESSAGES_PRESENT",matches)
+          report("SUBJECTS_OR_CUSTOMER_DATA_LOGGED",False)
+          report("MAIL_FILES_CHANGED",False)
+          if failures:
+              sys.exit(13)
+          report("COMPLETED",True)
+          PY
+      - name: Remove ephemeral SSH material
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-sales-audit-ssh"
+          test -d "$d" && rm -rf -- "$d" || true
