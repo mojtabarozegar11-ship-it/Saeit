@@ -107,6 +107,46 @@ class Build50Tests(unittest.TestCase):
         self.assertTrue(package.exists())
         ticket=engine.read(self.root/'build-50/test_product/planning-request.json')
         self.assertEqual(ticket['required_work_packages'],48)
+    def test_unchanged_audit_receipts_are_not_rewritten_but_tampering_rechecks(self):
+        import os
+        folder=self.root/'digital-products/test_product';folder.mkdir(parents=True)
+        package=folder/'test_product-internal-qa.zip'
+        package.write_bytes(b'VALID_HASH_BOUND_FIXTURE')
+        engine.save(folder/'manufacturing_manifest.json',
+                    {'artifact_sha256':engine.file_sha(package)})
+        self.assertEqual(engine.audit(self.root)['requiring_replanning'],1)
+        ticket=self.root/'build-50/test_product/planning-request.json'
+        status=self.root/'build-50-status.json'
+        older=1_700_000_000_000_000_000
+        os.utime(ticket,ns=(older,older))
+        os.utime(status,ns=(older,older))
+        self.assertEqual(engine.audit(self.root)['verified_50_stage_builds'],0)
+        self.assertEqual(ticket.stat().st_mtime_ns,older)
+        self.assertEqual(status.stat().st_mtime_ns,older)
+        before=engine.read(ticket)
+        package.write_bytes(b'CHANGED_BYTES')
+        self.assertEqual(engine.audit(self.root)['verified_50_stage_builds'],0)
+        after=engine.read(ticket)
+        self.assertNotEqual(before['source_snapshot_sha256'],after['source_snapshot_sha256'])
+        self.assertFalse(after['technical_artifact_integrity'])
+        self.assertFalse(after['commercial_release'])
+        self.assertNotEqual(ticket.stat().st_mtime_ns,older)
+        self.assertEqual(status.stat().st_mtime_ns,older)
+
+    def test_unchanged_audit_never_trusts_symlinked_ticket(self):
+        folder=self.root/'digital-products/test_product';folder.mkdir(parents=True)
+        package=folder/'test_product-internal-qa.zip'
+        package.write_bytes(b'FIXTURE')
+        engine.save(folder/'manufacturing_manifest.json',
+                    {'artifact_sha256':engine.file_sha(package)})
+        ticket=self.root/'build-50/test_product/planning-request.json'
+        ticket.parent.mkdir(parents=True)
+        protected=self.root/'protected.txt';protected.write_text('UNTOUCHED')
+        ticket.symlink_to(protected)
+        with self.assertRaisesRegex(ValueError,'BUILD50_UNSAFE_STATE'):
+            engine.audit(self.root)
+        self.assertEqual(protected.read_text(),'UNTOUCHED')
+
     def test_fewer_than_48_tasks_is_rejected(self):
         self.plan['work_packages'].pop()
         with self.assertRaises(ValueError):self.run_build()
