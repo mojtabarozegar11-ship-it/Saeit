@@ -13,7 +13,7 @@ from django.views.decorators.http import require_http_methods, require_GET
 from .catalog import BRANDS, PLATFORMS, catalogue
 from .store import Store
 from .service import connection_status
-from .adapters import Blocked
+from .adapters import Blocked, Uncertain
 
 def _allowed(user):
     if not user.is_authenticated or not user.is_active or not user.is_staff:
@@ -121,6 +121,28 @@ def dashboard(request):
                     pid = db.draft(account_id=aid,content=content,
                              schedule_at=request.POST.get("scheduled_at",""),actor=actor)
                     message = "Draft saved; not published: " + pid
+                elif operation == "ai_draft":
+                    if brand not in brands:
+                        raise Blocked("Brand not permitted")
+                    account_ids=request.POST.getlist("accounts")[:6]
+                    selected=[db.account(a) for a in account_ids]
+                    if not selected or any(not a or a["brand"]!=brand for a in selected):
+                        raise Blocked("Choose permitted official account targets")
+                    from .ai import propose
+                    result=propose(brief=request.POST.get("brief",""),brand=brand,
+                                   platforms=list(dict.fromkeys(a["platform"] for a in selected)),
+                                   language=request.POST.get("language","fa"),
+                                   explicit_api_consent=request.POST.get("api_consent")=="yes")
+                    count=0
+                    for a in selected:
+                        for variant in result["variants"]:
+                            if variant["platform"]==a["platform"]:
+                                db.draft(account_id=a["id"],content={"text":variant["text"]},
+                                         actor=actor+":ai_suggestion")
+                                count+=1
+                    if not count:
+                        raise Blocked("No matching generated drafts")
+                    message = "AI generated "+str(count)+" review-only drafts. Verify scientific and marketing claims before approval."
                 elif operation in ("approve","cancel"):
                     pid = request.POST.get("post_id","")
                     post = db.post(pid)
@@ -137,7 +159,7 @@ def dashboard(request):
                 else:
                     raise Blocked("Unsupported operation")
                 level = "success"
-            except (Blocked, ValueError, OSError, json.JSONDecodeError) as exc:
+            except (Blocked, Uncertain, ValueError, OSError, json.JSONDecodeError) as exc:
                 message, level = str(exc), "error"
         registered = [a for a in db.accounts() if a["brand"] in brands]
         posts = [p for p in db.posts(limit=200) if p["brand"] in brands]
@@ -185,6 +207,14 @@ def dashboard(request):
         '<label>Schedule UTC (ISO 8601)<input name="scheduled_at" placeholder="2026-11-01T12:00:00Z"></label>'+
         '<label>Advanced platform JSON<textarea name="advanced_json" rows="4" placeholder=\'{"privacy":"private"}\'></textarea></label>',
         "Save draft (no publishing)")
+    ai_form = form("ai_draft",
+        '<label>Brand<select name="brand">'+opt_brands+'</select></label>'+
+        '<label>Select up to six accounts<select name="accounts" multiple size="5">'+opt_accounts+'</select></label>'+
+        '<label>Language<select name="language"><option value="fa">فارسی</option><option value="en">English</option><option value="ar">العربية</option><option value="de">Deutsch</option></select></label>'+
+        '<label>Verified facts and creative brief<textarea name="brief" rows="6" maxlength="8000" required></textarea></label>'+
+        '<label><input type="checkbox" name="api_consent" value="yes" required style="width:auto"> I authorize this brief to be sent to the configured OpenAI API for draft generation.</label>'+
+        '<p class="hint">AI output is a draft, never a verified scientific claim or automatically published post.</p>',
+        "Generate ChatGPT drafts (review required)")
     account_rows = []
     for a in registered:
         status = statuses.get(a["id"],{})
@@ -231,7 +261,7 @@ td,th{padding:10px;border-bottom:1px solid #625940;text-align:right;word-break:b
 <main>""" + msg + '<div class="grid">'+stats+'</div><br><div class="grid">'+(
 '<section><h2>ثبت حساب رسمی</h2>'+register+'</section>' if register else "")+(
 '<section><h2>ثبت شاهد مالکیت</h2>'+verify+'</section>' if verify else "")+(
-'<section><h2>تهیه محتوای جدید</h2>'+composer+'</section>')+'</div>'+
+'<section><h2>تهیه محتوای جدید</h2>'+composer+'</section><section><h2>دستیار هوشمند ChatGPT</h2>'+ai_form+'</section>')+'</div>'+
 '<section><h2>حساب‌ها</h2><div class="scroll"><table><thead><tr><th>مجموعه</th><th>شبکه</th><th>شناسه</th><th>مالکیت</th><th>API</th></tr></thead><tbody>'+
 "".join(account_rows)+'</tbody></table></div></section>'+
 '<section><h2>صف انتشار و رسیدها</h2><div class="scroll"><table><thead><tr><th>مجموعه</th><th>شبکه</th><th>وضعیت</th><th>زمان UTC</th><th>رسید</th><th>اقدام</th></tr></thead><tbody>'+
