@@ -43,13 +43,19 @@ class PrivateContentAuditTests(unittest.TestCase):
                 writer.write(stream)
             result=audit.audit_pdf(path,expected_page_count=1,require_illustrations=True)
             self.assertTrue(result["checks"]["page_count_matches_declared_product_spec"])
-            self.assertFalse(result["checks"]["embedded_illustrations_present"])
+            self.assertFalse(result["checks"]["graphic_drawing_signals_present"])
             self.assertNotIn("bibliography_or_reference_markers_found", result["checks"])
             self.assertNotIn("structure_markers_found", result["checks"])
             self.assertIn("read_aloud_rhythm", result["needs_specialist_review"])
             self.assertNotIn("citation_validity", result["needs_specialist_review"])
             self.assertIn("image_scan_errors",result)
             self.assertNotIn("extracted_text",result)
+
+    def test_picturebook_vector_signal_threshold(self):
+        self.assertTrue(audit.graphic_drawing_signals_present(40,0,40,2544))
+        self.assertTrue(audit.graphic_drawing_signals_present(40,3,0,0))
+        self.assertFalse(audit.graphic_drawing_signals_present(40,0,0,0))
+        self.assertFalse(audit.graphic_drawing_signals_present(40,0,20,160))
 
     def test_pdf_audit_reports_vector_graphics_metrics_without_content(self):
         with tempfile.TemporaryDirectory() as tmp:
