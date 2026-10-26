@@ -88,7 +88,7 @@ footer{max-width:1140px;margin:auto;padding:1rem 1.4rem 2rem;color:#99c6bb;font-
 const W=720,H=820,canvas=document.getElementById('arena'),ctx=canvas.getContext('2d',{alpha:false});
 const $=id=>document.getElementById(id),colors=['#fac56b','#76e4cd','#b69cf4','#40525b'];
 const storeKey='zm.seed.guardian.v1';
-let saved={stage:1,best:0,clears:0};try{const v=JSON.parse(localStorage.getItem(storeKey)||'null');if(v&&Number.isInteger(v.stage))saved={stage:Math.max(1,Math.min(120,v.stage)),best:Math.max(0,v.best|0),clears:Math.max(0,v.clears|0)};}catch(_){}
+let saved={stage:1,best:0,clears:0};try{const v=JSON.parse(localStorage.getItem(storeKey)||'null');if(v&&Number.isInteger(v.stage))saved={stage:Math.max(1,Math.min(120,v.stage)),best:Number.isSafeInteger(v.best)&&v.best>=0&&v.best<=100000000?v.best:0,clears:Number.isSafeInteger(v.clears)&&v.clears>=0&&v.clears<=120?v.clears:0};}catch(_){}
 let stage=saved.stage,lives=7,score=0,best=saved.best,hits=0,goal=8,combo=0;
 let gates=[3,3,3],seeds=[],particles=[],stars=[],spawnClock=0,runTime=0,playing=false,mode='ready',selected=1,lastFrame=0,sound=false;
 let ac=null,mutation=0;
