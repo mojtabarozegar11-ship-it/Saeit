@@ -1,0 +1,51 @@
+name: AE-2026-001 independent-source worker growth consistency
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/ae-2026-001-ilostat-wdi-worker-growth-consistency.yml
+      - analysis/ae_ilostat_wdi_two_endpoint_worker_growth_consistency.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  independent-source-worker-growth:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Retrieve completed original ILOSTAT versus WDI worker-level source artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ae_growth"
+          gh run download 40300738631 --repo "$GITHUB_REPOSITORY" \
+            --name AE-2026-001-original-ILOSTAT-WDI-independent-worker-level-audit \
+            --dir "$RUNNER_TEMP/ae_growth"
+          test -s "$RUNNER_TEMP/ae_growth/AE_ILOSTAT_WDI_INDEPENDENT_WORKER_LEVEL_AUDIT.json"
+      - name: Compute actual two-endpoint worker growth discrepancy and source-stability sensitivity
+        run: |
+          set -euo pipefail
+          python analysis/ae_ilostat_wdi_two_endpoint_worker_growth_consistency.py \
+            --source-json "$RUNNER_TEMP/ae_growth/AE_ILOSTAT_WDI_INDEPENDENT_WORKER_LEVEL_AUDIT.json" \
+            --out "$RUNNER_TEMP/ae_growth/AE_ILOSTAT_WDI_WORKER_GROWTH_CONSISTENCY.json"
+          python - <<'PY'
+          import json,os,pathlib
+          x=json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"ae_growth"/"AE_ILOSTAT_WDI_WORKER_GROWTH_CONSISTENCY.json").read_text())
+          assert x["two_endpoint_countries_n"]==73
+          assert x["same_ilostat_source_countries"]["n"]==60
+          assert x["changed_ilostat_source_countries"]["n"]==13
+          assert x["wdi_revision_causality_identified"] is False
+          print("PASS: ACTUAL TWO-ENDPOINT WORKER GROWTH COMPARISON, NOT VINTAGE CAUSALITY")
+          PY
+      - name: Preserve actual country-level growth comparisons
+        uses: actions/upload-artifact@v4
+        with:
+          name: AE-2026-001-source-locked-ILO-WDI-worker-growth-consistency
+          path: ${{ runner.temp }}/ae_growth/AE_ILOSTAT_WDI_WORKER_GROWTH_CONSISTENCY.json
+          retention-days: 14
+          if-no-files-found: error
