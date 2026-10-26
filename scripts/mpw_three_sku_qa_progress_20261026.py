@@ -79,16 +79,20 @@ def verified_progress(root, ident):
         raise RuntimeError("PRIVATE_QA_COPY_BYTES_HASH_MISMATCH")
     ticket_dir = root / "quality1000-rework" / str(ident) / digest
     ticket_files = sorted(ticket_dir.glob("*.json"))
-    if ticket_dir.is_symlink() or len(ticket_files) != 1:
+    if ticket_dir.is_symlink() or not ticket_files:
         raise RuntimeError("PRIVATE_QA_BASE_TICKET_INVALID")
-    ticket_bytes = read_private(ticket_files[0], 1000000)
-    ticket = json.loads(ticket_bytes)
-    if (ticket.get("schema") != TICKET_SCHEMA or ticket.get("product_id") != ident
-            or ticket.get("source_file_sha256") != digest
-            or ticket.get("legal_dossier_status") != "owner_confirmed_complete"
-            or ticket.get("legal_execution_status") != "active"
-            or ticket.get("legal_dossier_reopened") is not False):
-        raise RuntimeError("PRIVATE_QA_BASE_TICKET_IDENTITY_INVALID")
+    ticket_hashes = []
+    for ticket_path in ticket_files:
+        ticket_bytes = read_private(ticket_path, 1000000)
+        ticket = json.loads(ticket_bytes)
+        if (ticket.get("schema") != TICKET_SCHEMA or ticket.get("product_id") != ident
+                or ticket.get("source_file_sha256") != digest
+                or ticket.get("legal_dossier_status") != "owner_confirmed_complete"
+                or ticket.get("legal_execution_status") != "active"
+                or ticket.get("legal_dossier_reopened") is not False):
+            raise RuntimeError("PRIVATE_QA_BASE_TICKET_IDENTITY_INVALID")
+        ticket_hashes.append(sha(ticket_bytes))
+    ticket_hashes.sort()
     audit_dir = ticket_dir / "content-audits"
     audit_files = sorted(audit_dir.glob("*.json"))
     if audit_dir.is_symlink() or len(audit_files) != 1:
@@ -128,7 +132,8 @@ def verified_progress(root, ident):
         "schema": SCHEMA,
         "product_id": ident,
         "source_sha256": digest,
-        "base_rework_ticket_sha256": sha(ticket_bytes),
+        "base_rework_ticket_sha256": ticket_hashes[0],
+        "base_rework_ticket_sha256s": ticket_hashes,
         "technical_audit_sha256": sha(audit_bytes),
         "mechanical_stage": mechanical_action,
         "mechanical_evidence": visual_metrics,

@@ -33,6 +33,10 @@ class PrivateProgressTests(unittest.TestCase):
             "schema":"saeit.mpw.three-retail-artifact-qa1000-rework.v1","product_id":sku,
             "source_file_sha256":digest,"legal_dossier_status":"owner_confirmed_complete",
             "legal_execution_status":"active","legal_dossier_reopened":False})
+        self.write_json(root/"quality1000-rework"/str(sku)/digest/"prior-base.json",{
+            "schema":"saeit.mpw.three-retail-artifact-qa1000-rework.v1","product_id":sku,
+            "source_file_sha256":digest,"legal_dossier_status":"owner_confirmed_complete",
+            "legal_execution_status":"active","legal_dossier_reopened":False})
         measured={"checks":{"reader_opened":True,"all_pdf_pages_rendered":not failed},
             "visual_render":{"rendered_page_count":415,"page_count_matches":True,
                 "render_failure":None,"near_blank_page_numbers":[],"pages_with_color_signal":403}}
@@ -54,6 +58,7 @@ class PrivateProgressTests(unittest.TestCase):
             self.assertEqual(saved["legal_dossier_status"],"owner_confirmed_complete")
             self.assertFalse(saved["legal_dossier_reopened"])
             self.assertFalse(saved["commercial_release_allowed"])
+            self.assertEqual(len(saved["base_rework_ticket_sha256s"]),2)
 
     def test_rejects_failed_mechanical_gate_without_advancing(self):
         with tempfile.TemporaryDirectory() as tmp:
