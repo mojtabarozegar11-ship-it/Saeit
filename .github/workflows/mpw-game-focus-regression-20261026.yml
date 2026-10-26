@@ -58,6 +58,7 @@ jobs:
           node --check /tmp/beacon-labyrinth-beta.js
           node --check /tmp/nebula-salvage-beta.js
           node tests/game/mpw-five-beta-mechanics-regressions.cjs
+          echo 'GAME_FOCUS_LOSS_REGRESSION=PASS'
       - name: Package and verify deterministic source-only candidate
         run: |
           set -euo pipefail
@@ -69,4 +70,3 @@ jobs:
           path: ${{ runner.temp }}/game-source-candidate.zip
           retention-days: 7
           if-no-files-found: error
-          echo 'GAME_FOCUS_LOSS_REGRESSION=PASS'
