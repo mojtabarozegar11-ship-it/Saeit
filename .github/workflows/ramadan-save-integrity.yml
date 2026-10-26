@@ -30,4 +30,4 @@ jobs:
       - name: Check reversible deployment script syntax
         run: python -m py_compile games/ramadan-war/deploy.py
       - name: Check browser module syntax
-        run: node --check games/ramadan-war/game.js && node --check games/ramadan-war/save-validation.mjs
+        run: node --check games/ramadan-war/game.js && node --check games/ramadan-war/save-validation.mjs && node --check games/ramadan-war/input-guard.mjs
