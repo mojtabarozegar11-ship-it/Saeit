@@ -56,6 +56,29 @@ class LeechStreamAcceptanceRegression(unittest.TestCase):
                 self.assertFalse(self.operator.stream_segment_is_acceptable(
                     marker + " " + self.valid))
 
+    def test_private_accept_rejects_disguised_reasoning_before_file_writes(self):
+        # The private accept command can be invoked independently of the
+        # streaming operator; it must apply the same canonical safety gate.
+        writer_path = Path(__file__).resolve().parents[1] / "scripts/factory_leech_free_offline_original_author_20261025.py"
+        spec = importlib.util.spec_from_file_location("leech_private_accept_gate", writer_path)
+        writer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(writer)
+        disguised = (
+            "<th\u200bink>private reasoning</th\u200bink>",
+            "<\uff54hink>private reasoning</\uff54hink>",
+            "<th\u202eink>private reasoning</th\u202eink>",
+            "<|im_\u2060start|>",
+            "[\uff29NST]",
+        )
+        for marker in disguised:
+            with self.subTest(marker=repr(marker)):
+                body = marker + " " + self.valid
+                with patch.object(writer, "source_evidence", return_value=({}, [], [])), \
+                     patch.object(writer, "state", return_value=({}, 0, 1, 1)), \
+                     patch.object(writer, "ensure_private", side_effect=AssertionError("UNSAFE_WRITE_REACHED")):
+                    with self.assertRaisesRegex(RuntimeError, "MODEL_REASONING_OR_CONTROL_TOKEN"):
+                        writer.accept({1: []}, body)
+
     def test_short_repetitive_or_incomplete_text_is_rejected(self):
         for text in ("word " * 400 + ".", "Only a short sentence.", self.valid[:-1]):
             with self.subTest(text=text[:30]):
