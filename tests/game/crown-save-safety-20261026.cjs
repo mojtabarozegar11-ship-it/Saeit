@@ -165,4 +165,56 @@ assert.equal(activeShop.calls.focus,1,'resumed play must restore canvas focus');
 assert.equal(shopReturn('menu').state,'menu','shop opened from menu must return to menu');
 assert.ok(js.slice(js.indexOf('function backFromPane(){'),js.indexOf('function ',js.indexOf('function backFromPane(){')+20)).includes("state='paused'"),'pause overlay must be restored by backFromPane');
 
+// Opening the hangar from the menu must show saved upgrade levels and correct prices.
+// Otherwise an existing level-three purchase is silently reset to level one.
+const shopOpenStart=js.indexOf('function openShop(){');
+const shopOpenEnd=js.indexOf('function resumeFromShop(){',shopOpenStart);
+assert.ok(shopOpenStart>=0&&shopOpenEnd>shopOpenStart,'hangar entry must be testable');
+const shopOpenCode=js.slice(shopOpenStart,shopOpenEnd);
+function shopEntry(origin){
+ return vm.runInNewContext(
+  'let state='+JSON.stringify(origin)+",overlayOrigin='none',overlayState='none',bank=40;"+
+  'let upgrades={armor:0,cannons:0};const save={credits:300,hangar:{armor:3,cannons:2}};'+
+  'let displayed=null;const $=id=>({hidden:false,textContent:""});'+
+  'function hidePanes(){}function showOverlay(){}function shopButtons(){displayed={...upgrades}}'+
+  shopOpenCode+'openShop();({state,bank,upgrades,displayed,overlayOrigin})'
+ );
+}
+const menuHangar=shopEntry('menu');
+assert.equal(menuHangar.state,'paused');
+assert.equal(menuHangar.bank,300,'menu hangar must use saved earned credits');
+assert.equal(menuHangar.upgrades.armor,3,'menu hangar must restore purchased armor levels');
+assert.equal(menuHangar.displayed.cannons,2,'displayed prices must reflect saved cannon level');
+assert.equal(menuHangar.overlayOrigin,'menu','shop return destination must remain the menu');
+const combatHangar=shopEntry('playing');
+assert.equal(combatHangar.bank,40,'combat hangar must preserve the current run bank');
+assert.equal(combatHangar.upgrades.armor,0,'combat hangar must preserve active run upgrade state');
+
 console.log('CROWN_SAVE_SAFETY_PASS: scoreboard validation, date safety, achievements and backward-compatible progress');
+
+
+// Runtime preference changes must immediately adjust animation intensity and auto quality.
+const motionStart=js.indexOf('function updateMotionPreference(event){');
+const motionEnd=js.indexOf('function reset(){',motionStart);
+assert.ok(motionStart>=0&&motionEnd>motionStart,'motion preference callback must exist');
+let motionCallback=null,starRebuilds=0;
+const motionBox={
+ motionPreference:{addEventListener(event,callback){assert.equal(event,'change');motionCallback=callback}},
+ reduced:false,modeLow:false,shake:6,save:{settings:{quality:'auto'}},
+ navigator:{hardwareConcurrency:8},makeStars(){starRebuilds++}
+};
+vm.runInNewContext(js.slice(motionStart,motionEnd),motionBox);
+assert.equal(typeof motionCallback,'function','game must subscribe to live preference changes');
+motionCallback({matches:true});
+assert.equal(motionBox.reduced,true,'reduced-motion change must be applied immediately');
+assert.equal(motionBox.modeLow,true,'automatic graphics quality must respect reduced motion');
+assert.equal(motionBox.shake,0,'reduced motion must stop active camera shake');
+assert.equal(starRebuilds,1,'background particles must be regenerated at lower density');
+motionCallback({matches:false});
+assert.equal(motionBox.reduced,false,'turning off reduced motion must restore full animation preference');
+assert.equal(motionBox.modeLow,false,'auto graphics quality must recover after preference changes');
+assert.equal(starRebuilds,2,'background must adapt when preference is restored');
+motionBox.save.settings.quality='low';
+motionCallback({matches:false});
+assert.equal(motionBox.modeLow,true,'explicit low quality must override motion preference');
+console.log('CROWN_LIVE_MOTION_PASS: live accessibility settings and particle density');
