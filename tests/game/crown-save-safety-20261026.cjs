@@ -191,3 +191,30 @@ assert.equal(combatHangar.bank,40,'combat hangar must preserve the current run b
 assert.equal(combatHangar.upgrades.armor,0,'combat hangar must preserve active run upgrade state');
 
 console.log('CROWN_SAVE_SAFETY_PASS: scoreboard validation, date safety, achievements and backward-compatible progress');
+
+
+// Runtime preference changes must immediately adjust animation intensity and auto quality.
+const motionStart=js.indexOf('function updateMotionPreference(event){');
+const motionEnd=js.indexOf('function reset(){',motionStart);
+assert.ok(motionStart>=0&&motionEnd>motionStart,'motion preference callback must exist');
+let motionCallback=null,starRebuilds=0;
+const motionBox={
+ motionPreference:{addEventListener(event,callback){assert.equal(event,'change');motionCallback=callback}},
+ reduced:false,modeLow:false,shake:6,save:{settings:{quality:'auto'}},
+ navigator:{hardwareConcurrency:8},makeStars(){starRebuilds++}
+};
+vm.runInNewContext(js.slice(motionStart,motionEnd),motionBox);
+assert.equal(typeof motionCallback,'function','game must subscribe to live preference changes');
+motionCallback({matches:true});
+assert.equal(motionBox.reduced,true,'reduced-motion change must be applied immediately');
+assert.equal(motionBox.modeLow,true,'automatic graphics quality must respect reduced motion');
+assert.equal(motionBox.shake,0,'reduced motion must stop active camera shake');
+assert.equal(starRebuilds,1,'background particles must be regenerated at lower density');
+motionCallback({matches:false});
+assert.equal(motionBox.reduced,false,'turning off reduced motion must restore full animation preference');
+assert.equal(motionBox.modeLow,false,'auto graphics quality must recover after preference changes');
+assert.equal(starRebuilds,2,'background must adapt when preference is restored');
+motionBox.save.settings.quality='low';
+motionCallback({matches:false});
+assert.equal(motionBox.modeLow,true,'explicit low quality must override motion preference');
+console.log('CROWN_LIVE_MOTION_PASS: live accessibility settings and particle density');
