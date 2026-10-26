@@ -73,6 +73,8 @@ def identify_renderer():
 def validate():
     import importlib
     import services.mpw_trx_walletless_one_tap_ui as one
+    base=importlib.import_module(one.render_invoice_page.__module__)
+    importlib.reload(base)
     importlib.reload(one)
     css=one.render_invoice_page.__globals__["STYLES"]
     for rule in (MARKER,'section[aria-label="Easy TRX payment"]',
