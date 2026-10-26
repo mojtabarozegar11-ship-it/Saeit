@@ -123,6 +123,17 @@ class DirectSocialPublishingTests(unittest.TestCase):
                 pub.publish(job(), ledger_path=ledger, environ=env(), transport=failed)
             self.assertEqual(len(calls), 1)
 
+    def test_private_ledger_storage_required(self):
+        with tempfile.TemporaryDirectory() as d:
+            import os
+            private_dir = Path(d) / "unsafe"
+            private_dir.mkdir(mode=0o755)
+            os.chmod(private_dir, 0o755)
+            with self.assertRaises(pub.PublicationBlocked):
+                pub.publish(job(), ledger_path=private_dir / "ledger.sqlite",
+                            environ=env(), transport=lambda req: (200, b'{}'))
+            self.assertFalse((private_dir / "ledger.sqlite").exists())
+
     def test_unsupported_platform_is_not_fake_ready(self):
         for platform in ("instagram", "linkedin", "tiktok", "facebook", "researchgate"):
             with self.assertRaises(pub.PublicationBlocked):
