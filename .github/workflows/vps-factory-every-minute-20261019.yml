@@ -239,6 +239,78 @@ jobs:
                   for line in lines[-50:]:
                       if line.startswith(("VPS_FACTORY_","FACTORY_","Traceback","TimeoutError","ModuleNotFoundError","ImportError","sqlite3.OperationalError")):
                           print("LOG_SIGNAL="+line[:240])
+          # Factory-only, aggregate queue/scheduler/gate census. No VPS writes.
+          import collections, re, subprocess, shutil
+          cron_run=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=6,check=False)
+          live_cron=([row for row in cron_run.stdout.splitlines()
+                      if row.strip() and not row.lstrip().startswith("#")]
+                     if cron_run.returncode==0 else [])
+          for tag in ("SAEIT_FACTORY_EVERY_MINUTE_V1",
+                      "SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025",
+                      "SAEIT_AGRI200_AUTONOMOUS_CLOSED_LOOP_V1",
+                      "SAEIT_ENGLISH_FIRST_SINGLE_ACTIVE_20261025"):
+              print("FACTORY_CRON_COUNT "+tag+"="+str(sum(tag in row for row in live_cron)))
+          print("FACTORY_DISK_FREE_GIB="+str(round(shutil.disk_usage(private).free/2**30,3)))
+          area=private/"production-instructions"
+          orders=area/"orders"
+          known=("site-topic-snapshot","mojplaywin-site-qa-return",
+                 "owner_requested_education700_p0","owner_requested_single_leech_english_20261025")
+          by_origin=collections.Counter()
+          by_state=collections.Counter()
+          order_id_set=set()
+          corrupt=0
+          if orders.is_dir() and not orders.is_symlink():
+              for p in orders.iterdir():
+                  if p.suffix!=".json": continue
+                  try:
+                      if p.is_symlink() or not p.is_file() or p.stat().st_size>250000:
+                          raise ValueError("unsafe")
+                      item=json.loads(p.read_text(encoding="utf8"))
+                      if not isinstance(item,dict) or not re.fullmatch(r"WO-[0-9]{8}[.]json",p.name):
+                          raise ValueError("schema")
+                      order_id_set.add(p.stem)
+                      origin=item.get("origin")
+                      by_origin[origin if origin in known else "other"]+=1
+                      status=item.get("status")
+                      by_state[status if status in ("issued","blocked_rework","in_engineering","completed_verified") else "other"]+=1
+                  except (OSError,ValueError,TypeError):
+                      corrupt+=1
+          print("FACTORY_CURRENT_ORDERS="+str(len(order_id_set))+
+                " UNSAFE="+str(corrupt)+" ORIGINS="+json.dumps(dict(by_origin),sort_keys=True)+
+                " STATUSES="+json.dumps(dict(by_state),sort_keys=True))
+          for label,filename in (
+              ("agri200","owner-agri200-p0-index.json"),
+              ("education700","owner-education700-p0-index.json"),
+              ("jobs300","owner-jobs300-ir-p0-index.json"),
+              ("women200","owner-women-home200-ir-p0-index.json")):
+              path=area/filename
+              if path.is_symlink() or not path.is_file():
+                  print("FACTORY_INDEX "+label+"=MISSING_OR_UNSAFE");continue
+              try:
+                  index=json.loads(path.read_text(encoding="utf8"))
+                  if not isinstance(index,dict):raise ValueError("root")
+                  raw=index.get("order_ids_ranked")
+                  if isinstance(raw,list) and len(raw)<=2000:
+                      ids=[i for i in raw if isinstance(i,str) and re.fullmatch(r"WO-[0-9]{8}",i)]
+                      print("FACTORY_INDEX "+label+" LISTED="+str(len(ids))+
+                            " PRESENT="+str(sum(i in order_id_set for i in ids))+
+                            " MISSING="+str(sum(i not in order_id_set for i in ids)))
+                  else:
+                      print("FACTORY_INDEX "+label+" NO_COMPATIBLE_RANKED_IDS")
+              except (OSError,ValueError,TypeError):
+                  print("FACTORY_INDEX "+label+" INVALID_JSON")
+          for label,folder in (
+              ("stage01_proofs","stage-01/receipts"),
+              ("stage02_sources","stage-02/receipts"),
+              ("stage03_designs","stage-03/receipts"),
+              ("stage04_prototypes","stage-04/receipts"),
+              ("stage05_manuscripts","stage-05/completed-drafts"),
+              ("stage06_qc1000","stage-06/strict-qc1000")):
+              d=area/folder
+              count=sum(p.is_file() and not p.is_symlink() and p.suffix==".json"
+                        for p in d.iterdir()) if d.is_dir() and not d.is_symlink() else 0
+              print("FACTORY_GATE_RECEIPTS "+label+"="+str(count))
+          print("FACTORY_DIAGNOSTICS_READ_ONLY=true")
           for proc in Path("/proc").iterdir():
               if not proc.name.isdigit():continue
               try:
