@@ -205,7 +205,7 @@ def compile_recipe(spec, recipes):
                   'search_states_evaluated':searched,'training_examples':len(train),
                   'heldout_examples_passed':len(holdout),'general_ai_invention':False,
                   'scientific_review_completed':False,'commercial_release':False,
-                   'generator_capability_revision':'verified-distribution-v4'}
+                   'generator_capability_revision':'verified-grouped-statistics-v5'}
     if destination.exists():
         saved = read(destination/'design_receipt.json')
         if saved.get('functional_sha256') != functional_hash:
@@ -296,6 +296,30 @@ def calculate_distribution(records):
             'population_variance': str(variance), **quartiles}
 # DISTRIBUTION_API_V4_END
 
+# GROUPED_STATISTICS_API_V5_START
+def calculate_grouped_statistics(records, group_by):
+    """Summarize validated batch results by one declared numeric input field."""
+    if not isinstance(group_by, str) or group_by not in NAMES:
+        raise ValueError('GROUP_FIELD_REQUIRED')
+    batch = calculate_batch(records)
+    groups = {}
+    for row, result in zip(records, batch['results']):
+        key = Decimal(str(row[group_by]))
+        groups.setdefault(key, []).append(Decimal(result['result']))
+    summaries = []
+    with localcontext() as context:
+        context.prec = 50
+        for key in sorted(groups):
+            values = groups[key]
+            total = sum(values, Decimal(0))
+            summaries.append({'group_value': str(key), 'count': len(values),
+                              'sum': str(total), 'minimum': str(min(values)),
+                              'maximum': str(max(values)),
+                              'mean': str(total / Decimal(len(values)))})
+    return {'group_by': group_by, 'unit': batch['results'][0]['unit'],
+            'groups': summaries}
+# GROUPED_STATISTICS_API_V5_END
+
 if __name__ == '__main__':
     incoming=json.load(sys.stdin)
     print(json.dumps(calculate_batch(incoming) if isinstance(incoming,list)
@@ -314,6 +338,10 @@ from calculator import calculate_statistics
 # DISTRIBUTION_TESTS_V4_START
 from calculator import calculate_distribution
 # DISTRIBUTION_TESTS_V4_END
+
+# GROUPED_STATISTICS_TESTS_V5_START
+from calculator import calculate_grouped_statistics
+# GROUPED_STATISTICS_TESTS_V5_END
 EXAMPLES = %r
 class GeneratedAcceptanceTests(unittest.TestCase):
     def test_reference_cases(self):
@@ -396,6 +424,34 @@ class GeneratedAcceptanceTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 calculate_distribution(invalid)
     # DISTRIBUTION_TESTS_V4_END
+    # GROUPED_STATISTICS_TESTS_V5_START
+    def test_grouped_statistics_match_independent_decimal_reference(self):
+        rows=[item['inputs'] for item in EXAMPLES[:4]]
+        group_by=next(iter(rows[0]))
+        observed=calculate_grouped_statistics(rows, group_by)
+        self.assertEqual(observed['group_by'], group_by)
+        self.assertEqual(observed['unit'], calculate(rows[0])['unit'])
+        expected={}
+        for row in rows:
+            key=Decimal(str(row[group_by]))
+            expected.setdefault(key, []).append(Decimal(calculate(row)['result']))
+        self.assertEqual(len(observed['groups']), len(expected))
+        for actual, key in zip(observed['groups'], sorted(expected)):
+            values=expected[key]
+            self.assertEqual(Decimal(actual['group_value']), key)
+            self.assertEqual(actual['count'], len(values))
+            self.assertEqual(Decimal(actual['sum']), sum(values, Decimal(0)))
+            self.assertEqual(Decimal(actual['minimum']), min(values))
+            self.assertEqual(Decimal(actual['maximum']), max(values))
+            self.assertEqual(Decimal(actual['mean']), sum(values, Decimal(0))/Decimal(len(values)))
+    def test_grouped_statistics_reject_invalid_field_and_batch(self):
+        row=EXAMPLES[0]['inputs']
+        group_by=next(iter(row))
+        for field in ('unknown', None, '', 1):
+            with self.assertRaises(ValueError): calculate_grouped_statistics([row], field)
+        for records in ([], [{}], [{}]*101, None, 'broken'):
+            with self.assertRaises(ValueError): calculate_grouped_statistics(records, group_by)
+    # GROUPED_STATISTICS_TESTS_V5_END
 ''' % examples
     readme = '# '+spec['title']+'\n\n'+spec['problem']+'\n\n'
     readme += 'Method: bounded arithmetic program synthesis; not a general AI invention.\n\n'
@@ -403,7 +459,7 @@ class GeneratedAcceptanceTests(unittest.TestCase):
     readme += 'Output unit: '+spec['output_unit']+'\n\n'+spec['limitations']+'\n\n'
     readme += 'Run: python calculator.py < example_inputs.json\n\n'
     readme += 'Bounded batch usage: provide a JSON array of 1-100 complete input objects on stdin; invalid entries reject the whole batch.\n\n'
-    readme += 'Python API: calculate_statistics(records) and calculate_distribution(records) provide exact-Decimal descriptive summaries, interpolated p25/median/p75, and population variance for 1-100 validated customer rows. Descriptions are not predictive risk estimates.\n\n'
+    readme += 'Python API: calculate_statistics(records) and calculate_distribution(records) provide exact-Decimal descriptive summaries, interpolated p25/median/p75, and population variance for 1-100 validated customer rows. calculate_grouped_statistics(records, group_by) provides ordered per-input totals, counts, ranges and means. Descriptions are not predictive risk estimates.\n\n'
     readme += 'Technical prototype; scientific, usability and commercial review remain pending.\n'
     stage = Path(tempfile.mkdtemp(prefix='.candidate-',dir=str(recipes)))
     try:
@@ -606,8 +662,8 @@ def evolve_recipe(recipe, recipes):
     prior_code=calculator.read_text(encoding='utf8')
     if not prior_code.startswith('"""Generated deterministic arithmetic planning tool;'):
         raise ValueError('EVOLUTION_SOURCE_NOT_COMPILER_OWNED')
-    if ('# DISTRIBUTION_API_V4_START' in prior_code
-            and receipt.get('generator_capability_revision')=='verified-distribution-v4'):
+    if ('# GROUPED_STATISTICS_API_V5_START' in prior_code
+            and receipt.get('generator_capability_revision')=='verified-grouped-statistics-v5'):
         return {'schema':'saeit.factory.source-evolution.v1',
                 'recipe':recipe,'changed':False,
                 'reason':'already_evolved','commercial_release':False}
@@ -653,7 +709,7 @@ def evolve_recipe(recipe, recipes):
             'revised_source_sha256':new_digest,
             'previous_source_retained':str(saved),
             'measured_acceptance':measurements,
-            'implemented_feature':'verified_decimal_customer_batch_distribution_v4',
+            'implemented_feature':'verified_decimal_grouped_customer_batch_statistics_v5',
             'independent_specialist_approval_verified':False,
             'quality_1000_certified':False,'commercial_release':False}
 

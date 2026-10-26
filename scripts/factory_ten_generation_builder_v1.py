@@ -21,6 +21,7 @@ RECIPE=re.compile(r"^(?:sheet|synth)_[0-9a-f]{24}$")
 REVISIONS={
     "verified-summary-v3": "# STATS_API_V3_START",
     "verified-distribution-v4": "# DISTRIBUTION_API_V4_START",
+    "verified-grouped-statistics-v5": "# GROUPED_STATISTICS_API_V5_START",
 }
 HEADER='''"""Versioned offline features for a validated factory arithmetic tool."""
 from calculator import NAMES, calculate, calculate_batch

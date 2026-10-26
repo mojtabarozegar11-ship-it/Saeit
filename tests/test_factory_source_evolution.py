@@ -33,6 +33,9 @@ def make_legacy_source(source):
     start=body.index('# DISTRIBUTION_API_V4_START')
     end=body.index('# DISTRIBUTION_API_V4_END',start)+len('# DISTRIBUTION_API_V4_END')
     body=body[:start]+body[end:]
+    start=body.index('# GROUPED_STATISTICS_API_V5_START')
+    end=body.index('# GROUPED_STATISTICS_API_V5_END',start)+len('# GROUPED_STATISTICS_API_V5_END')
+    body=body[:start]+body[end:]
     start=body.index('# STATS_API_V3_START')
     end=body.index('# STATS_API_V3_END',start)+len('# STATS_API_V3_END')
     body=body[:start]+body[end:]
@@ -53,12 +56,14 @@ def make_legacy_source(source):
     assert 'calculate_batch' not in cases
     cases=re.sub(r'(?ms)^# DISTRIBUTION_TESTS_V4_START\n.*?^# DISTRIBUTION_TESTS_V4_END\n','',cases)
     cases=re.sub(r'(?ms)^    # DISTRIBUTION_TESTS_V4_START\n.*?^    # DISTRIBUTION_TESTS_V4_END\n','',cases)
+    cases=re.sub(r'(?ms)^# GROUPED_STATISTICS_TESTS_V5_START\n.*?^# GROUPED_STATISTICS_TESTS_V5_END\n','',cases)
+    cases=re.sub(r'(?ms)^    # GROUPED_STATISTICS_TESTS_V5_START\n.*?^    # GROUPED_STATISTICS_TESTS_V5_END\n','',cases)
     assert 'calculate_statistics' not in cases
     assert 'calculate_distribution' not in cases
     tests.write_text(cases,encoding='utf8')
     receipt=source/'design_receipt.json'
     evidence=json.loads(receipt.read_text(encoding='utf8'))
-    assert evidence.pop('generator_capability_revision')=='verified-distribution-v4'
+    assert evidence.pop('generator_capability_revision')=='verified-grouped-statistics-v5'
     receipt.write_text(json.dumps(evidence,sort_keys=True,indent=2)+'\n',encoding='utf8')
     return body
 
@@ -81,7 +86,7 @@ class SourceEvolutionTests(unittest.TestCase):
         result=designer.evolve_recipe(self.name,self.recipes)
         self.assertTrue(result['changed'])
         self.assertEqual(result['previous_source_sha256'],before)
-        self.assertEqual(result['implemented_feature'],'verified_decimal_customer_batch_distribution_v4')
+        self.assertEqual(result['implemented_feature'],'verified_decimal_grouped_customer_batch_statistics_v5')
         self.assertNotEqual(result['previous_source_sha256'],result['revised_source_sha256'])
         self.assertIn('def calculate_batch', (self.source/'calculator.py').read_text())
         self.assertIn('def calculate_statistics', (self.source/'calculator.py').read_text())
@@ -106,6 +111,9 @@ class SourceEvolutionTests(unittest.TestCase):
         code=code[:first]+code[last:]
         first=code.index('# STATS_API_V3_START')
         last=code.index('# STATS_API_V3_END',first)+len('# STATS_API_V3_END')
+        code=code[:first]+code[last:]
+        first=code.index('# GROUPED_STATISTICS_API_V5_START')
+        last=code.index('# GROUPED_STATISTICS_API_V5_END',first)+len('# GROUPED_STATISTICS_API_V5_END')
         calculator.write_text(code[:first]+code[last:],encoding='utf8')
         tests=self.source/'test_calculator.py'
         content=tests.read_text(encoding='utf8')
@@ -113,6 +121,8 @@ class SourceEvolutionTests(unittest.TestCase):
         content=re.sub(r'(?ms)^    # DISTRIBUTION_TESTS_V4_START\n.*?^    # DISTRIBUTION_TESTS_V4_END\n','',content)
         content=re.sub(r'(?ms)^# STATS_TESTS_V3_START\n.*?^# STATS_TESTS_V3_END\n','',content)
         content=re.sub(r'(?ms)^    # STATS_TESTS_V3_START\n.*?^    # STATS_TESTS_V3_END\n','',content)
+        content=re.sub(r'(?ms)^# GROUPED_STATISTICS_TESTS_V5_START\n.*?^# GROUPED_STATISTICS_TESTS_V5_END\n','',content)
+        content=re.sub(r'(?ms)^    # GROUPED_STATISTICS_TESTS_V5_START\n.*?^    # GROUPED_STATISTICS_TESTS_V5_END\n','',content)
         tests.write_text(content,encoding='utf8')
         receipt=self.source/'design_receipt.json'
         data=json.loads(receipt.read_text(encoding='utf8'))
@@ -125,7 +135,7 @@ class SourceEvolutionTests(unittest.TestCase):
         self.assertEqual(change['previous_source_sha256'],old_digest)
         self.assertTrue(Path(change['previous_source_retained']).is_dir())
         self.assertEqual(json.loads((self.source/'design_receipt.json').read_text())['generator_capability_revision'],
-                         'verified-distribution-v4')
+                         'verified-grouped-statistics-v5')
         maker.verify_recipe(self.source,minimum_tests=7)
         self.assertFalse(designer.evolve_recipe(self.name,self.recipes)['changed'])
 
@@ -139,6 +149,8 @@ class SourceEvolutionTests(unittest.TestCase):
         prior=tests.read_text(encoding='utf8')
         prior=re.sub(r'(?ms)^# DISTRIBUTION_TESTS_V4_START\n.*?^# DISTRIBUTION_TESTS_V4_END\n','',prior)
         prior=re.sub(r'(?ms)^    # DISTRIBUTION_TESTS_V4_START\n.*?^    # DISTRIBUTION_TESTS_V4_END\n','',prior)
+        prior=re.sub(r'(?ms)^# GROUPED_STATISTICS_TESTS_V5_START\n.*?^# GROUPED_STATISTICS_TESTS_V5_END\n','',prior)
+        prior=re.sub(r'(?ms)^    # GROUPED_STATISTICS_TESTS_V5_START\n.*?^    # GROUPED_STATISTICS_TESTS_V5_END\n','',prior)
         tests.write_text(prior,encoding='utf8')
         receipt=self.source/'design_receipt.json'
         data=json.loads(receipt.read_text())
