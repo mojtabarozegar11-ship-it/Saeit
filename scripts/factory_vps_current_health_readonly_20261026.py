@@ -47,7 +47,6 @@ def inventory():
     tags = (
         "SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025",
         "SAEIT_AGRI200_AUTONOMOUS_CLOSED_LOOP_V1",
-        "SAEIT_OWNER_LEECH",
     )
     timers = command(["systemctl", "list-timers", "--all", "--no-legend",
                       "--no-pager"])
@@ -128,6 +127,8 @@ def inventory():
         "cron_active_count": len(active) if active is not None else None,
         "cron_marker_counts": ({tag: sum(tag in row for row in active)
                                 for tag in tags} if active is not None else None),
+        "leech_cron_like_count": (sum(bool(re.search("leech|WO-26102501", row, re.I))
+                                      for row in active) if active is not None else None),
         "systemd_timers_readable": timers is not None,
         "related_timer_count": (sum(bool(re.search("factory|agri200|qc1000|strict.serial",
                                                     row, re.I)) for row in timers.splitlines())
