@@ -1,9 +1,11 @@
 """Mount only inside the independent personal Django deployment URLconf."""
 from django.urls import path
+from django.contrib import admin
 from .portal import dashboard, read_status
 from .official import public_channels, public_channels_json
 
 urlpatterns = [
+    path("login/", admin.site.login, name="mojtaba_social_login"),
     path("", dashboard, name="mojtaba_social_command"),
     path("status/", read_status, name="mojtaba_social_status"),
     path("official/", public_channels, name="mojtaba_official_channels"),
