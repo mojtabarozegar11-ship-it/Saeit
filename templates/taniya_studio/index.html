@@ -124,11 +124,31 @@ Total output lines: 1
 function mountCake(){
  let icing='#ff79b8',topping='🍓',candles=0,greeting='My celebration cake';
  const storageKey='taniya-cake-design-v1';
+ const progressKey='taniya-cake-orders-v1';
  const history=[],future=[];
  let ordersCompleted=0,orderFulfilled=false,order=null;
  const orderColors=['#ff79b8','#4488cc','#73bc8b','#f2b36d'],orderTops=['🍓','🌼','🍬'],orderGreetings=['My celebration cake','Happy Birthday','Congratulations','Just Because'];
- function newCustomerOrder(){const pick=arr=>arr[Math.floor(Math.random()*arr.length)];order={icing:pick(orderColors),topping:pick(orderTops),candles:Math.floor(Math.random()*6),greeting:pick(orderGreetings)};orderFulfilled=false}
- newCustomerOrder();
+ function persistOrderProgress(){
+  try{localStorage.setItem(progressKey,JSON.stringify({ordersCompleted,orderFulfilled,order}))}catch(_){}
+ }
+ function newCustomerOrder(){const pick=arr=>arr[Math.floor(Math.random()*arr.length)];order={icing:pick(orderColors),topping:pick(orderTops),candles:Math.floor(Math.random()*6),greeting:pick(orderGreetings)};orderFulfilled=false;persistOrderProgress()}
+ // A finished customer order must not be rewarded again after refreshing the page.
+ // Accept only bounded, whitelisted state from browser storage.
+ let restoredOrder=false;
+ try{
+  const raw=localStorage.getItem(progressKey);
+  if(raw&&raw.length<512){
+   const d=JSON.parse(raw),o=d?.order;
+   if(Number.isSafeInteger(d.ordersCompleted)&&d.ordersCompleted>=0&&d.ordersCompleted<=10000&&
+      typeof d.orderFulfilled==='boolean'&&o&&typeof o==='object'&&
+      orderColors.includes(o.icing)&&orderTops.includes(o.topping)&&
+      Number.isInteger(o.candles)&&o.candles>=0&&o.candles<=5&&
+      orderGreetings.includes(o.greeting)){
+    ordersCompleted=d.ordersCompleted;orderFulfilled=d.orderFulfilled;order={icing:o.icing,topping:o.topping,candles:o.candles,greeting:o.greeting};restoredOrder=true;
+   }
+  }
+ }catch(_){}
+ if(!restoredOrder)newCustomerOrder();
  function remember(){history.push({icing,topping,candles,greeting});if(history.length>20)history.shift();future.length=0}
  try{const raw=localStorage.getItem(storageKey);if(raw&&raw.length<512){const d=JSON.parse(raw);if(d&&typeof d==='object'&&!Array.isArray(d)){
   if(typeof d.icing==='string'&&/^#[0-9a-f]{6}$/i.test(d.icing))icing=d.icing;
@@ -168,7 +188,7 @@ function mountCake(){
    candles=1+Math.floor(Math.random()*12);greeting=messages[Math.floor(Math.random()*messages.length)];
    draw();say('A surprise cake was designed. Undo restores your previous design.');
   };
-  gamebody.querySelector('[data-action="cake-check"]').onclick=()=>{if(orderFulfilled){say('This order is already completed. Choose a new order.');return}const missing=[];if(icing!==order.icing)missing.push('frosting');if(topping!==order.topping)missing.push('topping');if(candles!==order.candles)missing.push('candles');if(greeting!==order.greeting)missing.push('card message');if(missing.length){say('Almost there! Match the '+missing.join(', ')+'.');return}orderFulfilled=true;ordersCompleted++;draw();say('Customer order complete! Great decorating.')};
+  gamebody.querySelector('[data-action="cake-check"]').onclick=()=>{if(orderFulfilled){say('This order is already completed. Choose a new order.');return}const missing=[];if(icing!==order.icing)missing.push('frosting');if(topping!==order.topping)missing.push('topping');if(candles!==order.candles)missing.push('candles');if(greeting!==order.greeting)missing.push('card message');if(missing.length){say('Almost there! Match the '+missing.join(', ')+'.');return}orderFulfilled=true;ordersCompleted=Math.min(10000,ordersCompleted+1);persistOrderProgress();draw();say('Customer order complete! Great decorating.')};
   gamebody.querySelector('[data-action="cake-order"]').onclick=()=>{newCustomerOrder();draw();say('A new customer order is ready.')};
   gamebody.querySelector('[data-action="cake-reset"]').onclick=()=>{remember();icing='#ff79b8';topping='🍓';candles=0;greeting='My celebration cake';draw();say('A fresh cake is ready to decorate.')};
   gamebody.querySelector('[data-action="cake-undo"]').onclick=()=>{const previous=history.pop();if(!previous){say('Nothing to undo yet.');return}future.push({icing,topping,candles,greeting});({icing,topping,candles,greeting}=previous);draw();say('Your last edit was undone.')};
