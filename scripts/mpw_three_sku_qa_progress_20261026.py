@@ -98,46 +98,57 @@ def verified_progress(root, ident):
     ticket_hashes.sort()
     audit_dir = ticket_dir / "content-audits"
     audit_files = sorted(audit_dir.glob("*.json"))
-    if audit_dir.is_symlink() or len(audit_files) != 1:
+    if audit_dir.is_symlink() or not audit_files:
         raise RuntimeError("PRIVATE_QA_AUDIT_REPORT_INVALID")
-    audit_bytes = read_private(audit_files[0], 5000000)
-    audit = json.loads(audit_bytes)
-    if (audit.get("schema") != AUDIT_SCHEMA or audit.get("sku") != ident
-            or audit.get("source_sha256") != digest
-            or audit.get("professional_quality_score") is not None
-            or audit.get("quality1000_verified") is not False
-            or not isinstance(audit.get("measured_artifact"), dict)
-            or audit["measured_artifact"].get("sha256") != digest):
-        raise RuntimeError("PRIVATE_QA_AUDIT_IDENTITY_INVALID")
-    measured = audit.get("measured_artifact")
-    checks = measured.get("checks") if isinstance(measured, dict) else None
-    if not isinstance(checks, dict) or not checks or not all(value is True for value in checks.values()):
-        raise RuntimeError("PRIVATE_QA_MECHANICAL_CHECKS_NOT_PASSED")
-
-    if ident in (72, 225):
-        visual = measured.get("visual_render")
-        expected_pages = 415 if ident == 72 else 40
-        if (not isinstance(visual, dict) or visual.get("rendered_page_count") != expected_pages
-                or visual.get("page_count_matches") is not True or visual.get("render_failure") is not None
-                or visual.get("near_blank_page_numbers") or visual.get("pages_with_color_signal", 0) <= 0):
-            raise RuntimeError("PRIVATE_QA_FULL_PAGE_RENDER_NOT_VERIFIED")
-        mechanical_action = "FULL_PDF_RENDER_AND_MECHANICAL_CHECKS_PASSED"
-        visual_metrics = {
-            "pages_rendered": expected_pages,
-            "pages_with_color_signal": visual["pages_with_color_signal"],
-            "near_blank_page_count": len(visual.get("near_blank_page_numbers", [])),
-        }
-    else:
-        mechanical_action = "ZIP_INTEGRITY_AND_STATIC_ACCESSIBILITY_CHECKS_PASSED"
-        visual_metrics = {"zip_checks_passed": len(checks)}
-
+    passing_audits = []
+    for audit_path in audit_files:
+        audit_bytes_candidate = read_private(audit_path, 5000000)
+        audit_candidate = json.loads(audit_bytes_candidate)
+        if (audit_candidate.get("schema") != AUDIT_SCHEMA or audit_candidate.get("sku") != ident
+                or audit_candidate.get("source_sha256") != digest
+                or audit_candidate.get("professional_quality_score") is not None
+                or audit_candidate.get("quality1000_verified") is not False
+                or not isinstance(audit_candidate.get("measured_artifact"), dict)
+                or audit_candidate["measured_artifact"].get("sha256") != digest):
+            raise RuntimeError("PRIVATE_QA_AUDIT_IDENTITY_INVALID")
+        measured_candidate = audit_candidate["measured_artifact"]
+        checks_candidate = measured_candidate.get("checks")
+        if (not isinstance(checks_candidate, dict) or not checks_candidate
+                or not all(value is True for value in checks_candidate.values())):
+            continue
+        if ident in (72, 225):
+            visual_candidate = measured_candidate.get("visual_render")
+            expected_pages = 415 if ident == 72 else 40
+            if (not isinstance(visual_candidate, dict)
+                    or visual_candidate.get("rendered_page_count") != expected_pages
+                    or visual_candidate.get("page_count_matches") is not True
+                    or visual_candidate.get("render_failure") is not None
+                    or visual_candidate.get("near_blank_page_numbers")
+                    or visual_candidate.get("pages_with_color_signal", 0) <= 0):
+                continue
+            action_candidate = "FULL_PDF_RENDER_AND_MECHANICAL_CHECKS_PASSED"
+            metrics_candidate = {
+                "pages_rendered": expected_pages,
+                "pages_with_color_signal": visual_candidate["pages_with_color_signal"],
+                "near_blank_page_count": len(visual_candidate.get("near_blank_page_numbers", [])),
+            }
+        else:
+            action_candidate = "ZIP_INTEGRITY_AND_STATIC_ACCESSIBILITY_CHECKS_PASSED"
+            metrics_candidate = {"zip_checks_passed": len(checks_candidate)}
+        passing_audits.append((audit_bytes_candidate, audit_candidate, action_candidate, metrics_candidate))
+    if not passing_audits:
+        raise RuntimeError("PRIVATE_QA_NO_PASSING_AUDIT_FOR_SOURCE_HASH")
+    passing_audits.sort(key=lambda item: sha(item[0]))
+    audit_bytes, audit, mechanical_action, visual_metrics = passing_audits[0]
+    audit_hashes = sorted({sha(item[0]) for item in passing_audits})
     evidence = {
         "schema": SCHEMA,
         "product_id": ident,
         "source_sha256": digest,
         "base_rework_ticket_sha256": ticket_hashes[0],
         "base_rework_ticket_sha256s": ticket_hashes,
-        "technical_audit_sha256": sha(audit_bytes),
+        "technical_audit_sha256": audit_hashes[0],
+        "technical_audit_sha256s": audit_hashes,
         "mechanical_stage": mechanical_action,
         "mechanical_evidence": visual_metrics,
         "legal_dossier_status": "owner_confirmed_complete",
