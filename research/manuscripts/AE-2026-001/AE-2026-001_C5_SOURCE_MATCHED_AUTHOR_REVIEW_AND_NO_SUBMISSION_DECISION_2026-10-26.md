@@ -1,5 +1,10 @@
 # AE-2026-001 C5 — source-matched scientific author review and publication decision
 
+## C13 update — country-level 2023 attrition, 26 October 2026
+
+[New original-source country-level audit C13](AE-2026-001_C13_FOUR_ECONOMY_2023_ATTRITION_ORDER_STATISTIC_AUDIT_2026-10-26.md) identifies **SDN, SYR, PSE and UKR** as the four 2000/2019-positive economies lacking a positive 2023 endpoint in the dated 2026 WDI panel. Two removed ranks are below and two above the sample median, leaving the same **BGR** central observation in both the 157 and 153 cohorts. This **explains the exact unchanged median** without proving ignorable missingness. Manuscript §3.2 was scientifically amended in commit `bd05d290443e819695985d5913f8cb9edf47511f`. Previous Word artifact 12646949228 predates C11/C12 **and** C13 and must not be used as an exact-source author Word. **MAJOR REVISION / NO SUBMISSION**, historical ILOSTAT vintages and countryatlas head-to-head numerical benchmark unresolved, no author attestation or submission.
+
+
 **Date:** 26 October 2026. **Stage:** human scientific author review candidate; **not submitted, not accepted, not published**. This is a research-administration packet produced with AI assistance, **not** a human referee report or the author's personal attestation.
 
 **Latest internal AI editorial assessment (C6):** [direct functional comparison with documented countryatlas features](AE-2026-001_C6_DIRECT_COUNTRYATLAS_FUNCTIONAL_PRIOR_ART_AND_AI_EDITORIAL_GATE_2026-10-26.md) completed. The comparator already documents WDI vintage comparison, country selection, revision summaries and unit-rebasing warnings. AE's sign/rank/annualized-growth application is descriptive, not a validated new estimator. **Decision remains MAJOR REVISION / NO SUBMISSION**; no real head-to-head execution or independent ILO absolute employment validation was performed. That statement applied to C6 only; subsequent C7 and C9 scientific manuscript revisions require their own exact-source Word builds.
