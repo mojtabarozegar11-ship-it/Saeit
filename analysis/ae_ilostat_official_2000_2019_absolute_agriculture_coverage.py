@@ -21,9 +21,11 @@ def run(ilo,wdi,out):
         if not expected.issubset(reader.fieldnames or []):raise ValueError("ILOSTAT schema mismatch")
         rows=list(reader)
     if not rows:raise ValueError("Empty ILOSTAT source")
+    indicator_codes={row["indicator"].strip() for row in rows if row["indicator"].strip()}
+    if len(indicator_codes)!=1 or not next(iter(indicator_codes)).startswith("EMP_TEMP_SEX_ECO_NB"):
+        raise ValueError("Unexpected mixed or non-employment indicator codes: "+repr(indicator_codes))
     candidates=defaultdict(list)
     for row in rows:
-        if row["indicator"]!="EMP_TEMP_SEX_ECO_NB_A":continue
         if row["sex"]!="SEX_T" or row["classif1"]!="ECO_AGGREGATE_AGR":continue
         if str(row["best_source"]).strip() not in ("1","1.0","True","TRUE"):continue
         year=row["time"].strip()
@@ -55,7 +57,8 @@ def run(ilo,wdi,out):
     output={
         "ilostat_source_endpoint_csv_sha256":sha(ilo),
         "wdi_2026_panel_sha256":sha(wdi),
-        "indicator":"EMP_TEMP_SEX_ECO_NB_A",
+        "indicator":next(iter(indicator_codes)),
+        "source_dataset_id":"EMP_TEMP_SEX_ECO_NB_A",
         "sex":"SEX_T",
         "economic_activity":"ECO_AGGREGATE_AGR",
         "best_source":"1",
