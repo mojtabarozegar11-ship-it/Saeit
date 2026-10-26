@@ -368,6 +368,27 @@ jobs:
                           safe=[str(x)[:100] for x in codes if isinstance(x,(str,int))]
                           print("FACTORY_FIRST_FIVE_QA_CODES "+product+" "+label+" "+key+"="+json.dumps(safe))
 
+          # Independently verify any source-upgrade staging result for the five,
+          # including its exact customer ZIP bytes. Do not change originals.
+          import hashlib
+          archive_root=private/"quality-excellence/source-upgrade-pilot-v1"
+          if archive_root.is_dir() and not archive_root.is_symlink():
+              runs=[x for x in archive_root.iterdir() if x.is_dir() and not x.is_symlink() and re.fullmatch("[a-f0-9]{40}",x.name)]
+              for run in sorted(runs,key=lambda x:x.stat().st_mtime,reverse=True)[:3]:
+                  for candidate in candidate_rows:
+                      product=candidate["product_id"]
+                      folder=run/product
+                      rec=folder/"source_upgrade_receipt.json"
+                      if folder.is_symlink() or rec.is_symlink() or not rec.is_file():continue
+                      obj=json.loads(rec.read_text(encoding="utf8"))
+                      art=folder/(product+"-internal-qa.zip")
+                      valid=art.is_file() and not art.is_symlink() and hashlib.sha256(art.read_bytes()).hexdigest()==obj.get("new_artifact_sha256")
+                      print("FACTORY_FIRST_FIVE_SOURCE_UPGRADE="+json.dumps({
+                          "product_id":product,"commit":run.name,
+                          "receipt_present":True,"new_zip_hash_verified":valid,
+                          "technical_tests":obj.get("measured_successful_tests"),
+                          "commercial_release":obj.get("commercial_publication_allowed"),
+                          "quality_1000":obj.get("professional_1000_quality_grade")},sort_keys=True))
           print("FACTORY_DIAGNOSTICS_READ_ONLY=true")
           for proc in Path("/proc").iterdir():
               if not proc.name.isdigit():continue
