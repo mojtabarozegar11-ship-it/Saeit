@@ -1,7 +1,7 @@
 name: Game priority runtime integrity
 on:
   pull_request:
-    branches: [main]
+    branches: [main, game/ramadan-crown-runtime-integrity-20261025]
     paths:
       - games/ramadan-war/**
       - games/crown-defender/index.html
