@@ -137,7 +137,7 @@ def build(channels: dict) -> str:
         '<h2 id="mpw-hub-heading">One identity. Three connected destinations.</h2>',
         '<p class="hub-intro">The central starting point for my personal research and writing, Zomorod Melal Agro-Industry Company, MojPlayWin, and their verified official communications. Choose the destination that fits your enquiry.</p>',
         '<div class="hub-grid">', *blocks, '</div>',
-        '<p class="hub-note">Only verified public accounts are linked. For research, collaboration or a channel verification request, <a href="/mojtaba.roozegar/contact/">contact the central office</a>. An unrelated or unverified social handle does not represent these organizations.</p>',
+        '<p class="hub-note">Browse the <a href="/mojtaba.roozegar/social-command/official/">verified official channels directory</a> for personal, research, business and game-related networks. Only verified public accounts are listed. For research, collaboration or a channel verification request, <a href="/mojtaba.roozegar/contact/">contact the central office</a>. An unrelated or unverified social handle does not represent these organizations.</p>',
         '</section>', END
     ))
 
