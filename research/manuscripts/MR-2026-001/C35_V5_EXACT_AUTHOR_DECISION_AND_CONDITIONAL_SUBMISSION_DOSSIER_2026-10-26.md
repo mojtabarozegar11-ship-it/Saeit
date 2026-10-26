@@ -2,6 +2,12 @@
 
 **Prepared 2026-10-26.** **Status: author scientific review candidate, not submission-authorized.** All evidence in this packet is for the actual V5 text, not V4 or a hypothetical future version.
 
+## 26 October original Wiley Baroni comparator — current V5 author-review Word
+
+**New scientific source-level correction:** the original [Wiley publisher abstract for Baroni et al. 2019](https://onlinelibrary.wiley.com/doi/10.1002/ird.2337) explicitly identifies **six scheduling methods**, end-user interviews and comparative output assessment. **Five of six** estimated *seasonal irrigation amount* consistently, but agreement was weaker for the **irrigation season and number of irrigation events**. Positive user feedback coexisted with recommendations rarely being implemented. This is direct evidence that seasonal-volume agreement, scheduling frequency and implementation must be separately operationalised. **It does not give an event-level adherence percentage or validate the proposed G/D/R/A framework.** The original full methods remain unverified.
+
+**Manuscript revised:** commit [8b5a0a7cd8367a84be43d2f6df34b27bc4709392](https://github.com/mojtabarozegar11-ship-it/Saeit/commit/8b5a0a7cd8367a84be43d2f6df34b27bc4709392). **Current source-matched Word:** [run 40299475900](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40299475900) **COMPLETED/SUCCESS**, [artifact 12640250744](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40299475900/artifacts/12640250744). The previously current C41 Word **12632690900** is superseded. **Scientific decision remains MAJOR REVISION / NO SUBMISSION.** No publisher submission, author attestation or scientific ACCEPT is implied.
+
 ## 26 October C41 full-text Car Table 5 source gate — current Word
 
 **Latest scientific source correction:** commit `2bb3bb4d0efcdf5667790c5e660a9aa84f9f9e7e`, following independent [C41](C41_CAR_2012_AUTHOR_UPLOADED_FULLTEXT_TABLE5_RECONCILIATION_AND_LIMITS_2026-10-26.md) inspection of an **author-uploaded full-text PDF transcription** (not a publisher-authenticated page image). Extracted Car Table 5 category counts **26+7+3+6+15+17=74** disagree with the printed total **72**; percentages sum to **103.2%**, Groups 4/5 labels conflict with adjacent prose, and Groups 1–3 give **36/72=50%** rather than the neighboring stated **68%**. The independent abstract duration groups **45+13+14=72** are distinct categories, not a correction. No corrected participant data or validated compliance rate was invented.
