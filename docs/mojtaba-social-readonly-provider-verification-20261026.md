@@ -70,3 +70,15 @@ Other network accounts still use profile/registration status, not imaginary read
 `python -m unittest discover -s tests -p 'test_mojtaba_social_readonly_diagnostics_20261026.py' -v`
 
 CI must pass and a smoke test must confirm both the authenticated dashboard and the public directory before the isolated deployment is called successful.
+
+## Emergency account suspension (no provider-side effects)
+
+An authenticated owner superuser can select an existing verified account and **Suspend account** in the private Django dashboard. It immediately un-verifies the account (so its public official link disappears), deletes its read-only API confirmation, cancels all approved-but-unsent posts, and preserves the original evidence and audit log. Drafts are retained. Any already-inflight remote send remains for manual reconciliation.
+
+Private CLI alternative:
+
+`python scripts/mojtaba_social_hub_cli_20261026.py --db /PRIVATE/social.sqlite suspend-account --account ACCOUNT_ID --confirm`
+
+**This does NOT revoke a token at Telegram, Google, Meta, etc.** The owner must separately revoke or rotate that token at the provider or trusted secret manager; no system can claim successful remote revocation without an official API receipt.
+
+The protected Instagram handle `dr.mojtaba.rozegar` remains excluded from marketing, verification and promotion.
