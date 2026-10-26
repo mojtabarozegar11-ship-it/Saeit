@@ -1,0 +1,32 @@
+name: ZM-R01 official ENA 24-library capacity no-download scientific gate
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/zm-r01-official-ena-24-library-storage-gate.yml
+      - research/manuscripts/ZM-R01/analysis/official_ena_24_library_storage_gate.py
+      - research/manuscripts/ZM-R01/ENA_PRJNA1249400_OFFICIAL_24_RUN_PAIRED_FASTQ_MD5_2026-10-25.tsv
+      - research/manuscripts/ZM-R01/GSE294406_24_GSM_BIOSAMPLE_SRR_VERIFIED_CROSSWALK_2026-10-26.tsv
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-joined-storage-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify original metadata join, 24 biological libraries, disk capacity and no bulk download
+        run: python research/manuscripts/ZM-R01/analysis/official_ena_24_library_storage_gate.py
+      - name: Archive manifest-only audit with explicit non-counts disclaimer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZM-R01-24-library-source-joined-no-download-capacity-gate
+          path: research/manuscripts/ZM-R01/GSE294406_24_LIBRARY_OFFICIAL_ENA_NO_DOWNLOAD_STORAGE_GATE_2026-10-26.json
+          retention-days: 7
+          if-no-files-found: error
