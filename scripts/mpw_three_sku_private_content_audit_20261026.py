@@ -127,19 +127,92 @@ def ppm_pixel_metrics(raw):
     }
 
 
+def bitmap_pixel_metrics(bitmap):
+    width, height, channels, stride = bitmap.width, bitmap.height, bitmap.n_channels, bitmap.stride
+    if width <= 0 or height <= 0 or channels < 3 or stride < width * channels:
+        raise ValueError("PDFIUM_BITMAP_LAYOUT_INVALID")
+    total = width * height
+    sample_step = max(1, total // 16000)
+    sampled = nonwhite = colored = 0
+    buffer = bitmap.buffer
+    for pixel_index in range(0, total, sample_step):
+        y, x = divmod(pixel_index, width)
+        offset = y * stride + x * channels
+        first, second, third = buffer[offset], buffer[offset + 1], buffer[offset + 2]
+        sampled += 1
+        if min(first, second, third) < 245:
+            nonwhite += 1
+        if max(first, second, third) - min(first, second, third) >= 18:
+            colored += 1
+    nonwhite_ratio = nonwhite / sampled if sampled else 0.0
+    return {"width": width, "height": height, "sampled_pixels": sampled,
+            "nonwhite_ratio": round(nonwhite_ratio, 5),
+            "colored_pixel_ratio": round(colored / sampled if sampled else 0.0, 5),
+            "near_blank": nonwhite_ratio < 0.002}
+
+
 def render_pdf_pages(path, expected_page_count):
+    try:
+        import pypdfium2 as pdfium
+    except ImportError:
+        pdfium = None
+    if pdfium is not None:
+        metrics = []
+        render_errors = 0
+        document = None
+        try:
+            document = pdfium.PdfDocument(str(path))
+            page_count = len(document)
+            if page_count != expected_page_count:
+                return {"renderer_available": True, "renderer": "pypdfium2",
+                        "rendered_page_count": 0, "page_count_matches": False,
+                        "near_blank_page_numbers": [], "pages_with_color_signal": 0,
+                        "mean_nonwhite_ratio": None, "render_errors": 0,
+                        "render_failure": "RENDERER_PAGE_COUNT_MISMATCH"}
+            for index in range(page_count):
+                page = bitmap = None
+                try:
+                    page = document[index]
+                    width, height = page.get_size()
+                    bitmap = page.render(scale=320.0 / max(width, height))
+                    metrics.append(bitmap_pixel_metrics(bitmap))
+                except Exception:
+                    render_errors += 1
+                finally:
+                    if bitmap is not None:
+                        bitmap.close()
+                    if page is not None:
+                        page.close()
+        except Exception:
+            return {"renderer_available": True, "renderer": "pypdfium2",
+                    "rendered_page_count": len(metrics), "page_count_matches": False,
+                    "near_blank_page_numbers": [], "pages_with_color_signal": 0,
+                    "mean_nonwhite_ratio": None, "render_errors": render_errors + 1,
+                    "render_failure": "RENDERER_REJECTED_PDF"}
+        finally:
+            if document is not None:
+                document.close()
+        ratios = [item["nonwhite_ratio"] for item in metrics]
+        return {"renderer_available": True, "renderer": "pypdfium2",
+                "rendered_page_count": len(metrics),
+                "page_count_matches": len(metrics) == expected_page_count,
+                "render_errors": render_errors,
+                "near_blank_page_numbers": [i + 1 for i, item in enumerate(metrics) if item["near_blank"]][:100],
+                "pages_with_color_signal": sum(item["colored_pixel_ratio"] >= 0.01 for item in metrics),
+                "mean_nonwhite_ratio": round(statistics.mean(ratios), 5) if ratios else None,
+                "median_nonwhite_ratio": round(statistics.median(ratios), 5) if ratios else None,
+                "render_failure": None if render_errors == 0 else "PAGE_RENDER_ERRORS"}
     renderer = shutil.which("pdftoppm")
     if renderer is None:
         return {"renderer_available": False, "renderer": None, "rendered_page_count": 0,
                 "page_count_matches": False, "near_blank_page_numbers": [],
                 "pages_with_color_signal": 0, "mean_nonwhite_ratio": None,
-                "render_failure": "PDFTOPPM_NOT_INSTALLED"}
+                "render_failure": "NO_PRIVATE_PDF_RENDERER"}
     with tempfile.TemporaryDirectory(prefix="mpw-private-render-") as temp:
         prefix = Path(temp) / "page"
         try:
-            proc = subprocess.run(
-                [renderer, "-q", "-r", "36", "-scale-to", "320", str(path), str(prefix)],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=210, check=False)
+            proc = subprocess.run([renderer, "-q", "-r", "36", "-scale-to", "320", str(path), str(prefix)],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=210, check=False)
         except subprocess.TimeoutExpired:
             return {"renderer_available": True, "renderer": "pdftoppm", "rendered_page_count": 0,
                     "page_count_matches": False, "near_blank_page_numbers": [],
@@ -160,16 +233,15 @@ def render_pdf_pages(path, expected_page_count):
             except (OSError, ValueError, IndexError):
                 render_errors += 1
         ratios = [item["nonwhite_ratio"] for item in metrics]
-        return {
-            "renderer_available": True, "renderer": "pdftoppm",
-            "rendered_page_count": len(metrics), "page_count_matches": len(metrics) == expected_page_count,
-            "render_errors": render_errors,
-            "near_blank_page_numbers": [i + 1 for i, item in enumerate(metrics) if item["near_blank"]][:100],
-            "pages_with_color_signal": sum(item["colored_pixel_ratio"] >= 0.01 for item in metrics),
-            "mean_nonwhite_ratio": round(statistics.mean(ratios), 5) if ratios else None,
-            "median_nonwhite_ratio": round(statistics.median(ratios), 5) if ratios else None,
-            "render_failure": None if not render_errors else "PPM_DECODE_ERRORS",
-        }
+        return {"renderer_available": True, "renderer": "pdftoppm",
+                "rendered_page_count": len(metrics), "page_count_matches": len(metrics) == expected_page_count,
+                "render_errors": render_errors,
+                "near_blank_page_numbers": [i + 1 for i, item in enumerate(metrics) if item["near_blank"]][:100],
+                "pages_with_color_signal": sum(item["colored_pixel_ratio"] >= 0.01 for item in metrics),
+                "mean_nonwhite_ratio": round(statistics.mean(ratios), 5) if ratios else None,
+                "median_nonwhite_ratio": round(statistics.median(ratios), 5) if ratios else None,
+                "render_failure": None if not render_errors else "PPM_DECODE_ERRORS"}
+
 
 
 def graphic_drawing_signals_present(page_count, embedded_images, pages_with_vector_drawing,

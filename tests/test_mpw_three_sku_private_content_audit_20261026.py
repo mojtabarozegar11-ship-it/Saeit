@@ -66,6 +66,18 @@ class PrivateContentAuditTests(unittest.TestCase):
         self.assertEqual(result["colored_pixel_ratio"],0.5)
         self.assertNotIn("pixels",result)
 
+    def test_pdfium_bitmap_metrics_detect_blank_and_color_without_pixels(self):
+        class Bitmap:
+            width=2
+            height=1
+            n_channels=4
+            stride=8
+            buffer=bytes([255,255,255,255,255,0,0,255])
+        result=audit.bitmap_pixel_metrics(Bitmap())
+        self.assertFalse(result["near_blank"])
+        self.assertEqual(result["colored_pixel_ratio"],0.5)
+        self.assertNotIn("pixels",result)
+
     def test_pdf_audit_reports_vector_graphics_metrics_without_content(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/"vector.pdf"
