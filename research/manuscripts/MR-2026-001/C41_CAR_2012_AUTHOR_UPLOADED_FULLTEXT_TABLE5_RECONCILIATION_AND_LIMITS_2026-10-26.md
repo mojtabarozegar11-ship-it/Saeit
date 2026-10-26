@@ -39,3 +39,9 @@ Recomputation: 26+7+3+6+15+17 = **74**, exceeding printed 72 by **2**; 36+9.7+4.
 ## Reproducibility
 
 Arithmetic is deterministic, with displayed values above and no fabricated microdata. Cross-checks: group count sum 74; percentage sum 103.2; groups 1–3 count 36/72=50.0%; abstract-duration sum 72. Source version, page and access limitation are recorded so another reviewer can inspect the actual original PDF image.
+
+## Independent publisher-access and institutional-handle check (26 October, subsequent pass)
+
+The DOI `10.1016/j.compag.2012.03.003` was resolved again to the **actual** ScienceDirect PII `S0168169912000658`, but the publisher page returned a **robot/captcha challenge** (access checked 26 October 2026); consequently the original typeset **Table 5 page remains unverified**. An unrelated guessed ScienceDirect PII `S0168169912000730` was also bot-blocked and is **not** adopted as this article's identifier. No bypass, fabricated PDF, or claim to have visually read the publisher page is made.
+
+The [University of New England institutional publication record](https://researchers.une.edu.au/en/publications/using-a-mobile-phone-short-messaging-service-sms-for-irrigation-s-5/) links to the [university's permanent repository handle](https://hdl.handle.net/1959.11/14259), which resolves to its [RUNE item](https://rune.une.edu.au/entities/publication/68f9d1ef-6e62-415a-b831-0beb96df9853). Both institutional records independently corroborate the **72** participant count and **45/13/14** *engagement-duration* categories at abstract level. The accessible repository item provided metadata and abstract, **not the original publisher Table 5 page**. Thus the six-category 74-vs-72 and 103.2%-vs-100% discrepancy remains version-limited and unresolved; **no Table 5 quantitative distribution is adopted in MR V5**.
