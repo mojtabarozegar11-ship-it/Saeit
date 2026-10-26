@@ -135,7 +135,21 @@ return {
     image_count: images.length,
     broken_images: images.filter(i => !i.complete || i.naturalWidth === 0).length,
     viewport_width: window.innerWidth,
+    viewport_height: window.innerHeight,
     horizontal_overflow_px: Math.max(0, root.scrollWidth - window.innerWidth),
+    overflowing_shapes: Array.from(body.querySelectorAll("*"))
+      .map(node => ({ node, rect: node.getBoundingClientRect() }))
+      .filter(item => item.rect.width > 0 && item.rect.right > window.innerWidth + 2)
+      .sort((a, b) => b.rect.right - a.rect.right)
+      .slice(0, 6)
+      .map(item => ({
+        tag: item.node.tagName.toLowerCase(),
+        right_px: Math.round(item.rect.right),
+        width_px: Math.round(item.rect.width),
+        left_px: Math.round(item.rect.left),
+        position: getComputedStyle(item.node).position,
+        display: getComputedStyle(item.node).display
+      })),
     h1_count: document.querySelectorAll("h1").length
 };
 """
@@ -199,7 +213,12 @@ def browser_views(destination, entrypoint):
             rows = []
             for width, height in ((390, 844), (1440, 900)):
                 webdriver_request(driver_port, "POST", route + "/window/rect",
-                                  {"width": width, "height": height})
+                                  {"width": max(width, 850), "height": max(height, 900)})
+                webdriver_request(driver_port, "POST", route + "/goog/cdp/execute", {
+                    "cmd": "Emulation.setDeviceMetricsOverride",
+                    "params": {"width": width, "height": height, "deviceScaleFactor": 1,
+                               "mobile": width < 500}
+                })
                 webdriver_request(driver_port, "POST", route + "/url", {"url": url})
                 webdriver_request(driver_port, "POST", route + "/execute/sync",
                                   {"script": 'for (const i of document.images) i.loading="eager";', "args": []})
@@ -217,6 +236,8 @@ def browser_views(destination, entrypoint):
                     "image_count": int(metrics.get("image_count", 0)),
                     "broken_images": int(metrics.get("broken_images", 0)),
                     "viewport_width": int(metrics.get("viewport_width", 0)),
+                    "viewport_height": int(metrics.get("viewport_height", 0)),
+                    "overflowing_shapes": metrics.get("overflowing_shapes", []),
                     "horizontal_overflow_px": int(metrics.get("horizontal_overflow_px", 100000)),
                     "h1_count": int(metrics.get("h1_count", 0)),
                     "screenshot_valid": screenshot_is_png(png),
@@ -250,6 +271,9 @@ def audit(archive, expected_sha=SOURCE_SHA, output=None):
         views = browser_views(Path(temp), entrypoint)
     checks = {
         "two_real_browser_viewports": len(views) == 2,
+        "viewport_dimensions_verified": len(views) == 2 and all(
+            v["viewport_width"] == v["requested_viewport"][0] and
+            v["viewport_height"] == v["requested_viewport"][1] for v in views),
         "dom_ready_and_titled": bool(views) and all(v["ready"] and v["title_present"] for v in views),
         "visible_page_content": bool(views) and all(v["body_char_count"] >= 30 for v in views),
         "no_horizontal_overflow": bool(views) and all(v["horizontal_overflow_px"] <= 2 for v in views),
@@ -275,7 +299,14 @@ def audit(archive, expected_sha=SOURCE_SHA, output=None):
     print("MPW_SKU879_PRIVATE_BROWSER_QA=" + json.dumps({
         "source_sha256": expected_sha, "checks_passed": sum(checks.values()),
         "checks_total": len(checks), "failed_checks": [k for k,v in checks.items() if not v],
-        "viewport_count": len(views), "browser_smoke_passed": result["browser_smoke_passed"],
+        "viewport_count": len(views),
+        "viewport_overflow_diagnostics": [{
+            "requested_width": v["requested_viewport"][0],
+            "actual_width": v["viewport_width"],
+            "horizontal_overflow_px": v["horizontal_overflow_px"],
+            "offenders": v["overflowing_shapes"]
+        } for v in views],
+        "browser_smoke_passed": result["browser_smoke_passed"],
         "quality1000_verified": False, "commercial_release_allowed": False
     }, sort_keys=True))
     return result
