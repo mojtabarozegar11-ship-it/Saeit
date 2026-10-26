@@ -101,6 +101,10 @@ Total output lines: 1
  $('#icing',gamebody).oninput=e=>{if(/^#[0-9a-f]{6}$/i.test(e.target.value))icing=e.target.value;render()};
  gamebody.querySelectorAll('[data-top]').forEach(b=>b.onclick=()=>{topping=b.dataset.top;render();say('Topping updated. Your candles are still here.')});
  gamebody.querySelector('[data-action="candle"]').onclick=e=>{e.stopPropagation();if(candles<12){candles++;render();say('Candle '+candles+' of 12 added.')}else say('Your cake already has twelve candles.')};
+ gamebody.querySelector('[data-action="cake-reset"]').onclick=e=>{
+  e.stopPropagation();icing='#ff79b8';topping='🍓';candles=0;
+  $('#icing',gamebody).value=icing;render();say('Cake reset. Start decorating again.');
+ };
  gamebody.querySelector('[data-action="cake-download"]').onclick=e=>{
   e.stopPropagation();
   const candlesSvg=Array.from({length:candles},(_,i)=>{const x=250+i*36;return '<rect x="'+x+'" y="438" width="8" height="64" rx="3" fill="#fff8cf"/><path d="M'+(x+4)+' 433 q-12 -20 0 -32 q12 12 0 32" fill="#f1a326"/>'}).join('');
