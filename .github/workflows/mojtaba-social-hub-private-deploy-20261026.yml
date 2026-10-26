@@ -202,6 +202,8 @@ jobs:
           public=test.get(directory_path,secure=True)
           if public.status_code!=200 or b'Verified official channels' not in public.content:
               raise RuntimeError('Public vetted social directory not available')
+          if 'no-store' not in public.headers.get('Cache-Control',''):
+              raise RuntimeError('Suspended official profile could remain publicly cached')
           public_data=test.get(reverse('mojtaba_official_channels_json'),secure=True)
           if public_data.status_code!=200 or not isinstance(public_data.json().get('brands'),list):
               raise RuntimeError('Public official social JSON directory failed')
