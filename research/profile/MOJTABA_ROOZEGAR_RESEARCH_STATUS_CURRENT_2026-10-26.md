@@ -47,3 +47,14 @@ No independently verified degree, institutional affiliation, ORCID, residence, i
 **ZM:** [C32](../manuscripts/ZM-R01/C32_PUBLISHED_CC_BY_AUTHOR_POSTPRINT_ACCESS_AND_CHAMBER_METADATA_GATE_2026-10-26.md) identifies the **published** Milec 2025 article's CC BY 6.5 MB author postprint via the Czech Academy of Sciences and Rothamsted Research repositories, separately from the Zenodo preprint and seven-workbook data deposit. A direct binary retrieval **failed**, so no full Methods, chamber assignment, reference checksum, 24-sample integer counts, DESeq2 or FDR was verified. **DATA REBUILD / NO SUBMISSION**.
 
 **Web and publication:** public GitHub staging only. CV workflow verification for branch commit `d26459c3` was successful and the **publish job was skipped**. No live website deployment, restricted Instagram/Facebook activity, PR #1054 merge, human author approval, journal submission, Manuscript ID or acceptance.
+
+
+## 27 October 2026 scientific addendum — current staging only
+
+**MR:** New [C44 formal seasonal-total non-identifiability illustration](../manuscripts/MR-2026-001/MR-2026-001_C44_SEASONAL_RATIO_EVENT_FIDELITY_NONIDENTIFIABILITY_2026-10-27.md) is incorporated into the [V5 research text](../manuscripts/MR-2026-001/MR-2026-001_DIRECT_IRRIGATION_ADHERENCE_PRIOR_ART_AUTHOR_REVIEW_V5_2026-10-26.md). The four schedules are **synthetic**, not farmer observations or validated G/D/R/A. The last independently verified MR Word (run 40380719533, artifact 12678132048) **predates C44** and must not be represented as current. **MAJOR REVISION / NO SUBMISSION.**
+
+**AE:** New [C23 region-stratified 153-economy non-overlapping-period audit](../manuscripts/AE-2026-001/AE-2026-001_C23_REGION_STRATIFIED_NONOVERLAPPING_PERIOD_CONTRAST_2026-10-27.md) is incorporated into Methods 2.14 and Results 3.24 of the [empirical draft](../manuscripts/AE-2026-001/AE-2026-001_FIRST_FULL_EMPIRICAL_MANUSCRIPT_DRAFT_2026-10-25.md). Regional leave-one-out medians are all negative, but 4-year versus 19-year windows, selected countries and absence of historical ILOSTAT sources prohibit causal, global, vintage-mechanism or novelty inference. Last verified AE Word (run 40390073449, artifact 12682735677) **predates C23**. **MAJOR REVISION / NO SUBMISSION.**
+
+**ZM:** A renewed bounded institutional author-postprint PDF download attempt **failed**; no verified full Methods, independent experimental-unit assignment, integer counts, DESeq2 or FDR. **DATA REBUILD / NO SUBMISSION.**
+
+**Internal human-review packet:** [27 October author delta](RESEARCH_AUTHOR_REVIEW_DELTA_C23_C44_2026-10-27.md). No new completed article, author sign-off, journal submission, Manuscript ID, acceptance or publication. **This public GitHub staging update is not a live website deployment**; no PR #1054 merge or restricted social-account interaction.
