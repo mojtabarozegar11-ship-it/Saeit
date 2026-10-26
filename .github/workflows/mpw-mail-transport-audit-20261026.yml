@@ -1,0 +1,129 @@
+name: MojPlayWin owner notification mail transport audit
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-mail-transport-audit-20261026.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-mail-transport-audit-20261026.yml"
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: mpw-mail-transport-diagnostic-readonly
+  cancel-in-progress: false
+jobs:
+  source-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Check exact read-only diagnostic scope
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('.github/workflows/mpw-mail-transport-audit-20261026.yml').read_text()
+          assert 'EmailTrack' in s and "report['owner_recent_matches']" in s
+          assert 'MPW_MAIL_TRANSPORT_SCOPED=' in s and 'capture_output=True' in s
+          print('MPW_MAIL_AUDIT_SOURCE_SCOPE=PASS')
+          PY
+  inspect:
+    needs: [source-quality]
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-revenue-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect scoped cPanel owner mail transport records without exposing recipient data
+        run: |
+          set -euo pipefail
+          timeout 70s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel python3 - <<'PY'
+          import json,os,shutil,subprocess,time
+          from pathlib import Path
+          report={'account':'zomorod2','api2_track':'unavailable','owner_recent_matches':None,'owner_recent_status':{},'queue_count':None}
+          path='/usr/local/cpanel/bin/cpapi2'
+          if Path(path).is_file():
+            try:
+              p=subprocess.run([path,'--user=zomorod2','EmailTrack','search','success=1','defer=1'],capture_output=True,text=True,timeout=25)
+              if p.returncode==0:
+                data=json.loads(p.stdout)
+                rows=(data.get('cpanelresult') or {}).get('data') or []
+                if isinstance(rows,list):
+                  recent=[]
+                  for row in rows:
+                    if not isinstance(row,dict):continue
+                    if str(row.get('deliveredto','')).strip().lower()!='mojtaba.rozegar11@gmail.com':continue
+                    try:t=int(row.get('sendunixtime') or 0)
+                    except (ValueError,TypeError):continue
+                    if abs(time.time()-t)>7200:continue
+                    recent.append(row)
+                  report['api2_track']='available'
+                  report['owner_recent_matches']=len(recent)
+                  statuses={}
+                  for row in recent:
+                    flag=str(row.get('event') or row.get('deliveryevent') or row.get('status') or 'unknown').lower()
+                    if flag not in ('success','deliver','delivered','defer','deferred','failed','fail','unknown'):flag='other'
+                    statuses[flag]=statuses.get(flag,0)+1
+                  report['owner_recent_status']=statuses
+                else:report['api2_track']='unexpected-schema'
+              else:report['api2_track']='not-authorized-or-error'
+            except (Exception,ValueError):report['api2_track']='unavailable'
+          for path in ('/usr/sbin/exim','/usr/local/sbin/exim','/usr/sbin/sendmail'):
+            if not Path(path).is_file():continue
+            try:
+              p=subprocess.run([path,'-bpc'],capture_output=True,text=True,timeout=12)
+              if p.returncode==0 and p.stdout.strip().isdigit():
+                report['queue_count']=int(p.stdout.strip());break
+            except Exception:pass
+          print('MPW_MAIL_TRANSPORT_SCOPED='+json.dumps(report,sort_keys=True))
+          PY
+      - name: Discard temporary SSH key files
+        if: always()
+        run: |
+          rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
