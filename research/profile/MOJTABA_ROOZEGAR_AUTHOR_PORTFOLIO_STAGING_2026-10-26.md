@@ -2,7 +2,7 @@
 
 **Draft for:** https://mojplaywin.com/mojtaba.roozegar/  
 **Prepared:** 26 October 2026  
-**Publication status:** PRIVATE/REPOSITORY STAGING ONLY. **NOT deployed or indexed.**  
+**Publication status:** PUBLIC GITHUB REPOSITORY STAGING ONLY; **NOT deployed to the live personal website**. Search-engine indexing of this public repository file has **not been checked** and must not be asserted absent.  
 **Verification standard:** No academic degree, professor title, institutional appointment, ORCID, journal publication, citation metric, human peer review or editorial acceptance is claimed without independent evidence.
 
 ## English profile copy — approval-ready, not yet public
