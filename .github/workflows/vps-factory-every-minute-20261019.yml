@@ -408,6 +408,20 @@ jobs:
               items=[x for x in checkpoints.iterdir() if x.is_file() and not x.is_symlink() and x.suffix==".json"]
               print("FACTORY_CADENCE_CHECKPOINTS="+str(len(items)))
           else: print("FACTORY_CADENCE_CHECKPOINTS=NONE")
+          # SHA-backed confirmation of both BUILD50 factory runtime locations.
+          # Never inspect individual product contents or modify factory state.
+          for label,filename in (
+              ("manufacturer",runtime/"factory_build_50.py"),
+              ("warehouse",base/"operations/production-warehouse/factory_build_50.py")):
+              if filename.is_file() and not filename.is_symlink() and filename.stat().st_size<150000:
+                  source=filename.read_bytes()
+                  print("FACTORY_BUILD50_IO_RUNTIME "+label+" SHA256="+hashlib.sha256(source).hexdigest()+
+                        " IDEMPOTENT="+str(b"def save_if_changed(path,value):" in source))
+              else:
+                  print("FACTORY_BUILD50_IO_RUNTIME "+label+" MISSING_OR_UNSAFE=true")
+          status_file=private/"build-50-status.json"
+          if status_file.is_file() and not status_file.is_symlink():
+              print("FACTORY_BUILD50_STATUS_AGE_SECONDS="+str(round(time.time()-status_file.stat().st_mtime)))
           print("FACTORY_DIAGNOSTICS_READ_ONLY=true")
           for proc in Path("/proc").iterdir():
               if not proc.name.isdigit():continue
