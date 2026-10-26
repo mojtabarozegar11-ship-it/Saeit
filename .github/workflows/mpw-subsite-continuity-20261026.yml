@@ -1,0 +1,37 @@
+name: MojPlayWin main and protected subsite continuity
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-subsite-continuity-20261026.yml
+      - scripts/mpw_subsite_continuity_guard_20261026.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mpw-protected-subsite-continuity
+  cancel-in-progress: false
+
+jobs:
+  read-only-public-route-guard:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check continuity guard script without network or mutations
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_subsite_continuity_guard_20261026.py
+          python3 scripts/mpw_subsite_continuity_guard_20261026.py --selftest
+      - name: Validate all public child sites, storefront and checkout gates using GET
+        run: |
+          set -euo pipefail
+          python3 scripts/mpw_subsite_continuity_guard_20261026.py
