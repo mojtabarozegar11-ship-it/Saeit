@@ -1,0 +1,14 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const html=fs.readFileSync('games/ramadan-war/index.html','utf8');
+const canonical='https://zomorodmelal.ir/ramadan-war/';
+assert.equal((html.match(/rel="canonical"/g)||[]).length,1,'exactly one canonical is required');
+assert.ok(html.includes('<link rel="canonical" href="'+canonical+'">'),'canonical must use the public game route');
+assert.ok(html.includes('<meta property="og:url" content="'+canonical+'">'),'social URL must match canonical');
+assert.ok(html.includes('<meta property="og:type" content="website">'),'share type must be explicit');
+assert.ok(/<meta property="og:title" content="[^"]+">/.test(html),'share title must exist');
+assert.ok(/<meta property="og:description" content="[^"]+">/.test(html),'share description must exist');
+assert.ok(html.includes('name="description"'),'existing search description must remain');
+assert.ok(html.includes('src="./game.js"')||html.includes('src="game.js"')||html.includes('game.js'),'playable game script must remain linked');
+console.log('RAMADAN_SEO_CANONICAL=PASS: unique canonical, share metadata and game entry');
