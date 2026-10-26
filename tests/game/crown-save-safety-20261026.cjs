@@ -99,4 +99,26 @@ assert.equal(keyboard.counts.emp,1,'paused flight must not consume EMP');
 keyboard.dispatch(flightEvent('Escape'));
 assert.equal(keyboard.counts.pause,1,'Escape must still resume from pause overlay');
 
+// Hidden-tab transitions must not retain held controls when the window blur event is skipped.
+const interruptStart=js.indexOf("window.addEventListener('blur',");
+const interruptEnd=js.indexOf("$('start').addEventListener",interruptStart);
+assert.ok(interruptStart>=0&&interruptEnd>interruptStart,'interruption listeners must exist');
+const interruptionCode=js.slice(interruptStart,interruptEnd);
+const interruption=vm.runInNewContext(
+ "let state='playing',padDashDown=true,touchTarget={x:50,y:50};"+
+ "const keys=new Set(['Space','ArrowLeft']);"+
+ "const held={left:true,fire:true},padHeld={right:true,fire:true};"+
+ "const handlers={};const window={addEventListener:(name,fn)=>handlers[name]=fn};"+
+ "const document={hidden:true,addEventListener:(name,fn)=>handlers[name]=fn};"+
+ "function pause(){state='paused'}"+
+ interruptionCode+"({handlers,keys,held,padHeld,getDash:()=>padDashDown,getTarget:()=>touchTarget,getState:()=>state})"
+);
+interruption.handlers.visibilitychange();
+assert.equal(interruption.getState(),'paused','hidden tab must pause active flight');
+assert.equal(interruption.keys.size,0,'hidden tab must release keyboard controls');
+assert.equal(interruption.held.fire,false,'hidden tab must release touch fire');
+assert.equal(interruption.padHeld.fire,false,'hidden tab must release gamepad fire');
+assert.equal(interruption.getDash(),false,'hidden tab must reset gamepad dash edge');
+assert.equal(interruption.getTarget(),null,'hidden tab must clear pointer steering');
+
 console.log('CROWN_SAVE_SAFETY_PASS: scoreboard validation, date safety, achievements and backward-compatible progress');
