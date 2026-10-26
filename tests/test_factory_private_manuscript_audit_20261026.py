@@ -299,11 +299,11 @@ class PrivateAuditTests(unittest.TestCase):
     def test_direction_marks_cannot_hide_reasoning_in_private_audit(self):
         # LRM, RLM and Arabic Letter Mark are invisible formatting controls.
         # They must not conceal leaked model reasoning from private review.
-        for control in ("\\u200e", "\\u200f", "\\u061c"):
+        for control in ("\u200e", "\u200f", "\u061c"):
             with self.subTest(control=repr(control)):
                 with tempfile.TemporaryDirectory() as d:
                     p = self.make(d, "chapter-01-part-001.md",
-                                  tail="<th" + control + "ink>hidden</think>")
+                                  tail="<th" + control + "ink>hidden reasoning")
                     before = p.read_bytes()
                     result = module.audit(Path(d), chapters=1,
                                           chapter_target=300, total_target=300)
