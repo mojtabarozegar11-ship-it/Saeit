@@ -1,0 +1,106 @@
+# Historical Release Revisions in Agricultural Value Added per Worker: A Fixed-Country Audit of Three World Development Indicators Vintages
+
+**Status:** consolidated **internal author-review manuscript**, 27 October 2026; not scientifically final, not author approved, not submitted, not peer reviewed. The proposed human author must verify and materially contribute to the final text. This is a compact, transparent synthesis of existing source-locked analyses, **not a new empirical dataset or an additional independent finding**.
+
+## Abstract
+
+**Purpose.** To quantify how historical data releases alter country-level agricultural value-added-per-worker growth estimates and to distinguish such revisions from changes in observation horizon and employment-source coverage. **Data and methods.** We compared archived October 2024 and October 2025 World Development Indicators (WDI) Excel releases with a dated October 2026 official WDI snapshot. We fixed the 2000–2019 country sample to the 155 economies with positive observations in all three releases, computed annualized logarithmic growth and paired release revisions, and inspected sign, magnitude and rank sensitivity. A separately retrieved current ILOSTAT employment file and a WDI value-added numerator provided a limited denominator-consistency check. **Results.** Median 2000–2019 annualized log growth across the same 155 economies was 2.6561, 2.6969 and 2.3617 log-percentage points per year in the 2024, 2025 and 2026 releases. Growth signs changed in six, six and ten economies in the respective 2024→2025, 2025→2026 and 2024→2026 comparisons. The 2024→2026 Spearman country-ranking correlation was 0.8870; 26/155 economies had an absolute growth-rate revision exceeding one log-percentage point annually. A current-source ILOSTAT versus WDI-implied worker-level comparison yielded 200 matched country-year observations across 127 economies, with median absolute relative difference 5.805%; this is not an independent employment validation because WDI cites ILOSTAT. A separate 153-economy 2026-only three-date cohort showed that the overlapping 2000–2023 horizon mechanically attenuates the 2019–2023 versus 2000–2019 rate contrast by 4/23. **Conclusions.** Release date, country selection and growth-rate convention materially affect descriptive cross-country results. The evidence does not identify why statistical agencies revised the series, establish global causal productivity trends, or demonstrate a novel estimator.
+
+**Keywords:** agricultural labor productivity; World Development Indicators; data vintage; reproducibility; ILOSTAT; country selection.
+
+## 1. Introduction
+
+Agricultural value added per worker is a convenient indicator of aggregate sectoral output per employed person, but it is not farm yield, hours-adjusted productivity or total factor productivity. Sectoral national accounts and employment estimation introduce definition, coverage and revision uncertainty. The WDI series NV.AGR.EMPL.KD includes agriculture, forestry and fishing, and draws on World Bank national accounts and ILOSTAT. Published country-level growth can therefore vary when source series are revised even if the reference period stays unchanged.
+
+Existing literature establishes agricultural productivity gaps and the importance of structural heterogeneity (Gutierrez, 2002; Eberhardt and Teal, 2013; Gollin, Lagakos and Waugh, 2013/2014; Dieppe and Matsuoka, 2021/2025). Research on economic database revisions likewise predates this study (Johnson et al., 2013; Filer et al., 2004). Our contribution is deliberately **narrow**: an auditable descriptive comparison of specific archived WDI releases for a fixed set of economies. We do not claim priority for a vintage-comparison method or the first demonstration of revision sensitivity.
+
+The questions are: How much do annualized 2000–2019 country growth estimates change across the October 2024, October 2025 and October 2026 releases? How robust are sign and rank classifications to these revisions? What is and is not learned from comparing the published per-worker indicator with a separately retrieved current ILOSTAT employment file? How can one prevent release revision from being confused with changing observation horizons?
+
+## 2. Data and methods
+
+### 2.1 Sources and fixed cohort
+
+The primary series is WDI **NV.AGR.EMPL.KD**, agriculture, forestry and fishing, value added per worker (constant 2015 US$). Two original WDI archive ZIPs were dated **24 October 2024** (78,163,670 bytes; SHA256 `5a8922c6629eea69b93a314ebb2363ed8d5faf4f345ff19dbe203c62692af5a1`) and **8 October 2025** (81,022,548 bytes; SHA256 `9185df6f3029ca6c990d87674dcec60e4633cf0b344bc4ee6459392f1cfdc173`). The 2026 comparison uses the previously archived official API extract, whose source update was labelled **8 October 2026**, and not a rolling current API response. The country panel is version-controlled as `AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv`, blob `d4910ff78219f9e5097c6301a6fbfa7752bbf4f9`, source-file SHA256 `715ff36b3b817dcf58a4170eadad872b0bd629bd66a424a73fac077dac869169`.
+
+We exclude aggregate series using WDI country metadata and require positive finite 2000 and 2019 values in **all three releases**, producing the same **155 economies** in every primary comparison. This complete-case design prevents changing country composition from being mistaken for a release effect **within this selected sample**, but cannot eliminate selection bias. All economies have equal analytical weight. We do not impute absent values.
+
+### 2.2 Primary outcomes and revisions
+
+For economy i and vintage v, annualized log growth is `g_iv = 100[ln(P_i,2019,v)−ln(P_i,2000,v)]/19` log-percentage points/year. Paired release revision is `Δg_i(v→w)=g_iw−g_iv`. We report vintage-specific medians, median paired revisions, median absolute paired revisions, growth-sign switches and Spearman ranking correlations. **The median of paired revisions is not the difference of vintage medians.** Exploratory robustness requires absolute growth rates on both sides of a sign change to exceed post hoc thresholds of 0.1, 0.2, 0.5 or 1.0 log-percentage points annually. These thresholds are not statistical significance criteria.
+
+The original 2024 WDI archive used here contains **no eligible 2023 endpoint** for this indicator; hence a 2000–2023 *three-vintage* analysis is not identified and is not imputed.
+
+### 2.3 Current-source worker-level comparison
+
+For a separate, strictly qualified source-consistency check, we use the official ILOSTAT `EMP_TEMP_SEX_ECO_NB_A` RDS with total sex, broad agricultural aggregate and best-source records at 2000/2019. We obtain the WDI agricultural value-added numerator `NV.AGR.TOTL.KD` from its separately retrieved 2026 API source, and derive the algebraic WDI-implied worker count `L*=V/P`. The ILOSTAT count is converted from thousands of workers to persons before comparison. **The two downloaded files are separately retrieved but not necessarily independently generated**: WDI explicitly lists ILOSTAT among the sources underlying the published per-worker indicator. These checks do not reconstruct 2024 or 2025 ILOSTAT employment vintages or attribute historical revisions to numerator versus denominator.
+
+### 2.4 Distinguishing horizon from release
+
+As a separate **2026-only** sensitivity, 153 economies have positive values at 2000, 2019 and 2023. Let E, L and H denote annual log-percentage-point growth for 2000–2019, 2019–2023 and 2000–2023. The exact identity `23H=19E+4L` implies `H−E=(4/23)(L−E)` for each economy. This comparison uses **153** three-endpoint cases and must not be conflated with the primary **155** historical-vintage cases. We also checked the documented compound annual growth rate (CAGR) convention using the actual `countryatlas::growth_rate(type="cagr")` R package (countryatlas 3.0.0), but **did not** execute a historical three-vintage `countryatlas::compare_vintages` head-to-head.
+
+### 2.5 Reproducibility and inference
+
+Original source-hashed three-vintage calculation: `analysis/wdi_three_vintage_fixed_cohort_revisions.py`, GitHub Actions run **40241769129**, artifact **12616508530**. Original sign-margin audit: run **40251337787**, artifact **12620841635**. Ranking audit: run **40260737559**, artifact **12623633345**. Current-source worker audit: run **40300738631**, artifact **12640371610**. The direct countryatlas CAGR implementation: run **40407883759**, artifact **12692315824**. The 2026-only exact horizon identity and row-level checks are documented in C26. These are computational provenance records, **not** independent peer review. Analyses were post hoc and descriptive. No design-based confidence interval for the global agricultural sector is asserted.
+
+## 3. Results
+
+### 3.1 Primary fixed-country release sensitivity
+
+**Table 1. Identical 155-economy 2000–2019 panel across three WDI releases**
+
+| Statistic | October 2024 | October 2025 | October 2026 |
+| --- | ---: | ---: | ---: |
+| Median annualized log growth, log-pp/year | 2.656067 | 2.696920 | 2.361735 |
+| Mean annualized log growth, log-pp/year | 2.606986 | 2.612402 | 2.433037 |
+
+**Table 2. Paired revisions for the same 155 economies**
+
+| Metric | 2024→2025 | 2025→2026 | 2024→2026 |
+| --- | ---: | ---: | ---: |
+| Median paired annual growth revision, log-pp/year | +0.007153 | −0.059085 | −0.111754 |
+| Median absolute revision, log-pp/year | 0.166532 | 0.271055 | 0.412929 |
+| Economies changing growth sign | 6 | 6 | 10 |
+| Spearman country rank correlation | 0.9500 | 0.9189 | 0.8870 |
+| Absolute annual growth revision >1 log-pp/year | 12 | 24 | 26 |
+
+These are historical **published-estimate revisions**, not realized changes in agricultural performance over time. In the end-to-end comparison, the three largest absolute annual growth revisions were Singapore (−7.387 log-pp/year), Bahamas (+6.600) and Trinidad and Tobago (−5.796). The six plus six successive sign switches cannot be added to obtain net sign changes; Uganda switched in both successive transitions. In the 2024→2026 comparison, only **3/10** sign changes had absolute growth rates above **0.5 log-pp/year on both sides** (Bahamas, Timor-Leste, Trinidad and Tobago), showing the sensitivity of a binary sign classification near zero.
+
+### 3.2 Measurement and selection limitations
+
+The separately retrieved ILOSTAT source contained 617,241 original rows, but only 402 unambiguous country-year observations after the total-sex, broad-agriculture, best-source and endpoint filters. The worker-level comparison with the WDI-implied denominator yielded **200 positive matched country-year records across 127 economies**; the median absolute relative discrepancy was **5.8051%**, with **128/200** records within ±10%. For **73** economies with both 2000 and 2019 matched worker levels, the median absolute annual worker-growth discrepancy was **0.4104 log-pp/year** and **6/73** growth signs disagreed. This is a source-consistency diagnostic on a nonrandom subset, not evidence of an independent worker census or of the mechanism of historical WDI revisions.
+
+The 2026 observed-country panel contains **217** nonaggregate economies. Its 2000/2019/2023 positive-availability masks were 43 `000`, 16 `011`, 1 `100`, 4 `110` and 153 `111`; all other masks were zero. The four `110` economies were Sudan, Syrian Arab Republic, West Bank and Gaza, and Ukraine. These masks describe missing observations, **not zero productivity**. The primary 155-economy historical-vintage cohort is a separate selection and is not reconstructed from these 153 cases.
+
+### 3.3 Exact separation of horizon and release effects
+
+Within the distinct **153-economy 2026-only** cohort, median annual growth was **2.355575** log-pp/year for 2000–2019, **0.890440** for 2019–2023 and **2.224484** for 2000–2023. The median within-country L−E contrast was **−1.925832** log-pp/year, versus **−0.334927** for H−E; the difference is exactly the algebraic factor **4/23**. The rowwise maximum floating-point residual was below 2×10⁻¹⁵ log-pp/year. **60/153** countries changed the sign of their growth rate from E to L, whereas **10/153** did so from E to H; the latter 10 are a subset of the former 60. The identical *number* 10 also appears in the separate 2024→2026 historical-vintage sign comparison, but the two counts have **different samples and causes**. None of these calculations demonstrates a structural break or causal post-2019 effect.
+
+## 4. Discussion
+
+The evidence supports three narrow conclusions. First, source release is a material component of descriptive country-level measurement uncertainty: an end-to-end median absolute annual growth revision of 0.4129 log-percentage points can coexist with relatively high rank correlation. Second, sign-change headlines are sensitive to small growth rates near zero and must be accompanied by magnitude thresholds. Third, changing the time horizon is not changing the data vintage: the weighted-average identity shows exactly why extending the endpoint from 2019 to 2023 can suppress shorter-period sign reversals.
+
+The limitations are substantial. Revisions to the published composite indicator cannot be assigned to independent national-accounts or ILO employment mechanisms without matched historical component archives. Current-source ILOSTAT agreement does not provide independent provenance because the sources overlap. The fixed 155-country panel is selected by data availability, not a representative sample of world agriculture. The 2024 archive's missing 2023 endpoint prevents a three-vintage 2000–2023 comparison. The actual `countryatlas` CAGR function has been benchmarked, but the separate three-vintage `compare_vintages` prior-art benchmark remains incomplete. Prior research already studies statistical data revisions, and this study does **not** establish methodological novelty. The post hoc analysis is not preregistered, and the manuscript has not been externally reviewed.
+
+The appropriate application is as a transparent, reproducible descriptive data note or methodological case study **if a suitable journal accepts this limited contribution and the human author approves the scientific and publication conditions**. It must not be presented as a new theory of agricultural productivity, a causal explanation of revision, or a new measurement of agricultural employment.
+
+## 5. Conclusion
+
+Across the same 155 economies, three official WDI releases yield meaningfully different annualized historical agricultural value-added-per-worker growth estimates. Country-level release provenance, fixed-sample selection, scale convention and time-horizon definition are necessary for defensible interpretation. Historical employment-source attribution and novelty remain unresolved. **The manuscript is not yet cleared for submission.**
+
+## Data, code, ethics and author declarations
+
+**Data and code availability:** source-file names, SHA256 checksums, source code and execution IDs appear above and in the main repository manuscript. CI artifacts may expire; the committed observed-country CSV and methods should be preserved with the eventual submission. **Ethics:** only publicly available country-level secondary statistics are analyzed; no claim is made about a human-subjects ethics-board determination. **Funding, competing interests, AI use, author contributions, identity and affiliation, journal choice, rights and publication fees:** **NOT VERIFIED — HUMAN AUTHOR DECISION REQUIRED**. No signature, journal submission, manuscript ID, acceptance or publication is asserted.
+
+## References (verify final bibliographic formatting before submission)
+
+1. World Bank. World Development Indicators, NV.AGR.EMPL.KD. https://data.worldbank.org/indicator/NV.AGR.EMPL.KD
+2. International Labour Organization. ILOSTAT. https://ilostat.ilo.org/
+3. Gutierrez L. (2002). Why is agricultural labour productivity higher in some countries than others? *Agricultural Economics Review* 3(1):58–72. DOI: 10.22004/ag.econ.26431.
+4. Eberhardt M, Teal F. (2013). Structural change and cross-country growth empirics. *World Bank Economic Review* 27(2):229–271.
+5. Dieppe A, Matsuoka H. (2021). Sectoral Decomposition of Convergence in Labor Productivity. World Bank Policy Research Working Paper 9767.
+6. Gollin D, Lagakos D, Waugh ME. (2013). The Agricultural Productivity Gap. NBER Working Paper 19628. DOI: 10.3386/w19628.
+7. Johnson S, Larson W, Papageorgiou C, Subramanian A. (2013). Is newer better? Penn World Table revisions and their impact on growth estimates. *Journal of Monetary Economics* 60(2):255–274. DOI: 10.1016/j.jmoneco.2012.10.022.
+8. Filer RK, Hájková D, Hanousek J. (2004). The Other Side of the Moon: The Data Problem in Analysing Growth Determinants. CEPR Discussion Paper 4349.
+9. World Bank. WDI database archives. https://databank.worldbank.org/databases/archives
+
+**Critical internal AI decision:** MAJOR REVISION / NO SUBMISSION. The author-facing manuscript is a **real, consolidated output** but is not evidence of a completed peer-reviewed paper or author approval.
