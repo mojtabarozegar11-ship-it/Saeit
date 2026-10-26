@@ -57,6 +57,15 @@ class PrivateContentAuditTests(unittest.TestCase):
         self.assertFalse(audit.graphic_drawing_signals_present(40,0,0,0))
         self.assertFalse(audit.graphic_drawing_signals_present(40,0,20,160))
 
+    def test_ppm_visual_metrics_detect_colored_and_blank_regions(self):
+        raw=b"P6\n2 1\n255\n"+bytes([255,255,255,255,0,0])
+        result=audit.ppm_pixel_metrics(raw)
+        self.assertEqual(result["width"],2)
+        self.assertEqual(result["height"],1)
+        self.assertFalse(result["near_blank"])
+        self.assertEqual(result["colored_pixel_ratio"],0.5)
+        self.assertNotIn("pixels",result)
+
     def test_pdf_audit_reports_vector_graphics_metrics_without_content(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/"vector.pdf"

@@ -8,6 +8,10 @@ import hashlib
 import html.parser
 import json
 import re
+import shutil
+import statistics
+import subprocess
+import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
@@ -69,6 +73,104 @@ class PageAudit(html.parser.HTMLParser):
     def handle_data(self, data):
         if self.title and data.strip():
             self.title_text += len(data.strip())
+
+def ppm_pixel_metrics(raw):
+    if not raw.startswith(b"P6"):
+        raise ValueError("PPM_BINARY_P6_REQUIRED")
+    pos = 0
+    tokens = []
+    while len(tokens) < 4:
+        while pos < len(raw):
+            if raw[pos] in b" \t\r\n":
+                pos += 1
+            elif raw[pos] == 35:
+                end = raw.find(b"\n", pos)
+                pos = len(raw) if end < 0 else end + 1
+            else:
+                break
+        start = pos
+        while pos < len(raw) and raw[pos] not in b" \t\r\n#":
+            pos += 1
+        if start == pos:
+            raise ValueError("PPM_HEADER_INVALID")
+        tokens.append(raw[start:pos])
+    magic, width_raw, height_raw, maxval_raw = tokens
+    width, height, maxval = int(width_raw), int(height_raw), int(maxval_raw)
+    if magic != b"P6" or width <= 0 or height <= 0 or maxval != 255:
+        raise ValueError("PPM_DIMENSIONS_OR_DEPTH_INVALID")
+    if pos >= len(raw) or raw[pos] not in b" \t\r\n":
+        raise ValueError("PPM_HEADER_SEPARATOR_MISSING")
+    if raw[pos:pos + 2] == b"\r\n":
+        pos += 2
+    else:
+        pos += 1
+    pixels = raw[pos:]
+    total = width * height
+    if len(pixels) != total * 3:
+        raise ValueError("PPM_PIXEL_LENGTH_INVALID")
+    sample_step = max(1, total // 16000)
+    sampled = nonwhite = colored = 0
+    for pixel_index in range(0, total, sample_step):
+        i = pixel_index * 3
+        red, green, blue = pixels[i], pixels[i + 1], pixels[i + 2]
+        sampled += 1
+        if min(red, green, blue) < 245:
+            nonwhite += 1
+        if max(red, green, blue) - min(red, green, blue) >= 18:
+            colored += 1
+    nonwhite_ratio = nonwhite / sampled if sampled else 0.0
+    return {
+        "width": width, "height": height, "sampled_pixels": sampled,
+        "nonwhite_ratio": round(nonwhite_ratio, 5),
+        "colored_pixel_ratio": round(colored / sampled if sampled else 0.0, 5),
+        "near_blank": nonwhite_ratio < 0.002,
+    }
+
+
+def render_pdf_pages(path, expected_page_count):
+    renderer = shutil.which("pdftoppm")
+    if renderer is None:
+        return {"renderer_available": False, "renderer": None, "rendered_page_count": 0,
+                "page_count_matches": False, "near_blank_page_numbers": [],
+                "pages_with_color_signal": 0, "mean_nonwhite_ratio": None,
+                "render_failure": "PDFTOPPM_NOT_INSTALLED"}
+    with tempfile.TemporaryDirectory(prefix="mpw-private-render-") as temp:
+        prefix = Path(temp) / "page"
+        try:
+            proc = subprocess.run(
+                [renderer, "-q", "-r", "36", "-scale-to", "320", str(path), str(prefix)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=210, check=False)
+        except subprocess.TimeoutExpired:
+            return {"renderer_available": True, "renderer": "pdftoppm", "rendered_page_count": 0,
+                    "page_count_matches": False, "near_blank_page_numbers": [],
+                    "pages_with_color_signal": 0, "mean_nonwhite_ratio": None,
+                    "render_failure": "RENDER_TIMEOUT"}
+        if proc.returncode != 0:
+            return {"renderer_available": True, "renderer": "pdftoppm", "rendered_page_count": 0,
+                    "page_count_matches": False, "near_blank_page_numbers": [],
+                    "pages_with_color_signal": 0, "mean_nonwhite_ratio": None,
+                    "render_failure": "RENDERER_REJECTED_PDF"}
+        files = sorted(prefix.parent.glob("page-*.ppm"),
+                       key=lambda p: int(re.search(r"-(\d+)\.ppm$", p.name).group(1)))
+        metrics = []
+        render_errors = 0
+        for image in files:
+            try:
+                metrics.append(ppm_pixel_metrics(image.read_bytes()))
+            except (OSError, ValueError, IndexError):
+                render_errors += 1
+        ratios = [item["nonwhite_ratio"] for item in metrics]
+        return {
+            "renderer_available": True, "renderer": "pdftoppm",
+            "rendered_page_count": len(metrics), "page_count_matches": len(metrics) == expected_page_count,
+            "render_errors": render_errors,
+            "near_blank_page_numbers": [i + 1 for i, item in enumerate(metrics) if item["near_blank"]][:100],
+            "pages_with_color_signal": sum(item["colored_pixel_ratio"] >= 0.01 for item in metrics),
+            "mean_nonwhite_ratio": round(statistics.mean(ratios), 5) if ratios else None,
+            "median_nonwhite_ratio": round(statistics.median(ratios), 5) if ratios else None,
+            "render_failure": None if not render_errors else "PPM_DECODE_ERRORS",
+        }
+
 
 def graphic_drawing_signals_present(page_count, embedded_images, pages_with_vector_drawing,
                                        vector_drawing_operator_count):
@@ -137,12 +239,14 @@ def audit_pdf(path, expected_page_count=None, require_illustrations=False):
     nonblank = sum(n >= 40 for n in page_chars)
     duplicates = len(page_hashes) - len(set(page_hashes))
     low_text = [i + 1 for i, n in enumerate(page_chars) if 0 < n < 40]
+    visual_render = render_pdf_pages(path, page_count)
     checks = {
         "reader_opened": page_count > 0 and not reader.is_encrypted,
         "page_text_extraction_coverage_ge_95pct": page_count > 0 and nonblank / page_count >= .95,
         "no_page_extraction_errors": extraction_errors == 0,
         "duplicate_nonempty_pages_absent": duplicates == 0,
         "replacement_characters_absent": replacement_chars == 0,
+        "all_pdf_pages_rendered": visual_render["renderer_available"] and visual_render["page_count_matches"] and visual_render.get("render_errors", 0) == 0,
     }
     is_picture_book = expected_page_count is not None and require_illustrations
     if not is_picture_book:
@@ -166,6 +270,7 @@ def audit_pdf(path, expected_page_count=None, require_illustrations=False):
         "vector_drawing_operator_count": vector_drawing_operator_count,
         "pages_with_vector_drawing": pages_with_vector_drawing,
         "graphics_scan_errors": graphics_scan_errors,
+        "visual_render": visual_render,
         "contextual_exclusions": ([
             {"criterion": "bibliography_or_reference_markers_found", "reason": "Not required for an illustrated children's read-aloud picture book"},
             {"criterion": "structure_markers_found", "reason": "Chapter or table-of-contents markers are not applicable to this picture-book format"},
@@ -295,6 +400,11 @@ def run(root=BASE):
                         "vector_drawing_operator_count": measured.get("vector_drawing_operator_count"),
                         "pages_with_vector_drawing": measured.get("pages_with_vector_drawing"),
                         "graphics_scan_errors": measured.get("graphics_scan_errors"),
+                        "rendered_page_count": measured.get("visual_render", {}).get("rendered_page_count"),
+                        "rendered_page_count_matches": measured.get("visual_render", {}).get("page_count_matches"),
+                        "near_blank_page_count": len(measured.get("visual_render", {}).get("near_blank_page_numbers", [])),
+                        "pages_with_color_signal": measured.get("visual_render", {}).get("pages_with_color_signal"),
+                        "render_failure": measured.get("visual_render", {}).get("render_failure"),
                         "quality1000_verified": False})
     print("MPW_PRIVATE_CONTENT_AUDIT=" + json.dumps(results, sort_keys=True))
     print("MPW_CONTENT_BYTES_EMITTED=0;MPW_LIVE_MUTATIONS=0;MPW_QUALITY1000_CERTIFIED=0")
