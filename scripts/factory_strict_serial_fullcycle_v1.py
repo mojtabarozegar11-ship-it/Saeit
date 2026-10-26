@@ -261,7 +261,11 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
         if not certified:
             for stage in STAGES:
                 label = stage[0]
-                if hold and label != "primary_source":
+                # Every worker, including the primary-source downloader, can consume
+                # disk. Re-evaluate before each stage, retaining a hold once reached.
+                if disk_usage(root).free < RESERVE:
+                    hold = True
+                if hold:
                     results[label] = "STORAGE_RESERVE_HOLD"
                     continue
                 remaining = budget - (monotonic() - began)
