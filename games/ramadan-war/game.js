@@ -73,7 +73,7 @@ function validSavedWorld(s){
  if(!s||typeof s!=='object'||Array.isArray(s)||!Array.isArray(s.enemies)||s.endless||s.victory||s.gameOver)return false;
  const within=(v,lo,hi)=>Number.isFinite(v)&&v>=lo&&v<=hi;
  if(!Number.isInteger(s.mission)||!within(s.mission,0,5)||!Number.isInteger(s.hero)||safeHero(s.hero)!==s.hero)return false;
- if(!within(s.x,1,14)||!within(s.y,1,14)||!within(s.angle,-1e6,1e6)||!within(s.hp,1,10000)||!within(s.maxHp,1,10000)||s.hp>s.maxHp)return false;
+ if(!within(s.x,1,14)||!within(s.y,1,14)||tile(s.x|0,s.y|0,s.mission)!==0||!within(s.angle,-1e6,1e6)||!within(s.hp,1,10000)||!within(s.maxHp,1,10000)||s.hp>s.maxHp)return false;
  if(!within(s.lives,1,100)||!within(s.ammo,0,8)||!within(s.rockets,0,24)||!within(s.drones,0,7)||!within(s.score,0,1e9))return false;
  // Persisted progress must never poison wave spawning, timers, or mission completion.
  for(const k of ['missionKills','kills','shots','points','combo','rocketHits','time']){
