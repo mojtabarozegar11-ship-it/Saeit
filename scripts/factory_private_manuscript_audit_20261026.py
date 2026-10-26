@@ -95,8 +95,11 @@ def audit(root: Path, *, chapters: int = 30, chapter_target: int = 5300,
                 re.split(r"\n[ \t]*\n", text), 1):
             body = " ".join(line for line in paragraph.splitlines()
                             if line.strip() and not line.lstrip().startswith("#"))
+            # Match the full-prose gate: inline emphasis must not split tokens.
+            # Preserve underscores inside identifiers (term_0000 != term0000).
+            body = re.sub(r"[*`]|(?<!\w)_+|_+(?!\w)", "", body)
             tokens = [word.casefold() for word in
-                      re.findall(r"[A-Za-z][A-Za-z0-9'-]*", body)]
+                      re.findall(r"[A-Za-z][A-Za-z0-9_'-]*", body)]
             if len(tokens) < 100:
                 continue
             paragraph_hash = hashlib.sha256(
