@@ -89,7 +89,7 @@ def inventory():
             status = doc.get("status")
             order_status[status if isinstance(status, str) else "UNSET"] += 1
             origin = doc.get("origin")
-            order_origins[origin if origin in known_origins else "other"] += 1
+            order_origins[origin if isinstance(origin, str) and origin in known_origins else "other"] += 1
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             unsafe += 1
     serial = OPS / "strict-serial-fullcycle-v1.py"
