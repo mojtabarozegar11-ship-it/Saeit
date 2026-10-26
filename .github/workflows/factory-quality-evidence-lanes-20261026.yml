@@ -130,7 +130,7 @@ jobs:
             echo FACTORY_EXISTING_QA_SCRIPT=ABSENT_RESTORE_FROM_VERIFIED_SOURCE
           fi
           # Run once with fresh, hash-matched source; immutable queue receipts remain.
-          "$python" -B "$stage/workorders.py" --private-root "$private" --quality-module "$stage/quality.py" --catalog "$stage/quality_100_criteria.json" --run-id "quality-lanes-$run_id"
+          "$python" -B "$stage/workorders.py" --private-root "$private" --quality-module "$stage/quality.py" --catalog "$stage/quality_100_criteria.json" --products-file "$private/quality-excellence/product-flow/active-slots/current.json" --run-id "quality-lanes-$run_id"
           tmp="$(mktemp "$(dirname "$target")/.workorders.XXXXXXXX")"
           cp "$stage/workorders.py" "$tmp"
           chmod 600 "$tmp"
@@ -140,7 +140,12 @@ jobs:
           from pathlib import Path
           import json
           root=Path(__import__("sys").argv[1])/"quality-excellence"
-          targets=("capacity_planning_workbook","farm_enterprise_economics","fieldwork_animated_motion_48","fieldwork_developer_text_tools","fieldwork_engineering_calculators")
+          slot_file=root/"product-flow"/"active-slots"/"current.json"
+          slots=json.loads(slot_file.read_text())
+          assert slots.get("schema")=="saeit.factory.product-slots.v1"
+          assert slots.get("capacity")==5 and len(slots.get("active",[]))==5
+          targets=[item["recipe"] for item in slots["active"]]
+          assert len(set(targets))==5
           observed=[]
           for product in targets:
               engineering=root/"engineering-workorders"/product/"current.json"
@@ -156,7 +161,7 @@ jobs:
                                "engineering_gaps":a["technical_evidence_gap_count"],
                                "external_gaps":b["external_evidence_gap_count"],
                                "nonengineering_defects":len(b["pending_nonengineering_defects"])})
-          print("FACTORY_FIRST_FIVE_REAL_ROUTING="+json.dumps(observed,sort_keys=True))
+          print("FACTORY_ACTIVE_SLOT_REAL_ROUTING="+json.dumps(observed,sort_keys=True))
           print("FACTORY_PUBLIC_RELEASES=0")
           print("FACTORY_QUALITY_1000_AUTO_APPROVALS=0")
           PY
