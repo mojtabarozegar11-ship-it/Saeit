@@ -6,7 +6,7 @@ import hashlib, json, os, re, sys
 ROOT=Path('/home/zomorod2/public_html')
 ROW='ZM-R25'; GAME_ID='ZM-R25-GAME-RAMADAN-WAR-20261022'; GAME=ROOT/'ramadan-war'
 MARK='ZM-RAMADAN-WAR-WEB-CARD-20261022'
-ASSETS=['index.html','game.js','game.css','engine3d.js','three.module.js','three.core.min.js','THREE-LICENSE.txt','ASSET-CREDITS.md','weapon-overlay.webp','soldier-enemy.webp','stone-wall.webp','scene-desert.webp','scene-sniper-desert-v2.webp','scene-night.webp','scene-airbase.webp','soldier-rigged-ccby.glb','m24-sniper-ccby.glb','arms_basecolor.webp','arms_normal.webp','three-addons/loaders/GLTFLoader.js','three-addons/utils/BufferGeometryUtils.js','three-addons/utils/SkeletonUtils.js','three-addons/libs/meshopt_decoder.module.js']
+ASSETS=['index.html','game.js','save-validation.mjs','game.css','engine3d.js','three.module.js','three.core.min.js','THREE-LICENSE.txt','ASSET-CREDITS.md','weapon-overlay.webp','soldier-enemy.webp','stone-wall.webp','scene-desert.webp','scene-sniper-desert-v2.webp','scene-night.webp','scene-airbase.webp','soldier-rigged-ccby.glb','m24-sniper-ccby.glb','arms_basecolor.webp','arms_normal.webp','three-addons/loaders/GLTFLoader.js','three-addons/utils/BufferGeometryUtils.js','three-addons/utils/SkeletonUtils.js','three-addons/libs/meshopt_decoder.module.js']
 
 def digest(data): return hashlib.sha256(data).hexdigest()
 def atomic(path,data,run):
@@ -49,6 +49,7 @@ def prepare(stage):
     new={name:inputs[name].read_bytes() for name in ASSETS}
     assert len(new['index.html'])>1000 and MARK.encode() in new['index.html']
     assert b'RamadanWarDebug' in new['game.js'] and b'createEngine' in new['game.js'] and b'./game.js' in new['index.html'] and b'./game.css' in new['index.html']
+    assert b'./save-validation.mjs' in new['game.js'] and b'validateCampaignSave' in new['save-validation.mjs']
     assert b'./engine3d.js' in new['game.js'] and b'./three.module.js' in new['engine3d.js'] and b'./three.core.min.js' in new['three.module.js'] and len(new['three.module.js'])>300000 and len(new['three.core.min.js'])>300000
     assert b'The MIT License' in new['THREE-LICENSE.txt']
     assert b'CC BY 4.0' in new['ASSET-CREDITS.md'] and b'BAMEN' in new['ASSET-CREDITS.md'] and b'Naudaff3D' in new['ASSET-CREDITS.md']
