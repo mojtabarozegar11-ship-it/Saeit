@@ -86,6 +86,48 @@ jobs:
             exit 1
           fi
           REMOTE
+      - name: Classify agent readiness and remote reachability without exposing private log
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-live-three-private-qa"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          export PATH="/opt/alt/alt-nodejs22/root/usr/bin:$PATH"
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          path = Path.home() / "desktop-commander.log"
+          if not path.is_file():
+              print("MPW_REMOTE_DIAGNOSTIC=" + json.dumps({"log_exists": False}))
+          else:
+              with path.open("rb") as stream:
+                  size = path.stat().st_size
+                  stream.seek(max(0, size - 131072))
+                  log = stream.read().decode("utf-8", errors="replace").casefold()
+              terms = {
+                  "connected": "connected to remote mcp",
+                  "session_restored": "session restored",
+                  "channel_subscribed": "channel subscribed",
+                  "device_ready": "device ready",
+                  "marked_online": "device marked as online",
+                  "auth_flow_required": "device code received",
+                  "session_invalid": "persisted session invalid",
+                  "fetch_failed": "fetch failed",
+                  "startup_failed": "device startup failed",
+              }
+              print("MPW_REMOTE_DIAGNOSTIC=" + json.dumps({"log_exists": True, "log_bytes": size,
+                  "markers": {key: value in log for key, value in terms.items()}}, sort_keys=True))
+          PY
+          python3 - <<'PY'
+          import urllib.request
+          try:
+              with urllib.request.urlopen("https://mcp.desktopcommander.app", timeout=9) as response:
+                  print("MPW_REMOTE_ENDPOINT_HTTP=" + str(response.status))
+          except Exception as exc:
+              print("MPW_REMOTE_ENDPOINT_ERROR_TYPE=" + type(exc).__name__)
+          PY
+          REMOTE
       - name: Remove only this run's transient SSH identity
         if: always()
         shell: bash
