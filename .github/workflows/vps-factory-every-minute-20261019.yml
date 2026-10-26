@@ -355,6 +355,11 @@ jobs:
                   value=json.loads(filename.read_text(encoding="utf8"))
                   print("FACTORY_FIRST_FIVE_QA_KEYS "+product+" "+label+"="+
                         ",".join(sorted(str(k) for k in value.keys())))
+                  print("FACTORY_FIRST_FIVE_QA_METRICS "+product+" "+label+"="+json.dumps({k:value.get(k) for k in ("quality_points_verified","required_quality_points","documentary_evidence_points","quality_status","rework_closeout_status","missing_documentary_group_count","unresolved_technical_or_domain_defects","measured_zip_integrity_Q068") if isinstance(value.get(k),(int,float,bool,str,type(None)))},sort_keys=True))
+                  for key in ("defects","rework_actions","required_criterion_work"):
+                      item=value.get(key)
+                      if isinstance(item,list):
+                          print("FACTORY_FIRST_FIVE_QA_ITEMS "+product+" "+label+" "+key+"="+json.dumps([str(x.get("code",x.get("reason",x.get("criterion",x))) if isinstance(x,dict) else x)[:95] for x in item[:8]]))
                   for key in ("failed_checks","defect_codes","return_reasons","failed_dimensions","quality_defects",
                               "rework_codes","required_actions","release_gate"):
                       found=value.get(key)
