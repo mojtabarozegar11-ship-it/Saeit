@@ -52,10 +52,18 @@ class PageAudit(html.parser.HTMLParser):
             self.images += 1
             if not (a.get("alt") or "").strip():
                 self.images_without_alt += 1
-        elif tag in ("a", "link", "script"):
-            target = a.get("href") if tag != "script" else a.get("src")
-            if target and not re.match(r"^(?:[a-z]+:|//|#)", target, re.I):
-                self.local_links.append(target.split("?",1)[0].split("#",1)[0])
+        if tag in ("a", "link", "script", "img", "source", "video", "audio"):
+            target = a.get("href") if tag in ("a", "link") else a.get("src")
+            targets = [target]
+            if tag == "video":
+                targets.append(a.get("poster"))
+            if tag in ("img", "source"):
+                srcset = a.get("srcset") or ""
+                if srcset and not srcset.lstrip().lower().startswith("data:"):
+                    targets.extend(part.strip().split()[0] for part in srcset.split(",") if part.strip())
+            for target in targets:
+                if target and not re.match(r"^(?:[a-z]+:|//|#)", target, re.I):
+                    self.local_links.append(target.split("?",1)[0].split("#",1)[0])
             if tag == "script":
                 if a.get("src"):
                     if re.match(r"^(?:https?:)?//", a["src"], re.I):
@@ -63,7 +71,7 @@ class PageAudit(html.parser.HTMLParser):
                 else:
                     self.inline_scripts += 1
                     self.script_open = True
-        elif tag == "form":
+        if tag == "form":
             self.forms += 1
     def handle_endtag(self, tag):
         if tag == "title":
@@ -417,7 +425,7 @@ def audit_zip(path):
             "unsafe_member_count": len(unsafe), "crc_failure": bad_crc,
             "missing_local_refs": missing_local[:100], "html_pages": pages,
             "checks": checks,
-            "needs_specialist_review": ["gameplay", "responsive_browser_execution", "accessibility", "security", "asset_licenses", "commercial_rights_mapping"],
+            "needs_specialist_review": ["responsive_browser_execution", "navigation_integrity", "browser_console_errors", "accessibility", "security", "asset_licenses", "commercial_rights_mapping"],
         }
 
 def run(root=BASE):
