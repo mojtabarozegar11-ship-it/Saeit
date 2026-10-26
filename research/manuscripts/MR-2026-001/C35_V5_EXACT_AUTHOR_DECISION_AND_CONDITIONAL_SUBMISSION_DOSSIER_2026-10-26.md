@@ -2,7 +2,13 @@
 
 **Prepared 2026-10-26.** **Status: author scientific review candidate, not submission-authorized.** All evidence in this packet is for the actual V5 text, not V4 or a hypothetical future version.
 
-## 26 October C40 superseding source-integrity addendum — latest review artifact
+## 26 October C41 full-text Car Table 5 source gate — current Word
+
+**Latest scientific source correction:** commit `2bb3bb4d0efcdf5667790c5e660a9aa84f9f9e7e`, following independent [C41](C41_CAR_2012_AUTHOR_UPLOADED_FULLTEXT_TABLE5_RECONCILIATION_AND_LIMITS_2026-10-26.md) inspection of an **author-uploaded full-text PDF transcription** (not a publisher-authenticated page image). Extracted Car Table 5 category counts **26+7+3+6+15+17=74** disagree with the printed total **72**; percentages sum to **103.2%**, Groups 4/5 labels conflict with adjacent prose, and Groups 1–3 give **36/72=50%** rather than the neighboring stated **68%**. The independent abstract duration groups **45+13+14=72** are distinct categories, not a correction. No corrected participant data or validated compliance rate was invented.
+
+**New exact-source Word/QA:** [run 40281877221](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40281877221) **COMPLETED/SUCCESS**, [artifact 12632690900](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40281877221/artifacts/12632690900). The parallel V5 author-review workflow [run 40281877206](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40281877206) **SUCCESS**, [artifact 12631524399](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40281877206/artifacts/12631524399). These supersede artifact 12630350798 for the revised Car paragraph. **MAJOR REVISION / NO SUBMISSION** remains the internal scientific decision. Full publisher typeset-page verification and scientific novelty remain unresolved; a successful Word build is not a scientific ACCEPT.
+
+## 26 October C40 historical source-integrity addendum — previously matched review artifact
 
 **Latest source after C40 scientific correction:** commit `3bf74d25532ed707a14d632fb2d762d66a50e2ec`, with a carefully bounded **Cvejić 2020 83% respondent-denominator** statement. A new deterministic gate [run 40275708232](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40275708232) completed **SUCCESS**, [artifact 12630206545](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40275708232/artifacts/12630206545). Under the *untested* common-base, n≤46 and nearest-whole-percent assumptions, the eight reported percentages plus 6% (two dissatisfied farmers) uniquely admit hypothetical n=35; this **does not verify** that the 83% was 29/35 survey respondents because the publisher also reports 46 farmers and 35 farms.
 
