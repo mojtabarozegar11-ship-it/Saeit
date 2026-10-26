@@ -31,7 +31,7 @@ def _path(value, *, existing=False):
         raise Blocked("Private vault absolute path is not configured")
     path = Path(value)
     if (not path.is_absolute() or path.name in ("", ".", "..") or
-        any(x.lower() in DANGEROUS_PATH_PARTS for x in path.parts)):
+        any(x.lower() in DANGEROUS_PATH_PARTS or x==".." for x in path.parts)):
         raise Blocked("Vault must be an absolute path outside all webroots")
     parent=path.parent
     if (not parent.is_dir() or parent.is_symlink() or
@@ -92,12 +92,23 @@ def _vault(path):
         _token(secret)
     return data["secrets"]
 
+def _account_alias(account):
+    if not isinstance(account,dict):
+        raise Blocked("Private API account reference missing")
+    aid,brand,network,alias=(account.get(k) for k in ("id","brand","platform","token_env"))
+    if (not isinstance(aid,str) or not re.fullmatch(r"[0-9a-f]{32}",aid)
+        or brand not in ("personal","zomorod","mojplaywin")
+        or not isinstance(network,str) or not re.fullmatch(r"[a-z0-9_]{1,70}",network)):
+        raise Blocked("Invalid scoped account identity")
+    expected="MPW_SOCIAL_"+brand.upper()+"_"+network.upper()+"_"+aid.upper()+"_TOKEN"
+    if alias!=expected or not ALIAS.fullmatch(expected):
+        raise Blocked("Stored account secret alias does not match its exact identity")
+    return expected
+
 def credential_for(account, *, env=None, vault_file=None):
     """Resolve one account's privately scoped token, fail closed on ambiguity."""
     env=os.environ if env is None else env
-    alias=account.get("token_env") if isinstance(account,dict) else None
-    if not isinstance(alias,str) or not ALIAS.fullmatch(alias):
-        raise Blocked("Unrecognized private API credential identity")
+    alias=_account_alias(account)
     environment=env.get(alias,"")
     if environment:
         _token(environment)
@@ -141,9 +152,7 @@ def _validate_import(store,manifest,*,env=None):
         if any(k in (account["destination"]+" "+account["public_url"]).casefold()
                for k in RESTRICTED_HANDLES):
             raise Blocked("Restricted promotional account excluded")
-        alias=account["token_env"]
-        if not ALIAS.fullmatch(alias):
-            raise Blocked("Private account credential name not recognized")
+        alias=_account_alias(account)
         if env.get(alias):
             raise Blocked("Account already has credential in process environment; remove ambiguity first")
         mapped[aid]=(account,alias,_token(row["token"]))
@@ -257,7 +266,7 @@ def disconnect_batch(store,account_ids,*,vault_file,actor):
         prior=_vault(vault_file)
         removed=0
         for account in accounts:
-            removed+=int(prior.pop(account["token_env"],None) is not None)
+            removed+=int(prior.pop(_account_alias(account),None) is not None)
         with store.transaction():
             for account in accounts:
                 store.db.execute("DELETE FROM api_checks WHERE account_id=?",(account["id"],))
