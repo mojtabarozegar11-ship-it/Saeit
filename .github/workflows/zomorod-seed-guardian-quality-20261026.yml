@@ -1,0 +1,23 @@
+name: Zomorod Seed Guardian game integrity
+on:
+  pull_request:
+    paths:
+      - 'content/zomorod-seed-guardian-20261023/index.html'
+      - 'tests/game/seed-guardian-save-20261026.cjs'
+      - '.github/workflows/zomorod-seed-guardian-quality-20261026.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  seed-guardian-save:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate gameplay script and saved progression integrity
+        run: node tests/game/seed-guardian-save-20261026.cjs
