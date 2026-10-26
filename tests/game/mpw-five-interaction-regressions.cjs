@@ -70,9 +70,10 @@ function testPulse() {
   const g = boot('pulse-forge', {'mpw-beta-20261021-pulse-forge': 'Infinity'});
   assert.equal(g.el('best').textContent, '0', 'invalid saved best must not render Infinity');
   g.click('playButton');
+  const initialNotice = g.el('flash').textContent;
   const buttonEvent = g.press(' ', g.el('soundButton'));
   assert.equal(buttonEvent.defaultPrevented, false, 'Space on a real button must remain native');
-  assert.equal(g.el('flash').textContent, '', 'Space on toolbar must not strike the reactor');
+  assert.equal(g.el('flash').textContent, initialNotice, 'Space on toolbar must not strike the reactor');
   const arenaEvent = g.press(' ', g.el('playfield'));
   assert.equal(arenaEvent.defaultPrevented, true, 'Space in arena must not scroll page');
   assert.match(g.el('flash').textContent, /Signal missed|PERFECT SYNC/);
