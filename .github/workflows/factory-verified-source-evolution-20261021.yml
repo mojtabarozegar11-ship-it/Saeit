@@ -9,6 +9,7 @@ on:
       - scripts/factory_recipe_designer.py
       - scripts/factory_vps_product_cycle.py
       - tests/test_factory_recipe_designer.py
+      - tests/test_factory_vps_product_cycle.py
       - tests/test_factory_source_evolution.py
       - .github/workflows/factory-verified-source-evolution-20261021.yml
   push:
