@@ -13,6 +13,7 @@ from social_hub.catalog import catalogue
 from social_hub.store import Store
 from social_hub.service import connection_status, run_one, run_due
 from social_hub.adapters import Blocked, Uncertain
+from social_hub.diagnostics import record_one, SUPPORTED as READ_ONLY_PROVIDERS
 from social_hub.onboarding import preview as preview_onboarding, register as register_onboarding
 
 def main(argv=None):
@@ -27,6 +28,10 @@ def main(argv=None):
         batch.add_argument("--manifest-file",required=True,
                            help="Owner-authored token-free JSON; NEVER contains private OAuth credentials")
         batch.add_argument("--actor",default="owner-cli:manual")
+    diagnostics = sub.add_parser("test-readonly")
+    diagnostics.add_argument("--account",required=True)
+    diagnostics.add_argument("--confirm",action="store_true")
+    diagnostics.add_argument("--actor",default="owner-cli:check")
     reg = sub.add_parser("register")
     for n in ("brand","platform","destination"):
         reg.add_argument("--"+n, required=True)
@@ -67,6 +72,10 @@ def main(argv=None):
         db = Store(location)
         try:
             if args.command == "summary": result = db.summary()
+            elif args.command == "test-readonly":
+                if not args.confirm:
+                    raise Blocked("Read-only API test requires explicit --confirm")
+                result = record_one(db,args.account,actor=args.actor)
             elif args.command == "connections": result = connection_status(db)
             elif args.command in ("batch-preview","batch-register"):
                 manifest=json.loads(Path(args.manifest_file).read_text(encoding="utf-8"))
