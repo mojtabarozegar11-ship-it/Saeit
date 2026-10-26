@@ -1,0 +1,37 @@
+name: ZM-R01 independent official GEO BioSample to ENA SRR crosswalk (metadata only)
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/zm-r01-official-geo-biosample-srr-crosswalk.yml
+      - research/manuscripts/ZM-R01/analysis/official_geo_biosample_srr_crosswalk.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-verified-24-gsm-srr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and synthetic parser unit check (not real-data evidence)
+        run: |
+          python -m py_compile research/manuscripts/ZM-R01/analysis/official_geo_biosample_srr_crosswalk.py
+          python research/manuscripts/ZM-R01/analysis/official_geo_biosample_srr_crosswalk.py --self-test
+      - name: Join all 24 actual GEO GSM to BioSample and ENA SRR by deposited primary identifiers
+        run: |
+          python research/manuscripts/ZM-R01/analysis/official_geo_biosample_srr_crosswalk.py \
+            --ena-manifest research/manuscripts/ZM-R01/ENA_PRJNA1249400_OFFICIAL_24_RUN_PAIRED_FASTQ_MD5_2026-10-25.tsv \
+            --geo-manifest research/manuscripts/ZM-R01/GSE294406_24_SAMPLE_FACTORIZED_MANIFEST_2026-10-25.csv \
+            --output-prefix "${RUNNER_TEMP}/ZM-R01_GEO_BIOSAMPLE_SRR_SOURCE_CROSSWALK"
+      - name: Preserve source-hashed metadata audit; never publish FASTQ or infer DEG
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZM-R01-24-GSM-BioSample-SRR-verified-crosswalk-NOT-COUNTS
+          path: |
+            ${{ runner.temp }}/ZM-R01_GEO_BIOSAMPLE_SRR_SOURCE_CROSSWALK.tsv
+            ${{ runner.temp }}/ZM-R01_GEO_BIOSAMPLE_SRR_SOURCE_CROSSWALK.json
+          retention-days: 14
+          if-no-files-found: error
