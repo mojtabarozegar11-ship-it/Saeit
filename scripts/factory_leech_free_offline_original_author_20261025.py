@@ -193,6 +193,11 @@ def canonical_reasoning_view(body):
     """Canonicalize safety markers only; do not alter manuscript content."""
     import unicodedata
     safety_view = unicodedata.normalize("NFKC", body)
+    # Canonicalize line separators in the safety view so a CRLF/Unicode
+    # newline cannot conceal a bibliography marker from the pre-write gate.
+    safety_view = (safety_view.replace("\r\n", "\n").replace("\r", "\n")
+                   .replace("\u0085", "\n").replace("\u2028", "\n")
+                   .replace("\u2029", "\n"))
     # Strip every Unicode format control, not just a hand-picked subset.
     # U+034F (combining grapheme joiner) is also invisible but categorized Mn.
     # This is a safety-only view; the submitted prose is never rewritten.
