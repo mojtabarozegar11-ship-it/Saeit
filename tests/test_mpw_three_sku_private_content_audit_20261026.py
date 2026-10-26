@@ -125,6 +125,27 @@ class PrivateContentAuditTests(unittest.TestCase):
             self.assertEqual(len(result["missing_local_refs"]),4)
             self.assertNotIn("html_content",result)
 
+    def test_srcset_mixed_data_and_local_candidates_are_checked_individually(self):
+        self.assertEqual(audit.srcset_urls("data:image/png;base64,AAAA 1x, missing.png 2x"),
+                         ["data:image/png;base64,AAAA", "missing.png"])
+        self.assertEqual(audit.srcset_urls("present.png 1x, data:image/png;base64,AAAA 2x"),
+                         ["present.png", "data:image/png;base64,AAAA"])
+        with tempfile.TemporaryDirectory() as tmp:
+            missing=Path(tmp)/"missing.zip"
+            with zipfile.ZipFile(missing,"w") as archive:
+                archive.writestr("index.html",
+                    "<title>Kit</title><img alt='A' srcset='data:image/png;base64,AAAA 1x, missing.png 2x'>")
+            result=audit.audit_zip(missing)
+            self.assertFalse(result["checks"]["local_asset_links_resolve"])
+            self.assertEqual(result["missing_local_refs"],["missing.png"])
+            valid=Path(tmp)/"valid.zip"
+            with zipfile.ZipFile(valid,"w") as archive:
+                archive.writestr("index.html",
+                    "<title>Kit</title><img alt='A' srcset='present.png 1x, data:image/png;base64,AAAA 2x'>")
+                archive.writestr("present.png",b"placeholder")
+            result=audit.audit_zip(valid)
+            self.assertTrue(result["checks"]["local_asset_links_resolve"])
+
     def test_unsafe_zip_paths_are_not_accepted(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/"unsafe.zip"
