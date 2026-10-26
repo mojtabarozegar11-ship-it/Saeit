@@ -1,0 +1,80 @@
+name: AE C24 countryatlas 3.0.0 actual R head-to-head (source locked)
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/ae-2026-001-c24-countryatlas-actual-r-head-to-head.yml
+      - research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  direct-package-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::countryatlas
+      - name: Execute actual countryatlas::growth_rate on locked WDI endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv
+          echo "715ff36b3b817dcf58a4170eadad872b0bd629bd66a424a73fac077dac869169  $p" | sha256sum --check --status
+          mkdir -p research_outputs/AE-2026-001
+          Rscript - <<'RSCRIPT'
+          stopifnot(as.character(packageVersion("countryatlas")) == "3.0.0")
+          p <- "research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv"
+          d <- read.csv(p, stringsAsFactors=FALSE, na.strings=c("", "NA"))
+          stopifnot(nrow(d)==217, length(unique(d$country_iso3))==217)
+          results <- list()
+          for (window in list(c(2000L,2019L),c(2019L,2023L))) {
+            t0 <- window[1]; t1 <- window[2]
+            c0 <- paste0("ag_value_added_per_worker_",t0,"_constant2015usd")
+            c1 <- paste0("ag_value_added_per_worker_",t1,"_constant2015usd")
+            keep <- is.finite(d[[c0]]) & d[[c0]]>0 & is.finite(d[[c1]]) & d[[c1]]>0
+            z <- d[keep,c("country_iso3",c0,c1)]
+            z <- z[order(z$country_iso3),]
+            long <- data.frame(iso3c=rep(z$country_iso3,each=2L),
+                               year=rep(c(t0,t1),times=nrow(z)),
+                               ag_productivity=as.vector(t(as.matrix(z[,c(c0,c1)]))))
+            pkg <- countryatlas::growth_rate(long, ag_productivity, type="cagr")
+            actual <- pkg[pkg$year==t1,c("iso3c","ag_productivity_growth")]
+            stopifnot(nrow(actual)==nrow(z), !anyDuplicated(actual$iso3c))
+            expected <- data.frame(iso3c=z$country_iso3,
+                                   formula_cagr=exp(log(z[[c1]]/z[[c0]])/(t1-t0))-1,
+                                   annual_log_pp=100*log(z[[c1]]/z[[c0]])/(t1-t0))
+            m <- merge(expected,actual,by="iso3c",sort=TRUE)
+            stopifnot(nrow(m)==nrow(z),all(is.finite(m$ag_productivity_growth)))
+            delta <- abs(m$formula_cagr-m$ag_productivity_growth)
+            stopifnot(max(delta)<1e-10)
+            m$countryatlas_cagr_pp <- 100*m$ag_productivity_growth
+            m$log_minus_cagr_pp <- m$annual_log_pp-m$countryatlas_cagr_pp
+            fn <- paste0("research_outputs/AE-2026-001/C24_countryatlas_",t0,"_",t1,"_actual_package.csv")
+            write.csv(m,fn,row.names=FALSE)
+            results[[length(results)+1]] <- data.frame(
+              package_version=as.character(packageVersion("countryatlas")),
+              period=paste0(t0,"-",t1),n=nrow(m),
+              max_abs_package_formula_error=max(delta),
+              median_log_pp=median(m$annual_log_pp),
+              median_cagr_pp=median(m$countryatlas_cagr_pp),
+              max_abs_log_minus_cagr_pp=max(abs(m$log_minus_cagr_pp)),
+              sign_agreement=sum(sign(m$annual_log_pp)==sign(m$countryatlas_cagr_pp)))
+          }
+          s <- do.call(rbind,results)
+          stopifnot(identical(s$n,c(157L,169L)), all(s$sign_agreement==s$n))
+          write.csv(s,"research_outputs/AE-2026-001/C24_countryatlas_actual_package_summary.csv",row.names=FALSE)
+          print(s)
+          RSCRIPT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AE-2026-001-C24-actual-countryatlas-R-3-0-0-head-to-head-NOT-SUBMITTED
+          path: research_outputs/AE-2026-001/C24_countryatlas_*.csv
+          retention-days: 30
+          if-no-files-found: error
