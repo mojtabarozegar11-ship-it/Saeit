@@ -182,7 +182,7 @@ def _maintain_product_slots(root, recipe_names):
         if recipe not in seen and recipe not in queued:
             queue.append(recipe)
             queued.add(recipe)
-    # Migrate the former five-slot roster into one active item plus a FIFO queue.
+    # Migrate the former multi-slot roster into one active item plus a FIFO queue.
     for item in active[1:]:
         recipe = item["recipe"]
         if recipe not in queued:
@@ -364,12 +364,11 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             pending_evolution=sorted(r for r in generated if r in active_recipe_names)
             pending_evolution=[r for r in pending_evolution if r>last]+[
                 r for r in pending_evolution if r<=last]
-            # The master-agent genome can only prioritize genuine QA returns
-            # and choose a bounded quota inside the five active product slots.
-            if master_genome["quality_return_priority"]:
-                pending_evolution.sort(key=lambda r: r not in quality_return_orders)
+            # Line 41 has one active product, so source evolution is also
+            # single-product; gene mutations instead tune bounded repair depth
+            # and exact customer-ZIP confirmation passes.
             evolution_attempted_count = 0
-            for candidate_recipe in pending_evolution[:master_genome["source_evolution_quota"]]:
+            for candidate_recipe in pending_evolution[:1]:
                 evolution_attempted_count += 1
                 try:
                     outcome=designer.evolve_recipe(candidate_recipe,generated_root)
@@ -432,23 +431,32 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                     root, recipe, failure,
                     str(source) if source.is_dir() else "recipe_missing")
                 if enable_designer and recipe_roots[recipe] == generated_root:
-                    try:
-                        recovered = designer.recover_recipe(recipe, generated_root)
-                        result = maker.manufacture(recipe, generated_root, root / "digital-products")
-                        source_recoveries.append(recovered)
-                    except (RuntimeError, ValueError, OSError, ArithmeticError) as recovery_error:
+                    recovery_error = None
+                    recovered_result = None
+                    for _attempt in range(master_genome["recovery_attempt_limit"]):
+                        try:
+                            recovered = designer.recover_recipe(recipe, generated_root)
+                            rebuilt = maker.manufacture(recipe, generated_root, root / "digital-products")
+                            recovered_result = (recovered, rebuilt)
+                            break
+                        except (RuntimeError, ValueError, OSError, ArithmeticError) as error:
+                            recovery_error = error
+                    if recovered_result is None:
                         recorded["recovery_error"] = str(recovery_error)[:200]
                         failures.append(recorded)
                         continue
+                    recovered, result = recovered_result
+                    source_recoveries.append(recovered)
                 else:
                     failures.append(recorded)
                     continue
             # Test the actual bytes delivered to a customer, from a fresh ZIP
             # extraction. Manufacturer test counts alone cannot pass this gate.
             try:
-                customer_receipt, customer_fresh = customer.inspect_product_scheduled(root, recipe)
-                fresh_customer_checks += int(customer_fresh)
-                cached_customer_checks += int(not customer_fresh)
+                for _confirmation in range(master_genome["qa_confirmation_passes"]):
+                    customer_receipt, customer_fresh = customer.inspect_product_scheduled(root, recipe)
+                    fresh_customer_checks += int(customer_fresh)
+                    cached_customer_checks += int(not customer_fresh)
             except (RuntimeError, ValueError, OSError, ArithmeticError) as customer_error:
                 recorded = repair.record_failure(root, recipe, customer_error, str(source))
                 reason = str(customer_error)
@@ -458,11 +466,21 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                         "CUSTOMER_ZIP_HASH_MISMATCH", "CUSTOMER_ZIP_CRC_FAILED",
                         "CUSTOMER_ZIP_UNUSABLE", "CUSTOMER_ZIP_FILE_INDEX_MISMATCH")):
                     try:
-                        result = maker.manufacture(recipe, recipe_roots[recipe],
-                                                   root / "digital-products")
-                        customer_receipt, customer_fresh = customer.inspect_product_scheduled(root, recipe)
-                        fresh_customer_checks += int(customer_fresh)
-                        cached_customer_checks += int(not customer_fresh)
+                        repaired = False
+                        retry_error = None
+                        for _attempt in range(master_genome["recovery_attempt_limit"]):
+                            try:
+                                result = maker.manufacture(recipe, recipe_roots[recipe],
+                                                           root / "digital-products")
+                                customer_receipt, customer_fresh = customer.inspect_product_scheduled(root, recipe)
+                                fresh_customer_checks += int(customer_fresh)
+                                cached_customer_checks += int(not customer_fresh)
+                                repaired = True
+                                break
+                            except (RuntimeError, ValueError, OSError, ArithmeticError) as error:
+                                retry_error = error
+                        if not repaired:
+                            raise retry_error
                         customer_repairs.append({"recipe": recipe,
                             "artifact_sha256": customer_receipt["artifact_sha256"],
                             "technical_repair_verified": True})
