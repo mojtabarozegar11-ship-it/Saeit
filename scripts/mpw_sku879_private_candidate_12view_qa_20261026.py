@@ -9,7 +9,7 @@ import tempfile
 
 SKU = 879
 SOURCE_SHA = "20894f2de0228318c0e96ba407c2bd4aa98b62ba2f3f2f2fbca53987c9276783"
-CANDIDATE_SHA = "4164e8829dab62a85f7bfee19ddaa47a17b872dcf4f0f07bdbc0d20010534a34"
+CANDIDATE_SHA = "b6f171affcafcafc777279e70649dbebda87a0f7fd45389252423ffb0d1066f3"
 ROOT = Path("/home/githubops/factory-runtime/private/autonomous-product-cycle/design-intake/mpw-live-three-sku-qa")
 SCHEMA = "saeit.mpw.sku879.private-candidate-multiview-qa.v1"
 VIEWPORTS = (
