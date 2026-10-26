@@ -1,0 +1,55 @@
+name: AE-2026-001 independent ILOSTAT versus WDI worker level plausibility
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/ae-2026-001-independent-ilostat-wdi-worker-level-audit.yml
+      - analysis/ae_ilostat_wdi_independent_absolute_worker_level_audit.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  independent-worker-level-audit:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Retrieve original ILOSTAT source-locked absolute employment country-year coverage
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ae_ilo_wdi"
+          gh run download 40300545351 --repo "$GITHUB_REPOSITORY" \
+            --name AE-2026-001-official-ILOSTAT-agriculture-employment-coverage \
+            --dir "$RUNNER_TEMP/ae_ilo_wdi"
+          test -s "$RUNNER_TEMP/ae_ilo_wdi/AE_ILOSTAT_ABSOLUTE_AGRICULTURE_COVERAGE.json"
+      - name: Retrieve official WDI numerator and independently compare absolute worker levels
+        run: |
+          set -euo pipefail
+          python analysis/ae_ilostat_wdi_independent_absolute_worker_level_audit.py \
+            --ilo-coverage-json "$RUNNER_TEMP/ae_ilo_wdi/AE_ILOSTAT_ABSOLUTE_AGRICULTURE_COVERAGE.json" \
+            --wdi-panel research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv \
+            --out "$RUNNER_TEMP/ae_ilo_wdi/AE_ILOSTAT_WDI_INDEPENDENT_WORKER_LEVEL_AUDIT.json"
+          python - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path(os.environ["RUNNER_TEMP"])/"ae_ilo_wdi"/"AE_ILOSTAT_WDI_INDEPENDENT_WORKER_LEVEL_AUDIT.json"
+          x=json.loads(p.read_text())
+          assert x["matched_positive_country_years_n"]>0
+          assert x["independent_ilo_level_comparison_completed"] is True
+          assert x["same_2024_2025_ilo_vintages_verified"] is False
+          assert x["wdi_historical_revision_causality_identified"] is False
+          print("PASS: INDEPENDENT ILO ABSOLUTE EMPLOYMENT LEVEL AUDIT; NOT VINTAGE CAUSALITY")
+          PY
+      - name: Preserve real WDI source hash and independent country-year comparisons
+        uses: actions/upload-artifact@v4
+        with:
+          name: AE-2026-001-original-ILOSTAT-WDI-independent-worker-level-audit
+          path: |
+            ${{ runner.temp }}/ae_ilo_wdi/AE_ILOSTAT_WDI_INDEPENDENT_WORKER_LEVEL_AUDIT.json
+            ${{ runner.temp }}/ae_ilo_wdi/source_sha256.txt
+          retention-days: 14
+          if-no-files-found: error
