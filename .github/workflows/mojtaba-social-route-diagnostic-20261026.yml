@@ -1,0 +1,127 @@
+name: Mojtaba personal social route read-only diagnostic
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mojtaba-social-route-diagnostic-20261026.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-route-inspection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Authenticate to known and fingerprint-pinned cPanel through VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-social-ssh"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]); t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SOCIAL_SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Inspect Django and front-end routing READ ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 150s ssh -T -F "$SOCIAL_SSH_CONFIG" saeit-host 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          py="/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python"
+          test -x "$py" && test -f "$app/manage.py"
+          cd "$app"
+          "$py" - <<'PY'
+          import os, pathlib, urllib.request, urllib.error
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.urls import resolve,reverse
+          print("DIAG_ROOT_URLCONF", settings.ROOT_URLCONF,flush=True)
+          print("DIAG_SCRIPT_NAME",os.environ.get("SCRIPT_NAME",""),flush=True)
+          print("DIAG_FORCE_SCRIPT_NAME",getattr(settings,"FORCE_SCRIPT_NAME",None),flush=True)
+          print("DIAG_ALLOWED_HOSTS_COUNT",len(getattr(settings,"ALLOWED_HOSTS",[])),flush=True)
+          for n in ("mojtaba_social_command","mojtaba_official_channels","mojtaba_official_channels_json"):
+              try: print("DIAG_REVERSE",n,reverse(n),flush=True)
+              except Exception as e: print("DIAG_REVERSE_ERROR",n,type(e).__name__,flush=True)
+          for u in ("/social-command/","/mojtaba.roozegar/social-command/",
+                    "/social-command/official/","/mojtaba.roozegar/social-command/official/"):
+              try:
+                  match=resolve(u)
+                  print("DIAG_RESOLVE_OK",u,match.view_name,flush=True)
+              except Exception as e:
+                  print("DIAG_RESOLVE_FAIL",u,type(e).__name__,flush=True)
+          for item in sorted(pathlib.Path("/home/zomorod2/public_html").glob("*mojtaba*")):
+              print("DIAG_PUBLIC_WEB_ROOT",str(item),item.is_dir(),item.is_symlink(),flush=True)
+          print("DIAG_APP_PACKAGE_EXISTS",pathlib.Path("social_hub/urls.py").is_file(),flush=True)
+          for p in (pathlib.Path("/home/zomorod2/public_html/.htaccess"),
+                    pathlib.Path("/home/zomorod2/public_html/mojtaba.roozegar/.htaccess"),
+                    pathlib.Path("/home/zomorod2/mojtaba_personal/.htaccess"),
+                    pathlib.Path(".htaccess")):
+              if not p.is_file() or p.is_symlink():continue
+              print("DIAG_HTACCESS",p,flush=True)
+              for idx,line in enumerate(p.read_text(errors="replace").splitlines()):
+                  if any(w.lower() in line.lower() for w in
+                      ("passenger","rewriterule","rewritecond","proxy","wsgi","sethandler","redirect","alias")):
+                      if len(line)>300:line=line[:300]+"[truncated]"
+                      if any(s in line.lower() for s in ("secret","password","token","authorization","api_key")):
+                          print("DIAG_HTACCESS_LINE_REDACTED",idx+1,flush=True)
+                      else:print("DIAG_HTACCESS_LINE",idx+1,line,flush=True)
+          for u in ("https://mojplaywin.com/mojtaba.roozegar/",
+                    "https://mojplaywin.com/mojtaba.roozegar/social-command/",
+                    "https://mojplaywin.com/social-command/",
+                    "https://mojplaywin.com/mojtaba.roozegar/social-command/official/"):
+              try:
+                  opener=urllib.request.build_opener(urllib.request.HTTPRedirectHandler)
+                  r=opener.open(urllib.request.Request(u,headers={"Cache-Control":"no-cache"}),timeout=12)
+                  print("DIAG_HTTP",u,r.status,r.url,r.headers.get("Server",""),flush=True)
+              except urllib.error.HTTPError as e:
+                  print("DIAG_HTTP",u,e.code,e.url,e.headers.get("Server",""),flush=True)
+              except Exception as e:
+                  print("DIAG_HTTP_EXCEPTION",u,type(e).__name__,flush=True)
+          PY
+          REMOTE
+      - name: Discard temporary SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-social-ssh"
