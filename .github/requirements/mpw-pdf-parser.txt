@@ -1,2 +1,2 @@
-pypdf==5.4.0 \
-    --hash=sha256:db994ab47cadc81057ea1591b90e5b543e2b7ef2d0e31ef41a9bfe763c119dab
+PyPDF2==3.0.1 \
+    --hash=sha256:d16e4205cfee272fbdc0568b68d82be796540b1537508cef59388f839c191928
