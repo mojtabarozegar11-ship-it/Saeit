@@ -236,9 +236,15 @@ def verify_paths() -> None:
     if not HOME.is_file() or HOME.is_symlink():
         fail("Cannot read verified main homepage")
     for path in files():
-        if (not path.is_file() or path.is_symlink() or
-                path.parent.is_symlink() or path.parent.parent.is_symlink()):
+        if not path.is_file() or path.is_symlink():
             fail("Unsafe/missing scoped service file: " + str(path))
+        parent = path.parent
+        while parent != ROOT:
+            if parent.is_symlink() or not parent.is_dir():
+                fail("Unsafe scoped ancestor: " + str(parent))
+            parent = parent.parent
+    if STYLESHEET.parent.is_symlink() or not STYLESHEET.parent.is_dir():
+        fail("New stylesheet directory is untrusted")
     if STYLESHEET.exists() or STYLESHEET.is_symlink():
         fail("New scoped stylesheet already exists; refuse overwrite")
 
@@ -338,7 +344,9 @@ def rollback(run: str) -> None:
     if not backup.is_dir() or backup.is_symlink() or not meta.is_file():
         fail("Scoped backup is unavailable")
     data = json.loads(meta.read_text("utf-8"))
-    if data["run"] != run or len(data["files"]) != 15:
+    allowed = {str(path.relative_to(ROOT)) for path in files()}
+    allowed.add(str(STYLESHEET.relative_to(ROOT)))
+    if data["run"] != run or set(data["files"]) != allowed:
         fail("Unexpected scoped backup manifest")
     # Validate every target before rolling any of them back.
     restored = {}
