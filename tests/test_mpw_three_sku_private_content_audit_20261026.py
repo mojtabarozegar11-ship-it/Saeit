@@ -27,6 +27,12 @@ class PrivateContentAuditTests(unittest.TestCase):
             self.assertNotIn("text",result)
             self.assertNotIn("extracted_text",result)
             self.assertGreater(len(result["needs_specialist_review"]),0)
+            # Default PDF audits (including the chess research guide) must
+            # retain scholarly checks even when SKU 225 uses picture-book gates.
+            self.assertIn("bibliography_or_reference_markers_found", result["checks"])
+            self.assertIn("structure_markers_found", result["checks"])
+            self.assertIn("citation_validity", result["needs_specialist_review"])
+            self.assertIn("scientific_depth", result["needs_specialist_review"])
 
     def test_picturebook_uses_product_specific_page_and_illustration_checks(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -38,6 +44,10 @@ class PrivateContentAuditTests(unittest.TestCase):
             result=audit.audit_pdf(path,expected_page_count=1,require_illustrations=True)
             self.assertTrue(result["checks"]["page_count_matches_declared_product_spec"])
             self.assertFalse(result["checks"]["embedded_illustrations_present"])
+            self.assertNotIn("bibliography_or_reference_markers_found", result["checks"])
+            self.assertNotIn("structure_markers_found", result["checks"])
+            self.assertIn("read_aloud_rhythm", result["needs_specialist_review"])
+            self.assertNotIn("citation_validity", result["needs_specialist_review"])
             self.assertIn("image_scan_errors",result)
             self.assertNotIn("extracted_text",result)
 
