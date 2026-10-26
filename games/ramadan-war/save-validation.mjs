@@ -46,3 +46,12 @@ export function validateCampaignSave(s) {
 export function resumeCampaignScreen(save) {
   return save?.missionPassed === true ? 'success' : 'game';
 }
+
+// Saved hero selection is untrusted browser storage; never use NaN or out-of-range array keys.
+export function readHeroChoice(value) {
+  if (typeof value !== 'string' && typeof value !== 'number') return 0;
+  const raw = String(value).trim();
+  if (!/^(?:0|[1-9][0-9]{0,1})$/.test(raw)) return 0;
+  const hero = Number(raw);
+  return hero <= 29 ? hero : 0;
+}
