@@ -1,0 +1,123 @@
+name: MojPlayWin invoice page Android 404 read-only diagnosis
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-invoice-404-readonly-diagnostic-20261026.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-invoice-404-readonly-diagnostic
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Public requests from GitHub runner
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json
+          routes=('/store/product/779/','/commerce/book/779/','/commerce/trx-easy/invoice/14/','/accounts/login/')
+          for host in ('mojplaywin.com','www.mojplaywin.com'):
+              for route in routes:
+                  req=urllib.request.Request('https://'+host+route,headers={'User-Agent':'Mozilla/5.0 (Linux; Android 10; SM-A920F) AppleWebKit/537.36 Chrome/131 Mobile Safari/537.36'})
+                  op=urllib.request.build_opener(urllib.request.HTTPRedirectHandler())
+                  try:
+                      with op.open(req,timeout=12) as r:
+                          print('MPW_EXTERNAL='+json.dumps({'host':host,'route':route,'status':r.status,'final_url':r.url,'server':r.headers.get('Server'),'content_type':r.headers.get('Content-Type')}))
+                  except urllib.error.HTTPError as e:
+                      print('MPW_EXTERNAL='+json.dumps({'host':host,'route':route,'status':e.code,'server':e.headers.get('Server'),'type':e.headers.get('Content-Type'),'body_start':e.read(130).decode('utf-8','replace')}))
+                  except Exception as e: print('MPW_EXTERNAL_ERROR='+json.dumps({'host':host,'route':route,'error':str(e)[:150]}))
+          PY
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read-only cPanel app route, .htaccess and invoice-specific logs
+        run: |
+          timeout 120s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,re
+          from pathlib import Path
+          root=Path('/home/zomorod2')
+          for docroot in (root/'mojplaywin.com',root/'public_html',root/'Saeit-staging'):
+              print('MPW_DOCROOT='+json.dumps({'path':str(docroot),'exists':docroot.exists(),'islink':docroot.is_symlink(),'realpath':str(docroot.resolve()) if docroot.exists() else None}))
+              for segment in ('.htaccess','commerce/.htaccess','commerce/trx-easy/.htaccess','commerce/trx-easy/invoice/.htaccess'):
+                  p=docroot/segment
+                  if p.is_file():
+                      lines=p.read_text(encoding='utf-8',errors='replace').splitlines()
+                      matched=[(n+1,l.strip()[:240]) for n,l in enumerate(lines) if re.search(r'Passenger|Rewrite|Redirect|ErrorDocument|Options|DirectoryIndex|Proxy|SetHandler|FallbackResource',l,re.I)]
+                      print('MPW_HTACCESS='+json.dumps({'path':str(p),'size':p.stat().st_size,'routing_lines':matched[:80]}))
+                  elif p.exists():print('MPW_PATH_SHADOW='+json.dumps({'path':str(p),'type':'directory or special file'}))
+              for segment in ('commerce','commerce/trx-easy','commerce/trx-easy/invoice','accounts','store'):
+                  p=docroot/segment
+                  if p.exists():print('MPW_STATIC_SHADOW='+json.dumps({'path':str(p),'isdir':p.is_dir(),'islink':p.is_symlink()}))
+          os.chdir('/home/zomorod2/Saeit-staging')
+          sys.path.insert(0,os.getcwd())
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from django.urls import resolve
+          from django.test import Client
+          for route in ('/commerce/trx-easy/invoice/14/','/commerce/book/779/','/accounts/login/','/store/product/779/'):
+              try:
+                  m=resolve(route)
+                  c=Client(raise_request_exception=False)
+                  resp=c.get(route,secure=True,HTTP_HOST='mojplaywin.com')
+                  print('MPW_DJANGO='+json.dumps({'route':route,'handler':m.func.__module__+'.'+m.func.__name__,'status':resp.status_code,'location':resp.get('Location')}))
+              except Exception as e:print('MPW_DJANGO_ERROR='+json.dumps({'route':route,'error':repr(e)[:240]}))
+          for folder in (root/'access-logs',root/'logs'):
+              if not folder.is_dir():continue
+              for p in folder.iterdir():
+                  if not p.is_file() or ('mojplaywin' not in p.name):continue
+                  try:
+                      with p.open(encoding='utf-8',errors='replace') as f:
+                          last=f.readlines()[-2000:]
+                      lines=[]
+                      for l in last:
+                          if '/commerce/' not in l or '/invoice/' not in l:continue
+                          m=re.search(r'"(GET|POST|HEAD)\s+([^\s]+)[^"]*"\s+(\d{3})',l)
+                          if m: lines.append({'method':m.group(1),'path':m.group(2)[:180],'status':m.group(3)})
+                      print('MPW_INVOICE_ACCESSLOG='+json.dumps({'file':p.name,'lines':lines[-50:]}))
+                  except Exception as e:print('MPW_LOG_READ_ERROR='+json.dumps({'file':p.name,'error':type(e).__name__}))
+          PY
