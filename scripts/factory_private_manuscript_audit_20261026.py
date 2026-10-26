@@ -28,7 +28,7 @@ def normalize_similarity_text(text: str) -> str:
     substantive word counts, or scientific identifiers with underscores.
     """
     text = unicodedata.normalize("NFKC", text)
-    text = re.sub(r"[\u00ad\u200b\u200c\u200d\u2060\ufeff\u202a-\u202e\u2066-\u2069]", "", text)
+    text = re.sub(r"[\u00ad\u061c\u200b\u200c\u200d\u200e\u200f\u2060\ufeff\u202a-\u202e\u2066-\u2069]", "", text)
     text = re.sub(r"[*\x60]|(?<!\w)_+|_+(?!\w)", "", text)
     return re.sub(r"\s+", " ", text).strip()
 
