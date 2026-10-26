@@ -98,6 +98,8 @@ const cakeSandbox={
  say(){},downloadSvg(name,svg){downloaded=svg}
 };
 vm.runInNewContext(cake+cakeUI+'mountCake();',cakeSandbox);
+assert.match(cakeMarkup,/Customer order: (pink|blue|green|gold) frosting/,
+ 'child-friendly order instructions must use color names rather than hexadecimal codes');
 // A continuous color-picker gesture is one edit, not twenty separate undo steps.
 cakeNodes['#icing'].oninput({target:{value:'#4488cc'}});
 cakeNodes['#icing'].oninput({target:{value:'#556677'}});
