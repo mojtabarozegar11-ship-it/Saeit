@@ -65,7 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
-          import os,sys,json,importlib
+          import os,sys,json,importlib,hashlib
           from pathlib import Path
           root=Path("/home/zomorod2/Saeit-staging")
           os.chdir(root)
@@ -102,11 +102,23 @@ jobs:
               blocked.append(sku)
             else:
               metadata=product.metadata
-              stored_rights=type(metadata) is dict and metadata.get("rights_cleared") is True
+              fields=metadata if type(metadata) is dict else {}
+              rights_keys=sorted(k for k in fields if type(k) is str and any(
+                word in k.lower() for word in ("right","licen","author","source","approv","sha256","provenance")))
+              rights_reference_keys=[k for k in rights_keys if type(fields.get(k)) is str and
+                                    len(fields[k].strip())>0]
+              stored_rights=fields.get("rights_cleared") is True
               rights=(rights_cleared_for_sale(product) is True) if rights_cleared_for_sale else False
+              artifact_sha=None
               try:
                 asset=_private_file(SimpleNamespace(product=product))
                 file_ready=asset.is_file() and not asset.is_symlink() and asset.stat().st_size>0
+                if file_ready:
+                  digest=hashlib.sha256()
+                  with asset.open("rb") as stream:
+                    for chunk in iter(lambda:stream.read(1048576),b""):
+                      digest.update(chunk)
+                  artifact_sha=digest.hexdigest()
               except Exception:
                 file_ready=False
               eligible=bool(_eligible(product))
@@ -115,7 +127,13 @@ jobs:
                   and release_authorized)
               record={"id":sku,"exists":True,"active":product.active is True,
                  "eligible":eligible,"stored_rights":stored_rights,"runtime_rights_gate_present":rights_cleared_for_sale is not None,"explicit_rights":rights,"private_file_ready":file_ready,
-                 "is_sellable":is_sellable}
+                 "is_sellable":is_sellable,
+                 "rights_metadata_keys":rights_keys[:40],
+                 "rights_reference_keys":rights_reference_keys[:40],
+                 "asset_sha256_prefix":artifact_sha[:16] if artifact_sha else None,
+                 "rights_hash_reference_matches_asset":bool(artifact_sha and
+                    any(fields.get(key)==artifact_sha for key in
+                    ("rights_asset_sha256","rights_artifact_sha256","rights_file_sha256","approved_artifact_sha256")))};
               if not is_sellable:blocked.append(sku)
               else:sale_ready+=1
             print("MPW_PUBLIC_SKU_RIGHTS="+json.dumps(record,sort_keys=True))
