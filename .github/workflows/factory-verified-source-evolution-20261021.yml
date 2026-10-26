@@ -8,6 +8,7 @@ on:
       - tests/test_factory_product_rework.py
       - scripts/factory_recipe_designer.py
       - scripts/factory_vps_product_cycle.py
+      - scripts/factory_master_agent_genetics_v1.py
       - tests/test_factory_recipe_designer.py
       - tests/test_factory_vps_product_cycle.py
       - tests/test_factory_source_evolution.py
@@ -50,7 +51,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/factory_recipe_designer.py scripts/factory_vps_product_cycle.py
+          python3 -m py_compile scripts/factory_recipe_designer.py scripts/factory_vps_product_cycle.py scripts/factory_master_agent_genetics_v1.py
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_source_evolution -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_recipe_designer -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_vps_product_cycle -v
@@ -62,6 +63,7 @@ jobs:
           designer=Path('scripts/factory_recipe_designer.py').read_text()
           maker=Path('scripts/factory_product_maker.py').read_text()
           assert 'designer.evolve_recipe(candidate_recipe,generated_root)' in source
+          assert 'genetics.begin_cycle(root)' in source and 'genetics.finish_cycle(root, master_genome, state)' in source
           assert 'genuinely_evolved_source_count' in source
           assert 'quality_1000_certified' in designer
           assert "'commercial_release':False" in designer
@@ -106,7 +108,7 @@ jobs:
           host="githubops@178.239.147.150"
           stage="/home/githubops/factory-runtime/operations/.source-evolution-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           timeout 35s ssh -T "${opts[@]}" "$host" "umask 077; test ! -e '$stage' && mkdir -m 700 '$stage'"
-          for file in factory_recipe_designer.py factory_vps_product_cycle.py factory_product_rework.py; do
+          for file in factory_recipe_designer.py factory_vps_product_cycle.py factory_product_rework.py factory_master_agent_genetics_v1.py; do
             scp -q "${opts[@]}" "scripts/$file" "$host:$stage/$file"
             expected="$(sha256sum "scripts/$file" | cut -d' ' -f1)"
             actual="$(timeout 35s ssh -T "${opts[@]}" "$host" "sha256sum '$stage/$file' | cut -d' ' -f1")"
@@ -128,7 +130,7 @@ jobs:
           flock -w 60 9
           backup="$ops/backups/source-evolution-$RANDOM-$(date -u +%Y%m%dT%H%M%SZ)"
           install -d -m 700 "$backup"
-          files=(factory_recipe_designer.py factory_vps_product_cycle.py factory_product_rework.py)
+          files=(factory_recipe_designer.py factory_vps_product_cycle.py factory_product_rework.py factory_master_agent_genetics_v1.py)
           for file in "${files[@]}"; do
             test -f "$target/$file" && test ! -L "$target/$file"
             cp -p -- "$target/$file" "$backup/$file"
@@ -155,7 +157,7 @@ jobs:
             mv -f -- "$temp" "$target/$file"
             test "$(sha256sum "$target/$file" | cut -d' ' -f1)" = "$(sha256sum "$stage/$file" | cut -d' ' -f1)"
           done
-          "$python" -B -m py_compile "$target/factory_recipe_designer.py" "$target/factory_vps_product_cycle.py"
+          "$python" -B -m py_compile "$target/factory_recipe_designer.py" "$target/factory_vps_product_cycle.py" "$target/factory_master_agent_genetics_v1.py"
           echo FACTORY_EVOLUTION_SOURCE_CODE_SHA_VERIFIED=3
           # A bounded live inspection/evolution, not a fake positive product count.
           "$python" -B - "$target" "$private" <<'PY'
