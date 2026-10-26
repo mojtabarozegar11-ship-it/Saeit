@@ -55,3 +55,24 @@ export function readHeroChoice(value) {
   const hero = Number(raw);
   return hero <= 29 ? hero : 0;
 }
+
+// Browsers may block Web Storage entirely (privacy modes, sandboxed frames, policy).
+// Never let storage access stop the playable, unsaved campaign.
+export function storageRead(key) {
+  try { return globalThis.localStorage?.getItem(key) ?? null; }
+  catch { return null; }
+}
+export function storageWrite(key, value) {
+  try {
+    if (!globalThis.localStorage) return false;
+    globalThis.localStorage.setItem(key, String(value));
+    return true;
+  } catch { return false; }
+}
+export function storageRemove(key) {
+  try {
+    if (!globalThis.localStorage) return false;
+    globalThis.localStorage.removeItem(key);
+    return true;
+  } catch { return false; }
+}
