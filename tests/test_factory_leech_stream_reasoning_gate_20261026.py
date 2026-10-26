@@ -48,6 +48,9 @@ class LeechStreamAcceptanceRegression(unittest.TestCase):
             "<th\u200bink>internal reasoning</th\u200bink>",
             "<\uff54hink>hidden chain</\uff54hink>",
             "<th\u202eink>reversed control</th\u202eink>",
+            "<th\u200eink>left-to-right mark</think>",
+            "<th\u200fink>right-to-left mark</think>",
+            "<th\u061cink>Arabic letter mark</think>",
             "<|im_\u2060start|>",
             "[\uff29NST]",
         )
@@ -67,6 +70,9 @@ class LeechStreamAcceptanceRegression(unittest.TestCase):
             "<th\u200bink>private reasoning</th\u200bink>",
             "<\uff54hink>private reasoning</\uff54hink>",
             "<th\u202eink>private reasoning</th\u202eink>",
+            "<th\u200eink>private reasoning</think>",
+            "<th\u200fink>private reasoning</think>",
+            "<th\u061cink>private reasoning</think>",
             "<|im_\u2060start|>",
             "[\uff29NST]",
         )
