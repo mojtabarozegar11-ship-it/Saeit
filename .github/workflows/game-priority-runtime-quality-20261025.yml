@@ -1,5 +1,7 @@
 name: Game priority runtime integrity
 on:
+  push:
+    branches: [game/ramadan-hero-skills-consistency-20261026]
   pull_request:
     branches: [main, game/ramadan-crown-runtime-integrity-20261025]
     paths:
