@@ -128,7 +128,26 @@ const products=[
  {name:'Puzzle Party: 30 Challenges',cat:'Learning',emoji:'🧩',price:5.99,color:'linear-gradient(135deg,#d7bcff,#88deff)',desc:'A collection of kid-friendly logic and matching puzzles.'},
  {name:'Creative Play Starter Bundle',cat:'Printables',emoji:'🎁',price:9.99,color:'linear-gradient(135deg,#ffb8d2,#a9d7ff)',desc:'A starter bundle of printable activities from the studio.'}
 ];
-const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];let gameFilter='All',productFilter='All',searchTerm='';let jungleCleanup=()=>{};let cart=JSON.parse(localStorage.getItem('studioRahamCart')||'[]');let toastTimer;
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];let gameFilter='All',productFilter='All',searchTerm='';let jungleCleanup=()=>{};function loadCart(){
+ // Local storage is untrusted: never accept a stored product price, HTML or item identity.
+ // Rehydrate only from the current curated catalog and keep the games playable in private mode.
+ try{
+  const raw=localStorage.getItem('studioRahamCart');
+  if(!raw||raw.length>30000)return [];
+  const saved=JSON.parse(raw);
+  if(!Array.isArray(saved))return [];
+  const counts=new Map();
+  for(const item of saved.slice(0,100)){
+   const original=products.find(p=>p.name===item?.name);
+   if(!original)continue;
+   const qty=Number.isSafeInteger(item.qty)&&item.qty>=1&&item.qty<=20?item.qty:1;
+   counts.set(original.name,Math.min(20,(counts.get(original.name)||0)+qty));
+  }
+  // Deduplicate saved lines in catalog order; no forged extra cart rows.
+  return products.filter(p=>counts.has(p.name)).map(p=>({...p,qty:counts.get(p.name)}));
+ }catch(_){return []}
+}
+let cart=loadCart();let toastTimer;
 function showToast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2300)}
 function matchesText(item){return !searchTerm||(item.name+' '+item.desc+' '+(item.cat||'')).toLowerCase().includes(searchTerm)}
 function renderGames(){const list=games.filter(g=>(gameFilter==='All'||g.cat===gameFilter)&&matchesText(g));$('#gameGrid').innerHTML=list.map(g=>`<article class="game-card"><div class="game-art" style="--art:${g.color}"><span class="game-ribbon">${g.cat}</span><span class="game-emoji">${g.emoji}</span></div><div class="game-info"><h3>${g.name}</h3><p>${g.desc}</p><div class="game-bottom"><span class="tag">✦ MINI GAME</span><button class="play-button" data-play="${games.indexOf(g)}">Play now →</button></div></div></article>`).join('')||'<p class="empty-cart">No games found. Try another search.</p>';$$('[data-play]').forEach(b=>b.addEventListener('click',()=>openGame(games[+b.dataset.play])))}
@@ -190,8 +209,8 @@ function runnerGame(stage){let score=0;stage.innerHTML='<div class="stage-messag
 function ticGame(stage){let board=Array(9).fill(''),turn='✕';stage.innerHTML='<div class="stage-message">Two-player mini match · X goes first</div>';const grid=document.createElement('div');grid.style.cssText='display:grid;grid-template-columns:repeat(3,54px);gap:6px';for(let i=0;i<9;i++){let b=button('',()=>{if(board[i])return;board[i]=turn;b.textContent=turn;b.classList.add('alt');if(checkWin(board,turn)){message(stage,turn+' wins! Nice match.');grid.querySelectorAll('button').forEach(x=>x.disabled=true)}else if(board.every(Boolean))message(stage,'A friendly draw! Play again?');else{turn=turn==='✕'?'○':'✕';message(stage,turn+' plays next.')}} ,'alt');b.style.cssText='height:54px;font-size:22px;padding:0';grid.append(b)}stage.append(grid,button('New board',()=>ticGame(stage),'alt'))}
 function checkWin(a,p){return [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]].some(line=>line.every(i=>a[i]===p))}
 function countGame(stage){let n=3+Math.floor(Math.random()*6);stage.innerHTML=`<div class="stage-message">Count the little flowers!</div><div style="font-size:31px;letter-spacing:7px">${'🌼'.repeat(n)}</div><div class="stage-actions"></div>`;const row=stage.querySelector('.stage-actions');[n-1,n,n+1].sort(()=>Math.random()-.5).forEach(v=>row.append(button(v,()=>{if(v===n)message(stage,'🌷 Correct! You counted '+n+' flowers.');else showToast('Count once more!')},'alt')))}
-function addToCart(p){const found=cart.find(x=>x.name===p.name);if(found)found.qty++;else cart.push({...p,qty:1});saveCart();showToast(p.name+' added to your bag')}
-function saveCart(){localStorage.setItem('studioRahamCart',JSON.stringify(cart));$('#cartCount').textContent=cart.reduce((a,x)=>a+x.qty,0);renderCart()}
+function addToCart(p){const found=cart.find(x=>x.name===p.name);if(found)found.qty=Math.min(20,found.qty+1);else cart.push({...p,qty:1});saveCart();showToast(p.name+' added to your bag')}
+function saveCart(){try{localStorage.setItem('studioRahamCart',JSON.stringify(cart))}catch(_){}$('#cartCount').textContent=cart.reduce((a,x)=>a+x.qty,0);renderCart()}
 function renderCart(){const box=$('#cartItems');if(!cart.length){box.innerHTML='<div class="empty-cart">Your bag is ready for a little creativity. ✨</div>';$('#cartTotal').textContent='$0.00';return}box.innerHTML=cart.map((x,i)=>`<div class="cart-row"><span class="cart-row-emoji">${x.emoji}</span><span class="cart-row-info"><b>${x.name}</b><small>Qty ${x.qty} · $${x.price.toFixed(2)} each</small></span><button class="remove-item" aria-label="Remove ${x.name}" data-remove="${i}">×</button></div>`).join('');$$('[data-remove]').forEach(b=>b.onclick=()=>{cart.splice(+b.dataset.remove,1);saveCart()});$('#cartTotal').textContent='$'+cart.reduce((sum,x)=>sum+x.price*x.qty,0).toFixed(2)}
 function openCart(){renderCart();setOverlay('cartOverlay',true)}$('#cartOpen').onclick=openCart;$('#shopCart').onclick=openCart;$('#checkoutButton').onclick=()=>{$('#checkoutNote').textContent='Checkout is not connected yet, so no order or charge will be created. A payment provider and delivery flow must be connected before accepting customer payments.';showToast('Payment checkout still needs setup')};
 $$('#gameFilters .filter').forEach(b=>b.onclick=()=>{$$('#gameFilters .filter').forEach(x=>x.classList.remove('active'));b.classList.add('active');gameFilter=b.dataset.filter;renderGames()});$$('#productFilters .filter').forEach(b=>b.onclick=()=>{$$('#productFilters .filter').forEach(x=>x.classList.remove('active'));b.classList.add('active');productFilter=b.dataset.productFilter;renderProducts()});$$('.quick-card[data-filter]').forEach(a=>a.onclick=()=>{gameFilter=a.dataset.filter;$$('#gameFilters .filter').forEach(x=>x.classList.toggle('active',x.dataset.filter===gameFilter));renderGames()});$$('.quick-card[data-product-filter]').forEach(a=>a.onclick=()=>{productFilter=a.dataset.productFilter;$$('#productFilters .filter').forEach(x=>x.classList.toggle('active',x.dataset.productFilter===productFilter));renderProducts()});$('#searchInput').addEventListener('input',e=>{searchTerm=e.target.value.trim().toLowerCase();refresh()});$('#newsletterForm').addEventListener('submit',e=>{e.preventDefault();$('#newsletterMessage').textContent='Thanks! Newsletter signup will be enabled when an email service is connected.';showToast('Signup captured on this page only')});$('#menuToggle').onclick=()=>{const nav=$('#mainNav'),open=nav.classList.toggle('open');$('#menuToggle').setAttribute('aria-expanded',String(open))};$$('.nav a').forEach(a=>a.onclick=()=>$('#mainNav').classList.remove('open'));$('#year').textContent=new Date().getFullYear();saveCart();refresh();
