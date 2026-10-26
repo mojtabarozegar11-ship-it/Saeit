@@ -37,3 +37,9 @@
 | Manuscript ID or publisher receipt | NONE |
 
 **Allowed:** further original-source comparison, independent labor-series reconciliation, scientific revision and human author review. **Not allowed:** journal submission, payment, legal/copyright declaration by AI, PR #1054 merge, live-site changes or representation as published scholarship.
+
+## 26 October 2026 independent labor-series source-eligibility decision
+
+The World Bank's official indicator `SL.AGR.EMPL.ZS` is **employment in agriculture as a percentage of total employment**, sourced from **ILO modelled estimates**, not a count of agricultural workers. Primary metadata: https://data.worldbank.org/indicator/SL.AGR.EMPL.ZS and https://databank.worldbank.org/metadataglossary/world-development-indicators/series/SL.AGR.EMPL.ZS (consulted 26 October 2026). A percentage series **alone cannot independently validate the worker-count denominator** inferred by `L*=NV.AGR.TOTL.KD/NV.AGR.EMPL.KD`. An independent absolute employment estimate must share the same country definition, calendar years, employment coverage and vintage, with source-file checksum and unit checks. Multiplying the agriculture employment share by an incompatible labor-force or population series would introduce an unverified proxy and is **not authorized as validation**.
+
+**Current decision:** ILO series identity and its percent unit were verified from official metadata; no ILO absolute agricultural employment counts or historical 2024/2025 archive-aligned count series were obtained in this check. The 155-economy `L*` algebraic decomposition remains descriptive and non-causal. This is a source-eligibility clarification, **not** a completed independent labor validation, an empirical manuscript result, or evidence of journal novelty.
