@@ -5,13 +5,16 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
+import sys
 
 from social_hub.adapters import Blocked
 from social_hub.catalog import platform
 from social_hub.connection_plan import build_connection_plan
 from social_hub.credential_vault import (
     _vault, credential_for, has_credential, import_batch, plan_import,
-    disconnect_batch, load_private_import, create_private_template,
+    disconnect_batch, load_private_import, create_private_template, default_private_vault_path,
 )
 from social_hub.service import connection_status
 from social_hub.store import Store
@@ -169,6 +172,25 @@ class PrivateCredentialVaultTests(unittest.TestCase):
         with self.assertRaises(Blocked):
             plan_import(self.store,self.manifest(),vault_file=self.vault,env={})
         Path(self.vault).unlink()
+
+    def test_installed_personal_site_defaults_to_existing_private_db_folder(self):
+        default=str(self.private/"provider-api-vault.json")
+        private_module=SimpleNamespace(PRIVATE_DB=str(self.private/"social.sqlite"))
+        with patch.dict(sys.modules,{"social_hub.site_config":private_module}):
+            self.assertEqual(default_private_vault_path(),default)
+            import_batch(self.store,self.manifest(),vault_file=default,env={},
+                         actor="owner-cli:bulk")
+            first=credential_for(self.store.account(self.accounts[0]),env={})
+            self.assertEqual(first,FAKE_A)
+            report=connection_status(self.store,env={})
+            self.assertTrue(all(item["token_present"] for item in report))
+            self.assertFalse(any(item["connected"] for item in report))
+        blocked=self.private/"public_html"
+        blocked.mkdir(mode=0o700)
+        with patch.dict(sys.modules,{"social_hub.site_config":
+             SimpleNamespace(PRIVATE_DB=str(blocked/"social.sqlite"))}):
+            with self.assertRaises(Blocked):
+                default_private_vault_path()
 
     def test_owner_gets_only_real_account_ids_in_private_blank_input_template(self):
         target=self.private/"one-stage-input.json"
