@@ -50,7 +50,7 @@ test('preserves valid objective progress while refusing corrupted mission comple
 test('reversible release manifest ships and checks every new imported save module', () => {
   const deploy = readFileSync(new URL('../../games/ramadan-war/deploy.py', import.meta.url), 'utf8');
   const client = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
-  assert.match(client, /import \{validateCampaignSave\} from '\.\/save-validation\.mjs'/);
+  assert.match(client, /import \{validateCampaignSave(?:,\s*resumeCampaignScreen)?\} from '\.\/save-validation\.mjs'/);
   assert.match(deploy, /ASSETS=\[[^\n]*'save-validation\.mjs'/);
   assert.match(deploy, /b'\.\/save-validation\.mjs' in new\['game\.js'\]/);
 });
