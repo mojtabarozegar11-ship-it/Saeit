@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'games/ramadan-war/game.js'
+      - 'games/arrow-escape/engine.js'
+      - 'games/arrow-escape/engine.test.cjs'
       - 'games/crown-defender/index.html'
       - 'games/air-supremacy/**'
       - 'games/air-supremacy-fa/**'
@@ -29,3 +31,5 @@ jobs:
         run: node --check tests/game/hourly-keyboard-integrity-20261026.cjs
       - name: Execute nine-game behavior regressions
         run: node tests/game/hourly-keyboard-integrity-20261026.cjs
+      - name: Verify Arrow Escape deterministic solvability and corrupt-save rejection
+        run: node games/arrow-escape/engine.test.cjs
