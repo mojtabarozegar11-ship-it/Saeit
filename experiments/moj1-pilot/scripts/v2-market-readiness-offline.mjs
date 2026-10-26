@@ -1,5 +1,6 @@
 // Offline MOJ1 V2 evidence-consistency inspection only; NEVER authorizes a release.
 // No private keys, wallet, RPC, network fetch, deployment, pricing, or transactions.
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -13,6 +14,38 @@ const ALLOCATION = Object.freeze({
   partners_and_creators:15,
   contingency_and_audit_reserve:5,
 });
+
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+// This checks the TRON 0x41 prefix and double-SHA256 Base58Check checksum.
+// It checks syntax/integrity only, never proves a deployed contract or custody.
+export function isValidTronAddress(address) {
+  if (typeof address !== 'string' || address.length !== 34 || address[0] !== 'T') {
+    return false;
+  }
+  let number = 0n;
+  for (const char of address) {
+    const digit = BASE58_ALPHABET.indexOf(char);
+    if (digit < 0) return false;
+    number = number * 58n + BigInt(digit);
+  }
+  const bytes = [];
+  while (number > 0n) {
+    bytes.unshift(Number(number & 255n));
+    number >>= 8n;
+  }
+  for (const char of address) {
+    if (char !== '1') break;
+    bytes.unshift(0);
+  }
+  if (bytes.length !== 25 || bytes[0] !== 0x41) return false;
+  const payload = Buffer.from(bytes.slice(0, 21));
+  const actualChecksum = Buffer.from(bytes.slice(21));
+  const digest = createHash('sha256').update(
+    createHash('sha256').update(payload).digest()
+  ).digest();
+  return digest.subarray(0, 4).equals(actualChecksum);
+}
 
 function safeUint(value) {
   if (typeof value !== 'string' || !/^(?:0|[1-9]\d*)$/.test(value)) return null;
@@ -47,6 +80,14 @@ export function assessV2MarketGate(tokenomics, v1, v2) {
     typeof v1.token_contract === 'string' &&
     v2.candidate_token_contract !== v1.token_contract &&
     v2.previous_V1_token_testnet === v1.token_contract);
+  const contractAddresses = [
+    v1.token_contract,
+    v2.candidate_token_contract,
+    v2.candidate_genesis_factory,
+    v2.pilot_governance_contract,
+  ];
+  fail('TRON_ADDRESS_CHECKSUM_INVALID', contractAddresses.every(isValidTronAddress));
+  fail('TRON_ADDRESS_ROLE_COLLISION', new Set(contractAddresses).size === contractAddresses.length);
   fail('V2_FACTORY_MISSING', typeof v2.candidate_genesis_factory === 'string' &&
     v2.candidate_genesis_factory.length > 20 &&
     v2.candidate_genesis_factory !== v2.candidate_token_contract);
