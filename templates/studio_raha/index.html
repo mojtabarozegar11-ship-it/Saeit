@@ -189,7 +189,7 @@ function jungleRunGame(stage){
   if(move===course[step].safe){correct++;streak++;stars+=10+step+Math.min(streak,5)*2;feedback='Great '+move+'! You cleared the '+course[step].name+'.'}else{streak=0;lives--;stars=Math.max(0,stars-5);feedback='Not quite: the '+course[step].name+' needed '+course[step].safe+'. Try the next obstacle!'}
   step++;
   if(lives===0||step===course.length){finished=true;
-   if(stars>best){best=stars;try{localStorage.setItem('studio-raha-jungle-best-v1',String(best))}catch(e){}}
+   if(lives>0&&stars>best){best=stars;try{localStorage.setItem('studio-raha-jungle-best-v1',String(best))}catch(e){}}
   }
   paint();
   // Repainting replaces the action buttons; restore focus to the active game region
