@@ -99,6 +99,9 @@ class LeechStreamAcceptanceRegression(unittest.TestCase):
             "as an a\u200ci language model",
             "[\uff49nsert missing source]",
             "this is a place\u200bholder",
+            "[citation\u034f needed]",  # combining grapheme joiner, Mn
+            "this is a place\u2063holder",  # invisible separator, Cf
+            "lorem \u180eipsum",  # Mongolian vowel separator, Cf
         )
         for marker in disguised:
             with self.subTest(marker=repr(marker)):
