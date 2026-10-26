@@ -37,6 +37,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_mojtaba_social_onboarding_20261026.py' -v
       - name: Only verified public channels and no secrets
         run: python -m unittest discover -s tests -p 'test_mojtaba_social_public_official_20261026.py' -v
+      - name: Official API read-only verification safety regression
+        run: python -m unittest discover -s tests -p 'test_mojtaba_social_readonly_diagnostics_20261026.py' -v
       - name: Existing limited two-network regression
         env:
           MPW_SOCIAL_EXECUTION_ENABLED: '0'
