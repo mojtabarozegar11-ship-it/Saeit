@@ -30,6 +30,7 @@ function fixtures() {
       network:'Shasta',chain_scope:'TESTNET_ONLY',contractStandard:'TRC-20',
       candidate_token_contract:'TA8dcG3b9GByaY9vZ1LVjsFohZrZ4CveAY',
       candidate_genesis_factory:'TCBNLE1ZgEcAWXRZ6jjYPSyUH7WiHpLyBm',
+      pilot_governance_contract:'TPvMW5cSHKfCuttghjWqmUEScH33vaA1Yy',
       previous_V1_token_testnet:'TKg1oVb91qHzeLC74djmeeAnMMmb9PYJ6F',
       distribution_enabled:false,public_sale_enabled:false,real_payment_enabled:false,
       mainnet_deployed:false,total_supply_whole:'100000000000',
