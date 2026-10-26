@@ -162,3 +162,30 @@ jobs:
                       print('MPW_QUERY_COMPARISON='+json.dumps({'route':route,'ua':ua[:20],'status':e.code,'body':e.read(80).decode('utf-8','replace')}))
                   except Exception as e:print('MPW_QUERY_ERROR='+repr(e))
           PY
+      - name: Inspect invoice ownership check and expired-state rendering options
+        run: |
+          timeout 85s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,inspect
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          import services.mpw_trx_commercial_web as w
+          for fn in ('_get_owner_invoice','_ensure_live','_decode','_show_invoice','_start_invoice','_invoice_status','_send_to_login','_nocache'):
+              obj=getattr(w,fn,None)
+              if callable(obj):
+                  try:src=inspect.getsource(obj)
+                  except Exception as e:src=str(e)
+                  print('MPW_INVOICE_GUARD='+json.dumps({'name':fn,'source':src[:12500]}))
+          import mpw_commerce.customer_auth as a
+          for name in dir(a):
+              if 'next' in name.lower() or 'login' in name.lower() or 'redirect' in name.lower():
+                  obj=getattr(a,name)
+                  if callable(obj):
+                      try:src=inspect.getsource(obj)
+                      except Exception:continue
+                      if any(k in src.lower() for k in ('next','redirect')):
+                          print('MPW_CUSTOMER_AUTH='+json.dumps({'name':name,'source':src[:8500]}))
+          from django.apps import apps
+          for model in apps.get_models():
+              if 'intent' in model.__name__.lower() and 'payment' in model.__name__.lower():
+                  print('MPW_INTENT_MODEL='+json.dumps({'model':model._meta.label,'fields':[f.name for f in model._meta.fields]}))
+          PY
