@@ -88,22 +88,34 @@ def patch_page_shell(data):
         raise RuntimeError("Page shell already contains SEO override blocks")
     def wrap(pattern, block):
         nonlocal text
-        found = list(re.finditer(pattern, text))
+        tag_name, attribute, value = pattern
+        found = [m for m in re.finditer(r"<meta\b[^>]*>", text, re.I)
+                 if re.search(r"\b" + attribute + r"\s*=\s*(['\"])" + re.escape(value) + r"\1", m.group(0), re.I)]
         if len(found) != 1:
             raise RuntimeError("Expected exactly one existing " + block + " meta tag")
         match = found[0]
-        original = match.group(1)
-        text = text[:match.start(1)] + "{% block " + block + " %}" + original + "{% endblock %}" + text[match.end(1):]
+        tag = match.group(0)
+        content = re.search(r"\bcontent\s*=\s*(['\"])(.*?)\1", tag, re.I)
+        if content is None:
+            raise RuntimeError("Missing content attribute on " + block + " meta tag")
+        original = content.group(2)
+        replacement = (tag[:content.start(2)] + "{% block " + block + " %}" + original
+                       + "{% endblock %}" + tag[content.end(2):])
+        text = text[:match.start()] + replacement + text[match.end():]
         return original
-    og_title = wrap(r'<meta property="og:title" content="([^"]*)">', "og_title")
-    og_description = wrap(r'<meta property="og:description" content="([^"]*)">', "og_description")
-    card = wrap(r'<meta name="twitter:card" content="([^"]*)">', "twitter_card")
+    og_title = wrap(("meta", "property", "og:title"), "og_title")
+    og_description = wrap(("meta", "property", "og:description"), "og_description")
+    card = wrap(("meta", "name", "twitter:card"), "twitter_card")
     if card != "summary_large_image":
         raise RuntimeError("Unexpected shared Twitter card default")
     twitter = ('<meta name="twitter:title" content="{% block twitter_title %}' + og_title + '{% endblock %}">'
                '<meta name="twitter:description" content="{% block twitter_description %}' + og_description + '{% endblock %}">')
-    text = re.sub(r'(<meta name="twitter:card" content="\{% block twitter_card %\}[^\"]*\{% endblock %\}">)',
-                  lambda m: m.group(1) + twitter, text, count=1)
+    card_tags = [m for m in re.finditer(r"<meta\b[^>]*>", text, re.I)
+                 if re.search(r"\bname\s*=\s*(['\"])twitter:card\1", m.group(0), re.I)]
+    if len(card_tags) != 1:
+        raise RuntimeError("Could not locate the shared Twitter card meta tag")
+    position = card_tags[0].end()
+    text = text[:position] + twitter + text[position:]
     if text.count('name="twitter:title"') != 1 or text.count('name="twitter:description"') != 1:
         raise RuntimeError("Could not add the shared Twitter metadata blocks")
     return text.encode("utf8")
