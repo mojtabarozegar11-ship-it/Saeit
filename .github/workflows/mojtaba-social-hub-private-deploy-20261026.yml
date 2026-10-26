@@ -1,0 +1,165 @@
+name: Mojtaba private social console deploy
+on:
+  pull_request:
+    paths: ['social_hub/**','scripts/mojtaba_social_hub_install_personal_20261026.py','.github/workflows/mojtaba-social-hub-private-deploy-20261026.yml']
+  push:
+    branches: [main]
+    paths: ['social_hub/**','scripts/mojtaba_social_hub_install_personal_20261026.py','.github/workflows/mojtaba-social-hub-private-deploy-20261026.yml']
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-personal-app-installation
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify standalone app, rollback and isolation
+        env:
+          MPW_SOCIAL_OUTBOUND_ENABLED: '0'
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q social_hub scripts/mojtaba_social_hub_install_personal_20261026.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_social_hub_20261026.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojtaba_social_hub_installer_20261026.py' -v
+  deploy:
+    needs: preflight
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Record healthy sites
+        run: |
+          python3 - <<'PY'
+          from urllib.request import urlopen,Request
+          for url in ('https://mojplaywin.com/mojtaba.roozegar/','https://mojplaywin.com/','https://zomorodmelal.ir/'):
+              with urlopen(Request(url,headers={'Cache-Control':'no-cache'}),timeout=25) as r:
+                  if r.status!=200:raise RuntimeError('Unexpected baseline state')
+                  print('BASELINE='+url)
+          PY
+      - name: Authenticate to known and fingerprint-pinned cPanel through VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-social-ssh"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]); t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SOCIAL_SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Install exact personal app path and auto-rollback on failed Django/site checks
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mpw-social-command-stage-$GITHUB_RUN_ID"
+          timeout 40s ssh -T -F "$SOCIAL_SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 60s scp -q -F "$SOCIAL_SSH_CONFIG" scripts/mojtaba_social_hub_install_personal_20261026.py "saeit-host:$stage/install.py"
+          timeout 90s scp -q -r -F "$SOCIAL_SSH_CONFIG" social_hub "saeit-host:$stage/social_hub"
+          timeout 900s ssh -T -F "$SOCIAL_SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          id="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          py="/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python"
+          stage="/home/zomorod2/.mpw-social-command-stage-$id"
+          installed=0
+          verified=0
+          finalize() {
+            code=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$verified" = 0; then
+              "$py" "$stage/install.py" rollback --run-id "$id" || echo "SOCIAL_MANUAL_RECOVERY_REQUIRED=YES"
+              test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+            fi
+            if test -d "$stage" && test ! -L "$stage"; then rm -rf -- "$stage"; fi
+            exit "$code"
+          }
+          trap finalize EXIT
+          test -x "$py" && test -f "$app/manage.py" && test ! -L "$app"
+          "$py" "$stage/install.py" check --source "$stage/social_hub"
+          "$py" "$stage/install.py" install --source "$stage/social_hub" --run-id "$id"
+          installed=1
+          cd "$app"
+          "$py" manage.py check
+          "$py" - <<'PY'
+          import os
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.test import Client
+          from django.urls import reverse
+          from social_hub.portal import _db
+          db=_db()
+          try:
+              summary=db.summary()
+              if summary['accounts'] or summary['recent_posts']:
+                  raise RuntimeError('Fresh unconnected panel expected')
+          finally:db.close()
+          url=reverse('mojtaba_social_command')
+          r=Client(HTTP_HOST='mojplaywin.com').get(url,secure=True)
+          if r.status_code not in (302,403):
+              raise RuntimeError('Social panel not restricted to staff: '+str(r.status_code))
+          print('PERSONAL_STAFF_PROTECTED_ROUTE=PASS',flush=True)
+          PY
+          test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+          "$py" - <<'PY'
+          from urllib.request import urlopen,Request
+          for url in ('https://mojplaywin.com/mojtaba.roozegar/','https://mojplaywin.com/','https://zomorodmelal.ir/'):
+              with urlopen(Request(url,headers={'Cache-Control':'no-cache'}),timeout=25) as r:
+                  if r.status!=200:raise RuntimeError('Site health failed: '+url)
+                  if '/mojtaba.roozegar/' in url and b'mpw-social-central-hub-20261026' not in r.read(1500000):
+                      raise RuntimeError('Personal homepage lost')
+              print('PRESERVED='+url,flush=True)
+          PY
+          verified=1
+          echo 'PERSONAL_SOCIAL_CONSOLE_INSTALLED_NO_API_CREDENTIALS'
+          REMOTE
+      - name: Remove relay credentials from runner
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-social-ssh"
+          test ! -d "$d" || rm -rf -- "$d"
