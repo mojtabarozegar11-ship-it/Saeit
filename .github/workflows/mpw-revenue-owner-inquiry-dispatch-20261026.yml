@@ -1,0 +1,92 @@
+name: MojPlayWin privacy-safe owner inquiry notifications
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-revenue-owner-inquiry-dispatch-20261026.yml"
+      - "scripts/mpw_revenue_owner_inquiry_dispatch_20261026.php"
+  workflow_dispatch:
+  schedule:
+    - cron: "17 * * * *"
+permissions: {contents: read}
+concurrency:
+  group: mpw-revenue-owner-inquiry-dispatch
+  cancel-in-progress: false
+jobs:
+  source-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate safe, bounded owner notification processor
+        run: |
+          set -euo pipefail
+          php -l scripts/mpw_revenue_owner_inquiry_dispatch_20261026.php
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('scripts/mpw_revenue_owner_inquiry_dispatch_20261026.php').read_text()
+          assert "'consent'" in s and 'openssl_decrypt' in s and 'flock' in s
+          assert 'MPW_OWNER_INQUIRY_DISPATCH=' in s
+          assert 'customer_orders' not in s and 'payment_webhooks' not in s
+          print('MPW_PRIVACY_SAFE_OWNER_DISPATCH_SOURCE=PASS')
+          PY
+  notify-owner:
+    needs: [source-quality]
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-revenue-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Send bounded private encrypted inquiries to the owner's authorized mailbox
+        run: |
+          set -euo pipefail
+          timeout 120s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel 'php /dev/stdin dispatch' < scripts/mpw_revenue_owner_inquiry_dispatch_20261026.php
+      - name: Destroy temporary relay key material
+        if: always()
+        run: |
+          rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"
