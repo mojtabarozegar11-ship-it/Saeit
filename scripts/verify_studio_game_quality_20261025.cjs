@@ -88,11 +88,12 @@ assert.ok(sidestep.stage.innerHTML.includes('Streak 12'),'perfect course should 
 // Exercise the actual Cake Maker UI callbacks, not only its SVG serializer.
 const cakeUI=between(tan,'function mountCake(){','function mountPet(){');
 let cakeNodes={},downloaded='',cakeMarkup='';
+const cakeTopOption={dataset:{top:'🌼'},onclick:null,attributes:{},setAttribute(k,v){this.attributes[k]=v}};
 const cakeSandbox={
  stage(html){cakeMarkup=html;cakeNodes={'#cakepreview':{innerHTML:''},'#icing':{},'#cakeGreeting':{},
   '[data-action="candle"]':{},'[data-action="cake-remove"]':{},
   '[data-action="cake-reset"]':{},'[data-action="cake-undo"]':{},'[data-action="cake-redo"]':{},'[data-action="cake-surprise"]':{},'[data-action="cake-download"]':{},'[data-action="cake-check"]':{},'[data-action="cake-order"]':{}};},
- gamebody:{querySelector(sel){return cakeNodes[sel]},querySelectorAll(sel){return sel==='[data-top]'?[{dataset:{top:'🌼'},onclick:null}]:[]}},
+ gamebody:{querySelector(sel){return cakeNodes[sel]},querySelectorAll(sel){return sel==='[data-top]'?[cakeTopOption]:[]}},
  $(sel){return cakeNodes[sel]},
  btn(label,action){return '<button data-action="'+action+'">'+label+'</button>'},
  say(){},downloadSvg(name,svg){downloaded=svg}
@@ -100,6 +101,9 @@ const cakeSandbox={
 vm.runInNewContext(cake+cakeUI+'mountCake();',cakeSandbox);
 assert.match(cakeMarkup,/Customer order: (pink|blue|green|gold) frosting/,
  'child-friendly order instructions must use color names rather than hexadecimal codes');
+assert.equal(cakeTopOption.attributes['aria-pressed'],'false','unselected topping must be announced as unpressed');
+cakeTopOption.onclick();
+assert.equal(cakeTopOption.attributes['aria-pressed'],'true','selecting a topping must update its assistive-technology pressed state');
 // A continuous color-picker gesture is one edit, not twenty separate undo steps.
 cakeNodes['#icing'].oninput({target:{value:'#4488cc'}});
 cakeNodes['#icing'].oninput({target:{value:'#556677'}});
