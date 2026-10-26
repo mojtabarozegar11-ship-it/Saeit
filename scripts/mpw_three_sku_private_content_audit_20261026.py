@@ -80,10 +80,16 @@ def audit_pdf(path, expected_page_count=None, require_illustrations=False):
     embedded_images = 0
     image_pages = 0
     image_scan_errors = 0
+    vector_drawing_operator_count = 0
+    pages_with_vector_drawing = 0
+    graphics_scan_errors = 0
     words = 0
     references = 0
     toc_signals = 0
     headings = 0
+    from PyPDF2.generic import ContentStream
+    drawing_ops = {b"m", b"l", b"c", b"v", b"y", b"re", b"h", b"S", b"s",
+                   b"f", b"F", b"f*", b"B", b"B*", b"b", b"b*"}
     for page in reader.pages:
         try:
             page_images = page.images
@@ -93,6 +99,15 @@ def audit_pdf(path, expected_page_count=None, require_illustrations=False):
                 image_pages += 1
         except Exception:
             image_scan_errors += 1
+        try:
+            content = page.get_contents()
+            operations = ContentStream(content, reader).operations if content else []
+            path_count = sum(1 for operands, operator in operations if operator in drawing_ops)
+            vector_drawing_operator_count += path_count
+            if path_count >= 8:
+                pages_with_vector_drawing += 1
+        except Exception:
+            graphics_scan_errors += 1
         try:
             text = page.extract_text() or ""
         except Exception:
@@ -136,6 +151,9 @@ def audit_pdf(path, expected_page_count=None, require_illustrations=False):
         "reference_markers": references, "structure_markers": {"toc": toc_signals, "headings": headings},
         "expected_page_count": expected_page_count, "embedded_image_count": embedded_images,
         "pages_with_embedded_images": image_pages, "image_scan_errors": image_scan_errors,
+        "vector_drawing_operator_count": vector_drawing_operator_count,
+        "pages_with_vector_drawing": pages_with_vector_drawing,
+        "graphics_scan_errors": graphics_scan_errors,
         "contextual_exclusions": ([
             {"criterion": "bibliography_or_reference_markers_found", "reason": "Not required for an illustrated children's read-aloud picture book"},
             {"criterion": "structure_markers_found", "reason": "Chapter or table-of-contents markers are not applicable to this picture-book format"},
@@ -259,6 +277,12 @@ def run(root=BASE):
                         "format": measured["format"], "mechanical_pass": passed,
                         "mechanical_total": len(measured["checks"]),
                         "failed_checks": [name for name, ok in measured["checks"].items() if not ok],
+                        "embedded_image_count": measured.get("embedded_image_count"),
+                        "pages_with_embedded_images": measured.get("pages_with_embedded_images"),
+                        "image_scan_errors": measured.get("image_scan_errors"),
+                        "vector_drawing_operator_count": measured.get("vector_drawing_operator_count"),
+                        "pages_with_vector_drawing": measured.get("pages_with_vector_drawing"),
+                        "graphics_scan_errors": measured.get("graphics_scan_errors"),
                         "quality1000_verified": False})
     print("MPW_PRIVATE_CONTENT_AUDIT=" + json.dumps(results, sort_keys=True))
     print("MPW_CONTENT_BYTES_EMITTED=0;MPW_LIVE_MUTATIONS=0;MPW_QUALITY1000_CERTIFIED=0")

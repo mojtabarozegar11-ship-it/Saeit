@@ -51,6 +51,19 @@ class PrivateContentAuditTests(unittest.TestCase):
             self.assertIn("image_scan_errors",result)
             self.assertNotIn("extracted_text",result)
 
+    def test_pdf_audit_reports_vector_graphics_metrics_without_content(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/"vector.pdf"
+            writer=PdfWriter()
+            writer.add_blank_page(width=612,height=792)
+            with path.open("wb") as stream:
+                writer.write(stream)
+            result=audit.audit_pdf(path,expected_page_count=1,require_illustrations=True)
+            self.assertIsInstance(result["vector_drawing_operator_count"],int)
+            self.assertIsInstance(result["pages_with_vector_drawing"],int)
+            self.assertIsInstance(result["graphics_scan_errors"],int)
+            self.assertNotIn("extracted_text",result)
+
     def test_zip_audit_checks_assets_and_accessibility_without_releasing(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/"site.zip"
