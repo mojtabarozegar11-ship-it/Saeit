@@ -83,6 +83,9 @@ assert.ok(oneMiss.stage.innerHTML.includes('Not quite:'),'wrong jungle moves mus
 assert.equal(oneMiss.stage.focusCount,1,'replaced action buttons must return focus to the game region');
 const lose=runJungle(Array(3).fill(hint=>hint==='jump'?'duck':'jump'));
 assert.ok(lose.stage.innerHTML.includes('jungle wins'),'three wrong moves should end run');
+const partialLoss=runJungle([hint=>hint,hint=>hint,...Array(3).fill(hint=>hint==='jump'?'duck':'jump')]);
+assert.ok(partialLoss.stage.innerHTML.includes('jungle wins'),'partial run must end after three mistakes');
+assert.equal(partialLoss.storage.has('studio-raha-jungle-best-v1'),false,'a failed jungle course must never overwrite the personal best');
 const sidestep=runJungle(Array(12).fill(hint=>hint),()=>.99);
 assert.ok(sidestep.stage.innerHTML.includes('Jungle cleared!'),'twelve sidesteps must clear mud course');
 assert.ok(sidestep.stage.innerHTML.includes('Streak 12'),'perfect course should build a streak');
