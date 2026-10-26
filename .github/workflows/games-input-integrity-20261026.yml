@@ -1,0 +1,31 @@
+name: Games Input and Save Integrity
+on:
+  pull_request:
+    paths:
+      - 'games/ramadan-war/game.js'
+      - 'games/crown-defender/index.html'
+      - 'games/air-supremacy/**'
+      - 'games/air-supremacy-fa/**'
+      - 'templates/studio_raha/index.html'
+      - 'templates/taniya_studio/index.html'
+      - 'site_releases/mojplaywin/games-20261021/**'
+      - 'tests/game/hourly-keyboard-integrity-20261026.cjs'
+      - '.github/workflows/games-input-integrity-20261026.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  game-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify test syntax
+        run: node --check tests/game/hourly-keyboard-integrity-20261026.cjs
+      - name: Execute nine-game behavior regressions
+        run: node tests/game/hourly-keyboard-integrity-20261026.cjs
