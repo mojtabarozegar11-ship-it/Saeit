@@ -190,4 +190,13 @@ const combatHangar=shopEntry('playing');
 assert.equal(combatHangar.bank,40,'combat hangar must preserve the current run bank');
 assert.equal(combatHangar.upgrades.armor,0,'combat hangar must preserve active run upgrade state');
 
+// Canonical game identity must remain stable across previews and release URLs.
+const crownCanonical='https://mojplaywin.com/games/crown-defender/';
+assert.equal((html.match(/rel="canonical"/g)||[]).length,1,'exactly one canonical is allowed');
+assert.ok(html.includes('<link rel="canonical" href="'+crownCanonical+'">'),'canonical must target public game');
+assert.ok(html.includes('<meta property="og:url" content="'+crownCanonical+'">'),'Open Graph URL must match canonical');
+assert.ok(html.includes('<meta property="og:type" content="website">'),'share type must be explicit');
+assert.ok(/<meta property="og:title" content="[^"]+">/.test(html),'share title must be present');
+assert.ok(/<meta property="og:description" content="[^"]+">/.test(html),'share description must be present');
+
 console.log('CROWN_SAVE_SAFETY_PASS: scoreboard validation, date safety, achievements and backward-compatible progress');
