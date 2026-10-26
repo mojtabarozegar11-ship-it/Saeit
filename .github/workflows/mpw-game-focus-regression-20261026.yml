@@ -1,7 +1,7 @@
 name: Game focus-loss input regression (non-deploy)
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 'games/hourly-20261026-focus-safety']
     paths:
       - 'games/ramadan-war/game.js'
       - 'games/ramadan-war/site-smoke.cjs'
