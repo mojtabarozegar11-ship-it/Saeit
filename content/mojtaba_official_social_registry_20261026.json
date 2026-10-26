@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "policy": "Publish a social profile only after confirming account ownership and its exact public URL. Never use dr.mojtaba.rozegar for promotion.",
+  "channels": {
+    "personal": [],
+    "zomorod": [],
+    "mojplaywin": []
+  }
+}
