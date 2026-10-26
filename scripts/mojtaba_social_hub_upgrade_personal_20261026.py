@@ -68,6 +68,28 @@ def check(app,source,backups):
     return {"status":"ready_upgrade","existing_code_files":len(cfg["files"]),
             "new_code_files":len(new_files),"matched":str(cfg["matched"])}
 
+def _hashes_any_dir(folder: Path):
+    """Audit copied snapshots whose backup directory is not named social_hub."""
+    if folder.is_symlink() or not folder.is_dir():
+        raise InstallationBlocked("Snapshot directory missing or unsafe")
+    hashes={}
+    for item in folder.rglob("*"):
+        if item.is_symlink():
+            raise InstallationBlocked("Snapshot contains a symlink")
+        if "__pycache__" in item.parts or item.suffix==".pyc" or item.name=="site_config.py":
+            continue
+        if item.is_file():
+            rel=item.relative_to(folder).as_posix()
+            if not rel.endswith(".py") or not re.fullmatch(r"[A-Za-z0-9_./-]{1,180}",rel):
+                raise InstallationBlocked("Unexpected snapshot file")
+            hashes[rel]=sha(read(item))
+        elif not item.is_dir():
+            raise InstallationBlocked("Unexpected snapshot entry")
+    for name in ("__init__.py","catalog.py","store.py","service.py","portal.py","urls.py"):
+        if name not in hashes:
+            raise InstallationBlocked("Missing mandatory snapshot code")
+    return hashes
+
 def _copy_private(src,dst):
     shutil.copytree(src,dst,symlinks=False,
         ignore=lambda dir,names: [n for n in names if n=="__pycache__" or n.endswith(".pyc")])
@@ -87,7 +109,7 @@ def upgrade(app,source,backups,run_id):
     bdir.mkdir(mode=0o700)
     old_copy=bdir/"prior_package"
     _copy_private(cfg["package"],old_copy)
-    if _sources(old_copy)!=cfg["files"]:
+    if _hashes_any_dir(old_copy)!=cfg["files"]:
         raise InstallationBlocked("Original package backup checksum mismatch")
     stage=app/(".mpw-social-upgrade-stage-"+run_id)
     prior=app/(".mpw-social-upgrade-prior-"+run_id)
@@ -99,7 +121,7 @@ def upgrade(app,source,backups,run_id):
         _copy_private(source,stage)
         shutil.copy2(cfg["config"],stage/"site_config.py")
         os.chmod(stage/"site_config.py",0o600)
-        if _sources(stage)!=new_files or sha(read(stage/"site_config.py"))!=sha(read(cfg["config"])):
+        if _hashes_any_dir(stage)!=new_files or sha(read(stage/"site_config.py"))!=sha(read(cfg["config"])):
             raise InstallationBlocked("Staged checksum or private DB config mismatch")
         # Prevent any change to the independent Django URLconf.
         if sha(read(cfg["urls"]))!=cfg["url_sha"]:
@@ -146,7 +168,7 @@ def rollback(app,backups,run_id):
     if not pkg.is_dir() or pkg.is_symlink() or _sources(pkg)!=m["new_files"]:
         raise InstallationBlocked("Current installed package modified; refuse rollback")
     old=bdir/"prior_package"
-    if not old.is_dir() or old.is_symlink() or _sources(old)!=m["old_files"]:
+    if not old.is_dir() or old.is_symlink() or _hashes_any_dir(old)!=m["old_files"]:
         raise InstallationBlocked("Rollback backup files unavailable or altered")
     if sha(read(old/"site_config.py"))!=m["old_config_sha"]:
         raise InstallationBlocked("Private config backup changed")
