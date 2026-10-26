@@ -196,3 +196,22 @@ jobs:
           lines=result.stdout.splitlines() if result.returncode==0 else []
           print('MPW_CRONTAB_OVERVIEW='+json.dumps({'status':result.returncode,'jobs':len([l for l in lines if l.strip() and not l.lstrip().startswith('#')]),'trx_reconcile_jobs':sum(any(t in l.lower() for t in ('walletless','tron_reconcile','trx_reconcile','chain_settle')) for l in lines if not l.lstrip().startswith('#'))}))
           PY
+      - name: Locate customer reconcile trigger and settlement cron if any
+        run: |
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          import services.mpw_trx_walletless_one_tap_ui as one
+          base=one.render_invoice_page.__globals__
+          js=str(base.get('SCRIPT',''))
+          print('MPW_INVOICE_BASE_JS='+json.dumps({'bytes':len(js),'reconcile':('reconcile' in js),'status':('status' in js),'post':('POST' in js),'lines':js.splitlines()[:180]}))
+          import subprocess
+          p=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=8)
+          lines=p.stdout.splitlines() if p.returncode==0 else []
+          for i,line in enumerate(lines):
+           if not line.strip() or line.lstrip().startswith('#'):continue
+           if any(t in line.lower() for t in ('trx','commerce','invoice','payment','order','wallet','settle')):
+            tokens=line.split()
+            print('MPW_CRON_RELEVANT='+json.dumps({'ordinal':i+1,'schedule':tokens[:5],'keywords':{k:(k in line.lower()) for k in ('trx','commerce','invoice','payment','wallet','settle')}}))
+          PY
