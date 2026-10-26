@@ -63,6 +63,18 @@ assert.ok(runJungle([hint=>hint],()=>0,'999999999').stage.innerHTML.includes('Be
 assert.ok(runJungle([hint=>hint],()=>0,'180').stage.innerHTML.includes('Best 180'),'legitimate personal records must be retained');
 assert.ok(Number(win.storage.get('studio-raha-jungle-best-v1'))>0,'jungle personal best must persist');
 assert.ok(win.stage.innerHTML.includes('Best '+win.storage.get('studio-raha-jungle-best-v1')),'jungle UI must display saved record');
+// A focused action button must not cause a second move through the global shortcut.
+const keyboardJungle=runJungle([]);
+const jungleKey=keyboardJungle.listeners.get('keydown');
+assert.equal(typeof jungleKey,'function','active jungle must register its keyboard handler');
+jungleKey({code:'Space',repeat:false,target:{tagName:'BUTTON'},preventDefault(){}});
+assert.ok(keyboardJungle.stage.innerHTML.includes('Obstacle 1 / 12'),'Space on a focused action button must not consume an obstacle');
+const activeArrow={code:'ArrowUp',repeat:false,target:{tagName:'DIV'},preventDefault(){this.prevented=true}};
+jungleKey(activeArrow);
+assert.equal(activeArrow.prevented,true,'keyboard movement must prevent page scrolling while playing');
+assert.ok(keyboardJungle.stage.innerHTML.includes('Obstacle 2 / 12'),'active keyboard shortcut must advance one obstacle');
+assert.ok(rah.includes("stage.focus({preventScroll:true})"),'opening Jungle Run must focus the active game region');
+
 const lose=runJungle(Array(3).fill(hint=>hint==='jump'?'duck':'jump'));
 assert.ok(lose.stage.innerHTML.includes('jungle wins'),'three wrong moves should end run');
 const sidestep=runJungle(Array(12).fill(hint=>hint),()=>.99);
