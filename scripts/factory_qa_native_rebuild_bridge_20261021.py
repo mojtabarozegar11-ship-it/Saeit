@@ -19,6 +19,23 @@ import shutil
 import stat
 import tempfile
 import zipfile
+def active_product_allowlist(path):
+    """Read the factory's authoritative five active slots; fail closed."""
+    state_path = Path(path)
+    if state_path.is_symlink() or not state_path.is_file() or state_path.stat().st_size > 2000000:
+        raise ValueError("ACTIVE_PRODUCT_SLOTS_REQUIRED")
+    state = json.loads(state_path.read_text(encoding="utf8"))
+    active = state.get("active") if isinstance(state, dict) else None
+    if (state.get("schema") != "saeit.factory.product-slots.v1"
+            or state.get("capacity") != 5 or not isinstance(active, list)
+            or len(active) != 5):
+        raise ValueError("EXACTLY_FIVE_ACTIVE_FACTORY_PRODUCTS_REQUIRED")
+    recipes = [item.get("recipe") if isinstance(item, dict) else None for item in active]
+    if (len(set(recipes)) != 5 or any(not isinstance(recipe, str)
+            or not re.fullmatch(r"[a-z][a-z0-9_]{1,65}", recipe) for recipe in recipes)):
+        raise ValueError("ACTIVE_PRODUCT_SLOT_ENTRIES_INVALID")
+    return set(recipes)
+
 
 RECIPE=re.compile(r"^[a-z][a-z0-9_]{1,65}$")
 HEX=re.compile(r"^[0-9a-f]{64}$")
@@ -590,7 +607,7 @@ class EditionTests(unittest.TestCase):
         return "document_edition_failed_needs_engineering"
 
 
-def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
+def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=(),products_file=None):
     """Rebuild from either verified generated or installed native recipe roots."""
     root=Path(root);source_root=Path(source_root);maker_path=Path(maker_path)
     if not root.is_dir() or root.is_symlink():raise ValueError("PRIVATE_FACTORY_ROOT_INVALID")
@@ -632,6 +649,7 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
     workorders=root/"quality-excellence"/"production-workorders"
     if not workorders.is_dir() or workorders.is_symlink():
         raise ValueError("ACTUAL_QA_WORKORDERS_NOT_PRESENT")
+    active_products=active_product_allowlist(products_file) if products_file else None
     output=root/"quality-excellence"/"rebuilt-technical-candidates"
     output.mkdir(parents=True,mode=0o700,exist_ok=True)
     if output.is_symlink():raise ValueError("UNSAFE_REBUILD_DESTINATION")
@@ -652,6 +670,8 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=()):
             "root_cause_review_pending":0,"failure_escalations_created":0}
     orders=[]
     for folder in sorted(workorders.iterdir()):
+        if active_products is not None and folder.name not in active_products:
+            continue
         if folder.is_symlink() or not folder.is_dir() or not RECIPE.fullmatch(folder.name):
             continue
         current=folder/"current.json"
@@ -796,9 +816,10 @@ def main():
     p.add_argument("--additional-source-root",action="append",default=[])
     p.add_argument("--maker",required=True)
     p.add_argument("--limit",type=int,default=2)
+    p.add_argument("--products-file",default=None)
     a=p.parse_args()
     execute(a.private_root,a.source_root,a.maker,limit=a.limit,
-            additional_source_roots=a.additional_source_root)
+            additional_source_roots=a.additional_source_root,products_file=a.products_file)
 
 if __name__=="__main__":main()
 

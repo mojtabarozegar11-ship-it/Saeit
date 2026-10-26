@@ -15,6 +15,23 @@ from pathlib import Path
 import re
 import stat
 import zipfile
+def active_product_allowlist(path):
+    """Read the factory's authoritative five active slots; fail closed."""
+    state_path = Path(path)
+    if state_path.is_symlink() or not state_path.is_file() or state_path.stat().st_size > 2000000:
+        raise ValueError("ACTIVE_PRODUCT_SLOTS_REQUIRED")
+    state = json.loads(state_path.read_text(encoding="utf8"))
+    active = state.get("active") if isinstance(state, dict) else None
+    if (state.get("schema") != "saeit.factory.product-slots.v1"
+            or state.get("capacity") != 5 or not isinstance(active, list)
+            or len(active) != 5):
+        raise ValueError("EXACTLY_FIVE_ACTIVE_FACTORY_PRODUCTS_REQUIRED")
+    recipes = [item.get("recipe") if isinstance(item, dict) else None for item in active]
+    if (len(set(recipes)) != 5 or any(not isinstance(recipe, str)
+            or not re.fullmatch(r"[a-z][a-z0-9_]{1,65}", recipe) for recipe in recipes)):
+        raise ValueError("ACTIVE_PRODUCT_SLOT_ENTRIES_INVALID")
+    return set(recipes)
+
 
 SCHEMA = "saeit.factory.autonomous-jump-repair.v1"
 HEX = re.compile(r"^[0-9a-f]{64}$")
@@ -109,7 +126,7 @@ def immutable_receipt(root, product, record):
     return digest
 
 
-def reinspect(root, valid_families):
+def reinspect(root, valid_families, active_products=None):
     """Only native receipts for CURRENT still-open quality orders are eligible."""
     base = root / "quality-excellence"
     orders = base / "production-workorders"
@@ -125,6 +142,8 @@ def reinspect(root, valid_families):
         if not folder.is_dir() or folder.is_symlink() or not RECIPE.fullmatch(folder.name):
             continue
         product = folder.name
+        if active_products is not None and product not in active_products:
+            continue
         order_path = folder / "current.json"
         if not order_path.is_file() or order_path.is_symlink():
             continue
@@ -224,10 +243,11 @@ def reinspect(root, valid_families):
 
 
 def run(root, registry, source_root, maker, bridge, *, limit=3, rounds=2,
-        additional_source_roots=()):
+        additional_source_roots=(), products_file=None):
     root = Path(root)
     require(root.is_dir() and not root.is_symlink(), "PRIVATE_FACTORY_ROOT_REQUIRED")
     valid_families = families(registry)
+    active_products = active_product_allowlist(products_file) if products_file else None
     require(type(limit) is int and 1 <= limit <= 3
             and type(rounds) is int and 1 <= rounds <= 2, "BOUNDED_REPAIR_CAP_REQUIRED")
     require((root / "quality-excellence").is_dir(), "QUALITY_EXCELLENCE_ROOT_REQUIRED")
@@ -242,8 +262,11 @@ def run(root, registry, source_root, maker, bridge, *, limit=3, rounds=2,
             raise RuntimeError("AUTONOMOUS_REPAIR_ALREADY_RUNNING")
         completed = []
         for _ in range(rounds):
-            result = module.execute(root, source_root, maker, limit=limit,
-                                    additional_source_roots=additional_source_roots)
+            bridge_options = {"limit": limit,
+                              "additional_source_roots": additional_source_roots}
+            if products_file:
+                bridge_options["products_file"] = products_file
+            result = module.execute(root, source_root, maker, **bridge_options)
             require(isinstance(result, dict)
                     and result.get("professional_quality_1000_verified") is False
                     and result.get("commercial_release_authorized") is False,
@@ -251,7 +274,7 @@ def run(root, registry, source_root, maker, bridge, *, limit=3, rounds=2,
             completed.append(result)
             if result.get("rebuild_attempted") == 0:
                 break
-        audit = reinspect(root, valid_families)
+        audit = reinspect(root, valid_families, active_products)
         status = {"schema": SCHEMA, "registered_family_lines": len(valid_families),
                   "repair_rounds_executed": len(completed),
                   "rebuild_attempted": sum(row.get("rebuild_attempted", 0) for row in completed),
@@ -272,10 +295,12 @@ def main():
     parser.add_argument("--additional-source-root", action="append", default=[])
     parser.add_argument("--limit", type=int, default=3)
     parser.add_argument("--rounds", type=int, default=2)
+    parser.add_argument("--products-file", default=None)
     args = parser.parse_args()
     result = run(args.private_root, args.families, args.source_root, args.maker,
                  args.bridge, limit=args.limit, rounds=args.rounds,
-                 additional_source_roots=args.additional_source_root)
+                 additional_source_roots=args.additional_source_root,
+                 products_file=args.products_file)
     if result["invalid_candidate_receipts"]:
         raise SystemExit("AUTONOMOUS_REPAIR_UNVERIFIED_CANDIDATES")
 

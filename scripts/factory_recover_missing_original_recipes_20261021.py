@@ -16,6 +16,23 @@ import re
 import shutil
 import tempfile
 import zipfile
+def active_product_allowlist(path):
+    """Read the factory's authoritative five active slots; fail closed."""
+    state_path = Path(path)
+    if state_path.is_symlink() or not state_path.is_file() or state_path.stat().st_size > 2000000:
+        raise ValueError("ACTIVE_PRODUCT_SLOTS_REQUIRED")
+    state = json.loads(state_path.read_text(encoding="utf8"))
+    active = state.get("active") if isinstance(state, dict) else None
+    if (state.get("schema") != "saeit.factory.product-slots.v1"
+            or state.get("capacity") != 5 or not isinstance(active, list)
+            or len(active) != 5):
+        raise ValueError("EXACTLY_FIVE_ACTIVE_FACTORY_PRODUCTS_REQUIRED")
+    recipes = [item.get("recipe") if isinstance(item, dict) else None for item in active]
+    if (len(set(recipes)) != 5 or any(not isinstance(recipe, str)
+            or not re.fullmatch(r"[a-z][a-z0-9_]{1,65}", recipe) for recipe in recipes)):
+        raise ValueError("ACTIVE_PRODUCT_SLOT_ENTRIES_INVALID")
+    return set(recipes)
+
 
 SKU=re.compile(r"^[a-z][a-z0-9_]{1,65}$")
 HASH=re.compile(r"^[0-9a-f]{64}$")
@@ -141,8 +158,9 @@ def verify_previous_recovery(root, result_root, recipe, order, order_path, targe
         raise ValueError("RECOVERY_PREVIOUS_FILES_MISMATCH")
 
 
-def recover(root,*,limit=3,other_roots=()):
+def recover(root,*,limit=3,other_roots=(),products_file=None):
     root=Path(root)
+    active_products=active_product_allowlist(products_file) if products_file else None
     if root.is_symlink() or not root.is_dir():raise ValueError("RECOVERY_PRIVATE_ROOT_UNSAFE")
     if type(limit)is not int or not 1<=limit<=3:raise ValueError("RECOVERY_CAPACITY_INVALID")
     if len(other_roots)>3:raise ValueError("RECOVERY_SOURCE_ROOT_LIMIT")
@@ -159,6 +177,7 @@ def recover(root,*,limit=3,other_roots=()):
     for order_folder in sorted(orders.iterdir()):
         if not order_folder.is_dir() or order_folder.is_symlink() or not SKU.fullmatch(order_folder.name):continue
         recipe=order_folder.name
+        if active_products is not None and recipe not in active_products:continue
         stats["orders_examined"]+=1
         try:
             order_path=order_folder/"current.json"
@@ -279,6 +298,7 @@ def main():
     parser.add_argument("--private-root",required=True)
     parser.add_argument("--limit",type=int,default=3)
     parser.add_argument("--other-source-root",action="append",default=[])
+    parser.add_argument("--products-file",default=None)
     args=parser.parse_args()
-    recover(args.private_root,limit=args.limit,other_roots=args.other_source_root)
+    recover(args.private_root,limit=args.limit,other_roots=args.other_source_root,products_file=args.products_file)
 if __name__=="__main__":main()

@@ -15,6 +15,23 @@ import os
 from pathlib import Path
 import re
 import tempfile
+def active_product_allowlist(path):
+    """Read the factory's authoritative five active slots; fail closed."""
+    state_path = Path(path)
+    if state_path.is_symlink() or not state_path.is_file() or state_path.stat().st_size > 2000000:
+        raise ValueError("ACTIVE_PRODUCT_SLOTS_REQUIRED")
+    state = json.loads(state_path.read_text(encoding="utf8"))
+    active = state.get("active") if isinstance(state, dict) else None
+    if (state.get("schema") != "saeit.factory.product-slots.v1"
+            or state.get("capacity") != 5 or not isinstance(active, list)
+            or len(active) != 5):
+        raise ValueError("EXACTLY_FIVE_ACTIVE_FACTORY_PRODUCTS_REQUIRED")
+    recipes = [item.get("recipe") if isinstance(item, dict) else None for item in active]
+    if (len(set(recipes)) != 5 or any(not isinstance(recipe, str)
+            or not re.fullmatch(r"[a-z][a-z0-9_]{1,65}", recipe) for recipe in recipes)):
+        raise ValueError("ACTIVE_PRODUCT_SLOT_ENTRIES_INVALID")
+    return set(recipes)
+
 
 SCHEMA="saeit.factory.quality-triage.v2"
 REWORK="saeit.factory.quality-rework.v2"
@@ -144,8 +161,9 @@ def independent_zip_q068_fallback(folder,recipe,archive,manifest):
     return {"path":evidence.relative_to(folder).as_posix(),"sha256":sha(blob)}
 
 
-def triage_inventory(private_root,policy,registry,run_reference="manual",limit=250,scorecard_file=None):
+def triage_inventory(private_root,policy,registry,run_reference="manual",limit=250,scorecard_file=None,products_file=None):
     root=Path(private_root)
+    active_products=active_product_allowlist(products_file) if products_file else None
     assert root.is_dir() and not root.is_symlink()
     module=load_module(Path(policy))
     score_module=load_module(Path(scorecard_file) if scorecard_file else Path(__file__).with_name("factory_quality_1000_v2.py"))
@@ -170,6 +188,7 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
             eligible_total+=sum(
                 1 for folder in base.iterdir()
                 if folder.is_dir() and not folder.is_symlink() and SKU.fullmatch(folder.name)
+                and (active_products is None or folder.name in active_products)
                 and (folder/"manufacturing_manifest.json").is_file()
                 and not (folder/"manufacturing_manifest.json").is_symlink()
             )
@@ -184,6 +203,7 @@ def triage_inventory(private_root,policy,registry,run_reference="manual",limit=2
             manifest_path=folder/"manufacturing_manifest.json"
             if not manifest_path.is_file() or manifest_path.is_symlink():continue
             name=folder.name
+            if active_products is not None and name not in active_products:continue
             assert name not in encountered,"DUPLICATE_RECIPE_DIRECTORY:"+name
             encountered.add(name)
             try:
@@ -369,6 +389,7 @@ def main():
         p.add_argument("--"+name,required=True)
     p.add_argument("--run-reference",default="manual")
     p.add_argument("--scorecard",default=None)
+    p.add_argument("--products-file",default=None)
     args=p.parse_args()
-    triage_inventory(args.private_root,args.policy,args.registry,args.run_reference,scorecard_file=args.scorecard)
+    triage_inventory(args.private_root,args.policy,args.registry,args.run_reference,scorecard_file=args.scorecard,products_file=args.products_file)
 if __name__=="__main__":main()

@@ -96,6 +96,7 @@ jobs:
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3)
           stage="/home/githubops/factory-runtime/operations/.premium-rework-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          products_file="/home/githubops/factory-runtime/private/autonomous-product-cycle/quality-excellence/product-flow/active-slots/current.json"
           ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; test \"\$(id -un)\" = githubops; umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
           scp -q "${opts[@]}" scripts/factory_global_quality_triage_v2.py githubops@178.239.147.150:"$stage/rework.py"
           scp -q "${opts[@]}" scripts/factory_quality_1000_v2.py githubops@178.239.147.150:"$stage/score1000.py"
@@ -114,6 +115,7 @@ jobs:
             --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle \
             --policy "$stage/quality.py" --registry "$stage/families.json" \
             --scorecard "$stage/score1000.py" \
+            --products-file "$products_file" \
             --run-reference "$GITHUB_RUN_ID"
           echo FACTORY_GLOBAL_QUALITY_TRIAGE_PRIVATE_VPS=COMPLETED
           timeout 100s ssh -T "${opts[@]}" githubops@178.239.147.150 \
@@ -121,6 +123,7 @@ jobs:
             --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle \
             --quality-module "$stage/score1000.py" \
             --catalog "$stage/quality_100_criteria.json" \
+            --products-file "$products_file" \
             --run-id "$GITHUB_RUN_ID"
           echo FACTORY_PRODUCT_PROFESSIONAL_REWORK_QUEUE=OPERATIONAL
           # Recover original bytes only when source, ZIP and QA hashes agree.
@@ -129,6 +132,7 @@ jobs:
             --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle \
             --other-source-root /home/githubops/factory-runtime/private/autonomous-product-cycle/generated-product-recipes \
             --other-source-root /home/githubops/factory-runtime/operations/autonomous-product-runtime/product_recipes \
+            --products-file "$products_file" \
             --limit 3
           echo FACTORY_ORIGINAL_SOURCE_RECOVERY_HASH_BOUND=COMPLETED
           # Only source-backed, genuinely executed offline technical QA rebuilds;
@@ -148,6 +152,7 @@ jobs:
             --maker "$stage/factory_product_maker.py" --bridge "$stage/native-rebuild.py" \
             --additional-source-root /home/githubops/factory-runtime/operations/autonomous-product-runtime/product_recipes \
             --additional-source-root /home/githubops/factory-runtime/private/autonomous-product-cycle/recovered-original-product-recipes \
+            --products-file "$products_file" \
             --rounds 2 --limit 3
           echo FACTORY_NATIVE_TECHNICAL_REBUILD_CANDIDATES_INSPECTED=YES
           # Return every changed factory artifact to quality control in this same run.
@@ -156,6 +161,7 @@ jobs:
             --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle \
             --policy "$stage/quality.py" --registry "$stage/families.json" \
             --scorecard "$stage/score1000.py" \
+            --products-file "$products_file" \
             --run-reference "$GITHUB_RUN_ID-post-rework"
           echo FACTORY_POST_REWORK_QUALITY_REINSPECTION=COMPLETED
           timeout 100s ssh -T "${opts[@]}" githubops@178.239.147.150 \
@@ -163,6 +169,7 @@ jobs:
             --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle \
             --quality-module "$stage/score1000.py" \
             --catalog "$stage/quality_100_criteria.json" \
+            --products-file "$products_file" \
             --run-id "$GITHUB_RUN_ID-post-rework"
           echo FACTORY_POST_REWORK_WORKORDER_REFRESH=COMPLETED
           echo FACTORY_QUALITY_RELEASE_THRESHOLD=1000/1000

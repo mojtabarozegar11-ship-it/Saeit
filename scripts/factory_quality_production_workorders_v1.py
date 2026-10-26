@@ -13,6 +13,22 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+def active_product_allowlist(path):
+    """Read the factory's authoritative five active slots; fail closed."""
+    state_path = Path(path)
+    if state_path.is_symlink() or not state_path.is_file() or state_path.stat().st_size > 2000000:
+        raise ValueError("ACTIVE_PRODUCT_SLOTS_REQUIRED")
+    state = json.loads(state_path.read_text(encoding="utf8"))
+    active = state.get("active") if isinstance(state, dict) else None
+    if (state.get("schema") != "saeit.factory.product-slots.v1"
+            or state.get("capacity") != 5 or not isinstance(active, list)
+            or len(active) != 5):
+        raise ValueError("EXACTLY_FIVE_ACTIVE_FACTORY_PRODUCTS_REQUIRED")
+    recipes = [item.get("recipe") if isinstance(item, dict) else None for item in active]
+    if (len(set(recipes)) != 5 or any(not isinstance(recipe, str)
+            or not re.fullmatch(r"[a-z][a-z0-9_]{1,65}", recipe) for recipe in recipes)):
+        raise ValueError("ACTIVE_PRODUCT_SLOT_ENTRIES_INVALID")
+    return set(recipes)
 
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -158,8 +174,9 @@ def separate_lanes(snapshot, findings, defects, source_receipt_sha256):
     return engineering, certification
 
 
-def work_orders(root,quality_file,catalog_file,run_id,limit=300):
+def work_orders(root,quality_file,catalog_file,run_id,limit=300,products_file=None):
     base=Path(root)
+    active_products=active_product_allowlist(products_file) if products_file else None
     source=base/"quality-excellence"/"rework"
     assert base.is_dir() and source.is_dir() and not source.is_symlink()
     module=load(quality_file)
@@ -182,6 +199,7 @@ def work_orders(root,quality_file,catalog_file,run_id,limit=300):
     jobs=[]
     for folder in sorted(source.iterdir()):
         if len(jobs)>=limit:break
+        if active_products is not None and folder.name not in active_products:continue
         if folder.is_symlink() or not folder.is_dir() or not re.fullmatch(r"[a-z][a-z0-9_]{1,65}",folder.name):
             continue
         current=folder/"current.json"
@@ -284,5 +302,6 @@ if __name__=="__main__":
     p=argparse.ArgumentParser()
     for key in ("private-root","quality-module","catalog","run-id"):
         p.add_argument("--"+key,required=True)
+    p.add_argument("--products-file",default=None)
     a=p.parse_args()
-    work_orders(a.private_root,Path(a.quality_module),Path(a.catalog),a.run_id)
+    work_orders(a.private_root,Path(a.quality_module),Path(a.catalog),a.run_id,products_file=a.products_file)
