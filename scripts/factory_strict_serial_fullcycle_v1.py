@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""One active factory product until independently certified; fail-closed.
+"""One private factory product per tick with fair rework rotation; fail-closed.
 
-Each minute ticks the *same* product through the bounded real Stage 2-6 workers.
-Unlike the historical rotating source cursor, missing evidence does not advance
-the order. A one-minute scheduling interval is not a guarantee that legitimate
-scientific authorship and human review can finish within sixty seconds.
+A blocked product keeps its authentic state and returns on the next queue round;
+it never monopolizes the minute scheduler while independent review is pending.
+A minute is scheduling cadence, not a promise of scientific completion.
 """
 import argparse
 from datetime import datetime, timezone
@@ -175,6 +174,19 @@ def certified_finished(root, order, governance=None):
         return False
 
 
+def next_uncertified_order(root, orders, index, governance):
+    """Round-robin over work orders, skipping only independently verified stock.
+
+    Missing governance never authorizes a skip. Every candidate is rechecked
+    to prevent a stale cursor silently dropping uncertified products.
+    """
+    for offset in range(1, len(orders) + 1):
+        candidate = (index + offset) % len(orders)
+        if not certified_finished(root, orders[candidate], governance):
+            return orders[candidate], candidate
+    return None, len(orders)
+
+
 def worker_args(root, ops, order, stage):
     name, file, args, _ = stage
     script = ops / file
@@ -280,21 +292,28 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
                 except (OSError, RuntimeError, ValueError) as exc:
                     results[label] = "BLOCKED_" + type(exc).__name__ + ":" + str(exc)[:80]
             certified = certified_finished(root, order, governance)
-        next_index = index + 1 if certified else index
-        # A certified product exits the active slot, without silently
-        # distributing it to sites whose buyer-delivery gate is not proven.
-        all_complete = next_index == len(orders)
-        next_order = None if all_complete else orders[next_index]
+        # Exactly one selected order per tick. Unfinished work is revisited
+        # after other orders have had a fair chance to progress.
+        next_order, next_index = next_uncertified_order(root, orders, index, governance)
+        all_complete = next_order is None
+        decision = "CERTIFIED_AND_EXIT" if certified else "RETURN_TO_PRODUCTION"
+        blocked = [label for label, status in results.items() if status != "EXECUTED"]
+        if not certified and not blocked:
+            blocked = ["independent_scientific_review_or_authentic_rework"]
         atomic(state, {"schema":SCHEMA, "active_order":next_order,
-                       "index":next_index, "ticks":0 if certified else ticks + 1,
+                       "index":next_index, "ticks":0,  # reset per-order tick counter on rotation
                        "all_complete":all_complete,
                        "last_order":order, "last_order_certified":certified,
+                       "last_decision":decision, "last_blockers":blocked,
+                       "required_next_version":"AUTHENTIC_REWORK_VERSION" if not certified else None,
                        "last_cycle_utc":datetime.now(timezone.utc).isoformat(),
                        "stage_results":results, "storage_hold":hold,
                        "independent_approval_required":True,
                        "commercial_release":False, "sites_modified":False})
         return {"schema":SCHEMA, "processed_order":order,
                 "active_order_after_cycle":next_order,
+                "decision":decision, "rework_blockers":blocked,
+                "required_next_version":"AUTHENTIC_REWORK_VERSION" if not certified else None,
                 "certified_to_private_finished_goods":certified,
                 "stages_executed":sum(v=="EXECUTED" for v in results.values()),
                 "stage_results":results, "storage_hold":hold, "tick_number":ticks+1,
