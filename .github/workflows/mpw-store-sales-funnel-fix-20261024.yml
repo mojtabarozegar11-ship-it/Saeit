@@ -263,7 +263,7 @@ jobs:
           if store.is_symlink() or not store.is_file():
               raise SystemExit('STORE_TEMPLATE_NOT_REGULAR')
           digest=hashlib.sha256(store.read_bytes().replace(bytes([13,10]),bytes([10]))).hexdigest()
-          if digest!='b44cc7df0442cf1139febd220ab2e338b7381ffb51fe1b1ab6bb9352f567d9d0':
+          if digest!='c5b8d28149b9c0cd07c4c8efef3b0f4c82b6659f76e93eecc5a3b581d80ea113':
               raise SystemExit('ROLLBACK_HASH_NOT_VERIFIED')
           if ht.is_symlink() or not ht.is_file():
               raise SystemExit('HTACCESS_NOT_REGULAR')
