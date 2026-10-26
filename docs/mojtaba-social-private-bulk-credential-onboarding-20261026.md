@@ -16,7 +16,7 @@ Example operator commands (replace the private DB path with the ACTUAL location 
     chmod 700 "$HOME/.private_social_provider_tokens"
     export MPW_SOCIAL_CREDENTIAL_VAULT="$HOME/.private_social_provider_tokens/vault.json"
 
-Set that same absolute MPW_SOCIAL_CREDENTIAL_VAULT path in the PERSONAL Django application environment through the hosting account's private configuration. Restart only that standalone app as required. This release does not create or configure a production vault or token automatically.
+By default, the installed PERSONAL Django app now automatically looks for provider-api-vault.json in the SAME owner-only directory as its private social.sqlite. Therefore no extra cPanel application environment variable is needed when provisioning to that default private path. Use the verified absolute PRIVATE_DB parent directory, not a guessed path. MPW_SOCIAL_CREDENTIAL_VAULT remains an optional explicit override for a different private 0700 directory; when overriding it must be configured consistently in the standalone personal Django process. No real tokens, accounts, or external publishing rights are generated automatically.
 
 Generate a mode-0600 JSON template containing only already registered owner-attested account IDs and BLANK credential strings:
 
@@ -32,7 +32,7 @@ Then do the whole private import in ONE atomic owner-confirmed batch:
 
     python scripts/mojtaba_social_hub_cli_20261026.py --db /PRIVATE/OWNER/social.sqlite credential-import --vault-file "$MPW_SOCIAL_CREDENTIAL_VAULT" --input-private-file "$HOME/.private_social_provider_tokens/provision-once.json" --confirm
 
-The private JSON vault is OS-mode 0600 under an owner-only 0700 directory. It is **not encrypted at rest**; use a dedicated secrets manager for stronger threat models. Do not upload the one-time input file to GitHub, chat, Gmail, a web form, or backup services accessible to others. Delete the one-time input under your normal security procedure after provisioning (SSD snapshots and backups may retain copies).
+For the default standalone production deployment, the private path resolves from the installed site_config.PRIVATE_DB rather than from GitHub or the shared site's settings. The private JSON vault is OS-mode 0600 under an owner-only 0700 directory. It is **not encrypted at rest**; use a dedicated secrets manager for stronger threat models. Do not upload the one-time input file to GitHub, chat, Gmail, a web form, or backup services accessible to others. Delete the one-time input under your normal security procedure after provisioning (SSD snapshots and backups may retain copies).
 
 The staff-only readiness URL then reports credential PRESENCE and the next required verification step:
 https://mojplaywin.com/mojtaba.roozegar/social-command/connection-plan/
