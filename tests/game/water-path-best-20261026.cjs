@@ -63,3 +63,30 @@ assert.equal(final.next.disabled,true,'final stage must not offer a nonexistent 
 assert.equal(final.restart.focusCount,1,'final victory must focus replay rather than disabled next');
 assert.ok(final.board.buttons.every(b=>b.disabled),'final solved puzzle must remain stable');
 console.log('WATER_PATH_SOLVED_BOARD=PASS: immutable victory, focus handoff, and final-stage replay');
+
+// Keyboard-accessibility regression: stage transitions and restart must focus a playable pipe.
+const navStart=script.indexOf('next.addEventListener("click"');
+const navEnd=script.indexOf('function toggle()',navStart);
+assert.ok(navStart>=0&&navEnd>navStart,'stage navigation handlers must exist');
+const navButtons={next:{},previous:{},restart:{}};
+for(const button of Object.values(navButtons))button.addEventListener=function(type,fn){if(type==='click')this.click=fn};
+const navState={stage:0,solved:true,next:navButtons.next,previous:navButtons.previous,
+ document:{getElementById(id){assert.equal(id,'restart');return navButtons.restart}},
+ setupCalls:0,focusCalls:0,setup(){this.setupCalls++},focusFirstPipe(){this.focusCalls++}};
+vm.runInNewContext(script.slice(navStart,navEnd),navState);
+navButtons.next.click();
+assert.equal(navState.stage,1,'next stage advances exactly once');
+assert.equal(navState.focusCalls,1,'next stage focuses a playable pipe');
+navButtons.previous.click();
+assert.equal(navState.stage,0,'previous stage returns to first stage');
+assert.equal(navState.focusCalls,2,'previous stage restores playable keyboard focus');
+navButtons.restart.click();
+assert.equal(navState.setupCalls,3,'all three navigation actions reinitialize puzzle');
+assert.equal(navState.focusCalls,3,'restart restores playable keyboard focus');
+navState.solved=false;
+navButtons.next.click();
+assert.equal(navState.stage,0,'unsolved puzzle cannot skip a stage');
+assert.equal(navState.focusCalls,3,'blocked next-stage action cannot steal focus');
+assert.ok(script.includes('if(e.ctrlKey||e.metaKey||e.altKey||e.isComposing||e.target.isContentEditable'),
+ 'global shortcuts must not override browser shortcuts, IME or editable elements');
+console.log('WATER_PATH_KEYBOARD_NAV=PASS: focus handoff, locked stage progression and shortcut safety');
