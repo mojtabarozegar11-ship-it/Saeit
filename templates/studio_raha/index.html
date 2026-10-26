@@ -192,6 +192,9 @@ function jungleRunGame(stage){
    if(stars>best){best=stars;try{localStorage.setItem('studio-raha-jungle-best-v1',String(best))}catch(e){}}
   }
   paint();
+  // Repainting replaces the action buttons; restore focus to the active game region
+  // so keyboard and assistive-technology users do not lose their place after each move.
+  if(!finished&&stage.isConnected&&typeof stage.focus==='function')stage.focus({preventScroll:true});
   if(finished)jungleCleanup(); // Finished runs must release their keyboard handler.
  }
  function key(e){
