@@ -107,6 +107,20 @@ jobs:
                   print("MPW_TRIAL_ROUTE_DIAGNOSTIC="+json.dumps({"pk":pk,"product":v,"handler":name,"code_lines":selected[:36],"status":status},default=str))
               except Exception as e:
                   print("MPW_TRIAL_ROUTE_DIAGNOSTIC_ERROR="+repr(e))
+          from django.urls import resolve
+          from django.conf import settings
+          for path in ("/commerce/book/779/","/store/product/779/"):
+              match=resolve(path)
+              print("MPW_TRIAL_GATE_ROUTE="+json.dumps({"path":path,"func":match.func.__module__+"."+match.func.__name__,"anonymous_http":Client(raise_request_exception=False).get(path,secure=True,HTTP_HOST="mojplaywin.com").status_code}))
+          from mpw_commerce.product_checkout_page import approved_for_checkout,product_checkout_page
+          print("MPW_TRIAL_CHECKOUT_APPROVAL_SOURCE="+inspect.getsource(approved_for_checkout)[:5500].replace(chr(10),"\\n"))
+          import importlib
+          for name in settings.MIDDLEWARE:
+              mod,cls=name.rsplit(".",1)
+              try: code=inspect.getsource(getattr(importlib.import_module(mod),cls))
+              except (OSError,AttributeError,ImportError): continue
+              if ("779" in code or "CANARY_PRODUCT" in code):
+                  print("MPW_TRIAL_MIDDLEWARE_CANARY="+json.dumps({"middleware":name,"lines":[x.strip() for x in code.splitlines() if "779" in x or "CANARY_PRODUCT" in x]}))
           PY
       - name: Create real test listing, never modify originals or payment ledger
         id: publish_sample
