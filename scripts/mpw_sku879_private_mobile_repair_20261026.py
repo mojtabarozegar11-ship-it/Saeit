@@ -52,6 +52,14 @@ ADDITIONAL_STYLE = r"""
   }
 }
 """
+NARROW_SPAN_STYLE = r"""
+@media (max-width: 359px) {
+  span {
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+  }
+}
+"""
 THIRD_STYLE = r"""
 @media (max-width: 767px) {
   :where(main,section,article,header,footer,nav,div,figure) {
@@ -66,7 +74,8 @@ THIRD_STYLE = r"""
 VARIANTS = [
     ("intrinsic-text-and-flex-shrink", BASE_STYLE),
     ("contain-layout-blocks", BASE_STYLE + ADDITIONAL_STYLE),
-    ("contain-and-hyphenate", BASE_STYLE + ADDITIONAL_STYLE + THIRD_STYLE),
+    ("contain-and-unwrap-small-mobile-caption", BASE_STYLE + ADDITIONAL_STYLE + NARROW_SPAN_STYLE),
+    ("contain-and-hyphenate", BASE_STYLE + ADDITIONAL_STYLE + NARROW_SPAN_STYLE + THIRD_STYLE),
 ]
 
 
@@ -130,12 +139,14 @@ def repair(archive, output, receipt_file, expected=SOURCE_SHA):
         working = Path(tmp)
         entry = safe_extract(archive, working)
         source = (working / entry).read_text(encoding="utf-8-sig")
+        from mpw_sku879_private_candidate_12view_qa_20261026 import VIEWPORTS, evaluate_rows
         for name, style in VARIANTS:
             amended = inject(source, style)
             (working / entry).write_text(amended, encoding="utf-8")
             try:
-                views = browser_views(working, entry)
-                valid = passes(views)
+                views = browser_views(working, entry, VIEWPORTS)
+                checks = evaluate_rows(views)
+                valid = bool(checks) and all(checks.values())
                 attempts.append({
                     "variant": name,
                     "passes": valid,
