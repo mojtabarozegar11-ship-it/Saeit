@@ -94,8 +94,8 @@ class RealTenGenerationTests(unittest.TestCase):
         calculator.write_text(code,encoding="utf8")
         cases=source/"test_calculator.py"
         tests=cases.read_text(encoding="utf8")
-        tests=re.sub(r"(?ms)^# DISTRIBUTION_TESTS_V4_START.*?^# DISTRIBUTION_TESTS_V4_END\\n", "", tests)
-        tests=re.sub(r"(?ms)^    # DISTRIBUTION_TESTS_V4_START.*?^    # DISTRIBUTION_TESTS_V4_END\\n", "", tests)
+        tests=re.sub(r"(?ms)^# DISTRIBUTION_TESTS_V4_START.*?^# DISTRIBUTION_TESTS_V4_END\n", "", tests)
+        tests=re.sub(r"(?ms)^    # DISTRIBUTION_TESTS_V4_START.*?^    # DISTRIBUTION_TESTS_V4_END\n", "", tests)
         cases.write_text(tests,encoding="utf8")
         receipt=source/"design_receipt.json"
         data=json.loads(receipt.read_text(encoding="utf8"))
