@@ -1,0 +1,45 @@
+name: MOJ1 V2 offline market-safety gate
+
+on:
+  push:
+    branches:
+      - 'moj1/liquidity-feasibility-20261026'
+    paths:
+      - 'experiments/moj1-pilot/**'
+      - '.github/workflows/moj1-liquidity-gate-20261026.yml'
+  pull_request:
+    branches:
+      - 'moj1/internal-hardening-20261024'
+    paths:
+      - 'experiments/moj1-pilot/**'
+      - '.github/workflows/moj1-liquidity-gate-20261026.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  no-key-no-transaction:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out proposed source without writing credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js without installing dependencies
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax-check offline safety and liquidity modules
+        working-directory: experiments/moj1-pilot
+        run: |
+          node --check tools/liquidity-scenario.mjs
+          node --check scripts/v2-market-readiness-offline.mjs
+      - name: Run deterministic no-network feasibility regressions
+        working-directory: experiments/moj1-pilot
+        run: |
+          node --test tests/liquidity-scenario.test.mjs tests/v2-market-readiness-offline.test.mjs
+      - name: Confirm current guarded V2 manifests remain Mainnet NO-GO
+        working-directory: experiments/moj1-pilot
+        run: node scripts/v2-market-readiness-offline.mjs --assert-blocked
