@@ -28,7 +28,7 @@ a{color:var(--gold)}button{font:inherit;cursor:pointer}button:focus-visible,a:fo
 const cvs=document.getElementById('playfield'),c=cvs.getContext('2d',{alpha:false}),W=960,H=600;
 const el=id=>document.getElementById(id);const hudScore=el('score'),hudBest=el('best'),hudLevel=el('level'),hudState=el('state'),flash=el('flash'),overlay=el('overlay'),headline=el('overlayTitle'),overlayText=el('overlayText'),play=el('playButton');
 const saveKey='mpw-beta-20261021-pulse-forge'; let score=0,best=0,level='1',phase='READY',running=false,paused=false,last=0,clock=0,audio=false,audioContext=null; const keys=new Set();
-try{best=Math.max(0,Number(localStorage.getItem(saveKey))||0)}catch(e){}
+try{const stored=Number(localStorage.getItem(saveKey));best=Number.isSafeInteger(stored)&&stored>=0&&stored<=100000000?stored:0}catch(e){}
 hudBest.textContent=best.toLocaleString('en-US');
 const api={c,W,H,keys,get clock(){return clock},get running(){return running&&!paused},random:(a,b)=>a+Math.random()*(b-a),tone(f=440,d=.09){if(!audio)return;try{audioContext??=new(window.AudioContext||window.webkitAudioContext)();const o=audioContext.createOscillator(),g=audioContext.createGain();o.type='sine';o.frequency.setValueAtTime(f,audioContext.currentTime);g.gain.setValueAtTime(.07,audioContext.currentTime);g.gain.exponentialRampToValueAtTime(.001,audioContext.currentTime+d);o.connect(g);g.connect(audioContext.destination);o.start();o.stop(audioContext.currentTime+d)}catch(e){}},
 score(n){score+=Math.round(n);hudScore.textContent=score.toLocaleString('en-US');if(score>best){best=score;hudBest.textContent=best.toLocaleString('en-US');try{localStorage.setItem(saveKey,String(best))}catch(e){}}},
@@ -62,7 +62,7 @@ function action(name){if(name==='pause'){togglePause();return}if(name==='sound')
 play.addEventListener('click',start);el('pauseButton').addEventListener('click',()=>action('pause'));el('soundButton').addEventListener('click',()=>action('sound'));
 document.querySelectorAll('[data-control]').forEach(b=>{b.addEventListener('click',()=>action(b.dataset.control))});
 cvs.addEventListener('pointerdown',e=>{if(!running||paused)return;const r=cvs.getBoundingClientRect(),x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*H/r.height;if(game.pointer)game.pointer(x,y);cvs.focus()});
-document.addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();if(e.key==='Escape'||e.key.toLowerCase()==='p'){if(!e.repeat)togglePause();return}keys.add(e.key.toLowerCase());if(!running||paused)return;if(game.key&&!e.repeat)game.key(e.key.toLowerCase())});
+document.addEventListener('keydown',e=>{const t=e.target;if(t&&t!==cvs&&t!==document.body&&t!==document)return;if(e.key==='Escape'||e.key.toLowerCase()==='p'){if(!e.repeat)togglePause();return}if(!running||paused)return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();keys.add(e.key.toLowerCase());if(game.key&&!e.repeat)game.key(e.key.toLowerCase())});
 document.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));window.addEventListener('blur',()=>{if(running&&!paused)togglePause()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&running&&!paused)togglePause()});
 function frame(ts){const dt=Math.min(.045,last?(ts-last)/1000:0);last=ts;if(running&&!paused){clock+=dt;game.update(dt)}game.draw();requestAnimationFrame(frame)}requestAnimationFrame(frame);
