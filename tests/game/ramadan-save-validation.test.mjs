@@ -77,3 +77,30 @@ test('restore branch presents completed stage results instead of trapping player
   assert.match(client, /showResult\('منطقه پاکسازی شد'/);
   assert.match(client, /showScreen\('game'\);last=performance\.now\(\);requestAnimationFrame\(frame\)/);
 });
+
+
+test('accepts live projectiles and rejects projectiles with invalid movement or damage', () => {
+  const hostile = {x: 4, y: 6, life: 3, vx: 2, vy: -3, hp: 8};
+  const missile = {x: 2.5, y: 7.5, life: 2, vx: 7.5, vy: 0, targetId: 0};
+  assert.equal(validateCampaignSave({...fresh(), hostile: [hostile], missiles: [missile]}), true);
+  for (const bad of [{...hostile, vx: undefined}, {...hostile, vy: Infinity},
+    {...hostile, hp: '8'}, {...hostile, vx: 1000}]) {
+    assert.equal(validateCampaignSave({...fresh(), hostile: [bad]}), false);
+  }
+  for (const bad of [{...missile, vx: undefined}, {...missile, vy: NaN},
+    {...missile, targetId: 30}, {...missile, targetId: '0'}]) {
+    assert.equal(validateCampaignSave({...fresh(), missiles: [bad]}), false);
+  }
+});
+
+test('rejects corrupt saved clocks and drone impact coordinates without breaking legacy saves', () => {
+  assert.equal(validateCampaignSave({...fresh(), time: 37.5, enemyTimer: -.5, strikeX: 8, strikeY: 7}), true);
+  for (const field of ['time', 'enemyTimer', 'shotTimer', 'reloadTimer', 'comboTimer',
+    'rocketTimer', 'droneTimer', 'skillTimer', 'shield', 'strikeTimer', 'hitFlash',
+    'explosionTimer', 'muzzle', 'freeze']) {
+    assert.equal(validateCampaignSave({...fresh(), [field]: Infinity}), false, field);
+    assert.equal(validateCampaignSave({...fresh(), [field]: '0'}), false, field);
+  }
+  for (const patch of [{strikeX: NaN}, {strikeY: Infinity}, {strikeX: '5'}])
+    assert.equal(validateCampaignSave({...fresh(), ...patch}), false);
+});
