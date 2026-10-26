@@ -1,0 +1,35 @@
+name: Game focus-loss input regression (non-deploy)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'games/ramadan-war/game.js'
+      - 'games/ramadan-war/site-smoke.cjs'
+      - 'games/crown-defender/index.html'
+      - 'tests/game/crown-v120.cjs'
+      - '.github/workflows/mpw-game-focus-regression-20261026.yml'
+permissions:
+  contents: read
+jobs:
+  focus-loss-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Parse both games and execute Crown Defender runtime regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check games/ramadan-war/game.js
+          node --check games/ramadan-war/site-smoke.cjs
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('games/crown-defender/index.html').read_text('utf-8')
+          assert src.count('<script>') == 1
+          Path('/tmp/crown-focus-regression.js').write_text(src.split('<script>',1)[1].split('</script>',1)[0], 'utf-8')
+          PY
+          node --check /tmp/crown-focus-regression.js
+          node tests/game/crown-v120.cjs
+          echo 'GAME_FOCUS_LOSS_REGRESSION=PASS'
