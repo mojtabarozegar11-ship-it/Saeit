@@ -95,7 +95,7 @@ def upload_video(account: dict, content: dict, token: str, transport, *, media_r
                 rid = response.payload.get("id")
                 if not isinstance(rid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{6,40}", rid):
                     raise Uncertain("YouTube video ID absent")
-                return DispatchOutcome("published", rid)
+                return DispatchOutcome("submitted", rid, "YouTube accepted video upload; privacy and processing status require separate confirmation")
             if response.status != 308:
                 raise Uncertain("YouTube upload returned unexpected state")
             server_range = response.headers.get("Range") or response.headers.get("range")
