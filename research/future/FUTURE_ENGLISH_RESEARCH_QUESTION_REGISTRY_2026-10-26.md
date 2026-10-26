@@ -1,0 +1,68 @@
+# Future English Research Question Registry — exploratory queue, not manuscripts
+
+**Prepared:** 2026-10-26. **Scope:** 46 owner-specified subjects. **Priority:** A=near-term candidate for data feasibility; B=needs specialized source/field records; C=high rights/ethics/market-data barrier. **Status of every entry: QUESTION ONLY — NOT RESEARCH RESULT, NOT VERIFIED NOVELTY, NOT AN ARTICLE.** Existing MR-2026-001, AE-2026-001 and ZM-R01 take precedence.
+
+Each question must pass a literature search, independent originality screen, reproducible data-availability and licensing check, ethics/animal welfare or chemical-safety requirements where applicable, a locked analysis protocol and a critical internal AI review **before** becoming an active manuscript. No results, DOI, human authorship, experiments, datasets or publication approval are implied. Proposed methods and candidate data sources are **not** proof that compatible series exist.
+
+Candidate official data portals verified at portal level on 2026-10-26: FAOSTAT https://www.fao.org/faostat/en/ (free country-level crops/livestock and fertilizer/pesticide series), USDA NASS Quick Stats https://www.nass.usda.gov/Quick_Stats/ (US commodity and regional statistics; API may require a key), and FAO AGRIS https://www.fao.org/agris/ (bibliographic discovery, **not** guaranteed full text). FAO data explorer https://dataexplorer.fao.org/ is explicitly **beta**, so do not assume all FishStat series are available there. Commodity-specific data quality and licenses remain unverified.
+
+## Topic queue
+
+| ID | Topic | Testable candidate question | Proposed method | Candidate source / hard data gate | Priority |
+|---|---|---|---|---|---|
+| FUT-001 | Dairy cattle | How sensitive is milk output per cow to heat stress and feed costs across regions? | panel association; weather matching | FAOSTAT; national herd data; meteorology | A |
+| FUT-002 | Laying hens | How do feed-price changes correlate with egg production margins? | cost-accounting sensitivity | FAOSTAT; USDA NASS; price series | A |
+| FUT-003 | Broilers | How do feed-conversion assumptions affect break-even production costs? | scenario accounting | public feed and poultry price series; farm cost records needed | A |
+| FUT-004 | Sturgeon aquaculture | How do long grow-out cycles affect discounted cash flow and mortality risk? | stochastic farm cash flow | official aquaculture output; farm cohorts needed | B |
+| FUT-005 | Warm-water fish | What is the effect of feed and survival uncertainty on pond profitability? | stochastic sensitivity | FAO fishery data; farm-level FCR needed | A |
+| FUT-006 | Cold-water fish | How do temperature and feed prices jointly constrain unit margins? | weather-linked farm cost model | official aquaculture and climate series; farm costs needed | A |
+| FUT-007 | Pistachio | How do alternate bearing and drought risk change farm income volatility? | yield-risk panel | FAOSTAT; NASS; climate data | A |
+| FUT-008 | Olive | How do irrigation constraints alter yield and gross margin by production system? | matched region descriptive panel | FAOSTAT; weather; farm costs needed | B |
+| FUT-009 | Citrus | How do heat and water deficits predict yield anomalies by species? | weather-yield panel | FAOSTAT; national commodity records | A |
+| FUT-010 | Greenhouse | What energy-price threshold changes the optimal heating and crop choice? | partial-budget scenario | official energy prices; commercial farm costs needed | A |
+| FUT-011 | Mushrooms | How do substrate costs and contamination loss affect profit thresholds? | cost and loss sensitivity | substrate market series; grower data needed | B |
+| FUT-012 | Wheat | How sensitive are country yield trends to heat and precipitation anomalies? | country-year panel | FAOSTAT; weather reanalysis | A |
+| FUT-013 | Barley | Are rainfall anomalies associated with barley yield variability? | panel with fixed effects | FAOSTAT; climate grids | A |
+| FUT-014 | Rice paddy | How do irrigation water costs affect rice production margins? | partial budget; water accounting | FAOSTAT; irrigation cost data needed | A |
+| FUT-015 | Livestock feed | How does feed ingredient price substitution affect ration cost under nutrition constraints? | linear programming | feed composition tables; verified prices | A |
+| FUT-016 | Dairy processing | What is the break-even sensitivity of milk-to-cheese conversion under energy costs? | engineering economic balance | published conversion coefficients; audited costs needed | B |
+| FUT-017 | Functional foods | How do evidence and labeling rules constrain claims for enriched foods? | systematic regulatory mapping | official FDA/EFSA regulations; clinical trials | B |
+| FUT-018 | Biologics/biotechnology | What is the evidence quality for microbial bioinputs on crop yield? | systematic review/meta-analysis feasibility | registered field trials and peer-reviewed studies | B |
+| FUT-019 | Nanotechnology | What reproducibility gaps exist in nano-fertilizer field trials? | systematic methodological audit | published trials; registered protocols | B |
+| FUT-020 | Walnut | How does late frost exposure relate to walnut yield variability? | climate-yield panel | national yield series; weather | B |
+| FUT-021 | Almond | How do irrigation constraints interact with price volatility for orchard returns? | scenario farm economics | USDA NASS; FAOSTAT; water prices needed | A |
+| FUT-022 | Fig | How does postharvest loss affect producer-to-market value capture? | value-chain loss accounting | FAOSTAT; documented loss studies | B |
+| FUT-023 | Hazelnut | Are regional yield trends robust to climate and price shocks? | panel descriptive sensitivity | FAOSTAT; weather; trade data | B |
+| FUT-024 | Kiwi | How do chilling-hour deficits associate with yield anomalies? | weather-yield panel | FAOSTAT; climate station series | B |
+| FUT-025 | Nursery seedlings | Which quality and survival parameters dominate nursery break-even cost? | cost and survival threshold model | nursery accounting data needed | B |
+| FUT-026 | Sheep | How do feed and veterinary cost shocks affect flock profitability? | stochastic gross margin | FAOSTAT; national prices; farm costs needed | A |
+| FUT-027 | Goats | How do herd size and kidding rate alter unit production costs? | bioeconomic herd model | official livestock series; herd records needed | B |
+| FUT-028 | Buffalo | How do milk yields and feed costs compare across buffalo systems? | harmonized descriptive accounting | FAOSTAT; verified herd-level data needed | B |
+| FUT-029 | Camels | What milk-market and feed assumptions determine camel herd break-even? | partial budget | FAOSTAT; local producer records needed | B |
+| FUT-030 | Ostriches | How does low-volume processing capacity affect ostrich unit economics? | capacity utilization model | licensed facility costs needed | C |
+| FUT-031 | Medicinal plants | How do cultivation costs compare with wild-harvest supply risks? | value-chain and sustainability accounting | trade/production data; permits needed | B |
+| FUT-032 | Herbal medicines | What clinical evidence supports selected herbal product efficacy and safety claims? | systematic review of RCTs | trial registries; regulator monographs | B |
+| FUT-033 | Tomatoes and paste | How do raw-material price and soluble-solids yield affect paste margins? | processing mass balance | FAOSTAT; processing yield and price data | A |
+| FUT-034 | Pickles and preserves | What raw material and packaging cost thresholds drive margins? | processing cost model | audited process recipes and prices needed | B |
+| FUT-035 | Compotes and canned foods | How do energy and can-material price shocks affect unit cost? | industrial cost sensitivity | public material prices; plant records needed | B |
+| FUT-036 | Fertilizers | How does fertilizer price volatility alter crop gross margins? | commodity price linkage | FAOSTAT fertilizer and crop data | A |
+| FUT-037 | Pesticides and IPM | What is the comparative evidence on cost-effectiveness of IPM vs chemical programs? | systematic review and cost audit | field trial literature; pesticide use statistics | B |
+| FUT-038 | Seeds | How do seed replacement rates affect expected yield and cost? | scenario and observational synthesis | official seed statistics; trials needed | B |
+| FUT-039 | Deer/gazelle breeding | What genetic diversity and welfare safeguards are required for conservation breeding? | ethical conservation-genetics review | licensed conservation records; permits needed | C |
+| FUT-040 | Horse breeding | How do inbreeding coefficients relate to performance and welfare outcomes? | pedigree study feasibility | authorized pedigree data; ethics approvals | C |
+| FUT-041 | Alfalfa | How do irrigation and cutting-frequency choices affect economic water productivity? | farm water-cost model | FAOSTAT; agronomic trial data | A |
+| FUT-042 | Canola | How do fertilizer and oilseed price shocks affect break-even yield? | gross margin sensitivity | FAOSTAT; national farm budgets | A |
+| FUT-043 | Leather | How do hide supply and effluent compliance costs influence tannery economics? | value-chain and environmental costing | official production/trade; plant records | B |
+| FUT-044 | Wool | How do fiber quality grades affect producer price dispersion? | hedonic price model | verified wool auction microdata needed | B |
+| FUT-045 | Carpets | How do material costs and labor intensity affect handmade carpet pricing? | value-chain cost decomposition | documented sales and labor records needed | B |
+| FUT-046 | Gemstones | How do disclosure and treatment certifications affect gemstone price comparability? | hedonic price study design | verified auction records and lab reports needed | C |
+
+## Novelty and integrity gate for every topic
+
+1. Record at least two closely competing peer-reviewed studies and compare **specific estimands, population, data vintage and method**. Merely changing a crop/animal name or geography is not originality.
+2. Verify that the required **actual observations**, units, time range, country/region identifiers, licensing, and source revision history exist. Candidate portal ≠ acquired dataset.
+3. Specify the research question, primary outcome, exclusion rule, confounding risks, model and sensitivity plan **before** looking at outcome contrasts wherever feasible.
+4. For animal breeding, wildlife and pharmacological topics, require ethics, conservation permits, welfare and clinical-safety restrictions; no breeding/clinical trials or hazardous chemical work is authorized.
+5. Only promote to active manuscript after a scientific feasibility memo with genuine source checks and internal critical review. **No submission without the human owner's manuscript and declaration approval.**
+
+**Operational rule:** this registry counts as **one queue-management artifact**, not 46 new studies or 46 successful actions. No production claim is made.
