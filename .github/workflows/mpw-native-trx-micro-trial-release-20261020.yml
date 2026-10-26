@@ -238,3 +238,4 @@ jobs:
 # 2026-10-26: release after fixing trial-only product detail metadata and purchase CTA.
 # 2026-10-26: verify effective Django template origin for trial purchase CTA.
 # 2026-10-26: confirm rendered accessible 3-cent checkout anchor after template processing.
+# 2026-10-26: validate secure checkout directly from the low-value store card.
