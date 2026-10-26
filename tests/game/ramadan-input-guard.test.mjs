@@ -76,3 +76,13 @@ test('five HUD buttons preserve pointer activation and gain keyboard or screen-r
   }
   assert.match(game, /import \{[^}]*isKeyboardOrAssistiveClick[^}]*\} from '\.\/input-guard\.mjs'/);
 });
+
+
+test('scope toggle state and game feedback are exposed to assistive technology', () => {
+  const html = readFileSync(new URL('../../games/ramadan-war/index.html', import.meta.url), 'utf8');
+  const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
+  assert.match(html, /id="toast"[^>]*role="status"[^>]*aria-live="polite"[^>]*aria-atomic="true"/);
+  assert.match(html, /id="scope"[^>]*aria-pressed="false"/);
+  assert.ok(game.includes("$('#scope').setAttribute('aria-pressed',String(scoped))"), 'scope toggles expose state');
+  assert.ok(game.includes("$('#scope').setAttribute('aria-pressed','false')"), 'new game resets scope state');
+});
