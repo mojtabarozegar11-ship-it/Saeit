@@ -106,7 +106,9 @@ jobs:
           target="$ops/autonomous-product-runtime/scripts/factory_quality_production_workorders_v1.py"
           test "$(id -un)" = githubops
           test -x "$python" && test -d "$private/quality-excellence/rework"
-          test -f "$target" && test ! -L "$target"
+          test -d "$(dirname "$target")" && test ! -L "$(dirname "$target")"
+          # The other factory publisher can replace this script between staging and locks.
+          # Resolve the exact installed state only after acquiring both production locks.
           test -f "$stage/workorders.py" && test -f "$stage/quality.py"
           # Keep the evaluator's catalogue dependency beside its staged module.
           cp -p "$stage/quality.py" "$stage/factory_quality_1000_v2.py"
@@ -117,8 +119,16 @@ jobs:
           flock -w 90 9
           backup="$ops/backups/quality-lanes-$run_id"
           install -d -m 700 "$backup"
-          cp -p "$target" "$backup/workorders.py"
-          test "$(sha256sum "$target" | awk '{print $1}')" = "$(sha256sum "$backup/workorders.py" | awk '{print $1}')"
+          if test -f "$target" && test ! -L "$target"; then
+            cp -p "$target" "$backup/workorders.py"
+            test "$(sha256sum "$target" | awk '{print $1}')" = "$(sha256sum "$backup/workorders.py" | awk '{print $1}')"
+            echo FACTORY_EXISTING_QA_SCRIPT_BACKUP=PASS
+          elif test -e "$target" || test -L "$target"; then
+            echo FACTORY_QA_SCRIPT_UNEXPECTED_FILE_TYPE=BLOCKED >&2
+            exit 1
+          else
+            echo FACTORY_EXISTING_QA_SCRIPT=ABSENT_RESTORE_FROM_VERIFIED_SOURCE
+          fi
           # Run once with fresh, hash-matched source; immutable queue receipts remain.
           "$python" -B "$stage/workorders.py" --private-root "$private" --quality-module "$stage/quality.py" --catalog "$stage/quality_100_criteria.json" --run-id "quality-lanes-$run_id"
           tmp="$(mktemp "$(dirname "$target")/.workorders.XXXXXXXX")"
