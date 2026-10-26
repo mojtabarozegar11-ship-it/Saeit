@@ -2,6 +2,8 @@
 const mount=document.getElementById("mpw-functional-tool");
 if(!mount)return;
 const slug=mount.dataset.tool||"";
+const metric=(event)=>{if(!/^(tool_generated|quote_click|game_interacted)$/.test(event))return;try{const beacon=new Image(1,1);beacon.src="/mpw-editorial/revenue/metrics.php?slug="+encodeURIComponent(slug)+"&event="+event+"&r="+Math.random().toString(36).slice(2)}catch{}};
+document.querySelectorAll('a[data-cta="quote"]').forEach(a=>a.addEventListener("click",()=>metric("quote_click")));
 const $=(tag,attrs={},...kids)=>{const e=document.createElement(tag);for(const [k,v] of Object.entries(attrs)){if(k==="className")e.className=v;else if(k==="text")e.textContent=String(v);else if(k==="value")e.value=String(v);else e.setAttribute(k,String(v))}for(const v of kids)if(v!=null)e.append(typeof v==="string"?document.createTextNode(v):v);return e};
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const trim=s=>String(s??"").trim().slice(0,600);
@@ -104,7 +106,7 @@ function run(){
   }
 }
 if(slug==="browser-games"){
- let value=0,moves=0;
+ let value=0,moves=0,logged=false;
  const display=$("h3",{text:"Value: 0 · Moves: 0/4"}),msg=$("p",{text:"Try to reach exactly 24 in four operations."});
  const ops=$("div",{className:"mpw-game-controls"});
  const reset=()=>{value=0;moves=0;display.textContent="Value: 0 · Moves: 0/4";msg.textContent="Try to reach exactly 24 in four operations."};
@@ -112,6 +114,7 @@ if(slug==="browser-games"){
   const b=$("button",{type:"button",className:"mpw-game-btn",text:op+" "+n});
   b.onclick=()=>{
     if(moves>=4)return;
+    if(!logged){metric("game_interacted");logged=true;}
     value=op==="+"?value+n:op==="−"?value-n:value*n;
     moves++;display.textContent="Value: "+value+" · Moves: "+moves+"/4";
     msg.textContent=moves===4?(value===24?"Success! You reached exactly 24.":"Finished at "+value+". Try another strategy."):("Keep going — "+(4-moves)+" moves left.");
@@ -119,5 +122,5 @@ if(slug==="browser-games"){
  }
  const start=$("button",{type:"button",className:"mpw-tool-button",text:"Restart puzzle"});start.onclick=reset;
  result.append(display,msg,ops,start);
-}else{form.addEventListener("submit",e=>{e.preventDefault();try{run()}catch(error){result.replaceChildren($("p",{text:"The input could not be processed. Check the fields and try again."}))}})}
+}else{form.addEventListener("submit",e=>{e.preventDefault();try{run();if(result.querySelector("h3"))metric("tool_generated")}catch(error){result.replaceChildren($("p",{text:"The input could not be processed. Check the fields and try again."}))}})}
 })();
