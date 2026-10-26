@@ -71,7 +71,7 @@ jobs:
           install -d -m 700 "$d" "$d/parser"
           python3 -m pip install --disable-pip-version-check --no-deps --require-hashes --target "$d/parser" -r .github/requirements/mpw-pdf-parser.txt
           PYTHONPATH="$d/parser" python3 -c 'import PyPDF2; assert PyPDF2.__version__ == "3.0.1"'
-          tar -C "$d/parser" -czf "$d/PyPDF2-3.0.1.tar.gz" PyPDF2 PyPDF2-3.0.1.dist-info
+          tar -C "$d/parser" -czf "$d/PyPDF2-3.0.1.tar.gz" PyPDF2 pypdf2-3.0.1.dist-info
           sha256sum "$d/PyPDF2-3.0.1.tar.gz" > "$d/PyPDF2-3.0.1.tar.gz.sha256"
       - name: Establish pinned no-agent-forwarding GitHub to VPS to cPanel relay
         shell: bash
@@ -155,7 +155,7 @@ jobs:
                   raise SystemExit("PARSER_ARCHIVE_MEMBER_LIMIT")
               for member in members:
                   p = pathlib.PurePosixPath(member.name)
-                  if p.is_absolute() or ".." in p.parts or not p.parts or p.parts[0] not in {"PyPDF2", "PyPDF2-3.0.1.dist-info"}:
+                  if p.is_absolute() or ".." in p.parts or not p.parts or p.parts[0] not in {"PyPDF2", "pypdf2-3.0.1.dist-info"}:
                       raise SystemExit("PARSER_ARCHIVE_PATH_INVALID")
                   if not (member.isdir() or member.isfile()) or member.issym() or member.islnk():
                       raise SystemExit("PARSER_ARCHIVE_TYPE_INVALID")
