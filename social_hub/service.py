@@ -18,7 +18,11 @@ def connection_status(store, env=None):
             "owner_verified": bool(account["verified"]),
             "token_present": bool(env.get(token_alias, "")),
             "outbound_enabled": env.get("MPW_SOCIAL_OUTBOUND_ENABLED") == "1",
-            "connected": bool(account["verified"]) and bool(env.get(token_alias, "")),
+            # Configuration is not evidence that the provider accepted the OAuth
+            # scope, recognizes account ownership, or permits publishing.
+            "configuration_ready": bool(account["verified"]) and bool(env.get(token_alias, "")),
+            "connected": False,
+            "provider_verified": False,
         })
     return out
 
