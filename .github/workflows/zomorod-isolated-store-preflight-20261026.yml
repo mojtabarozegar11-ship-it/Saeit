@@ -1,0 +1,33 @@
+name: Zomorod isolated native store preflight
+on:
+  push:
+    branches: ["fix/zomorod-store-security-accessibility-20261026"]
+    paths:
+      - "content/zomorod-v11/store_index.php"
+      - "tests/test_zomorod_store_live_harden_20261026.py"
+      - ".github/workflows/zomorod-isolated-store-preflight-20261026.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: PHP syntax, isolated store behavior and accessibility contracts
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-v11/store_index.php
+          python3 -m unittest discover -s tests -p 'test_zomorod_store_live_harden_20261026.py' -v
+          python3 -m unittest discover -s tests -p 'test_zomorod_free_seed_product.py' -v
+      - name: Domain-only live baseline (read only; NOT a deployment verification)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 25 --retry 1 https://zomorodmelal.ir/store/ -o "$RUNNER_TEMP/zomorod-store.html"
+          grep -Fq 'درگاه بانک شهر' "$RUNNER_TEMP/zomorod-store.html"
+          grep -Fq 'پرداخت' "$RUNNER_TEMP/zomorod-store.html"
+          echo "ZM_LIVE_BASELINE_READ_ONLY=PASS"
