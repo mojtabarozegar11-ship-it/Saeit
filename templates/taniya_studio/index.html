@@ -120,6 +120,10 @@ function mountCake(){
  let icing='#ff79b8',topping='🍓',candles=0,greeting='My celebration cake';
  const storageKey='taniya-cake-design-v1';
  const history=[],future=[];
+ let ordersCompleted=0,orderFulfilled=false,order=null;
+ const orderColors=['#ff79b8','#4488cc','#73bc8b','#f2b36d'],orderTops=['🍓','🌼','🍬'],orderGreetings=['My celebration cake','Happy Birthday','Congratulations','Just Because'];
+ function newCustomerOrder(){const pick=arr=>arr[Math.floor(Math.random()*arr.length)];order={icing:pick(orderColors),topping:pick(orderTops),candles:Math.floor(Math.random()*6),greeting:pick(orderGreetings)};orderFulfilled=false}
+ newCustomerOrder();
  function remember(){history.push({icing,topping,candles,greeting});if(history.length>20)history.shift();future.length=0}
  try{const raw=localStorage.getItem(storageKey);if(raw&&raw.length<512){const d=JSON.parse(raw);if(d&&typeof d==='object'&&!Array.isArray(d)){
   if(typeof d.icing==='string'&&/^#[0-9a-f]{6}$/i.test(d.icing))icing=d.icing;
@@ -128,14 +132,16 @@ function mountCake(){
   if(['My celebration cake','Happy Birthday','Congratulations','Just Because'].includes(d.greeting))greeting=d.greeting;
  }}}catch(e){}
  function draw(){
-  stage('<div class="game-toolbar"><b>Design a celebration cake</b><span>Layers, toppings and up to 12 candles</span></div>'+
+  stage('<div class="game-toolbar"><b>Design a celebration cake</b><span>Orders completed: '+ordersCompleted+' · Up to 12 candles</span></div>'+
+   '<p class="game-message" id="cakeOrder" aria-live="polite">Customer order: frosting '+order.icing+' · '+order.topping+' · '+order.candles+' candle(s) · '+order.greeting+(orderFulfilled?' · COMPLETE ✓':'')+'</p>'+ 
    '<div class="play-preview" id="cakepreview" role="img" aria-label="Cake preview" style="min-height:230px"></div>'+
    '<div class="choice-row"><label class="game-action">Frosting <input id="icing" type="color" value="'+icing+'" aria-label="Choose frosting color"></label>'+
+   '<button class="game-action" type="button" data-icing="#ff79b8">Pink frosting</button><button class="game-action" type="button" data-icing="#4488cc">Blue frosting</button><button class="game-action" type="button" data-icing="#73bc8b">Green frosting</button><button class="game-action" type="button" data-icing="#f2b36d">Gold frosting</button>'+ 
    '<button class="game-action" type="button" data-top="🍓">🍓 berries</button>'+
    '<button class="game-action" type="button" data-top="🌼">🌼 flowers</button>'+
    '<button class="game-action" type="button" data-top="🍬">🍬 sweets</button></div>'+
    '<div class="choice-row"><label class="game-action">Card message <select id="cakeGreeting" aria-label="Choose card greeting"><option>My celebration cake</option><option>Happy Birthday</option><option>Congratulations</option><option>Just Because</option></select></label></div>'+ 
-   '<div class="game-actions">'+btn('Add a candle 🕯️','candle')+btn('Remove last candle','cake-remove')+btn('Download this cake card','cake-download')+btn('Undo last edit','cake-undo')+btn('Redo last edit','cake-redo')+btn('Surprise me 🎲','cake-surprise')+btn('Start over','cake-reset')+'</div>'+
+   '<div class="game-actions">'+btn('Add a candle 🕯️','candle')+btn('Remove last candle','cake-remove')+btn('Download this cake card','cake-download')+btn('Undo last edit','cake-undo')+btn('Redo last edit','cake-redo')+btn('Surprise me 🎲','cake-surprise')+btn('Check customer order','cake-check')+btn('New customer order','cake-order')+btn('Start over','cake-reset')+'</div>'+
    '<p class="game-message" aria-live="polite">Your design is saved in the downloaded SVG card.</p>');
   const preview=$('#cakepreview',gamebody);
   function renderPreview(){preview.innerHTML='<svg viewBox="150 400 600 620" width="230" height="230" aria-hidden="true">'+cakeCardMarkup(icing,topping,candles,greeting)+'</svg>';
@@ -147,6 +153,7 @@ function mountCake(){
   $('#icing',gamebody).oninput=e=>{if(!colorEditing){remember();colorEditing=true}icing=e.target.value;renderPreview()};
   $('#icing',gamebody).onchange=e=>{if(!colorEditing&&icing!==e.target.value)remember();icing=e.target.value;colorEditing=false;renderPreview()};
   $('#cakeGreeting',gamebody).onchange=e=>{remember();greeting=e.target.value;renderPreview();say('Your card greeting is updated.')};
+  gamebody.querySelectorAll('[data-icing]').forEach(b=>b.onclick=()=>{if(icing===b.dataset.icing)return;remember();icing=b.dataset.icing;draw();say('Frosting selected for the customer order.')});
   gamebody.querySelectorAll('[data-top]').forEach(b=>b.onclick=()=>{remember();topping=b.dataset.top;renderPreview();say('Topping selected. Add candles or download your cake.')});
   gamebody.querySelector('[data-action="candle"]').onclick=()=>{if(candles>=12){say('Your cake already has twelve candles.');return}remember();candles++;renderPreview();say(candles+' candle'+(candles===1?'':'s')+' added.')};
   gamebody.querySelector('[data-action="cake-remove"]').onclick=()=>{if(candles===0){say('No candles to remove yet.');return}remember();candles--;renderPreview();say(candles+' candles remain.')};
@@ -156,6 +163,8 @@ function mountCake(){
    candles=1+Math.floor(Math.random()*12);greeting=messages[Math.floor(Math.random()*messages.length)];
    draw();say('A surprise cake was designed. Undo restores your previous design.');
   };
+  gamebody.querySelector('[data-action="cake-check"]').onclick=()=>{if(orderFulfilled){say('This order is already completed. Choose a new order.');return}const missing=[];if(icing!==order.icing)missing.push('frosting');if(topping!==order.topping)missing.push('topping');if(candles!==order.candles)missing.push('candles');if(greeting!==order.greeting)missing.push('card message');if(missing.length){say('Almost there! Match the '+missing.join(', ')+'.');return}orderFulfilled=true;ordersCompleted++;draw();say('Customer order complete! Great decorating.')};
+  gamebody.querySelector('[data-action="cake-order"]').onclick=()=>{newCustomerOrder();draw();say('A new customer order is ready.')};
   gamebody.querySelector('[data-action="cake-reset"]').onclick=()=>{remember();icing='#ff79b8';topping='🍓';candles=0;greeting='My celebration cake';draw();say('A fresh cake is ready to decorate.')};
   gamebody.querySelector('[data-action="cake-undo"]').onclick=()=>{const previous=history.pop();if(!previous){say('Nothing to undo yet.');return}future.push({icing,topping,candles,greeting});({icing,topping,candles,greeting}=previous);draw();say('Your last edit was undone.')};
   gamebody.querySelector('[data-action="cake-redo"]').onclick=()=>{const next=future.pop();if(!next){say('Nothing to redo yet.');return}history.push({icing,topping,candles,greeting});if(history.length>20)history.shift();({icing,topping,candles,greeting}=next);draw();say('Your last undone edit was restored.')};
