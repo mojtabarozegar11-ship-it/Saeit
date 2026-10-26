@@ -63,7 +63,7 @@ def _write_private_json(path, value):
     try:
         with os.fdopen(fd, "w", encoding="utf8") as stream:
             json.dump(value, stream, ensure_ascii=False, sort_keys=True, indent=2)
-            stream.write("\\n")
+            stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
         os.chmod(temporary, 0o600)
