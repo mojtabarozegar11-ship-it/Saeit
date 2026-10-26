@@ -119,8 +119,8 @@ Total output lines: 1
 function mountCake(){
  let icing='#ff79b8',topping='🍓',candles=0,greeting='My celebration cake';
  const storageKey='taniya-cake-design-v1';
- const history=[];
- function remember(){history.push({icing,topping,candles,greeting});if(history.length>20)history.shift()}
+ const history=[],future=[];
+ function remember(){history.push({icing,topping,candles,greeting});if(history.length>20)history.shift();future.length=0}
  try{const raw=localStorage.getItem(storageKey);if(raw&&raw.length<512){const d=JSON.parse(raw);if(d&&typeof d==='object'&&!Array.isArray(d)){
   if(typeof d.icing==='string'&&/^#[0-9a-f]{6}$/i.test(d.icing))icing=d.icing;
   if(['🍓','🌼','🍬'].includes(d.topping))topping=d.topping;
@@ -135,7 +135,7 @@ function mountCake(){
    '<button class="game-action" type="button" data-top="🌼">🌼 flowers</button>'+
    '<button class="game-action" type="button" data-top="🍬">🍬 sweets</button></div>'+
    '<div class="choice-row"><label class="game-action">Card message <select id="cakeGreeting" aria-label="Choose card greeting"><option>My celebration cake</option><option>Happy Birthday</option><option>Congratulations</option><option>Just Because</option></select></label></div>'+ 
-   '<div class="game-actions">'+btn('Add a candle 🕯️','candle')+btn('Remove last candle','cake-remove')+btn('Download this cake card','cake-download')+btn('Undo last edit','cake-undo')+btn('Surprise me 🎲','cake-surprise')+btn('Start over','cake-reset')+'</div>'+
+   '<div class="game-actions">'+btn('Add a candle 🕯️','candle')+btn('Remove last candle','cake-remove')+btn('Download this cake card','cake-download')+btn('Undo last edit','cake-undo')+btn('Redo last edit','cake-redo')+btn('Surprise me 🎲','cake-surprise')+btn('Start over','cake-reset')+'</div>'+
    '<p class="game-message" aria-live="polite">Your design is saved in the downloaded SVG card.</p>');
   const preview=$('#cakepreview',gamebody);
   function renderPreview(){preview.innerHTML='<svg viewBox="150 400 600 620" width="230" height="230" aria-hidden="true">'+cakeCardMarkup(icing,topping,candles,greeting)+'</svg>';
@@ -155,7 +155,8 @@ function mountCake(){
    draw();say('A surprise cake was designed. Undo restores your previous design.');
   };
   gamebody.querySelector('[data-action="cake-reset"]').onclick=()=>{remember();icing='#ff79b8';topping='🍓';candles=0;greeting='My celebration cake';draw();say('A fresh cake is ready to decorate.')};
-  gamebody.querySelector('[data-action="cake-undo"]').onclick=()=>{const previous=history.pop();if(!previous){say('Nothing to undo yet.');return}({icing,topping,candles,greeting}=previous);draw();say('Your last edit was undone.')};
+  gamebody.querySelector('[data-action="cake-undo"]').onclick=()=>{const previous=history.pop();if(!previous){say('Nothing to undo yet.');return}future.push({icing,topping,candles,greeting});({icing,topping,candles,greeting}=previous);draw();say('Your last edit was undone.')};
+  gamebody.querySelector('[data-action="cake-redo"]').onclick=()=>{const next=future.pop();if(!next){say('Nothing to redo yet.');return}history.push({icing,topping,candles,greeting});if(history.length>20)history.shift();({icing,topping,candles,greeting}=next);draw();say('Your last undone edit was restored.')};
   gamebody.querySelector('[data-action="cake-download"]').onclick=()=>{downloadSvg('taniya-custom-cake-card',cakeCardMarkup(icing,topping,candles,greeting));say('Your customized cake card has been downloaded.')};
  }
  draw();
