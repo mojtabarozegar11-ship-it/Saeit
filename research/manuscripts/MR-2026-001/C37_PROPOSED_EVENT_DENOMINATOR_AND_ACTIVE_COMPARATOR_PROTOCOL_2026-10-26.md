@@ -15,6 +15,17 @@ Let `G` be the number of **distinct applicable recommendations generated** durin
 
 For every numerator/denominator, include number missing, reason missing, plot count, farm count, observation window, and whether the unit is messages, plots, people, days, irrigation events or volume. Do not equate `45/72` all-season SMS response participation with event-level implementation. Report ambiguous many-to-many matches separately rather than inflating action rates.
 
+## Four separate operational concordance estimands (Baroni 2019 comparator refinement)
+
+The original Wiley abstract of Baroni et al. (2019; DOI 10.1002/ird.2337) reports five of six scheduling methods agreeing on *seasonal irrigation volume* while disagreeing more on irrigation **season and event counts**; users rarely implemented recommendations. Accordingly, the following **four distinct proposed measures** must not be collapsed into a single compliance percentage:
+
+1. **Seasonal total-volume concordance:** for plot `p` and a fully specified season `T`, separately report `sum(observed_metered_m3) / sum(recommended_m3)` and its absolute difference, *only when both totals cover the same plot area, observation window, weather/crop assumptions and irrigation opportunity set*. Convert depths in mm to volumes using measured plot area; record metering uncertainty, omitted events and whether the advice itself changed. An estimated water requirement is not an observed delivered volume.
+2. **Event-count concordance:** report the number of distinct observed irrigation starts, number of actionable recommended events, and the matching algorithm's counts of one-to-one, one-to-many, many-to-one and unmatched events. Do not define `observed_event_count / recommendation_count` as a fraction of farmers who complied; a recommendation can legitimately be split or combined.
+3. **Event-timing concordance:** among uniquely or explicitly weighted matched event pairs only, report signed lag `actual_start_utc - advice_target_utc`, the prespecified allowed window, median absolute lag and percentage matched within tolerance, with the number of eligible/matched/ambiguous events. A receipt timestamp is not an irrigation start.
+4. **Dose concordance:** among verifiably matched actions, report `measured_depth_mm - recommended_depth_mm` and absolute/relative deviation with calibrated measurement error and missingness; do not infer correct dose from mere event occurrence or a survey answer.
+
+**Do not pool these metrics into one unvalidated adherence score.** Every denominator is plot-, event- and window-specific, and missing observation, explicit non-implementation, justified adaptation and device failure are distinct states. The original source does not supply the raw linked events to calculate these metrics; they are falsifiable definitions for a **future validation study**, not new observed findings or priority claims.
+
 ## Evidence and causal boundaries
 - `M`: physical water/soil/yield measurement with instrument, calibration, units and uncertainty.
 - `O`: independently verifiable, recommendation-linked action with an auditable record.
