@@ -40,6 +40,7 @@ def audit(root: Path, *, chapters: int = 30, chapter_target: int = 5300,
     parts = {i: [] for i in range(1, chapters + 1)}
     hashes = []
     flags = []
+    seen_segment_hashes = {}  # Detect exact repeated manuscript segments across chapters.
     total = 0
     for path in sorted(root.iterdir()):
         if path.name in ("status.json", "complete-unreviewed.md", ".authoring.lock"):
@@ -66,11 +67,15 @@ def audit(root: Path, *, chapters: int = 30, chapter_target: int = 5300,
             continue
         if any(token in text.casefold() for token in FORBIDDEN):
             flags.append("unsafe_content_marker:" + path.name)
+        digest = hashlib.sha256(raw).hexdigest()
+        first_path = seen_segment_hashes.setdefault(digest, path.name)
+        if first_path != path.name:
+            flags.append("duplicate_segment_content:" + path.name + ":" + first_path)
         n = len(substantive_words(text))
         counts[str(chapter)] += n
         total += n
         parts[chapter].append(part)
-        hashes.append({"name": path.name, "sha256": hashlib.sha256(raw).hexdigest(),
+        hashes.append({"name": path.name, "sha256": digest,
                        "substantive_words": n})
     for chapter, numbers in parts.items():
         if sorted(numbers) != list(range(1, len(numbers) + 1)):
