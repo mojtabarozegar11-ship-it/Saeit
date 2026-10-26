@@ -35,7 +35,7 @@ jobs:
           dois=set(re.findall(r'10\.\d{4,9}/[^\s)]+',refs[1]))
           dois={x.rstrip('.,;') for x in dois}
           assert len(dois)==22, f'Expected 22 unique DOI references, got {len(dois)}'
-          for marker in ['ARIS LIAS','0.23','0.94','six commercial','24%','7%','C37','not a validated','MAJOR REVISION']:
+          for marker in ['ARIS LIAS','0.23','0.94','six commercial','24%','7%','C37','strictly hypothetical identifiability check','30 mm applied','not a validated','MAJOR REVISION']:
               if marker=='MAJOR REVISION': continue
               assert marker.lower() in s.lower(), f'Missing source revision: {marker}'
           a=s.split('## Abstract',1)[1].split('\n## ',1)[0].strip()
@@ -65,7 +65,7 @@ jobs:
           p=Path('/tmp/mr-review/MR-2026-001_CURRENT_SOURCE_AUTHOR_REVIEW_NOT_SUBMITTED.docx')
           d=Document(p)
           text='\n'.join([x.text for x in d.paragraphs]+[c.text for t in d.tables for r in t.rows for c in r.cells])
-          for marker in ['ARIS LIAS','0.23','0.94','24%','7%','10.1007/s11269-012-0023-3']:
+          for marker in ['ARIS LIAS','0.23','0.94','24%','7%','30 mm applied','10.1007/s11269-012-0023-3']:
               assert marker in text, f'Word missing substantive source marker {marker}'
           assert len(d.tables)>=1 and p.stat().st_size>10000
           print('Word source-locked content QA PASS:',p.stat().st_size,'bytes; tables',len(d.tables))
