@@ -4,6 +4,7 @@ import os
 
 from .adapters import Blocked, Uncertain, send
 from .transport import http_transport
+from .credential_vault import credential_for, has_credential
 from .youtube import upload_video
 
 def connection_status(store, env=None):
@@ -14,6 +15,7 @@ def connection_status(store, env=None):
     out = []
     for account in store.accounts():
         token_alias = account["token_env"]
+        configured = has_credential(account,env=env)
         check = latest_checks.get(account["id"])
         fresh = False
         if check:
@@ -27,13 +29,13 @@ def connection_status(store, env=None):
             "platform": account["platform"], "destination": account["destination"],
             "credential_env_name": token_alias,
             "owner_verified": bool(account["verified"]),
-            "token_present": bool(env.get(token_alias, "")),
+            "token_present": configured,
             "outbound_enabled": env.get("MPW_SOCIAL_OUTBOUND_ENABLED") == "1",
             # Configuration is not evidence that the provider accepted the OAuth
             # scope, recognizes account ownership, or permits publishing.
-            "configuration_ready": bool(account["verified"]) and bool(env.get(token_alias, "")),
+            "configuration_ready": bool(account["verified"]) and configured,
             "connected": False,  # Sending permissions require separate publish receipt.
-            "provider_verified": bool(account["verified"] and env.get(token_alias) and
+            "provider_verified": bool(account["verified"] and configured and
                                       check and fresh and check["state"]=="identity_verified"),
             "provider_check_state": check["state"] if check and fresh else ("stale" if check else "not_checked"),
             "provider_checked_at": check["checked_at"] if check else "",
@@ -57,7 +59,7 @@ def run_one(store, post_id, *, env=None, transport=None, execute=False, actor="p
     account = store.account(item["account_id"])
     if not account or not account["verified"] or account["brand"] != item["brand"]:
         raise Blocked("Official account ownership not verified")
-    token = env.get(account["token_env"], "").strip()
+    token = credential_for(account,env=env)
     if len(token) < 6:
         raise Blocked("No private token configured for exact account")
     if not item["approved_by"] or not item["approved_at"]:

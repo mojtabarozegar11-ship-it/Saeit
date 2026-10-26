@@ -35,6 +35,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_public_official_20261026.py' -v
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_readonly_diagnostics_20261026.py' -v
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_connection_plan_20261026.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojtaba_social_private_bulk_credentials_20261026.py' -v
   deploy:
     needs: preflight
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'

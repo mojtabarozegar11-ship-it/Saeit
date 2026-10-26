@@ -16,6 +16,7 @@ from urllib.parse import quote, urlsplit
 from .adapters import Blocked, Uncertain, _server
 from .catalog import BRANDS, RESTRICTED_HANDLES
 from .transport import http_transport
+from .credential_vault import credential_for
 
 @dataclass(frozen=True)
 class Diagnostic:
@@ -269,7 +270,7 @@ def record_one(store, account_id, *, env=None, transport=None,
         raise Blocked("Owner attestation required first")
     if account["platform"] not in SUPPORTED:
         raise Blocked("Provider does not support read-only identity checks")
-    token=env.get(account["token_env"],"").strip()
+    token=credential_for(account,env=env)
     _bearer(token)
     recent=store.api_check(account_id)
     if recent and not force:
