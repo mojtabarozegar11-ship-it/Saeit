@@ -122,3 +122,32 @@ allowed.set('rwHero',5);
 assert.equal(allowed.get('rwHero'),'5','normal storage preserves hero choice');
 allowed.remove('rwHero');
 assert.equal(allowed.get('rwHero'),null,'normal storage supports cleanup');
+
+
+// Mobile runtime regression: second fingers must not steal the joystick and zero-width layouts stay finite.
+const stickSource=slice("const stick=$('#stick'),knob=$('#knob');","let aimY=0;");
+const mobile=vm.runInNewContext(
+ "let screen='game',joyId=null,joyF=0,joyS=0;"+
+ "const joystickKnob={style:{transform:''}};"+
+ "const joystickElement={captures:[],getBoundingClientRect(){return {left:0,top:0,width:0,height:0}},setPointerCapture(id){this.captures.push(id)}};"+
+ "const $=id=>id==='#stick'?joystickElement:joystickKnob;"+
+ stickSource+"({stick:joystickElement,knob:joystickKnob,get:()=>({joyId,joyF,joyS}),setScreen:s=>screen=s})"
+);
+const touch=(pointerId,clientX=10,clientY=5)=>({pointerId,clientX,clientY});
+mobile.stick.onpointerdown(touch(1));
+assert.equal(mobile.get().joyId,1,'first finger must own the mobile joystick');
+assert.ok(Number.isFinite(mobile.get().joyF)&&Number.isFinite(mobile.get().joyS),
+ 'zero-width mobile layout must never create NaN or Infinity steering');
+mobile.stick.onpointerdown(touch(2));
+assert.equal(mobile.get().joyId,1,'second finger must not hijack active joystick ownership');
+assert.deepEqual(Array.from(mobile.stick.captures),[1],'only the first finger may capture the joystick');
+mobile.stick.onpointerup(touch(2));
+assert.equal(mobile.get().joyId,1,'unrelated finger release must not stop movement');
+mobile.stick.onpointerup(touch(1));
+assert.equal(mobile.get().joyId,null,'owner release must clear joystick ownership');
+assert.equal(mobile.get().joyF,0,'owner release must clear forward steering');
+assert.equal(mobile.get().joyS,0,'owner release must clear lateral steering');
+mobile.setScreen('pausePanel');
+mobile.stick.onpointerdown(touch(3));
+assert.equal(mobile.get().joyId,null,'paused gameplay must not acquire joystick control');
+console.log('RAMADAN_JOYSTICK_OWNERSHIP_PASS: multitouch isolation, finite axes, pause safety');
