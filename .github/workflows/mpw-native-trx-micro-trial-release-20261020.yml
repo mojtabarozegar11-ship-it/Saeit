@@ -122,6 +122,25 @@ jobs:
               except (OSError,AttributeError,ImportError): continue
               if ("779" in code or "CANARY_PRODUCT" in code):
                   print("MPW_TRIAL_MIDDLEWARE_CANARY="+json.dumps({"middleware":name,"lines":[x.strip() for x in code.splitlines() if "779" in x or "CANARY_PRODUCT" in x]}))
+          import services.mpw_trx_public_pages as public_module
+          print("MPW_TRIAL_ACTIVE_PAYMENT_IDS="+repr(getattr(settings,"MPW_TRX_PUBLIC_PRODUCT_IDS",None)))
+          for name in dir(public_module):
+              if ("invoice" in name or "purchase" in name or "payment" in name) and not name.startswith("_"):
+                  obj=getattr(public_module,name)
+                  if callable(obj):
+                      try: source=inspect.getsource(obj)
+                      except (OSError,TypeError): continue
+                      if "MPW_TRX_PUBLIC_PRODUCT_IDS" in source or "product_id" in source:
+                          relevant=[line.strip() for line in source.splitlines() if any(word in line.lower() for word in ("public_product_ids","amount","minimum","product_id","invoice","price","eligible","payment","quote"))]
+                          print("MPW_TRIAL_PUBLIC_PAYMENT_GATES="+json.dumps({"name":name,"lines":relevant[:45]}))
+          for filename in ("core/templates/mojplaywin/store.html","config/settings.py"):
+              from pathlib import Path
+              p=Path("/home/zomorod2/Saeit-staging")/filename
+              src=p.read_text(errors="replace") if p.is_file() and not p.is_symlink() else ""
+              if filename.endswith("store.html"):
+                  print("MPW_TRIAL_STORE_ANCHORS="+json.dumps({"old_catalog_anchor_count":src.count("<!-- MPW_TWO_BOOKS_PUBLIC_CATALOG_V1_START -->"),"atelier_marker":src.count("mpw-atelier-discovery-20261025"),"existing_779_links":src.count("/store/product/779/"),"length":len(src)}))
+              else:
+                  print("MPW_TRIAL_SETTINGS_LINES="+json.dumps([line.strip() for line in src.splitlines() if "MPW_TRX_PUBLIC_PRODUCT_IDS" in line][:5]))
           PY
       - name: Create real test listing, never modify originals or payment ledger
         id: publish_sample
