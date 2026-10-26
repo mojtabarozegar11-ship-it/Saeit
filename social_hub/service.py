@@ -49,6 +49,11 @@ def run_one(store, post_id, *, env=None, transport=None, execute=False, actor="p
                                 ensure_ascii=False,separators=(",",":")).encode("utf-8")).hexdigest()
     if digest != item["payload_hash"]:
         raise Blocked("Content integrity changed after approval")
+    if account["platform"] == "mastodon":
+        from .adapters import _server
+        approved = {v.strip() for v in env.get("MPW_SOCIAL_ALLOWED_MASTODON_ORIGINS","").split(",") if v.strip()}
+        if _server(account.get("instance", "")) not in approved:
+            raise Blocked("Mastodon instance is not in explicit private allowlist")
     if account["platform"] == "youtube" and not env.get("MPW_SOCIAL_MEDIA_ROOT"):
         raise Blocked("Private YouTube media root must be configured")
     post, account = store.claim(post_id, actor=actor)
