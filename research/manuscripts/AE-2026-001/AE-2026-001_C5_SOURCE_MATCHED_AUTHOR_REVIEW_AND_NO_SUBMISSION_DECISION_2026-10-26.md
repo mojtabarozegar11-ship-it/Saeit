@@ -2,6 +2,9 @@
 
 **Date:** 26 October 2026. **Stage:** human scientific author review candidate; **not submitted, not accepted, not published**. This is a research-administration packet produced with AI assistance, **not** a human referee report or the author's personal attestation.
 
+**Latest internal AI editorial assessment (C6):** [direct functional comparison with documented countryatlas features](AE-2026-001_C6_DIRECT_COUNTRYATLAS_FUNCTIONAL_PRIOR_ART_AND_AI_EDITORIAL_GATE_2026-10-26.md) completed. The comparator already documents WDI vintage comparison, country selection, revision summaries and unit-rebasing warnings. AE's sign/rank/annualized-growth application is descriptive, not a validated new estimator. **Decision remains MAJOR REVISION / NO SUBMISSION**; no real head-to-head execution or independent ILO absolute employment validation was performed. This scientific gate does not alter the current manuscript source, so the Word artifact below remains source-matched.
+
+
 ## Exact version for review
 
 - Article: *Historical-Release Sensitivity of Agricultural Value Added per Worker in World Development Indicators: A Three-Vintage Fixed-Country Audit*.
