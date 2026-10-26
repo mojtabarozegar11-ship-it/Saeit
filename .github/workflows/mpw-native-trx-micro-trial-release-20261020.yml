@@ -205,26 +205,33 @@ jobs:
                           break
           print('MPW_MICRO_CTA_INSPECTION=PASS')
           PY
-      - name: Verify public three-cent store and protected siblings
+      - name: Verify all public buyer routes after Passenger reload and diagnose cache
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import json,urllib.request,urllib.error
           routes=("/store/","/store/product/779/","/commerce/book/779/","/store/product/72/","/store/product/225/","/store/product/879/")
+          errors=[]
           for route in routes:
-              req=urllib.request.Request("https://mojplaywin.com"+route,headers={"User-Agent":"MPWTrial779OwnerRelease/1","Cache-Control":"no-cache"})
+              req=urllib.request.Request("https://mojplaywin.com"+route,headers={"User-Agent":"MPWTrial779OwnerRelease/1","Cache-Control":"no-cache, no-store, max-age=0"})
               try:
                   with urllib.request.urlopen(req,timeout=25) as response:
                       status=response.status
                       final=response.url
-                      body=response.read(160000).decode("utf8","replace")
+                      body=response.read(180000).decode("utf8","replace")
+                      headers={k:response.headers.get(k) for k in ("Cache-Control","Age","X-Cache","Server") if response.headers.get(k)}
               except urllib.error.HTTPError as exc:
                   status=exc.code
                   final=req.full_url
                   body=""
-              print("MPW_TRIAL_779_PUBLIC_SMOKE="+json.dumps({"route":route,"http":status,"final_url":final,"listed":"/store/product/779/" in body if route=="/store/" else None}))
-              if status!=200 or (route=="/store/" and "/store/product/779/" not in body):
-                  raise RuntimeError("TRIAL_OR_ORIGINAL_PUBLIC_ROUTE_FAILED:"+route)
+                  headers={}
+              listed="/store/product/779/" in body if route=="/store/" else None
+              checkout="/commerce/book/779/" in body if route=="/store/" else None
+              print("MPW_TRIAL_779_PUBLIC_SMOKE="+json.dumps({"route":route,"http":status,"final_url":final,"listed":listed,"checkout_link":checkout,"headers":headers}))
+              if status!=200 or (route=="/store/" and not (listed and checkout)):
+                  errors.append(route)
+          if errors:
+              raise RuntimeError("TRIAL_OR_ORIGINAL_PUBLIC_ROUTE_FAILED:"+",".join(errors))
           PY
       - name: Roll back only the three isolated code files if owner release failed
         if: failure() && steps.scoped_release.outcome == 'success'
