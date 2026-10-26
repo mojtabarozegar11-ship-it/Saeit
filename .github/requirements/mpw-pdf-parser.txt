@@ -1,2 +1,4 @@
 PyPDF2==3.0.1 \
     --hash=sha256:d16e4205cfee272fbdc0568b68d82be796540b1537508cef59388f839c191928
+typing_extensions==4.13.2 \
+    --hash=sha256:a439e7c04b49fec3e5d3e2beaa21755cadbbdc391694e28ccdd36ca4a1408f8c
