@@ -1,5 +1,10 @@
 # MR-2026-001 V5 — exact-file scientific author decision and conditional journal dossier
 
+## C42 update — publisher full-method audit, 26 October 2026
+
+[Original-publisher full-method audit C42](MR-2026-001_C42_AMINI_2025_ORIGINAL_FULL_METHODS_F7_PROVENANCE_AUDIT_2026-10-26.md) independently verifies the Amini 2025 split-plot treatment/control description and physical water-measurement methods (WSC flume, timed sprinkler/nozzle and dripper measurements, gravimetric soil moisture). The paper explicitly says farmers attempted to follow the DSS schedule while adjusting event dates/times. **Measured seasonal outcomes (M) do not validate event-level independent action (O).** The F7 −1.3/−1.4/−0.1 kg/m³ inconsistency persists in the original publisher text; do not repair it without source-author raw data. MR V5 manuscript has been scientifically amended in commit `605346f16e1559a9617f851323046700f98c8da8`. The previously verified Word run 40299475900 / artifact 12640250744 now **predates this manuscript edit** and is **not** exact-source current Word. **MAJOR REVISION / NO SUBMISSION**; no author signoff or Manuscript ID.
+
+
 **Prepared 2026-10-26.** **Status: author scientific review candidate, not submission-authorized.** All evidence in this packet is for the actual V5 text, not V4 or a hypothetical future version.
 
 ## CURRENT Car source-access disposition (subsequent independent pass)
