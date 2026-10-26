@@ -212,3 +212,13 @@ jobs:
           src=inspect.getsource(one.render_invoice_page)
           print('MPW_INVOICE_BASE_RENDER='+json.dumps({'module':one.render_invoice_page.__module__,'source':src[:30000]}))
           PY
+      - name: Read exact invoice base CSS and mobile breakpoints
+        run: |
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from services.mpw_trx_walletless_one_tap_ui import render_invoice_page
+          css=render_invoice_page.__globals__.get('STYLES')
+          print('MPW_INVOICE_STYLES='+json.dumps({'type':type(css).__name__,'css':css if isinstance(css,str) else None}))
+          PY
