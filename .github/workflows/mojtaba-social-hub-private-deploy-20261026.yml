@@ -194,9 +194,10 @@ jobs:
           api_response=read_status(owner_request)
           if api_response.status_code!=200:
               raise RuntimeError('Authorized private connection status unavailable')
+          import json
           from social_hub.portal import connection_plan
           planned=connection_plan(owner_request)
-          if planned.status_code!=200 or planned.json().get("credentials_included") is not False:
+          if planned.status_code!=200 or json.loads(planned.content).get("credentials_included") is not False:
               raise RuntimeError('Private API readiness plan not available or unsafe')
           noauth=Client(HTTP_HOST='mojplaywin.com').get(
               reverse('mojtaba_social_connection_plan'),secure=True)
