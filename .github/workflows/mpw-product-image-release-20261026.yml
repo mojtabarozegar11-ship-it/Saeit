@@ -1,0 +1,157 @@
+name: MojPlayWin - isolated replacement of chess and Taniya product artwork
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-product-image-release-20261026.yml"
+      - "scripts/mpw_product_image_release_20261026.py"
+      - "core/static/site/mojplaywin-products/chess-improvement.webp"
+      - "core/static/site/mojplaywin-products/taniya-baker-worms.webp"
+permissions: {contents: read}
+concurrency:
+  group: mojplaywin-isolated-product-artwork
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate checked-in artwork and reversible MojPlayWin-only patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_product_image_release_20261026.py
+          python3 scripts/mpw_product_image_release_20261026.py selftest
+          file core/static/site/mojplaywin-products/*.webp
+          test "$(stat -c %s core/static/site/mojplaywin-products/chess-improvement.webp)" -gt 20000
+          test "$(stat -c %s core/static/site/mojplaywin-products/taniya-baker-worms.webp)" -gt 20000
+          echo "CHESS_NEW_SHA=$(sha256sum core/static/site/mojplaywin-products/chess-improvement.webp | awk '{print $1}')" >> "$GITHUB_ENV"
+          echo "TANIYA_NEW_SHA=$(sha256sum core/static/site/mojplaywin-products/taniya-baker-worms.webp | awk '{print $1}')" >> "$GITHUB_ENV"
+      - name: Verify existing live products and record precise image baselines
+        shell: bash
+        run: |
+          set -euo pipefail
+          for route in / /store/ /store/product/72/ /store/product/225/ /store/product/879/; do
+            curl -fsSL --max-time 25 "https://mojplaywin.com$route" -o /dev/null
+          done
+          curl -fsSL --max-time 25 https://zomorodmelal.ir/ -o /dev/null
+          curl -fsSL --max-time 25 "https://mojplaywin.com/store/?mpw_image_baseline=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/mpw-before.html"
+          grep -Fq 'mpw-product--chess' "$RUNNER_TEMP/mpw-before.html"
+          grep -Fq 'mpw-product--taniya' "$RUNNER_TEMP/mpw-before.html"
+          grep -Fq 'mpw-product--atelier' "$RUNNER_TEMP/mpw-before.html"
+          curl -fsSL --max-time 25 'https://mojplaywin.com/static/site/mojplaywin-products/chess-improvement.webp' -o "$RUNNER_TEMP/chess-before.webp"
+          curl -fsSL --max-time 25 'https://mojplaywin.com/static/site/mojplaywin-products/taniya-baker-worms.webp' -o "$RUNNER_TEMP/taniya-before.webp"
+          echo "CHESS_OLD_SHA=$(sha256sum "$RUNNER_TEMP/chess-before.webp" | awk '{print $1}')" >> "$GITHUB_ENV"
+          echo "TANIYA_OLD_SHA=$(sha256sum "$RUNNER_TEMP/taniya-before.webp" | awk '{print $1}')" >> "$GITHUB_ENV"
+      - name: Configure fingerprint-pinned GitHub Actions to VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-product-art-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Stage exact image assets and scoped installer on cPanel
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-product-art-ssh"
+          stage="/home/zomorod2/.mpw-image-stage-$GITHUB_RUN_ID"
+          ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
+          scp -F "$d/config" scripts/mpw_product_image_release_20261026.py "saeit-cpanel:$stage/patch.py"
+          scp -F "$d/config" core/static/site/mojplaywin-products/chess-improvement.webp "saeit-cpanel:$stage/chess-improvement.webp"
+          scp -F "$d/config" core/static/site/mojplaywin-products/taniya-baker-worms.webp "saeit-cpanel:$stage/taniya-baker-worms.webp"
+      - name: Install the two images, update store cards and verify public results
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-product-art-ssh"
+          stage="/home/zomorod2/.mpw-image-stage-$GITHUB_RUN_ID"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/patch.py' install '$GITHUB_RUN_ID' '$CHESS_OLD_SHA' '$TANIYA_OLD_SHA'"
+          echo "applied=true" >> "$GITHUB_OUTPUT"
+          verified=0
+          for attempt in $(seq 1 18); do
+            if curl -fsSL --max-time 25 -H 'Cache-Control: no-cache' "https://mojplaywin.com/store/?product_artwork=$GITHUB_RUN_ID-$attempt" -o "$RUNNER_TEMP/store-after.html"; then
+              if grep -Fq 'class="mpw-product-image"' "$RUNNER_TEMP/store-after.html" &&
+                 grep -Fq 'chess-improvement.webp?v=20261026' "$RUNNER_TEMP/store-after.html" &&
+                 grep -Fq 'taniya-baker-worms.webp?v=20261026' "$RUNNER_TEMP/store-after.html" &&
+                 grep -Fq 'mpw-product--atelier' "$RUNNER_TEMP/store-after.html"; then
+                curl -fsSL --max-time 25 -H 'Cache-Control: no-cache' "https://mojplaywin.com/static/site/mojplaywin-products/chess-improvement.webp?release=$GITHUB_RUN_ID-$attempt" -o "$RUNNER_TEMP/chess-after.webp"
+                curl -fsSL --max-time 25 -H 'Cache-Control: no-cache' "https://mojplaywin.com/static/site/mojplaywin-products/taniya-baker-worms.webp?release=$GITHUB_RUN_ID-$attempt" -o "$RUNNER_TEMP/taniya-after.webp"
+                chess_actual="$(sha256sum "$RUNNER_TEMP/chess-after.webp" | awk '{print $1}')"
+                taniya_actual="$(sha256sum "$RUNNER_TEMP/taniya-after.webp" | awk '{print $1}')"
+                if test "$chess_actual" = "$CHESS_NEW_SHA" && test "$taniya_actual" = "$TANIYA_NEW_SHA"; then
+                  verified=1
+                  break
+                fi
+              fi
+            fi
+            sleep 5
+          done
+          test "$verified" = 1
+          for route in / /store/ /store/product/72/ /store/product/225/ /store/product/879/; do
+            curl -fsSL --max-time 25 "https://mojplaywin.com$route" -o /dev/null
+          done
+          curl -fsSL --max-time 25 https://zomorodmelal.ir/ -o /dev/null
+          echo "MPW_TWO_NEW_PRODUCT_IMAGES_LIVE=PASS"
+          echo "OTHER_PRODUCT_AND_PAYMENT_CODE_UNCHANGED=YES"
+      - name: Restore original images and store view if post-deployment verification fails
+        if: failure() && steps.install.outputs.applied == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-product-art-ssh"
+          stage="/home/zomorod2/.mpw-image-stage-$GITHUB_RUN_ID"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/patch.py' rollback '$GITHUB_RUN_ID'"
+      - name: Remove only temporary cPanel staging and runner SSH files
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-product-art-ssh"
+          stage="/home/zomorod2/.mpw-image-stage-$GITHUB_RUN_ID"
+          if test -f "$d/config"; then
+            ssh -T -F "$d/config" saeit-cpanel "case '$stage' in /home/zomorod2/.mpw-image-stage-[0-9]*) rm -rf -- '$stage';; *) exit 1;; esac" || true
+          fi
+          rm -rf -- "$d"
