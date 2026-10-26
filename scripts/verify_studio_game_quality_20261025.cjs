@@ -180,6 +180,11 @@ assert.equal(forgedCart.length,1,'unrecognized stored products must be dropped')
 assert.equal(forgedCart[0].price,12.5,'stored price must not override catalog price');
 assert.equal(forgedCart[0].qty,2,'legitimate cart quantity must survive');
 assert.equal(forgedCart[0].emoji,'🎨','stored HTML must never enter rendered cart');
+const duplicateCart=loadCartCase({getItem(){return JSON.stringify([
+ {name:'Safe game art',qty:18},{name:'Safe game art',qty:18},{name:'Safe game art',qty:2}
+])}});
+assert.equal(duplicateCart.length,1,'duplicated saved lines must collapse to one product');
+assert.equal(duplicateCart[0].qty,20,'duplicate lines cannot bypass the quantity limit');
 assert.equal(loadCartCase({getItem(){return '{broken'} }).length,0,'corrupt JSON must not crash the studio');
 assert.equal(loadCartCase({getItem(){throw Error('SecurityError')}}).length,0,'private browsing must not crash the studio');
 assert.equal(loadCartCase({getItem(){return JSON.stringify([{name:'Safe game art',qty:999999}])}})[0].qty,1,'oversized cart quantity must be clamped');
