@@ -102,6 +102,37 @@ class PrivateAuditTests(unittest.TestCase):
             self.assertFalse(r["commercial_release_allowed"])
             self.assertEqual(second.read_bytes(), before)
 
+    def test_inline_identifier_underscore_is_not_removed(self):
+        # A substantive identifier change must not be mistaken for Markdown.
+        with tempfile.TemporaryDirectory() as d:
+            self.make(d, "chapter-01-part-001.md")
+            second = Path(d) / "chapter-02-part-001.md"
+            first_text = (Path(d) / "chapter-01-part-001.md").read_text()
+            second.write_text(first_text.replace(
+                "# Heading", "# A different heading").replace(
+                "term0000", "term_0000"))
+            r = module.audit(Path(d), chapters=2,
+                             chapter_target=300, total_target=600)
+            self.assertFalse(any(x.startswith("duplicate_prose_body:")
+                                 for x in r["integrity_flags"]))
+            self.assertFalse(r["commercial_release_allowed"])
+
+    def test_intraword_markdown_emphasis_cannot_hide_duplicate_prose(self):
+        with tempfile.TemporaryDirectory() as d:
+            first = self.make(d, "chapter-01-part-001.md")
+            second = Path(d) / "chapter-02-part-001.md"
+            second.write_text(first.read_text().replace(
+                "# Heading", "# A different heading").replace(
+                "term0000", "term*0000*"))
+            before = second.read_bytes()
+            r = module.audit(Path(d), chapters=2,
+                             chapter_target=300, total_target=600)
+            self.assertTrue(any(x.startswith("duplicate_prose_body:")
+                                for x in r["integrity_flags"]))
+            self.assertFalse(r["length_and_structure_ready_for_independent_review"])
+            self.assertFalse(r["commercial_release_allowed"])
+            self.assertEqual(second.read_bytes(), before)
+
     def test_gap_and_reasoning_marker_fail_closed(self):
         with tempfile.TemporaryDirectory() as d:
             self.make(d, "chapter-01-part-002.md", tail="<think>secret</think>")
