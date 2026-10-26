@@ -67,6 +67,8 @@ def _sources(package):
         raise InstallationBlocked("Expected isolated source package missing")
     result = {}
     for p in package.rglob("*"):
+        if "__pycache__" in p.parts or p.suffix == ".pyc" or p.name == "site_config.py":
+            continue
         if p.is_symlink():
             raise InstallationBlocked("Symlink in deployment source")
         if p.is_file():
