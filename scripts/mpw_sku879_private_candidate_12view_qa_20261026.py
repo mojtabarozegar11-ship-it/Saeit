@@ -85,6 +85,7 @@ def audit(archive, receipt_path):
         "missing_image_alts": v["images_missing_alt"],
         "unsafe_new_tab_links": v["unsafe_blank_links"],
         "broken_anchors": v["broken_same_page_anchors"],
+        "overflowing_shapes": v["overflowing_shapes"][:10] if v["horizontal_overflow_px"] > 2 else [],
     } for v in views]
     receipt = {
         "schema": SCHEMA, "sku": SKU,

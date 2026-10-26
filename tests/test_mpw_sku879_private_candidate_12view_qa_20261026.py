@@ -62,7 +62,14 @@ class BrowserMatrixTests(unittest.TestCase):
             "<p>Professional residential interior design portfolio.</p>"
             "<form><label for='email'>Email</label><input id='email' type='email'>"
             "<button type='button'>Contact Us</button></form>"
+            "<span id='labelled-button'>Menu</span>"
+            "<button aria-labelledby='labelled-button'></button>"
+            "<button><img alt='Search' src='data:image/png;base64,"
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+nmv8AAAAASUVORK5CYII='></button>"
             "<a href='#about'>Learn more</a><h2 id='about'>About us</h2>"
+            "<a href='#contact%20us'>Contact</a><div id='contact us'>Contact area</div>"
+            "<a href='#top'>Back to top</a><a name='legacy'></a>"
+            "<a href='#legacy'>Legacy</a>"
             "</main></body></html>"
         )
         with tempfile.TemporaryDirectory() as temp:
@@ -79,6 +86,7 @@ class BrowserMatrixTests(unittest.TestCase):
                 self.assertEqual(row["horizontal_overflow_px"], 0)
                 self.assertEqual(row["unlabeled_form_controls"], 0)
                 self.assertEqual(row["unlabeled_buttons"], 0)
+                self.assertEqual(row["images_missing_alt"], 0)
                 self.assertEqual(row["broken_same_page_anchors"], 0)
 
 

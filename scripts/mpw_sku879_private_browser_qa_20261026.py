@@ -134,6 +134,26 @@ function inFixedLayer(node) {
     if (getComputedStyle(cur).position === "fixed") return true;
   return false;
 }
+function buttonHasName(b) {
+  if ((b.getAttribute("aria-label") || "").trim()) return true;
+  if ((b.getAttribute("title") || "").trim()) return true;
+  if ((b.innerText || "").trim()) return true;
+  const refs = (b.getAttribute("aria-labelledby") || "").trim().split(/\s+/).filter(Boolean);
+  if (refs.some(id => (document.getElementById(id)?.textContent || "").trim())) return true;
+  if (Array.from(b.querySelectorAll("img[alt]")).some(i => (i.alt || "").trim())) return true;
+  if (Array.from(b.querySelectorAll("svg title")).some(t => (t.textContent || "").trim())) return true;
+  return false;
+}
+function samePageAnchorResolves(a) {
+  const href = a.getAttribute("href") || "";
+  if (href === "#" || href.length === 0) return true;
+  let fragment = "";
+  try { fragment = decodeURIComponent(href.slice(1)); }
+  catch { return false; }
+  if (fragment.toLowerCase() === "top") return true;
+  return !!document.getElementById(fragment) ||
+    Array.from(document.querySelectorAll("a[name]")).some(el => el.getAttribute("name") === fragment);
+}
 return {
     ready: document.readyState === "complete",
     title_present: !!document.title.trim(),
@@ -176,9 +196,7 @@ return {
     h1_count: document.querySelectorAll("h1").length,
     images_missing_alt: images.filter(i => !i.hasAttribute("alt")).length,
     unlabeled_buttons: Array.from(document.querySelectorAll("button")).filter(
-      b => !(b.getAttribute("aria-label") || "").trim() &&
-           !(b.getAttribute("title") || "").trim() &&
-           !(b.innerText || "").trim()).length,
+      b => !buttonHasName(b)).length,
     unlabeled_form_controls: Array.from(document.querySelectorAll("input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=reset]):not([type=image]),textarea,select")).filter(
       el => !(el.getAttribute("aria-label") || "").trim() &&
             !(el.getAttribute("aria-labelledby") || "").trim() &&
@@ -186,8 +204,7 @@ return {
     unsafe_blank_links: Array.from(document.querySelectorAll('a[target="_blank"]')).filter(
       a => !(a.relList && a.relList.contains("noopener"))).length,
     broken_same_page_anchors: Array.from(document.querySelectorAll('a[href^="#"]')).filter(
-      a => a.getAttribute("href").length > 1 &&
-           !document.getElementById(a.getAttribute("href").slice(1))).length
+      a => !samePageAnchorResolves(a)).length
 };
 """
 
