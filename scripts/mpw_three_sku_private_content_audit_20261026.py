@@ -29,6 +29,39 @@ def digest_file(path):
             h.update(block)
     return h.hexdigest()
 
+def srcset_urls(value):
+    """Read candidate URLs without splitting the comma inside a data URI.
+
+    The URL token ends at whitespace; descriptor commas separate candidates.
+    A bare trailing comma also terminates a URL candidate.
+    """
+    urls = []
+    index = 0
+    while index < len(value):
+        while index < len(value) and (value[index].isspace() or value[index] == ","):
+            index += 1
+        start = index
+        while index < len(value) and not value[index].isspace():
+            index += 1
+        raw_url = value[start:index]
+        url = raw_url.rstrip(",")
+        if url:
+            urls.append(url)
+        if raw_url.endswith(","):
+            continue
+        depth = 0
+        while index < len(value):
+            if value[index] == "(":
+                depth += 1
+            elif value[index] == ")" and depth:
+                depth -= 1
+            elif value[index] == "," and depth == 0:
+                index += 1
+                break
+            index += 1
+    return urls
+
+
 class PageAudit(html.parser.HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -52,10 +85,17 @@ class PageAudit(html.parser.HTMLParser):
             self.images += 1
             if not (a.get("alt") or "").strip():
                 self.images_without_alt += 1
-        elif tag in ("a", "link", "script"):
-            target = a.get("href") if tag != "script" else a.get("src")
-            if target and not re.match(r"^(?:[a-z]+:|//|#)", target, re.I):
-                self.local_links.append(target.split("?",1)[0].split("#",1)[0])
+        if tag in ("a", "link", "script", "img", "source", "video", "audio"):
+            target = a.get("href") if tag in ("a", "link") else a.get("src")
+            targets = [target]
+            if tag == "video":
+                targets.append(a.get("poster"))
+            if tag in ("img", "source"):
+                srcset = a.get("srcset") or ""
+                targets.extend(srcset_urls(srcset))
+            for target in targets:
+                if target and not re.match(r"^(?:[a-z]+:|//|#)", target, re.I):
+                    self.local_links.append(target.split("?",1)[0].split("#",1)[0])
             if tag == "script":
                 if a.get("src"):
                     if re.match(r"^(?:https?:)?//", a["src"], re.I):
@@ -63,7 +103,7 @@ class PageAudit(html.parser.HTMLParser):
                 else:
                     self.inline_scripts += 1
                     self.script_open = True
-        elif tag == "form":
+        if tag == "form":
             self.forms += 1
     def handle_endtag(self, tag):
         if tag == "title":
@@ -417,7 +457,7 @@ def audit_zip(path):
             "unsafe_member_count": len(unsafe), "crc_failure": bad_crc,
             "missing_local_refs": missing_local[:100], "html_pages": pages,
             "checks": checks,
-            "needs_specialist_review": ["gameplay", "responsive_browser_execution", "accessibility", "security", "asset_licenses", "commercial_rights_mapping"],
+            "needs_specialist_review": ["responsive_browser_execution", "navigation_integrity", "browser_console_errors", "accessibility", "security", "asset_licenses", "commercial_rights_mapping"],
         }
 
 def run(root=BASE):
