@@ -189,6 +189,15 @@ def save_atomic(path, payload):
         if os.path.exists(name):
             os.unlink(name)
 
+def canonical_reasoning_view(body):
+    """Canonicalize safety markers only; do not alter manuscript content."""
+    import unicodedata
+    safety_view = unicodedata.normalize("NFKC", body)
+    safety_view = re.sub(
+        r"[\u00ad\u200b\u200c\u200d\u2060\ufeff\u202a-\u202e\u2066-\u2069]",
+        "", safety_view)
+    return safety_view.casefold()
+
 def accept(chunks, body):
     work, chapters, sources = source_evidence()
     counts, total, chapter, part = state(chunks)
@@ -196,7 +205,7 @@ def accept(chunks, body):
         reject("MANUSCRIPT_ALREADY_LENGTH_COMPLETE")
     # Enforce the reasoning/control-token gate at the final private acceptance
     # boundary too: the operator streaming filter is not an authorization gate.
-    if any(marker in body.casefold() for marker in (
+    if any(marker in canonical_reasoning_view(body) for marker in (
             "<think", "</think", "<|im_start|>", "<|im_end|>",
             "<|assistant", "<|endoftext|>", "[inst]", "[/inst]")):
         reject("MODEL_REASONING_OR_CONTROL_TOKEN")
