@@ -1,6 +1,6 @@
 # MOJ1 V2 — Independent Audit Intake & Zero-Cash Sponsor Pack
 
-**Prepared:** 2026-10-26  
+**Prepared:** 2026-10-27  
 **Branch:** `moj1/audit-intake-ready-20261026`  
 **Purpose:** audit readiness and non-binding funding discussions only  
 **Owner cash / contingent liability:** USD 0  
@@ -34,7 +34,7 @@ The quote and final report must list each included and excluded artifact. At min
 
 **Required deliverables:** named reviewers and independence/conflict statement; methods and exact scope; severity-ranked findings; commit, build, and bytecode hashes; signed/verifiable report; remediation consultation and independent re-test of critical/high findings; explicit exclusions; timeline and fixed total price.
 
-The known **75 nonblank, noncomment lines** are only the two first-party source files at the frozen commit (12 + 63). They are **not** the complete audit nSLOC. The auditor must count the complete final scope, including dependencies and generated contracts, before fixing price or calling the review complete.
+The corrected first-party count is **205 nonblank, noncomment, non-import lines** across all four guarded V2 project-authored contracts (10 + 59 + 53 + 83), as detailed in the frozen-source manifest below. The earlier 75-line figure covered only two files and omitted the vesting and reserve contracts; do not use it as the V2 scope count. The 205 count still excludes imported dependencies and generated code, so it is not the complete audit nSLOC. The auditor must count the agreed final scope before fixing price or calling the review complete.
 
 ## 3. Funding conditions
 
@@ -52,7 +52,7 @@ If a proposal misses any condition, mark it **not zero-cost** and do not accept 
 
 | Route | Verified state | Next condition |
 |---|---|---|
-| Kann Audits grant | Kann's written reply says the standard USD 250 participation fee is not waived; it permits a third-party sponsor to cover that fee. It also offered a waiver only after two referred protocols independently proceed with real audit engagements. No artificial referrals will be made. | Still need a named payer and written confirmation of the full audit/re-test cost and scope. The USD 250 is not evidence that the entire audit is covered. Batch 1 deadline shown as 2026-11-15. |
+| Kann Audits grant | Kann's 2026-10-27 reply consolidates its position: it will accept a third party paying the USD 250 participation fee directly, does not identify or guarantee a sponsor, and says repeated requests do not change the terms. The referral alternative remains unavailable because its genuine conditions are not met. | Stop duplicate follow-ups. Reopen only if an eligible outside payer is secured; then obtain the full assessment and re-test scope, total cost, and terms in writing before any commitment. The USD 250 participation fee is not full-audit coverage. Batch 1 deadline shown as 2026-11-15. |
 | Guardian Security Fund | Official page advertises audit coverage for selected projects, not cash. Earlier eligibility enquiry is pending; TRON/TVM eligibility has not been confirmed. | Obtain a response confirming TRON/TVM acceptance, complete scope, and no owner fee or liability. |
 | TRON Builders League | Official materials allow approved funding to be used for audits, but awards are discretionary and milestone-based. The formal program terms include binding indemnity/arbitration exposure already assessed in issue #853. | **Do not submit or accept TBL terms** under the current zero-liability mandate. Only reconsider if TRON offers a separate written route with no owner liability, approved case by case. |
 | Ecosystem sponsor prospects | Existing non-binding enquiries to HTX Ventures, HTX DAO Genesis, P2P.org, Kiln, JustLend Grants DAO and other leads are recorded in issue #853. No award or pledge is recorded. | Wait for substantive replies; do not re-send duplicate inquiries. |
@@ -60,7 +60,7 @@ If a proposal misses any condition, mark it **not zero-cost** and do not accept 
 
 ## 5. Outreach log and no-duplicate rule
 
-As of this document, relevant outreach and replies are tracked in [issue #853](https://github.com/mojtabarozegar11-ship-it/Saeit/issues/853). Kann has already replied and the sponsor-payment follow-up is pending. Guardian and multiple TRON ecosystem prospects have already been contacted. Two duplicate messages were sent in error during the latest execution; see the current conversation record. No additional message should be sent to those same recipients unless a substantive reply arrives or a materially new funding proposal is available.
+As of 2026-10-27, relevant outreach and replies are tracked in [issue #853](https://github.com/mojtabarozegar11-ship-it/Saeit/issues/853). Kann has replied that it will not source a sponsor and asked that repeated requests stop; no more messages should be sent there unless an outside payer is secured and a substantive new question remains. Guardian and multiple TRON ecosystem prospects have already been contacted; no award or positive eligibility confirmation is recorded. Two duplicate messages were sent in error on 2026-10-26; do not repeat that contact pattern. Check existing threads for replies before any new outreach.
 
 A “sent” message is not a commitment, grant award, payment, quote acceptance, or audit engagement. Record each future inbound reply, verified offer, payer identity, and terms before deciding the next action.
 
@@ -79,4 +79,4 @@ A “sent” message is not a commitment, grant award, payment, quote acceptance
 
 The engineering evidence and non-binding sponsor materials are assembled sufficiently to **request a scope discussion** without exposing keys or claiming a finished audit. The project is **not yet ready for a funded audit start** because there is no confirmed full-cost payer, no accepted auditor scope/quote, and the complete dependency-inclusive nSLOC/build map remains to be finalized.
 
-No external application was submitted by this preparation. No funding was received or promised. No payment, contract, wallet signature, token distribution, Mainnet deployment, sale, pool, or live customer reward was authorized.
+No new external application or email was submitted in this continuation. Kann's latest reply closes the repetitive inquiry path unless a third-party payer is independently found. Research recheck found no newly verified, currently open 100%-coverage grant confirmed to accept TRON/TVM; Ethereum/L2-only subsidies are not MOJ1-eligible on the present Shasta/TVM target. No funding was received or promised. No payment, contract, wallet signature, token distribution, Mainnet deployment, sale, pool, or live customer reward was authorized.
