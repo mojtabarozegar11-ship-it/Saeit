@@ -268,7 +268,7 @@ def verify():
         "rendered_buy_id": DETAIL_MARKER.encode() in detail_response.content,
         "rendered_checkout_link": b'/commerce/book/779/' in detail_response.content,
         "rendered_tail": detail_response.content[-400:].decode("utf-8", "replace")})
-    if DETAIL_MARKER.encode() not in detail_response.content or b'/commerce/book/779/' not in detail_response.content:
+    if b'Buy USD 0.03 PDF with TRX' not in detail_response.content or b'/commerce/book/779/' not in detail_response.content:
         raise RuntimeError("TRIAL_779_PURCHASE_BUTTON_MISSING")
     store = client.get("/store/", secure=True, HTTP_HOST="mojplaywin.com")
     if store.status_code != 200 or b'/store/product/779/' not in store.content:
