@@ -32,13 +32,23 @@ const assert=require('node:assert/strict');
    await page.waitForFunction(()=>document.querySelector('#view').getContext('webgl2')||document.querySelector('#view').getContext('webgl'),null,{timeout:10000});
    let state=await page.evaluate(()=>window.RamadanWarDebug.getState());
    assert.equal(state.hp,100);assert.equal(state.lives,100);assert.equal(state.stage,0);assert.equal(state.mode,'game');
-   assert.equal(state.rockets,12);assert.equal(state.drones,3);assert.equal(state.ammo,8);assert.equal(state.renderer,'webgl-threejs');assert(state.enemies>0,'mission enemy spawn '+JSON.stringify(state));
+   assert.equal(state.rockets,12);assert.equal(state.drones,3);assert.equal(state.ammo,8);
+   await page.keyboard.down('Space');await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
+   await page.locator('#pausePanel:not(.hidden)').waitFor();assert.equal(await page.evaluate(()=>window.RamadanWarDebug.getState().mode),'pausePanel');
+   const shotsAtPause=await page.evaluate(()=>window.RamadanWarDebug.getState().shots);
+   await page.locator('#resume').click();await page.evaluate(()=>{for(let i=0;i<15;i++)window.RamadanWarDebug.tick(.04)});
+   assert.equal(await page.evaluate(()=>window.RamadanWarDebug.getState().shots),shotsAtPause,'lost focus must release held fire');await page.keyboard.up('Space');
+   await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));delete document.hidden});
+   await page.locator('#pausePanel:not(.hidden)').waitFor();assert.equal(await page.evaluate(()=>window.RamadanWarDebug.getState().mode),'pausePanel');await page.locator('#resume').click();assert.equal(state.renderer,'webgl-threejs');assert(state.enemies>0,'mission enemy spawn '+JSON.stringify(state));
    await page.evaluate(()=>window.RamadanWarDebug.spawnTestEnemy());
    await page.evaluate(()=>{window.RamadanWarDebug.fire();window.RamadanWarDebug.rocket();window.RamadanWarDebug.drone()});
    await page.evaluate(()=>{window.RamadanWarDebug.spawnTestPickup('ammo');window.RamadanWarDebug.tick(.04)});state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.shots,1);assert.equal(state.rockets,11);assert.equal(state.drones,2);assert.equal(state.ammo,8,'ammo pickup restores the magazine');
+   await page.locator('#soundToggle').click();assert.equal(await page.locator('#soundToggle').getAttribute('aria-pressed'),'false');
    await page.locator('#pause').click();await page.locator('#pausePanel:not(.hidden)').waitFor();await page.reload({waitUntil:'domcontentloaded'});
+   assert.equal(await page.locator('#soundHome').getAttribute('aria-pressed'),'false','sound preference survives reload');
    assert.match(await page.locator('#start').innerText(),/ادامه/);
    await page.locator('#start').click();
+   await page.locator('#soundToggle').click();assert.equal(await page.locator('#soundToggle').getAttribute('aria-pressed'),'true');
    state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.stage,0);assert.equal(state.rockets,11);assert.equal(state.drones,2);assert.equal(state.mode,'game');
 
    // Exercise the actual objective interactions on the local release candidate.
