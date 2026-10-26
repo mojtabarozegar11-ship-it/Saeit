@@ -112,9 +112,13 @@
   }
   function transition(state, action) {
     if (!state || !Array.isArray(state.pieces) || !Array.isArray(state.removed) ||
+        !Number.isSafeInteger(state.twistsLeft) || state.twistsLeft < 0 ||
+        !Number.isInteger(state.phase) || state.phase < 0 || state.phase > 3 ||
         !action || typeof action !== 'object') return null;
     if (action.type === 'remove') {
-      if (!canExit(action.id, state)) return null;
+      // Only canonical numeric IDs from the active puzzle can be removed.
+      if (!Number.isSafeInteger(action.id) || !state.pieces.some(p => p.id === action.id) ||
+          !canExit(action.id, state)) return null;
       return { ...state, removed: [...state.removed, action.id] };
     }
     if (action.type === 'twist') {
