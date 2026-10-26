@@ -86,7 +86,7 @@ let cakeNodes={},downloaded='';
 const cakeSandbox={
  stage(html){cakeNodes={'#cakepreview':{innerHTML:''},'#icing':{},'#cakeGreeting':{},
   '[data-action="candle"]':{},'[data-action="cake-remove"]':{},
-  '[data-action="cake-reset"]':{},'[data-action="cake-undo"]':{},'[data-action="cake-surprise"]':{},'[data-action="cake-download"]':{}};},
+  '[data-action="cake-reset"]':{},'[data-action="cake-undo"]':{},'[data-action="cake-redo"]':{},'[data-action="cake-surprise"]':{},'[data-action="cake-download"]':{}};},
  gamebody:{querySelector(sel){return cakeNodes[sel]},querySelectorAll(sel){return sel==='[data-top]'?[{dataset:{top:'🌼'},onclick:null}]:[]}},
  $(sel){return cakeNodes[sel]},
  btn(label,action){return '<button data-action="'+action+'">'+label+'</button>'},
@@ -100,6 +100,10 @@ cakeNodes['[data-action="cake-remove"]'].onclick();
 assert.equal((cakeNodes['#cakepreview'].innerHTML.match(/y="480"/g)||[]).length,1,'remove candle must update preview');
 cakeNodes['[data-action="cake-undo"]'].onclick();
 assert.equal((cakeNodes['#cakepreview'].innerHTML.match(/y="480"/g)||[]).length,2,'undo must restore the removed candle');
+cakeNodes['[data-action="cake-redo"]'].onclick();
+assert.equal((cakeNodes['#cakepreview'].innerHTML.match(/y="480"/g)||[]).length,1,'redo must reapply the removed candle');
+cakeNodes['[data-action="cake-undo"]'].onclick();
+assert.equal((cakeNodes['#cakepreview'].innerHTML.match(/y="480"/g)||[]).length,2,'undo after redo must restore prior design');
 cakeNodes['[data-action="cake-remove"]'].onclick();
 cakeNodes['[data-action="cake-reset"]'].onclick();
 assert.equal((cakeNodes['#cakepreview'].innerHTML.match(/y="480"/g)||[]).length,0,'start over must reset all candles');
@@ -111,6 +115,12 @@ assert.ok(['#4488cc','#73bc8b','#f2b36d','#ac85e6'].some(c=>cakeNodes['#cakeprev
 assert.ok((cakeNodes['#cakepreview'].innerHTML.match(/y="480"/g)||[]).length>=1,'surprise cake must add candles');
 cakeNodes['[data-action="cake-undo"]'].onclick();
 assert.ok(cakeNodes['#cakepreview'].innerHTML.includes('#ff79b8'),'undo must restore original frosting after surprise');
+cakeNodes['[data-action="cake-redo"]'].onclick();
+assert.ok(!cakeNodes['#cakepreview'].innerHTML.includes('#ff79b8'),'redo must restore the surprise frosting');
+cakeNodes['[data-action="cake-undo"]'].onclick();
+cakeNodes['[data-action="candle"]'].onclick();
+cakeNodes['[data-action="cake-redo"]'].onclick();
+assert.ok(cakeNodes['#cakepreview'].innerHTML.includes('#ff79b8'),'new edits must invalidate redo history');
 cakeNodes['[data-action="cake-download"]'].onclick();
 assert.ok(downloaded.includes('#ff79b8'),'reset must restore default icing in exported design');
 // Verify Cake Maker persistence survives a complete UI remount without trusting stored markup.
