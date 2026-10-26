@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 
 const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
 function functionLine(name) {
-  const line = game.split('\n').find(row => row.startsWith('function '+name+'(){'));
+  const line = game.split('\n').find(row => row.startsWith('function '+name+'('));
   assert.ok(line, name+' must remain an executable game function');
   return line;
 }
@@ -45,6 +45,7 @@ test('successful support skill consumes exactly one drone and persists the coold
   assert.equal(h.world.strikeX,7);
   assert.equal(h.world.strikeY,8);
   assert.equal(h.world.skillTimer,13.5);
+  assert.equal(h.saves.length,1,'support action must persist only the final atomic state');
   assert.equal(h.saves.at(-1).skillTimer,13.5);
   assert.equal(h.saves.at(-1).drones,1);
   assert.equal(h.world.skillFired,true);
@@ -63,5 +64,22 @@ test('cooldown blocks a repeated support activation without spending another dro
   h.sandbox.special();
   assert.equal(h.world.drones,2);
   assert.equal(h.world.skillTimer,3);
+  assert.equal(h.saves.length,0);
+});
+
+test('ordinary drone action saves once and remains independent of the special skill cooldown', () => {
+  const h=harness({hero:5});
+  const success=h.sandbox.droneStrike();
+  assert.equal(success,true);
+  assert.equal(h.world.drones,1);
+  assert.equal(h.world.skillTimer,0);
+  assert.equal(h.saves.length,1);
+  assert.equal(h.saves[0].drones,1);
+});
+
+test('failed ordinary drone action does not write an invalid save', () => {
+  const h=harness({target:null});
+  assert.equal(h.sandbox.droneStrike(),false);
+  assert.equal(h.world.drones,2);
   assert.equal(h.saves.length,0);
 });
