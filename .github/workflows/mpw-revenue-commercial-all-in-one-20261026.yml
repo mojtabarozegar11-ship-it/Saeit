@@ -58,6 +58,7 @@ jobs:
           print("MPW_COMMERCIAL_SOURCE_QA_12_UNIQUE_SERVICE_PAGES=PASS")
           PY
   release:
+    needs: [source-quality]
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 18
