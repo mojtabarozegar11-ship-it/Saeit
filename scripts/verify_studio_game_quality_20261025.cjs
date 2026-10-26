@@ -152,6 +152,7 @@ vm.runInNewContext(cake+cakeUI+'mountCake();',cakeSandbox);
 assert.ok(!cakeNodes['#cakepreview'].innerHTML.includes('javascript'),'tampered cake color must be rejected');
 assert.ok(!cakeNodes['#cakepreview'].innerHTML.includes('<script>'),'tampered greeting must be rejected');
  // Customer orders require all four attributes, and the same order cannot award points twice.
+ savedCake.delete('taniya-cake-design-v1'); // The previous tamper test deliberately stored 12 candles.
  vm.runInNewContext(cake+cakeUI+'mountCake();',{...cakeSandbox,Math:Object.assign(Object.create(Math),{random:()=>0})});
  assert.ok(cakeMarkup.includes('Customer order:'),'cake challenge must display a customer specification');
  assert.ok(cakeMarkup.includes('Orders completed: 0'),'new session starts with no completed orders');
