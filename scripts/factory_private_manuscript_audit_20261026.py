@@ -42,6 +42,7 @@ def audit(root: Path, *, chapters: int = 30, chapter_target: int = 5300,
     flags = []
     seen_segment_hashes = {}  # Detect exact repeated manuscript segments across chapters.
     seen_prose_hashes = {}  # Catch copied bodies with changed headings or whitespace.
+    seen_long_paragraphs = {}  # Catch reused long paragraphs in otherwise different parts.
     total = 0
     for path in sorted(root.iterdir()):
         if path.name in ("status.json", "complete-unreviewed.md", ".authoring.lock"):
@@ -87,6 +88,24 @@ def audit(root: Path, *, chapters: int = 30, chapter_target: int = 5300,
             first_prose = seen_prose_hashes.setdefault(prose_hash, path.name)
             if first_prose != path.name and first_path == path.name:
                 flags.append("duplicate_prose_body:" + path.name + ":" + first_prose)
+        # An altered introduction or conclusion must not hide an otherwise
+        # identical substantial paragraph. Keep only hashes and private names;
+        # no manuscript prose is emitted in the evidence.
+        for paragraph_index, paragraph in enumerate(
+                re.split(r"\\n[ \\t]*\\n", text), 1):
+            body = " ".join(line for line in paragraph.splitlines()
+                            if line.strip() and not line.lstrip().startswith("#"))
+            tokens = [word.casefold() for word in
+                      re.findall(r"[A-Za-z][A-Za-z0-9'-]*", body)]
+            if len(tokens) < 100:
+                continue
+            paragraph_hash = hashlib.sha256(
+                " ".join(tokens).encode("utf-8")).hexdigest()
+            origin = seen_long_paragraphs.setdefault(
+                paragraph_hash, f"{path.name}:paragraph-{paragraph_index}")
+            location = f"{path.name}:paragraph-{paragraph_index}"
+            if origin != location:
+                flags.append("duplicate_long_paragraph:" + location + ":" + origin)
         n = len(substantive_words(text))
         counts[str(chapter)] += n
         total += n
