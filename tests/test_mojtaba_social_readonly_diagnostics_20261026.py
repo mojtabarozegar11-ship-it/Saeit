@@ -15,8 +15,10 @@ from social_hub.store import Store
 TG_TOKEN="123456789:" + "A"*32
 
 def account(platform, destination, **extras):
-    return {"brand":"personal","platform":platform,"verified":True,
-            "destination":destination,**extras}
+    out={"brand":"personal","platform":platform,"verified":True,
+         "destination":destination}
+    out.update(extras)
+    return out
 
 class Mocks:
     def __init__(self,*responses):
