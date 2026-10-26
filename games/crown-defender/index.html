@@ -1,6 +1,12 @@
 <!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#060915"><meta name="description" content="Fly Crown Defender: Air Supremacy. A mobile-first aerial combat game with detailed jet aircraft, island fortresses, flagship battles and 100 starting lives.">
+<link rel="canonical" href="https://mojplaywin.com/games/crown-defender/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Crown Defender — Air Supremacy | MojPlayWin">
+<meta property="og:description" content="Play a mobile-first aerial combat game with ten star sectors, fleet upgrades and 100 starting lives.">
+<meta property="og:url" content="https://mojplaywin.com/games/crown-defender/">
+<meta name="twitter:card" content="summary">
 <title>Crown Defender — Air Supremacy | MojPlayWin</title>
 <style>
 :root{color-scheme:dark;--gold:#f5ce83;--gold2:#bb833c;--text:#f7f3e9;--muted:#aab6ca;--cyan:#7debe7;--blue:#0b1731;--card:rgba(10,18,36,.90);--border:rgba(248,199,114,.3);--danger:#ff708b}
@@ -125,8 +131,10 @@ if(!ctx){$('overlayText').textContent='This browser does not support Canvas 2D.'
 const W=540,H=960,TAU=Math.PI*2,clamp=(n,a,b)=>Math.max(a,Math.min(b,n)),rnd=(a,b)=>a+Math.random()*(b-a),d2=(a,b,c,d)=>Math.hypot(a-c,b-d),fmt=n=>Math.floor(n).toLocaleString('en-US');
 const STORAGE='mpw-crown-v10-save';const DEFAULT={schema:120,best:0,credits:0,achievements:[],history:[],hangar:{cannons:0,engine:0,armor:0,shield:0,missiles:0,magnet:0,reactor:0,wingmen:0,railgun:0},settings:{quality:'auto',contrast:'normal',autofire:true,sound:false},campaign:{unlockedSector:1,cleared:false},stats:{kills:0,attempts:0,bosses:0,highestWave:1}};
 const safeCopy=obj=>JSON.parse(JSON.stringify(obj));
+// Corrupted saves must not turn Infinity/NaN or nonnumeric progress into max rewards.
+const safeSavedNumber=(value,max,fallback=0)=>{const n=Number(value);return Number.isFinite(n)&&n>=0?clamp(n,0,max):fallback};
 function loadSave(){let obj;try{obj=JSON.parse(localStorage.getItem(STORAGE)||'null')}catch{}const a=safeCopy(DEFAULT);if(!obj||typeof obj!=='object')return a;
-a.best=clamp(Number(obj.best)||0,0,1e10);a.credits=clamp(Number(obj.credits)||0,0,1000000);a.achievements=Array.isArray(obj.achievements)?obj.achievements.filter(x=>typeof x==='string').slice(0,30):[];a.history=Array.isArray(obj.history)?obj.history.filter(x=>x&&Number.isFinite(x.score)).slice(0,5):[];if(obj.hangar)for(const k of Object.keys(a.hangar))a.hangar[k]=clamp(Number(obj.hangar[k])||0,0,5);for(const k of Object.keys(a.settings))if(obj.settings&&typeof obj.settings[k]===typeof a.settings[k])a.settings[k]=obj.settings[k];if(obj.campaign){a.campaign.unlockedSector=clamp(Number(obj.campaign.unlockedSector)||1,1,10);a.campaign.cleared=Number(obj.schema)>=20&&!!obj.campaign.cleared;}if(obj.stats)for(const k of Object.keys(a.stats))a.stats[k]=clamp(Number(obj.stats[k])||0,0,999999);return a;}
+a.best=safeSavedNumber(obj.best,1e10);a.credits=safeSavedNumber(obj.credits,1000000);a.achievements=Array.isArray(obj.achievements)?obj.achievements.filter(x=>typeof x==='string').slice(0,30):[];a.history=Array.isArray(obj.history)?obj.history.filter(x=>x&&Number.isFinite(x.score)).slice(0,5):[];if(obj.hangar)for(const k of Object.keys(a.hangar))a.hangar[k]=safeSavedNumber(obj.hangar[k],5);for(const k of Object.keys(a.settings))if(obj.settings&&typeof obj.settings[k]===typeof a.settings[k])a.settings[k]=obj.settings[k];if(obj.campaign){a.campaign.unlockedSector=Math.max(1,safeSavedNumber(obj.campaign.unlockedSector,10,1));a.campaign.cleared=Number(obj.schema)>=20&&!!obj.campaign.cleared;}if(obj.stats)for(const k of Object.keys(a.stats))a.stats[k]=safeSavedNumber(obj.stats[k],999999);return a;}
 let save=loadSave();try{const legacy=Math.max(0,Number(localStorage.getItem('mpw-crown-defender-best-v1'))||0);save.best=Math.max(save.best,legacy)}catch{}const persist=()=>{try{localStorage.setItem(STORAGE,JSON.stringify(save))}catch{}};
 // Each silhouette is an original vector airframe. Premium entitlements are never read from localStorage.
 const jets=[
