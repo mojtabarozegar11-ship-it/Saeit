@@ -8,6 +8,7 @@ on:
       - scripts/mpw_three_sku_factory_quality1000_20261026.py
       - tests/test_mpw_three_sku_factory_quality1000_20261026.py
       - tests/test_mpw_live_three_sku_qa_copy_20261023.py
+      - .github/requirements/mpw-pdf-parser.txt
       - .github/workflows/mpw-live-three-sku-private-qa-20261023.yml
   push:
     branches: [main]
@@ -16,6 +17,7 @@ on:
       - scripts/mpw_three_sku_factory_quality1000_20261026.py
       - tests/test_mpw_three_sku_factory_quality1000_20261026.py
       - tests/test_mpw_live_three_sku_qa_copy_20261023.py
+      - .github/requirements/mpw-pdf-parser.txt
       - .github/workflows/mpw-live-three-sku-private-qa-20261023.yml
   workflow_dispatch:
   schedule:
@@ -32,12 +34,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11", cache: pip}
+      - name: Install hash-pinned PDF parser for real PDF validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          parser="$RUNNER_TEMP/mpw-pdf-parser"
+          install -d -m 700 "$parser"
+          python3 -m pip install --disable-pip-version-check --no-deps --require-hashes --target "$parser" -r .github/requirements/mpw-pdf-parser.txt
+          PYTHONPATH="$parser" python3 -c 'import pypdf; assert pypdf.__version__ == "6.21.2"'
       - name: Verify exact live SKU selection, hash receipts and no storefront replacement
         shell: bash
         run: |
           set -euo pipefail
-          python3 -B -m unittest discover -s tests -p test_mpw_live_three_sku_qa_copy_20261023.py -v
-          python3 -B -m unittest discover -s tests -p test_mpw_three_sku_factory_quality1000_20261026.py -v
+          PYTHONPATH="$RUNNER_TEMP/mpw-pdf-parser" python3 -B -m unittest discover -s tests -p test_mpw_live_three_sku_qa_copy_20261023.py -v
+          PYTHONPATH="$RUNNER_TEMP/mpw-pdf-parser" python3 -B -m unittest discover -s tests -p test_mpw_three_sku_factory_quality1000_20261026.py -v
           python3 -B -m py_compile scripts/mpw_live_three_sku_qa_copy_20261023.py scripts/mpw_three_sku_factory_quality1000_20261026.py
 
   private-copy:
@@ -48,6 +60,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11", cache: pip}
+      - name: Build hash-pinned PDF parser bundle for private factory only
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-live-three-private-qa"
+          install -d -m 700 "$d" "$d/parser"
+          python3 -m pip install --disable-pip-version-check --no-deps --require-hashes --target "$d/parser" -r .github/requirements/mpw-pdf-parser.txt
+          PYTHONPATH="$d/parser" python3 -c 'import pypdf; assert pypdf.__version__ == "6.21.2"'
+          tar -C "$d/parser" -czf "$d/pypdf-6.21.2.tar.gz" pypdf pypdf-6.21.2.dist-info
+          sha256sum "$d/pypdf-6.21.2.tar.gz" > "$d/pypdf-6.21.2.tar.gz.sha256"
       - name: Establish pinned no-agent-forwarding GitHub to VPS to cPanel relay
         shell: bash
         env:
@@ -91,6 +116,75 @@ jobs:
             RequestTTY no
           EOF
           chmod 600 "$d/config"
+      - name: Provision verified parser in a private versioned VPS dependency directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-live-three-private-qa"
+          archive="/home/githubops/factory-runtime/private/dependencies/.pypdf-6.21.2-$GITHUB_RUN_ID.tar.gz"
+          expected="$(cut -d' ' -f1 "$d/pypdf-6.21.2.tar.gz.sha256")"
+          timeout 45s ssh -T -F "$d/config" saeit-vps "install -d -m 700 /home/githubops/factory-runtime/private/dependencies && test ! -e '$archive'"
+          scp -F "$d/config" "$d/pypdf-6.21.2.tar.gz" "saeit-vps:$archive"
+          timeout 20s ssh -T -F "$d/config" saeit-vps "chmod 600 '$archive'"
+          installer="$(cat <<'PY'
+          import hashlib, os, pathlib, shutil, subprocess, sys, tarfile
+          archive = pathlib.Path(sys.argv[1])
+          expected = sys.argv[2]
+          run_id = sys.argv[3]
+          if hashlib.sha256(archive.read_bytes()).hexdigest() != expected:
+              raise SystemExit("PARSER_BUNDLE_HASH_MISMATCH")
+          dest = pathlib.Path("/home/githubops/factory-runtime/private/dependencies/pypdf-6.21.2")
+          if dest.exists():
+              check = subprocess.run(["python3", "-c", "import pypdf;assert pypdf.__version__=='6.21.2'"],
+                  env={**os.environ, "PYTHONPATH": str(dest)}, check=False)
+              if check.returncode:
+                  raise SystemExit("EXISTING_PARSER_VERSION_INVALID")
+              archive.unlink()
+              print("PINNED_PDF_PARSER_REUSED=true")
+              raise SystemExit(0)
+          temp = dest.parent / (".pypdf-6.21.2-" + run_id)
+          if temp.exists():
+              raise SystemExit("PARSER_TEMP_PATH_EXISTS")
+          temp.mkdir(mode=0o700)
+          total = 0
+          with tarfile.open(archive, "r:gz") as bundle:
+              members = bundle.getmembers()
+              if not members or len(members) > 2000:
+                  raise SystemExit("PARSER_ARCHIVE_MEMBER_LIMIT")
+              for member in members:
+                  p = pathlib.PurePosixPath(member.name)
+                  if p.is_absolute() or ".." in p.parts or not p.parts or p.parts[0] not in {"pypdf", "pypdf-6.21.2.dist-info"}:
+                      raise SystemExit("PARSER_ARCHIVE_PATH_INVALID")
+                  if not (member.isdir() or member.isfile()) or member.issym() or member.islnk():
+                      raise SystemExit("PARSER_ARCHIVE_TYPE_INVALID")
+                  total += member.size
+                  if total > 50000000:
+                      raise SystemExit("PARSER_ARCHIVE_SIZE_LIMIT")
+                  target = temp.joinpath(*p.parts)
+                  if member.isdir():
+                      target.mkdir(parents=True, exist_ok=True, mode=0o700)
+                  else:
+                      target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                      source = bundle.extractfile(member)
+                      if source is None:
+                          raise SystemExit("PARSER_ARCHIVE_MEMBER_EMPTY")
+                      with source, target.open("xb") as output:
+                          shutil.copyfileobj(source, output)
+                      os.chmod(target, 0o600)
+          for directory, subdirs, _ in os.walk(temp):
+              os.chmod(directory, 0o700)
+          check = subprocess.run(["python3", "-c", "import pypdf;assert pypdf.__version__=='6.21.2'"],
+              env={**os.environ, "PYTHONPATH": str(temp)}, check=False)
+          if check.returncode:
+              raise SystemExit("INSTALLED_PARSER_VERSION_INVALID")
+          os.rename(temp, dest)
+          os.chmod(dest, 0o700)
+          archive.unlink()
+          print("PINNED_PDF_PARSER_INSTALLED=true")
+          PY
+          )"
+          installer_b64="$(printf '%s' "$installer" | base64 -w0)"
+          timeout 60s ssh -T -F "$d/config" saeit-vps "python3 -c 'import base64;exec(base64.b64decode(\"$installer_b64\"))' '$archive' '$expected' '$GITHUB_RUN_ID'"
       - name: Stream exactly three read-only live retail files into private factory QA
         shell: bash
         run: |
@@ -114,7 +208,7 @@ jobs:
           script="$(base64 -w0 scripts/mpw_three_sku_factory_quality1000_20261026.py)"
           test -n "$script"
           timeout 155s ssh -T -F "$d/config" saeit-vps \
-            "python3 -c 'import base64;exec(base64.b64decode(\"$script\"))'"
+            "PYTHONPATH=\"\$HOME/factory-runtime/private/dependencies/pypdf-6.21.2\" python3 -c 'import base64;exec(base64.b64decode(\"$script\"))'"
           echo 'MPW_THREE_EXISTING_STORE_SKUS_FACTORY_QUALITY1000_REWORK_ADMITTED=PASS'
           echo 'MPW_PROFESSIONAL_QUALITY_1000_PENDING_EXTERNAL_EVIDENCE=true'
       - name: Confirm public storefront routes remain reachable
