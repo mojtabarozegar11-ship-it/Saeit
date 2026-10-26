@@ -1,0 +1,34 @@
+name: Studio games quality regression (isolated)
+on:
+  pull_request:
+    paths:
+      - 'templates/studio_raha/index.html'
+      - 'templates/taniya_studio/index.html'
+      - 'mpw-editorial/field-guides/20261023/prism-relay/index.html'
+      - 'scripts/verify_studio_game_quality_20261025.cjs'
+      - '.github/workflows/studio-games-quality-20261025.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  game-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Run isolated game logic and syntax regressions
+        run: node scripts/verify_studio_game_quality_20261025.cjs
+      - name: Reject changes to protected commerce paths
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          git diff --name-only "$BASE_SHA" HEAD > /tmp/studio-changed-paths
+          if grep -Ei '(^|/)(checkout|payment|wallet|store)(/|[._-])' /tmp/studio-changed-paths; then
+            echo "Protected commerce path was changed by this game-only PR"
+            exit 1
+          fi
