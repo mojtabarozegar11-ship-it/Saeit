@@ -101,6 +101,7 @@ jobs:
                   handler=match.func
                   name=handler.__module__+"."+handler.__name__
                   code=inspect.getsource(handler)
+                  if pk==779: print('MPW_TRIAL_LIVE_VIEW_SOURCE='+code[:6000].replace(chr(10),'\\n'))
                   selected=[line.strip() for line in code.splitlines() if any(term in line.lower() for term in ("get_object_or_404","filter(","404","active","published","product","redirect","allowlist","whitelist","guard","pk"))]
                   status=Client(raise_request_exception=False).get(path,secure=True,HTTP_HOST="mojplaywin.com").status_code
                   print("MPW_TRIAL_ROUTE_DIAGNOSTIC="+json.dumps({"pk":pk,"product":v,"handler":name,"code_lines":selected[:36],"status":status},default=str))
