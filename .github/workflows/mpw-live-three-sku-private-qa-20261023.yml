@@ -80,8 +80,8 @@ jobs:
           python3 -m pip install --disable-pip-version-check --no-deps --require-hashes --target "$d/parser" -r .github/requirements/mpw-pdf-parser.txt
           python3 -m pip install --disable-pip-version-check --no-deps --require-hashes --only-binary=:all: --platform manylinux_2_17_x86_64 --implementation py --python-version 311 --abi none --target "$d/parser" -r .github/requirements/mpw-pdf-renderer.txt
           PYTHONPATH="$d/parser" python3 -c 'import PyPDF2,pypdfium2,importlib.metadata; assert PyPDF2.__version__ == "3.0.1"; assert importlib.metadata.version("pypdfium2") == "5.14.0"'
-          tar -C "$d/parser" -czf "$d/PyPDF2-3.0.1-pypdfium2-5.14.0.tar.gz" PyPDF2 pypdf2-3.0.1.dist-info typing_extensions.py typing_extensions-4.13.2.dist-info pypdfium2 pypdfium2_raw pypdfium2-5.14.0.dist-info
-          sha256sum "$d/PyPDF2-3.0.1-pypdfium2-5.14.0.tar.gz" > "$d/PyPDF2-3.0.1-pypdfium2-5.14.0.tar.gz.sha256"
+          tar -C "$d/parser" -czf "$d/PyPDF2-3.0.1-pypdfium2-5.14.0-cfg1.tar.gz" PyPDF2 pypdf2-3.0.1.dist-info typing_extensions.py typing_extensions-4.13.2.dist-info pypdfium2 pypdfium2_raw pypdfium2_cfg pypdfium2-5.14.0.dist-info
+          sha256sum "$d/PyPDF2-3.0.1-pypdfium2-5.14.0-cfg1.tar.gz" > "$d/PyPDF2-3.0.1-pypdfium2-5.14.0-cfg1.tar.gz.sha256"
       - name: Establish pinned no-agent-forwarding GitHub to VPS to cPanel relay
         shell: bash
         env:
@@ -130,10 +130,10 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-live-three-private-qa"
-          archive="/home/githubops/factory-runtime/private/dependencies/.PyPDF2-3.0.1-pypdfium2-5.14.0-$GITHUB_RUN_ID.tar.gz"
-          expected="$(cut -d' ' -f1 "$d/PyPDF2-3.0.1-pypdfium2-5.14.0.tar.gz.sha256")"
+          archive="/home/githubops/factory-runtime/private/dependencies/.PyPDF2-3.0.1-pypdfium2-5.14.0-cfg1-$GITHUB_RUN_ID.tar.gz"
+          expected="$(cut -d' ' -f1 "$d/PyPDF2-3.0.1-pypdfium2-5.14.0-cfg1.tar.gz.sha256")"
           timeout 45s ssh -T -F "$d/config" saeit-vps "install -d -m 700 /home/githubops/factory-runtime/private/dependencies && test ! -e '$archive'"
-          scp -F "$d/config" "$d/PyPDF2-3.0.1-pypdfium2-5.14.0.tar.gz" "saeit-vps:$archive"
+          scp -F "$d/config" "$d/PyPDF2-3.0.1-pypdfium2-5.14.0-cfg1.tar.gz" "saeit-vps:$archive"
           timeout 20s ssh -T -F "$d/config" saeit-vps "chmod 600 '$archive'"
           installer="$(cat <<'PY'
           import hashlib, os, pathlib, shutil, subprocess, sys, tarfile
@@ -142,8 +142,8 @@ jobs:
           run_id = sys.argv[3]
           if hashlib.sha256(archive.read_bytes()).hexdigest() != expected:
               raise SystemExit("PARSER_BUNDLE_HASH_MISMATCH")
-          dest = pathlib.Path("/home/githubops/factory-runtime/private/dependencies/PyPDF2-3.0.1-pypdfium2-5.14.0")
-          stale = dest.parent / ".PyPDF2-3.0.1-pypdfium2-5.14.0-40251823204"
+          dest = pathlib.Path("/home/githubops/factory-runtime/private/dependencies/PyPDF2-3.0.1-pypdfium2-5.14.0-cfg1")
+          stale = dest.parent / ".PyPDF2-3.0.1-pypdfium2-5.14.0-cfg1-40251823204"
           if stale.exists():
               if stale.is_symlink():
                   raise SystemExit("PARSER_STALE_TEMP_PATH_UNSAFE")
@@ -156,7 +156,7 @@ jobs:
               archive.unlink()
               print("PINNED_PDF_PARSER_REUSED=true")
               raise SystemExit(0)
-          temp = dest.parent / (".PyPDF2-3.0.1-pypdfium2-5.14.0-" + run_id)
+          temp = dest.parent / (".PyPDF2-3.0.1-pypdfium2-5.14.0-cfg1-" + run_id)
           if temp.exists():
               if temp.is_symlink():
                   raise SystemExit("PARSER_TEMP_PATH_UNSAFE")
@@ -169,7 +169,7 @@ jobs:
                   raise SystemExit("PARSER_ARCHIVE_MEMBER_LIMIT")
               for member in members:
                   p = pathlib.PurePosixPath(member.name)
-                  if p.is_absolute() or ".." in p.parts or not p.parts or p.parts[0] not in {"PyPDF2", "pypdf2-3.0.1.dist-info", "typing_extensions.py", "typing_extensions-4.13.2.dist-info", "pypdfium2", "pypdfium2_raw", "pypdfium2-5.14.0.dist-info"}:
+                  if p.is_absolute() or ".." in p.parts or not p.parts or p.parts[0] not in {"PyPDF2", "pypdf2-3.0.1.dist-info", "typing_extensions.py", "typing_extensions-4.13.2.dist-info", "pypdfium2", "pypdfium2_raw", "pypdfium2_cfg", "pypdfium2-5.14.0.dist-info"}:
                       raise SystemExit("PARSER_ARCHIVE_PATH_INVALID")
                   if not (member.isdir() or member.isfile()) or member.issym() or member.islnk():
                       raise SystemExit("PARSER_ARCHIVE_TYPE_INVALID")
@@ -224,7 +224,7 @@ jobs:
           script="$(base64 -w0 scripts/mpw_three_sku_factory_quality1000_20261026.py)"
           test -n "$script"
           timeout 155s ssh -T -F "$d/config" saeit-vps \
-            "PYTHONPATH=\"\$HOME/factory-runtime/private/dependencies/PyPDF2-3.0.1-pypdfium2-5.14.0\" python3 -c 'import base64;exec(base64.b64decode(\"$script\"))'"
+            "PYTHONPATH=\"\$HOME/factory-runtime/private/dependencies/PyPDF2-3.0.1-pypdfium2-5.14.0-cfg1\" python3 -c 'import base64;exec(base64.b64decode(\"$script\"))'"
           echo 'MPW_THREE_EXISTING_STORE_SKUS_FACTORY_QUALITY1000_REWORK_ADMITTED=PASS'
           echo 'MPW_PROFESSIONAL_QUALITY_1000_PENDING_EXTERNAL_EVIDENCE=true'
       - name: Execute private content audit over all pages and packaged assets
@@ -235,7 +235,7 @@ jobs:
           script="$(base64 -w0 scripts/mpw_three_sku_private_content_audit_20261026.py)"
           test -n "$script"
           timeout 210s ssh -T -F "$d/config" saeit-vps \
-            "PYTHONPATH=\"\$HOME/factory-runtime/private/dependencies/PyPDF2-3.0.1-pypdfium2-5.14.0\" python3 -c 'import base64;exec(base64.b64decode(\"$script\"))'"
+            "PYTHONPATH=\"\$HOME/factory-runtime/private/dependencies/PyPDF2-3.0.1-pypdfium2-5.14.0-cfg1\" python3 -c 'import base64;exec(base64.b64decode(\"$script\"))'"
           echo 'MPW_PRIVATE_CONTENT_BYTES_EMITTED=0'
           echo 'MPW_PRIVATE_CONTENT_AUDIT_REPORTS=3'
           echo 'MPW_QUALITY1000_CERTIFIED=0'
