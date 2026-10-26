@@ -18,14 +18,16 @@ PIXEL = base64.b64decode(
 
 
 class PrivateBrowserQaTests(unittest.TestCase):
-    def make_archive(self, path, missing=False):
+    def make_archive(self, path, missing=False, wide=False):
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("index.html",
                 "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
                 "<meta name='viewport' content='width=device-width,initial-scale=1'>"
                 "<title>Client-Ready Kit</title>"
                 "<style>html,body{margin:0}main{max-width:960px;margin:auto;padding:16px}"
-                "img{max-width:100%;height:auto}</style></head><body><main>"
+                "img{max-width:100%;height:auto}" +
+                ("main{min-width:453px}" if wide else "") +
+                "</style></head><body><main>"
                 "<h1>Functional Website Kit</h1><p>This is a real local browser "
                 "rendering smoke test across desktop and mobile viewports.</p>"
                 "<img alt='Hero' src='" + ("missing.png" if missing else "hero.png") + "'>"
@@ -44,7 +46,9 @@ class PrivateBrowserQaTests(unittest.TestCase):
             views = qa.browser_views(extraction, entry)
             self.assertEqual(len(views), 2)
             self.assertEqual([v["requested_viewport"][0] for v in views], [390, 1440])
-            self.assertEqual([v["viewport_width"] for v in views], [390, 1440])
+            self.assertEqual(views[0]["device_screen_width"], 390)
+            self.assertEqual(views[0]["visual_viewport_width"], 390)
+            self.assertEqual(views[1]["viewport_width"], 1440)
             self.assertEqual([v["viewport_height"] for v in views], [844, 900])
             for view in views:
                 self.assertTrue(view["ready"])
@@ -64,6 +68,20 @@ class PrivateBrowserQaTests(unittest.TestCase):
             views = qa.browser_views(extraction, entry)
             self.assertEqual(len(views), 2)
             self.assertTrue(all(v["broken_images"] >= 1 for v in views))
+
+    def test_mobile_min_width_reports_real_physical_overflow(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = Path(temp) / "too-wide.zip"
+            self.make_archive(archive, wide=True)
+            extraction = Path(temp) / "extracted"
+            extraction.mkdir(mode=0o700)
+            entry = qa.safe_extract(archive, extraction)
+            views = qa.browser_views(extraction, entry)
+            self.assertEqual(views[0]["device_screen_width"], 390)
+            self.assertEqual(views[0]["visual_viewport_width"], 390)
+            self.assertGreaterEqual(views[0]["horizontal_overflow_px"], 60)
+            self.assertTrue(any(item["min_width"] == "453px"
+                                for item in views[0]["overflowing_shapes"]))
 
     def test_zip_path_traversal_fails_closed(self):
         with tempfile.TemporaryDirectory() as temp:
