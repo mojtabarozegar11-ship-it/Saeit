@@ -122,6 +122,48 @@ jobs:
             "matches_are_not_independent_legal_clearance":True
           },sort_keys=True))
           PY
+      - name: Diagnose live TRX invoice routing and expiry without reading buyer details
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 70s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,json
+          from pathlib import Path
+          from collections import Counter
+          root=Path("/home/zomorod2/Saeit-staging")
+          os.chdir(root);sys.path.insert(0,str(root))
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.urls import resolve,Resolver404
+          from django.utils import timezone
+          from core.models import PaymentIntent
+          from services.mpw_walletless_commercial_intent import PROVIDER,WAITING,_decode
+          routes={}
+          for route in ("/commerce/trx-easy/invoice/1/",
+                        "/commerce/trx-easy/purchases/",
+                        "/commerce/trx-easy/start/72/",
+                        "/commerce/trx-easy/status/1/"):
+            try:
+              view=resolve(route).func
+              routes[route]={"resolves":True,"module":view.__module__,
+                             "function":getattr(view,"__name__","wrapped")}
+            except Resolver404:
+              routes[route]={"resolves":False}
+          statuses=Counter()
+          unexpired=0
+          decode_failed=0
+          for intent in PaymentIntent.objects.filter(provider=PROVIDER).order_by("-pk")[:100]:
+            statuses[str(intent.status)]+=1
+            if intent.status==WAITING:
+              try:
+                if _decode(intent).expires_at>timezone.now():unexpired+=1
+              except Exception:decode_failed+=1
+          print("MPW_LIVE_INVOICE_DIAG="+json.dumps({
+            "read_only":True,"routes":routes,"recent_intent_status_counts":dict(statuses),
+            "recent_pending_unexpired":unexpired,"recent_pending_decode_failed":decode_failed,
+            "no_customer_identifiers_disclosed":True,"no_invoice_created":True},sort_keys=True))
+          PY
       - name: Check all three publicly listed products without changing checkout or customer data
         run: |
           set -euo pipefail
