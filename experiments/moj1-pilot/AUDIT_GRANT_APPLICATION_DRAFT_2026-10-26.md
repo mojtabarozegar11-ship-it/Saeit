@@ -19,7 +19,7 @@
 | Core in-repo first-party contracts | `experiments/moj1-pilot/contracts/MojCoinGuarded.sol`; `MojGenesisFactoryGuarded.sol` |
 | Approx. source scope size | **75** nonblank, noncomment lines across those **two first-party Solidity files** (12 + 63; measured on the frozen commit). This excludes third-party imported contracts and any additional treasury, vesting, governance or integration scope. **Not a complete audit nSLOC estimate.** |
 | GitHub repository | `https://github.com/mojtabarozegar11-ship-it/Saeit`; frozen commit above (access/permissions must be separately arranged when an auditor is engaged) |
-| Contact | `mojtaba.rozegar11@gmail.com` (internal reference; transmitting this to a form requires specific approval if applicable) |
+| Contact | Use separately approved project contact when an application is authorized; do not pre-publish contact details. |
 | V2 Shasta testnet token | `TA8dcG3b9GByaY9vZ1LVjsFohZrZ4CveAY` |
 | V2 factory escrow | `TCBNLE1ZgEcAWXRZ6jjYPSyUH7WiHpLyBm` |
 | Expected audit timeline | **Not sure yet**; only when independent funding and scope exist |
