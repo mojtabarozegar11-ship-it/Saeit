@@ -128,3 +128,42 @@ jobs:
           for name in ('MPW_TRX_PUBLIC_PRODUCT_IDS','MPW_TRX_LIVE','MPW_TRX_ENABLED','MPW_TRX_GATEWAY_ENABLED','MPW_TRX_CATALOG_ENABLED'):
             print('MPW_PAYMENT_FLAG='+json.dumps({'name':name,'value':str(getattr(settings,name,'UNSPECIFIED'))[:100]}))
           PY
+      - name: Audit remaining active products and verifiable chain gate
+        run: |
+          timeout 130s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,inspect
+          from types import SimpleNamespace
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from core.models import Product
+          from django.conf import settings
+          from mpw_commerce.buyer_orders import _eligible
+          from mpw_commerce.downloads import _private_file
+          for prod in Product.objects.filter(active=True).order_by('pk'):
+            try: elig=bool(_eligible(prod))
+            except Exception as e:elig='error:'+type(e).__name__
+            try:
+              f=_private_file(SimpleNamespace(product=prod))
+              valid=f.is_file() and not f.is_symlink() and f.stat().st_size>0
+            except Exception:valid=False
+            meta=prod.metadata or {}
+            flags={k:meta.get(k) for k in ('checkout_enabled','payment_live','quality_approved','license_verified','factory_publication_permission','rights_cleared','sales_enabled') if k in meta}
+            print('MPW_ACTIVE_PRODUCT_GATE='+json.dumps({'id':prod.pk,'type':prod.product_type,'price':str(prod.price),'eligible':elig,'private_file_ready':valid,'in_trx_allowlist':prod.pk in getattr(settings,'MPW_TRX_PUBLIC_PRODUCT_IDS',()),'flags':flags}))
+          import services.mpw_walletless_commercial_intent as intent
+          for name in ('reserve_commercial_intent','reconcile_commercial_intent_from_candidates','_commercial_db','_paid_read_db','_decode','_rate_provider'):
+            obj=getattr(intent,name,None)
+            if callable(obj):
+              print('MPW_INTENT_FN='+json.dumps({'name':name,'source':inspect.getsource(obj)[:18000]}))
+          from services import mpw_trx_commercial_web as w
+          for name in ('_rate_provider','_configured_receiver','_ensure_live','_start_order'):
+            obj=getattr(w,name,None)
+            if callable(obj): print('MPW_WEB_FN='+json.dumps({'name':name,'source':inspect.getsource(obj)[:15000]}))
+          import services.mpw_tron_readonly_deposit_candidates as candidates
+          for name in ('find_candidate_hashes',):
+            obj=getattr(candidates,name,None)
+            if callable(obj):print('MPW_DEPOSIT_FN='+json.dumps({'name':name,'source':inspect.getsource(obj)[:14000]}))
+          import services.mpw_trx_commercial_chain as chain
+          for name in ('read_only_independent_pair',):
+            obj=getattr(chain,name,None)
+            if callable(obj):print('MPW_CHAIN_FN='+json.dumps({'name':name,'source':inspect.getsource(obj)[:14000]}))
+          PY
