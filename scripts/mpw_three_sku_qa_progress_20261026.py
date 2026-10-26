@@ -162,7 +162,7 @@ def verified_progress(root, ident):
         "next_private_operation": {
             72: "source-specific factual and citation review, then create a version-bound improved candidate",
             225: "story, child-appropriateness and illustration review, then create a version-bound improved candidate",
-            879: "isolated browser gameplay and security review, then create a version-bound improved candidate",
+            879: "isolated responsive-browser, navigation, accessibility and security review, then create a version-bound improved website-kit candidate",
         }[ident],
     }
     raw = (json.dumps(evidence, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
