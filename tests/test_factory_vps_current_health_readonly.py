@@ -34,6 +34,11 @@ class ReadOnlyFactoryHealthTests(unittest.TestCase):
                  patch.object(audit.os, "geteuid", return_value=1000), \
                  patch.object(audit, "command", return_value=""):
                 result = audit.inventory()
+                # An array is valid JSON syntax but never a valid order object.
+                (orders / "WO-00000001.json").write_text("[]", encoding="utf8")
+                malformed = audit.inventory()
+            self.assertEqual(malformed["agri_invalid"], 1)
+            self.assertEqual(malformed["current_order_unsafe"], 1)
             self.assertTrue(result["read_only"])
             self.assertEqual(result["server_written_bytes"], 0)
             self.assertEqual(result["agri_index_entries"], 2)
