@@ -193,9 +193,13 @@ def canonical_reasoning_view(body):
     """Canonicalize safety markers only; do not alter manuscript content."""
     import unicodedata
     safety_view = unicodedata.normalize("NFKC", body)
-    safety_view = re.sub(
-        r"[\u00ad\u061c\u200b\u200c\u200d\u200e\u200f\u2060\ufeff\u202a-\u202e\u2066-\u2069]",
-        "", safety_view)
+    # Strip every Unicode format control, not just a hand-picked subset.
+    # U+034F (combining grapheme joiner) is also invisible but categorized Mn.
+    # This is a safety-only view; the submitted prose is never rewritten.
+    safety_view = "".join(
+        ch for ch in safety_view
+        if unicodedata.category(ch) != "Cf" and ch != "\u034f"
+    )
     return safety_view.casefold()
 
 def accept(chunks, body):
