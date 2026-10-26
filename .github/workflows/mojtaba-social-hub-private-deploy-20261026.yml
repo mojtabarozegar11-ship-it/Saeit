@@ -32,6 +32,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_ai_20261026.py' -v
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_hub_upgrade_20261026.py' -v
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_onboarding_20261026.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojtaba_social_public_official_20261026.py' -v
   deploy:
     needs: preflight
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
@@ -182,6 +183,14 @@ jobs:
               raise RuntimeError('Authorized private connection status unavailable')
           print('PERSONAL_STAFF_PROTECTED_ROUTE=PASS',flush=True)
           print('SOCIAL_AUTHENTICATED_DASHBOARD=PASS',flush=True)
+          directory_path=reverse('mojtaba_official_channels')
+          public=test.get(directory_path,secure=True)
+          if public.status_code!=200 or b'Verified official channels' not in public.content:
+              raise RuntimeError('Public vetted social directory not available')
+          public_data=test.get(reverse('mojtaba_official_channels_json'),secure=True)
+          if public_data.status_code!=200 or not isinstance(public_data.json().get('brands'),list):
+              raise RuntimeError('Public official social JSON directory failed')
+          print('SOCIAL_PUBLIC_CHANNEL_DIRECTORY=PASS',flush=True)
           PY
           test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
           "$py" - <<'PY'
