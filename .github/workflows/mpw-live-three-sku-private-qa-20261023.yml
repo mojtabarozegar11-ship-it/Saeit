@@ -50,7 +50,7 @@ jobs:
           install -d -m 700 "$parser"
           python3 -m pip install --disable-pip-version-check --no-deps --require-hashes --target "$parser" -r .github/requirements/mpw-pdf-parser.txt
           python3 -m pip install --disable-pip-version-check --no-deps --require-hashes --only-binary=:all: --platform manylinux_2_17_x86_64 --implementation py --python-version 311 --abi none --target "$parser" -r .github/requirements/mpw-pdf-renderer.txt
-          PYTHONPATH="$parser" python3 -c 'import PyPDF2,importlib.metadata; assert PyPDF2.__version__ == "3.0.1"; assert importlib.metadata.version("pypdfium2") == "5.14.0"'
+          PYTHONPATH="$parser" python3 -c 'import PyPDF2,pypdfium2,importlib.metadata; assert PyPDF2.__version__ == "3.0.1"; assert importlib.metadata.version("pypdfium2") == "5.14.0"'
       - name: Verify exact live SKU selection, hash receipts and no storefront replacement
         shell: bash
         run: |
@@ -79,7 +79,7 @@ jobs:
           install -d -m 700 "$d" "$d/parser"
           python3 -m pip install --disable-pip-version-check --no-deps --require-hashes --target "$d/parser" -r .github/requirements/mpw-pdf-parser.txt
           python3 -m pip install --disable-pip-version-check --no-deps --require-hashes --only-binary=:all: --platform manylinux_2_17_x86_64 --implementation py --python-version 311 --abi none --target "$d/parser" -r .github/requirements/mpw-pdf-renderer.txt
-          PYTHONPATH="$d/parser" python3 -c 'import PyPDF2,importlib.metadata; assert PyPDF2.__version__ == "3.0.1"; assert importlib.metadata.version("pypdfium2") == "5.14.0"'
+          PYTHONPATH="$d/parser" python3 -c 'import PyPDF2,pypdfium2,importlib.metadata; assert PyPDF2.__version__ == "3.0.1"; assert importlib.metadata.version("pypdfium2") == "5.14.0"'
           tar -C "$d/parser" -czf "$d/PyPDF2-3.0.1-pypdfium2-5.14.0.tar.gz" PyPDF2 pypdf2-3.0.1.dist-info typing_extensions.py typing_extensions-4.13.2.dist-info pypdfium2 pypdfium2_raw pypdfium2-5.14.0.dist-info
           sha256sum "$d/PyPDF2-3.0.1-pypdfium2-5.14.0.tar.gz" > "$d/PyPDF2-3.0.1-pypdfium2-5.14.0.tar.gz.sha256"
       - name: Establish pinned no-agent-forwarding GitHub to VPS to cPanel relay
@@ -149,7 +149,7 @@ jobs:
                   raise SystemExit("PARSER_STALE_TEMP_PATH_UNSAFE")
               shutil.rmtree(stale)
           if dest.exists():
-              check = subprocess.run(["python3", "-c", "import PyPDF2;assert PyPDF2.__version__=='3.0.1'"],
+              check = subprocess.run(["python3", "-c", "import PyPDF2,pypdfium2,importlib.metadata;assert PyPDF2.__version__=='3.0.1';assert importlib.metadata.version('pypdfium2')=='5.14.0'"],
                   env={**os.environ, "PYTHONPATH": str(dest)}, check=False)
               if check.returncode:
                   raise SystemExit("EXISTING_PARSER_VERSION_INVALID")
@@ -189,7 +189,7 @@ jobs:
                       os.chmod(target, 0o600)
           for directory, subdirs, _ in os.walk(temp):
               os.chmod(directory, 0o700)
-          check = subprocess.run(["python3", "-c", "import PyPDF2;assert PyPDF2.__version__=='3.0.1'"],
+          check = subprocess.run(["python3", "-c", "import PyPDF2,pypdfium2,importlib.metadata;assert PyPDF2.__version__=='3.0.1';assert importlib.metadata.version('pypdfium2')=='5.14.0'"],
               env={**os.environ, "PYTHONPATH": str(temp)}, check=False)
           if check.returncode:
               raise SystemExit("INSTALLED_PARSER_VERSION_INVALID")
