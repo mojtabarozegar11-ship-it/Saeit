@@ -21,6 +21,14 @@
     };
   }
   function canExit(piece, others, size) {
+    // Imported/saved puzzles must not crash the solver when a path or heading is corrupt.
+    if (!piece || !Array.isArray(piece.path) || piece.path.length === 0 ||
+        !Number.isInteger(piece.dir) || piece.dir < 0 || piece.dir >= DIRECTIONS.length ||
+        !Number.isInteger(size) || size < 2 || size > 64 || !Array.isArray(others) ||
+        !piece.path.every(p => p && Number.isInteger(p.x) && Number.isInteger(p.y) &&
+          p.x >= 0 && p.x < size && p.y >= 0 && p.y < size) ||
+        !others.every(other => other && Array.isArray(other.path) &&
+          other.path.every(p => p && Number.isInteger(p.x) && Number.isInteger(p.y)))) return false;
     const occupied = new Set();
     for (const other of others) {
       if (other.id === piece.id) continue;
