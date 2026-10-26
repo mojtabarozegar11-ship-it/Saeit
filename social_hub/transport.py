@@ -8,6 +8,12 @@ from .adapters import Response, Uncertain
 
 MAX_JSON_BYTES = 2_000_000
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise Uncertain("Unexpected external API redirect; refuse token forwarding")
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
 def http_transport(method: str, url: str, body, headers: dict) -> Response:
     """Use only URLs constructed by adapters, never unsanitized user-supplied URLs."""
     if method not in ("POST", "PUT", "GET"):
@@ -24,7 +30,7 @@ def http_transport(method: str, url: str, body, headers: dict) -> Response:
         raise Uncertain("Invalid HTTP body")
     request = urllib.request.Request(url, data=encoded, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with _OPENER.open(request, timeout=30) as response:
             raw = response.read(MAX_JSON_BYTES + 1)
             if len(raw) > MAX_JSON_BYTES:
                 raise Uncertain("Upstream response too large")
