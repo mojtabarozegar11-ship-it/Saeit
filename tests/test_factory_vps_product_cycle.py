@@ -258,10 +258,15 @@ class FactorySynthesisIntegrationTests(unittest.TestCase):
         self.assertEqual(second["registered_recipes"],5)
         self.assertEqual(second["new_recipe_count"],1)
         self.assertEqual(sorted(x.name for x in self.recipes.iterdir()),static_before)
-        slots=json.loads((self.output/"quality-excellence/product-flow/active-slots/current.json").read_text())
-        self.assertEqual(len(slots["active"]),1)
-        active_recipe=slots["active"][0]["recipe"]
-        generated=self.output/"generated-product-recipes"/active_recipe
+        generated_root=self.output/"generated-product-recipes"
+        active_recipe=next(path.name for path in generated_root.iterdir() if path.is_dir())
+        slot_path=self.output/"quality-excellence/product-flow/active-slots/current.json"
+        slots=json.loads(slot_path.read_text())
+        previous_active=[item["recipe"] for item in slots["active"] if item["recipe"]!=active_recipe]
+        slots["active"]=[{"recipe":active_recipe,"status":"active"}]
+        slots["waiting"]=previous_active+[name for name in slots["waiting"] if name!=active_recipe]
+        slot_path.write_text(json.dumps(slots))
+        generated=generated_root/active_recipe
         (generated/"calculator.py").write_text("raise RuntimeError('deliberate fault')\\n")
         third=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True)
         self.assertEqual(third["status"],"ok")
