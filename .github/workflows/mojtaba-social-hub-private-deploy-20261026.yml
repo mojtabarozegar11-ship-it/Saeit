@@ -33,6 +33,8 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_hub_upgrade_20261026.py' -v
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_onboarding_20261026.py' -v
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_public_official_20261026.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojtaba_social_readonly_diagnostics_20261026.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojtaba_social_connection_plan_20261026.py' -v
   deploy:
     needs: preflight
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
@@ -185,11 +187,22 @@ jobs:
           owner_request=RequestFactory().get(url,secure=True,HTTP_HOST='mojplaywin.com')
           owner_request.user=staff
           owner_response=dashboard(owner_request)
-          if owner_response.status_code!=200 or b'manifest_json' not in owner_response.content:
+          if (owner_response.status_code!=200 or b'manifest_json' not in owner_response.content
+              or b'connection_probe' not in owner_response.content
+              or b'suspend_account' not in owner_response.content):
               raise RuntimeError('Authorized social batch-onboarding UI not rendered')
           api_response=read_status(owner_request)
           if api_response.status_code!=200:
               raise RuntimeError('Authorized private connection status unavailable')
+          from social_hub.portal import connection_plan
+          planned=connection_plan(owner_request)
+          if planned.status_code!=200 or planned.json().get("credentials_included") is not False:
+              raise RuntimeError('Private API readiness plan not available or unsafe')
+          noauth=Client(HTTP_HOST='mojplaywin.com').get(
+              reverse('mojtaba_social_connection_plan'),secure=True)
+          if noauth.status_code not in (302,403):
+              raise RuntimeError('Private API readiness plan exposed to unauthenticated public')
+          print('PERSONAL_API_READINESS_SECRET_FREE=PASS',flush=True)
           print('PERSONAL_STAFF_PROTECTED_ROUTE=PASS',flush=True)
           print('SOCIAL_AUTHENTICATED_DASHBOARD=PASS',flush=True)
           directory_path=reverse('mojtaba_official_channels')
@@ -197,6 +210,8 @@ jobs:
           public=test.get(directory_path,secure=True)
           if public.status_code!=200 or b'Verified official channels' not in public.content:
               raise RuntimeError('Public vetted social directory not available')
+          if 'no-store' not in public.headers.get('Cache-Control',''):
+              raise RuntimeError('Revoked public profile link may persist in cache')
           public_data=test.get(reverse('mojtaba_official_channels_json'),secure=True)
           if public_data.status_code!=200 or not isinstance(public_data.json().get('brands'),list):
               raise RuntimeError('Public official social JSON directory failed')
