@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assessV2MarketGate } from '../scripts/v2-market-readiness-offline.mjs';
+import { assessV2MarketGate, isValidTronAddress } from '../scripts/v2-market-readiness-offline.mjs';
 
 function fixtures() {
   return {
@@ -93,6 +93,38 @@ test('claimed audit and newly toggled owner flags cannot self-authorize a releas
   assert.ok(r.inconsistencies.includes('EXTERNAL_REVIEW_STATUS_NOT_PENDING'));
   assert.ok(r.inconsistencies.includes('UNVERIFIED_OWNER_RELEASE_STATE'));
   assert.equal(r.marketOrMainnetAuthorized,false);
+});
+
+test('all recorded Shasta contract addresses have valid TRON Base58Check checksums', () => {
+  const {v1,v2} = fixtures();
+  for (const address of [
+    v1.token_contract, v2.candidate_token_contract,
+    v2.candidate_genesis_factory, v2.pilot_governance_contract,
+  ]) {
+    assert.equal(isValidTronAddress(address), true, address);
+  }
+  assert.equal(isValidTronAddress('T' + '1'.repeat(33)), false);
+  assert.equal(isValidTronAddress('T0' + '1'.repeat(32)), false);
+});
+
+test('tampered or duplicate contract addresses fail the V2 market gate closed', () => {
+  const modified = fixtures();
+  modified.v2.candidate_token_contract =
+    modified.v2.candidate_token_contract.slice(0, -1) + '1';
+  const invalid = assessV2MarketGate(modified.policy, modified.v1, modified.v2);
+  assert.ok(invalid.inconsistencies.includes('TRON_ADDRESS_CHECKSUM_INVALID'));
+  assert.equal(invalid.marketOrMainnetAuthorized, false);
+
+  const duplicated = fixtures();
+  duplicated.v2.candidate_genesis_factory = duplicated.v2.candidate_token_contract;
+  const collision = assessV2MarketGate(duplicated.policy, duplicated.v1, duplicated.v2);
+  assert.ok(collision.inconsistencies.includes('TRON_ADDRESS_ROLE_COLLISION'));
+  assert.equal(collision.marketOrMainnetAuthorized, false);
+
+  const missing = fixtures();
+  delete missing.v2.pilot_governance_contract;
+  const noGovernor = assessV2MarketGate(missing.policy, missing.v1, missing.v2);
+  assert.ok(noGovernor.inconsistencies.includes('TRON_ADDRESS_CHECKSUM_INVALID'));
 });
 
 test('missing manifest rejects without exceptions and without permits', () => {
