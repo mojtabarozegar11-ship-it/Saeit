@@ -1,5 +1,10 @@
 # Mojtaba Roozegar — Research and Project Portfolio (staging only)
 
+## Research source-status update — 26 October 2026 (staging only)
+
+MR-2026-001: [C42 original-publisher Amini full-method audit](../manuscripts/MR-2026-001/MR-2026-001_C42_AMINI_2025_ORIGINAL_FULL_METHODS_F7_PROVENANCE_AUDIT_2026-10-26.md) now distinguishes measured plot outcomes from independently verified irrigation-event adherence; conflicting F7 values remain unresolved. AE-2026-001: [C13 country-level WDI attrition audit](../manuscripts/AE-2026-001/AE-2026-001_C13_FOUR_ECONOMY_2023_ATTRITION_ORDER_STATISTIC_AUDIT_2026-10-26.md) identifies the four 2023-attrited economies and explains median invariance. Both source manuscripts changed after previously verified Word builds, so **no current exact-source Word is claimed**. These are unpublished drafts in **MAJOR REVISION / NO SUBMISSION**; ZM-R01 remains pre-counts with no DESeq2/FDR. This public GitHub staging file is not an authenticated credential, peer-reviewed publication or verified academic identity; **not deployed to the live website**.
+
+
 **Draft for:** https://mojplaywin.com/mojtaba.roozegar/  
 **Prepared:** 26 October 2026  
 **Publication status:** PUBLIC GITHUB REPOSITORY STAGING ONLY; **NOT deployed to the live personal website**. Search-engine indexing of this public repository file has **not been checked** and must not be asserted absent.  
