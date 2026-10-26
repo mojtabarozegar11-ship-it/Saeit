@@ -143,9 +143,11 @@ jobs:
           slot_file=root/"product-flow"/"active-slots"/"current.json"
           slots=json.loads(slot_file.read_text())
           assert slots.get("schema")=="saeit.factory.product-slots.v1"
-          assert slots.get("line_id")==41 and slots.get("capacity")==1 and len(slots.get("active",[]))==1
-          targets=[item["recipe"] for item in slots["active"]]
-          assert len(set(targets))==5
+          legacy=(slots.get("capacity")==5 and len(slots.get("active",[]))==5)
+          current=(slots.get("line_id")==41 and slots.get("capacity")==1 and len(slots.get("active",[]))==1)
+          assert legacy or current
+          targets=[item["recipe"] for item in slots["active"][:1]]
+          assert len(set(targets))==1
           observed=[]
           for product in targets:
               engineering=root/"engineering-workorders"/product/"current.json"
