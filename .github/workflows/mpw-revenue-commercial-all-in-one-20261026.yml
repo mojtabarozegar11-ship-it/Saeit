@@ -59,7 +59,8 @@ jobs:
           PY
   release:
     needs: [source-quality]
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    # This exact 18-to-20 file upgrade succeeded in run 40274072290; never replay it.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
