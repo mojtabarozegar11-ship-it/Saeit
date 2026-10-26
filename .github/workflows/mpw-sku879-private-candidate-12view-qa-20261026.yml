@@ -91,9 +91,9 @@ jobs:
           set -euo pipefail
           umask 077
           d="$RUNNER_TEMP/mpw-live-three-private-qa"
-          candidate='/home/githubops/factory-runtime/private/autonomous-product-cycle/design-intake/mpw-live-three-sku-qa/quality1000-rework/879/20894f2de0228318c0e96ba407c2bd4aa98b62ba2f3f2f2fbca53987c9276783/mobile-candidates/4164e8829dab62a85f7bfee19ddaa47a17b872dcf4f0f07bdbc0d20010534a34.zip'
+          candidate='/home/githubops/factory-runtime/private/autonomous-product-cycle/design-intake/mpw-live-three-sku-qa/quality1000-rework/879/20894f2de0228318c0e96ba407c2bd4aa98b62ba2f3f2f2fbca53987c9276783/mobile-candidates/b6f171affcafcafc777279e70649dbebda87a0f7fd45389252423ffb0d1066f3.zip'
           timeout 90s ssh -T -F "$d/config" saeit-vps "test -f '$candidate' && cat '$candidate'" > "$d/sku879-responsive-private.zip"
-          test "$(sha256sum "$d/sku879-responsive-private.zip" | awk '{print $1}')" = '4164e8829dab62a85f7bfee19ddaa47a17b872dcf4f0f07bdbc0d20010534a34'
+          test "$(sha256sum "$d/sku879-responsive-private.zip" | awk '{print $1}')" = 'b6f171affcafcafc777279e70649dbebda87a0f7fd45389252423ffb0d1066f3'
           chmod 600 "$d/sku879-responsive-private.zip"
           echo 'MPW879_RESPONSIVE_CANDIDATE_HASH_VERIFIED=true'
       - name: Run 12 real browser viewports, persist immutable factory QA, fail closed
