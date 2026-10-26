@@ -79,6 +79,13 @@ distributions, cash flow timing, discounted valuation and financing structure.
 Consequently, results are **contribution accounting illustrations**, not full
 investment appraisal, tax accounting, or professional financial advice.
 
+Each numeric input must be finite, no longer than 64 characters, and have
+absolute magnitude no greater than 10^20; this prevents unbounded precision,
+resource exhaustion and obscure decimal runtime failures. Internal arithmetic
+uses 80 significant digits to support aggregate totals for high-unit currencies,
+including IRR, without failing during cents rounding. Monetary displays are
+rounded to two decimal places; this is not an exchange-rate conversion.
+
 Input numbers in the supplied example are synthetic and are **not** claims
 about agriculture in any particular country or market. The tool does not
 pretend to use scientific sources or current prices.
