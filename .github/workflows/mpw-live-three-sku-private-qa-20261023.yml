@@ -9,6 +9,8 @@ on:
       - tests/test_mpw_three_sku_factory_quality1000_20261026.py
       - tests/test_mpw_live_three_sku_qa_copy_20261023.py
       - .github/requirements/mpw-pdf-parser.txt
+      - scripts/mpw_three_sku_private_content_audit_20261026.py
+      - tests/test_mpw_three_sku_private_content_audit_20261026.py
       - .github/workflows/mpw-live-three-sku-private-qa-20261023.yml
   push:
     branches: [main]
@@ -50,7 +52,8 @@ jobs:
           set -euo pipefail
           PYTHONPATH="$RUNNER_TEMP/mpw-pdf-parser" python3 -B -m unittest discover -s tests -p test_mpw_live_three_sku_qa_copy_20261023.py -v
           PYTHONPATH="$RUNNER_TEMP/mpw-pdf-parser" python3 -B -m unittest discover -s tests -p test_mpw_three_sku_factory_quality1000_20261026.py -v
-          python3 -B -m py_compile scripts/mpw_live_three_sku_qa_copy_20261023.py scripts/mpw_three_sku_factory_quality1000_20261026.py
+          PYTHONPATH="$RUNNER_TEMP/mpw-pdf-parser" python3 -B -m unittest discover -s tests -p test_mpw_three_sku_private_content_audit_20261026.py -v
+          python3 -B -m py_compile scripts/mpw_live_three_sku_qa_copy_20261023.py scripts/mpw_three_sku_factory_quality1000_20261026.py scripts/mpw_three_sku_private_content_audit_20261026.py
 
   private-copy:
     needs: tests
@@ -218,6 +221,18 @@ jobs:
             "PYTHONPATH=\"\$HOME/factory-runtime/private/dependencies/PyPDF2-3.0.1\" python3 -c 'import base64;exec(base64.b64decode(\"$script\"))'"
           echo 'MPW_THREE_EXISTING_STORE_SKUS_FACTORY_QUALITY1000_REWORK_ADMITTED=PASS'
           echo 'MPW_PROFESSIONAL_QUALITY_1000_PENDING_EXTERNAL_EVIDENCE=true'
+      - name: Execute private content audit over all pages and packaged assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-live-three-private-qa"
+          script="$(base64 -w0 scripts/mpw_three_sku_private_content_audit_20261026.py)"
+          test -n "$script"
+          timeout 210s ssh -T -F "$d/config" saeit-vps \
+            "PYTHONPATH=\"\$HOME/factory-runtime/private/dependencies/PyPDF2-3.0.1\" python3 -c 'import base64;exec(base64.b64decode(\"$script\"))'"
+          echo 'MPW_PRIVATE_CONTENT_BYTES_EMITTED=0'
+          echo 'MPW_PRIVATE_CONTENT_AUDIT_REPORTS=3'
+          echo 'MPW_QUALITY1000_CERTIFIED=0'
       - name: Confirm public storefront routes remain reachable
         shell: bash
         run: |
