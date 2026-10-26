@@ -201,7 +201,7 @@ def dashboard(request):
                     str(s["states"].get("published",0))+' confirmed published</div></article>'
                     for b,s in summary.items())
     msg = '<div class="notice '+level+'">'+escape(message)+'</div>' if message else ""
-    page = """<!doctype html><html lang="fa" dir="rtl"><head>
+    page = ("""<!doctype html><html lang="fa" dir="rtl"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>فرماندهی شبکه‌ها | وب مجتبی روزگار</title>
 <style>
@@ -231,5 +231,5 @@ td,th{padding:10px;border-bottom:1px solid #625940;text-align:right;word-break:b
 '<section><h2>صف انتشار و رسیدها</h2><div class="scroll"><table><thead><tr><th>مجموعه</th><th>شبکه</th><th>وضعیت</th><th>زمان UTC</th><th>رسید</th><th>اقدام</th></tr></thead><tbody>'+
 "".join(post_rows)+'</tbody></table></div></section>'+
 '<footer>هیچ عملیات انتشار خارجی از پنل HTTP انجام نمی‌شود. انتشار تنها از worker خصوصی، با مجوز مستقل و کلیدهای بعدی فعال می‌شود. تبلیغ در dr.mojtaba.rozegar ممنوع است.</footer>'+
-'</main></body></html>'
+'</main></body></html>')
     return _no_cache(HttpResponse(page,content_type="text/html; charset=utf-8"))
