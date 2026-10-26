@@ -4,7 +4,7 @@ on:
     branches: ["fix/zomorod-store-security-accessibility-20261026"]
     paths:
       - "content/zomorod-v11/store_index.php"
-      - "tests/test_zomorod_store_hardening_20261026.py"
+      - "tests/test_zomorod_store_live_harden_20261026.py"
       - ".github/workflows/zomorod-isolated-store-preflight-20261026.yml"
   workflow_dispatch:
 permissions:
@@ -21,7 +21,7 @@ jobs:
         run: |
           set -euo pipefail
           php -l content/zomorod-v11/store_index.php
-          python3 -m unittest discover -s tests -p 'test_zomorod_store_hardening_20261026.py' -v
+          python3 -m unittest discover -s tests -p 'test_zomorod_store_live_harden_20261026.py' -v
           python3 -m unittest discover -s tests -p 'test_zomorod_free_seed_product.py' -v
       - name: Domain-only live baseline (read only; NOT a deployment verification)
         shell: bash
