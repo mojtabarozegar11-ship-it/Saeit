@@ -1,5 +1,10 @@
 name: MojPlayWin privacy-safe owner inquiry notifications
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-revenue-owner-inquiry-dispatch-20261026.yml"
+      - "scripts/mpw_revenue_owner_inquiry_dispatch_20261026.php"
   push:
     branches: [main]
     paths:
