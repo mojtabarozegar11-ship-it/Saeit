@@ -72,7 +72,7 @@ const navButtons={next:{},previous:{},restart:{}};
 for(const button of Object.values(navButtons))button.addEventListener=function(type,fn){if(type==='click')this.click=fn};
 const navState={stage:0,solved:true,next:navButtons.next,previous:navButtons.previous,
  document:{getElementById(id){assert.equal(id,'restart');return navButtons.restart}},
- setupCalls:0,focusCalls:0,setup(){this.setupCalls++},focusFirstPipe(){this.focusCalls++}};
+ setupCalls:0,focusCalls:0,setup(){navState.setupCalls++},focusFirstPipe(){navState.focusCalls++}};
 vm.runInNewContext(script.slice(navStart,navEnd),navState);
 navButtons.next.click();
 assert.equal(navState.stage,1,'next stage advances exactly once');
