@@ -15,7 +15,8 @@ def _read():
         db.close()
 
 def _headers(response,has_links):
-    response["Cache-Control"]="public,max-age=60"
+    # A suspended account must disappear on the next request, not remain in caches.
+    response["Cache-Control"]="no-store, max-age=0, must-revalidate"
     response["Content-Security-Policy"]=(
         "default-src 'none'; style-src 'unsafe-inline'; "
         "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
