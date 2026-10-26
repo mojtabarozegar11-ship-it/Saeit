@@ -229,6 +229,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         source_recoveries = []
         source_evolutions = []
         evolution_attempt_defects = []
+        evolution_attempted_count = 0
         invention_state={"enabled":False,"new_technical_briefs_this_tick":0}
         if enable_designer:
             designer = load("saeit_factory_recipe_designer", SCRIPTS / "factory_recipe_designer.py")
