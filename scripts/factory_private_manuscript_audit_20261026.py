@@ -92,7 +92,7 @@ def audit(root: Path, *, chapters: int = 30, chapter_target: int = 5300,
         # identical substantial paragraph. Keep only hashes and private names;
         # no manuscript prose is emitted in the evidence.
         for paragraph_index, paragraph in enumerate(
-                re.split(r"\\n[ \\t]*\\n", text), 1):
+                re.split(r"\n[ \t]*\n", text), 1):
             body = " ".join(line for line in paragraph.splitlines()
                             if line.strip() and not line.lstrip().startswith("#"))
             tokens = [word.casefold() for word in
