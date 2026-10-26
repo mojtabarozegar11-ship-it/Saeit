@@ -26,6 +26,30 @@ jobs:
             --ena-manifest research/manuscripts/ZM-R01/ENA_PRJNA1249400_OFFICIAL_24_RUN_PAIRED_FASTQ_MD5_2026-10-25.tsv \
             --geo-manifest research/manuscripts/ZM-R01/GSE294406_24_SAMPLE_FACTORIZED_MANIFEST_2026-10-25.csv \
             --output-prefix "${RUNNER_TEMP}/ZM-R01_GEO_BIOSAMPLE_SRR_SOURCE_CROSSWALK"
+      - name: Independently compare 24-row permanent manifest to source-fetched GEO/ENA crosswalk
+        run: |
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          full=Path(__import__('os').environ['RUNNER_TEMP'])/'ZM-R01_GEO_BIOSAMPLE_SRR_SOURCE_CROSSWALK.tsv'
+          compact=Path('research/manuscripts/ZM-R01/GSE294406_24_GSM_BIOSAMPLE_SRR_VERIFIED_CROSSWALK_2026-10-26.tsv')
+          def read(path):
+              with path.open(newline='',encoding='utf-8') as f:
+                  return list(csv.DictReader(f,delimiter='\t'))
+          source, committed=read(full),read(compact)
+          assert len(source)==len(committed)==24
+          fields=['gsm','biosample','srr','D','H','C']
+          by_gsm={row['gsm']:row for row in source}
+          assert len(by_gsm)==24
+          for row in committed:
+              original=by_gsm[row['gsm']]
+              for key in fields:
+                  assert row[key]==original[key], (row['gsm'],key,row[key],original[key])
+          assert len({x['srr'] for x in committed})==24
+          assert len({x['biosample'] for x in committed})==24
+          assert all(len(x['fastq1_md5'])==len(x['fastq2_md5'])==32 for x in source)
+          print('24/24 permanent GEO-BioSample-SRR and D/H/C rows match original GEO SOFT + ENA; 48 MD5 strings present (NOT content-verified)')
+          PY
       - name: Preserve source-hashed metadata audit; never publish FASTQ or infer DEG
         uses: actions/upload-artifact@v4
         with:
