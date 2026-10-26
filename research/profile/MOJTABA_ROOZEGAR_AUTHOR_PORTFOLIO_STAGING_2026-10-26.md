@@ -1,5 +1,10 @@
 # Mojtaba Roozegar — Research and Project Portfolio (staging only)
 
+## Source-matched unpublished review files — verified 26 October 2026 (staging only)
+
+MR-2026-001 latest unpublished author-review Word: [run 40344172230 / artifact 12659259449](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40344172230/artifacts/12659259449), source commit `605346f16e1559a9617f851323046700f98c8da8`, **not submitted**. AE-2026-001 latest unpublished author-review Word: [run 40344162803 / artifact 12660237844](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40344162803/artifacts/12660237844), source commit `bd05d290443e819695985d5913f8cb9edf47511f`, **not submitted**. Both are internal draft documents, **not published journal papers or verified human referee decisions**. ZM-R01 remains blocked before a valid 24-sample integer count matrix. No live website change is authorized or claimed.
+
+
 ## Research source-status update — 26 October 2026 (staging only)
 
 MR-2026-001: [C42 original-publisher Amini full-method audit](../manuscripts/MR-2026-001/MR-2026-001_C42_AMINI_2025_ORIGINAL_FULL_METHODS_F7_PROVENANCE_AUDIT_2026-10-26.md) now distinguishes measured plot outcomes from independently verified irrigation-event adherence; conflicting F7 values remain unresolved. AE-2026-001: [C13 country-level WDI attrition audit](../manuscripts/AE-2026-001/AE-2026-001_C13_FOUR_ECONOMY_2023_ATTRITION_ORDER_STATISTIC_AUDIT_2026-10-26.md) identifies the four 2023-attrited economies and explains median invariance. Both source manuscripts changed after previously verified Word builds, so **no current exact-source Word is claimed**. These are unpublished drafts in **MAJOR REVISION / NO SUBMISSION**; ZM-R01 remains pre-counts with no DESeq2/FDR. This public GitHub staging file is not an authenticated credential, peer-reviewed publication or verified academic identity; **not deployed to the live website**.
