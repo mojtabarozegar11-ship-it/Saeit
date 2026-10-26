@@ -64,9 +64,10 @@ function action(name){if(name==='pause'){togglePause();return}if(name==='sound')
 play.addEventListener('click',start);el('pauseButton').addEventListener('click',()=>action('pause'));el('soundButton').addEventListener('click',()=>action('sound'));
 document.querySelectorAll('[data-control]').forEach(b=>{b.addEventListener('click',()=>action(b.dataset.control))});
 cvs.addEventListener('pointerdown',e=>{if(!running||paused)return;const r=cvs.getBoundingClientRect(),x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*H/r.height;if(game.pointer)game.pointer(x,y);cvs.focus()});
-document.addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();if(e.key==='Escape'||e.key.toLowerCase()==='p'){if(!e.repeat)togglePause();return}keys.add(e.key.toLowerCase());if(!running||paused)return;if(game.key&&!e.repeat)game.key(e.key.toLowerCase())});
-document.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));window.addEventListener('blur',()=>{if(running&&!paused)togglePause()});
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&running&&!paused)togglePause()});
+function acceptsGameKeyboard(e){return running&&!e.isComposing&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&!e.target?.isContentEditable&&!['INPUT','TEXTAREA','SELECT','BUTTON','A'].includes(e.target?.tagName)}
+document.addEventListener('keydown',e=>{if(!acceptsGameKeyboard(e))return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();if(e.key==='Escape'||e.key.toLowerCase()==='p'){if(!e.repeat)togglePause();return}if(paused)return;keys.add(e.key.toLowerCase());if(game.key&&!e.repeat)game.key(e.key.toLowerCase())});
+document.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));window.addEventListener('blur',()=>{keys.clear();if(running&&!paused)togglePause()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){keys.clear();if(running&&!paused)togglePause()}});
 function frame(ts){const dt=Math.min(.045,last?(ts-last)/1000:0);last=ts;if(running&&!paused){clock+=dt;game.update(dt)}game.draw();requestAnimationFrame(frame)}requestAnimationFrame(frame);
 })();
 </script></body></html>
