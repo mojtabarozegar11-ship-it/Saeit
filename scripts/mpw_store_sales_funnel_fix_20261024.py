@@ -86,7 +86,7 @@ def patch_page_shell(data):
     text = data.decode("utf8")
     if "{% block og_title %}" in text or "{% block twitter_title %}" in text:
         raise RuntimeError("Page shell already contains SEO override blocks")
-    def wrap(pattern, block):
+    def wrap(pattern, block, expression):
         nonlocal text
         tag_name, attribute, value = pattern
         found = [m for m in re.finditer(r"<meta\b[^>]*>", text, re.I)
@@ -98,18 +98,21 @@ def patch_page_shell(data):
         content = re.search(r"\bcontent\s*=\s*(['\"])(.*?)\1", tag, re.I)
         if content is None:
             raise RuntimeError("Missing content attribute on " + block + " meta tag")
-        original = content.group(2)
-        replacement = (tag[:content.start(2)] + "{% block " + block + " %}" + original
+        replacement = (tag[:content.start(2)] + "{% block " + block + " %}" + expression
                        + "{% endblock %}" + tag[content.end(2):])
         text = text[:match.start()] + replacement + text[match.end():]
-        return original
-    og_title = wrap(("meta", "property", "og:title"), "og_title")
-    og_description = wrap(("meta", "property", "og:description"), "og_description")
-    card = wrap(("meta", "name", "twitter:card"), "twitter_card")
+    title_default = "{{ section_title|default:page.title|default:'MojPlayWin | Research, Games & Learning' }}"
+    description_default = ("{{ section_lead|default:page.body|striptags|truncatechars:155|"
+                           "default:'Original games, practical research, learning and digital products.' }}")
+    wrap(("meta", "property", "og:title"), "og_title", title_default)
+    twitter_title = title_default
+    wrap(("meta", "property", "og:description"), "og_description", description_default)
+    twitter_description = description_default
+    card = wrap(("meta", "name", "twitter:card"), "twitter_card", "summary_large_image")
     if card != "summary_large_image":
         raise RuntimeError("Unexpected shared Twitter card default")
-    twitter = ('<meta name="twitter:title" content="{% block twitter_title %}' + og_title + '{% endblock %}">'
-               '<meta name="twitter:description" content="{% block twitter_description %}' + og_description + '{% endblock %}">')
+    twitter = ('<meta name="twitter:title" content="{% block twitter_title %}' + twitter_title + '{% endblock %}">'
+               '<meta name="twitter:description" content="{% block twitter_description %}' + twitter_description + '{% endblock %}">')
     card_tags = [m for m in re.finditer(r"<meta\b[^>]*>", text, re.I)
                  if re.search(r"\bname\s*=\s*(['\"])twitter:card\1", m.group(0), re.I)]
     if len(card_tags) != 1:
