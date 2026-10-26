@@ -140,4 +140,29 @@ assert.equal(manualPause.padDashDown,false,'manual pause must reset gamepad dash
 assert.equal(manualPause.touchTarget,null,'manual pause must clear touch steering');
 assert.equal(manualPause.pointer,null,'manual pause must clear captured pointer state');
 
+// Returning from a shop opened while paused must not silently abandon a mission.
+const shopStart=js.indexOf('function resumeFromShop(){');
+const shopEnd=js.indexOf('function showRecords(){',shopStart);
+assert.ok(shopStart>=0&&shopEnd>shopStart,'shop return handler must remain testable');
+const shopCode=js.slice(shopStart,shopEnd);
+function shopReturn(origin){
+ return vm.runInNewContext(
+  "let overlayOrigin="+JSON.stringify(origin)+",state='paused';"+
+  "const calls={back:0,menu:0,hide:0,focus:0};"+
+  "function backFromPane(){calls.back++;state='paused'}"+
+  "function mainMenu(){calls.menu++;state='menu'}"+
+  "function hideOverlay(){calls.hide++}const canvas={focus(){calls.focus++}};"+
+  shopCode+"resumeFromShop();({state,calls})"
+ );
+}
+const pausedShop=shopReturn('paused');
+assert.equal(pausedShop.state,'paused','returning from shop must preserve a paused mission');
+assert.equal(pausedShop.calls.back,1,'paused shop must restore the pause overlay');
+assert.equal(pausedShop.calls.menu,0,'paused shop must not discard the mission to main menu');
+const activeShop=shopReturn('playing');
+assert.equal(activeShop.state,'playing','shop opened during play must resume the mission');
+assert.equal(activeShop.calls.focus,1,'resumed play must restore canvas focus');
+assert.equal(shopReturn('menu').state,'menu','shop opened from menu must return to menu');
+assert.ok(js.slice(js.indexOf('function backFromPane(){'),js.indexOf('function ',js.indexOf('function backFromPane(){')+20)).includes("state='paused'"),'pause overlay must be restored by backFromPane');
+
 console.log('CROWN_SAVE_SAFETY_PASS: scoreboard validation, date safety, achievements and backward-compatible progress');
