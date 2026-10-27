@@ -9,10 +9,13 @@ const {pathToFileURL}=require('node:url');
     for(const device of [{name:'desktop',width:1280,height:900,mobile:false},{name:'mobile',width:390,height:844,mobile:true}]){
       const context=await browser.newContext({viewport:{width:device.width,height:device.height},isMobile:device.mobile,hasTouch:device.mobile,acceptDownloads:true});
       try{
-        const page=await context.newPage();
+        const page=await context.newPage(),errors=[];
+        page.on('pageerror',error=>errors.push(error.message));
         await page.goto(pathToFileURL(path.resolve('templates/taniya_studio/index.html')).href,{waitUntil:'domcontentloaded'});
         await page.locator('button.play[data-game="Cake Maker"]').click();
-        await page.locator('#cakepreview').waitFor();
+        await page.locator('#cakepreview').waitFor({state:'visible',timeout:5000}).catch(async error=>{
+          throw new Error('Cake Maker failed to open: '+errors.join(' | ')+' modal='+await page.locator('#modal').getAttribute('class')+' body='+String(await page.locator('#gamebody').innerHTML()).slice(0,300)+' '+error.message);
+        });
         assert.match(await page.locator('#cakepreview').textContent(),/🍓/);
         await page.locator('[data-top="🍬"]').click();
         await page.locator('[data-action="candle"]').click();
