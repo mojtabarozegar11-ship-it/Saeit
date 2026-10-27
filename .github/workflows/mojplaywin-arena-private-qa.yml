@@ -21,7 +21,7 @@ jobs:
           node-version: "22"
       - name: Install browser driver without downloading a browser
         run: npm install --no-save --ignore-scripts --no-audit --no-fund --prefix "$RUNNER_TEMP/moj-arena-test" playwright-core@1.62.1
-      - name: Verify all 16 interactions, 6 languages, and mobile layout offline
+      - name: Verify 37 interactions, six languages, and mobile layout offline
         env:
           NODE_PATH: ${{ runner.temp }}/moj-arena-test/node_modules
         shell: bash
@@ -51,25 +51,43 @@ jobs:
               assert.equal(await page.locator('#age-gate').isVisible(),true);
               await page.locator('#age-confirm').click();
               assert.equal(await page.locator('#game-grid article').count(),16);
+              assert.equal(await page.locator('#dice-game-grid article').count(),15);
+              assert.equal(await page.locator('#classic-game-grid article').count(),6);
+              assert.equal(await page.locator('#chess-board button').count(),64);
+              assert.equal(await page.locator('#back-board button').count(),24);
               assert.equal(await page.locator('#language option').count(),6);
               for(const lang of ['fa','ar','de','fr','es','en']){
                 await page.locator('#language').selectOption(lang);
                 assert.equal(await page.locator('html').getAttribute('lang'),lang);
                 assert.equal(await page.locator('html').getAttribute('dir'),['fa','ar'].includes(lang)?'rtl':'ltr');
                 assert.ok((await page.locator('#free-poker h3').innerText()).trim().length>3);
+                assert.ok((await page.locator('#classic-heading').innerText()).trim().length>5);
+                assert.ok((await page.locator('#dice-heading').innerText()).trim().length>5);
               }
               for(const card of await page.locator('#game-grid article').all()){
                 const button=card.locator('button').first();
                 await button.click();
                 assert.ok((await card.locator('[role=status]').innerText()).trim().length>3);
               }
+              for(const card of await page.locator('#dice-game-grid article').all()){
+                await card.locator('button').first().click();
+                assert.ok((await card.locator('[role=status]').innerText()).trim().length>3);
+              }
+              await page.locator('#chess-board button').nth(52).click();
+              await page.locator('#chess-board button').nth(36).click();
+              assert.ok((await page.locator('#classic-chess [role=status]').innerText()).length>4);
+              await page.locator('#classic-backgammon .board-line button').last().click();
+              await page.locator('#classic-cards-war .board-line button').click();
+              await page.locator('#classic-cards-three .board-line button').click();
+              await page.locator('#classic-cards-memory .memory-tile').first().click();
+              await page.locator('#classic-cards-trick .playing-card').first().click();
               await page.screenshot({path:'arena-desktop.png',fullPage:true,animations:'disabled'});
               await page.setViewportSize({width:390,height:844});
               const geometry=await page.evaluate(()=>({content:document.documentElement.scrollWidth,viewport:innerWidth}));
               assert.ok(geometry.content<=geometry.viewport+2,JSON.stringify(geometry));
               await page.screenshot({path:'arena-mobile.png',fullPage:true,animations:'disabled'});
               assert.deepEqual(errors,[]);
-              console.log('MOJ_ARENA_PRIVATE_QA_PASS games=16 languages=6 externalRequests=0 deployment=none');
+              console.log('MOJ_ARENA_PRIVATE_QA_PASS games=37 languages=6 externalRequests=0 deployment=none');
             }finally{await browser.close()}
           })().catch(e=>{console.error(e);process.exitCode=1});
           JS
