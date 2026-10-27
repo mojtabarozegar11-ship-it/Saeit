@@ -24,3 +24,8 @@ Verify actual intellectual contribution and author list, final scientific versio
 
 
 **ZM C35 metadata clarification:** The Ensembl Plants archive page with URL slug `Triticum_aestivum_refseqv2` explicitly reports **IWGSC_RefSeq_v2.1** and assembly accession **GCA_018294505.1**, not v2.0. This new source-level observation prevents treating the website slug as proof of the assembly used by Milec. Exact source FASTA/GTF/checksum remain unknown; see [C35](../manuscripts/ZM-R01/C35_ENSEMBL_REFSEQV2_SLUG_V21_ASSEMBLY_IDENTITY_GATE_2026-10-27.md). No RNA reanalysis or inferred DEG.
+
+
+## 27 October addendum — C48 full-text GesCoN model lineage
+
+The [C48 original-publisher audit](../manuscripts/MR-2026-001/MR-2026-001_C48_GESCON_2015_FULL_METHOD_MODEL_VALIDATION_VS_2022_FIELD_ADOPTION_2026-10-27.md) establishes that the open-access 2015 GesCoN Part I article already describes daily irrigation/nitrogen scheduling, while Part II reports five calibration and 13 validation datasets for **crop-model predictions**, not farmer recommendation-event adherence. The 2022 commercial-farm study is a separate evidence layer; full 2015 methods cannot validate its 2022 field allocation, event implementation or adoption. The MR Perspective now cites the 2015 original-publisher articles as references 23–24 and explicitly rejects novelty claims based on daily scheduling or crop-model validation. This **does not close** the original full-method gate for the 2022 Elia application or Lorite/Baroni, nor demonstrate empirical G/D/R/A validity. Human approval and all release gates remain outstanding; no journal submission or live deployment.
