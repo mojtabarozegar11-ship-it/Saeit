@@ -232,92 +232,94 @@ def browser_views(destination, entrypoint, sizes=None):
     driver_port = get_port()
     service = None
     session_id = None
+    profile_temp = None
     try:
-        with tempfile.TemporaryDirectory(prefix="mpw879-chrome-profile-") as profile:
-            service = subprocess.Popen(
-                [driver, "--port=" + str(driver_port), "--allowed-ips=127.0.0.1", "--silent"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-            for _ in range(60):
-                if service.poll() is not None:
-                    raise RuntimeError("CHROMEDRIVER_EARLY_EXIT")
-                try:
-                    webdriver_request(driver_port, "GET", "/status")
-                    break
-                except RuntimeError:
-                    time.sleep(0.25)
-            else:
-                raise RuntimeError("CHROMEDRIVER_START_TIMEOUT")
-            options = {
-                "args": [
-                    "--headless=new", "--no-sandbox", "--disable-gpu",
-                    "--disable-dev-shm-usage", "--disable-background-networking",
-                    "--disable-extensions", "--no-first-run",
-                    "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1",
-                    "--user-data-dir=" + profile,
-                ],
-                "binary": chrome,
-            }
-            created = webdriver_request(driver_port, "POST", "/session", {
-                "capabilities": {"alwaysMatch": {
-                    "browserName": "chrome", "goog:chromeOptions": options
-                }}
+        profile_temp = tempfile.TemporaryDirectory(prefix="mpw879-chrome-profile-")
+        profile = profile_temp.name
+        service = subprocess.Popen(
+            [driver, "--port=" + str(driver_port), "--allowed-ips=127.0.0.1", "--silent"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        for _ in range(60):
+            if service.poll() is not None:
+                raise RuntimeError("CHROMEDRIVER_EARLY_EXIT")
+            try:
+                webdriver_request(driver_port, "GET", "/status")
+                break
+            except RuntimeError:
+                time.sleep(0.25)
+        else:
+            raise RuntimeError("CHROMEDRIVER_START_TIMEOUT")
+        options = {
+            "args": [
+                "--headless=new", "--no-sandbox", "--disable-gpu",
+                "--disable-dev-shm-usage", "--disable-background-networking",
+                "--disable-extensions", "--no-first-run",
+                "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1",
+                "--user-data-dir=" + profile,
+            ],
+            "binary": chrome,
+        }
+        created = webdriver_request(driver_port, "POST", "/session", {
+            "capabilities": {"alwaysMatch": {
+                "browserName": "chrome", "goog:chromeOptions": options
+            }}
+        })
+        session_id = created.get("sessionId") if isinstance(created, dict) else None
+        if not session_id:
+            raise RuntimeError("WEBDRIVER_SESSION_MISSING")
+        route = "/session/" + urllib.parse.quote(session_id, safe="")
+        url = ("http://127.0.0.1:" + str(server.server_port) + "/" +
+               urllib.parse.quote(entrypoint, safe="/"))
+        rows = []
+        for width, height in sizes:
+            webdriver_request(driver_port, "POST", route + "/window/rect",
+                              {"width": max(width, 850), "height": max(height, 900)})
+            webdriver_request(driver_port, "POST", route + "/goog/cdp/execute", {
+                "cmd": "Emulation.setDeviceMetricsOverride",
+                "params": {"width": width, "height": height, "deviceScaleFactor": 1,
+                           "mobile": width < 500}
             })
-            session_id = created.get("sessionId") if isinstance(created, dict) else None
-            if not session_id:
-                raise RuntimeError("WEBDRIVER_SESSION_MISSING")
-            route = "/session/" + urllib.parse.quote(session_id, safe="")
-            url = ("http://127.0.0.1:" + str(server.server_port) + "/" +
-                   urllib.parse.quote(entrypoint, safe="/"))
-            rows = []
-            for width, height in sizes:
-                webdriver_request(driver_port, "POST", route + "/window/rect",
-                                  {"width": max(width, 850), "height": max(height, 900)})
-                webdriver_request(driver_port, "POST", route + "/goog/cdp/execute", {
-                    "cmd": "Emulation.setDeviceMetricsOverride",
-                    "params": {"width": width, "height": height, "deviceScaleFactor": 1,
-                               "mobile": width < 500}
-                })
-                webdriver_request(driver_port, "POST", route + "/url", {"url": url})
-                webdriver_request(driver_port, "POST", route + "/execute/sync",
-                                  {"script": 'for (const i of document.images) i.loading="eager";', "args": []})
-                time.sleep(0.7)
-                metrics = webdriver_request(driver_port, "POST", route + "/execute/sync",
-                                            {"script": METRICS_JS, "args": []})
-                if not isinstance(metrics, dict):
-                    raise RuntimeError("WEBDRIVER_METRICS_INVALID")
-                png = webdriver_request(driver_port, "GET", route + "/screenshot")
-                rows.append({
-                    "requested_viewport": [width, height],
-                    "ready": metrics.get("ready") is True,
-                    "title_present": metrics.get("title_present") is True,
-                    "body_char_count": int(metrics.get("body_char_count", 0)),
-                    "image_count": int(metrics.get("image_count", 0)),
-                    "broken_images": int(metrics.get("broken_images", 0)),
-                    "viewport_width": int(metrics.get("viewport_width", 0)),
-                    "viewport_height": int(metrics.get("viewport_height", 0)),
-                    "device_screen_width": int(metrics.get("device_screen_width", 0)),
-                    "visual_viewport_width": float(metrics.get("visual_viewport_width", 0)),
-                    "visual_viewport_scale": float(metrics.get("visual_viewport_scale", 0)),
-                    "viewport_meta_present": metrics.get("viewport_meta_present") is True,
-                    "viewport_meta_device_width": metrics.get("viewport_meta_device_width") is True,
-                    "viewport_meta_count": int(metrics.get("viewport_meta_count", 0)),
-                    "root_min_width": str(metrics.get("root_min_width", ""))[:32],
-                    "body_min_width": str(metrics.get("body_min_width", ""))[:32],
-                    "body_scroll_width": int(metrics.get("body_scroll_width", 0)),
-                    "root_scroll_width": int(metrics.get("root_scroll_width", 0)),
-                    "overflowing_shapes": metrics.get("overflowing_shapes", []),
-                    "horizontal_overflow_px": int(metrics.get("horizontal_overflow_px", 100000)),
-                    "h1_count": int(metrics.get("h1_count", 0)),
-                    "images_missing_alt": int(metrics.get("images_missing_alt", 0)),
-                    "unlabeled_buttons": int(metrics.get("unlabeled_buttons", 0)),
-                    "unlabeled_form_controls": int(metrics.get("unlabeled_form_controls", 0)),
-                    "unsafe_blank_links": int(metrics.get("unsafe_blank_links", 0)),
-                    "broken_same_page_anchors": int(metrics.get("broken_same_page_anchors", 0)),
-                    "screenshot_valid": screenshot_is_png(png),
-                })
-            return rows
+            webdriver_request(driver_port, "POST", route + "/url", {"url": url})
+            webdriver_request(driver_port, "POST", route + "/execute/sync",
+                              {"script": 'for (const i of document.images) i.loading="eager";', "args": []})
+            time.sleep(0.7)
+            metrics = webdriver_request(driver_port, "POST", route + "/execute/sync",
+                                        {"script": METRICS_JS, "args": []})
+            if not isinstance(metrics, dict):
+                raise RuntimeError("WEBDRIVER_METRICS_INVALID")
+            png = webdriver_request(driver_port, "GET", route + "/screenshot")
+            rows.append({
+                "requested_viewport": [width, height],
+                "ready": metrics.get("ready") is True,
+                "title_present": metrics.get("title_present") is True,
+                "body_char_count": int(metrics.get("body_char_count", 0)),
+                "image_count": int(metrics.get("image_count", 0)),
+                "broken_images": int(metrics.get("broken_images", 0)),
+                "viewport_width": int(metrics.get("viewport_width", 0)),
+                "viewport_height": int(metrics.get("viewport_height", 0)),
+                "device_screen_width": int(metrics.get("device_screen_width", 0)),
+                "visual_viewport_width": float(metrics.get("visual_viewport_width", 0)),
+                "visual_viewport_scale": float(metrics.get("visual_viewport_scale", 0)),
+                "viewport_meta_present": metrics.get("viewport_meta_present") is True,
+                "viewport_meta_device_width": metrics.get("viewport_meta_device_width") is True,
+                "viewport_meta_count": int(metrics.get("viewport_meta_count", 0)),
+                "root_min_width": str(metrics.get("root_min_width", ""))[:32],
+                "body_min_width": str(metrics.get("body_min_width", ""))[:32],
+                "body_scroll_width": int(metrics.get("body_scroll_width", 0)),
+                "root_scroll_width": int(metrics.get("root_scroll_width", 0)),
+                "overflowing_shapes": metrics.get("overflowing_shapes", []),
+                "horizontal_overflow_px": int(metrics.get("horizontal_overflow_px", 100000)),
+                "h1_count": int(metrics.get("h1_count", 0)),
+                "images_missing_alt": int(metrics.get("images_missing_alt", 0)),
+                "unlabeled_buttons": int(metrics.get("unlabeled_buttons", 0)),
+                "unlabeled_form_controls": int(metrics.get("unlabeled_form_controls", 0)),
+                "unsafe_blank_links": int(metrics.get("unsafe_blank_links", 0)),
+                "broken_same_page_anchors": int(metrics.get("broken_same_page_anchors", 0)),
+                "screenshot_valid": screenshot_is_png(png),
+            })
+        return rows
     finally:
         if service is not None:
             if session_id:
@@ -332,6 +334,11 @@ def browser_views(destination, entrypoint, sizes=None):
             except subprocess.TimeoutExpired:
                 service.kill()
                 service.wait(timeout=3)
+        # Chrome can still be writing into its user-data directory until the
+        # WebDriver session and driver process are closed. Clean the profile
+        # only after both have been stopped.
+        if profile_temp is not None:
+            profile_temp.cleanup()
         server.shutdown()
         server.server_close()
         thread.join(timeout=3)
