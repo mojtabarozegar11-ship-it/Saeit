@@ -7,6 +7,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -64,6 +65,40 @@ class LeechStatusReadOnlyTests(unittest.TestCase):
                     author.list_parts()
             self.assertEqual(target.read_text(encoding="utf-8"),
                              "Confidential synthetic placeholder")
+
+    def test_part_growth_after_stat_is_rejected_by_bounded_actual_read(self):
+        with tempfile.TemporaryDirectory() as temp:
+            private = Path(temp) / "private"
+            private.mkdir()
+            part = private / "chapter-01-part-001.md"
+            part.write_bytes(b"A" * 50001)
+            real_stat = Path.stat
+
+            def stale_stat(path, *args, **kwargs):
+                result = real_stat(path, *args, **kwargs)
+                if path == part:
+                    fields = list(result[:10])
+                    fields[6] = 1000  # A stale precheck sees an eligible file.
+                    return os.stat_result(fields)
+                return result
+
+            with (mock.patch.object(author, "PRIVATE", private),
+                  mock.patch.object(Path, "stat", stale_stat)):
+                with self.assertRaisesRegex(RuntimeError, "UNEXPECTED_PRIVATE_MANUSCRIPT_ENTRY"):
+                    author.list_parts()
+            self.assertEqual(part.stat().st_size, 50001)
+
+    def test_invalid_utf8_part_fails_closed_without_mutating_bytes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            private = Path(temp) / "private"
+            private.mkdir()
+            part = private / "chapter-01-part-001.md"
+            part.write_bytes(b"\\xff" * 300)
+            before = part.read_bytes()
+            with mock.patch.object(author, "PRIVATE", private):
+                with self.assertRaisesRegex(RuntimeError, "UNSAFE_PRIVATE_MANUSCRIPT_IO"):
+                    author.list_parts()
+            self.assertEqual(part.read_bytes(), before)
 
 
 if __name__ == "__main__":
