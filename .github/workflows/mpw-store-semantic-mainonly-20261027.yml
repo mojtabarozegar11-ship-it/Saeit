@@ -1,0 +1,161 @@
+name: MojPlayWin store-only semantic landmark release
+on:
+  push:
+    branches: [main]
+    paths:
+      - core/templates/mojplaywin/store.html
+      - scripts/mpw_store_semantic_release_20261027.py
+      - .github/workflows/mpw-store-semantic-mainonly-20261027.yml
+permissions:
+  contents: read
+concurrency:
+  group: mpw-store-semantic-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate reviewed markup and release guard
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_store_semantic_release_20261027.py
+          python3 scripts/mpw_store_semantic_release_20261027.py selftest
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path("core/templates/mojplaywin/store.html").read_text("utf-8")
+          shell=Path("core/templates/mojplaywin/site_base.html").read_text("utf-8")
+          assert raw.count('<div class="mpw-shop">')==1
+          assert raw.count('<main class="mpw-shop">')==0
+          assert raw.count("</div></div>\n{% endblock %}")==1
+          assert shell.count('<main id="main-content"')==1
+          for product in ("/store/product/72/","/store/product/225/","/store/product/879/"):
+              assert product in raw
+          print("MPW_STORE_SEMANTIC_REVIEWED_SOURCE_OK")
+          PY
+      - name: Capture protected routes and live nested-main baseline
+        run: |
+          python3 - <<'PY'
+          import json,os,re,urllib.request
+          root="https://mojplaywin.com"
+          paths=("/","/store/","/store/product/72/","/store/product/225/",
+                 "/store/product/879/","/games/","/services/","/taniya/",
+                 "/farnaz/","/saman/","/picm/","/mojtaba.roozegar/")
+          status={}
+          for path in paths:
+              with urllib.request.urlopen(root+path,timeout=25) as r:
+                  if r.status!=200:raise RuntimeError("PROTECTED_PRECHECK_FAILED:"+path)
+                  if path=="/store/":
+                      content=r.read(250000).decode("utf8","replace")
+                      print("MPW_STORE_BEFORE_MAIN_COUNT",len(re.findall(r"<main\\b",content,re.I)))
+                      for pk in ("72","225","879"):
+                          if "/store/product/"+pk+"/" not in content:
+                              raise RuntimeError("STORE_PRODUCT_MISSING:"+pk)
+                  status[path]=r.status
+          with open(os.path.join(os.environ["RUNNER_TEMP"],"mpw-store-semantic-before.json"),"w") as f:
+              json.dump(status,f)
+          print("MPW_STORE_SEMANTIC_PREFLIGHT_OK",len(status))
+          PY
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-store-semantic-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Audit production template SHA and document landmarks without changes
+        run: |
+          timeout 35s ssh -T -F "$RUNNER_TEMP/mpw-store-semantic-ssh/config" saeit-cpanel "python3 - audit" < scripts/mpw_store_semantic_release_20261027.py
+      - name: Atomically patch only verified production store template
+        id: install
+        run: |
+          set -euo pipefail
+          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-store-semantic-ssh/config" saeit-cpanel "python3 - publish '$GITHUB_RUN_ID'" < scripts/mpw_store_semantic_release_20261027.py
+      - name: Request guarded Passenger template cache refresh
+        run: |
+          timeout 40s ssh -T -F "$RUNNER_TEMP/mpw-store-semantic-ssh/config" saeit-cpanel "python3 - refresh" < scripts/mpw_store_semantic_release_20261027.py
+      - name: Confirm one main landmark, intact products and protected routes
+        run: |
+          python3 - <<'PY'
+          import json,os,re,time,urllib.request
+          origin="https://mojplaywin.com"
+          prior=json.load(open(os.path.join(os.environ["RUNNER_TEMP"],"mpw-store-semantic-before.json")))
+          good=False
+          for attempt in range(10):
+              req=urllib.request.Request(origin+"/store/?semantics="+str(time.time_ns()),
+                                         headers={"Cache-Control":"no-cache"})
+              with urllib.request.urlopen(req,timeout=25) as response:
+                  doc=response.read(300000).decode("utf8","replace")
+              if (len(re.findall(r"<main\\b",doc,re.I))==1
+                  and len(re.findall(r"</main\\s*>",doc,re.I))==1
+                  and 'class="mpw-shop"' in doc):
+                  good=True;break
+              time.sleep(2)
+          if not good:raise RuntimeError("STORE_SINGLE_MAIN_NOT_LIVE")
+          for pk in ("72","225","879"):
+              if "/store/product/"+pk+"/" not in doc:
+                  raise RuntimeError("PRODUCT_LINK_MISSING:"+pk)
+          for path,status in prior.items():
+              with urllib.request.urlopen(origin+path,timeout=25) as response:
+                  if response.status!=status:
+                      raise RuntimeError("PROTECTED_ROUTE_CHANGED:"+path)
+          for pk in ("72","225","879"):
+              with urllib.request.urlopen(origin+"/store/product/"+pk+"/checkout/",timeout=25) as response:
+                  if "/accounts/login/" not in response.url:
+                      raise RuntimeError("CHECKOUT_GUARD_CHANGED:"+pk)
+          print("MPW_STORE_SEMANTIC_VERIFIED;PROTECTED_ROUTES_UNCHANGED")
+          PY
+      - name: Restore only unchanged store template on smoke failure
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-store-semantic-ssh/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_store_semantic_release_20261027.py
+      - name: Refresh cache after successful rollback
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          timeout 40s ssh -T -F "$RUNNER_TEMP/mpw-store-semantic-ssh/config" saeit-cpanel "python3 - refresh" < scripts/mpw_store_semantic_release_20261027.py
+      - name: Remove ephemeral transport keys
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-store-semantic-ssh"
+          if [ -d "$d" ]; then rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/config"; rmdir "$d"; fi
