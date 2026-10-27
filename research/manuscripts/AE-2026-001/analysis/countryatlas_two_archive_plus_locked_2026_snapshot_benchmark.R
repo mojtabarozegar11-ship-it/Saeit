@@ -33,7 +33,7 @@ snapshot <- Sys.getenv("AE_2026_SNAPSHOT_FILE", "")
 if(!nzchar(snapshot)) stop("Set AE_2026_SNAPSHOT_FILE to the committed source-locked CSV path")
 if(!file.exists(snapshot)) stop("Missing committed source-locked 2026 snapshot")
 expected_sha <- "715ff36b3b817dcf58a4170eadad872b0bd629bd66a424a73fac077dac869169"
-actual_sha <- digest::digest(file=snapshot,algo="sha256")
+actual_sha <- digest::digest(snapshot,algo="sha256",file=TRUE,serialize=FALSE)
 if(!identical(actual_sha,expected_sha)) stop("2026 CSV SHA256 mismatch; refuse to continue")
 d26 <- utils::read.csv(snapshot,stringsAsFactors=FALSE,check.names=FALSE)
 if(nrow(d26)!=217L || anyDuplicated(d26$country_iso3))
