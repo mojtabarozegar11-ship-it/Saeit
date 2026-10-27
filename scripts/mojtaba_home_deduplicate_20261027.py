@@ -93,8 +93,9 @@ def remove_duplicate_sections(source: str) -> tuple[str, int]:
     for ident in PRESERVE_IDS:
         if source.count('id="' + ident + '"') != 1 or updated.count('id="' + ident + '"') != 1:
             raise ValueError("Protected section changed: " + ident)
-    if updated.count("{%") != source.count("{%") or updated.count("{{") != source.count("{{"):
-        raise ValueError("Django template syntax changed by section deletion")
+    # Self-contained Django tags inside a duplicated section may be removed.
+    # Full Django compilation and rendered Home/Journal equivalence are required
+    # by django_preflight before any write to the production template.
     return updated, removed
 
 

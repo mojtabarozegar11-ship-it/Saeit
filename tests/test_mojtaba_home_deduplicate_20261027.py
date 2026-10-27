@@ -97,6 +97,20 @@ class HomeDeduplicationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             mod.remove_duplicate_sections(src)
 
+    def test_duplicate_with_complete_django_tags_can_be_removed(self):
+        original = fixture()
+        ident = mod.DUPLICATE_IDS[0]
+        fragment = mod.section_text(original, ident)
+        tagged = fragment.replace("<h2>", "{% if show %}<h2>", 1).replace(
+            "</h2>", "</h2>{% endif %}", 1,
+        )
+        source = original.replace(fragment, tagged, 1)
+        updated, removed = mod.remove_duplicate_sections(source)
+        self.assertGreater(removed, 75000)
+        self.assertIn("{% extends", updated)
+        self.assertNotIn("{% if show %}", updated)
+        self.assertNotIn(ident, updated)
+
     def test_boundary_is_one_independent_template(self):
         self.assertEqual(mod.REL, "templates/personal_site/core/home.html")
         self.assertIn("/mojtaba_personal/mojtaba_roozegar_personal_v17", str(mod.APP))
