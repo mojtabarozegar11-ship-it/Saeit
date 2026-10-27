@@ -1,0 +1,90 @@
+name: Update banknew launch authorization and service catalog
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/banknew-service-catalog-20261027.yml']
+permissions:
+  contents: read
+concurrency:
+  group: banknew-isolated-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-structure-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Update banknew only, verify and restore on failure
+        run: |
+          timeout 180s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import hashlib,json,urllib.request
+          root=Path('/home/zomorod2/mojplaywin.com'); d=root/'banknew'; p=d/'index.html'
+          assert d.is_dir() and not d.is_symlink() and p.is_file() and not p.is_symlink()
+          def get():
+           with urllib.request.urlopen(urllib.request.Request('https://mojplaywin.com/banknew/',headers={'Cache-Control':'no-cache'}),timeout=25) as r:return r.read(2000000)
+          root_page='https://mojplaywin.com/'
+          with urllib.request.urlopen(root_page,timeout=25) as r:assert r.status==200
+          old=p.read_bytes(); new=json.loads("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"robots\" content=\"noindex,nofollow\"><title>MOJ Pay · Wallet & merchant workspace</title><link rel=\"stylesheet\" href=\"style.css\"></head><body><aside><a class=\"brand\" href=\"/banknew/\"><span class=\"logo\">m.</span> MOJ Pay</a><small>YOUR MONEY. YOUR CONTROL.</small><nav><a href=\"#overview\">◈ Overview</a><a href=\"#wallet\">▣ Your wallet</a><a href=\"#merchant\">↗ Merchant payments</a><a href=\"#pricing\">◎ Pricing</a><a href=\"#access\">⚙ Account access</a></nav><div class=\"aside-bottom\">Part of <a href=\"/\">MojPlayWin ↗</a><p>Self-custody workspace</p></div></aside><main><header><span>Wallet & payments / Overview</span><span class=\"pill\">Setup in progress</span></header><section id=\"overview\" class=\"hero\"><div><p class=\"eyebrow\">BUILT AROUND YOUR WALLET</p><h1>A clearer way<br>to manage crypto.</h1><p class=\"intro\">Connect a compatible wallet, view its native balance and understand merchant fees. Your keys stay with you.</p><a class=\"button\" href=\"#wallet\">Connect your wallet <b>↗</b></a></div><div class=\"hero-card\"><span>PROPOSED MERCHANT SERVICE FEE</span><h2>0.1<span>%</span></h2><p>10 basis points. Clearly calculated.</p><div class=\"card-rule\"></div><p>Network and provider fees are separate.<br>Payment processing is not activated.</p></div></section><div class=\"notice\">Website launch authorization: ۳۴۵/۵۶۷۸۹۴/۸۷۶/۱۴۰۵/۰۲/۱۲. Financial services are being prepared; the separate operating authorization is pending. No customer funds or payments are accepted at this stage.</div><section id=\"wallet\"><div class=\"section-title\"><div><p class=\"eyebrow\">SELF-CUSTODY</p><h2>Your wallet, connected.</h2></div><span class=\"pill\">Read-only access</span></div><div class=\"grid\"><article class=\"panel\"><div class=\"asset-icon\">Ξ</div><h3>Ethereum-compatible wallet</h3><p>Use a compatible wallet browser or browser extension. Connecting requests your public address only.</p><button id=\"connect\">Connect EVM wallet ↗</button><button id=\"disconnect\" class=\"secondary\" hidden>Clear connection</button><p id=\"wallet-message\" role=\"status\" aria-live=\"polite\">No wallet connected.</p><dl><dt>Network ID</dt><dd id=\"chain\">—</dd><dt>Public address</dt><dd id=\"address\">—</dd><dt>Native balance</dt><dd id=\"balance\">—</dd></dl><p class=\"fine\">Token balances, TRON and WalletConnect QR pairing are not integrated. A connected address is not proof of identity.</p></article><article class=\"panel dark\"><p class=\"eyebrow\">SECURITY BY DESIGN</p><h3>Keep the keys.<br>Keep the control.</h3><ul><li>No seed phrase collection</li><li>No private key uploads</li><li>No token approval requests</li><li>No transaction signing on this page</li></ul><p class=\"fine\">Disconnecting here clears the page. Revoke site permissions inside your wallet to disconnect fully.</p></article></div></section><section id=\"merchant\"><p class=\"eyebrow\">FOR BUSINESSES</p><h2>Merchant payments</h2><div class=\"grid three\"><article class=\"panel\"><span class=\"step\">01</span><h3>Payment gateway & P2P</h3><p>Merchant checkout, invoices, payment links and person-to-person transfers.</p><span class=\"pending\">In preparation</span></article><article class=\"panel\"><span class=\"step\">02</span><h3>Multi-currency wallet</h3><p>Crypto and foreign-currency account features, with clear custody and settlement rules.</p><span class=\"pending\">In preparation</span></article><article class=\"panel\"><span class=\"step\">03</span><h3>Currency exchange & bullion</h3><p>Currency services and melted-gold trading, subject to approved providers, pricing and operating authorization.</p><span class=\"pending\">In preparation</span></article></div></section><section id=\"pricing\" class=\"pricing\"><div><p class=\"eyebrow\">NO HIDDEN MATH</p><h2>Calculate the service fee.</h2><p>0.1% = 1 unit per 1,000 units processed.</p><p class=\"fine\">Illustrative quote only. Fee deducted from the entered amount, rounded to the nearest cent. Actual asset precision and settlement costs require an activated payment integration.</p></div><div class=\"panel\"><label for=\"amount\">Payment amount (USD equivalent)</label><input id=\"amount\" inputmode=\"decimal\" type=\"text\" value=\"1000.00\" maxlength=\"16\"><div id=\"fee-error\" role=\"status\"></div><dl><dt>Service fee · 0.1%</dt><dd id=\"fee\">$1.00</dd><dt>After service fee</dt><dd id=\"net\">$999.00</dd><dt>Network / provider fees</dt><dd>Not included</dd></dl></div></section><section id=\"access\" class=\"panel\"><p class=\"eyebrow\">ACCOUNT ACCESS</p><h2>Sign in with Google</h2><p>Google sign-in is awaiting OAuth configuration. Account creation and financial identity verification are not active.</p><span class=\"pending\">Google OAuth not connected</span><p class=\"fine\">A verified email confirms access to a Google account. It does not verify a customer's financial identity or authorize custody of funds.</p></section><footer><span>© 2026 MOJ Pay · MojPlayWin</span><span>Not a bank. No deposit or fiat account services are offered.</span></footer></main><script src=\"app.js\"></script></body></html>\n").encode(); backup=d/'.index.html.banknew-release-backup'
+          assert not backup.exists() and not backup.is_symlink()
+          backup.write_bytes(old); backup.chmod(0o600)
+          try:
+           p.write_bytes(new)
+           body=get()
+           assert b'Website launch authorization' in body and '۳۴۵/۵۶۷۸۹۴/۸۷۶/۱۴۰۵/۰۲/۱۲'.encode() in body
+           assert b'operating authorization is pending' in body and b'Currency exchange &amp; bullion' in body
+           assert hashlib.sha256(p.read_bytes()).digest()==hashlib.sha256(new).digest()
+           with urllib.request.urlopen(root_page,timeout=25) as r:assert r.status==200
+           backup.unlink()
+          except Exception:
+           p.write_bytes(old)
+           if backup.exists():backup.unlink()
+           raise
+          print('BANKNEW_SERVICE_CATALOG_UPDATED_AND_SMOKED')
+          PY
+      - name: Remove temporary keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-structure-ssh"
