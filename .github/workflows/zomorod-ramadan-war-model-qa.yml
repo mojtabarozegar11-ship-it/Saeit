@@ -34,7 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 games/ramadan-war/check_release_dependencies.py
-          python3 -m unittest discover -s games/ramadan-war -p 'test_release_dependencies.py'
+          python3 -m unittest discover -s games/ramadan-war -p 'test_*.py'
       - name: Read-only protection check of currently live IT cards
         run: |
           python3 - <<'PY'

@@ -50,6 +50,7 @@ jobs:
           test -s games/ramadan-war/three-addons/libs/meshopt_decoder.module.js
           python3 -m py_compile games/ramadan-war/deploy.py
           python3 games/ramadan-war/check_release_dependencies.py
+          python3 -m unittest discover -s games/ramadan-war -p 'test_*.py'
           node --check games/ramadan-war/site-smoke.cjs
           python3 - <<'PY'
           from html.parser import HTMLParser

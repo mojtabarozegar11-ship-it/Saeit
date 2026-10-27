@@ -112,18 +112,56 @@ def verify(stage):
     print('RAMADAN_WEB_CLIENT_AND_PROTECTED_PAGES=PASS')
 
 def rollback_files(stage,m,run):
-    for name,h in m['new'].items():
+    # Preflight the ENTIRE rollback before changing any bytes. If even one
+    # backup is corrupt, deleting newly staged modules would leave the new
+    # game.js importing missing files. Concurrent edits also abort the whole
+    # rollback rather than creating a mixed-version client.
+    if set(m['new'])!=set(ASSETS) or not set(m['old']).issubset(set(ASSETS)) or GAME.is_symlink():
+        print('ROLLBACK_ABORT_INVALID_MANIFEST');return False
+    restore=[];remove=[]
+    for name,new_hash in m['new'].items():
         p=GAME/name
-        if name in m['old'] and p.is_file() and not p.is_symlink() and digest(p.read_bytes())==h:
-            atomic(p,(stage/f'old-{name}').read_bytes(),run);print('RESTORED_OLD_GAME_FILE='+name)
-        elif name not in m['old'] and p.is_file() and not p.is_symlink() and digest(p.read_bytes())==h:
-            p.unlink();print('REMOVED_NEW_GAME_ASSET='+name)
-        else:print('ROLLBACK_SKIPPED_UNEXPECTED_GAME_FILE='+name)
+        parent=p.parent
+        if not p.is_relative_to(GAME) or p.is_symlink():
+            print('ROLLBACK_ABORT_UNSAFE_PATH='+name);return False
+        while parent!=GAME:
+            if parent.is_symlink():
+                print('ROLLBACK_ABORT_UNSAFE_PARENT='+name);return False
+            parent=parent.parent
+        if name in m['old']:
+            if not p.is_file():
+                print('ROLLBACK_ABORT_MISSING_LIVE_FILE='+name);return False
+            current=digest(p.read_bytes())
+            if current==m['old'][name]:
+                continue  # Already restored by an earlier partial rollback.
+            if current!=new_hash:
+                print('ROLLBACK_ABORT_CONCURRENT_EDIT='+name);return False
+            backup=stage/f'old-{name}'
+            if not backup.is_file() or backup.is_symlink():
+                print('ROLLBACK_ABORT_INVALID_BACKUP='+name);return False
+            original=backup.read_bytes()
+            if digest(original)!=m['old'][name]:
+                print('ROLLBACK_ABORT_INVALID_BACKUP='+name);return False
+            restore.append((name,p,original))
+        elif p.exists():
+            if not p.is_file() or digest(p.read_bytes())!=new_hash:
+                print('ROLLBACK_ABORT_CONCURRENT_NEW_ASSET='+name);return False
+            remove.append((name,p))
+    for name,p,original in restore:
+        atomic(p,original,run)
+        print('RESTORED_OLD_GAME_FILE='+name)
+    for name,p in remove:
+        p.unlink()
+        print('REMOVED_NEW_GAME_ASSET='+name)
+    return True
 
 def rollback(stage,run):
     if not (stage/'release.json').is_file():print('ROLLBACK_SKIPPED_NO_RELEASE_STATE');return
-    m=metadata(stage);rollback_files(stage,m,run)
-    print('OLD_GAME_CLIENT_RESTORED; HOMEPAGE_CARD_UNCHANGED')
+    m=metadata(stage)
+    if rollback_files(stage,m,run):
+        print('OLD_GAME_CLIENT_RESTORED; HOMEPAGE_CARD_UNCHANGED')
+    else:
+        print('ROLLBACK_INCOMPLETE_MANUAL_REVIEW_REQUIRED')
 
 def main():
     assert len(sys.argv)==3,'usage: deploy.py prepare|publish|verify|rollback RUN_ID'
