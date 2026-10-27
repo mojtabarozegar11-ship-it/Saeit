@@ -168,12 +168,20 @@ jobs:
             ssh_retry_capture "$RUNNER_TEMP/mpw-qa-feedback.json" 60s -T -F "$d/config" saeit-cpanel \
               "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' site-feedback-page-$page"
             count="$(python3 - <<'PY'
-          import json,os
+          import json,os,re
+          from pathlib import Path
           data=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-qa-feedback.json'))
           assert data.get('tenant')=='mojplaywin-main'
           assert data.get('schema')=='mpw.factory.return-to-stage1.v1'
           assert isinstance(data.get('returns'),list)
           assert len(data['returns']) <= 50
+          fingerprint=data.get('snapshot_sha256')
+          assert isinstance(fingerprint,str) and re.fullmatch(r'[a-f0-9]{64}',fingerprint)
+          marker=Path(os.environ['RUNNER_TEMP'])/'mpw-qa-feedback.snapshot'
+          if marker.exists():
+              assert marker.read_text()==fingerprint, 'RETURN_SNAPSHOT_CHANGED_DURING_PAGING'
+          else:
+              marker.write_text(fingerprint)
           print(len(data['returns']))
           PY
             )"
@@ -181,9 +189,22 @@ jobs:
             ssh_retry_stdin 75s "$RUNNER_TEMP/mpw-qa-feedback.json" -T -F "$d/config" saeit-vps \
               "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-return"
             total=$((total + count))
-            # The Python source rejects >1600 receipts. A full final page (31)\n            # therefore means exactly 1600, not an incomplete scan.\n            if [ "$count" -lt 50 ] || [ "$page" -eq 31 ]; then completed=1; break; fi
+            # The Python source rejects >1600 receipts. A full final page (31)
+            # therefore means exactly 1600, not an incomplete scan.
+            if [ "$count" -lt 50 ] || [ "$page" -eq 31 ]; then completed=1; break; fi
           done
           test "$completed" -eq 1 || { echo RETURN_PAGE_CAP_REACHED >&2; exit 1; }
+          # Re-read the first page to detect a backlog mutation after replay.
+          # A failed comparison is safe: VPS receipt intake is idempotent.
+          ssh_retry_capture "$RUNNER_TEMP/mpw-qa-feedback-final.json" 60s -T -F "$d/config" saeit-cpanel \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' site-feedback-page-0"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])
+          final=json.loads((root/'mpw-qa-feedback-final.json').read_text())
+          assert final.get('snapshot_sha256')==(root/'mpw-qa-feedback.snapshot').read_text(), 'RETURN_SNAPSHOT_CHANGED_AFTER_PAGING'
+          PY
           echo "MPW_FACTORY_QA_RETURN_RECEIPTS_REPLAYED=$total"
           echo 'MPW_FACTORY_STAGE1_RETURN_CHANNEL=PASS'
       - name: Prove old site work orders and classify actual specialist blockers before new intake
