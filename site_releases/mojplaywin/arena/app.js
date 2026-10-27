@@ -96,7 +96,7 @@
     if (submitted === memorySecret) {
       memoryStreak++; memoryLength++; setBest("memory",memoryStreak);updateMemoryBest();
       memorySequence.textContent = "✓"; memoryStatus.textContent = "Correct! Streak " + memoryStreak + ". Next sequence loading…";
-      memoryState = "showing"; memoryTimer = setTimeout(startMemory,950);
+      memoryState = "showing"; memoryTimer = setTimeout(() => { memoryState = "idle"; startMemory(); },950);
     } else {
       memorySequence.textContent = memorySecret; memoryStatus.textContent = "Incorrect. That was the sequence. Start again.";
       memoryState = "idle"; memoryLength = 4; memoryStreak = 0; memoryStart.textContent = "Try again"; memoryStart.disabled = false;
