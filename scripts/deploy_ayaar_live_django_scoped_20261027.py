@@ -83,8 +83,6 @@ def check_root():
         safe_regular(path)
     if 'Saeit-staging' not in (DOCROOT / 'passenger_wsgi.py').read_text('utf-8', 'replace'):
         abort('main_wsgi_does_not_reference_pinned_app')
-    if not VENV_PYTHON.is_file() or VENV_PYTHON.is_symlink():
-        abort('pinned_venv_missing')
     if RESTART.parent.is_symlink() or not RESTART.parent.is_dir() or RESTART.is_symlink():
         abort('unsafe_restart_location')
     for target in (VIEW, ASSET_ROOT):
@@ -99,6 +97,7 @@ def check_root():
     if not 500 < len(raw) < 250000:
         abort('unexpected_live_urlconf_size')
     ast.parse(raw.decode('utf-8'), filename='config/urls.py')
+    select_runtime()
     return raw
 
 
@@ -178,6 +177,37 @@ def reload_app():
     RESTART.touch(exist_ok=True)
 
 
+def select_runtime():
+    candidates = (
+        VENV_PYTHON,
+        HOME / 'virtualenv/Saeit-staging/3.12/bin/python',
+        HOME / 'virtualenv/Saeit-staging/3.10/bin/python',
+        HOME / 'virtualenv/Saeit/3.11/bin/python',
+        HOME / 'virtualenv/repositories/Saeit/3.11/bin/python',
+        Path(sys.executable),
+    )
+    check = ("import runpy;"
+             "runpy.run_path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py');"
+             "from django.urls import resolve; assert resolve('/store/') is not None")
+    seen = set()
+    for path in candidates:
+        candidate = str(path)
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        # Python venv executables are normally *trusted interpreter symlinks*.
+        if not path.is_file() or not os.access(path, os.X_OK):
+            continue
+        try:
+            result = subprocess.run([candidate, '-c', check], cwd=str(APP),
+                                    capture_output=True, timeout=25, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if result.returncode == 0:
+            return candidate
+    abort('no_verified_compatible_django_python')
+
+
 def python_route_proof():
     code = ("import runpy; runpy.run_path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py');"
             "from django.urls import resolve; from django.test import RequestFactory;"
@@ -186,7 +216,7 @@ def python_route_proof():
             "assert resolve('/store/') is not None;"
             "r=a.func(RequestFactory().get('/ayaar/'));"
             "assert r.status_code==200; r.close()")
-    process = subprocess.run([str(VENV_PYTHON), '-c', code], cwd=str(APP),
+    process = subprocess.run([select_runtime(), '-c', code], cwd=str(APP),
                              capture_output=True, timeout=55, check=False)
     if process.returncode != 0:
         abort('live_django_import_or_route_proof_failed')
