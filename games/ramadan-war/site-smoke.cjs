@@ -49,6 +49,28 @@ const assert=require('node:assert/strict');
      assert(afterRight.y > afterUp.y + .05, 'rightward joystick drag must strafe right');
      assert(Math.abs(afterRight.x - afterUp.x) < .12, 'rightward drag must not advance');
      console.log('RAMADAN_REAL_JOYSTICK_PASS', v.name);
+     // Exercise the real Chromium keyboard event path and engine ticks. The
+     // diagonal distance must not exceed straight-line distance by sqrt(2).
+     const speedCheck = await page.evaluate(() => {
+       const g = window.RamadanWarDebug;
+       const press = (code, kind) => window.dispatchEvent(new KeyboardEvent(kind, {code, bubbles:true}));
+       const run = codes => {
+         g.qaMove(2.5, 7.5);
+         const origin = g.qaPosition();
+         codes.forEach(code => press(code, 'keydown'));
+         for(let i=0;i<3;i++)g.tick(.04);
+         codes.forEach(code => press(code, 'keyup'));
+         const end = g.qaPosition();
+         return Math.hypot(end.x-origin.x, end.y-origin.y);
+       };
+       return {straight:run(['KeyW']), diagonal:run(['KeyW','KeyD'])};
+     });
+     assert(speedCheck.straight > .1, 'keyboard forward motion must work');
+     assert(speedCheck.diagonal > .1, 'keyboard diagonal motion must work');
+     assert(speedCheck.diagonal <= speedCheck.straight * 1.06,
+       'W+D must not gain a diagonal speed advantage: '+JSON.stringify(speedCheck));
+     console.log('RAMADAN_REAL_DIAGONAL_SPEED_PASS', v.name);
+
    }
    await page.locator('#scope').click();assert.equal(await page.locator('#game').evaluate(el=>el.classList.contains('scope-mode')),true);
    assert.equal(await page.locator('#view').evaluate(el=>el.getContext('webgl2')||el.getContext('webgl')?true:false),true);

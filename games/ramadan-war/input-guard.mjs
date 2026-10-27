@@ -57,3 +57,14 @@ export function isModifiedOrComposingKey(event) {
   return Boolean(event && (event.ctrlKey || event.altKey || event.metaKey ||
     event.isComposing || event.keyCode === 229));
 }
+
+// Normalize combined WASD and touch input to a unit vector. Without this,
+// pressing W+D covers sqrt(2) times the distance of W alone per frame.
+export function normalizeMovementAxes(forward, side) {
+  if (!Number.isFinite(forward) || !Number.isFinite(side)) return {forward: 0, side: 0};
+  const f = Math.max(-1, Math.min(1, forward));
+  const s = Math.max(-1, Math.min(1, side));
+  const length = Math.hypot(f, s);
+  const factor = length > 1 ? 1 / length : 1;
+  return {forward: f * factor, side: s * factor};
+}
