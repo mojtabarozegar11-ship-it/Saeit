@@ -4,7 +4,7 @@
 ## Newly checked
 - The archived source-locked 2026-only 217-economy panel was independently read. Valid 2000/2019 growth exists for 157; valid 2000/2019/2023 for 153. These must remain distinct from the 155-economy three-vintage fixed cohort.
 - A new 2000–2019 post-stratification exercise was computed: observed equal-economy mean 2.398498365, hypothetical 217-frame region-reweighted mean 2.346616320 log-pp/year, shift −0.051882045. This is a **hypothetical within-region exchangeability assumption**, not a global estimate.
-- Algebraic missing-group sensitivity makes the identification gap explicit: 60 of 217 growth rates are unknown; assuming missing mean −2/0/+2 yields hypothetical full-frame means 1.182324/1.735319/2.288314. The tipping-point missing mean for a zero full-frame mean is −6.275? (consult exact C34 figure; do not round or quote here without source). No missing observations were imputed.
+- Algebraic missing-group sensitivity makes the identification gap explicit: 60 of 217 growth rates are unknown; assuming missing mean −2/0/+2 yields hypothetical full-frame means 1.182324/1.735319/2.288314. The tipping-point missing mean for a zero full-frame mean is −6.276071 log-pp/year (a hypothetical algebraic threshold, not an observed rate). No missing observations were imputed.
 - [C34 audit](../manuscripts/AE-2026-001/AE-2026-001_C34_REGION_POSTSTRATIFICATION_AND_UNIDENTIFIED_2000_2019_MISSING_GROWTH_2026-10-27.md) was integrated into Methods 2.10, Results 3.9 and Discussion of the [consolidated manuscript](../manuscripts/AE-2026-001/AE-2026-001_CONSOLIDATED_AUTHOR_REVIEW_MANUSCRIPT_2026-10-27.md).
 
 ## Adversarial objections and release gate
