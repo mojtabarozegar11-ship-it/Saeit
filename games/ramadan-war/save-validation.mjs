@@ -45,7 +45,20 @@ export function validateCampaignSave(s) {
       typeof s.marker.kind !== 'string' || s.marker.kind.length > 32)) return false;
   if (s.bossSpawned !== undefined && typeof s.bossSpawned !== 'boolean') return false;
   if (s.missionPassed !== undefined && typeof s.missionPassed !== 'boolean') return false;
-  if (s.missionPassed === true && s.enemies.length !== 0) return false;
+  if (s.missionPassed === true) {
+    // A cleared stage is an earned transition, not merely an empty arena.
+    // Verify the same kill quotas and stage-specific objectives as game.js.
+    // Never trust a locally edited missionPassed flag to unlock the next stage.
+    const quotas = [4, 5, 5, 6, 7, 8];
+    const requiredDone = [2, 1, 3, 2, 1, 0];
+    if (s.enemies.length !== 0 || s.missionKills < quotas[s.mission] ||
+        !s.objective) return false;
+    if (s.mission === 1) {
+      if (s.objective.done !== 1 || s.objective.hold < 22) return false;
+    } else if (s.mission === 5) {
+      if (s.objective.bossDefeated !== true) return false;
+    } else if (s.objective.done !== requiredDone[s.mission]) return false;
+  }
   // Projectiles are integrated each frame; missing velocities poison the world with NaN.
   if (!group(s.hostile, 150, e => point(e) && finite(e.life, -10, 100) &&
       finite(e.vx, -50, 50) && finite(e.vy, -50, 50) && finite(e.hp, 0, 500))) return false;
