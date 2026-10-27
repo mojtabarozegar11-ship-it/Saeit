@@ -42,8 +42,13 @@ jobs:
               homepage=response.read(900000)
           from scripts.mpw_structure_safe_release_20261026 import patch_home
           patched=patch_home(homepage)
-          if not patched.count(b'data-mpw-structure-v1="20261026"')==1:
-              raise RuntimeError('Unexpected public homepage; refuse release')
+          from scripts.mpw_structure_safe_release_20261026 import patch_home_footer_order
+          if (patched.count(b'data-mpw-structure-v1="20261026"')!=1
+              or patched.count(b'<details class="mpw-content-fold"')!=2):
+              raise RuntimeError('Homepage preflight cannot repair incomplete fold state')
+          arranged=patch_home_footer_order(patched)
+          if arranged.count(b'MPW_FOOTER_ORDER_FIXED_20261027')!=1:
+              raise RuntimeError('Homepage footer transformation preflight failed')
           with urllib.request.urlopen(origin+'/sitemap.xml',timeout=25) as response:
               urls=[node.text for node in ET.fromstring(response.read(2000000)).iter() if node.tag.endswith('loc')]
           if len(urls)!=len(set(urls)) or len(urls)<60:
@@ -155,6 +160,10 @@ jobs:
                      and 'id="mw-all-pages-menu"' in homepage
                      and 'id="site-directory"' in homepage)
               if ready:break
+              print('MPW_HOME_SMOKE_ATTEMPT',trial,
+                    'folds',homepage.count('class="mpw-content-fold"'),
+                    'marker',homepage.count('MPW_FOOTER_ORDER_FIXED_20261027'),
+                    'main_before_footer',homepage.find('</main>')<homepage.find('<footer'))
               time.sleep(2)
           if not ready:raise RuntimeError('Live homepage structure not verified')
           with urllib.request.urlopen(origin+'/sitemap.xml?structure_release='+str(time.time_ns()),timeout=25) as r:
