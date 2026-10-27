@@ -15,6 +15,10 @@ SITE = HOME / "mojplaywin.com"
 TARGET = APP / "core/templates/brands/mojplaywin/product.html"
 OLD = '<a href="/accounts/register/">New customer? Create an account</a>'
 NEW = '<a href="/accounts/register/?next=/store/product/{{ product.pk }}/checkout/">New customer? Create an account</a>'
+CONDITIONAL = ('<a href="{% if product.pk == 879 %}'
+               '/accounts/register/?next=/store/product/879/checkout/'
+               '{% else %}/accounts/register/{% endif %}">'
+               'New customer? Create an account</a>')
 
 
 def sha(data):
@@ -23,25 +27,34 @@ def sha(data):
 
 def transform(data):
     source = data.decode("utf-8")
-    # Existing book links are already checkout-aware. Only the remaining
-    # single generic signup link is eligible for replacement.
-    if source.count(OLD) == 0 and source.count(NEW) >= 2:
+    # The installed template has TWO generic registration links and ONE
+    # existing checkout-aware book link. Preserve the book link and all
+    # other SKUs' original generic destinations. Only SKU 879 receives
+    # a checkout return target in either generic-link branch.
+    if source.count(OLD) == 0 and source.count(CONDITIONAL) == 2:
+        if source.count(NEW) != 1:
+            raise RuntimeError("Book checkout link changed after patch")
         return data, False
-    if source.count(OLD) != 1 or source.count(NEW) < 1:
+    if (source.count(OLD) != 2 or source.count(CONDITIONAL) != 0
+            or source.count(NEW) != 1):
         raise RuntimeError("Unexpected live product signup anchors")
     if "product.pk == 72 or product.pk == 225" not in source:
         raise RuntimeError("Expected book checkout branch missing")
-    updated = source.replace(OLD, NEW, 1).encode("utf-8")
+    updated = source.replace(OLD, CONDITIONAL).encode("utf-8")
     return updated, True
 
 
 def selftest():
-    fixture = ('{% elif product.pk == 72 or product.pk == 225 %}' + NEW +
+    fixture = ('{% if product.pk == 879 %}' + OLD +
+               '{% elif product.pk == 72 or product.pk == 225 %}' + NEW +
                '{% else %}' + OLD + '{% endif %}').encode()
     patched, changed = transform(fixture)
-    assert changed and patched.count(NEW.encode()) == 2
+    assert changed and patched.count(CONDITIONAL.encode()) == 2
+    assert patched.count(NEW.encode()) == 1
     assert transform(patched) == (patched, False)
-    for bad in (fixture + OLD.encode(), fixture.replace(NEW.encode(), b"")):
+    for bad in (fixture + OLD.encode(),
+                fixture.replace(NEW.encode(), b""),
+                fixture.replace(OLD.encode(), b"", 1)):
         try:
             transform(bad)
         except RuntimeError:
@@ -127,6 +140,7 @@ def preview():
                     enumerate(source.splitlines()) if "accounts/register" in line]
     print("MPW_879_SIGNUP_SOURCE_DIAGNOSTIC=" + json.dumps({
         "old_count": source.count(OLD), "new_count": source.count(NEW),
+        "conditional_count": source.count(CONDITIONAL),
         "book_branch_count": source.count("product.pk == 72 or product.pk == 225"),
         "signup_lines": signup_lines[:12]}))
     after, changed = transform(before)
