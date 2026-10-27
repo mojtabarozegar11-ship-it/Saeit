@@ -75,4 +75,5 @@ def test_offer_design_creates_isolated_inactive_draft_without_relabeling_catalog
     assert draft.active is False
     assert draft.price == 0
     assert draft.metadata["pricing_status"] == "requires_market_evidence"
-    assert result["evidence"]["value"]["active"] is False
+    assert result["evidence"]["kind"] == "product_record"
+    assert str(draft.pk) in result["evidence"]["value"]
