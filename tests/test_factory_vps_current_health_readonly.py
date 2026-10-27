@@ -97,5 +97,28 @@ class ReadOnlyFactoryHealthTests(unittest.TestCase):
 
 
 
+    def test_wrapper_schedule_is_classified_as_autonomous_cycle(self):
+        rows = ["23 * * * * /bin/bash /private/worker.sh # SAEIT_AUTONOMOUS_PRODUCTS_V2"]
+        self.assertEqual(audit.cron_production_channels(rows)["autonomous_cycle"], 1)
+
+    def test_heartbeat_real_counter_only_and_no_server_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            private = Path(tmp)
+            sample = {"schema": "saeit.factory.production-health.v1",
+                      "last_cycle_finished_at_utc": "2026-10-27T09:00:00+00:00",
+                      "completed_cycles": 47, "new_or_updated_artifacts_this_cycle": 0,
+                      "cycle_status": "degraded",
+                      "private_token": "NEVER_EMIT"}
+            path = private / "production-health.json"
+            path.write_text(json.dumps(sample), encoding="utf8")
+            before = path.read_bytes()
+            report = audit.production_heartbeat(private)
+            self.assertEqual(report["completed_cycles"], 47)
+            self.assertEqual(report["cycle_status"], "degraded")
+            self.assertNotIn("NEVER_EMIT", json.dumps(report))
+            self.assertEqual(path.read_bytes(), before)
+
+
+
 if __name__ == "__main__":
     unittest.main()
