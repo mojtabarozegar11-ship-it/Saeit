@@ -121,6 +121,7 @@ class CaseServiceTests(unittest.TestCase):
         service.append_case_evidence(item["case_id"], item["access_key"],
                                      "Updated reproducible testing notes attached in text", [], self.secret)
         self.assertEqual(service.case_status(item["case_id"], item["access_key"], self.secret)["status"], "submitted")
+        service.set_status(item["case_id"], "in_review", "staff:8", "Review resumed after applicant response")
         service.submit_review(item["case_id"], "staff:8", make_review())
         with self.assertRaises(service.CaseError):
             service.append_case_evidence(item["case_id"], item["access_key"],
@@ -141,17 +142,20 @@ class CaseServiceTests(unittest.TestCase):
 
     def test_no_publication_without_consent(self):
         item = self.create(public=False)
+        service.set_status(item["case_id"], "in_review", "staff:1", "A documented review is underway")
         result = service.submit_review(item["case_id"], "staff:1", make_review())
         self.assertFalse(result["public_report"])
         self.assertEqual(service.registry(), [])
 
     def test_critical_criterion_override(self):
         item = self.create(public=True)
+        service.set_status(item["case_id"], "in_review", "staff:1", "A documented review is underway")
         result = service.submit_review(item["case_id"], "staff:1", make_review(conflict=True))
         self.assertEqual(result["grade"], "Critical gate failure")
 
     def test_conflicts_and_incomplete_evidence_are_blocked(self):
         item = self.create()
+        service.set_status(item["case_id"], "in_review", "staff:1", "A documented review is underway")
         review = make_review()
         review["no_material_conflict"] = False
         with self.assertRaises(service.CaseError):
@@ -160,6 +164,44 @@ class CaseServiceTests(unittest.TestCase):
         review["criteria"]["sources"]["evidence"] = "short"
         with self.assertRaises(service.CaseError):
             service.submit_review(item["case_id"], "staff:1", review)
+
+
+    def test_cannot_finalise_before_review_or_while_information_is_pending(self):
+        item = self.create()
+        code, key = item["case_id"], item["access_key"]
+        with self.assertRaises(service.CaseError) as unstarted:
+            service.submit_review(code, "staff:1", make_review())
+        self.assertEqual(unstarted.exception.status, 409)
+        service.set_status(code, "needs_information", "staff:1",
+                           "Please provide the latest rights evidence")
+        with self.assertRaises(service.CaseError) as pending:
+            service.submit_review(code, "staff:1", make_review())
+        self.assertEqual(pending.exception.status, 409)
+        with self.assertRaises(service.CaseError) as bypass:
+            service.set_status(code, "in_review", "staff:1",
+                               "Bypass the missing evidence request")
+        self.assertEqual(bypass.exception.status, 409)
+        self.assertEqual(service.case_status(code, key, self.secret)["status"], "needs_information")
+        service.append_case_evidence(
+            code, key, "This is the requested full provenance clarification", [], self.secret)
+        service.set_status(code, "in_review", "staff:1", "Review resumed after applicant evidence")
+        self.assertEqual(service.submit_review(code, "staff:1", make_review())["status"], "reviewed")
+
+    def test_decline_is_terminal_and_requires_reason(self):
+        item = self.create()
+        code, key = item["case_id"], item["access_key"]
+        with self.assertRaises(service.CaseError):
+            service.set_status(code, "declined", "staff:1", "short")
+        self.assertEqual(service.case_status(code, key, self.secret)["status"], "submitted")
+        service.set_status(code, "declined", "staff:1",
+                           "Submission outside the accepted review scope")
+        events = service.case_status(code, key, self.secret)["events"]
+        with self.assertRaises(service.CaseError) as reopen:
+            service.set_status(code, "in_review", "staff:1", "Reopen declined case")
+        self.assertEqual(reopen.exception.status, 409)
+        with self.assertRaises(service.CaseError):
+            service.submit_review(code, "staff:1", make_review())
+        self.assertEqual(service.case_status(code, key, self.secret)["events"], events)
 
     def test_private_file_access_and_owner_erasure(self):
         raw = b"%PDF-1.7\nexample controlled test evidence\n%%EOF"
