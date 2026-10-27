@@ -18,16 +18,10 @@ OLD_CLAIM = "بزرگ ترین شرکت تحقیقات و پژوهش های عل
 NEW_CLAIM = "پژوهش و توسعه علمی، ژنتیک و فناوری در حوزه‌های کشاورزی"
 ASSET_PREFIX = "/static/site/zm-home-media-20261027/"
 IMAGE = re.compile(r"data:image/(svg\+xml|webp);base64,([A-Za-z0-9+/=]+)")
-SECURITY_MARKER = "# zm-six-root-only-frame-policy-20261027"
-SECURITY_BLOCK = """
-# zm-six-root-only-frame-policy-20261027
-<IfModule mod_headers.c>
-  # DirectoryIndex can internally resolve / as /index.html during the
-  # response-header phase. Neither expression matches child subsite paths.
-  Header always set X-Frame-Options "SAMEORIGIN" "expr=%{REQUEST_URI} == '/' || %{REQUEST_URI} == '/index.html'"
-  Header always append Content-Security-Policy "frame-ancestors 'self'" "expr=%{REQUEST_URI} == '/' || %{REQUEST_URI} == '/index.html'"
-</IfModule>
-"""
+# Live production verification (runs 40479155440, 40479833776 and
+# 40480556798) confirmed root-scoped mod_headers changes do not reach the
+# public response. Preserve .htaccess byte for byte until the actual host
+# response-header layer is available for a scoped fix.
 STORE_LINK = '<a href="/contact/">تماس با شرکت</a>'
 STORE_ADDITION = '<a href="/ask-master/index.php">ثبت پرسش و استعلام همکاری</a>'
 
@@ -111,16 +105,12 @@ def stage(web, output):
     assert STORE_ADDITION not in store and store.count(STORE_LINK) == 1, "Unexpected store source"
     revised_store = store.replace(STORE_LINK, STORE_LINK + ' · ' + STORE_ADDITION)
     assert revised_store.count("پرداخت آنلاین") >= store.count("پرداخت آنلاین"), "Payment gate changed"
-    htaccess = original[".htaccess"].decode("utf-8")
-    assert SECURITY_MARKER not in htaccess
-    revised_htaccess = htaccess.rstrip("\n") + "\n" + SECURITY_BLOCK
-
     output.mkdir(parents=True, mode=0o700)
     staged = {
         "index.html": converted.encode("utf-8"),
         "sitemap.xml": revised_sitemap.encode("utf-8"),
         "store/index.php": revised_store.encode("utf-8"),
-        ".htaccess": revised_htaccess.encode("utf-8"),
+        ".htaccess": original[".htaccess"],
     }
     for rel, content in staged.items():
         target = output / rel
@@ -128,8 +118,11 @@ def stage(web, output):
         target.write_bytes(content)
     asset_dir = output / ASSET_PREFIX.lstrip("/")
     asset_dir.mkdir(parents=True)
+    asset_dir.chmod(0o755)
     for name, blob in blobs.items():
-        (asset_dir / name).write_bytes(blob)
+        asset = asset_dir / name
+        asset.write_bytes(blob)
+        asset.chmod(0o644)
 
     manifest = {
         "original": {k: digest(v) for k, v in original.items()},
@@ -141,6 +134,7 @@ def stage(web, output):
         "sitemap_old_count": len(original_urls),
         "sitemap_new_count": len(check_urls),
         "store_payment_remains_disabled": True,
+        "root_frame_header_pending_host_configuration": True,
     }
     (output / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     verify(web, output)
