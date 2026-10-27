@@ -1,4 +1,4 @@
-name: Real factory quality triage and quarantine 40 families
+name: Real factory quality triage for active line 41 product
 on:
   push:
     branches: [main]
@@ -56,7 +56,7 @@ jobs:
           python3 -B -m unittest discover -s tests -p test_factory_autonomous_jump_repair_v1.py -v
           python3 -B -m unittest discover -s tests -p test_factory_quality_production_workorders_v1.py -v
           python3 -B -m unittest discover -s tests -p test_factory_qa_native_rebuild_bridge_20261021.py -v
-  review-real-inventory:
+  review-active-line-product:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -95,6 +95,25 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3)
+          factory_root="/home/githubops/factory-runtime/private/autonomous-product-cycle"
+          slots="$factory_root/quality-excellence/product-flow/active-slots/current.json"
+          timeout 30s ssh -T "${opts[@]}" githubops@178.239.147.150 python3 -B - "$slots" <<'PY'
+          import json,re,sys
+          from pathlib import Path
+          path=Path(sys.argv[1])
+          if path.is_symlink() or any(parent.is_symlink() for parent in path.parents):
+              raise SystemExit("ACTIVE_PRODUCT_SLOT_PATH_UNSAFE")
+          state=json.loads(path.read_text(encoding="utf8"))
+          active=state.get("active") if isinstance(state,dict) else None
+          if (state.get("schema")!="saeit.factory.product-slots.v1"
+              or state.get("line_id")!=41 or state.get("capacity")!=1
+              or not isinstance(active,list) or len(active)!=1
+              or not isinstance(active[0],dict)
+              or not isinstance(active[0].get("recipe"),str)
+              or not re.fullmatch(r"[a-z][a-z0-9_]{1,65}",active[0]["recipe"])):
+              raise SystemExit("ACTIVE_LINE_41_MUST_HAVE_EXACTLY_ONE_REAL_PRODUCT")
+          print("FACTORY_ACTIVE_LINE_41_SINGLE_PRODUCT_SLOT=PASS")
+          PY
           stage="/home/githubops/factory-runtime/operations/.premium-rework-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           ssh -T "${opts[@]}" githubops@178.239.147.150 "set -eu; test \"\$(id -un)\" = githubops; umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
           scp -q "${opts[@]}" scripts/factory_global_quality_triage_v2.py githubops@178.239.147.150:"$stage/rework.py"
@@ -114,6 +133,7 @@ jobs:
             --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle \
             --policy "$stage/quality.py" --registry "$stage/families.json" \
             --scorecard "$stage/score1000.py" \
+            --products-file "$slots" \
             --run-reference "$GITHUB_RUN_ID"
           echo FACTORY_GLOBAL_QUALITY_TRIAGE_PRIVATE_VPS=COMPLETED
           timeout 100s ssh -T "${opts[@]}" githubops@178.239.147.150 \
@@ -121,6 +141,7 @@ jobs:
             --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle \
             --quality-module "$stage/score1000.py" \
             --catalog "$stage/quality_100_criteria.json" \
+            --products-file "$slots" \
             --run-id "$GITHUB_RUN_ID"
           echo FACTORY_PRODUCT_PROFESSIONAL_REWORK_QUEUE=OPERATIONAL
           # Recover original bytes only when source, ZIP and QA hashes agree.
@@ -129,11 +150,12 @@ jobs:
             --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle \
             --other-source-root /home/githubops/factory-runtime/private/autonomous-product-cycle/generated-product-recipes \
             --other-source-root /home/githubops/factory-runtime/operations/autonomous-product-runtime/product_recipes \
+            --products-file "$slots" \
             --limit 3
           echo FACTORY_ORIGINAL_SOURCE_RECOVERY_HASH_BOUND=COMPLETED
           # Only source-backed, genuinely executed offline technical QA rebuilds;
           # original factory stock and public release state remain unchanged.
-          # One bounded, provenance-checked sweep across all 40 registered production families.
+          # One bounded, provenance-checked sweep for the active line 41 product only.
           for pair in "scripts/factory_autonomous_jump_repair_v1.py:jump-repair.py" "scripts/factory_qa_native_rebuild_bridge_20261021.py:native-rebuild.py" "factory_config/forty_families.json:families.json"; do
             local_file="${pair%%:*}"
             remote_file="${pair#*:}"
@@ -148,7 +170,8 @@ jobs:
             --maker "$stage/factory_product_maker.py" --bridge "$stage/native-rebuild.py" \
             --additional-source-root /home/githubops/factory-runtime/operations/autonomous-product-runtime/product_recipes \
             --additional-source-root /home/githubops/factory-runtime/private/autonomous-product-cycle/recovered-original-product-recipes \
-            --rounds 1 --limit 40
+            --products-file "$slots" \
+            --rounds 1 --limit 1
           echo FACTORY_NATIVE_TECHNICAL_REBUILD_CANDIDATES_INSPECTED=YES
           # Return every changed factory artifact to quality control in this same run.
           timeout 125s ssh -T "${opts[@]}" githubops@178.239.147.150 \
@@ -156,6 +179,7 @@ jobs:
             --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle \
             --policy "$stage/quality.py" --registry "$stage/families.json" \
             --scorecard "$stage/score1000.py" \
+            --products-file "$slots" \
             --run-reference "$GITHUB_RUN_ID-post-rework"
           echo FACTORY_POST_REWORK_QUALITY_REINSPECTION=COMPLETED
           timeout 100s ssh -T "${opts[@]}" githubops@178.239.147.150 \
@@ -163,6 +187,7 @@ jobs:
             --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle \
             --quality-module "$stage/score1000.py" \
             --catalog "$stage/quality_100_criteria.json" \
+            --products-file "$slots" \
             --run-id "$GITHUB_RUN_ID-post-rework"
           echo FACTORY_POST_REWORK_WORKORDER_REFRESH=COMPLETED
           echo FACTORY_QUALITY_RELEASE_THRESHOLD=1000/1000
