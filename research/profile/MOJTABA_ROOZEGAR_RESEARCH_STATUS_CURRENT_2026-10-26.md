@@ -8,6 +8,10 @@ The [AE-2026-001 C34 source-locked reanalysis](../manuscripts/AE-2026-001/AE-202
 
 **Current stage:** AE and MR = MAJOR REVISION / NO SUBMISSION; ZM-R01 = DATA REBUILD / NO SUBMISSION. **Zero** author-approved, submitted, accepted or published papers. No source-matched Word after C34 has been verified. The historical ILOSTAT archives, direct three-vintage countryatlas benchmark, MR source and G/D/R/A validation, and ZM exact reference and integer counts remain open. The 46-topic registry remains a candidate queue only. **No live website deployment; PR #1054 remains draft/unmerged and restricted social accounts untouched.**
 
+## MR C49 randomized feedback comparator — 27 October 2026 (staging only)
+
+The [MR C49 original-publisher abstract audit](../manuscripts/MR-2026-001/MR-2026-001_C49_RANDOMIZED_SMART_METER_FEEDBACK_CAUSAL_COMPARATOR_2026-10-27.md) documents a 2019 randomized trial involving 200 smart-meter-equipped farmers and weekly water-use feedback. This is **adjacent prior art**, not proof of event-specific DSS recommendation fidelity or a new result from MR. The [MR Perspective text](../manuscripts/MR-2026-001/MR-2026-001_DIRECT_IRRIGATION_ADHERENCE_PRIOR_ART_AUTHOR_REVIEW_V5_2026-10-26.md) and [internal AI author packet](MR_2026_001_C49_AUTHOR_DECISION_AND_INTERNAL_AI_NOVELTY_REVIEW_2026-10-27.md) now explicitly delimit the causal-comparator claim. **MAJOR REVISION / NO SUBMISSION**; no validated G/D/R/A or post-C49 source-matched Word verified.
+
 ## Current research
 
 **MR-2026-001:** Unpublished V5 Perspective; 22 DOI references, C42 original Amini methods and unresolved F7 numerical contradiction; Car Table 5, event-level G/D/R/A validation and originality remain unresolved. Last independently verified Word: run 40344172230, artifact 12659259449. **MAJOR REVISION / NO SUBMISSION.**
