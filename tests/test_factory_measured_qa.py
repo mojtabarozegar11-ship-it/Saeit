@@ -138,7 +138,7 @@ class RecipeInventoryReplacementTests(unittest.TestCase):
             goods = root/'finished.zip'
             goods.write_bytes(b'existing artifact')
             installer = (ROOT/'deploy'/'install_autonomous_factory_products.sh').read_text()
-            block = installer.split('incoming="$(mktemp',1)[1].split('# Quality gate',1)[0]
+            block = installer.split('incoming="$(mktemp',1)[1].split('# Verify the exact reviewed flagship',1)[0]
             block = 'incoming="$(mktemp' + block
             env = dict(os.environ, repo=str(repo), stage=str(stage), scripts=str(scripts),
                        recipes=str(old), ops=str(ops), python=sys.executable, stamp='test')
