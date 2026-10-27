@@ -99,6 +99,44 @@ def line41_diagnostic(private):
 
 
 
+
+def cycle_error_buckets(private):
+    """Privacy-preserving roots of a live degraded manufacturing cycle."""
+    path = private / "production-state.json"
+    if not path.exists() and not path.is_symlink():
+        return {"state": "absent"}
+    try:
+        data = safe_json(path, 2_000_000)
+        if data.get("schema_version") != 1:
+            return {"state": "invalid"}
+        names = ("designer_failures", "research_failures",
+                 "recipe_admission_failures", "quality_failures_this_cycle",
+                 "source_recoveries", "source_evolutions",
+                 "quality_return_build_candidates")
+        result = {"state": "valid", "cycle_status": data.get("cycle_status")}
+        for key in names:
+            values = data.get(key)
+            result[key + "_count"] = len(values) if isinstance(values, list) else None
+        groups = collections.Counter()
+        for row in data.get("designer_failures", []):
+            if isinstance(row, dict):
+                category = row.get("type")
+                if isinstance(category, str) and re.fullmatch(r"[a-z_]{3,64}", category):
+                    groups[category] += 1
+                else:
+                    groups["other"] += 1
+        result["designer_failure_types"] = dict(groups)
+        for name in ("product_candidates_processed", "registered_recipe_count",
+                     "built_product_count", "source_evolution_attempted_count",
+                     "genuinely_evolved_source_count", "manufacturing_failed_recipe_count",
+                     "quality_returns_unresolved"):
+            value = data.get(name)
+            result[name] = value if type(value) is int and value >= 0 else None
+        return result
+    except (OSError, ValueError, TypeError, AttributeError):
+        return {"state": "unreadable"}
+
+
 def production_heartbeat(private):
     """Return only a schema-checked subset of real cycle counters and timestamps."""
     path = private / "production-health.json"
@@ -264,6 +302,7 @@ def inventory():
         "existing_three_sku_private_copies": sku_copies,
         "line41": line41_diagnostic(PRIVATE),
         "production_heartbeat": production_heartbeat(PRIVATE),
+        "cycle_error_buckets": cycle_error_buckets(PRIVATE),
         "cron_production_channels": cron_production_channels(active),
     }
 
