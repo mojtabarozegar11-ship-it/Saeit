@@ -254,6 +254,44 @@ jobs:
             "recent_pending_unexpired":unexpired,"recent_pending_decode_failed":decode_failed,
             "no_customer_identifiers_disclosed":True,"no_invoice_created":True},sort_keys=True))
           PY
+      - name: Inspect effective order entry guards without customer data or writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 55s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import inspect,json,os,sys
+          from pathlib import Path
+          root=Path("/home/zomorod2/Saeit-staging")
+          if not root.is_dir() or root.is_symlink():raise RuntimeError("APP_ROOT_INVALID")
+          os.chdir(root);sys.path.insert(0,str(root))
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.conf import settings
+          from services import mpw_trx_commercial_web as web
+          from mpw_commerce import buyer_orders
+          def code_flags(fn):
+              if fn is None:return {"present":False}
+              source=inspect.getsource(fn).lower()
+              return {"present":True,
+                "mentions_rights":any(s in source for s in ("rights_cleared","license_verified","publication_approved")),
+                "mentions_merchant_canary":"merchant_canary" in source,
+                "mentions_public_enabled":"public_enabled" in source,
+                "mentions_release_authorized":"release_authorized" in source}
+          try:
+              from services.mpw_trx_commercial_context import rights_cleared_for_sale
+              runtime_rights_gate=callable(rights_cleared_for_sale)
+          except (ImportError,AttributeError):
+              runtime_rights_gate=False
+          result={
+            "read_only":True,"customer_records_read":0,"orders_created":0,
+            "public_enabled":getattr(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False) is True,
+            "merchant_canary":getattr(settings,"MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED",False) is True,
+            "runtime_rights_gate_importable":runtime_rights_gate,
+            "start_order_source":code_flags(getattr(web,"_start_order",None)),
+            "eligibility_source":code_flags(getattr(buyer_orders,"_eligible",None))}
+          print("MPW_EFFECTIVE_ORDER_GUARDS="+json.dumps(result,sort_keys=True))
+          PY
       - name: Check all three publicly listed products without changing checkout or customer data
         run: |
           set -euo pipefail
