@@ -67,19 +67,34 @@ jobs:
           import os,json,hashlib,subprocess,shutil,urllib.request,urllib.error,http.cookiejar,secrets,sqlite3,time
           root=Path('/home/zomorod2/public_html');target=root/'$$zm';private=Path('/home/zomorod2/zm-finance-private')
           assert root.is_dir() and not root.is_symlink()
-          assert not target.exists() and not target.is_symlink(),'Existing target requires fresh audit'
-          assert not private.exists() and not private.is_symlink(),'Existing private storage requires fresh audit'
-          for p in [Path('/AGENTS.md'),Path('/home/AGENTS.md'),Path('/home/zomorod2/AGENTS.md'),root/'AGENTS.md']:
+          assert not target.is_symlink() and not private.is_symlink(), 'Symlink target is forbidden'
+          for p in [Path('/AGENTS.md'),Path('/home/AGENTS.md'),Path('/home/zomorod2/AGENTS.md'),root/'AGENTS.md',target/'AGENTS.md']:
            assert not p.exists(),'New local instructions must be read before deployment'
+          existing=target.is_dir()
+          manifest=private/'release-manifest.json'
+          if existing:
+           assert private.is_dir() and (private/'rate.key').is_file() and (private/'manage_requests.py').is_file(), 'Private service state missing'
+           assert set(p.name for p in target.iterdir())==set(FILES), 'Unexpected user files in live portal'
+           if manifest.is_file():
+            expected=json.loads(manifest.read_text(encoding='utf8'))
+            assert set(expected)==set(FILES), 'Manifest content mismatch'
+            for name,digest in expected.items():
+             assert hashlib.sha256((target/name).read_bytes()).hexdigest()==digest, 'Unexpected live modification: '+name
+           else:
+            for name,body in FILES.items():
+             assert (target/name).read_text(encoding='utf8')==body, 'Untracked live content: '+name
+          else:
+           assert not target.exists() and not private.exists(), 'Partial installation requires separate recovery'
           baseline={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in [root/'index.html',root/'.htaccess'] if p.is_file()}
-          backup=Path('/home/zomorod2/.backups/zm-finance-'+str(int(time.time())))
+          backup=Path('/home/zomorod2/.backups/zm-finance-'+str(time.time_ns()))
           backup.mkdir(parents=True,mode=0o700)
           for name in baseline:shutil.copy2(name,backup/Path(name).name)
           (backup/'baseline.json').write_text(json.dumps(baseline))
-          private.mkdir(mode=0o700)
-          (private/'rate.key').write_text(secrets.token_hex(32));(private/'rate.key').chmod(0o600)
-          (private/'manage_requests.py').write_text(MANAGER);(private/'manage_requests.py').chmod(0o600)
-          stage=private/'release';stage.mkdir(mode=0o755)
+          if not existing:
+           private.mkdir(mode=0o700)
+           (private/'rate.key').write_text(secrets.token_hex(32));(private/'rate.key').chmod(0o600)
+           (private/'manage_requests.py').write_text(MANAGER);(private/'manage_requests.py').chmod(0o600)
+          stage=private/('release-next-'+str(time.time_ns()));stage.mkdir(mode=0o755)
           for name,body in FILES.items():
            p=stage/name;p.write_text(body,encoding='utf8');p.chmod(0o644)
           php=shutil.which('php')
@@ -94,7 +109,11 @@ jobs:
             return r.read(),r.headers
           get('https://zomorodmelal.ir/')
           created=None
+          old_swapped=False
           try:
+           if existing:
+            os.rename(target,backup/'portal-previous')
+            old_swapped=True
            os.rename(stage,target)
            for name in ['index.html','app.js','style.css','services.json']:
             body,headers=get(base+('' if name=='index.html' else name))
@@ -117,15 +136,19 @@ jobs:
            assert not any((target/x).exists() for x in ['requests.sqlite','rate.key','manage_requests.py'])
            for name,sha in baseline.items():assert hashlib.sha256(Path(name).read_bytes()).hexdigest()==sha,'Main site changed'
            get('https://zomorodmelal.ir/')
+           next_manifest={name:hashlib.sha256(body.encode('utf8')).hexdigest() for name,body in FILES.items()}
+           temp_manifest=private/('release-manifest-'+str(time.time_ns())+'.json')
+           temp_manifest.write_text(json.dumps(next_manifest),encoding='utf8')
+           temp_manifest.chmod(0o600)
+           os.replace(temp_manifest,manifest)
            print('DEPLOYED=https://zomorodmelal.ir/%24%24zm/')
            print('VERIFIED=assets,security_headers,csrf,reject_bad_token,create_request,private_lookup,unchanged_homepage')
            print('PAYMENTS=DISABLED SERVICES=36 STORAGE=PRIVATE')
           except Exception:
            if target.is_dir() and not target.is_symlink():
-            for name,body in FILES.items():
-             p=target/name
-             if p.is_file() and not p.is_symlink() and p.read_text()==body:p.unlink()
-            if not list(target.iterdir()):target.rmdir()
+            os.rename(target,backup/'unaccepted-portal')
+           if old_swapped:
+            os.rename(backup/'portal-previous',target)
            raise
           finally:
            if created:
