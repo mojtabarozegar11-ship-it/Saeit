@@ -56,6 +56,10 @@ To assess whether the separate 2026-only 2000–2019 versus 2019–2023 period c
 
 A separate **2026-only** availability-selection diagnostic compared the **153** economies observed in 2000/2019/2023 with **16** additional economies observed in 2019/2023 but not at the positive 2000 baseline. We compared the distributions of observed 2019 productivity using medians and exact cross-group pairwise ranks; region-conditioned comparisons used only pairs from the same WDI region. Independently, we compared the distributions of **absolute** 2019–2023 annualized log growth, `|100 ln(P2023/P2019)/4|`, using medians and **post hoc** descriptive thresholds 5, 10 and 15 log-percentage points. These are post hoc finite-sample descriptions, not tests of a missing-data mechanism, and must not be conflated with the primary 155-economy **three-vintage** analysis. Calculations and country identities are documented in [C30](AE-2026-001_C30_2000_BASELINE_MISSINGNESS_2019_LEVEL_AND_VOLATILITY_SELECTION_2026-10-27.md).
 
+### 2.9 Region-stratified endpoint availability (C33)
+
+We re-tabulated the previously committed **217-economy 2026-only** observed-country CSV by its exact WDI metadata region. A year was available only when the indicator value was finite and strictly positive; the chronological 2000/2019/2023 availability mask was counted without imputation. We report each region's denominator, three-endpoint complete cases, two-endpoint 2019/2023 cases and other missingness masks. These are administrative availability fractions, **not** population-weighted coverage, tests of missingness mechanisms, or estimates of world agricultural output. This region census does **not** alter the separate **155-economy historical-vintage** cohort. Full counts and a standard-library replication recipe are provided in [C33](AE-2026-001_C33_REGIONAL_ENDPOINT_AVAILABILITY_SELECTION_2026-10-27.md).
+
 ## 3. Results
 
 ### 3.1 Primary fixed-country release sensitivity
@@ -140,6 +144,23 @@ To assess the influence of the two largest positive-growth observations in the 1
 
 An exact cross-group comparison of **absolute** growth magnitudes yielded **1,597/2,448 = 0.652369** winning pairs for the baseline-missing group; after removing CAF and DJI, **1,293/2,142 = 0.603641**. Restricting comparisons to pairs within the same WDI region reduced these fractions to **291/461 = 0.631236** and **241/410 = 0.587805**, respectively. In Sub-Saharan Africa alone the within-region fraction changed from **132/252 = 0.523810** to **96/216 = 0.444444** after excluding CAF, reversing the descriptive direction. These are observed finite-sample rank proportions, not inferential probabilities, causal effects, measures of intra-period volatility or evidence of historical-vintage revisions. Full country-level definitions, exclusion rules and denominators are recorded in [C31](AE-2026-001_C31_OUTLIER_EXCLUSION_AND_REGION_STRATIFIED_ABSOLUTE_GROWTH_SELECTION_2026-10-27.md).
 
+### 3.8 Regional composition of the endpoint-complete cohort (C33)
+
+**Table 6. Regional coverage of the 2026-only three-endpoint observed-country panel**
+
+| WDI metadata region | Economy records | Complete 2000/2019/2023 | Complete-case share | 2019/2023 pairs |
+| --- | ---: | ---: | ---: | ---: |
+| Latin America & Caribbean | 42 | 28 | 66.67% | 28 |
+| Middle East, North Africa, Afghanistan & Pakistan | 23 | 15 | 65.22% | 20 |
+| Sub-Saharan Africa | 48 | 36 | 75.00% | 43 |
+| Europe & Central Asia | 58 | 45 | 77.59% | 47 |
+| East Asia & Pacific | 37 | 22 | 59.46% | 24 |
+| South Asia | 6 | 6 | 100.00% | 6 |
+| North America | 3 | 1 | 33.33% | 1 |
+| **Total** | **217** | **153** | **70.51%** | **169** |
+
+The 16 additional 2019/2023 observations lacking a 2000 baseline comprised seven Sub-Saharan African, five Middle Eastern/North African/Afghanistan/Pakistan, two European/Central Asian and two East Asian/Pacific economies. The remaining availability masks were 43 with no positive endpoint, four with only 2000/2019 and one with only 2000. In this source-locked CSV, Canada has all three positive endpoints while the United States and Bermuda have none for **this indicator**; this does not mean those economies lack agricultural output or other statistics, and it is not independently revalidated against a live API. Coverage heterogeneity is a **sample-selection warning**, not proof of a missingness mechanism or a global representativeness adjustment. The full five-mask regional census and source-file checksum appear in [C33](AE-2026-001_C33_REGIONAL_ENDPOINT_AVAILABILITY_SELECTION_2026-10-27.md).
+
 ## 4. Discussion
 
 The 2026-only baseline-availability audits (C30/C31) identify a further selection caution: economies lacking the 2000 endpoint had lower pooled median 2019 productivity and higher median absolute 2019–2023 growth than the complete cases, while within-region rank comparisons differed materially. This does not establish a missingness mechanism or generalize to the 155-economy historical-vintage cohort. Excluding two extreme observations weakens, but does not eliminate, the absolute-growth rank contrast; the within-Sub-Saharan-African comparison reverses direction. With only 2019 and 2023 endpoints, the magnitude of net growth must not be called time-series volatility. Accordingly, pooled 153-versus-169 growth contrasts should not be interpreted as representative changes in the world's agricultural productivity.
@@ -152,7 +173,7 @@ A direct prior-art comparison is necessary: the documented `countryatlas::compar
 
 A further comparability issue is the **13th-versus-19th ICLS definition of employment and work**: the ILO documents differing country implementation dates and distinct database concepts. No country-specific standards transition is identified by our 2026-only worker check. Consequently, the observed worker-level discrepancies cannot be assigned to a changed ICLS definition, and the historical WDI vintage differences cannot be decomposed into ICLS, value-added and worker components without date-stamped component series and matching metadata (see [C29](AE-2026-001_C29_ILOSTAT_ICLS_STANDARD_AND_VINTAGE_IDENTIFICATION_GATE_2026-10-27.md)).
 
-The limitations are substantial. Revisions to the published composite indicator cannot be assigned to independent national-accounts or ILO employment mechanisms without matched historical component archives. Current-source ILOSTAT agreement does not provide independent provenance because the sources overlap. The fixed 155-country panel is selected by data availability, not a representative sample of world agriculture. The 2024 archive's missing 2023 endpoint prevents a three-vintage 2000–2023 comparison. The actual `countryatlas` CAGR function has been benchmarked, but the separate three-vintage `compare_vintages` prior-art benchmark remains incomplete. Prior research already studies statistical data revisions, and this study does **not** establish methodological novelty. The post hoc analysis is not preregistered, and the manuscript has not been externally reviewed.
+The new regional availability census (C33) shows complete-case coverage ranging from 1/3 to 6/6 across the seven WDI metadata regions, with strong differences in region denominators and territory composition. This reinforces the restriction to **descriptive selected-country results**, not a population-weighted global statement. The missingness mechanism remains unidentified.\n\nThe limitations are substantial. Revisions to the published composite indicator cannot be assigned to independent national-accounts or ILO employment mechanisms without matched historical component archives. Current-source ILOSTAT agreement does not provide independent provenance because the sources overlap. The fixed 155-country panel is selected by data availability, not a representative sample of world agriculture. The 2024 archive's missing 2023 endpoint prevents a three-vintage 2000–2023 comparison. The actual `countryatlas` CAGR function has been benchmarked, but the separate three-vintage `compare_vintages` prior-art benchmark remains incomplete. Prior research already studies statistical data revisions, and this study does **not** establish methodological novelty. The post hoc analysis is not preregistered, and the manuscript has not been externally reviewed.
 
 The appropriate application is as a transparent, reproducible descriptive data note or methodological case study **if a suitable journal accepts this limited contribution and the human author approves the scientific and publication conditions**. It must not be presented as a new theory of agricultural productivity, a causal explanation of revision, or a new measurement of agricultural employment.
 
