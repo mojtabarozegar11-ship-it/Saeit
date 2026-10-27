@@ -25,7 +25,9 @@
     { icon:"◉", name:"Brand Activations", description:"Bespoke quizzes, QR or product-code experiences and interactive campaigns.", category:"business", action:"For business", href:"#partners", color:"rgba(224,176,84,.23)" },
     { icon:"▧", name:"Digital Marketplace", description:"Connect with MojPlayWin digital products and relevant paid downloads.", category:"business", action:"Visit store", href:"https://mojplaywin.com/store/", color:"rgba(101,203,176,.18)" },
     { icon:"♜", name:"Event Infrastructure", description:"Organizers can explore fair-scoring challenges and white-label entertainment.", category:"business", action:"Partnerships", href:"#partners", color:"rgba(120,142,230,.20)" },
-    { icon:"⚖", name:"Regulatory Gateway", description:"Real-money wagering stays locked unless separately licensed and approved.", category:"business", action:"Read status", href:"#compliance", color:"rgba(244,152,126,.17)" }
+    { icon:"⚖", name:"Regulatory Gateway", description:"Real-money wagering stays locked unless separately licensed and approved.", category:"business", action:"Read status", href:"#compliance", color:"rgba(244,152,126,.17)" },
+    { icon:"♠", name:"MOJ Casino 18+", description:"Adult casino-style free play and a separate, non-operating regulated service pathway.", category:"play", action:"Explore free casino", href:"./casino/", color:"rgba(236,174,84,.25)" },
+    { icon:"◫", name:"50 Revenue Channels", description:"Ten commercial engines and fifty potential revenue models with explicit activation requirements.", category:"business", action:"Explore revenue plan", href:"./revenue/", color:"rgba(103,191,227,.22)" }
   ];
   const grid = $("experience-grid");
   for (const item of experienceItems) {
