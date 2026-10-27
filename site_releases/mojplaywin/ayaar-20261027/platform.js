@@ -149,7 +149,9 @@
     container.append(h("p","Scope: "+report.review_scope,"a-small"));
     container.append(h("p",report.final_disclaimer,"a-small"));
     if(report.integrity?.proof){
-      container.append(h("p","AYAR server integrity reference: "+report.integrity.proof,"a-small"));
+      const integrityLine=h("p","AYAR server integrity reference: "+report.integrity.proof,"a-small");
+      integrityLine.style.overflowWrap="anywhere";
+      container.append(integrityLine);
       container.append(h("p","This is an AYAR platform record check, not an independent quality certificate.","a-small"));
     }
   }
@@ -276,7 +278,9 @@
         card.append(h("span",item.grade+" · "+item.score+"/100","a-status "+(item.grade==="Excellent"?"reviewed":"")));
         card.append(h("p",item.category+" · "+item.notice));
         if(item.proof){
-          card.append(h("p","Platform integrity code: "+item.proof,"a-small"));
+          const integrityLine=h("p","Platform integrity code: "+item.proof,"a-small");
+          integrityLine.style.overflowWrap="anywhere";
+          card.append(integrityLine);
           const check=h("button","Verify AYAR record ↗","a-button a-button-secondary");
           check.type="button";
           const result=h("p","","a-small");
