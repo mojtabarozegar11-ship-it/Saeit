@@ -410,3 +410,32 @@ class ProductionContinuityTests(unittest.TestCase):
             if item.get('status')=='technical_prototype_built':
                 self.assertFalse(item['build50_verified'])
                 self.assertFalse(item['commercial_release'])
+
+
+class FactoryLiveHealthSemanticsTests(unittest.TestCase):
+    def test_real_vps_backlog_is_not_a_manufacturing_runtime_failure(self):
+        pending = [{"type": "engineering_rework", "source_revisions": 54},
+                   {"type": "deferred_rework", "count": 616}]
+        result = cycle._execution_health([], [], pending, [])
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["expected_design_backlog_count"], 2)
+        self.assertEqual(result["fatal_design_failure_count"], 0)
+        self.assertTrue(result["backlog_retained"])
+        self.assertEqual(len(pending), 2)
+
+    def test_real_failure_cannot_be_masked_by_pending_queue(self):
+        pending = [{"type": "deferred_rework", "count": 616},
+                   {"type": "engineering_intake", "reason": "invalid evidence"}]
+        result = cycle._execution_health([], [], pending, [])
+        self.assertEqual(result["status"], "needs_rework")
+        self.assertEqual(result["fatal_design_failure_count"], 1)
+        for target in (0, 1, 3):
+            queues = [[], [], [], []]
+            queues[target] = [{"reason": "authentic fault"}]
+            self.assertEqual(cycle._execution_health(*queues)["status"], "needs_rework")
+
+    def test_unknown_error_is_fatal_fail_closed(self):
+        self.assertEqual(cycle._execution_health([], [], ["untrusted"], [])["status"],
+                         "needs_rework")
+        self.assertEqual(cycle._execution_health([], [], [{}], [])["status"],
+                         "needs_rework")
