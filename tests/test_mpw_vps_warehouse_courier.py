@@ -145,6 +145,28 @@ class VPSWarehouseCourierTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,"RETURN_PAGE_INVALID"):
             feedback_site(self.site,page=32)
 
+    def test_page_snapshot_fingerprint_detects_new_receipts_and_content_changes(self):
+        archive=export_factory(self.factory)
+        import_site(archive,self.site)
+        first=json.loads(feedback_site(self.site,page=0))
+        second=json.loads(feedback_site(self.site,page=1))
+        self.assertRegex(first["snapshot_sha256"],r"^[a-f0-9]{64}$")
+        self.assertEqual(first["snapshot_sha256"],second["snapshot_sha256"])
+        self.assertEqual(second["returns"],[])
+        folder=self.site/"returns"/self.product
+        original=folder/(self.version+".json")
+        row=json.loads(original.read_text())
+        row["issues"]=list(row["issues"])+["ADDITIONAL_REVIEW_REQUIRED"]
+        original.write_text(json.dumps(row))
+        changed=json.loads(feedback_site(self.site,page=0))
+        self.assertNotEqual(first["snapshot_sha256"],changed["snapshot_sha256"])
+        another="b"*64
+        row=dict(row,source_sha256=another)
+        (folder/(another+".json")).write_text(json.dumps(row))
+        extended=json.loads(feedback_site(self.site,page=0))
+        self.assertNotEqual(changed["snapshot_sha256"],extended["snapshot_sha256"])
+        self.assertEqual(len(extended["returns"]),2)
+
     def test_exact_1600_receipts_fills_last_page_and_1601_fails_closed(self):
         archive=export_factory(self.factory)
         import_site(archive,self.site)
