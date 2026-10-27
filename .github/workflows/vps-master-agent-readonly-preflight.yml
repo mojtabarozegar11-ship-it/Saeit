@@ -108,7 +108,7 @@ jobs:
             ps -o pid=,ppid=,etime=,stat=,wchan:24=,comm= -p "$pids" || true
             for process_id in ${pids//,/ }; do
               if test -r "/proc/$process_id/io"; then
-              io="$(awk '$1 == \"read_bytes:\" || $1 == \"write_bytes:\" {print $1 $2}' \"/proc/$process_id/io\")"
+              io="$(awk '$1 == "read_bytes:" || $1 == "write_bytes:" {print $1 $2}' "/proc/$process_id/io")"
                 echo "MASTER_PROCESS_IO pid=$process_id $io"
               fi
             done
