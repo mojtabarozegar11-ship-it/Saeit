@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick} from '../../games/ramadan-war/input-guard.mjs';
+import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey} from '../../games/ramadan-war/input-guard.mjs';
 
 const arena = {closest: () => null};
 const menuButton = {closest: selector => selector.includes('button') ? {} : null};
@@ -93,4 +93,19 @@ test('lost pointer capture releases mobile movement and continuous fire', () => 
   assert.ok(game.includes("stick.onlostpointercapture=endStick"), 'joystick stops after pointer capture loss');
   assert.ok(game.includes("$('#fire').onlostpointercapture=endFire"), 'fire release must handle capture loss');
   assert.match(game, /function endFire\(e\)\{if\(!isOwnedGameplayPointer\(fireId,e\.pointerId\)\)return;fireId=null;fireHeld=false\}/, 'only owning pointer releases continuous fire');
+});
+
+test('browser modifiers and IME composition never activate game shortcuts', () => {
+  const unmodified = {ctrlKey:false, altKey:false, metaKey:false, isComposing:false, keyCode:81};
+  assert.equal(isModifiedOrComposingKey(unmodified), false);
+  for (const flag of ['ctrlKey','altKey','metaKey','isComposing']) {
+    assert.equal(isModifiedOrComposingKey({...unmodified, [flag]:true}), true, flag);
+  }
+  assert.equal(isModifiedOrComposingKey({...unmodified, keyCode:229}), true, 'IME process key');
+  assert.equal(isModifiedOrComposingKey(null), false);
+  const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
+  assert.match(game, /if\\(isModifiedOrComposingKey\\(e\\)\\)return;/);
+  assert.ok(game.indexOf('if(isModifiedOrComposingKey(e))return;') <
+    game.indexOf('const action=keyboardAction(e.code,screen,e.target,e.repeat);'),
+    'modified/composing keys must be ignored before gameplay actions and preventDefault');
 });
