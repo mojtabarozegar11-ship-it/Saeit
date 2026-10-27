@@ -22,6 +22,7 @@ REVISIONS={
     "verified-summary-v3": "# STATS_API_V3_START",
     "verified-distribution-v4": "# DISTRIBUTION_API_V4_START",
     "verified-grouped-statistics-v5": "# GROUPED_STATISTICS_API_V5_START",
+    "verified-one-percent-sensitivity-v6": "# SENSITIVITY_API_V6_START",
 }
 HEADER='''"""Versioned offline features for a validated factory arithmetic tool."""
 from calculator import NAMES, calculate, calculate_batch
@@ -284,7 +285,11 @@ def original_identity(source,maker):
     if (not calculator.startswith('"""Generated deterministic arithmetic planning tool;')
         or "# STATS_API_V3_START" not in calculator
         or REVISIONS[revision] not in calculator
-        or (revision=="verified-summary-v3" and "# DISTRIBUTION_API_V4_START" in calculator)):
+        or (revision=="verified-summary-v3" and "# DISTRIBUTION_API_V4_START" in calculator)
+        or (revision=="verified-one-percent-sensitivity-v6" and any(
+            marker not in calculator for marker in (
+                "# DISTRIBUTION_API_V4_START", "# GROUPED_STATISTICS_API_V5_START"
+            )))):
         raise ValueError("TEN_VERIFIED_COMPILER_SOURCE_REQUIRED")
     maker.verify_recipe(source,minimum_tests=7)
     return maker.source_digest(source,files),receipt["family_id"]

@@ -121,6 +121,27 @@ class RealTenGenerationTests(unittest.TestCase):
         self.assertEqual(engine.run(self.private,self.recipes,
                          ROOT/"scripts/factory_product_maker.py",limit=2)["new_real_generations"],0)
 
+    def test_v6_sensitivity_provenance_requires_predecessor_markers(self):
+        recipe=self.names[0]
+        source=self.recipes/recipe
+        receipt=json.loads((source/"design_receipt.json").read_text(encoding="utf8"))
+        self.assertEqual(receipt["generator_capability_revision"],
+                         "verified-one-percent-sensitivity-v6")
+        digest,family=engine.original_identity(source,maker)
+        self.assertEqual(family,"F27")
+        self.assertEqual(len(digest),64)
+        calculator=source/"calculator.py"
+        original=calculator.read_text(encoding="utf8")
+        for marker in ("# SENSITIVITY_API_V6_START",
+                       "# GROUPED_STATISTICS_API_V5_START",
+                       "# DISTRIBUTION_API_V4_START"):
+            with self.subTest(marker=marker):
+                calculator.write_text(original.replace(marker,""),encoding="utf8")
+                with self.assertRaisesRegex(ValueError,
+                                            "TEN_VERIFIED_COMPILER_SOURCE_REQUIRED"):
+                    engine.original_identity(source,maker)
+        calculator.write_text(original,encoding="utf8")
+
     def test_v4_source_cannot_claim_to_be_a_v3_compiler_revision(self):
         recipe=self.names[0]
         receipt=self.recipes/recipe/"design_receipt.json"
