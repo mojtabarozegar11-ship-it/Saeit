@@ -426,3 +426,34 @@ test('one animation frame owns gameplay after rapid pause/resume and repeated re
   assert.equal((source.match(/requestAnimationFrame\(frame\)/g)||[]).length,1,
     'only the scheduler itself may request an animation frame');
 });
+
+
+test('public Ramadan telemetry cannot mutate the campaign or invoke QA-only controls', () => {
+  const source=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
+  const start=source.indexOf('const qaIsLocal=');
+  const end=source.indexOf(';if(storageRead(saveKey))',start);
+  assert.ok(start>0&&end>start,'extract the actual published debug API setup');
+  const world={objective:{done:1,hold:0},enemies:[],mission:0,hero:0,endless:false};
+  const makeContext=hostname=>({
+    window:{},location:{hostname},NAMES:['Hero'],SKILLS:['Skill'],
+    world,screen:'game',engine:{stats:()=>({renderer:'webgl-threejs'})},
+    plan:()=>({kind:'activate'}),objectiveTarget:()=>2,
+    fire:()=>{},launchRocket:()=>{},droneStrike:()=>{},tick:()=>{},interactObjective:()=>{}
+  });
+  const publicContext=makeContext('zomorodmelal.ir');
+  runInNewContext(source.slice(start,end),publicContext);
+  const publicApi=publicContext.window.RamadanWarDebug;
+  assert.deepEqual(Object.keys(publicApi),['heroes','skills','getState']);
+  assert.equal(Object.isFrozen(publicApi),true);
+  assert.equal(publicApi.tick,undefined);
+  assert.equal(publicApi.start,undefined);
+  assert.equal(publicApi.spawnTestEnemy,undefined);
+  assert.equal(publicApi.spawnTestPickup,undefined);
+  const telemetry=publicApi.getState();
+  telemetry.objective.done=999;
+  assert.equal(world.objective.done,1,'public telemetry must not expose mutable campaign references');
+  const localContext=makeContext('localhost');
+  runInNewContext(source.slice(start,end),localContext);
+  assert.equal(typeof localContext.window.RamadanWarDebug.tick,'function');
+  assert.equal(typeof localContext.window.RamadanWarDebug.qaMission,'function');
+});

@@ -144,5 +144,20 @@ addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='Space')fireHeld=fal
 addEventListener('blur',()=>{releaseGameInputs();if(screen==='game')$('#pause').click()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){releaseGameInputs();if(screen==='game')$('#pause').click()}});
 addEventListener('pagehide',save);setInterval(save,5000);
-window.RamadanWarDebug={heroes:NAMES,skills:SKILLS,getState:()=>world&&({mode:screen,hero:world.hero,stage:world.mission,hp:world.hp,maxHp:world.maxHp,lives:world.lives,rockets:world.rockets,drones:world.drones,kills:world.kills,missionKills:world.missionKills,enemies:world.enemies.length,shots:world.shots||0,points:world.points,objective:world.objective,objectiveKind:world.endless?'survival':plan().kind,objectiveTarget:objectiveTarget(),...engine.stats(),score:world.score,ammo:world.ammo,combo:world.combo}),selectHero:n=>{hero=(n+30)%30;storageWrite('rwHero',hero);updateHome()},start:()=>newWorld(false),fire,rocket:launchRocket,drone:droneStrike,tick,reload:()=>reload(true),spawnTestEnemy:()=>{if(world){const e=body(6.5,7.5,0,39);e.strafe=1;world.enemies.push(e)}},interact:interactObjective,qaPosition:()=>['localhost','127.0.0.1'].includes(location.hostname)&&world?{x:world.x,y:world.y}:null,qaMove:(x,y)=>{if(!['localhost','127.0.0.1'].includes(location.hostname)||!world||tile(x|0,y|0)!==0)return false;world.x=x;world.y=y;updateObjective(0);return true},qaMission:n=>{if(!['localhost','127.0.0.1'].includes(location.hostname)||!world||n<0||n>5)return false;world.mission=n;prepareMission();return true},spawnTestPickup:(type='ammo')=>{if(world)world.pickups.push({x:world.x,y:world.y,type:['ammo','health','intel'].includes(type)?type:'ammo',life:10})}};if(storageRead(saveKey))$('#start').textContent='ادامهٔ نبرد';updateHome();engine.build({hero:0,mission:0,x:2.5,y:7.5,angle:.08,muzzle:0,enemies:[],missiles:[]},tile);engine.render(null,0)
+const qaIsLocal=['localhost','127.0.0.1'].includes(location.hostname);
+const debugApi={
+ heroes:Object.freeze([...NAMES]),skills:Object.freeze([...SKILLS]),
+ getState:()=>world&&({mode:screen,hero:world.hero,stage:world.mission,hp:world.hp,maxHp:world.maxHp,lives:world.lives,rockets:world.rockets,drones:world.drones,kills:world.kills,missionKills:world.missionKills,enemies:world.enemies.length,shots:world.shots||0,points:world.points,objective:world.objective?JSON.parse(JSON.stringify(world.objective)):null,objectiveKind:world.endless?'survival':plan().kind,objectiveTarget:objectiveTarget(),...engine.stats(),score:world.score,ammo:world.ammo,combo:world.combo})
+};
+if(qaIsLocal)Object.assign(debugApi,{
+ selectHero:n=>{hero=(n+30)%30;storageWrite('rwHero',hero);updateHome()},
+ start:()=>newWorld(false),fire,rocket:launchRocket,drone:droneStrike,tick,reload:()=>reload(true),
+ spawnTestEnemy:()=>{if(world){const e=body(6.5,7.5,0,39);e.strafe=1;world.enemies.push(e)}},
+ interact:interactObjective,
+ qaPosition:()=>world?{x:world.x,y:world.y}:null,
+ qaMove:(x,y)=>{if(!world||tile(x|0,y|0)!==0)return false;world.x=x;world.y=y;updateObjective(0);return true},
+ qaMission:n=>{if(!world||n<0||n>5)return false;world.mission=n;prepareMission();return true},
+ spawnTestPickup:(type='ammo')=>{if(world)world.pickups.push({x:world.x,y:world.y,type:['ammo','health','intel'].includes(type)?type:'ammo',life:10})}
+});
+window.RamadanWarDebug=Object.freeze(debugApi);if(storageRead(saveKey))$('#start').textContent='ادامهٔ نبرد';updateHome();engine.build({hero:0,mission:0,x:2.5,y:7.5,angle:.08,muzzle:0,enemies:[],missiles:[]},tile);engine.render(null,0)
 })();

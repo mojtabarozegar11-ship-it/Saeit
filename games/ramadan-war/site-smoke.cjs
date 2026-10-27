@@ -7,14 +7,26 @@ const assert=require('node:assert/strict');
    const context=await browser.newContext({viewport:{width:v.width,height:v.height},isMobile:v.mobile,hasTouch:v.mobile});
    const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push('page: '+e.message));page.on('console',m=>{if(m.type()==='error')errors.push('console: '+m.text())});page.on('requestfailed',r=>errors.push('request: '+r.url()+' '+(r.failure()?.errorText||'')));
    const response=await page.goto(process.env.GAME_URL,{waitUntil:'domcontentloaded',timeout:45000});assert.equal(response.status(),200);
+   const localCandidate=['127.0.0.1','localhost'].includes(new URL(process.env.GAME_URL).hostname);
    await page.locator('#home h1').waitFor();
    await page.waitForFunction(()=>window.RamadanWarDebug&&Array.isArray(window.RamadanWarDebug.heroes),null,{timeout:10000}).catch(e=>{throw new Error(e.message+'\n'+errors.join('\n'))});
    assert.equal(await page.evaluate(()=>window.RamadanWarDebug.heroes.length),30);
    assert.equal(await page.evaluate(()=>window.RamadanWarDebug.skills.length),6);
-   await page.evaluate(()=>window.RamadanWarDebug.selectHero(1));
-   assert.equal(await page.locator('#heroName').innerText(),'حاج قاسم — قاسم سلیمانی');
-   await page.evaluate(()=>window.RamadanWarDebug.selectHero(0));
-   await page.evaluate(()=>window.RamadanWarDebug.start());
+   if(localCandidate){
+    await page.evaluate(()=>window.RamadanWarDebug.selectHero(1));
+    assert.equal(await page.locator('#heroName').innerText(),'حاج قاسم — قاسم سلیمانی');
+    await page.evaluate(()=>window.RamadanWarDebug.selectHero(0));
+    await page.evaluate(()=>window.RamadanWarDebug.start());
+   }else{
+    assert.equal(await page.evaluate(()=>typeof window.RamadanWarDebug.tick),'undefined','public build must not expose simulation mutators');
+    assert.equal(await page.evaluate(()=>typeof window.RamadanWarDebug.spawnTestPickup),'undefined','public build must not expose free pickups');
+    await page.locator('#chooseHero').click();
+    await page.locator('#heroGrid button').nth(1).click();
+    assert.equal(await page.locator('#heroName').innerText(),'حاج قاسم — قاسم سلیمانی');
+    await page.locator('#chooseHero').click();
+    await page.locator('#heroGrid button').first().click();
+    await page.locator('#start').click();
+   }
    await page.locator('#hud:not(.hidden)').waitFor();
    await page.waitForFunction(()=>document.querySelector('#weaponArt').complete&&document.querySelector('#weaponArt').naturalWidth>0);
    await page.waitForFunction(()=>{const s=window.RamadanWarDebug.getState();return s&&s.soldierModel&&s.weaponModel},null,{timeout:20000}).catch(e=>{throw new Error('3D model assets did not load\n'+errors.join('\n')+'\n'+e.message)});
@@ -24,7 +36,8 @@ const assert=require('node:assert/strict');
    assert.equal(await page.locator('#game').evaluate(el=>el.classList.contains('three-world-ready')),true);
    assert.equal(await page.locator('#missionBackdrop').evaluate(el=>getComputedStyle(el).display),'block');assert.equal(await page.locator('#fullscreen').count(),1);
    assert.equal(await page.locator('#weaponArt').evaluate(el=>getComputedStyle(el).display),'none');
-   await page.evaluate(()=>{for(let i=0;i<30;i++)window.RamadanWarDebug.tick(.04)});
+   if(localCandidate)await page.evaluate(()=>{for(let i=0;i<30;i++)window.RamadanWarDebug.tick(.04)});
+   else await page.waitForTimeout(1200);
    const controls=await page.evaluate(()=>({stick:document.querySelector('#stick').getBoundingClientRect().x,fire:document.querySelector('#fire').getBoundingClientRect().x}));assert(controls.stick<controls.fire,'movement pad should be on the left of fire controls');
    // Real pointer capture and animation frames: dragging up must advance,
    // dragging right must strafe, including on the mobile viewport.
@@ -77,7 +90,7 @@ const assert=require('node:assert/strict');
    await page.locator('#scope').click();assert.equal(await page.locator('#game').evaluate(el=>el.classList.contains('scope-mode')),false);
    await page.waitForFunction(()=>document.querySelector('#view').getContext('webgl2')||document.querySelector('#view').getContext('webgl'),null,{timeout:10000});
    let state=await page.evaluate(()=>window.RamadanWarDebug.getState());
-   assert.equal(state.hp,100);assert.equal(state.lives,100);assert.equal(state.stage,0);assert.equal(state.mode,'game');
+   assert(state.hp>0&&state.hp<=100,'hero must be alive');assert.equal(state.lives,100);assert.equal(state.stage,0);assert.equal(state.mode,'game');
    assert.equal(state.rockets,12);assert.equal(state.drones,3);assert.equal(state.ammo,8);assert.equal(state.renderer,'webgl-threejs');assert(state.enemies>0,'mission enemy spawn '+JSON.stringify(state));
    // Real Chromium event dispatch: browser shortcuts and composition must not
    // consume rockets/drones or suppress native key handling on either viewport.
@@ -99,16 +112,22 @@ const assert=require('node:assert/strict');
    assert.equal(shortcutCheck.dronesAfter,shortcutCheck.dronesBefore,'Alt+E must not spend drones');
    assert.equal(shortcutCheck.shotsAfter,shortcutCheck.shotsBefore,'browser shortcuts must not fire weapons');
    console.log('RAMADAN_REAL_MODIFIER_IME_PASS',v.name);
-   await page.evaluate(()=>window.RamadanWarDebug.spawnTestEnemy());
-   await page.evaluate(()=>{window.RamadanWarDebug.fire();window.RamadanWarDebug.rocket();window.RamadanWarDebug.drone()});
-   await page.evaluate(()=>{window.RamadanWarDebug.spawnTestPickup('ammo');window.RamadanWarDebug.tick(.04)});state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.shots,1);assert.equal(state.rockets,11);assert.equal(state.drones,2);assert.equal(state.ammo,8,'ammo pickup restores the magazine');
+   if(localCandidate){
+    await page.evaluate(()=>window.RamadanWarDebug.spawnTestEnemy());
+    await page.evaluate(()=>{window.RamadanWarDebug.fire();window.RamadanWarDebug.rocket();window.RamadanWarDebug.drone()});
+    await page.evaluate(()=>{window.RamadanWarDebug.spawnTestPickup('ammo');window.RamadanWarDebug.tick(.04)});
+    state=await page.evaluate(()=>window.RamadanWarDebug.getState());
+    assert.equal(state.shots,1);assert.equal(state.rockets,11);assert.equal(state.drones,2);assert.equal(state.ammo,8,'ammo pickup restores the magazine');
+   }
+   const savedBeforeReload=await page.evaluate(()=>window.RamadanWarDebug.getState());
    await page.locator('#pause').click();await page.locator('#pausePanel:not(.hidden)').waitFor();await page.reload({waitUntil:'domcontentloaded'});
    assert.match(await page.locator('#start').innerText(),/ادامه/);
    await page.locator('#start').click();
-   state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.stage,0);assert.equal(state.rockets,11);assert.equal(state.drones,2);assert.equal(state.mode,'game');
+   state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.stage,0);assert.equal(state.rockets,savedBeforeReload.rockets);assert.equal(state.drones,savedBeforeReload.drones);assert.equal(state.mode,'game');
    // A real pointer click exercises the published control path, unlike debug.fire().
    assert((await page.locator('#pause').getAttribute('aria-label'))?.length>=3,'pause needs a screen-reader name');
-   await page.evaluate(()=>{for(let i=0;i<40;i++)window.RamadanWarDebug.tick(.04)});
+   if(localCandidate)await page.evaluate(()=>{for(let i=0;i<40;i++)window.RamadanWarDebug.tick(.04)});
+   else await page.waitForTimeout(1200);
    const shotsBefore=await page.evaluate(()=>window.RamadanWarDebug.getState().shots);
    await page.locator('#fire').click();
    await page.waitForFunction(n=>window.RamadanWarDebug.getState().shots>n,shotsBefore,{timeout:5000});
