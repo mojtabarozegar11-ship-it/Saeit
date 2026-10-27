@@ -11,6 +11,10 @@
 - The two sample pages say **no supplementary files provided** at the individual GSM level, and raw reads are linked via SRA. This does not prove no processed data exist elsewhere at GSE or publisher level.
 - The live GEO HTML currently challenges automated access (CAPTCHA). Indexed source snippets were available; full current page and all sample records were **not** exhaustively inspected.
 
+## Provenance clarification (C39; no new sequencing claims)
+
+The **complete 24/24 GSM↔BioSample↔SRR source crosswalk was already completed on 26 October 2026 in [C24](C24_OFFICIAL_GEO_24_BIOSAMPLE_SRR_SOURCE_CROSSWALK_COMPLETED_2026-10-26.md)**. The two GSM records in this C38 memo are illustrative independent checks, **not** evidence that 22 sample identities were missing. The subsequent [C39](C39_FULL_24_LIBRARY_PAIRED_FASTQ_BYTE_BALANCE_AND_JOINED_DESIGN_AUDIT_2026-10-27.md) joined the already deposited complete manifests and computed treatment-stratified **compressed FASTQ file sizes**; it did not download or hash the FASTQs or produce gene counts. This corrects the status interpretation without re-counting C24 as a new achievement.
+
 ## Precise verification gap and economical next method
 1. Obtain a metadata-only complete GSE294406-to-SRX/SRR run table from official GEO/SRA or ENA, recording GSM, BioSample, SRX, SRR, condition, replicate, layout, fastq_md5, fastq_bytes, and retrieval date. **Do not download any FASTQ** to prepare this manifest.
 2. ENA's official filereport API supports result=read_run and fields run_accession,fastq_ftp,fastq_md5,fastq_bytes, per https://github.com/enasequence/read_docs/blob/master/retrieval/programmatic-access/file-reports.rst . API documentation establishes a **possible metadata route**, not successful retrieval of this study's run hashes. Direct metadata API access did not succeed in this run.
