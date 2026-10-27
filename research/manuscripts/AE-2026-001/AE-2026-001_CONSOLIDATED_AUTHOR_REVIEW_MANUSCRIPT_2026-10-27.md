@@ -46,6 +46,10 @@ Original source-hashed three-vintage calculation: `analysis/wdi_three_vintage_fi
 
 As an additional post hoc diagnostic within the **153-economy 2026-only cohort**, we compared strict growth-rate sign reversals between E and L (nonoverlapping periods) and between E and H (overlapping horizons). For margins m = 0, 0.1, 0.2, 0.5, 1 and 2 annual log-percentage points, a reversal is retained only if both compared rates have absolute magnitude greater than m. The identity 23H=19E+4L implies that, for E and L of opposite signs, a strict E-to-H reversal requires |L|>4.75|E|. These exploratory margins are **not** tests of statistical significance or a new estimator.
 
+### 2.7 Exploratory baseline-productivity stratification (C28)
+
+To assess whether the separate 2026-only 2000–2019 versus 2019–2023 period contrast is homogeneous across starting productivity levels, we sorted the 153 complete-case economies by year-2000 value added per worker and assigned quartiles by sorted row index `1+floor(4i/153)` for zero-based `i`. We summarized the paired country difference `d=L−E` in each quartile and calculated the descriptive Spearman correlation of log baseline productivity with d. This post hoc exercise uses the **153-economy 2026-only cohort**, not the primary 155-economy three-vintage cohort. Because the baseline value also enters E, mathematical coupling and regression to the mean preclude a causal interpretation.
+
 ## 3. Results
 
 ### 3.1 Primary fixed-country release sensitivity
@@ -94,11 +98,27 @@ Within the distinct **153-economy 2026-only** cohort, median annual growth was *
 
 The ten overlapping-horizon sign reversals include seven with at least one rate no larger than 0.5 log-pp/year in absolute magnitude. This demonstrates the sensitivity of a binary growth-sign label to near-zero annual rates. It does not imply that the separate ten historical-vintage sign switches in the 155-economy primary analysis have the same identities or margins. Full country-level calculations and the exact 4.75 threshold are in [C27](AE-2026-001_C27_HORIZON_SIGN_SWITCH_MARGIN_ROBUSTNESS_2026-10-27.md). No uncertainty or causal inference is attached to these post hoc thresholds.
 
+### 3.5 Exploratory heterogeneity by baseline agricultural productivity (C28)
+
+**Table 4. Baseline year-2000 productivity quartiles in the separate 2026-only 153-economy period contrast**
+
+| Baseline productivity quartile | Economies | Median paired change in annual log growth (log-pp/year) | Economies with lower growth in 2019–2023 |
+| --- | ---: | ---: | ---: |
+| Q1, lowest | 39 | −2.650990 | 31 |
+| Q2 | 38 | −2.493042 | 29 |
+| Q3 | 38 | −0.460747 | 24 |
+| Q4, highest | 38 | −1.563035 | 25 |
+| **Total** | **153** | **−1.925832 (pooled median)** | **109** |
+
+The rank correlation between log baseline productivity and the paired change was **+0.133214**, descriptive only. All four quartile medians were negative, but the pattern was **not monotone**. These observations do not establish a productivity-convergence mechanism or a world-representative trend; quartile allocation and full source-locked calculations are documented in [C28](AE-2026-001_C28_BASELINE_PRODUCTIVITY_QUARTILE_PERIOD_CONTRAST_2026-10-27.md).
+
 ## 4. Discussion
 
 The evidence supports three narrow conclusions. First, source release is a material component of descriptive country-level measurement uncertainty: an end-to-end median absolute annual growth revision of 0.4129 log-percentage points can coexist with relatively high rank correlation. Second, sign-change headlines are sensitive to small growth rates near zero and must be accompanied by magnitude thresholds. Third, changing the time horizon is not changing the data vintage: the weighted-average identity shows exactly why extending the endpoint from 2019 to 2023 can suppress shorter-period sign reversals.
 
 A direct prior-art comparison is necessary: the documented `countryatlas::compare_vintages()` function reports **single-year level** revisions between archived WDI releases, whereas the present audit calculates **two-endpoint annualized growth-rate** revisions and their sign/rank sensitivity. The latter are standard downstream computations, not an original estimator. An exact head-to-head numerical benchmark would require identical release identities, endpoint years, country intersections and units; substituting a rolling `current` API result for the dated October 2026 extract would not guarantee identical source bytes. The original `countryatlas` source-code/estimand comparison is documented in the internal C7 audit, and the published function reference is cited below.
+
+A further comparability issue is the **13th-versus-19th ICLS definition of employment and work**: the ILO documents differing country implementation dates and distinct database concepts. No country-specific standards transition is identified by our 2026-only worker check. Consequently, the observed worker-level discrepancies cannot be assigned to a changed ICLS definition, and the historical WDI vintage differences cannot be decomposed into ICLS, value-added and worker components without date-stamped component series and matching metadata (see [C29](AE-2026-001_C29_ILOSTAT_ICLS_STANDARD_AND_VINTAGE_IDENTIFICATION_GATE_2026-10-27.md)).
 
 The limitations are substantial. Revisions to the published composite indicator cannot be assigned to independent national-accounts or ILO employment mechanisms without matched historical component archives. Current-source ILOSTAT agreement does not provide independent provenance because the sources overlap. The fixed 155-country panel is selected by data availability, not a representative sample of world agriculture. The 2024 archive's missing 2023 endpoint prevents a three-vintage 2000–2023 comparison. The actual `countryatlas` CAGR function has been benchmarked, but the separate three-vintage `compare_vintages` prior-art benchmark remains incomplete. Prior research already studies statistical data revisions, and this study does **not** establish methodological novelty. The post hoc analysis is not preregistered, and the manuscript has not been externally reviewed.
 
@@ -124,5 +144,8 @@ Across the same 155 economies, three official WDI releases yield meaningfully di
 8. Filer RK, Hájková D, Hanousek J. (2004). The Other Side of the Moon: The Data Problem in Analysing Growth Determinants. CEPR Discussion Paper 4349.
 9. World Bank. WDI database archives. https://databank.worldbank.org/databases/archives
 10. Yu Y. *countryatlas* 3.0.0: `compare_vintages` documentation (single-year WDI release-level comparisons). https://pursuitofdatascience.github.io/countryatlas/reference/compare_vintages.html . Package DOI: 10.32614/CRAN.package.countryatlas.
+
+11. International Labour Organization. New ILO database updates work-related indicators to meet latest standards. ILOSTAT methodological explainer (2022). https://ilostat.ilo.org/blog/new-ilo-database-updates-work-related-indicators-to-meet-latest-standards/
+12. International Labour Organization. Rilostat repository, data-licensing and access guidance (ILOSTAT datasets generally CC BY 4.0 since 3 May 2023 unless otherwise indicated). https://github.com/ilostat/Rilostat
 
 **Critical internal AI decision:** MAJOR REVISION / NO SUBMISSION. The author-facing manuscript is a **real, consolidated output** but is not evidence of a completed peer-reviewed paper or author approval.
