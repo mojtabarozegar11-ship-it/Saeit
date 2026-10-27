@@ -22,8 +22,10 @@ SECURITY_MARKER = "# zm-six-root-only-frame-policy-20261027"
 SECURITY_BLOCK = """
 # zm-six-root-only-frame-policy-20261027
 <IfModule mod_headers.c>
-  Header always set X-Frame-Options "SAMEORIGIN" "expr=%{REQUEST_URI} == '/'"
-  Header always append Content-Security-Policy "frame-ancestors 'self'" "expr=%{REQUEST_URI} == '/'"
+  # DirectoryIndex can internally resolve / as /index.html during the
+  # response-header phase. Neither expression matches child subsite paths.
+  Header always set X-Frame-Options "SAMEORIGIN" "expr=%{REQUEST_URI} == '/' || %{REQUEST_URI} == '/index.html'"
+  Header always append Content-Security-Policy "frame-ancestors 'self'" "expr=%{REQUEST_URI} == '/' || %{REQUEST_URI} == '/index.html'"
 </IfModule>
 """
 STORE_LINK = '<a href="/contact/">تماس با شرکت</a>'
