@@ -43,10 +43,11 @@ HEX_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _read_private_json(path):
+    """Fail closed on transient filesystem errors during private JSON inspection."""
     path = Path(path)
-    if path.is_symlink() or not path.is_file() or path.stat().st_size > 2_000_000:
-        return None
     try:
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 2_000_000:
+            return None
         value = json.loads(path.read_text(encoding="utf8"))
         return value if isinstance(value, dict) else None
     except (OSError, ValueError, UnicodeError):
