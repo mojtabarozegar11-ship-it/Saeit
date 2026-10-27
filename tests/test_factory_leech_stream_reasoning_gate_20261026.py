@@ -87,12 +87,12 @@ class LeechStreamAcceptanceRegression(unittest.TestCase):
         writer = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(writer)
         tokens = self.valid.split()
-        for marker in ("<|endoftext|>", "<|endo\\u200bftext|>", "<|endof\\u034ftext|>"):
+        for marker in ("<|endoftext|>", "<|endo\u200bftext|>", "<|endof\u034ftext|>"):
             with self.subTest(marker=repr(marker)):
                 body = " ".join(tokens[:160] + [marker] + tokens[160:])
                 self.assertFalse(self.operator.stream_segment_is_acceptable(body))
-                with patch.object(writer, "source_evidence", return_value=({}, [], [])), \\
-                     patch.object(writer, "state", return_value=({}, 0, 1, 1)), \\
+                with patch.object(writer, "source_evidence", return_value=({}, [], [])), \
+                     patch.object(writer, "state", return_value=({}, 0, 1, 1)), \
                      patch.object(writer, "ensure_private", side_effect=AssertionError("UNSAFE_WRITE_REACHED")):
                     with self.assertRaisesRegex(RuntimeError, "MODEL_REASONING_OR_CONTROL_TOKEN"):
                         writer.accept({1: []}, body)
