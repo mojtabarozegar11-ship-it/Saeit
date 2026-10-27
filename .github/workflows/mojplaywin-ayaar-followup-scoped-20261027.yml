@@ -48,7 +48,7 @@ jobs:
               text=Path('site_releases/mojplaywin/ayaar-20261027',name).read_text('utf-8')
               assert '<html lang="en" dir="ltr">' in text
               assert 'platform.js?v=platform-3' in text
-           assert 'platform.css?v=platform-2' in text
+              assert 'platform.css?v=platform-2' in text
           assert 'def append_case_evidence' in Path('core/ayaar_case_service.py').read_text('utf-8')
           print('AYAR_FOLLOWUP_QA=PASS')
           PY
