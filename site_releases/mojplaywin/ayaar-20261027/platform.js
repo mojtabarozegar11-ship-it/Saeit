@@ -67,8 +67,9 @@
     if(!response.ok || !result.ok)throw Error(result.error||"Request failed");
     return result.data;
   }
-  async function publicGet(op) {
-    const response=await fetch("./api?op="+encodeURIComponent(op),{credentials:"same-origin",cache:"no-store"});
+  async function publicGet(op,params={}) {
+    const query=new URLSearchParams({op,...params});
+    const response=await fetch("./api?"+query.toString(),{credentials:"same-origin",cache:"no-store"});
     const data=await response.json();
     if(!response.ok || !data.ok)throw Error(data.error||"Service unavailable");
     return data;
@@ -147,6 +148,10 @@
     container.append(h("p","Independence statement: "+report.independence_statement,"a-small"));
     container.append(h("p","Scope: "+report.review_scope,"a-small"));
     container.append(h("p",report.final_disclaimer,"a-small"));
+    if(report.integrity?.proof){
+      container.append(h("p","AYAR server integrity reference: "+report.integrity.proof,"a-small"));
+      container.append(h("p","This is an AYAR platform record check, not an independent quality certificate.","a-small"));
+    }
   }
   function downloadCaseReport(details) {
     const exportData={
@@ -155,7 +160,8 @@
       case_id:details.case_id, product_name:details.product_name,
       product_version:details.product_version, category:details.category,
       case_history:details.events, review:details.review,
-      notice:"Reviewer-attested assessment only; not accredited or independently certified. This downloaded JSON is not cryptographically signed."
+      platform_integrity_checked:details.review_integrity_valid,
+      notice:"Reviewer-attested assessment only. The embedded AYAR server integrity marker can be checked by AYAR; it is not a third-party signature or independent accreditation."
     };
     const url=URL.createObjectURL(new Blob([JSON.stringify(exportData,null,2)],{type:"application/json"}));
     const anchor=document.createElement("a");anchor.href=url;
@@ -220,6 +226,9 @@
     }
     if(details.review){
       renderReport(target,details.review);
+      if(details.review_integrity_valid===false){
+        target.append(h("p","Warning: this stored report failed its AYAR integrity check. Contact support before relying on it.","a-alert error"));
+      }
       const exportButton=h("button","Download documented review (JSON) ↓","a-button a-button-secondary");
       exportButton.type="button";exportButton.addEventListener("click",()=>downloadCaseReport(details));
       target.append(exportButton);
@@ -266,9 +275,52 @@
         card.append(h("h3",item.product_name));
         card.append(h("span",item.grade+" · "+item.score+"/100","a-status "+(item.grade==="Excellent"?"reviewed":"")));
         card.append(h("p",item.category+" · "+item.notice));
+        if(item.proof){
+          card.append(h("p","Platform integrity code: "+item.proof,"a-small"));
+          const check=h("button","Verify AYAR record ↗","a-button a-button-secondary");
+          check.type="button";
+          const result=h("p","","a-small");
+          check.addEventListener("click",async()=>{
+            check.disabled=true;
+            try{
+              const answer=await publicGet("verify",{case_id:item.case_id,proof:item.proof});
+              result.textContent=answer.verified
+                ? "Valid AYAR-issued report record. This does not establish reviewer independence or external accreditation."
+                : "No matching public AYAR integrity record.";
+            }catch(error){result.textContent=error.message;}
+            finally{check.disabled=false;}
+          });
+          card.append(check,result);
+        }else{
+          card.append(h("p","Legacy report: no server integrity code issued.","a-small"));
+        }
         area.append(card);
       });
     }).catch(error=>{clear(area).append(h("div",error.message,"a-empty"));});
+  }
+  function setupVerification() {
+    const form=$("verifyForm");
+    if(!form)return;
+    form.addEventListener("submit",async event=>{
+      event.preventDefault();
+      const output=$("verifyResult"),button=$("verifyButton");
+      button.disabled=true;
+      output.textContent="Checking AYAR public record…";
+      try{
+        const result=await publicGet("verify",{
+          case_id:field(form,"case_id").value.trim(),
+          proof:field(form,"proof").value.trim()
+        });
+        if(result.verified){
+          output.textContent="AYAR record verified: "+result.product_name+
+            " · version "+(result.product_version||"unspecified")+
+            " · "+result.score+"/100. "+result.notice;
+        }else{
+          output.textContent="No matching published AYAR record. Check both values; private or withdrawn reports are not publicly verifiable.";
+        }
+      }catch(error){output.textContent=error.message;}
+      finally{button.disabled=false;}
+    });
   }
   let selectedCode="";
   async function loadStaffList(){
@@ -404,5 +456,5 @@
       $("refreshStaff")?.addEventListener("click",()=>loadStaffList().catch(error=>message(error.message,"error")));
     }catch(error){message(error.message,"error");}
   }
-  nav();setupSubmission();setupTracking();setupRegistry();setupReviewer();
+  nav();setupSubmission();setupTracking();setupRegistry();setupVerification();setupReviewer();
 })();
