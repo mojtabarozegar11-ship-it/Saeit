@@ -53,7 +53,7 @@ def extract(archive, target):
             name = info.filename
             p = PurePosixPath(name)
             mode = (info.external_attr >> 16) & 0o170000
-            if (not name or name.startswith("/") or "\\\\" in name or
+            if (not name or name.startswith("/") or "\\" in name or
                     "." in p.parts or ".." in p.parts or name in seen or
                     mode not in (0, stat.S_IFDIR, stat.S_IFREG)):
                 raise RuntimeError("REWORK_UNSAFE_ZIP_MEMBER")
