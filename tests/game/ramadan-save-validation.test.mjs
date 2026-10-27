@@ -254,3 +254,10 @@ test('campaign restore repairs obstructed player location before engine build', 
   const client=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
   assert.match(client,/restorePlayerPosition\(world,\(x,y\)=>tile\(x,y\)!==0\);hero=world\.hero/);
 });
+
+test('restored time stop expires normally and forged permanent freezes fail closed', () => {
+  for (const freeze of [0,.04,2.5,5])
+    assert.equal(validateCampaignSave({...fresh(),freeze}),true);
+  for (const freeze of [-1,5.01,1e8,Infinity,NaN,'5',null])
+    assert.equal(validateCampaignSave({...fresh(),freeze}),false,String(freeze));
+});

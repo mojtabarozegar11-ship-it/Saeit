@@ -1,16 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {canEnemyAct, restoreEnemyRuntime, advanceHostileProjectile} from '../../games/ramadan-war/enemy-action-policy.mjs';
+import {canEnemyAct, restoreEnemyRuntime, advanceHostileProjectile, shouldCleanupEnemy, activateTimeStop, advanceTimeStop} from '../../games/ramadan-war/enemy-action-policy.mjs';
 
 const enemy = () => ({x:8.5,y:7.5,type:1,hp:30,max:50,life:1.5,strafe:1,pathTimer:.4});
 
 test('only living enemies may move, fire or inflict contact damage', () => {
   assert.equal(canEnemyAct(enemy()), true);
   assert.equal(canEnemyAct({...enemy(),life:-.1}), true, 'negative attack cooldown is normal');
+  assert.equal(canEnemyAct({...enemy(),life:-5}), true, 'expired attack cooldown must not kill a living enemy');
   for (const e of [
     {...enemy(),hp:0}, {...enemy(),hp:-5},
-    {...enemy(),life:-5}, {...enemy(),hp:NaN},
+    {...enemy(),hp:NaN},
     {...enemy(),life:Infinity}, null, {}
   ]) assert.equal(canEnemyAct(e), false, 'defeated/corrupt enemy must be inert');
 });
@@ -35,10 +36,10 @@ test('legacy transient enemy fields recover without granting kills or health', (
 
 test('runtime guard precedes the movement and attack loop, but not the reward cleanup', () => {
   const client=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
-  assert.match(client,/import \{canEnemyAct,restoreEnemyRuntime,advanceHostileProjectile\} from '\.\/enemy-action-policy\.mjs'/);
+  assert.match(client,/import \{canEnemyAct,restoreEnemyRuntime,advanceHostileProjectile,shouldCleanupEnemy,activateTimeStop,advanceTimeStop\} from '\.\/enemy-action-policy\.mjs'/);
   assert.match(client,/world\.enemies\.forEach\(\(e,i\)=>restoreEnemyRuntime\(e,i\)\)/);
-  assert.match(client,/for\(const e of world\.enemies\)\{if\(!canEnemyAct\(e\)\)continue;let dx=/);
-  assert.match(client,/for\(let i=world\.enemies\.length-1;i>=0;i--\)\{const e=world\.enemies\[i\];if\(e\.hp<=0\|\|e\.life< -4\)/);
+  assert.match(client,/for\(const e of world\.enemies\)\{if\(enemyFrozen\|\|!canEnemyAct\(e\)\)continue;let dx=/);
+  assert.match(client,/for\(let i=world\.enemies\.length-1;i>=0;i--\)\{const e=world\.enemies\[i\];if\(shouldCleanupEnemy\(e\)\)/);
 });
 
 test('reversible deployment manifest includes the imported enemy policy module',()=>{
@@ -77,7 +78,7 @@ test('unblocked live enemy projectile hits exactly once, with no duplicate damag
 
 test('enemy projectile collision policy is called before hurt and old unsafe loop is absent', () => {
   const client=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
-  assert.match(client,/if\(advanceHostileProjectile\(b,dt,world,\(x,y\)=>tile\(x,y\)!==0\)\)hurt\(b\.hp\)/);
+  assert.match(client,/if\(!enemyFrozen&&advanceHostileProjectile\(b,dt,world,\(x,y\)=>tile\(x,y\)!==0\)\)hurt\(b\.hp\)/);
   assert.doesNotMatch(client,/b\.x\+=b\.vx\*dt;b\.y\+=b\.vy\*dt/);
 });
 
@@ -119,4 +120,42 @@ test('ordinary unobstructed projectile movement and remaining lifetime are prese
   assert.ok(Math.abs(bullet.x-2.7)<1e-10);
   assert.equal(bullet.y,5.5);
   assert.ok(Math.abs(bullet.life-4.96)<1e-10);
+});
+
+test('time stop suspends combat without modifying health, rewards or objectives', () => {
+  const world={freeze:0,score:900,missionKills:2,points:5,enemies:[enemy()],hostile:[{life:4}]};
+  assert.equal(activateTimeStop(world,5),true);
+  assert.equal(world.freeze,5);
+  assert.equal(advanceTimeStop(world,.04),true);
+  assert.ok(world.freeze>4.9);
+  assert.equal(world.enemies[0].hp,30);
+  assert.equal(world.score,900);
+  assert.equal(world.missionKills,2);
+  assert.equal(world.points,5);
+  assert.equal(world.hostile[0].life,4);
+  assert.equal(activateTimeStop(world,Infinity),false,'invalid freeze cannot extend duration');
+  for(let i=0;i<130;i++)advanceTimeStop(world,.04);
+  assert.equal(world.freeze,0);
+  assert.equal(advanceTimeStop(world,.04),false);
+});
+
+test('attack cooldown never awards a kill; only defeated HP qualifies', () => {
+  assert.equal(shouldCleanupEnemy({...enemy(),life:-500}),false);
+  assert.equal(shouldCleanupEnemy({...enemy(),hp:0}),true);
+  assert.equal(shouldCleanupEnemy({...enemy(),hp:-5}),true);
+  assert.equal(shouldCleanupEnemy({...enemy(),hp:NaN}),false);
+  const legacy={...enemy(),life:-5};
+  restoreEnemyRuntime(legacy,0);
+  assert.equal(legacy.life,0,'living legacy enemy recovers expired cooldown');
+  assert.equal(legacy.hp,30);
+});
+
+test('time-stop game integration freezes hostile movement and spawning without instant kills', () => {
+  const client=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
+  assert.match(client,/case 4:activateTimeStop\(world,5\);world\.hostile=\[\]/);
+  assert.match(client,/if\(!enemyFrozen&&world\.enemyTimer<=0/);
+  assert.match(client,/if\(enemyFrozen\|\|!canEnemyAct\(e\)\)continue/);
+  assert.match(client,/if\(!enemyFrozen&&advanceHostileProjectile/);
+  assert.doesNotMatch(client,/e\.life=-5/);
+  assert.doesNotMatch(client,/e\.hp<=0\|\|e\.life< -4/);
 });

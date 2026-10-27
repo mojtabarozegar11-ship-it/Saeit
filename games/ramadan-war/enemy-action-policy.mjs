@@ -3,13 +3,16 @@
 export function canEnemyAct(enemy) {
   return enemy !== null && typeof enemy === 'object' &&
     Number.isFinite(enemy.hp) && enemy.hp > 0 &&
-    Number.isFinite(enemy.life) && enemy.life >= -4;
+    Number.isFinite(enemy.life);
 }
 
 // Legacy saves may omit transient runtime fields. Restore safe finite defaults
 // without changing earned kills, rewards, HP or objective progress.
 export function restoreEnemyRuntime(enemy, index) {
+  // A legacy time-stop used life=-5 as a kill flag. A living enemy must not
+  // be stuck forever or grant a free kill after the new time-stop migration.
   if (!Number.isFinite(enemy.life)) enemy.life = 1.5;
+  else if (enemy.hp > 0 && enemy.life < -4) enemy.life = 0;
   if (!Number.isFinite(enemy.max) || enemy.max <= 0) enemy.max = Math.max(1, enemy.hp);
   if (enemy.strafe !== -1 && enemy.strafe !== 1) enemy.strafe = index % 2 ? 1 : -1;
   if (!Number.isFinite(enemy.pathTimer) || enemy.pathTimer < 0) enemy.pathTimer = 0;
@@ -70,4 +73,25 @@ export function advanceHostileProjectile(bullet, dt, player, isWall) {
   bullet.y += dy;
   bullet.life -= dt;
   return false;
+}
+
+
+// Attack cooldown is not an enemy death condition. Long periods behind cover
+// may make life deeply negative; only depleted HP grants a defeat/reward.
+export function shouldCleanupEnemy(enemy) {
+  return Boolean(enemy) && Number.isFinite(enemy.hp) && enemy.hp <= 0;
+}
+
+// Hero 5's "time stop" suspends hostile simulation without killing enemies.
+// Never grant kills, score, objective progress or paid entitlements here.
+export function activateTimeStop(world, duration = 5) {
+  if (!world || !Number.isFinite(duration) || duration <= 0 || duration > 5) return false;
+  world.freeze = Math.max(Number.isFinite(world.freeze) ? world.freeze : 0, duration);
+  return true;
+}
+
+export function advanceTimeStop(world, dt) {
+  if (!world || !Number.isFinite(dt) || dt < 0 || dt > 0.04) return false;
+  world.freeze = Math.max(0, (Number.isFinite(world.freeze) ? world.freeze : 0) - dt);
+  return world.freeze > 0;
 }
