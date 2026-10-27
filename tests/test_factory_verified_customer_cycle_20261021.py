@@ -132,7 +132,11 @@ class ExtractedCustomerQATests(unittest.TestCase):
         module = "factory_verified_customer_cycle_20261021.py"
         self.assertIn('test -f "$repo/scripts/' + module + '"', installer)
         self.assertIn('test ! -L "$repo/scripts/' + module + '"', installer)
-        self.assertIn("factory_vps_product_cycle.py \\\n         " + module + " \\\n", installer)
+        # Check membership in the actual install loop, not brittle adjacency:
+        # new mandatory runtime modules may be added between these entries.
+        installed = installer.split("for f in ", 1)[1].split("; do", 1)[0].split()
+        self.assertIn("factory_vps_product_cycle.py", installed)
+        self.assertIn(module, installed)
         self.assertIn('"$scripts/' + module + '"', installer)
         self.assertIn('"$python" "$scripts/factory_vps_product_cycle.py"', installer)
 
