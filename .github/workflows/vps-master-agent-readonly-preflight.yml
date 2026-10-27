@@ -80,6 +80,7 @@ jobs:
           find "$base/operations/backups" -maxdepth 1 -type f -name 'master-before-*.sqlite3' -printf '%f bytes=%s\n' 2>/dev/null | tail -5
           echo MASTER_BACKUP_FILESYSTEM_SPACE
           df -PB1 "$base/operations/backups" | tail -1
+          echo "MASTER_PREFLIGHT_SNAPSHOT_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           echo MASTER_ACTIVATION_PROCESSES
           ps -eo pid=,etime=,comm=,args= | grep -E '[a]ctivate_vps_master_agent\.sh|[a]utonomous_master_loop|[v]ps_master_evolution_cycle\.py' | cut -c1-220 | tail -10 || true
           activation_pid="$(ps -eo pid=,args= | awk '/bash .*activate_vps_master_agent\.sh/ && !/awk/ {print $1; exit}')"
