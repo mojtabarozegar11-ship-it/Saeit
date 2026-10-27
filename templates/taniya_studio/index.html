@@ -97,6 +97,8 @@ Total output lines: 1
     function renderCakePreview(){
       const p=$('#cakepreview',gamebody);if(!p)return;
       p.textContent='🎂 '+cakeState.topping+(cakeState.candles?' '+Array(cakeState.candles).fill('🕯️').join(' '):'');
+      const toppingName={'🍓':'berries','🌼':'flowers','🍬':'sweets'}[cakeState.topping]||'topping';
+      p.setAttribute('aria-label','Decorated cake with '+toppingName+', '+cakeState.candles+' candles, frosting '+cakeState.icing);
       p.style.filter='drop-shadow(0 0 14px '+cakeState.icing+')';
     }
     function cakeCardBody(){
@@ -120,8 +122,8 @@ Total output lines: 1
     function mountCake(){
       cakeState={icing:'#ff79b8',topping:'🍓',candles:0};
       stage('<div class="game-toolbar"><b>Design your own celebration cake</b><span>Decorate it your way</span></div><div class="play-preview" id="cakepreview" role="img" aria-label="Your decorated cake">🎂</div><div class="choice-row"><label class="game-action">Frosting <input id="icing" type="color" value="'+cakeState.icing+'" aria-label="Choose frosting color"></label><button class="game-action" data-top="🍓">🍓 berries</button><button class="game-action" data-top="🌼">🌼 flowers</button><button class="game-action" data-top="🍬">🍬 sweets</button></div><div class="game-actions">'+btn('Add a candle 🕯️','candle')+btn('Download your cake card','cake-download')+btn('Start over','cake-reset')+'</div><p class="game-message" aria-live="polite">Choose frosting, toppings, and candles.</p>');
-      $('#icing',gamebody).oninput=e=>{if(/^#[0-9a-fA-F]{6}$/.test(e.target.value)){cakeState.icing=e.target.value;renderCakePreview()}};
-      gamebody.querySelectorAll('[data-top]').forEach(b=>b.onclick=()=>{if(['🍓','🌼','🍬'].includes(b.dataset.top)){cakeState.topping=b.dataset.top;renderCakePreview()}});
+      $('#icing',gamebody).oninput=e=>{if(/^#[0-9a-fA-F]{6}$/.test(e.target.value)){cakeState.icing=e.target.value;renderCakePreview();say('Frosting color updated.')}};
+      gamebody.querySelectorAll('[data-top]').forEach(b=>b.onclick=()=>{if(['🍓','🌼','🍬'].includes(b.dataset.top)){cakeState.topping=b.dataset.top;renderCakePreview();say('Cake topping updated.')}});
       renderCakePreview();
     }
     function mountPet(){let happy=15,energy=70,care=25,note='Choose a kind action for your friend.';function draw(){stage('<div class="game-toolbar"><b>Help your kitten feel cozy and happy</b><span>Care level: <strong>'+Math.min(100,Math.round((happy+energy+care)/3))+'%</strong></span></div><div class="play-preview">🐱</div><div>Happiness<div class="meter"><span style="width:'+happy+'%"></span></div>Energy<div class="meter"><span style="width:'+energy+'%"></span></div>Clean & cared for<div class="meter"><span style="width:'+care+'%"></span></div></div><div class="game-actions">'+btn('Give a snack 🥛','pet-feed')+btn('Brush gently 🪮','pet-brush')+btn('Play together 🧶','pet-play')+btn('Nap time 💤','pet-rest')+'</div><p class="game-message">'+note+'</p>');gamebody.querySelectorAll('[data-action^="pet-"]').forEach(b=>b.onclick=()=>{if(b.dataset.action==='pet-feed'){happy=Math.min(100,happy+18);energy=Math.max(0,energy-5);note='Yum! A little snack makes the kitten smile.'}if(b.dataset.action==='pet-brush'){care=Math.min(100,care+25);note='All clean and fluffy!'}if(b.dataset.action==='pet-play'){happy=Math.min(100,happy+25);energy=Math.max(0,energy-16);note='That was fun! The kitten is ready for a rest.'}if(b.dataset.action==='pet-rest'){energy=Math.min(100,energy+28);note='A peaceful nap restored some energy.'}draw()})}draw()}
