@@ -18,7 +18,11 @@ const {pathToFileURL}=require('node:url');
         });
         assert.match(await page.locator('#cakepreview').textContent(),/🍓/);
         assert.match(await page.locator('#cakepreview').getAttribute('aria-label'),/berries, 0 candles/);
+        assert.equal(await page.locator('[data-top="🍓"]').getAttribute('aria-pressed'),'true');
+        assert.equal(await page.locator('[data-top="🍬"]').getAttribute('aria-pressed'),'false');
         await page.locator('[data-top="🍬"]').click();
+        assert.equal(await page.locator('[data-top="🍬"]').getAttribute('aria-pressed'),'true');
+        assert.equal(await page.locator('[data-top="🍓"]').getAttribute('aria-pressed'),'false');
         await page.locator('[data-action="candle"]').click();
         await page.locator('[data-action="candle"]').click();
         const preview=await page.locator('#cakepreview').textContent();
@@ -37,7 +41,14 @@ const {pathToFileURL}=require('node:url');
         assert.match(svg,/fill="#11aa22"/);
         assert.match(svg,/🍬/);
         assert.equal((svg.match(/🕯️/g)||[]).length,2);
+        for(let i=0;i<10;i++)await page.locator('[data-action="candle"]').click();
+        assert.equal(await page.locator('[data-action="candle"]').isDisabled(),true,
+          'adding candles must stop at twelve');
+        assert.match(await page.locator('#cakepreview').getAttribute('aria-label'),/12 candles/);
         await page.locator('[data-action="cake-reset"]').click();
+        assert.equal(await page.locator('[data-action="candle"]').isEnabled(),true,
+          'reset must allow candles again');
+        assert.equal(await page.locator('[data-top="🍓"]').getAttribute('aria-pressed'),'true');
         const reset=await page.locator('#cakepreview').textContent();
         assert.match(reset,/🍓/);
         assert.equal((reset.match(/🕯️/g)||[]).length,0);
