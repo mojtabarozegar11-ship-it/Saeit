@@ -55,7 +55,6 @@ CATALOG={
  'F28':'fieldwork_engineering_calculators',
  'F29':'fieldwork_editable_document_suite',
  'F30':'fieldwork_editable_slide_suite',
- 'F31':'weekly_planner',
  'F32':'fieldwork_original_geometric_brand_portfolio',
  'F33':'fieldwork_vector_illustration_suite',
  'F34':'fieldwork_ui_48_icons',
