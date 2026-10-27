@@ -86,13 +86,23 @@ uses 80 significant digits to support aggregate totals for high-unit currencies,
 including IRR, without failing during cents rounding. Monetary displays are
 rounded to two decimal places; this is not an exchange-rate conversion.
 
+## Spreadsheet security
+
+Enterprise names must start with a Unicode letter or number and may not
+contain control characters. This deliberately rejects labels that could be
+interpreted as spreadsheet formulas when exported to CSV (including initial
+\`=\`, \`+\`, \`-\`, \`@\` and their full-width forms). CSV fields are always
+double-quoted. These safeguards protect against a common spreadsheet injection
+class; do not disable them when modifying the export code. Negative modeled
+profits are generated numeric results, not user-supplied formula strings.
+
 Input numbers in the supplied example are synthetic and are **not** claims
 about agriculture in any particular country or market. The tool does not
 pretend to use scientific sources or current prices.
 
 ## Verification and support
 
-To run the included seven automated tests:
+To run the included automated tests:
 
    python -m unittest -v test_calculator.py
 
