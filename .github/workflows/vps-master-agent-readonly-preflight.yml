@@ -74,6 +74,11 @@ jobs:
           echo "MASTER_SOURCE_BACKUP_SETS=$backup_count"
           echo MASTER_DB_BACKUP_FILES
           find "$base/operations/backups" -maxdepth 1 -type f -name 'master-before-*.sqlite3' -printf '%f bytes=%s\n' 2>/dev/null | tail -5
+          echo MASTER_ACTIVATION_PROCESSES
+          ps -eo pid=,etime=,comm=,args= | grep -E '[a]ctivate_vps_master_agent\.sh|[a]utonomous_master_loop|[v]ps_master_evolution_cycle\.py' | cut -c1-220 | tail -10 || true
+          if command -v fuser >/dev/null 2>&1 && test -e "$base/operations/master-agent/activation.lock"; then
+            fuser "$base/operations/master-agent/activation.lock" 2>/dev/null || true
+          fi
           test -x "$base/operations/vps-only-loop.sh" && echo FACTORY_LOOP_SCRIPT_PRESENT
           REMOTE
 # Post-activation independent owner verification 2026-10-16.
