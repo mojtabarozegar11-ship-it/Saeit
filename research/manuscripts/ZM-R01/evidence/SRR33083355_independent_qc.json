@@ -1,0 +1,29 @@
+{
+  "audit": "original artifact cross-file provenance and sparse integer count consistency",
+  "source_workflow_run": 40222743342,
+  "sample": "GSM8904963",
+  "srr": "SRR33083355",
+  "verified_ena_fastq_bytes": 6193355290,
+  "official_ena_mates_md5": [
+    "9a6776857b7e34e1b80d5e073c555198",
+    "082dcd1fb7dc08d78e57599aaf77efb5"
+  ],
+  "reference_url": "https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-61/fasta/triticum_aestivum/cdna/Triticum_aestivum.IWGSC.cdna.all.fa.gz",
+  "reference_compressed_sha256": "d3c6bb1f552354fc5354eb0402506b2a19ecd8782d1b199e8ab4d5026cd10c9b",
+  "mapped_reference_transcripts": 133744,
+  "observed_nonzero_genes": 58039,
+  "sum_conservative_integer_gene_counts": 14357584,
+  "bowtie2_overall_alignment_rate_percent": 81.47,
+  "original_input_read_pairs": 43926311,
+  "concordant_zero_pairs": 8137578,
+  "concordant_exactly_once_pairs": 3148686,
+  "concordant_more_than_once_pairs": 32640047,
+  "minimum_counted_fragments_from_multimapping_category": 11208898,
+  "sparse_integer_table_integrity": "PASS",
+  "unique_mapping_claim": "REFUTED_BY_ORIGINAL_BOWTIE2_SUMMARY",
+  "scientific_release_gate": "BLOCKED_MULTIMAPPING_AND_ASSEMBLY",
+  "all_24_libraries_counted": false,
+  "assembly_equivalence_to_Milec_RefSeqv2": "NOT VERIFIED",
+  "publication_grade_DESeq2_matrix": false,
+  "note": "Single sample, pilot transcriptome alignment only. Source-level MD5 checks verified against manifest and provenance; raw FASTQ bytes were not redownloaded for this audit."
+}
