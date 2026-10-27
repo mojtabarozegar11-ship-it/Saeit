@@ -1,0 +1,85 @@
+name: MOJ Arena private browser QA (no deployment)
+on:
+  push:
+    branches: ["feat/moj-arena-global-20261027"]
+    paths:
+      - ".github/workflows/mojplaywin-arena-private-qa.yml"
+      - "site_releases/mojplaywin/arena/**"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-browser-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install browser driver without downloading a browser
+        run: npm install --no-save --ignore-scripts --no-audit --no-fund --prefix "$RUNNER_TEMP/moj-arena-test" playwright-core@1.62.1
+      - name: Verify all 16 interactions, 6 languages, and mobile layout offline
+        env:
+          NODE_PATH: ${{ runner.temp }}/moj-arena-test/node_modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'JS'
+          const assert=require('node:assert/strict');
+          const fs=require('node:fs');
+          const path=require('node:path');
+          const {pathToFileURL}=require('node:url');
+          const {chromium}=require('playwright-core');
+          (async()=>{
+            const target=path.resolve('site_releases/mojplaywin/arena/index.html');
+            const html=fs.readFileSync(target,'utf8');
+            const script=html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+            assert.ok(script,'inline application script');
+            new Function(script);
+            const browserBinary=['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(p=>fs.existsSync(p));
+            assert.ok(browserBinary,'GitHub runner has no Chrome browser');
+            const browser=await chromium.launch({executablePath:browserBinary,headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+            try{
+              const page=await browser.newPage({viewport:{width:1365,height:900},deviceScaleFactor:1});
+              const errors=[];
+              page.on('pageerror',e=>errors.push(e.message));
+              page.on('request',r=>{if(!r.url().startsWith('file:')&&!r.url().startsWith('data:'))errors.push('external request '+r.url())});
+              await page.goto(pathToFileURL(target).href);
+              assert.equal(await page.locator('#age-gate').isVisible(),true);
+              await page.locator('#age-confirm').click();
+              assert.equal(await page.locator('#game-grid article').count(),16);
+              assert.equal(await page.locator('#language option').count(),6);
+              for(const lang of ['fa','ar','de','fr','es','en']){
+                await page.locator('#language').selectOption(lang);
+                assert.equal(await page.locator('html').getAttribute('lang'),lang);
+                assert.equal(await page.locator('html').getAttribute('dir'),['fa','ar'].includes(lang)?'rtl':'ltr');
+                assert.ok((await page.locator('#free-poker h3').innerText()).trim().length>3);
+              }
+              for(const card of await page.locator('#game-grid article').all()){
+                const button=card.locator('button').first();
+                await button.click();
+                assert.ok((await card.locator('[role=status]').innerText()).trim().length>3);
+              }
+              await page.screenshot({path:'arena-desktop.png',fullPage:true,animations:'disabled'});
+              await page.setViewportSize({width:390,height:844});
+              const geometry=await page.evaluate(()=>({content:document.documentElement.scrollWidth,viewport:innerWidth}));
+              assert.ok(geometry.content<=geometry.viewport+2,JSON.stringify(geometry));
+              await page.screenshot({path:'arena-mobile.png',fullPage:true,animations:'disabled'});
+              assert.deepEqual(errors,[]);
+              console.log('MOJ_ARENA_PRIVATE_QA_PASS games=16 languages=6 externalRequests=0 deployment=none');
+            }finally{await browser.close()}
+          })().catch(e=>{console.error(e);process.exitCode=1});
+          JS
+      - name: Attach private screenshots to workflow run
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: moj-arena-private-visual-proof
+          path: |
+            arena-desktop.png
+            arena-mobile.png
+          if-no-files-found: warn
+          retention-days: 7
