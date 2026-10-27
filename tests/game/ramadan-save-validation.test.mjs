@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
 import {validateCampaignSave, boundedCampaignPickups, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove} from '../../games/ramadan-war/save-validation.mjs';
 
 const fresh = () => ({
@@ -158,7 +159,7 @@ test('restore branch presents completed stage results instead of trapping player
   const client = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
   assert.match(client, /if\(resumeCampaignScreen\(world\)==='success'\)\{showResult\(/);
   assert.match(client, /showResult\('منطقه پاکسازی شد'/);
-  assert.match(client, /showScreen\('game'\);last=performance\.now\(\);requestAnimationFrame\(frame\)/);
+  assert.match(client, /showScreen\('game'\);last=performance\.now\(\);scheduleFrame\(\)/);
 });
 
 
@@ -389,4 +390,39 @@ test('crowded recovery saves retain unique mission intel when the runtime restor
     'production restore must use the intel-preserving bounded selection');
   assert.ok(!client.includes('world.pickups=(world.pickups||[]).slice(0,30)'),
     'the old first-30 truncation would silently discard mission intel');
+});
+
+
+test('one animation frame owns gameplay after rapid pause/resume and repeated resume clicks', () => {
+  const source=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
+  const start=source.indexOf('let frameQueued=false;');
+  const end=source.indexOf('\nfunction playTone(',start);
+  assert.ok(start>0&&end>start,'extract the actual production frame scheduler');
+  const queued=[];let ticks=0,renders=0;
+  const context={screen:'game',last:0,
+    requestAnimationFrame:callback=>{queued.push(callback);return queued.length;},
+    tick:()=>{ticks++;},render:()=>{renders++;}
+  };
+  runInNewContext(source.slice(start,end)+'\nglobalThis.schedule=scheduleFrame;',context);
+  context.schedule();context.schedule();context.schedule();
+  assert.equal(queued.length,1,'multiple resume requests share one pending RAF');
+  queued.shift()(16);
+  assert.equal(ticks,1);assert.equal(renders,1);
+  assert.equal(queued.length,1,'one follow-up frame is queued');
+  context.screen='pausePanel';
+  queued.shift()(32);
+  assert.equal(ticks,1,'paused frame must not advance the simulation');
+  assert.equal(queued.length,0,'paused frame must not reschedule itself');
+  context.screen='game';context.schedule();context.schedule();
+  assert.equal(queued.length,1,'resume schedules exactly one new frame');
+  context.screen='pausePanel';context.screen='game';context.schedule();
+  assert.equal(queued.length,1,'rapid pause/resume reuses an already pending frame');
+  queued.shift()(48);
+  assert.equal(ticks,2,'rapid toggles must not double the simulation speed');
+  assert.equal(renders,2);
+  assert.equal(queued.length,1);
+  const callSites=(source.match(/scheduleFrame\(\)/g)||[]).length;
+  assert.ok(callSites>=7,'all gameplay resume paths must use the single-flight scheduler');
+  assert.equal((source.match(/requestAnimationFrame\(frame\)/g)||[]).length,1,
+    'only the scheduler itself may request an animation frame');
 });
