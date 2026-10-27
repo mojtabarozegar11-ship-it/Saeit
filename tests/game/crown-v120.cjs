@@ -40,6 +40,17 @@ for(const [schema,cleared] of [[120,'true'],[120,{}],[120,1],['120',true],[null,
     'forged campaign clear must not unlock the victory state');
 }
 
+// Saved quality/contrast are enum values, not arbitrary strings. A forged
+// quality setting must not bypass auto low-detail mode on weaker devices.
+const validSettings=readCrownSave({settings:{quality:'low',contrast:'high',autofire:false,sound:true}});
+assert.deepEqual(validSettings.settings,{quality:'low',contrast:'high',autofire:false,sound:true});
+const forgedSettings=readCrownSave({settings:{quality:'ultra',contrast:'flashing',autofire:'false',sound:1}});
+assert.deepEqual(forgedSettings.settings,{quality:'auto',contrast:'normal',autofire:true,sound:false},
+  'invalid saved settings must fall back to safe defaults');
+const mixedSettings=readCrownSave({settings:{quality:'high',contrast:'unknown',autofire:false,sound:'true'}});
+assert.deepEqual(mixedSettings.settings,{quality:'high',contrast:'normal',autofire:false,sound:false},
+  'valid settings survive without coercing malformed neighbors');
+
 // Legacy score migration is a separate untrusted storage channel.
 const legacyLine=code.split('\n').find(line=>line.startsWith('let save=loadSave();try{'));
 assert.ok(legacyLine,'legacy migration source is available for executable regression');
