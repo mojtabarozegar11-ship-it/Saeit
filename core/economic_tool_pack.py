@@ -56,16 +56,13 @@ def opportunity_score(payload):
 
 
 def offer_design(payload):
-    inactive = Product.objects.filter(active=False).order_by("id").first()
-    if inactive:
-        inactive.metadata = {
-            **(inactive.metadata or {}),
-            "commercial_status": "offer_designed",
-            "offer_designed_at": timezone.now().isoformat(),
-            "value_proposition": "Deliver a concrete, measurable outcome with transparent scope and evidence.",
-        }
-        inactive.save(update_fields=["metadata", "updated_at"])
-        product = inactive
+    offer = Product.objects.filter(
+        title="Digital Project & Automation Audit",
+        product_type="service",
+        metadata__commercial_status="offer_designed",
+    ).order_by("id").first()
+    if offer:
+        product = offer
         created = False
     else:
         product = Product.objects.create(
@@ -83,12 +80,14 @@ def offer_design(payload):
         )
         created = True
     return {
-        "action_performed": f"{'Created' if created else 'Updated'} product offer {product.pk}: {product.title}.",
+        "action_performed": f"{'Created' if created else 'Reused'} isolated draft offer {product.pk}: {product.title}.",
         "verified_effect": True,
-        "evidence": _evidence("product_record", {"id": product.pk, "status": product.metadata.get("commercial_status")}),
+        "evidence": _evidence("product_record", {
+            "id": product.pk, "status": product.metadata.get("commercial_status"),
+            "active": product.active, "price": str(product.price),
+        }),
         "next_action": "income_mvp_build",
     }
-
 
 MVP_SECTIONS = (
     ("1. Define the outcome", "State the buyer, the costly problem, the observable result, and the time horizon.", [
