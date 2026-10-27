@@ -90,6 +90,12 @@ jobs:
           django.setup()
           from django.conf import settings
           paths=[('SOURCE',Path(settings.DATABASES['default']['NAME']))]
+          for suffix in ('','-wal','-shm'):
+              path=Path(str(paths[0][1])+suffix)
+              try:
+                  stat=path.stat()
+                  print(f'MASTER_SQLITE_FILE_{suffix or "DB"}_BYTES={stat.st_size} MTIME={int(stat.st_mtime)}')
+              except OSError: print(f'MASTER_SQLITE_FILE_{suffix or "DB"}_BYTES=absent')
           backups=sorted(backup_dir.glob('master-before-*.sqlite3'),key=lambda p:p.stat().st_mtime)
           if backups: paths.append(('LATEST_BACKUP',backups[-1]))
           for label,path in paths:
