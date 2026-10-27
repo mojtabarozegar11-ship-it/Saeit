@@ -132,17 +132,29 @@ jobs:
           backup="$ops/backups/source-evolution-$RANDOM-$(date -u +%Y%m%dT%H%M%SZ)"
           install -d -m 700 "$backup"
           files=(factory_recipe_designer.py factory_vps_product_cycle.py factory_product_rework.py factory_master_agent_genetics_v1.py)
+          existing=()
+          new_files=()
           for file in "${files[@]}"; do
-            test -f "$target/$file" && test ! -L "$target/$file"
-            cp -p -- "$target/$file" "$backup/$file"
-            test "$(sha256sum "$backup/$file" | cut -d' ' -f1)" = "$(sha256sum "$target/$file" | cut -d' ' -f1)"
+            if test -f "$target/$file" && test ! -L "$target/$file"; then
+              existing+=("$file")
+              cp -p -- "$target/$file" "$backup/$file"
+              test "$(sha256sum "$backup/$file" | cut -d' ' -f1)" = "$(sha256sum "$target/$file" | cut -d' ' -f1)"
+            elif test ! -e "$target/$file" && test ! -L "$target/$file"; then
+              new_files+=("$file")
+            else
+              echo "FACTORY_EVOLUTION_TARGET_PATH_UNSAFE=$file" >&2
+              exit 1
+            fi
           done
           installed=0
           restore() {
             rc=$?
             if test "$rc" -ne 0 && test "$installed" -eq 1; then
-              for file in "${files[@]}"; do
+              for file in "${existing[@]}"; do
                 cp -p -- "$backup/$file" "$target/$file"
+              done
+              for file in "${new_files[@]}"; do
+                rm -f -- "$target/$file"
               done
               echo FACTORY_EVOLUTION_CODE_ROLLBACK=RESTORED
             fi

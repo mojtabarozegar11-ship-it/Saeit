@@ -47,9 +47,9 @@ class FactoryDefectLoopTests(unittest.TestCase):
     def _ledger(self, recipe):
         return json.loads((self.output / "qa-rework" / recipe / "ledger.json").read_text())
 
-    def test_failure_preserves_old_zip_and_does_not_block_other_recipe(self):
+    def test_failure_preserves_old_zip_and_keeps_single_line_on_failed_product(self):
         initial = cycle.run_cycle(self.db, self.output, self.recipes)
-        self.assertEqual(initial["manufactured"], len(maker.RECIPES))
+        self.assertEqual(initial["manufactured"], 1)
         recipe = "farm_enterprise_economics"
         good_file = (self.output / "digital-products" / recipe /
                      (recipe + "-internal-qa.zip"))
@@ -59,7 +59,10 @@ class FactoryDefectLoopTests(unittest.TestCase):
         )
         result = cycle.run_cycle(self.db, self.output, self.recipes)
         self.assertEqual(result["status"], "needs_rework")
-        self.assertEqual(result["manufactured"], len(maker.RECIPES) - 1)
+        self.assertEqual(result["manufactured"], 0)
+        slots=json.loads((self.output/"quality-excellence/product-flow/active-slots/current.json").read_text())
+        self.assertEqual(slots["line_id"],41)
+        self.assertEqual([item["recipe"] for item in slots["active"]],[recipe])
         self.assertEqual(result["failed"], 1)
         self.assertEqual(maker.sha256_file(good_file), hash_before)
         record = self._ledger(recipe)

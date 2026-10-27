@@ -258,15 +258,24 @@ class FactorySynthesisIntegrationTests(unittest.TestCase):
         self.assertEqual(second["registered_recipes"],5)
         self.assertEqual(second["new_recipe_count"],1)
         self.assertEqual(sorted(x.name for x in self.recipes.iterdir()),static_before)
-        generated=next((self.output/"generated-product-recipes").iterdir())
-        (generated/"calculator.py").write_text("raise RuntimeError('deliberate fault')\n")
-        third=cycle.run_cycle(self.db, self.output, self.recipes, enable_designer=True)
+        generated_root=self.output/"generated-product-recipes"
+        active_recipe=next(path.name for path in generated_root.iterdir() if path.is_dir())
+        slot_path=self.output/"quality-excellence/product-flow/active-slots/current.json"
+        slots=json.loads(slot_path.read_text())
+        previous_active=[item["recipe"] for item in slots["active"] if item["recipe"]!=active_recipe]
+        slots["active"]=[{"recipe":active_recipe,"status":"active"}]
+        slots["waiting"]=previous_active+[name for name in slots["waiting"] if name!=active_recipe]
+        slot_path.write_text(json.dumps(slots))
+        generated=generated_root/active_recipe
+        (generated/"calculator.py").write_text("raise RuntimeError('deliberate fault')\\n")
+        third=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True)
         self.assertEqual(third["status"],"ok")
-        self.assertEqual(third["new_artifacts"],0)
+        self.assertEqual(third["new_artifacts"],1)
         state=json.loads((self.output/"production-state.json").read_text())
-        self.assertEqual(len(state["source_recoveries"]),1)
-        self.assertTrue(Path(state["source_recoveries"][0]["retained_broken_source"]).is_dir())
-        ledger=json.loads((self.output/"qa-rework"/generated.name/"ledger.json").read_text())
+        recovered=[x for x in state["source_recoveries"] if x["recipe"]==active_recipe]
+        self.assertEqual(len(recovered),1)
+        self.assertTrue(Path(recovered[0]["retained_broken_source"]).is_dir())
+        ledger=json.loads((self.output/"qa-rework"/active_recipe/"ledger.json").read_text())
         self.assertEqual(ledger["current_status"],"technical_qa_pass_only_owner_and_content_review_pending")
         self.assertGreaterEqual(len(ledger["history"]),1)
 
