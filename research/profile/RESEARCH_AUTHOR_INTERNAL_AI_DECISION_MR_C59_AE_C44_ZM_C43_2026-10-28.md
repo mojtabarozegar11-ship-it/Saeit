@@ -2,6 +2,18 @@
 
 **28 October 2026 | Internal research administration only | NOT AUTHOR APPROVAL | NO SUBMISSION**
 
+## 28 October 2026 — additional source audit and code-integrity decision (C60/C61/C44)
+
+**MR C60:** The author-uploaded Car (2012) Table 6 counts and rounded percentages are internally coherent with a tabular denominator of **41**; the adjacent prose reports **40**. The discrepancy is **not** resolved by arithmetic alone. Table 5 remains inconsistent at 74 versus 72, and no alternative denominator may be silently assigned. [C60](../manuscripts/MR-2026-001/MR-2026-001_C60_CAR_TABLE6_DENOMINATOR_INTERNAL_COHERENCE_2026-10-28.md).
+
+**MR C61:** Newly screened direct prior art, Fan and McCann (2020; DOI 10.22004/ag.econ.302459), already analyzes scientific irrigation-scheduling adoption using the 2013 Farm and Ranch Irrigation Survey. It narrows any claim of novelty in adoption research; it is **not** yet a ninth fully extracted case. [C61](../manuscripts/MR-2026-001/MR-2026-001_C61_DIRECT_ADOPTION_PRIOR_ART_FAN_MCCANN_2020_2026-10-28.md). The clean MR author-review manuscript was amended accordingly.
+
+**AE C13/C14:** The original four-economy 2023 attrition and three-endpoint mask audits were retrieved directly from the target branch. They are historical evidence and **not counted as new results**. Historical ILOSTAT releases, exact WDI release identities and direct countryatlas benchmark remain open; no AE stage transition.
+
+**ZM C44:** The R script now refuses a nonempty results directory and defers creation of any new output directory until after the DESeq2 fit succeeds, reducing stale/mixed result risk. The updated file was read back, but **R execution was not performed**. It is a software safeguard, not a validated transcriptomic analysis. [C44](../manuscripts/ZM-R01/ZM-R01_C44_STALE_OUTPUT_PROTECTION_AND_DEFERRED_WRITE_2026-10-28.md).
+
+**Scientific and author decision:** MR and AE remain MAJOR REVISION; ZM remains DATA REBUILD. All are **NO SUBMISSION**. Human author participation, final manuscript/identity/affiliation, funding/COI/AI, rights, journal/APC and cover letter require individual owner confirmation before any journal action.
+
 ## MR-2026-001 — scientific disposition: MAJOR REVISION
 - New [C59](../manuscripts/MR-2026-001/MR-2026-001_C59_EIGHT_CASE_EVENT_CHAIN_CLAIM_ELIGIBILITY_2026-10-28.md) reconciles eight existing C58 extraction rows with the proposed G/D/R/A reporting taxonomy. **0/8 have the complete event chain established by the extraction**, not a finding of zero true adoption in the studies or proof of first invention.
 - The clean eight-case author-review manuscript has been amended to make this claim boundary explicit.
