@@ -1,0 +1,20 @@
+name: Taniya Cake Maker gameplay and export QA
+on:
+  pull_request:
+    paths:
+      - 'templates/taniya_studio/index.html'
+      - 'tests/game/taniya-cake.cjs'
+      - '.github/workflows/mpw-taniya-cake-maker-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cake-maker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify Cake Maker state, decoration export and safe reset
+        run: node tests/game/taniya-cake.cjs
