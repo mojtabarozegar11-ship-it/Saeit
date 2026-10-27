@@ -78,6 +78,30 @@ jobs:
           echo "MASTER_SOURCE_BACKUP_SETS=$backup_count"
           echo MASTER_DB_BACKUP_FILES
           find "$base/operations/backups" -maxdepth 1 -type f -name 'master-before-*.sqlite3' -printf '%f bytes=%s\n' 2>/dev/null | tail -5
+          "$base/.venv/bin/python" - "$app" "$base/operations/backups" <<'PY'
+          import sys,sqlite3
+          from pathlib import Path
+          import os
+          app,backup_dir=map(Path,sys.argv[1:])
+          os.environ['SAEIT_ENV']='production'
+          os.environ['MOJ_FACTORY_LOCAL_MODE']='1'
+          os.environ['DJANGO_SETTINGS_MODULE']='config.settings'
+          import django
+          django.setup()
+          from django.conf import settings
+          paths=[('SOURCE',Path(settings.DATABASES['default']['NAME']))]
+          backups=sorted(backup_dir.glob('master-before-*.sqlite3'),key=lambda p:p.stat().st_mtime)
+          if backups: paths.append(('LATEST_BACKUP',backups[-1]))
+          for label,path in paths:
+              try:
+                  conn=sqlite3.connect(path.as_uri()+'?mode=ro',uri=True,timeout=3)
+                  page_count=conn.execute('PRAGMA page_count').fetchone()[0]
+                  page_size=conn.execute('PRAGMA page_size').fetchone()[0]
+                  freelist=conn.execute('PRAGMA freelist_count').fetchone()[0]
+                  print(f'MASTER_SQLITE_{label}_PAGES={page_count} PAGE_SIZE={page_size} FREELIST={freelist}')
+                  conn.close()
+              except Exception as exc: print(f'MASTER_SQLITE_{label}_PAGES=unavailable {type(exc).__name__}')
+          PY
           echo MASTER_BACKUP_FILESYSTEM_SPACE
           df -PB1 "$base/operations/backups" | tail -1
           echo "MASTER_PREFLIGHT_SNAPSHOT_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
