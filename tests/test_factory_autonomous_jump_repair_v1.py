@@ -182,5 +182,26 @@ class JumpRepairTests(unittest.TestCase):
                     m.run(self.root, self.registry, self.root, MODULE, MODULE)
 
 
+    def test_active_allowlist_accepts_single_line_and_legacy_five_slots(self):
+        slots = self.root / "active-slots.json"
+        for capacity in (1, 5):
+            recipes = ["product_line_%02d" % n for n in range(1, capacity + 1)]
+            slots.write_text(json.dumps({
+                "schema": "saeit.factory.product-slots.v1",
+                "capacity": capacity,
+                "active": [{"recipe": recipe} for recipe in recipes],
+            }))
+            self.assertEqual(m.active_product_allowlist(slots), set(recipes))
+
+    def test_active_allowlist_rejects_family_count_as_line_capacity(self):
+        slots = self.root / "active-slots.json"
+        slots.write_text(json.dumps({
+            "schema": "saeit.factory.product-slots.v1",
+            "capacity": 40,
+            "active": [{"recipe": "product_line_%02d" % n} for n in range(1, 41)],
+        }))
+        with self.assertRaisesRegex(ValueError, "CAPACITY_MISMATCH"):
+            m.active_product_allowlist(slots)
+
 if __name__ == "__main__":
     unittest.main()
