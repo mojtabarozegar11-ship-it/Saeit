@@ -37,3 +37,10 @@ export function joystickAxes(dx, dy, limit) {
 export function isKeyboardOrAssistiveClick(event) {
   return Boolean(event && event.detail === 0);
 }
+
+// A second touch must not steal a joystick or camera pointer already in use.
+// Do not require isPrimary: players must be able to move and aim with two fingers.
+export function canCaptureGameplayPointer(activePointerId, incomingPointerId, screen) {
+  return screen === 'game' && activePointerId === null &&
+    Number.isInteger(incomingPointerId) && incomingPointerId >= 0;
+}
