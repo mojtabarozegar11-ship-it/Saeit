@@ -2,3 +2,24 @@
 .lab-workspace{align-items:start}
 .result-panel{position:sticky;top:104px;align-self:start;min-height:735px}
 @media(max-width:950px){.result-panel{position:relative;top:auto;min-height:0}}
+/* English is the primary language of the international AYAR release. */
+html[lang="en"] body{font-family:"Manrope","DM Sans",Arial,sans-serif}
+html[lang="en"] .announcement span:last-child{font-family:"Manrope",sans-serif;font-size:9px;letter-spacing:.03em}
+html[lang="en"] .hero h1{line-height:1.15;letter-spacing:-.075em;font-weight:500}
+html[lang="en"] .hero-lead,html[lang="en"] .philosophy-main>p,html[lang="en"] .method-step p,html[lang="en"] .section-heading>p,html[lang="en"] .governance-left p{line-height:1.9}
+html[lang="en"] .philosophy h2,html[lang="en"] .section-heading h2,html[lang="en"] .method h2,html[lang="en"] .lab h2,html[lang="en"] .governance h2,html[lang="en"] .closing h2{line-height:1.2;letter-spacing:-.055em}
+html[lang="en"] .manifesto-card blockquote{line-height:1.65;letter-spacing:-.035em}
+html[lang="en"] .brand-copy strong{letter-spacing:.045em;font-size:26px}
+html[lang="en"] .brand-copy small{letter-spacing:.09em;font-size:7px}
+html[lang="en"] .draft-tag{direction:ltr;font:700 10px "Manrope",sans-serif;letter-spacing:.04em}
+html[lang="en"] .criterion-evidence{font:12px "Manrope",sans-serif}
+html[lang="en"] .criterion-weight{margin-right:0;margin-left:8px}
+html[lang="en"] .qualities b{margin-left:0;margin-right:12px}
+html[lang="en"] .doc-block p,html[lang="en"] .doc-block li{line-height:1.9}
+html[lang="en"] .doc-block ul{padding-right:0;padding-left:20px}
+html[lang="en"] .doc-block td,html[lang="en"] .doc-block th{text-align:left}
+html[lang="en"] .discipline-card{border-left:0;border-right:1px solid var(--stroke)}
+html[lang="en"] .discipline-card:last-child{border-right:0}
+@media(max-width:950px){html[lang="en"] .discipline-card:nth-child(2){border-right:0}}
+@media(max-width:640px){html[lang="en"] .discipline-card{border-right:0}html[lang="en"] .hero h1{font-size:clamp(46px,10.2vw,65px)}html[lang="en"] .brand-copy small{font-size:6px}}
+@media print{html[lang="en"] .print-sheet{direction:ltr;font:12px "Manrope",Arial,sans-serif}html[lang="en"] .print-sheet th,html[lang="en"] .print-sheet td{text-align:left}}

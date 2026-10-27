@@ -3,47 +3,47 @@
 
   const rubrics = {
     ebook: [
-      ["accuracy","صحت علمی و محتوایی","کنترل ادعاها، روش استناد و درستی اطلاعات",18,true],
-      ["sources","منابع و قابلیت راستی‌آزمایی","ارجاعات قابل بازیابی و تفکیک شواهد از تفسیر",16,false],
-      ["rights","حقوق اثر و اصالت","مالکیت، مجوز انتشار، نقل‌قول و اصالت محتوا",16,true],
-      ["editing","ویرایش و انسجام","زبان، سازمان‌دهی، پیوستگی فصل‌ها و نمایه",10,false],
-      ["experience","تجربه مطالعه","ناوبری، خوانایی و تناسب با مخاطب",10,false],
-      ["accessibility","استاندارد فایل و دسترس‌پذیری","فهرست، جست‌وجو، متن جایگزین و سازگاری",10,false],
-      ["security","ایمنی فایل و حریم خصوصی","پرهیز از محتوای مخرب و گردآوری داده بی‌دلیل",8,true],
-      ["delivery","تحویل و پشتیبانی","کامل‌بودن فایل، نسخه‌بندی و پاسخ‌گویی",12,false]
+      ["accuracy","Scientific and factual accuracy","Source claims, citation practices and factual correctness",18,true],
+      ["sources","Evidence and references","Retrievable sources and separation of evidence from opinion",16,false],
+      ["rights","Rights and originality","Ownership, distribution licensing, quotations and originality",16,true],
+      ["editing","Editing and coherence","Language, structure, chapter consistency and indexing",10,false],
+      ["experience","Reading experience","Navigation, readability and audience suitability",10,false],
+      ["accessibility","File standards and access","Navigation, search, alternative text and device compatibility",10,false],
+      ["security","File safety and privacy","No malicious payloads or unnecessary personal-data collection",8,true],
+      ["delivery","Delivery and support","Complete files, versioning and support responsiveness",12,false]
     ],
     game: [
-      ["gameplay","کیفیت تجربه و گیم‌پلی","هدف، تعادل، عمق مکانیک‌ها و جذابیت پایدار",19,false],
-      ["reliability","پایداری و کارایی","نرخ خطا، پاسخ‌گویی، ذخیره و بازیابی",17,false],
-      ["security","امنیت و حریم خصوصی","پرداخت، نشست، داده کودک و آسیب‌پذیری‌ها",15,true],
-      ["rights","حقوق مالکیت و دارایی‌ها","مجوز موتور، موسیقی، گرافیک و کد",15,true],
-      ["accessibility","دسترس‌پذیری و هدایت کاربر","کنترل‌ها، کنتراست، آموزش و دسترسی",10,false],
-      ["economy","اقتصاد و انصاف بازی","تعادل جوایز، شفافیت هزینه و ضدسوءاستفاده",10,false],
-      ["compatibility","سازگاری دستگاه‌ها","مرورگر، موبایل، وضوح تصویر و ورودی‌ها",8,false],
-      ["delivery","انتشار و پشتیبانی","نصب، به‌روزرسانی و رسیدگی به ایراد",6,false]
+      ["gameplay","Gameplay and engagement","Goals, balance, depth of mechanics and lasting appeal",19,false],
+      ["reliability","Reliability and performance","Error rates, responsiveness, save states and recovery",17,false],
+      ["security","Security and privacy","Payments, sessions, minors' data and vulnerabilities",15,true],
+      ["rights","Intellectual property","Engine, music, graphic and code licenses",15,true],
+      ["accessibility","Accessibility and onboarding","Controls, contrast, tutorials and inclusive access",10,false],
+      ["economy","In-game economy and fairness","Balanced rewards, clear costs and abuse prevention",10,false],
+      ["compatibility","Device compatibility","Browsers, phones, resolutions and inputs",8,false],
+      ["delivery","Release and support","Installation, updates and bug handling",6,false]
     ],
     software: [
-      ["functionality","صحت عملکرد","پوشش نیازمندی‌ها، سناریوهای بحرانی و خروجی درست",20,true],
-      ["security","امنیت فنی","احراز هویت، مجوزها، تزریق، ذخیره اسرار و ثبت رخداد",20,true],
-      ["reliability","قابلیت اطمینان و کارایی","خطا، بازیابی، ظرفیت، کارایی و مشاهده‌پذیری",15,false],
-      ["privacy","حریم خصوصی داده","حداقل‌سازی داده، حفظ و حذف، رضایت و شفافیت",10,true],
-      ["rights","مجوزها و انطباق حقوقی","مجوز وابستگی‌ها و حق بهره‌برداری تجاری",10,true],
-      ["documentation","آزمون و مستندات","آزمون‌های تکرارپذیر، راهنما و تغییرات نسخه",10,false],
-      ["accessibility","تجربه کاربری و دسترس‌پذیری","وضوح جریان، پاسخ‌گویی و استانداردهای دسترسی",8,false],
-      ["deployment","استقرار و تحویل","پیکربندی، پشتیبان، انتشار و پشتیبانی",7,false]
+      ["functionality","Functional correctness","Requirements coverage, critical flows and reliable outputs",20,true],
+      ["security","Technical security","Authentication, authorization, injection, secrets and audit logs",20,true],
+      ["reliability","Reliability and speed","Errors, recovery, capacity, latency and observability",15,false],
+      ["privacy","Data privacy","Data minimization, retention, deletion, consent and transparency",10,true],
+      ["rights","Licensing and compliance","Dependency licenses and commercial usage rights",10,true],
+      ["documentation","Testing and documentation","Repeatable tests, user guidance and release notes",10,false],
+      ["accessibility","Usability and accessibility","Clear flows, responsiveness and accessible design",8,false],
+      ["deployment","Deployment and delivery","Configuration, backups, release practices and support",7,false]
     ],
     media: [
-      ["provenance","اصالت و صحت ادعا","منبع، نسبت‌دادن محتوا و شفافیت تولید",15,false],
-      ["creative","کیفیت هنری و روایی","ساختار، صدا، تصویر و انسجام اجرایی",15,false],
-      ["rights","مجوز و حقوق بهره‌برداری","موسیقی، تصویر، آثار ثالث و اجازه استفاده",20,true],
-      ["technical","کیفیت فنی خروجی","وضوح، فشرده‌سازی، فرمت، رنگ و صدا",15,false],
-      ["accessibility","دسترس‌پذیری","زیرنویس، متن جایگزین، خوانایی و تطبیق",10,false],
-      ["packaging","بسته‌بندی و فراداده","نسخه، فایل‌های همراه، شرح و برچسب‌گذاری",10,false],
-      ["security","ایمنی فایل","سلامت فایل، لینک‌ها و حفاظت از مخاطب",5,true],
-      ["utility","ارزش کاربردی و مصرف","تناسب با هدف و تجربه استفاده نهایی",10,false]
+      ["provenance","Provenance and truthful claims","Source attribution and transparent production history",15,false],
+      ["creative","Creative and narrative quality","Structure, sound, visuals and execution coherence",15,false],
+      ["rights","Licensing and usage rights","Music, images, third-party material and reuse permissions",20,true],
+      ["technical","Technical output quality","Resolution, compression, format, color and sound",15,false],
+      ["accessibility","Accessibility","Captions, alternative text, legibility and adaptation",10,false],
+      ["packaging","Packaging and metadata","Version, companion files, description and labels",10,false],
+      ["security","File safety","File integrity, links and user protection",5,true],
+      ["utility","Practical value","Fitness for purpose and end-user experience",10,false]
     ]
   };
-  const typeLabels = {ebook:"کتاب الکترونیکی و محتوای علمی",game:"بازی و تجربه تعاملی",software:"نرم‌افزار و خدمات وب",media:"رسانه و دارایی دیجیتال"};
+  const typeLabels = {ebook:"E-books & scientific content",game:"Games & interactive experiences",software:"Software & web services",media:"Media & digital assets"};
   const el = id => document.getElementById(id);
   const SHA256_K = [
     0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
@@ -107,7 +107,7 @@
     toggle.addEventListener("click", () => {
       const opened = toggle.getAttribute("aria-expanded") === "true";
       toggle.setAttribute("aria-expanded", String(!opened));
-      toggle.setAttribute("aria-label", opened ? "باز کردن فهرست" : "بستن فهرست");
+      toggle.setAttribute("aria-label", opened ? "Open menu" : "Close menu");
       nav.hidden = opened;
     });
     nav.querySelectorAll("a").forEach(a => a.addEventListener("click", () => {
@@ -144,14 +144,14 @@
         const desc = document.createElement("p");desc.className="criterion-desc";desc.textContent=description;
         left.append(main,desc);
         const select = document.createElement("select");select.className="criterion-select";select.dataset.score=id;
-        select.setAttribute("aria-label",`امتیاز ${label}`);
-        [["","ارزیابی نشده"],["0","۰ - مردود"],["1","۱ - ضعیف"],["2","۲ - ناکافی"],["3","۳ - قابل قبول"],["4","۴ - خوب"],["5","۵ - عالی"]].forEach(([value,label])=>{
+        select.setAttribute("aria-label",`Score for ${label}`);
+        [["","Not rated"],["0","0 - Fail"],["1","1 - Poor"],["2","2 - Insufficient"],["3","3 - Acceptable"],["4","4 - Good"],["5","5 - Excellent"]].forEach(([value,label])=>{
           const option=document.createElement("option");option.value=value;option.textContent=label;select.append(option);
         });
         select.value=saved[index]?.score ?? "";
         const evidence=document.createElement("input");evidence.type="text";evidence.className="criterion-evidence";evidence.dataset.evidence=id;
-        evidence.maxLength=450;evidence.placeholder="شاهد، نتیجه آزمون یا مرجع بررسی را بنویسید (حداقل ۱۲ نویسه)";
-        evidence.setAttribute("aria-label",`شاهد ${label}`);
+        evidence.maxLength=450;evidence.placeholder="Evidence, test finding or reference (at least 12 characters)";
+        evidence.setAttribute("aria-label",`Evidence for ${label}`);
         evidence.value=saved[index]?.evidence ?? "";
         select.addEventListener("change",update);
         evidence.addEventListener("input",update);
@@ -170,14 +170,14 @@
       const complete=completeCount===ratings.length && el("productName").value.trim().length>=2;
       const weightedScore=complete?Math.round(ratings.reduce((sum,x)=>sum+x.weight*x.score/5,0)*10)/10:null;
       const failedGates=complete?ratings.filter(x=>x.criticalGate&&x.score<3):[];
-      let grade="در انتظار تکمیل شواهد";
-      if(complete){grade=failedGates.length?"نیازمند رفع مانع حیاتی":weightedScore>=90?"ممتاز · پیش‌ارزیابی":weightedScore>=80?"قوی · پیش‌ارزیابی":weightedScore>=70?"قابل قبول با اصلاحات":"نیازمند بازنگری";}
+      let grade="Awaiting documented evidence";
+      if(complete){grade=failedGates.length?"Critical issue requires resolution":weightedScore>=90?"Excellent · preliminary":weightedScore>=80?"Strong · preliminary":weightedScore>=70?"Acceptable with improvements":"Further review required";}
       return {ratings,completeCount,complete,weightedScore,failedGates,grade};
     }
     function update() {
       currentResult=calculate();
       const result=currentResult;
-      el("coverageValue").textContent=`${result.completeCount} / ۸`;
+      el("coverageValue").textContent=`${result.completeCount} / 8`;
       el("coverageBar").style.width=`${result.completeCount*12.5}%`;
       el("scoreValue").textContent=result.complete?String(result.weightedScore).replace(".","."):"—";
       el("gaugeProgress").style.strokeDashoffset=String(565.486*(1-(result.complete?result.weightedScore:0)/100));
@@ -186,9 +186,9 @@
       alert.classList.toggle("danger",result.complete&&result.failedGates.length>0);
       alert.classList.toggle("success",result.complete&&result.failedGates.length===0);
       const p=alert.querySelector("p");
-      if(result.complete&&result.failedGates.length) p.textContent=`مانع حیاتی در ${result.failedGates.map(x=>x.label).join("، ")} ثبت شده است. امتیاز کلی مجوز تأیید محصول نیست.`;
-      else if(result.complete) p.textContent="پیش‌ارزیابی تکمیل شد؛ نتیجه تنها بر اساس داده‌های واردشده است و به معنی تأیید مستقل نیست.";
-      else p.textContent="برای محاسبه امتیاز، نام محصول، امتیاز هر هشت معیار و شاهد مرتبط با هر معیار را تکمیل کنید.";
+      if(result.complete&&result.failedGates.length) p.textContent=`Critical gate failed: ${result.failedGates.map(x=>x.label).join(", ")}. A high average cannot authorize certification.`;
+      else if(result.complete) p.textContent="Preliminary assessment complete. Results reflect only your inputs, not an independently verified judgment.";
+      else p.textContent="Enter the product name, eight criterion scores and supporting evidence to calculate a preliminary result.";
       el("resultSub")?.remove();
       el("downloadReport").disabled=!result.complete;
       el("printReport").disabled=!result.complete;
@@ -217,34 +217,34 @@
       const url=URL.createObjectURL(blob),a=document.createElement("a");
       a.href=url;a.download=`ayar-preassessment-${new Date().toISOString().slice(0,10)}.json`;
       document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1200);
-      toast("گزارش مقدماتی با اثرانگشت فایل دانلود شد.");
+      toast("Preliminary report downloaded with a file integrity checksum.");
     }
     function printReport() {
       const report=buildReport();if(!report)return;
       document.querySelectorAll(".print-sheet").forEach(x=>x.remove());
       const sheet=document.createElement("div");sheet.className="print-sheet";
-      const heading=document.createElement("h1");heading.textContent="عـیـار | گزارش پیش‌ارزیابی دیجیتال";
-      const disclaimer=document.createElement("div");disclaimer.className="watermark";disclaimer.textContent="خودارزیابی مقدماتی — فاقد تأیید و امضای کارشناس مستقل";
-      const meta=document.createElement("p");meta.textContent=`محصول: ${report.product.name} | نسخه: ${report.product.version||"ثبت نشده"} | گروه: ${report.product.typeLabel} | تاریخ: ${new Date(report.generatedAt).toLocaleString("fa-IR")}`;
-      const score=document.createElement("h2");score.textContent=`امتیاز وزنی: ${report.weightedScore} از ۱۰۰ — ${report.grade}`;
+      const heading=document.createElement("h1");heading.textContent="AYAR | Preliminary Digital Product Assessment";
+      const disclaimer=document.createElement("div");disclaimer.className="watermark";disclaimer.textContent="USER-GENERATED PRELIMINARY REPORT — NOT INDEPENDENTLY CERTIFIED";
+      const meta=document.createElement("p");meta.textContent=`Product: ${report.product.name} | Version: ${report.product.version||"Not provided"} | Category: ${report.product.typeLabel} | Date: ${new Date(report.generatedAt).toLocaleString("en-GB")}`;
+      const score=document.createElement("h2");score.textContent=`Weighted score: ${report.weightedScore} / 100 — ${report.grade}`;
       const table=document.createElement("table"),thead=document.createElement("thead"),tr=document.createElement("tr");
-      ["محور","وزن","امتیاز / ۵","شاهد ثبت‌شده"].forEach(text=>{const th=document.createElement("th");th.textContent=text;tr.append(th);});thead.append(tr);table.append(thead);
+      ["Criterion","Weight","Score / 5","Recorded evidence"].forEach(text=>{const th=document.createElement("th");th.textContent=text;tr.append(th);});thead.append(tr);table.append(thead);
       const tbody=document.createElement("tbody");
       report.findings.forEach(f=>{const row=document.createElement("tr");[f.label,`${f.weight}%`,String(f.score),f.evidence].forEach(text=>{const td=document.createElement("td");td.textContent=text;row.append(td);});tbody.append(row);});table.append(tbody);
-      const notes=document.createElement("p");notes.textContent=`محدوده و محدودیت: ${report.scopeNotes||"ثبت نشده"}`;
-      const foot=document.createElement("p");foot.className="foot";foot.textContent="این فرم با داده‌های واردشده توسط کاربر تولید شده و شواهد آن مستقلاً راستی‌آزمایی نشده‌اند. برای گواهی رسمی، بررسی کارشناسی واقعی و افشای تضاد منافع لازم است.";
+      const notes=document.createElement("p");notes.textContent=`Scope and limitations: ${report.scopeNotes||"Not provided"}`;
+      const foot=document.createElement("p");foot.className="foot";foot.textContent="This user-generated report has not independently verified the underlying evidence. Formal certification requires qualified expert review and conflict-of-interest disclosure.";
       sheet.append(heading,disclaimer,meta,score,table,notes,foot);document.body.append(sheet);
       window.print();
     }
     el("productType").addEventListener("change",e=>{remember();currentType=e.target.value;renderCriteria();});
     el("productName").addEventListener("input",update);
-    el("downloadReport").addEventListener("click",()=>downloadReport().catch(()=>toast("خطا در تهیه گزارش؛ دوباره تلاش کنید.")));
+    el("downloadReport").addEventListener("click",()=>downloadReport().catch(()=>toast("Report generation failed. Please try again.")));
     el("printReport").addEventListener("click",printReport);
     el("resetForm").addEventListener("click",()=>{
-      if(!confirm("تمام اطلاعات این فرم در این صفحه پاک شود؟"))return;
+      if(!confirm("Clear all information in this assessment form?"))return;
       for(const key of Object.keys(state))delete state[key];
       ["productName","productVersion","scopeNotes"].forEach(id=>el(id).value="");
-      el("productType").value="ebook";currentType="ebook";renderCriteria();toast("فرم پاک شد.");
+      el("productType").value="ebook";currentType="ebook";renderCriteria();toast("Assessment cleared.");
     });
     document.querySelectorAll("[data-type]").forEach(link=>link.addEventListener("click",()=>{
       if(link.dataset.type===currentType)return;
@@ -257,15 +257,15 @@
     const result=el("verifyResult");
     input.addEventListener("change",async()=>{
       const file=input.files?.[0];if(!file)return;
-      if(file.size>1024*1024){result.textContent="فایل بیش از ۱ مگابایت است؛ بررسی انجام نشد.";return;}
+      if(file.size>1024*1024){result.textContent="File exceeds the 1 MB limit; verification was not performed.";return;}
       try {
         const obj=JSON.parse(await file.text());
         if(obj.assessment?.schema!=="AYAR-PREASSESSMENT-v1"||obj.integrity?.algorithm!=="SHA-256"||!obj.integrity.digest){throw new Error("FORMAT");}
         const actual=await sha256(JSON.stringify(obj.assessment));
         result.textContent=actual===obj.integrity.digest?
-          "ساختار و اثرانگشت فایل مطابقت دارند. این فقط کنترل یکپارچگی فایل است؛ اصالت صادرکننده یا استقلال کارشناس را تأیید نمی‌کند.":
-          "هشدار: اثرانگشت با داده‌های فایل مطابقت ندارد؛ فایل ممکن است تغییر کرده یا آسیب دیده باشد.";
-      }catch{result.textContent="ساختار فایل معتبر نیست یا از قالب گزارش عیار پشتیبانی نمی‌شود.";}
+          "Report structure and checksum match. This proves file consistency only; it does not authenticate the issuer or verify reviewer independence.":
+          "Warning: the checksum does not match. The file may have been modified or corrupted.";
+      }catch{result.textContent="Invalid file structure or unsupported AYAR report format.";}
       input.value="";
     });
   }

@@ -1,0 +1,165 @@
+name: AYAR English-first exact-path content correction
+on:
+  push:
+    branches: [release/ayaar-english-20261027]
+    paths:
+      - ".github/workflows/mojplaywin-ayaar-english-content-scoped-20261027.yml"
+      - "scripts/deploy_ayaar_english_assets_scoped_20261027.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-ayaar-one-authorized-shared-django-restart
+  cancel-in-progress: false
+jobs:
+  update-english-content:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/release/ayaar-english-20261027'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify scoped English-only source and original baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast,re,subprocess
+          from pathlib import Path
+          ast.parse(Path('scripts/deploy_ayaar_english_assets_scoped_20261027.py').read_text('utf-8'))
+          base='cc0ed25839ab7ae1acfc43cb34bda1f341031c78'
+          root=Path('site_releases/mojplaywin/ayaar-20261027')
+          for name in ('index.html','methodology.html','app.js','hero.css'):
+              p=root/name
+              assert p.is_file() and not p.is_symlink() and 0 < p.stat().st_size < 350000
+              old=subprocess.check_output(['git','show',f'{base}:site_releases/mojplaywin/ayaar-20261027/{name}'])
+              assert len(old)>0
+          assert (root/'index.html').read_text('utf-8').find('<html lang="en" dir="ltr">')>=0
+          assert (root/'methodology.html').read_text('utf-8').find('<html lang="en" dir="ltr">')>=0
+          for name in ('index.html','methodology.html','app.js'):
+              assert re.search('[\u0600-\u06FF]',(root/name).read_text('utf-8')) is None, name
+          assert 'AYAR-PREASSESSMENT-v1' in (root/'app.js').read_text('utf-8')
+          print('AYAR_ENGLISH_STATIC_AND_ENGINE_PREFLIGHT=PASS')
+          PY
+      - name: Verify protected public routes before update
+        shell: bash
+        run: |
+          set -euo pipefail
+          for route in / /store/ /saman/ /taniya/ /mojtaba.roozegar/ /ayaar/; do
+            code="$(curl --connect-timeout 9 --max-time 25 -L -sS -o /dev/null -w '%{http_code}' "https://mojplaywin.com$route")"
+            echo "PROTECTED_BEFORE=$route:$code"
+            test "$code" = 200
+          done
+      - name: Prepare existing pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/ayaar-en-protected-relay"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            path="$d/${item}.key"
+            printf '%s' "${!item}" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$path"
+            chmod 600 "$path"
+            ssh-keygen -y -P '' -f "$path" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 13
+          EOF
+          chmod 600 "$d/config"
+      - name: Atomic checksum-guarded update of four AYAR assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          conf="$RUNNER_TEMP/ayaar-en-protected-relay/config"
+          rid="${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          sha="$GITHUB_SHA"
+          timeout 60s ssh -T -F "$conf" saeit-cpanel "python3 - preflight '$rid' '$sha'" < scripts/deploy_ayaar_english_assets_scoped_20261027.py
+          payload="$RUNNER_TEMP/ayaar-english-payload"
+          install -d -m 700 "$payload"
+          for name in index.html methodology.html app.js hero.css; do
+            cp -- "site_releases/mojplaywin/ayaar-20261027/$name" "$payload/$name"
+          done
+          AYAAR_RUN="$rid" AYAAR_SHA="$sha" AYAAR_PAYLOAD="$payload" python3 - <<'PY'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          stage=Path(os.environ['AYAAR_PAYLOAD'])
+          baseline='cc0ed25839ab7ae1acfc43cb34bda1f341031c78'
+          filenames=('index.html','methodology.html','app.js','hero.css')
+          old={}
+          new={}
+          for name in filenames:
+              previous=subprocess.check_output(['git','show',f'{baseline}:site_releases/mojplaywin/ayaar-20261027/{name}'])
+              old[name]=hashlib.sha256(previous).hexdigest()
+              new[name]=hashlib.sha256((stage/name).read_bytes()).hexdigest()
+          data={'identity':'MPW_AYAAR_EN_CONTENT_ONLY_V1','run':os.environ['AYAAR_RUN'],'sha':os.environ['AYAAR_SHA'],'before':old,'after':new}
+          (stage/'release.json').write_text(json.dumps(data,sort_keys=True),encoding='utf-8')
+          PY
+          timeout 55s ssh -T -F "$conf" saeit-cpanel "mkdir -m 700 '/home/zomorod2/.mpw-ayaar-english-stage-$rid'"
+          tar -C "$payload" -cf - . | timeout 65s ssh -T -F "$conf" saeit-cpanel "tar -C '/home/zomorod2/.mpw-ayaar-english-stage-$rid' -xf -"
+          timeout 100s ssh -T -F "$conf" saeit-cpanel "python3 - deploy '$rid' '$sha'" < scripts/deploy_ayaar_english_assets_scoped_20261027.py
+      - name: Verify English live site, assets, protected routes; rollback on failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          conf="$RUNNER_TEMP/ayaar-en-protected-relay/config"
+          rid="${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          sha="$GITHUB_SHA"
+          healthy=true
+          page="$RUNNER_TEMP/ayaar-en-live.html"
+          for attempt in 1 2 3; do
+            code="$(curl --connect-timeout 9 --max-time 28 -sS -o "$page" -w '%{http_code}' "https://mojplaywin.com/ayaar/?release=$rid" || true)"
+            if test "$code" = 200 && grep -q '<html lang="en" dir="ltr">' "$page" && grep -q 'Beyond' "$page"; then break; fi
+            if test "$attempt" = 3; then healthy=false; else sleep 3; fi
+          done
+          for route in /ayaar/app.js /ayaar/hero.css /ayaar/methodology.html; do
+            code="$(curl --connect-timeout 9 --max-time 28 -sS -o /dev/null -w '%{http_code}' "https://mojplaywin.com$route?release=$rid" || true)"
+            echo "AYAR_ENGLISH_ASSET=$route:$code"
+            if test "$code" != 200; then healthy=false; fi
+          done
+          method="$RUNNER_TEMP/ayaar-en-methodology.html"
+          curl --connect-timeout 9 --max-time 28 -sS -o "$method" "https://mojplaywin.com/ayaar/methodology.html?release=$rid" || healthy=false
+          if ! grep -q '<html lang="en" dir="ltr">' "$method"; then healthy=false; fi
+          engine="$RUNNER_TEMP/ayaar-en-engine.js"
+          curl --connect-timeout 9 --max-time 28 -sS -o "$engine" "https://mojplaywin.com/ayaar/app.js?release=$rid" || healthy=false
+          if ! grep -q 'Awaiting documented evidence' "$engine"; then healthy=false; fi
+          for route in / /store/ /saman/ /taniya/ /mojtaba.roozegar/; do
+            code="$(curl --connect-timeout 9 --max-time 28 -L -sS -o /dev/null -w '%{http_code}' "https://mojplaywin.com$route" || true)"
+            echo "PROTECTED_AFTER=$route:$code"
+            if test "$code" != 200; then healthy=false; fi
+          done
+          if test "$healthy" != true; then
+            echo 'AYAR_ENGLISH_HEALTH_FAILED_AUTOMATIC_ROLLBACK'
+            timeout 90s ssh -T -F "$conf" saeit-cpanel "python3 - rollback '$rid' '$sha'" < scripts/deploy_ayaar_english_assets_scoped_20261027.py
+            exit 1
+          fi
+          echo 'AYAR_EXACT_DOMAIN_ENGLISH_FIRST=TRUE'
+          echo 'AYAR_ALL_PROTECTED_ROUTES_UNCHANGED=TRUE'
