@@ -96,6 +96,21 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
+      - name: Diagnose exact live game source before any write
+        run: |
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          root=Path("/home/zomorod2/mojplaywin.com/design-preview-20261017")
+          expected=root/"mpw-ten-editorials-20261018/pages/games.html"
+          print("MPW_GAME_EXPECTED",str(expected),"exists",expected.exists(),"file",expected.is_file(),"symlink",expected.is_symlink(),"resolved",str(expected.resolve()))
+          print("MPW_GAME_PARENT_EXISTS",expected.parent.is_dir())
+          for base in (expected.parent,root):
+              if base.is_dir():
+                  for p in sorted(base.glob("*game*"))[:30]:
+                      print("MPW_GAME_CANDIDATE",str(p),"file",p.is_file(),"symlink",p.is_symlink(),"bytes",p.stat().st_size if p.is_file() else -1)
+          for p in sorted(root.glob("**/games*.html"))[:30]:
+              print("MPW_GAME_RECURSIVE",str(p),"file",p.is_file(),"symlink",p.is_symlink(),"bytes",p.stat().st_size if p.is_file() else -1)
+          PY
       - name: Publish only verified home source and sitemap include
         id: install
         run: |
