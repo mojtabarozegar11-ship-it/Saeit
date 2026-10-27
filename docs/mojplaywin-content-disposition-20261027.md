@@ -19,7 +19,7 @@ Scope: `https://mojplaywin.com/`, excluding the separately managed personal and 
 - Public-page similarity is not a substitute for verified Search Console query-level cannibalization. No mass content merges or deletions without query and intent mapping.
 - The GSC Wizard subscription/connection was unavailable in the current audit, so Google Search Console clicks, impressions, query entropy and CrUX field data must **not** be asserted.
 - A visible product page, a checkout redirect to login and a code merge do **not** establish a successful transaction. Invoice creation, payment confirmation, email receipt and protected download need real end-to-end evidence.
-- The `/store/` path still has a 307 passthrough redirect, and authenticated invoice/payment/email/download end-to-end confirmation is outstanding. Treat these as separate commerce/routing tasks; do not bypass payment or cross-site security protections to change them.
+- The previous GET `/store/` 307 passthrough has been eliminated; the live route now responds with direct canonical 200. Owner-only display of existing invoice 14 (closed, non-payable) and its mobile markup have been verified. A **new paid purchase**, processor settlement, email notification and downloadable-file delivery remain unverified end-to-end; no funds were sent.
 - The previously disabled broad Django/Passenger deployment must remain disabled. Changes are limited to guarded, hash-checked, reversible one-file or explicitly scoped main-site releases.
 
 A page must only be removed/redirected after unique-content ownership, inbound links, search intent, traffic, internal links and canonical destinations have been verified.
@@ -31,3 +31,6 @@ A page must only be removed/redirected after unique-content ownership, inbound l
 - Dynamic Games, static Studio and 53 template guide links: [run 40482970364](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40482970364), success.
 
 The release smoke tests verify live structure, link targets and protected route availability; they do not establish a successful paid transaction or Search Console improvement.
+
+- Store direct canonical 200 and protected route regression checks: [run 40486632620](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40486632620), success.
+- Read-only actual owner invoice 14 closed-state, guest privacy, sign-in return, wallet-action IDs and responsive layout verification: [run 40487219821](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40487219821), success. This was not a paid transaction.
