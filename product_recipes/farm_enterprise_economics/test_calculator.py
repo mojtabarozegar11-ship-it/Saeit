@@ -170,5 +170,39 @@ class EconomicsTests(unittest.TestCase):
             self.assertEqual(len(csv.read_text(encoding="utf-8").splitlines()), 10)
 
 
+    def test_spreadsheet_formula_injection_is_rejected(self):
+        original = self.example["enterprises"][0]
+        for label in ("=HYPERLINK(\"https://example.com\")", "+SUM(1,1)",
+                      "-1+2", "@SUM(1,1)", "＝1+2", "＋1+2",
+                      "\t=1+2", " Farm\n=HYPERLINK(1)", "Farm\r@1"):
+            with self.subTest(label=label):
+                with self.assertRaises(ValueError):
+                    enterprise(dict(original, name=label))
+        safe = enterprise(dict(original, name="مزرعه زمرد ملل"))
+        self.assertEqual(safe["name"], "مزرعه زمرد ملل")
+
+    def test_csv_export_quotes_all_fields_and_preserves_safe_separators(self):
+        import csv
+        entry = dict(self.example["enterprises"][0], name='Farm "A", west')
+        data = dict(self.example, enterprises=[entry])
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            inputs = home / "input.json"
+            csvfile = home / "output.csv"
+            inputs.write_text(json.dumps(data), encoding="utf8")
+            finished = subprocess.run(
+                [sys.executable, str(Path(__file__).with_name("calculator.py")),
+                 str(inputs), "--csv-output", str(csvfile)],
+                capture_output=True, text=True, timeout=15)
+            self.assertEqual(finished.returncode, 0, finished.stderr)
+            raw = csvfile.read_text(encoding="utf8")
+            self.assertTrue(raw.startswith('"enterprise","volume_multiplier"'))
+            with csvfile.open(encoding="utf8", newline="") as stream:
+                rows = list(csv.DictReader(stream))
+            self.assertEqual(len(rows), 9)
+            self.assertTrue(all(row["enterprise"] == 'Farm "A", west' for row in rows))
+
+
+
 if __name__ == "__main__":
     unittest.main()
