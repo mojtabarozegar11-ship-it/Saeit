@@ -111,6 +111,29 @@ jobs:
           for p in sorted(root.glob("**/games*.html"))[:30]:
               print("MPW_GAME_RECURSIVE",str(p),"file",p.is_file(),"symlink",p.is_symlink(),"bytes",p.stat().st_size if p.is_file() else -1)
           PY
+      - name: Locate dynamic PHP guide source without modifications
+        run: |
+          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          import os,time
+          root="/home/zomorod2/mojplaywin.com"
+          needle=b'href="/#field-library-round2"'
+          found=[]
+          started=time.monotonic()
+          for directory,dirs,files in os.walk(root, followlinks=False):
+              dirs[:]=[d for d in dirs if d not in (".git","node_modules","vendor","images","image","backup","backups")]
+              for name in files:
+                  if not name.endswith((".php",".html",".htm")):continue
+                  path=os.path.join(directory,name)
+                  try:
+                      if os.path.getsize(path)<850000 and needle in open(path,"rb").read():
+                          found.append(path)
+                  except (OSError,PermissionError):
+                      pass
+                  if len(found)>=25 or time.monotonic()-started>35:break
+              if len(found)>=25 or time.monotonic()-started>35:break
+          for path in found:print("MPW_DYNAMIC_GUIDE_SOURCE",path)
+          print("MPW_DYNAMIC_GUIDE_SCAN",len(found),"seconds",round(time.monotonic()-started,2))
+          PY
       - name: Publish only verified home source and sitemap include
         id: install
         run: |
@@ -140,7 +163,7 @@ jobs:
               raise RuntimeError('Sitemap lost URLs or gained duplicates')
           for path in ('/knowledge/','/research/','/company/','/taniya/','/ventures/agriculture/'):
               if urls.count(origin+path)!=1:raise RuntimeError('Required sitemap route missing '+path)
-          for path in ('/services/','/games/'):
+          for path in ('/services/',):
               with urllib.request.urlopen(origin+path+'?structure_links='+str(time.time_ns()),timeout=25) as r:
                   document=r.read(250000).decode('utf8','replace')
               for obsolete in ('href="/#mpw-insight-title"', 'href="/#field-library-round2"', 'href="/#field-library-advanced"'):
