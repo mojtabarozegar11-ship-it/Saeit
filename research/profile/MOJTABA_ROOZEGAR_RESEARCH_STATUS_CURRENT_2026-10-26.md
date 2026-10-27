@@ -113,3 +113,14 @@ No independently verified degree, institutional affiliation, ORCID, residence, i
 **ZM-R01:** exact RefSeq v2.0 FASTA/annotation, experimental independence, multimapping and real 24-sample integer count matrix remain unresolved; published FPKM and 1,167 exploratory candidates are not independently validated DEG/FDR. No bulk FASTQ download. **DATA REBUILD / NO SUBMISSION.**
 
 **Future registry:** 46 gated English research questions remain a queue, not 46 completed papers. **Human author approvals, journal submissions, manuscript IDs, acceptances and publications: zero.** No live-site edits, PR #1054 merge or prohibited social-account interactions.
+
+
+## 27 October 2026 — verified C28/C29/C46 source corrections (staging only)
+
+**AE-2026-001:** The consolidated English internal author-review manuscript now includes [C28 baseline-productivity quartile heterogeneity](../manuscripts/AE-2026-001/AE-2026-001_C28_BASELINE_PRODUCTIVITY_QUARTILE_PERIOD_CONTRAST_2026-10-27.md) on the separate **153-economy 2026-only cohort**, and [C29 ILOSTAT 13th/19th-ICLS comparability audit](../manuscripts/AE-2026-001/AE-2026-001_C29_ILOSTAT_ICLS_STANDARD_AND_VINTAGE_IDENTIFICATION_GATE_2026-10-27.md). Four baseline quartile medians of paired period growth contrasts are negative but non-monotone (−2.651, −2.493, −0.461, −1.563 log-pp/year); this is descriptive, not causal, not a three-vintage result. ILOSTAT historical 2024/2025 versions and component attribution remain unverified. [Consolidated manuscript](../manuscripts/AE-2026-001/AE-2026-001_CONSOLIDATED_AUTHOR_REVIEW_MANUSCRIPT_2026-10-27.md) was updated and re-read. **MAJOR REVISION / NO SUBMISSION**; new source-aligned Word not independently verified.
+
+**MR-2026-001:** A fresh [C46 publisher-table arithmetic audit](../manuscripts/MR-2026-001/MR-2026-001_C46_AMINI_F7_SOURCE_TABLE_ARITHMETIC_ROUNDING_RECONCILIATION_2026-10-27.md) reconciles the F7 **−1.3 vs −1.4 kg/m³** statements as different rounding orders from Table 4 yields and irrigation depths. The conclusion's **−0.1 kg/m³** and Table 5's **−3.22** remain unexplained. The [MR V5 Perspective](../manuscripts/MR-2026-001/MR-2026-001_DIRECT_IRRIGATION_ADHERENCE_PRIOR_ART_AUTHOR_REVIEW_V5_2026-10-26.md) was corrected; this is not field validation, a publisher erratum or author approval. **MAJOR REVISION / NO SUBMISSION**; new source-aligned Word not independently verified.
+
+**ZM-R01:** No genuine 24-sample integer count matrix, exact compatible RefSeq v2.0 FASTA/GTF pair, validated FASTQ MD5 or DESeq2/FDR result. **DATA REBUILD / NO SUBMISSION**. No 149.54GB download or VPS/cost incurred.
+
+**Pipeline:** 3 active manuscripts, 2 internal author-review revisions, 1 data-rebuild project; **0** author-approved, journal-submitted, accepted or published. The 46-topic future registry remains **questions only**. **No live website deployment, PR #1054 merge or restricted social activity.**
