@@ -8,6 +8,8 @@
 - compare_vintages(indicator, vintages, year, countries) compares the **same indicator in a single year** across releases. Its attached revision summaries concern value changes, not 2000–2019 growth-rate changes. Source: https://pursuitofdatascience.github.io/countryatlas/reference/compare_vintages.html .
 - fetch_indicator(source="wdi", indicator=..., years=c(2000,2019), vintage=...) is the documented path to pin the two endpoints to a specific API release. Source: https://pursuitofdatascience.github.io/countryatlas/reference/fetch_indicator.html .
 
+**Version-specific caution:** The currently rendered countryatlas reference site identifies itself as **4.0.0**, while the AE project previously executed **3.0.0** for a separate CAGR check. API behavior and release lists must be pinned to the actually installed package version; current 4.0.0 documentation is a present-day methodological reference, not evidence that the 3.0.0 implementation has been rerun or produces identical data.
+
 ## Exact scientific estimand and non-equivalence
 The primary AE outcome for economy i and release v is g(i,v) = 100 * [ln(P(i,2019,v)) - ln(P(i,2000,v))]/19. Therefore:
 1. First obtain both endpoints for each of 2024, 2025 and 2026 release definitions, using an **identical fixed country cohort**, positive finite values, same indicator NV.AGR.EMPL.KD and documented units.
