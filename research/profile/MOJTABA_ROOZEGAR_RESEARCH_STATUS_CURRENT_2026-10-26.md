@@ -2,6 +2,12 @@
 
 **Date:** 26 October 2026. **Not deployed to live site.** This dated addendum **supersedes stale Word/source claims in the older long-form profile staging table**; preserve that earlier file as historical work-in-progress, not a current authority.
 
+## C34 regional post-stratification — 27 October 2026 (GitHub staging only)
+
+The [AE-2026-001 C34 source-locked reanalysis](../manuscripts/AE-2026-001/AE-2026-001_C34_REGION_POSTSTRATIFICATION_AND_UNIDENTIFIED_2000_2019_MISSING_GROWTH_2026-10-27.md) calculated an observed 157-economy 2000–2019 mean of **2.398498** log-percentage points/year and a **hypothetical**, region-post-stratified 217-record value of **2.346616**. The difference **−0.051882** does **not** identify the 60 missing-endpoint economies or justify global representativeness. The consolidated English AE manuscript now contains Methods 2.10 and Results 3.9, with [AI adversarial author packet](AE_2026_001_C34_AUTHOR_DECISION_AND_INTERNAL_AI_ADVERSARIAL_REVIEW_2026-10-27.md). This is 2026-only secondary sensitivity, **not** the 155-economy historical-vintage comparison, a new estimator, or an accepted paper.
+
+**Current stage:** AE and MR = MAJOR REVISION / NO SUBMISSION; ZM-R01 = DATA REBUILD / NO SUBMISSION. **Zero** author-approved, submitted, accepted or published papers. No source-matched Word after C34 has been verified. The historical ILOSTAT archives, direct three-vintage countryatlas benchmark, MR source and G/D/R/A validation, and ZM exact reference and integer counts remain open. The 46-topic registry remains a candidate queue only. **No live website deployment; PR #1054 remains draft/unmerged and restricted social accounts untouched.**
+
 ## Current research
 
 **MR-2026-001:** Unpublished V5 Perspective; 22 DOI references, C42 original Amini methods and unresolved F7 numerical contradiction; Car Table 5, event-level G/D/R/A validation and originality remain unresolved. Last independently verified Word: run 40344172230, artifact 12659259449. **MAJOR REVISION / NO SUBMISSION.**
