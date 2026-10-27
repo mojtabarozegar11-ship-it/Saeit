@@ -123,5 +123,5 @@ test('combined keyboard directions cannot exceed single-axis movement speed', ()
   assert.deepEqual(normalizeMovementAxes(0, NaN), {forward: 0, side: 0});
   assert.equal(Math.hypot(...Object.values(normalizeMovementAxes(-20, 30))) <= 1, true);
   const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
-  assert.match(game, /const movement=normalizeMovementAxes\\(forward,side\\);forward=movement.forward;side=movement.side;move\\(/);
+  assert.ok(game.includes('const movement=normalizeMovementAxes(forward,side);forward=movement.forward;side=movement.side;move('), 'normalization is wired into engine movement');
 });
