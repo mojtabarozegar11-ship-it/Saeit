@@ -104,7 +104,7 @@ def _inspect_review_archive(package):
                 name=item.filename
                 parts=PurePosixPath(name)
                 if (item.is_dir() or not name or name.startswith("/") or "\\" in name
-                        or any(part in ("",".","..") for part in parts.parts)
+                        or parts.as_posix()!=name or any(part in ("",".","..") for part in parts.parts)
                         or ((item.external_attr>>16)&0o170000)==0o120000
                         or name in actual):
                     raise ValueError("CHATGPT_REVIEW_ARCHIVE_MEMBER_UNSAFE")
@@ -199,7 +199,7 @@ def require_chatgpt_final_review(inbox,recipe,artifact_sha,product_manifest,pack
         name=row["path"]
         parts=PurePosixPath(name)
         if (not name or name.startswith("/") or "\\" in name
-                or any(part in ("",".","..") for part in parts.parts)
+                or parts.as_posix()!=name or any(part in ("",".","..") for part in parts.parts)
                 or name in reviewed):
             raise ValueError("CHATGPT_FINAL_REVIEW_FILE_PATH_INVALID")
         reviewed[name]=(row["sha256"],row["size"])
