@@ -385,7 +385,8 @@ test('crowded recovery saves retain unique mission intel when the runtime restor
     'recovery must not create replacement intel when original items were preserved');
   assert.equal(saved.pickups.length,60,'original persisted snapshot is not mutated');
   const client=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
-  assert.match(client,/world\\.pickups=boundedCampaignPickups\\(world\\.pickups\\)\\.slice\\(-30\\)/,
-    'production restore must use the same intel-preserving bounded selection');
-  assert.doesNotMatch(client,/world\\.pickups=\\(world\\.pickups\\|\\|\\[\\]\\)\\.slice\\(0,30\\)/);
+  assert.ok(client.includes('world.pickups=boundedCampaignPickups(world.pickups).slice(-30)'),
+    'production restore must use the intel-preserving bounded selection');
+  assert.ok(!client.includes('world.pickups=(world.pickups||[]).slice(0,30)'),
+    'the old first-30 truncation would silently discard mission intel');
 });
