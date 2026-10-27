@@ -293,11 +293,16 @@ def work_orders(root,quality_file,catalog_file,run_id,limit=300,products_file=No
                "independent_certification_pending":len(jobs),
                "generated_by":"measured_evidence_intake_only",
               "items":jobs}
-    manifest=output/("index-"+re.sub(r"[^0-9A-Za-z]","",str(run_id))[:40]+".json")
-    if manifest.exists():assert json.loads(manifest.read_text())==overview
+    overview_bytes=(json.dumps(overview,ensure_ascii=False,sort_keys=True,indent=2)+"\\n").encode("utf8")
+    overview_sha=hashlib.sha256(overview_bytes).hexdigest()
+    run_token=re.sub(r"[^0-9A-Za-z]","",str(run_id))[:40]
+    # Workflow reruns reuse the same run ID while their latest QA snapshot can change.
+    # Content-address every index receipt so a retry never collides with its prior attempt.
+    manifest=output/("index-"+run_token+"-"+overview_sha[:20]+".json")
+    if manifest.exists():
+        assert not manifest.is_symlink() and manifest.read_bytes()==overview_bytes
     else:
-        with manifest.open("x",encoding="utf8") as f:
-            json.dump(overview,f,ensure_ascii=False,sort_keys=True,indent=2);f.write("\n")
+        with manifest.open("xb") as f:f.write(overview_bytes)
         manifest.chmod(0o600)
     print("FACTORY_PRODUCTION_WORKORDERS_WRITTEN="+str(len(jobs)))
     print("FACTORY_MISSING_VERIFIABLE_QUALITY_GROUPS="+str(overview["pending_groups_total"]))
