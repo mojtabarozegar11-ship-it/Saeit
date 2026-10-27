@@ -25,6 +25,7 @@ def sample_home():
         parts.append('<div id="' + ident + '">Protected text and brand content</div>')
     parts.append('<section id="' + mod.GALLERY_ID + '"><h2>Original Gallery</h2>')
     parts.extend('<figure><a href="' + image(i) + '"><img src="' + image(i) + '" alt="Photo"></a></figure>' for i in range(1, 11))
+    parts.append("<p>" + ("Original photographic archive. " * 230) + "</p>")
     parts.append("</section>")
     parts.append('<section id="' + mod.PORTRAITS_ID + '">')
     parts.extend('<img src="' + REPEATED + '" alt="Portrait">' for _ in range(3))
