@@ -1,6 +1,7 @@
 # MOJ ARENA GLOBAL — Independent source package
 
 Source: site_releases/mojplaywin/arena/
+Subpages: revenue/ and casino/
 Intended URL: https://mojplaywin.com/arena/
 Owner: MojPlayWin
 Status: 2026-10-27 source exists on isolated feature branch. **Not deployed. Real-money wagering NOT available.**
@@ -10,50 +11,42 @@ Language: English-first with Persian for major headlines/navigation; full locali
 
 - Premium responsive static design, accessible navigation and focus/reduced-motion styling.
 - Filterable twelve-category experience index; future services are explicitly described as planned.
-- Three interactive, locally scored skill games: reaction time, number memory, knowledge sprint.
+- Three interactive, locally scored skill games: reaction time, number memory, knowledge sprint; plus three free nonfinancial casino-style routines in the separate adult district.
 - Free user-authored forecast journal with basic validation, local browser storage, JSON export and confirmed deletion.
 - Country/market selector that keeps real-money betting disabled in every market; informational jurisdiction notes only.
-- Business and 30-channel strategy described below; responsible-play disclosures and regulator references.
+- Interactive 50-channel revenue matrix plus separate adult casino area, with clear non-operational money-play gating and regulator references.
 - No wallet, money deposit, withdrawal, API integration, fake leaderboard, customer payment or prize-redemption facility.
 
-## Thirty proposed income channels
+## Fifty non-casino revenue channels + the separate casino vertical
 
-Revenue is **not active** merely because this UI exists. Each monetization stream requires a real offer and appropriate product rights, legal review, funding/payment acceptance, fulfillment and taxes.
+The approved portfolio is **50 distinct non-casino potential revenue models in 10 categories, plus MOJ Casino as a separate vertical**. The exact fifty individually named mechanisms and their launch gates are in revenue/models.js, presented at /arena/revenue/.
 
-| # | Category | Stream | Activation gate |
-|---|---|---|---|
-| 1 | Ads | Contextual ads | ad provider and privacy consent |
-| 2 | Ads | Voluntary rewarded ads | provider and nonfinancial rewards |
-| 3 | Ads | Sponsored video | sponsor contract and delivery |
-| 4 | Ads | Interactive product ads | brand agreement/disclosure |
-| 5 | Ads | Event sponsorship | confirmed event/sponsor |
-| 6 | Games | Standalone premium games | IP, QA, fulfillment |
-| 7 | Games | Cosmetic items | item entitlement/checkout |
-| 8 | Games | Expansion packs | rights and delivery |
-| 9 | Games | Customization | moderation/entitlement |
-| 10 | Games | Product bundles | item rights |
-| 11 | Subscriptions | Individual premium | renewal terms/billing |
-| 12 | Subscriptions | Non-gambling family plan | age segmentation |
-| 13 | Subscriptions | Creator plan | creator agreement |
-| 14 | Subscriptions | B2B club | service contract |
-| 15 | Competitions | Lawful event admission | local law review |
-| 16 | Competitions | Organizer service fee | organizer contract |
-| 17 | Competitions | Sponsored contest | contest law and sponsor |
-| 18 | Commerce | Original digital goods | ownership and checkout |
-| 19 | Commerce | Creator marketplace | moderation/royalty |
-| 20 | Commerce | Non-gambling affiliate links | merchant contract/disclosure |
-| 21 | Commerce | QR and product-code campaigns | brand campaign |
-| 22 | B2B | White-label skill software | license contract |
-| 23 | B2B | Branded mini-games | development contract |
-| 24 | B2B | Interactive campaign studio | defined offer |
-| 25 | B2B | Tournament operations | SLA and fair rules |
-| 26 | Content | Educational game content | content license |
-| 27 | Content | Entertainment event tickets | live scheduled event |
-| 28 | Content | Skill tutorials | owned course |
-| 29 | Content | Licensed media/co-production | IP agreement |
-| 30 | Regulated | Licensed-operator wagering partnership | licence and financial approvals |
+| Commercial engine | Count |
+|---|---:|
+| Advertising | 5 |
+| Sponsorship | 5 |
+| Game sales | 5 |
+| Cosmetics | 5 |
+| Subscriptions | 5 |
+| Events | 5 |
+| Digital goods | 5 |
+| Affiliate and leads | 5 |
+| B2B technology | 5 |
+| Creator services | 5 |
+| **Total outside casino** | **50** |
+| Additional separately regulated casino vertical | **+1** |
 
-Paid competitions, paid predictions, sweepstakes, prizes of real-world value and crypto rewards may trigger gambling/contest regulation even when described as skill-based.
+None are asserted to be active merely because the source exists. The casino vertical must not be conflated with a working regulated operator.
+
+### Casino source and legal separation
+
+- /arena/casino/ contains an adult-gated informational zone and **three functioning free casino-style routines**: European roulette-colour practice, single-deck blackjack practice and symbol reels.
+- There are no entry fees, money stakes, purchaseable play credits, payouts, redeemable assets, wallet integration or real-world prizes. Each browser visit requires an 18+ self-declaration; **this is not identity verification**.
+- This source is NOT licensed casino software, not certified for gambling, and not suitable for financial play. It remains unpublished pending the same safe URL-path deployment preflight and jurisdictional assessment applied to all Arena content.
+- Real-money casino operations, if pursued, require an entirely separate service and market/product-specific permission, audited operator backend, approved payment and identity verification. A foreign licence cannot be assumed sufficient worldwide.
+- UK Gambling Commission remote casino licence: https://www.gamblingcommission.gov.uk/licensees-and-businesses/licences-and-fees/remote-casino-operating-licence
+- Germany GGL official operator whitelist: https://www.gluecksspiel-behoerde.de/de/fuer-spielende/uebersicht-erlaubter-anbieter-whitelist
+- Restricted payment activities: https://stripe.com/legal/restricted-businesses
 
 ## Non-negotiable regulated wagering barriers
 
