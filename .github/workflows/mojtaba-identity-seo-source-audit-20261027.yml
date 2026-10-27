@@ -1,0 +1,113 @@
+name: Mojtaba personal identity SEO source audit
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/mojtaba-identity-seo-source-audit-20261027.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-personal-seo-source-audit
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Establish pinned GitHub to VPS to cPanel SSH relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-official-hub-ssh"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "HUB_SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Read only identity and SEO source signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 120s ssh -T -F "$HUB_SSH_CONFIG" saeit-host 'python3 -' <<'PY'
+          from pathlib import Path
+          root=Path('/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17')
+          if root.is_symlink() or not (root/'manage.py').is_file():
+              raise RuntimeError('Personal app mismatch')
+          markers=('alternateName','ProfilePage','Dr.mojtaba.rozegar',
+                   'Official website of Mojtaba Roozegar','Entrepreneur, business executive and researcher',
+                   'Mojtaba Rozegar','Author','scientific articles')
+          seen=set()
+          roots=(root/'templates/personal_site',root/'personal_site',root/'config')
+          for folder in roots:
+              if not folder.is_dir() or folder.is_symlink():continue
+              for f in folder.rglob('*'):
+                  if f in seen or f.is_symlink() or not f.is_file() or f.suffix not in ('.py','.html','.json'):continue
+                  seen.add(f)
+                  if f.stat().st_size>800000:continue
+                  rel=f.relative_to(root).as_posix()
+                  if any(x in rel.lower() for x in ('settings','secret','private','password','credentials','migration','test_')):continue
+                  s=f.read_text(encoding='utf8',errors='replace')
+                  present=[m for m in markers if m in s]
+                  if not present:continue
+                  print('SEO_SOURCE='+rel+' MARKERS='+repr(present),flush=True)
+                  if 'alternateName' in s or 'ProfilePage' in s:
+                      for marker in ('alternateName','ProfilePage','Dr.mojtaba.rozegar'):
+                          ix=s.find(marker)
+                          if ix>=0:
+                              line=s.count('\n',0,ix)+1
+                              snippet=s[max(0,ix-310):min(len(s),ix+540)].replace('\n',' ')
+                              print('SEO_CONTEXT='+rel+':'+str(line)+' '+repr(snippet),flush=True)
+                  if 'Official website of Mojtaba Roozegar' in s:
+                      ix=s.find('Official website of Mojtaba Roozegar')
+                      print('HOME_META_CONTEXT='+rel+' '+repr(s[max(0,ix-180):min(len(s),ix+330)]),flush=True)
+          print('PERSONAL_IDENTITY_AUDIT_READ_ONLY=PASS',flush=True)
+          PY
+      - name: Remove ephemeral relay credentials
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-official-hub-ssh"
+          test ! -d "$d" || rm -rf -- "$d"
