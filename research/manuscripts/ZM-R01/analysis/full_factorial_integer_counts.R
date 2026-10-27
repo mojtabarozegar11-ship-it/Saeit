@@ -1,18 +1,63 @@
 #!/usr/bin/env Rscript
 # GSE294406: prespecified 2x2x2 integer-count interaction analysis.
 # INPUTS MUST BE RAW UNNORMALIZED INTEGER GENE COUNTS, NOT FPKM/TPM.
-# Usage: Rscript full_factorial_integer_counts.R raw_gene_counts.tsv verified_manifest.csv output_dir
+# Usage: Rscript full_factorial_integer_counts.R counts.tsv manifest.csv independent_units.csv provenance.json output_dir
+# FAIL-CLOSED: this unblocked DESeq2 design is forbidden without source-verified
+# raw-count provenance and 24 independently assigned chambers. Shared-chamber
+# designs require a different prespecified, cluster-aware analysis.
 suppressPackageStartupMessages(library(DESeq2))
 args <- commandArgs(trailingOnly=TRUE)
-if (length(args) != 3L) stop("Usage: Rscript full_factorial_integer_counts.R counts.tsv manifest.csv output_dir")
-counts_file <- args[[1L]]; manifest_file <- args[[2L]]; outdir <- args[[3L]]
-if (!file.exists(counts_file) || !file.exists(manifest_file)) stop("Input file not found")
-dir.create(outdir, showWarnings=FALSE, recursive=TRUE)
+if (length(args) != 5L)
+  stop("Usage: Rscript full_factorial_integer_counts.R counts.tsv manifest.csv independent_units.csv provenance.json output_dir")
+counts_file <- args[[1L]]; manifest_file <- args[[2L]]
+units_file <- args[[3L]]; provenance_file <- args[[4L]]; outdir <- args[[5L]]
+if (!all(file.exists(c(counts_file, manifest_file, units_file, provenance_file))))
+  stop("Missing counts, manifest, independently documented units, or count provenance; NO DESeq2")
+if (!requireNamespace("digest", quietly=TRUE) || !requireNamespace("jsonlite", quietly=TRUE))
+  stop("digest and jsonlite required for source integrity checks")
 manifest <- read.csv(manifest_file, check.names=FALSE, stringsAsFactors=FALSE)
 required <- c("GSM","SRR","GEO_sample_title")
 if (!all(required %in% names(manifest))) stop("Manifest lacks GSM/SRR/GEO_sample_title")
 if (nrow(manifest) != 24L || anyDuplicated(manifest$GSM) || anyDuplicated(manifest$SRR))
   stop("Expected exactly 24 unique GSM/SRR libraries")
+# These structural checks cannot independently authenticate experimental-unit
+# records; source documents and real allocation must still be critically reviewed.
+units <- read.csv(units_file, check.names=FALSE, stringsAsFactors=FALSE)
+unit_fields <- c("GSM", "assignment_unit_id", "chamber_id",
+                 "assignment_unit_type", "source_uri", "verification_status")
+if (!all(unit_fields %in% names(units)) || nrow(units) != 24L ||
+    anyNA(units[,unit_fields,drop=FALSE]) ||
+    !setequal(units$GSM, manifest$GSM) || anyDuplicated(units$GSM))
+  stop("Missing or invalid 24-row independent-unit evidence; NO DESeq2")
+if (any(!nzchar(trimws(as.character(units$assignment_unit_id)))) ||
+    anyDuplicated(units$assignment_unit_id) ||
+    any(!nzchar(trimws(as.character(units$chamber_id)))) ||
+    anyDuplicated(units$chamber_id))
+  stop("Repeated/missing treatment-assignment unit or chamber: unblocked design invalid")
+if (any(units$assignment_unit_type != "independently_assigned_chamber") ||
+    any(units$verification_status != "SOURCE_DOCUMENT_VERIFIED") ||
+    any(!grepl("^https://", units$source_uri)))
+  stop("Source-verifiable independent chamber assignment not documented")
+prov <- jsonlite::fromJSON(provenance_file, simplifyVector=FALSE)
+needed_true <- c("raw_unnormalized_gene_counts", "all_24_fastq_md5_recomputed_from_bytes",
+                 "refseq_v2_assembly_fasta_verified", "matching_annotation_gtf_verified",
+                 "multimapping_policy_independently_validated",
+                 "gene_universe_consistent", "independent_units_evidence_verified")
+if (any(!vapply(needed_true, function(k) identical(prov[[k]], TRUE), logical(1))))
+  stop("Missing positive primary-data/reference/multimapping provenance; NO DESeq2")
+for (k in c("counts_sha256", "unit_evidence_sha256", "reference_fasta_sha256",
+            "annotation_gtf_sha256")) {
+  if (!is.character(prov[[k]]) || length(prov[[k]]) != 1L ||
+      !grepl("^[0-9a-f]{64}$", prov[[k]]))
+    stop(paste("Missing/invalid source digest", k))
+}
+if (!identical(digest::digest(counts_file, algo="sha256", file=TRUE, serialize=FALSE),
+               prov$counts_sha256) ||
+    !identical(digest::digest(units_file, algo="sha256", file=TRUE, serialize=FALSE),
+               prov$unit_evidence_sha256))
+  stop("Count or unit evidence SHA256 mismatch; NO DESeq2")
+# Directory is created only after the primary scientific release gates pass.
+dir.create(outdir, showWarnings=FALSE, recursive=TRUE)
 titles <- manifest$GEO_sample_title
 replicate <- suppressWarnings(as.integer(sub(".*_biol_rep([123])$", "\\1", titles)))
 if (anyNA(replicate) || !all(grepl("_biol_rep[123]$", titles)))
@@ -69,6 +114,11 @@ writeLines(c(paste("Input:",normalizePath(counts_file)),
              paste("Residual degrees of freedom:",nrow(design)-qr(design)$rank),
              paste("Interaction coefficient:",triple),
              paste("FDR<0.05:",sum(!is.na(res$padj)&res$padj<0.05)),
-             paste("Caveat: inferential analysis requires biological/technical QC, annotation and independent novelty audit.")),
+             paste("Unit-evidence SHA256:", prov$unit_evidence_sha256),
+             paste("Counts SHA256:", prov$counts_sha256),
+             paste("Reference FASTA SHA256 (declared):", prov$reference_fasta_sha256),
+             paste("Annotation GTF SHA256 (declared):", prov$annotation_gtf_sha256),
+             paste("Caveat: machine checks verify metadata structure and selected hashes, NOT truth of chamber assignment, reference identity or author approval."),
+             paste("Caveat: human scientific review and publication authorization remain mandatory.")),
            file.path(outdir, "analysis_provenance.txt"))
 capture.output(sessionInfo(), file=file.path(outdir, "R_session_info.txt"))
