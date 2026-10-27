@@ -109,7 +109,7 @@ done
 echo MASTER_FACTORY_WORKERS_QUIESCENT
 # SQLite's online backup API provides a consistent rollback snapshot while application services stay online.
 "$py" - "$ops/backups/master-before-$stamp.sqlite3" <<'PY'
-import sqlite3,sys
+import os,sqlite3,sys
 from pathlib import Path
 import time
 from django.conf import settings
@@ -118,16 +118,24 @@ assert "sqlite3" in db["ENGINE"], "MASTER_DB_BACKEND_UNEXPECTED"
 src=Path(db["NAME"]).resolve()
 assert src.exists() and src.is_file() and not src.is_symlink(), "MASTER_DB_MISSING"
 dst=Path(sys.argv[1])
+# Pre-create with private permissions and close SQLite connections explicitly.
+fd=os.open(dst,os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
+os.close(fd)
 last_report=[0.0]
 def report_progress(status,remaining,total):
     now=time.monotonic()
     if now-last_report[0]>=15 or remaining==0:
         print(f"MASTER_DB_BACKUP_PROGRESS remaining_pages={remaining} total_pages={total}",flush=True)
         last_report[0]=now
-# The online backup API may update source lock/WAL metadata; use a normal local connection.\nwith sqlite3.connect(str(src),timeout=20) as original:
-    with sqlite3.connect(str(dst)) as backup:
-        original.backup(backup,pages=2048,progress=report_progress,sleep=0.1)
-        assert backup.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+original=sqlite3.connect(str(src),timeout=20)
+backup=sqlite3.connect(str(dst),timeout=20)
+try:
+    original.backup(backup,pages=2048,progress=report_progress,sleep=0.1)
+    assert backup.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+finally:
+    backup.close()
+    original.close()
+assert dst.is_file(), "MASTER_DB_BACKUP_FILE_MISSING_AFTER_CLOSE"
 dst.chmod(0o600)
 print("MASTER_DB_BACKUP_INTEGRITY_OK")
 PY
