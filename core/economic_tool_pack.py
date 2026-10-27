@@ -4,6 +4,7 @@ These handlers perform bounded, auditable internal work. External writes and
 financial commitments remain behind the existing approval boundary.
 """
 import os
+import importlib.util
 from pathlib import Path
 
 from django.utils import timezone
@@ -160,6 +161,42 @@ def profit_optimize(payload):
     }
 
 
+def master_self_improvement(payload):
+    """Build privately verified candidates from the allowlisted repair engine."""
+    if os.getenv("MOJ_FACTORY_LOCAL_MODE") != "1":
+        raise ValueError("MASTER_SELF_IMPROVEMENT_PRIVATE_RUNTIME_ONLY")
+    repo = Path(__file__).resolve().parents[1]
+    engine_path = repo / "scripts" / "factory_code_self_upgrade.py"
+    if engine_path.is_symlink() or not engine_path.is_file():
+        raise ValueError("MASTER_SELF_IMPROVEMENT_ENGINE_MISSING")
+    spec = importlib.util.spec_from_file_location("master_self_upgrade_engine", engine_path)
+    if spec is None or spec.loader is None:
+        raise ValueError("MASTER_SELF_IMPROVEMENT_ENGINE_LOAD_FAILED")
+    engine = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(engine)
+    output = Path.home() / "factory-runtime" / "private" / "master-agent" / "code-upgrade"
+    report = engine.generate(repo, output)
+    verified = (
+        report.get("unresolved_known_security_regressions") == 0
+        and report.get("validated_repair_rule_coverage", 0)
+        == report.get("candidate_count", 0) + report.get("preexisting_verified_repairs", 0)
+    )
+    return {
+        "action_performed": "Ran the bounded private code-upgrade engine and wrote its candidate/evidence dossier.",
+        "verified_effect": verified,
+        "evidence": _evidence("private_self_upgrade_dossier", {
+            "candidate_count": report.get("candidate_count"),
+            "measured_improvements": report.get("candidates_with_measured_improvement"),
+            "verified_existing_repairs": report.get("preexisting_verified_repairs"),
+            "production_promotions": report.get("production_code_promotions"),
+            "whole_code_autonomous_evolution_complete": report.get("whole_code_autonomous_evolution_complete"),
+            "dossier": str(output / "evolution-proof.json"),
+        }),
+        "production_promotion": False,
+        "next_action": "income_market_research",
+    }
+
+
 def factory_native_review(payload):
     # This executor is intentionally *private VPS-only*. Never accept a
     # caller-supplied root, production website path, or output destination.
@@ -180,4 +217,5 @@ def build_economic_gateway():
         ToolSpec(code="income_growth_experiment", handler=growth_experiment, risk="medium"),
         ToolSpec(code="income_revenue_verify", handler=revenue_verify, risk="medium"),
         ToolSpec(code="income_profit_optimize", handler=profit_optimize, risk="medium"),
+        ToolSpec(code="master_self_improvement", handler=master_self_improvement, risk="medium"),
     ])
