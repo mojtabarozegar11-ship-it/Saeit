@@ -53,6 +53,7 @@ class QARebuildTests(unittest.TestCase):
         (order/"current.json").write_text(json.dumps({
             "schema":"saeit.factory.production-rework-order.v1",
             "recipe":name,
+            "family_id":"F28",
             "source_quality_receipt_sha256":"a"*64,
             "unresolved_technical_or_domain_defects":defects or []}))
         original=self.root/"digital-products"/name;original.mkdir(parents=True)
@@ -123,6 +124,23 @@ class QARebuildTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "UNSAFE_REBUILD_CURSOR"):
                 m.execute(self.root, self.source, FILE, limit=1)
         self.assertEqual(FakeMaker.calls, 0)
+
+    def test_one_product_per_family_is_rebuilt_in_a_sweep(self):
+        self.seed(name="synth_aaa111")
+        self.seed(name="synth_bbb222")
+        with patch.object(m,"load_maker",return_value=FakeMaker):
+            result=m.execute(self.root,self.source,FILE,limit=40)
+        self.assertEqual(result["rebuild_attempted"],1)
+        self.assertEqual(result["technical_candidates_verified"],1)
+        self.assertEqual(FakeMaker.calls,1)
+
+    def test_excluded_family_does_not_enter_rebuild_loop(self):
+        self.seed()
+        with patch.object(m,"load_maker",return_value=FakeMaker):
+            result=m.execute(self.root,self.source,FILE,limit=40,
+                             excluded_families={"F28"})
+        self.assertEqual(result["rebuild_attempted"],0)
+        self.assertEqual(FakeMaker.calls,0)
 
     def test_changed_native_source_makes_real_private_candidate_once(self):
         _,original=self.seed()
