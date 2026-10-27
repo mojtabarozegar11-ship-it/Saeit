@@ -145,6 +145,27 @@ class VPSWarehouseCourierTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,"RETURN_PAGE_INVALID"):
             feedback_site(self.site,page=32)
 
+    def test_earlier_page_rejects_corrupt_receipt_hidden_on_later_page(self):
+        """No page can be replayed if an off-page receipt is invalid."""
+        archive=export_factory(self.factory)
+        import_site(archive,self.site)
+        folder=self.site/"returns"/self.product
+        original=folder/(self.version+".json")
+        template=json.loads(original.read_text())
+        # The 50 numeric SHA names sort before the original 'a'*64 name.
+        # Thus the corrupted original sits on page 1, not page 0.
+        for index in range(1,51):
+            version=f"{index:064x}"
+            row=dict(template,source_sha256=version)
+            (folder/(version+".json")).write_text(json.dumps(row))
+        bad=dict(template,tenant="not-mojplaywin-main")
+        original.write_text(json.dumps(bad))
+        with self.assertRaisesRegex(RuntimeError,"RETURN_IDENTITY_INVALID"):
+            feedback_site(self.site,page=0)
+        self.assertFalse(
+            (self.factory/"design-intake/mojplaywin-stage1-quality-returns").exists()
+        )
+
     def test_page_snapshot_fingerprint_detects_new_receipts_and_content_changes(self):
         archive=export_factory(self.factory)
         import_site(archive,self.site)
