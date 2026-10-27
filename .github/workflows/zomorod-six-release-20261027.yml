@@ -218,11 +218,30 @@ jobs:
             echo PUBLIC_ROUTE_OK="$path"
           done
           home="$(curl -fsSL --connect-timeout 8 --max-time 30 -H 'Cache-Control: no-cache' "https://zomorodmelal.ir/?zm_six=$run")"
-          grep -Fq 'zm-home-media-20261027' <<< "$home"
-          grep -Fq 'پژوهش و توسعه علمی، ژنتیک' <<< "$home"
+          echo "PUBLIC_HOME_RECEIVED_BYTES=${#home}"
+          if ! grep -Fq 'zm-home-media-20261027' <<< "$home"; then
+            echo PUBLIC_HOME_EXTERNAL_MEDIA_MARKER=missing
+            exit 1
+          fi
+          echo PUBLIC_HOME_EXTERNAL_MEDIA_MARKER=verified
+          if ! grep -Fq 'پژوهش و توسعه علمی، ژنتیک' <<< "$home"; then
+            echo PUBLIC_HOME_NEUTRAL_CLAIM=missing
+            exit 1
+          fi
+          echo PUBLIC_HOME_NEUTRAL_CLAIM=verified
           head="$(curl -fsSI --connect-timeout 8 --max-time 30 "https://zomorodmelal.ir/?zm_six=$run")"
-          grep -iq 'x-frame-options: SAMEORIGIN' <<< "$head"
-          grep -iq "frame-ancestors 'self'" <<< "$head"
+          if ! grep -iq 'x-frame-options: SAMEORIGIN' <<< "$head"; then
+            echo PUBLIC_ROOT_X_FRAME_OPTIONS=missing
+            printf '%s\n' "$head" | grep -iE '^(http/|x-frame-options:|content-security-policy:|cache-control:|age:|server:)' || true
+            exit 1
+          fi
+          echo PUBLIC_ROOT_X_FRAME_OPTIONS=verified
+          if ! grep -iq "frame-ancestors 'self'" <<< "$head"; then
+            echo PUBLIC_ROOT_FRAME_ANCESTORS=missing
+            printf '%s\n' "$head" | grep -iE '^(http/|x-frame-options:|content-security-policy:|cache-control:|age:|server:)' || true
+            exit 1
+          fi
+          echo PUBLIC_ROOT_FRAME_ANCESTORS=verified
           first="$(find "$assets" -maxdepth 1 -name '*.svg' -type f -print -quit)"
           test -s "$first"
           sample="/static/site/zm-home-media-20261027/$(basename "$first")"
