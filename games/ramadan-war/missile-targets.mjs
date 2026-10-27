@@ -13,3 +13,24 @@ export function removeEnemyAndRetargetMissiles(enemies, missiles, removedIndex) 
   }
   return removed;
 }
+
+// Rockets must collide with solid cover even while homing on a live enemy.
+// Check the entire movement segment, not just the endpoint: an untrusted
+// restored velocity or a slow frame must not let a missile tunnel through walls.
+// Fail closed on invalid state and cap the work to the 16x16 arena dimensions.
+export function missilePathBlocked(missile, dt, isWall) {
+  if (!missile || !Number.isFinite(dt) || dt < 0 ||
+      !Number.isFinite(missile.x) || !Number.isFinite(missile.y) ||
+      !Number.isFinite(missile.vx) || !Number.isFinite(missile.vy) ||
+      typeof isWall !== 'function') return true;
+  const dx = missile.vx * dt, dy = missile.vy * dt;
+  const distance = Math.hypot(dx, dy);
+  if (!Number.isFinite(distance) || distance > 16) return true;
+  const steps = Math.max(1, Math.ceil(distance / 0.15));
+  for (let i = 0; i <= steps; i++) {
+    const x = missile.x + dx * i / steps;
+    const y = missile.y + dy * i / steps;
+    if (isWall(Math.floor(x), Math.floor(y))) return true;
+  }
+  return false;
+}
