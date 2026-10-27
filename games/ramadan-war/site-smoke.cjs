@@ -26,6 +26,30 @@ const assert=require('node:assert/strict');
    assert.equal(await page.locator('#weaponArt').evaluate(el=>getComputedStyle(el).display),'none');
    await page.evaluate(()=>{for(let i=0;i<30;i++)window.RamadanWarDebug.tick(.04)});
    const controls=await page.evaluate(()=>({stick:document.querySelector('#stick').getBoundingClientRect().x,fire:document.querySelector('#fire').getBoundingClientRect().x}));assert(controls.stick<controls.fire,'movement pad should be on the left of fire controls');
+   // Real pointer capture and animation frames: dragging up must advance,
+   // dragging right must strafe, including on the mobile viewport.
+   if (['127.0.0.1','localhost'].includes(new URL(process.env.GAME_URL).hostname)) {
+     const stick = await page.locator('#stick').boundingBox();
+     assert(stick && stick.width > 30, 'joystick must be rendered');
+     const cx = stick.x + stick.width / 2, cy = stick.y + stick.height / 2;
+     const drag = async (dx, dy) => {
+       await page.mouse.move(cx, cy);
+       await page.mouse.down();
+       await page.mouse.move(cx + dx, cy + dy, {steps: 4});
+       await page.waitForTimeout(260);
+       await page.mouse.up();
+       return page.evaluate(() => window.RamadanWarDebug.qaPosition());
+     };
+     const before = await page.evaluate(() => window.RamadanWarDebug.qaPosition());
+     assert(before, 'local-only position inspection must be available');
+     const afterUp = await drag(0, -stick.height * .3);
+     assert(afterUp.x > before.x + .05, 'upward joystick drag must move forward');
+     assert(Math.abs(afterUp.y - before.y) < .12, 'upward drag must not strafe');
+     const afterRight = await drag(stick.width * .3, 0);
+     assert(afterRight.y > afterUp.y + .05, 'rightward joystick drag must strafe right');
+     assert(Math.abs(afterRight.x - afterUp.x) < .12, 'rightward drag must not advance');
+     console.log('RAMADAN_REAL_JOYSTICK_PASS', v.name);
+   }
    await page.locator('#scope').click();assert.equal(await page.locator('#game').evaluate(el=>el.classList.contains('scope-mode')),true);
    assert.equal(await page.locator('#view').evaluate(el=>el.getContext('webgl2')||el.getContext('webgl')?true:false),true);
    await page.locator('#scope').click();assert.equal(await page.locator('#game').evaluate(el=>el.classList.contains('scope-mode')),false);
