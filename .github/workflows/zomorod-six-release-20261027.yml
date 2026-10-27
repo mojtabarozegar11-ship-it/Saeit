@@ -1,0 +1,238 @@
+name: Zomorod Melal six priorities protected production release
+on:
+  pull_request:
+    paths:
+      - scripts/zomorod_six_safe_patch_20261027.py
+      - .github/workflows/zomorod-six-release-20261027.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/zomorod_six_safe_patch_20261027.py
+      - .github/workflows/zomorod-six-release-20261027.yml
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-root-homepage
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static safety checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_six_safe_patch_20261027.py content/zomorod-v11/search_build.py
+          grep -Fq 'ASSET_PREFIX = "/static/site/zm-home-media-20261027/"' scripts/zomorod_six_safe_patch_20261027.py
+          grep -Fq 'ZM_SIX_REVERSIBILITY=byte_identical' scripts/zomorod_six_safe_patch_20261027.py
+          grep -Fq 'store_payment_remains_disabled' scripts/zomorod_six_safe_patch_20261027.py
+          echo SOURCE_SAFETY=passed
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned and non-interactive VPS to cPanel SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-six-release"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo PINNED_RELAY=verified
+      - name: Recheck the actual live files, back up exact originals, and fingerprint protected sites
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/zm-six-release/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          run="$1"; web="/home/zomorod2/public_html"
+          backup="/home/zomorod2/.backups/zomorod-six-20261027-release/$run"
+          test -d "$web" && test ! -L "$web" && test ! -e "$backup"
+          test ! -e "$web/static/site/zm-home-media-20261027"
+          install -d -m 700 "$backup" "$backup/files" "$backup/source"
+          : > "$backup/original.sha256"
+          for rel in index.html search/index.json sitemap.xml store/index.php .htaccess; do
+            src="$web/$rel"
+            test -s "$src" && test ! -L "$src"
+            install -d -m 700 "$backup/files/$(dirname "$rel")"
+            cp -p "$src" "$backup/files/$rel"
+            cmp -s "$src" "$backup/files/$rel"
+            sha256sum "$src" >> "$backup/original.sha256"
+          done
+          : > "$backup/protected.sha256"
+          (cd "$web"
+           for rel in topics/index.html topics/sitemap.xml about/index.html company/index.html \
+             contact/index.html research/index.html services/index.html \
+             business/index.php tala/index.php mohammad/index.html ghanadi/index.html \
+             amozeshgah/index.html; do
+             if test -f "$rel" && test ! -L "$rel"; then sha256sum "$rel"; fi
+           done) > "$backup/protected.sha256"
+          test -s "$backup/protected.sha256"
+          echo FRESH_LIVE_BACKUP=verified
+          echo RELEASE_BACKUP_PATH="$backup"
+          REMOTE
+          scp -F "$RUNNER_TEMP/zm-six-release/config" scripts/zomorod_six_safe_patch_20261027.py \
+            "saeit-cpanel:/home/zomorod2/.backups/zomorod-six-20261027-release/$GITHUB_RUN_ID/source/patch.py"
+          scp -F "$RUNNER_TEMP/zm-six-release/config" content/zomorod-v11/search_build.py \
+            "saeit-cpanel:/home/zomorod2/.backups/zomorod-six-20261027-release/$GITHUB_RUN_ID/source/search_build.py"
+      - name: Prepare all candidate files outside web root and enforce real-data QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/zm-six-release/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          run="$1"; web="/home/zomorod2/public_html"
+          b="/home/zomorod2/.backups/zomorod-six-20261027-release/$run"
+          sha256sum -c --status "$b/original.sha256"
+          (cd "$web" && sha256sum -c --status "$b/protected.sha256")
+          python3 -m py_compile "$b/source/patch.py" "$b/source/search_build.py"
+          python3 "$b/source/patch.py" stage "$web" "$b/candidate"
+          python3 "$b/source/search_build.py" "$web" "$b/search-candidate"
+          python3 - "$b" <<'PY'
+          import sys,json,xml.etree.ElementTree as ET
+          from pathlib import Path
+          b=Path(sys.argv[1]);search=json.loads((b/'search-candidate/index.json').read_text('utf-8'))
+          urls={p['url'] for p in search['pages']}
+          assert len(urls)==search['count']>=650,search['count']
+          for p in ('/','/topics/','/topics/zm-r01/wheat/','/research/directory/centers/genetics/'):
+              assert p in urls,p
+          assert not any(p.startswith(('/business/','/tala/','/mohammad/','/ghanadi/','/admin/','/site-heritage/')) for p in urls)
+          assert any('گندم' in (r['title']+' '+r['content']) for r in search['pages'] if r['url']=='/topics/zm-r01/wheat/')
+          manifest=json.loads((b/'candidate/manifest.json').read_text('utf-8'))
+          assert manifest['homepage_bytes_after']<500000
+          assert len(manifest['assets'])>=608
+          assert manifest['sitemap_new_count']>=manifest['sitemap_old_count']+2
+          ET.parse(b/'candidate/sitemap.xml')
+          print('SEARCH_PUBLIC_PAGES='+str(search['count']))
+          print('MAIN_SITE_CANDIDATES=validated')
+          PY
+          bin="$(command -v php || true)"
+          if test -z "$bin"; then bin=/opt/cpanel/ea-php82/root/usr/bin/php; fi
+          "$bin" -l "$b/candidate/store/index.php"
+          sha256sum -c --status "$b/original.sha256"
+          (cd "$web" && sha256sum -c --status "$b/protected.sha256")
+          echo CANDIDATE_QA=passed
+          REMOTE
+      - name: Atomic scoped publication, live checks, and automatic exact-file rollback on failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/zm-six-release/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          run="$1";web="/home/zomorod2/public_html"
+          b="/home/zomorod2/.backups/zomorod-six-20261027-release/$run"
+          assets="$web/static/site/zm-home-media-20261027"
+          test ! -e "$assets" && test ! -L "$assets"
+          sha256sum -c --status "$b/original.sha256"
+          (cd "$web" && sha256sum -c --status "$b/protected.sha256")
+          python3 "$b/source/patch.py" verify "$web" "$b/candidate"
+          rollback(){
+            set +e
+            for rel in .htaccess sitemap.xml store/index.php search/index.json index.html; do
+              target="$web/$rel";original="$b/files/$rel";temp="$target.zm-rollback-$run"
+              if test -s "$original";then cp -p "$original" "$temp" && mv -f "$temp" "$target";fi
+            done
+            if test -d "$assets" && test ! -L "$assets";then mv "$assets" "$b/rollback-assets";fi
+            sha256sum -c --status "$b/original.sha256"
+            echo MAIN_SITE_ROLLBACK=attempted
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" -eq 1; then rollback; fi; exit "$rc"' EXIT
+          mv -T "$b/candidate/static/site/zm-home-media-20261027" "$assets"
+          replace(){
+            rel="$1";source="$2";target="$web/$rel";tmp="$target.zm-next-$run"
+            test -s "$source" && test -f "$target" && test ! -L "$target" && test ! -e "$tmp"
+            cp -p "$source" "$tmp"
+            chmod --reference="$target" "$tmp"
+            mv -T "$tmp" "$target"
+          }
+          replace index.html "$b/candidate/index.html"
+          replace search/index.json "$b/search-candidate/index.json"
+          replace store/index.php "$b/candidate/store/index.php"
+          replace sitemap.xml "$b/candidate/sitemap.xml"
+          replace .htaccess "$b/candidate/.htaccess"
+          python3 - "$b/candidate/manifest.json" "$web" <<'PY'
+          import json,hashlib,sys
+          from pathlib import Path
+          manifest=json.loads(Path(sys.argv[1]).read_text('utf-8'));web=Path(sys.argv[2])
+          for rel,expected in manifest['candidate'].items():
+              assert hashlib.sha256((web/rel).read_bytes()).hexdigest()==expected,rel
+          for url,info in manifest['assets'].items():
+              assert hashlib.sha256((web/url.lstrip('/')).read_bytes()).hexdigest()==info['sha256'],url
+          print('ALL_REAL_BYTES_MATCH_CANDIDATE=yes')
+          PY
+          (cd "$web" && sha256sum -c --status "$b/protected.sha256")
+          python3 - "$web/search/index.json" <<'PY'
+          import json,sys
+          j=json.load(open(sys.argv[1]));assert j['count']>=650
+          assert any(x['url']=='/topics/zm-r01/wheat/' for x in j['pages'])
+          print('SEARCH_REBUILT=verified')
+          PY
+          for path in / /search/index.json /store/ /topics/ /sitemap.xml /contact/;do
+            code="$(curl -fsSL --connect-timeout 8 --max-time 25 -o /dev/null -w '%{http_code}' -H 'Cache-Control: no-cache' "https://zomorodmelal.ir$path?zm_six=$run" || true)"
+            test "$code" = 200 || { echo "PUBLIC_ROUTE_FAILED=$path:$code"; exit 1; }
+            echo PUBLIC_ROUTE_OK="$path"
+          done
+          home="$(curl -fsSL --connect-timeout 8 --max-time 30 -H 'Cache-Control: no-cache' "https://zomorodmelal.ir/?zm_six=$run")"
+          grep -Fq 'zm-home-media-20261027' <<< "$home"
+          grep -Fq 'پژوهش و توسعه علمی، ژنتیک' <<< "$home"
+          head="$(curl -fsSI --connect-timeout 8 --max-time 30 "https://zomorodmelal.ir/?zm_six=$run")"
+          grep -iq 'x-frame-options: SAMEORIGIN' <<< "$head"
+          grep -iq "frame-ancestors 'self'" <<< "$head"
+          first="$(find "$assets" -maxdepth 1 -name '*.svg' -type f -print -quit)"
+          test -s "$first"
+          sample="/static/site/zm-home-media-20261027/$(basename "$first")"
+          code="$(curl -fsSL --connect-timeout 8 --max-time 25 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$sample")"
+          test "$code" = 200
+          active=0;trap - EXIT
+          echo ZOMOROD_SIX_SITE_RELEASE=live_verified
+          echo ROLLBACK_BACKUP="$b"
+          REMOTE
+      - name: Remove ephemeral SSH credentials, preserving all private backups
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zm-six-release"

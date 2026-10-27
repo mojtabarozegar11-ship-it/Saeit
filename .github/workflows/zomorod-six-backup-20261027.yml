@@ -1,0 +1,108 @@
+name: Zomorod Melal six-priority live file backup
+on:
+  push:
+    branches: [ops/zomorod-six-priorities-20261027]
+    paths: ['.github/workflows/zomorod-six-backup-20261027.yml']
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-six-20261027-backup
+  cancel-in-progress: false
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Set up pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-six-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo PINNED_RELAY=verified
+      - name: Copy exact live files into private cPanel backup and record hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/zm-six-ssh/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          run="$1"
+          web="/home/zomorod2/public_html"
+          backup="/home/zomorod2/.backups/zomorod-six-20261027/$run"
+          test -d "$web" && test ! -L "$web"
+          test -s "$web/index.html" && test ! -L "$web/index.html"
+          test -s "$web/search/index.json" && test ! -L "$web/search/index.json"
+          test ! -e "$backup" && test ! -L "$backup"
+          mkdir -p "$(dirname "$backup")"
+          install -d -m 700 "$backup" "$backup/files"
+          : > "$backup/hashes.sha256"
+          : > "$backup/inventory.tsv"
+          for rel in index.html .htaccess robots.txt sitemap.xml \
+            search/index.html search/index.json store/index.php \
+            topics/index.html topics/sitemap.xml about/index.html \
+            company/index.html contact/index.html services/index.html \
+            research/index.html en/index.html; do
+            src="$web/$rel"
+            if test -f "$src" && test ! -L "$src"; then
+              install -d -m 700 "$backup/files/$(dirname "$rel")"
+              cp -p "$src" "$backup/files/$rel"
+              cmp -s "$src" "$backup/files/$rel"
+              sha256sum "$backup/files/$rel" >> "$backup/hashes.sha256"
+              stat -c '%n\t%s\t%y' "$src" >> "$backup/inventory.tsv"
+            else
+              printf 'MISSING\t%s\n' "$rel" >> "$backup/inventory.tsv"
+            fi
+          done
+          test "$(find "$backup/files" -type f | wc -l)" -ge 12
+          (cd "$backup/files" && tar -cf "$backup/live-files.tar" .)
+          tar -tf "$backup/live-files.tar" >/dev/null
+          (cd "$backup" && sha256sum -c --status hashes.sha256)
+          sha256sum "$backup/live-files.tar" > "$backup/archive.sha256"
+          echo LIVE_FILES_BACKED_UP="$(find "$backup/files" -type f | wc -l)"
+          echo BACKUP_ARCHIVE_SHA256="$(cut -d ' ' -f1 "$backup/archive.sha256")"
+          echo BACKUP_PATH="$backup"
+          REMOTE
+      - name: Remove ephemeral SSH keys
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zm-six-ssh"
