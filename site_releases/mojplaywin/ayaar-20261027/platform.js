@@ -300,18 +300,31 @@
         line.append(download);panel.append(line);
       }
     }
-    if(details.status!=="reviewed") {
+    if(details.status==="declined") {
+      panel.append(h("p","This declined case is closed. A fresh application is required for a new assessment.","a-small"));
+    } else if(details.status!=="reviewed") {
       const statusArea=h("div","","a-paper");
       statusArea.append(h("h3","Record case disposition"));
       const select=h("select");select.id="staffStatus";
-      [["in_review","In review"],["needs_information","More information required"],["declined","Decline application"]].forEach(([v,l])=>{const o=h("option",l);o.value=v;select.append(o);});
-      const note=h("textarea");note.placeholder="Evidence-based reason or request for the customer…";note.id="staffNote";note.style.width="100%";note.style.minHeight="80px";
+      const transitions = details.status==="submitted"
+        ? [["in_review","Start formal review"],["needs_information","Request more information"],["declined","Decline application"]]
+        : details.status==="in_review"
+          ? [["needs_information","Request more information"],["declined","Decline application"]]
+          : [["declined","Decline after unanswered information request"]];
+      transitions.forEach(([v,l])=>{const o=h("option",l);o.value=v;select.append(o);});
+      const note=h("textarea");note.placeholder="Provide a reason for the decision or specific evidence request (12+ characters)…";note.id="staffNote";note.style.width="100%";note.style.minHeight="80px";
       const save=h("button","Save status","a-button");save.addEventListener("click",async()=>{
         try{await request("staff_status",{case_id:code,status:select.value,note:note.value});await openStaffCase(code);await loadStaffList();}
         catch(error){message(error.message,"error");}
       });
       statusArea.append(select,note,save);panel.append(statusArea);
-      buildReviewForm(panel,details);
+      if(details.status==="in_review") {
+        buildReviewForm(panel,details);
+      } else if(details.status==="needs_information") {
+        panel.append(h("p","The applicant's response is pending. A final assessment cannot be signed before the requested evidence is received and formal review resumes.","a-small"));
+      } else {
+        panel.append(h("p","Start formal review before the eight-criterion assessment is available.","a-small"));
+      }
     }
     panel.scrollIntoView({behavior:"smooth",block:"start"});
   }
