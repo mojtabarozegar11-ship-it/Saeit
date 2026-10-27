@@ -246,13 +246,17 @@ def reinspect(root, valid_families, active_products=None):
 
 
 def run(root, registry, source_root, maker, bridge, *, limit=3, rounds=2,
-        additional_source_roots=(), products_file=None):
+        additional_source_roots=(), products_file=None, excluded_families=()):
     root = Path(root)
     require(root.is_dir() and not root.is_symlink(), "PRIVATE_FACTORY_ROOT_REQUIRED")
     valid_families = families(registry)
     active_products = active_product_allowlist(products_file) if products_file else None
-    require(type(limit) is int and 1 <= limit <= 3
+    require(type(limit) is int and 1 <= limit <= 40
             and type(rounds) is int and 1 <= rounds <= 2, "BOUNDED_REPAIR_CAP_REQUIRED")
+    require(isinstance(excluded_families,(list,tuple,set,frozenset)),
+            "EXCLUDED_FAMILY_SET_REQUIRED")
+    excluded_families=set(excluded_families)
+    require(excluded_families <= valid_families,"EXCLUDED_FAMILY_NOT_REGISTERED")
     require((root / "quality-excellence").is_dir(), "QUALITY_EXCELLENCE_ROOT_REQUIRED")
     lock_path = root / "quality-excellence" / ".autonomous-jump-repair.lock"
     require(not lock_path.is_symlink(), "AUTONOMOUS_REPAIR_LOCK_UNSAFE")
@@ -266,7 +270,8 @@ def run(root, registry, source_root, maker, bridge, *, limit=3, rounds=2,
         completed = []
         for _ in range(rounds):
             bridge_options = {"limit": limit,
-                              "additional_source_roots": additional_source_roots}
+                              "additional_source_roots": additional_source_roots,
+                              "excluded_families": sorted(excluded_families)}
             if products_file:
                 bridge_options["products_file"] = products_file
             result = module.execute(root, source_root, maker, **bridge_options)
@@ -285,6 +290,7 @@ def run(root, registry, source_root, maker, bridge, *, limit=3, rounds=2,
                                                     for row in completed),
                   "rebuild_failures": sum(row.get("failed", 0) for row in completed),
                   "repair_cap_per_round": limit, "repair_round_limit": rounds,
+                  "excluded_family_ids": sorted(excluded_families),
                   **audit, "quality_1000_certifications": 0, "human_signatures_forged": 0,
                   "publications_authorized": 0, "release_gate_modified": False}
         print("FACTORY_AUTONOMOUS_JUMP_REPAIR=" + json.dumps(status, sort_keys=True))
@@ -299,11 +305,13 @@ def main():
     parser.add_argument("--limit", type=int, default=3)
     parser.add_argument("--rounds", type=int, default=2)
     parser.add_argument("--products-file", default=None)
+    parser.add_argument("--exclude-family", action="append", default=[])
     args = parser.parse_args()
     result = run(args.private_root, args.families, args.source_root, args.maker,
                  args.bridge, limit=args.limit, rounds=args.rounds,
                  additional_source_roots=args.additional_source_root,
-                 products_file=args.products_file)
+                 products_file=args.products_file,
+                 excluded_families=args.exclude_family)
     if result["invalid_candidate_receipts"]:
         raise SystemExit("AUTONOMOUS_REPAIR_UNVERIFIED_CANDIDATES")
 
