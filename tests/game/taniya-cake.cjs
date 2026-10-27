@@ -1,0 +1,56 @@
+const fs=require('node:fs');
+const vm=require('node:vm');
+const assert=require('node:assert/strict');
+const html=fs.readFileSync('templates/taniya_studio/index.html','utf8');
+const start=html.indexOf('    let cakeState='),end=html.indexOf('    function mountPet(){',start);
+assert(start>=0&&end>start,'Cake Maker code must be present in the actual studio template');
+const cakeSource=html.slice(start,end);
+const nodes={
+  cakepreview:{textContent:'',style:{}},
+  icing:{value:'#ff79b8',oninput:null}
+};
+const tops=['🍓','🌼','🍬'].map(top=>({dataset:{top},onclick:null}));
+const exports=[],messages=[];
+const context={
+  gamebody:{querySelectorAll(sel){assert.equal(sel,'[data-top]');return tops}},
+  $(selector){return nodes[selector.slice(1)]},
+  stage(markup){assert.match(markup,/Download your cake card/);nodes.cakepreview.textContent='🎂'},
+  btn(label,action){return '<button data-action="'+action+'">'+label+'</button>'},
+  say(message){messages.push(message)},
+  downloadSvg(name,body){exports.push({name,body})}
+};
+vm.createContext(context);
+vm.runInContext(cakeSource,context);
+const run=expression=>vm.runInContext(expression,context);
+run('mountCake()');
+assert.equal(run('cakeState.candles'),0);
+assert.match(nodes.cakepreview.textContent,/🍓/);
+tops[2].onclick();
+assert.equal(run('cakeState.topping'),'🍬');
+run("handleCakeAction('candle')");
+run("handleCakeAction('candle')");
+assert.equal(run('cakeState.candles'),2);
+assert.equal((nodes.cakepreview.textContent.match(/🕯️/g)||[]).length,2);
+nodes.icing.oninput({target:{value:'#11aa22'}});
+assert.equal(run('cakeState.icing'),'#11aa22');
+run("handleCakeAction('cake-download')");
+assert.equal(exports.length,1);
+assert.equal(exports[0].name,'taniya-cake-card');
+assert.match(exports[0].body,/fill="#11aa22"/);
+assert.match(exports[0].body,/🍬/);
+assert.equal((exports[0].body.match(/🕯️/g)||[]).length,2,'export must preserve exactly the visible candle count');
+nodes.icing.oninput({target:{value:'"><script>'}});
+assert.equal(run('cakeState.icing'),'#11aa22','untrusted color must not enter exported SVG');
+tops[0].dataset.top='<script>';tops[0].onclick();
+assert.equal(run('cakeState.topping'),'🍬','untrusted topping must not enter exported SVG');
+for(let i=0;i<20;i++)run("handleCakeAction('candle')");
+assert.equal(run('cakeState.candles'),12,'candle count must be bounded');
+run("handleCakeAction('cake-download')");
+assert.equal((exports[1].body.match(/🕯️/g)||[]).length,12);
+run('mountCake()');
+assert.equal(run('cakeState.candles'),0,'Start over must clear all candles');
+assert.equal(run('cakeState.topping'),'🍓','Start over must restore default topping');
+assert.equal(run('cakeState.icing'),'#ff79b8','Start over must restore default icing');
+assert.equal((nodes.cakepreview.textContent.match(/🕯️/g)||[]).length,0);
+assert(messages.length>=1);
+console.log('TANIYA_CAKE_MAKER_QA=PASS topping+icing+candles+SVG+input_guard+reset');
