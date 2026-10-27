@@ -83,6 +83,10 @@ For the separate **2026-only** frame of 217 nonaggregate economy records, 157 ha
 
 For the **separate 2026-only 217-record frame**, we extended the missing-growth sensitivity from a median value to the fraction of economy/territory records exceeding a growth threshold. For a region with N records, n valid 2000/2019 endpoint pairs, m=N−n missing rates and k observed annualized log-growth rates strictly greater than a threshold t, unrestricted missing values imply sharp bounds `[k/N, (k+m)/N]`. We calculated these bounds for t=0,1,2,3,5 annual log-percentage points and for t=0 within each of the seven WDI metadata regions. These are deterministic finite-frame bounds, **not confidence intervals**, imputed values, prespecified hypotheses or population/worker-weighted global growth estimates. Reproducible source-locked calculation and regional counts: [C38](AE-2026-001_C38_SHARP_POSITIVE_GROWTH_PREVALENCE_BOUNDS_BY_REGION_2026-10-27.md).
 
+### 2.13 Sharp finite-frame quantile identification limits (C44)
+
+For the separate 2026-only frame of 217 economies, we extend the C36 order-statistic missingness analysis beyond the median. Define each p-quantile by the nearest-rank rule `k=ceil(217p)`. With 157 observed annualized 2000–2019 growth rates and 60 unrestricted missing rates, the sharp lower infimum is unbounded if `k<=60`, otherwise observed order statistic `x_(k-60)`; the upper supremum is unbounded if `k>157`, otherwise `x_(k)`. These are identification bounds, not uncertainty intervals or claims about actual missing-country growth. A source-SHA-locked Python replication is in [C44](AE-2026-001_C44_SHARP_FULL_FRAME_QUANTILE_MISSINGNESS_IDENTIFICATION_2026-10-28.md).
+
 ## 3. Results
 
 ### 3.1 Primary fixed-country release sensitivity
@@ -201,6 +205,10 @@ The 157 observed 2000–2019 growth rates include **132 positive** and **25 nega
 Of the **157** 2026-only observed 2000/2019 growth rates, **132** were strictly positive; **60** of the 217 frame records lacked valid endpoint pairs. The sharp fraction of all 217 records with positive growth is therefore **132/217 to 192/217 (60.83%–88.48%)**, establishing a positive-growth majority for this finite frame without identifying its exact prevalence. A majority above **1** annual log-percentage point is also robust (114/217=52.53% lower bound); a majority above **2** is not guaranteed (87/217=40.09% lower bound). The upper bound above **5** is only 79/217=36.41%, so even assigning every missing rate above 5 cannot yield a majority at that threshold.
 
 Region-specific bounds qualify the aggregate result: a positive-growth majority is guaranteed in **five of seven** WDI metadata regions, but is **not identified** in East Asia & Pacific (14/37 to 29/37, 37.84%–78.38%) or North America (1/3 to 3/3, 33.33%–100%). These are equal-record, mixed country/territory comparisons, not globally representative or causally interpreted productivity trends. Full table and replication recipe: [C38](AE-2026-001_C38_SHARP_POSITIVE_GROWTH_PREVALENCE_BOUNDS_BY_REGION_2026-10-27.md).
+
+### 3.13 Quantile-tail nonidentification in the 2026-only frame (C44)
+
+For the 217-record nearest-rank quantiles, the 25th percentile (rank 55) is **unbounded below** and at most **1.629363** annual log-percentage points; the 75th percentile (rank 163) is at least **3.488990** and **unbounded above**. The 10th percentile is at most −0.064478 and unbounded below; the 90th is at least 4.838383 and unbounded above. The median remains bounded between **1.423959 and 3.689876**, reproducing C36. Thus the finite-frame interquartile spread is not point-identified by the 157 observed rates; observed-sample quartiles cannot be reported as all-217-frame quartiles. The unbounded limits express missing-data nonidentification, **not** observed extreme outcomes, a world productivity distribution or a novel statistical estimator.
 
 ## 4. Discussion
 
