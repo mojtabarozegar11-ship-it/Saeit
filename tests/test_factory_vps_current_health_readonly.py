@@ -60,5 +60,42 @@ class ReadOnlyFactoryHealthTests(unittest.TestCase):
                     audit.inventory()
 
 
+    def test_line41_diagnoses_stale_full_slot_without_mutation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            private = Path(temporary)
+            slot = private / "quality-excellence/product-flow/active-slots/current.json"
+            slot.parent.mkdir(parents=True)
+            slot.write_text(json.dumps({
+                "schema": audit.SLOT_SCHEMA, "line_id": 41, "capacity": 1,
+                "active": [{"recipe": "synth_aaaaaaaaaaaaaaaaaaaaaaaa"}],
+                "waiting": ["sheet_bbbbbbbbbbbbbbbbbbbbbbbb"], "exited": {}
+            }), encoding="utf8")
+            home = private / "generated-product-recipes/synth_aaaaaaaaaaaaaaaaaaaaaaaa"
+            home.mkdir(parents=True)
+            (home / "design_receipt.json").write_text(json.dumps({
+                "schema": "saeit.factory.synthesis-receipt.v1",
+                "generator_capability_revision": "verified-one-percent-sensitivity-v6"
+            }), encoding="utf8")
+            before = slot.read_bytes()
+            result = audit.line41_diagnostic(private)
+            self.assertEqual(result["slot_state"], "valid")
+            self.assertEqual(result["active_count"], 1)
+            self.assertEqual(result["waiting_count"], 1)
+            self.assertTrue(result["active_details"][0]["compiler_owned"])
+            self.assertEqual(result["active_details"][0]["generator_capability_revision"],
+                             "verified-one-percent-sensitivity-v6")
+            self.assertEqual(before, slot.read_bytes())
+            self.assertFalse((private / "digital-products").exists())
+
+    def test_cron_classifier_does_not_emit_private_commands(self):
+        sample = ["* * * * * python /private/autonomous-product-runtime # sample",
+                  "* * * * * python stage2-research.py --secret=shhh"]
+        output = audit.cron_production_channels(sample)
+        self.assertEqual(output["autonomous_cycle"], 1)
+        self.assertEqual(output["science_stage_workers"], 1)
+        self.assertNotIn("shhh", json.dumps(output))
+
+
+
 if __name__ == "__main__":
     unittest.main()

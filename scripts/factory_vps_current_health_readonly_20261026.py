@@ -38,6 +38,79 @@ def command(args):
         return None
 
 
+
+SLOT_SCHEMA = "saeit.factory.product-slots.v1"
+RECIPE = re.compile(r"[a-z][a-z0-9_]{1,65}\Z")
+
+
+def line41_diagnostic(private):
+    """Prove the single slot's actual source state without running its workers."""
+    current = private / "quality-excellence/product-flow/active-slots/current.json"
+    if not current.exists() and not current.is_symlink():
+        return {"slot_state": "absent"}
+    try:
+        state = safe_json(current, 500_000)
+        active = state.get("active")
+        waiting = state.get("waiting")
+        exited = state.get("exited")
+        if (state.get("schema") != SLOT_SCHEMA or not isinstance(active, list)
+                or not isinstance(waiting, list) or not isinstance(exited, dict)):
+            return {"slot_state": "invalid"}
+        names = [x.get("recipe") for x in active if isinstance(x, dict)]
+        if len(names) != len(active) or any(not isinstance(x, str)
+                                            or not RECIPE.fullmatch(x) for x in names):
+            return {"slot_state": "invalid"}
+        details = []
+        for name in names[:2]:
+            source = private / "generated-product-recipes" / name
+            receipt = source / "design_receipt.json"
+            manifest = (private / "digital-products" / name
+                        / "manufacturing_manifest.json")
+            clearance = (private / "quality-excellence/signed-clearances"
+                         / name / "current.json")
+            review = (private / "quality-excellence/production-workorders"
+                      / name / "current.json")
+            info = {"recipe": name, "generated_source_exists": source.is_dir()
+                    and not source.is_symlink(), "signed_clearance_present":
+                    clearance.is_file() and not clearance.is_symlink(),
+                    "quality_rework_order_present": review.is_file()
+                    and not review.is_symlink()}
+            for key, path in (("design", receipt), ("manifest", manifest)):
+                try:
+                    doc = safe_json(path)
+                    if key == "design":
+                        info["generator_capability_revision"] = doc.get(
+                            "generator_capability_revision")
+                        info["compiler_owned"] = doc.get("schema") == (
+                            "saeit.factory.synthesis-receipt.v1")
+                    else:
+                        info["technical_qa_status"] = doc.get("qa_status")
+                        info["professional_quality_approved"] = doc.get(
+                            "professional_quality_approved")
+                except (OSError, ValueError, TypeError):
+                    info[key + "_readable"] = False
+            details.append(info)
+        return {"slot_state": "valid", "active_count": len(active),
+                "waiting_count": len(waiting), "exited_count": len(exited),
+                "active_details": details,
+                "capacity": state.get("capacity"), "line_id": state.get("line_id")}
+    except (OSError, ValueError, TypeError):
+        return {"slot_state": "unreadable"}
+
+
+def cron_production_channels(active):
+    """Redacted scheduler classification; no command lines or tokens escape."""
+    if active is None:
+        return None
+    rules = {
+        "autonomous_cycle": r"autonomous-product-runtime|factory_vps_product_cycle",
+        "forty_family": r"factory[-_]40|family[-_]master|build50",
+        "science_stage_workers": r"stage[2-6]|research-navigator|agri200|qc1000",
+        "unreviewed_leech": r"leech",
+    }
+    return {k: sum(bool(re.search(regex, row, re.I)) for row in active)
+            for k, regex in rules.items()}
+
 def inventory():
     if os.geteuid() == 0 or any(p.is_symlink() or not p.is_dir()
                                 for p in (BASE, PRIVATE, OPS, ORDERS)):
@@ -154,6 +227,8 @@ def inventory():
         "serial_tick": state_summary,
         "finished_archive_directories_with_receipts": approved_archive_dirs,
         "existing_three_sku_private_copies": sku_copies,
+        "line41": line41_diagnostic(PRIVATE),
+        "cron_production_channels": cron_production_channels(active),
     }
 
 
