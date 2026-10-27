@@ -42,12 +42,8 @@ def validate():
     if MARKER in text:
         if not all(route in text for route in ROUTES):raise RuntimeError("Incomplete existing sitemap block")
         return raw,raw
-    pattern=re.compile(re.escape(ANCHOR)+r"\s*\n\$paths = array_merge\(\$paths, \[[^\n]+\]\);")
-    hits=list(pattern.finditer(text))
-    if len(hits)!=1:raise RuntimeError("Cannot locate canonical navigation append block")
     insertion="\n"+MARKER+"\n$paths = array_merge($paths, ["+", ".join("'"+r+"'" for r in ROUTES)+"]);"
-    m=hits[0]
-    changed=(text[:m.end()]+insertion+text[m.end():]).encode("utf-8")
+    changed=text.replace(ANCHOR,ANCHOR+insertion,1).encode("utf-8")
     if any(changed.decode().count(route)!=1 for route in ROUTES):
         raise RuntimeError("Sitemap duplicate route")
     php_lint(changed)
