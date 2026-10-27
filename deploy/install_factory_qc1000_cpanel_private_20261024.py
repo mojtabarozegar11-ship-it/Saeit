@@ -19,6 +19,7 @@ FILES = (
     "factory_commercial_quality_release_guard_v1.py",
     "factory_quality_signed_approval_v1.py",
     "factory_real_qc1000_live_monitor_20261023.py",
+    "import_factory_store_drafts.py",
 )
 TARGET = Path("/home/zomorod2/.saeit-factory-inbox/bin")
 PUBLISHER = "publish_verified_factory_store_listing.py"
@@ -95,6 +96,10 @@ def verify_negative_controls(bin_dir):
             or "QC1000_REQUIRED_FOR_FACTORY_EXIT" not in publisher
             or "clearance.get(\"1000_quality_verified\") is not True" not in publisher):
         raise RuntimeError("QC1000_PUBLISHER_EXIT_GATE_NOT_STRICT")
+    importer = (bin_dir / "import_factory_store_drafts.py").read_text(encoding="utf-8")
+    if ("STORE_BLOCKED_UNTIL_CHATGPT_AND_QC1000_APPROVE" not in importer
+            or "factory_commercial_quality_release_guard_v1.py" not in importer):
+        raise RuntimeError("QC1000_CHATGPT_STORE_IMPORT_GATE_NOT_STRICT")
 
 
 def install(staging, expected):
