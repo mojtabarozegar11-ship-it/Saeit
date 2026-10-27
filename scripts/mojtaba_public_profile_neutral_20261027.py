@@ -32,6 +32,8 @@ CONTACT_DESCRIPTION = (
     "Contact Mojtaba Roozegar for research, agribusiness, responsible digital "
     "technology and international professional collaboration."
 )
+SEO_OLD = "in Vancouver or remotely"
+SEO_NEW = "across international and remote teams"
 DESC_BLOCK = re.compile(r"{%\s*block\s+description\s*%}.*?{%\s*endblock\s*%}", re.S)
 EXTENDS = re.compile(r"{%\s*extends\s+['\"][^'\"]+['\"]\s*%}")
 CITY_CLAIM = re.compile(r"Vancouver|British Columbia|Canada", re.I)
@@ -116,6 +118,31 @@ def targets() -> dict[str, Path]:
         if not path.is_file() or path.is_symlink() or path.resolve() != path:
             raise ValueError("Unsafe template: " + rel)
         result[rel] = path
+    # The SEO configuration is a separate source from Contact's HTML template.
+    # Restrict discovery to personal-app source files and require one exact match.
+    roots = (APP / "personal_site", APP / "config", APP / "templates/personal_site")
+    matches = []
+    for root in roots:
+        if not root.is_dir() or root.is_symlink():
+            continue
+        for path in root.rglob("*"):
+            if path.suffix not in (".py", ".html", ".json", ".yml", ".yaml"):
+                continue
+            if path.is_symlink() or not path.is_file() or path.stat().st_size > 1000000:
+                continue
+            raw = path.read_text(encoding="utf8")
+            if SEO_OLD in raw or SEO_NEW in raw:
+                matches.append(path)
+    if len(matches) != 1:
+        raise ValueError("Expected exactly one public Contact SEO text source; found " + str(len(matches)))
+    seo_path = matches[0]
+    if APP not in seo_path.parents or seo_path.resolve() != seo_path:
+        raise ValueError("SEO source not within the independent personal application")
+    rel = seo_path.relative_to(APP).as_posix()
+    if rel in result:
+        raise ValueError("SEO source must be separate from page templates")
+    result[rel] = seo_path
+    print("PROFILE_META_SOURCE=" + rel, flush=True)
     return result
 
 
@@ -124,7 +151,12 @@ def plan() -> dict[str, tuple[bytes, bytes]]:
     for rel, path in targets().items():
         before = path.read_bytes()
         source = before.decode("utf8")
-        revised = revise_about(source) if rel.endswith("/about.html") else revise_contact(source)
+        if rel.endswith("/about.html"):
+            revised = revise_about(source)
+        elif rel.endswith("/contact.html"):
+            revised = revise_contact(source)
+        else:
+            revised = strict_replace(source, SEO_OLD, SEO_NEW, "Contact SEO source")
         after = revised.encode("utf8")
         if after == before:
             raise ValueError("No difference in " + rel)
@@ -139,7 +171,12 @@ def django_preflight(candidates: dict[str, tuple[bytes, bytes]]) -> None:
     django.setup()
     from django.template import engines
     for rel, (_, data) in candidates.items():
-        engines["django"].engine.from_string(data.decode("utf8"))
+        if rel.endswith(".html"):
+            engines["django"].engine.from_string(data.decode("utf8"))
+        elif rel.endswith(".py"):
+            compile(data.decode("utf8"), rel, "exec")
+        elif rel.endswith(".json"):
+            json.loads(data.decode("utf8"))
     from django.test import Client
     c = Client(HTTP_HOST="mojplaywin.com")
     for route in ("about/", "contact/", "resume/", "gallery/", "blog/"):
