@@ -193,8 +193,21 @@ def prepare_private_product(inbox):
 def publish(inbox, webroot, *, release_authorized=False):
     if release_authorized is not True:
         raise ValueError("EXPLICIT_PUBLICATION_AUTHORIZATION_REQUIRED")
+    requested_root = Path(webroot).expanduser().absolute()
+    if requested_root.name != "mojplaywin.com":
+        raise ValueError("WRONG_STOREFRONT_ROOT")
+    if requested_root.is_symlink() or not requested_root.is_dir():
+        raise ValueError("PUBLIC_ROOT_NOT_VERIFIED")
+    early_public_dir = requested_root / "factory-releases" / PUBLIC_SLUG
+    if early_public_dir.is_symlink():
+        raise ValueError("PUBLIC_RELEASE_SYMLINK_FORBIDDEN")
+    if early_public_dir.exists() and (
+            not early_public_dir.is_dir()
+            or not (early_public_dir / "SHA256SUMS.txt").is_file()
+            or not (early_public_dir / PUBLIC_FILENAME).is_file()):
+        raise ValueError("REFUSING_TO_REPLACE_EXISTING_PUBLIC_RELEASE")
     digest, source = prepare_private_product(inbox)
-    parent = secure_parent(webroot)
+    parent = secure_parent(requested_root)
     public_dir = parent / PUBLIC_SLUG
     if public_dir.is_symlink():
         raise ValueError("PUBLIC_RELEASE_SYMLINK_FORBIDDEN")
