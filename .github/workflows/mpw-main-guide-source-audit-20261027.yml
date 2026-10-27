@@ -1,0 +1,119 @@
+name: MojPlayWin dynamic main-page guide source audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-main-guide-source-audit-20261027.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fingerprint public pages without writes
+        run: |
+          python3 - <<'PY'
+          import hashlib,re,urllib.request
+          for route in ("/games/","/studio/","/services/"):
+              with urllib.request.urlopen("https://mojplaywin.com"+route,timeout=30) as response:
+                  raw=response.read(700000)
+              print("MPW_PUBLIC_PAGE",route,"sha256",hashlib.sha256(raw).hexdigest(),
+                    "bytes",len(raw),"legacy_field_links",raw.count(b'/#field-library-'),
+                    "unique_game_heading",raw.count(b'Games built around meaningful choices.'))
+          PY
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-main-guide-audit-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Search only main docroot and Saeit app source for the exact route renderer
+        run: |
+          timeout 70s ssh -T -F "$RUNNER_TEMP/mpw-main-guide-audit-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          import hashlib,os,re,time
+          from pathlib import Path
+          roots=[Path("/home/zomorod2/mojplaywin.com"),Path("/home/zomorod2/Saeit-staging/core")]
+          needles={
+              "games-heading":b"Games built around meaningful choices.",
+              "games-guide-id":b'id="guide-games"',
+              "legacy-guide-href":b"/#field-library-round2",
+              "php-shell-header":b"x-mpw-main-shell",
+              "main-dynamic-css":b"mpw-dynamic-unified-shell-20261019",
+          }
+          extensions=(".php",".py",".html",".htm",".inc",".js",".json",".txt")
+          limit=80
+          for root in roots:
+              if not root.is_dir() or root.is_symlink():raise RuntimeError("SOURCE_ROOT_NOT_SAFE")
+              found=0;scanned=0
+              started=time.monotonic()
+              for current,dirs,files in os.walk(root,followlinks=False):
+                  dirs[:]=[d for d in dirs if d not in (".git","node_modules","vendor","media","static","images","image","backups","backup","__pycache__")]
+                  for name in files:
+                      if not name.endswith(extensions):continue
+                      p=Path(current)/name
+                      try:
+                          if p.is_symlink() or p.stat().st_size>1500000:continue
+                          raw=p.read_bytes();scanned+=1
+                      except OSError:continue
+                      tags=[key for key,value in needles.items() if value in raw]
+                      if tags:
+                          print("MPW_SOURCE_CANDIDATE",str(p),"bytes",len(raw),"sha256",hashlib.sha256(raw).hexdigest(),"tags",",".join(tags))
+                          found+=1
+                      if found>=limit or time.monotonic()-started>40:break
+                  if found>=limit or time.monotonic()-started>40:break
+              print("MPW_SOURCE_SCAN_TOTAL",str(root),"files",scanned,"matches",found,"elapsed",round(time.monotonic()-started,1))
+          ht=Path("/home/zomorod2/mojplaywin.com/.htaccess")
+          if ht.is_file() and not ht.is_symlink():
+              for idx,line in enumerate(ht.read_text("utf8","replace").splitlines(),1):
+                  if any(term in line.lower() for term in ("games","studio","services","mpw-main")):
+                      print("MPW_APACHE_ROUTE_HINT",idx,line[:250])
+          PY
+      - name: Remove ephemeral relay material
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-main-guide-audit-ssh"
+          if [ -d "$d" ]; then rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/config"; rmdir "$d"; fi
