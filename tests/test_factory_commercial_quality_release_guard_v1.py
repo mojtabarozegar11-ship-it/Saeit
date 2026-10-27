@@ -69,7 +69,8 @@ class PublicReleaseSafety(unittest.TestCase):
                 mod._inspect_review_archive("not-read.zip")
 
     def test_review_archive_rejects_traversal_and_backslash(self):
-        for unsafe in ("../escape.txt","sub\\\\escape.txt"):
+        for unsafe in ("../escape.txt","sub\\\\escape.txt",
+                       "sub//alias.txt","sub/./alias.txt","./root.txt"):
             with self.subTest(name=unsafe),tempfile.TemporaryDirectory() as t:
                 archive=Path(t)/"package.zip"
                 with zipfile.ZipFile(archive,"w") as z:
