@@ -1,6 +1,6 @@
-# AE-2026-001 C30 — Baseline-availability selection in 2019 productivity levels and subsequent growth volatility
+# AE-2026-001 C30 — Baseline-availability selection in 2019 productivity levels and absolute annualized endpoint-growth magnitude
 
-**27 October 2026.** Original secondary descriptive computations from the already committed, official, dated 2026 WDI country panel. This is **not** an additional historical WDI vintage, an independently generated employment dataset, a new estimator, a causal result or proof of journal novelty.
+**Terminology correction (27 October):** The file path retains the legacy word 'VOLATILITY', but only 2019 and 2023 endpoints were observed. Absolute annualized growth is **not** a time-series volatility estimator; see [C31](AE-2026-001_C31_OUTLIER_EXCLUSION_AND_REGION_STRATIFIED_ABSOLUTE_GROWTH_SELECTION_2026-10-27.md). No original data or numeric result was changed.\n\n**27 October 2026.** Original secondary descriptive computations from the already committed, official, dated 2026 WDI country panel. This is **not** an additional historical WDI vintage, an independently generated employment dataset, a new estimator, a causal result or proof of journal novelty.
 
 ## Exact source and cohorts
 
@@ -15,7 +15,7 @@
 
 **Regional composition sensitivity.** Of the 16 baseline-missing cases, 7 are Sub-Saharan African, 5 MENA/Afghanistan/Pakistan, 2 European/Central Asian and 2 East Asian/Pacific; none are in the other three WDI regions. Within-region pairwise probabilities (baseline-missing economy above a baseline-present economy's 2019 level) were **0.559524** in Sub-Saharan Africa (7×36 comparisons), **0.280000** in MENA (5×15), **0.144444** in Europe/Central Asia (2×45) and **0.363636** in East Asia/Pacific (2×22). Pooling all **461 within-region** cross-group comparisons yields **191/461 = 0.414317**. The pooled cross-region 0.354575 contrast is therefore sensitive to region composition, and the direction is reversed within Sub-Saharan Africa. Do not assert a common country-level missingness mechanism or call the difference statistically significant.
 
-## Question 2: Does baseline availability select a different observed 2019–2023 growth-volatility distribution?
+## Question 2: Does baseline availability select a different observed 2019–2023 absolute annualized 2019–2023 endpoint-growth distribution?
 
 For each of the 169 economies compute `g=100*ln(P2023/P2019)/4` annual log-percentage points and summarize **absolute** g separately by 2000-baseline availability.
 
@@ -40,4 +40,4 @@ Parse the source CSV with quoted fields. For each row define `valid(y) = finite(
 2. Country regions differ in productivity levels; within-region and pooled rank contrasts differ substantially. There are only 2 baseline-missing cases in two of the four eligible regions.
 3. The 2019 level is also the denominator of 2019–2023 growth; baseline-level/growth association is susceptible to mathematical coupling. Do not infer a causal pathway from missingness to growth.
 4. This is a **2026-only** selection diagnostic. It neither changes the 155-economy **2024/2025/2026 historical vintage** estimand nor resolves archived ILOSTAT 2024/2025, countryatlas three-vintage benchmark, employment-source non-independence or novel scientific contribution.
-5. The manuscript may use these findings to qualify selection/coverage and the volatility of a differently selected cohort. **MAJOR REVISION / NO SUBMISSION**; human author approval remains necessary.
+5. The manuscript may use these findings to qualify selection/coverage and the absolute magnitude of annualized 2019–2023 net endpoint growth in a differently selected cohort. Two endpoints do **not** measure within-period time-series volatility. **MAJOR REVISION / NO SUBMISSION**; human author approval remains necessary.
