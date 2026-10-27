@@ -48,7 +48,12 @@ def _read_private_json(path):
     try:
         if path.is_symlink() or not path.is_file() or path.stat().st_size > 2_000_000:
             return None
-        value = json.loads(path.read_text(encoding="utf8"))
+        # Bound the actual read: the file may grow after the size preflight.
+        with path.open("rb") as stream:
+            raw = stream.read(2_000_001)
+        if len(raw) > 2_000_000:
+            return None
+        value = json.loads(raw.decode("utf8"))
         return value if isinstance(value, dict) else None
     except (OSError, ValueError, UnicodeError):
         return None
