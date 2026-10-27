@@ -57,7 +57,15 @@ assert.equal(game.getInput().held.left,false,'capture failure must not latch mov
 elements.left.setPointerCapture=()=>{};
 elements.left.handlers.pointerdown(pointerEvent(15));
 assert.equal(game.getInput().held.left,true);
-assert.equal(game.getState().maxHp,100);for(let i=1;i<=180;i++)frame(i*16);assert.ok(drawCalls>1000);assert.ok(game.getState().shots>0);assert.ok(game.getState().enemies+game.getState().kills>0);document.handlers.keydown({code:'ArrowLeft',target:document.body,repeat:false,preventDefault(){}});assert.equal(game.getInput().keys,1);
+assert.equal(game.getState().maxHp,100);for(let i=1;i<=180;i++)frame(i*16);assert.ok(drawCalls>1000);assert.ok(game.getState().shots>0);assert.ok(game.getState().enemies+game.getState().kills>0);// Browser shortcuts and IME must not latch movement, fire or special actions.
+for(const patch of [{ctrlKey:true},{altKey:true},{metaKey:true},{isComposing:true},{keyCode:229}]){
+  let prevented=false;
+  document.handlers.keydown({code:'KeyE',target:document.body,repeat:false,
+    preventDefault(){prevented=true},...patch});
+  assert.equal(prevented,false,'modified/composing shortcut must remain native');
+  assert.equal(game.getInput().keys,0,'modified/composing shortcut cannot latch game key');
+}
+document.handlers.keydown({code:'ArrowLeft',target:document.body,repeat:false,preventDefault(){}});assert.equal(game.getInput().keys,1);
 document.hidden=true;document.handlers.visibilitychange();assert.equal(game.getState().state,'paused');assert.equal(game.getInput().touchActive,false,'background tab releases ship pointer');assert.equal(game.getInput().held.left,false,'background tab releases directional owner');assert.equal(game.getInput().keys,0,'hidden tab releases keyboard input');assert.equal(Object.values(game.getInput().held).some(Boolean),false);document.hidden=false;game.pause();assert.equal(game.getState().state,'playing');
 game.pause();assert.equal(game.getState().state,'paused');game.start();frame(2980);assert.ok(Math.abs(game.getState().simulationTime-.1)<1e-6,'100 ms hitch advances simulation consistently');game.spawnBoss();const beforeBossContact=game.getState().enemies;game.testBossContact();assert.equal(game.getState().enemies,beforeBossContact,'boss must survive contact');game.advanceWave();game.advanceWave();assert.equal(game.getState().state,'playing','waves must not force shop interruption');game.start();for(let i=0;i<8;i++)game.spawnEnemy();assert.doesNotThrow(()=>game.useEMP(),'EMP finishing a wave must tolerate cleared enemy arrays');assert.equal(game.getState().wave,2);
 (async()=>{game.openFleet();await game.refreshFleet();assert.equal(elements.fleetStatus.textContent.includes('unavailable'),true);assert.equal(game.getFleet().filter(j=>j.owned).length,1);game.earn(1000);
