@@ -197,6 +197,8 @@ def create_case(payload, uploads, remote_addr, secret_key):
         raise CaseError("Select a supported product and service")
     if payload.get("rights_declared") is not True or payload.get("privacy_consent") is not True:
         raise CaseError("Ownership and privacy acknowledgments are required")
+    if payload.get("ai_processing_consent") is not True:
+        raise CaseError("Explicit consent to AI-assisted review is required")
     name = clean(payload.get("product_name", ""), 120, True)
     version = clean(payload.get("product_version", ""), 80)
     product_url = https_url(payload.get("product_url", ""))
@@ -264,7 +266,9 @@ def create_case(payload, uploads, remote_addr, secret_key):
                     (file_id, code, filename, stored, size, digest.hexdigest())
                 )
             db.execute("INSERT INTO intake_limiter(identity_hash,occurred_at) VALUES(?,?)", (fingerprint, record_time))
-            event(db, code, "customer", "submitted", "Evidence dossier received; expert assessment not yet performed")
+            event(db, code, "customer", "submitted", "Evidence dossier received; assessment not yet performed")
+            event(db, code, "customer", "ai_processing_consent",
+                  "Applicant authorized AI-assisted analysis of case information")
     except BaseException:
         for item in saved:
             try:
@@ -289,6 +293,9 @@ def as_case(db, code, include_private=False):
         "product_name": row["product_name"], "product_version": row["product_version"],
         "product_url": row["product_url"], "scope": row["scope"],
         "evidence_summary": row["evidence_summary"],
+        "ai_processing_consent": bool(db.execute(
+            "SELECT 1 FROM events WHERE code=? AND action='ai_processing_consent' LIMIT 1", (code,)
+        ).fetchone()),
         "events": [dict(e) for e in db.execute(
             "SELECT occurred_at,actor,action,detail FROM events WHERE code=? ORDER BY id", (code,)
         )],
@@ -326,6 +333,27 @@ def case_status(code, access_key, secret_key):
                 if integrity else None
             )
         return result
+
+
+def grant_ai_consent(code, access_key, secret_key):
+    """Authenticated, explicit consent for pre-existing applicant dossiers."""
+    code = clean(code, 28, True)
+    access_key = clean(access_key, 100, True)
+    with database() as db, db:
+        row = db.execute("SELECT secret_hash,status FROM cases WHERE code=?", (code,)).fetchone()
+        digest = hmac.new(secret_key.encode(), access_key.encode(), hashlib.sha256).hexdigest()
+        if row is None or not hmac.compare_digest(digest, row["secret_hash"]):
+            raise CaseError("Invalid case reference or access key", 403)
+        if row["status"] in {"reviewed", "declined"}:
+            raise CaseError("Consent cannot alter a completed dossier", 409)
+        existing = db.execute(
+            "SELECT 1 FROM events WHERE code=? AND action='ai_processing_consent' LIMIT 1",
+            (code,)
+        ).fetchone()
+        if not existing:
+            event(db, code, "customer", "ai_processing_consent",
+                  "Applicant explicitly authorized AI-assisted analysis of this dossier")
+    return {"case_id": code, "ai_processing_consent": True}
 
 
 def append_case_evidence(code, access_key, note, uploads, secret_key):
@@ -542,8 +570,15 @@ def submit_review(code, actor, payload, secret_key):
     independence = clean(payload.get("independence_statement", ""), 1500, True)
     scope = clean(payload.get("review_scope", ""), 1500, True)
     methodology_notes = clean(payload.get("methodology_notes", ""), 2000, True)
+    if payload.get("review_mode") != "ai_assisted":
+        raise CaseError("AYAR Expert Engine requires a documented AI-assisted review")
+    source = clean(payload.get("ai_review_reference", ""), 300, True)
+    if len(source) < 12:
+        raise CaseError("Record a traceable AI review session reference")
+    if payload.get("evidence_examined") is not True:
+        raise CaseError("Confirm the available evidence was actually examined")
     if payload.get("no_material_conflict") is not True:
-        raise CaseError("Material conflict disclosures must be resolved before final review")
+        raise CaseError("Disclose and acknowledge all material affiliations and limits")
     with database() as db, db:
         row = db.execute("SELECT * FROM cases WHERE code=?", (code,)).fetchone()
         if row is None:
@@ -554,18 +589,27 @@ def submit_review(code, actor, payload, secret_key):
             raise CaseError("Declined cases cannot be finalized")
         if row["status"] != "in_review":
             raise CaseError("Start formal review and resolve outstanding evidence requests first", 409)
+        consent = db.execute(
+            "SELECT 1 FROM events WHERE code=? AND action='ai_processing_consent' LIMIT 1",
+            (code,)
+        ).fetchone()
+        if not consent:
+            raise CaseError("The applicant has not authorized AI-assisted review", 403)
         criteria, score, blockers = validate_review(row["category"], payload.get("criteria"))
         grade = ("Critical gate failure" if blockers else "Excellent" if score >= 90
                  else "Strong" if score >= 80 else "Acceptable with corrections" if score >= 70
                  else "Further review required")
         verdict = {
-            "schema": "AYAR-HUMAN-REVIEW-v1", "report_kind": "Reviewer-attested assessment",
-            "notice": "NOT a third-party accreditation or official quality certificate",
+            "schema": "AYAR-AI-ASSISTED-REVIEW-v1",
+            "report_kind": "AYAR Expert Engine analytical assessment",
+            "reviewer_alias": "AYAR Expert Engine", "review_mode": "ai_assisted",
+            "notice": "AI-assisted assessment, NOT independent human review or official certification",
             "reviewed_at": now(), "reviewer_account": actor,
+            "ai_review_reference": source,
             "independence_statement": independence, "review_scope": scope,
             "methodology_notes": methodology_notes, "grade": grade,
             "score": score, "blocking_criteria": blockers, "criteria": criteria,
-            "final_disclaimer": "Independence is attested by the reviewer, not technically proven by this platform."
+            "final_disclaimer": "This AI-assisted internal assessment may be incomplete or mistaken and does not establish independent third-party accreditation."
         }
         verdict["integrity"] = {
             "scheme": "AYAR-HMAC-SHA256-v1",
@@ -580,7 +624,7 @@ def submit_review(code, actor, payload, secret_key):
         )
         if changed.rowcount != 1:
             raise CaseError("Case changed while you were reviewing it; reload first", 409)
-        event(db, code, actor, "reviewed", "Staff reviewer saved final evidence-linked assessment")
+        event(db, code, actor, "reviewed", "Staff recorded documented AYAR Expert Engine analysis")
         return {"case_id": code, "status": "reviewed", "score": score,
                 "grade": grade, "public_report": bool(public)}
 
