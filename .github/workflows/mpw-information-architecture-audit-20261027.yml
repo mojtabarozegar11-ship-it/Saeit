@@ -1,0 +1,23 @@
+name: MojPlayWin sitemap-wide information architecture audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/mpw_information_architecture_audit_20261027.py
+      - .github/workflows/mpw-information-architecture-audit-20261027.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile read-only sitemap audit
+        run: python3 -m py_compile scripts/mpw_information_architecture_audit_20261027.py
+      - name: Inspect all publicly indexed MojPlayWin routes and repeated content
+        run: python3 -u scripts/mpw_information_architecture_audit_20261027.py
