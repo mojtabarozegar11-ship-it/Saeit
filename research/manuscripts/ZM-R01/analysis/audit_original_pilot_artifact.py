@@ -113,10 +113,14 @@ def audit(folder, manifest_path):
     zero_pairs, one_pairs, multi_pairs = int(no.group(1)), int(unique.group(1)), int(multi.group(1))
     if zero_pairs + one_pairs + multi_pairs != original_pairs:
         raise ValueError("Original Bowtie2 categories do not sum to input pairs")
-    # MAPQ >=20 does NOT establish a uniquely concordant paired alignment.
-    # Source counts exceed uniquely aligned concordant pairs by 11.2 million.
-    lower_bound_multimapped_counted = max(0, total - one_pairs)
-    uniqueness_refuted = lower_bound_multimapped_counted > 0
+    # Bowtie2 concordant-pair categories are not a crosswalk of the SAM
+    # primary-first-mate MAPQ-filtered gene assignments.  Discordant/mixed
+    # modes, read-pair versus alignment units, and filtering prevent
+    # subtracting the two totals to infer a lower bound on *counted*
+    # multimappers.  The alignment pool contains multimapping, but the
+    # count-level origin cannot be reconstructed from these summaries.
+    descriptive_difference = total - one_pairs
+    alignment_pool_has_multimapping = multi_pairs > 0
     return {
         "audit": "original artifact cross-file provenance and sparse integer count consistency",
         "source_workflow_run": EXPECTED_RUN,
@@ -133,10 +137,13 @@ def audit(folder, manifest_path):
         "concordant_zero_pairs": zero_pairs,
         "concordant_exactly_once_pairs": one_pairs,
         "concordant_more_than_once_pairs": multi_pairs,
-        "minimum_counted_fragments_from_multimapping_category": lower_bound_multimapped_counted,
+        "assigned_minus_concordant_unique_pairs_descriptive_only": descriptive_difference,
+        "minimum_counted_fragments_from_multimapping_category": None,
+        "counted_multimapping_lower_bound": "NOT_IDENTIFIABLE_FROM_AGGREGATE_SUMMARIES",
+        "alignment_pool_contains_concordant_multimapping": alignment_pool_has_multimapping,
         "sparse_integer_table_integrity": "PASS",
-        "unique_mapping_claim": "REFUTED_BY_ORIGINAL_BOWTIE2_SUMMARY" if uniqueness_refuted else "NOT_ESTABLISHED",
-        "scientific_release_gate": "BLOCKED_MULTIMAPPING_AND_ASSEMBLY" if uniqueness_refuted else "BLOCKED_ASSEMBLY_AND_INCOMPLETE_MATRIX",
+        "unique_mapping_claim": "NOT_ESTABLISHED_FOR_COUNTED_FRAGMENTS",
+        "scientific_release_gate": "BLOCKED_MULTIMAPPING_POLICY_ASSEMBLY_AND_INCOMPLETE_MATRIX",
         "all_24_libraries_counted": False,
         "assembly_equivalence_to_Milec_RefSeqv2": "NOT VERIFIED",
         "publication_grade_DESeq2_matrix": False,
