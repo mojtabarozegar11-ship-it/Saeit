@@ -1,0 +1,99 @@
+name: Publish isolated banknew wallet workspace
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/banknew-wallet-workspace-20261027.yml']
+permissions:
+  contents: read
+concurrency:
+  group: banknew-isolated-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-structure-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Create only banknew and verify public assets with automatic rollback
+        run: |
+          timeout 180s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import json,os,urllib.request,shutil
+          root=Path('/home/zomorod2/mojplaywin.com')
+          target=root/'banknew'
+          assert root.is_dir() and not root.is_symlink()
+          assert not target.exists() and not target.is_symlink(), 'banknew already exists; refusing overwrite'
+          assert not (root/'AGENTS.md').exists(), 'Read local AGENTS.md before deployment'
+          def fetch(url):
+              with urllib.request.urlopen(urllib.request.Request(url,headers={'Cache-Control':'no-cache'}),timeout=25) as r:
+                  assert r.status==200
+                  return r.read(2000000)
+          fetch('https://mojplaywin.com/')
+          files=json.loads("{\"style.css\":\":root{--ink:#122d29;--muted:#62716c;--line:#dce5df;--green:#c8f76e}*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:20px}body{margin:0;background:#f5f7f2;color:var(--ink);font:15px/1.6 system-ui,-apple-system,sans-serif}a{color:inherit;text-decoration:none}aside{position:fixed;inset:0 auto 0 0;width:235px;background:#fff;border-right:1px solid var(--line);padding:35px 25px}.brand{font-size:23px;font-weight:750;display:flex;align-items:center;gap:10px}.logo{background:var(--ink);color:var(--green);border-radius:12px;padding:0 10px;font-size:32px}aside small{display:block;font-size:9px;letter-spacing:1.7px;margin:25px 0;color:var(--muted)}nav{display:grid;gap:10px}nav a{padding:12px 10px;border-radius:9px;font-size:14px}nav a:hover{background:#eef5e7}.aside-bottom{position:absolute;bottom:30px;font-size:12px;color:var(--muted)}main{margin-left:235px;padding:0 5vw;max-width:1700px}header{display:flex;justify-content:space-between;gap:15px;align-items:center;padding:28px 0;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}.pill,.pending{border:1px solid var(--line);border-radius:30px;padding:6px 12px;font-size:11px;background:#fff}.pending{display:inline-block;background:#f5f2e8;color:#715e24;border-color:#e8dfc8}.hero{display:grid;grid-template-columns:1.35fr 1fr;gap:35px;align-items:center;padding:65px 0 40px}.eyebrow{font-size:10px;letter-spacing:2px;font-weight:750;color:var(--muted)}h1{font-size:clamp(38px,4.3vw,68px);line-height:1.08;letter-spacing:-3px;margin:18px 0}h2{font-size:28px;line-height:1.2;letter-spacing:-1px;margin:10px 0 20px}h3{font-size:21px;line-height:1.3;margin:15px 0}.intro{max-width:410px;color:var(--muted)}.button,button{background:var(--ink);color:#fff;display:inline-flex;align-items:center;justify-content:space-between;gap:25px;padding:14px 20px;border:0;border-radius:8px;font:600 13px system-ui;cursor:pointer;margin-top:12px}button:disabled{opacity:.6;cursor:wait}button.secondary{background:#e8efdf;color:var(--ink)}[hidden]{display:none!important}.hero-card{background:var(--green);padding:35px;border-radius:25px;transform:rotate(-2deg);box-shadow:10px 14px 0 #e3ebd8}.hero-card>span{font-size:10px;letter-spacing:1.5px;font-weight:700}.hero-card h2{font-size:88px;letter-spacing:-6px;margin:20px 0}.hero-card h2 span{font-size:48px}.hero-card p{font-size:13px}.card-rule{height:1px;background:#79983f;margin:25px 0}.notice{border-left:3px solid #b6c99c;padding:12px 18px;background:#edf2e8;font-size:12px;color:#4f604e;margin:15px 0 45px}section{margin-bottom:45px}.section-title{display:flex;align-items:center;justify-content:space-between}.grid{display:grid;grid-template-columns:1.3fr 1fr;gap:20px}.grid.three{grid-template-columns:repeat(3,1fr)}.panel{padding:28px;background:#fff;border:1px solid var(--line);border-radius:16px;min-width:0}.panel p{color:var(--muted);font-size:13px}.asset-icon{width:40px;height:40px;border-radius:50%;background:#edf0fd;text-align:center;line-height:40px;font-size:28px}.dark{background:var(--ink);color:#fff}.dark .eyebrow,.dark p{color:#c5d7c7}.dark h3{font-size:32px}.dark ul{padding-left:20px;font-size:14px;line-height:2.5}.fine{font-size:11px!important;color:var(--muted)}dl{display:grid;grid-template-columns:1fr 1.3fr;gap:12px;border-top:1px solid var(--line);padding-top:20px;font-size:12px}dt{color:var(--muted)}dd{text-align:right;margin:0;overflow-wrap:anywhere}.step{font-size:28px;color:#9bae9e}.pricing{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}label{font-size:12px;display:block;margin-bottom:12px}input{width:100%;border:1px solid var(--line);border-radius:8px;padding:15px;font-size:24px;color:var(--ink);background:#fafcf8}#fee-error{color:#953b2d;font-size:12px}footer{display:flex;justify-content:space-between;gap:25px;padding:30px 0;font-size:10px;color:var(--muted);border-top:1px solid var(--line)}a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid #8cbb37;outline-offset:3px}@media(max-width:950px){aside{width:190px;padding:25px 16px}main{margin-left:190px;padding:0 25px}.hero{grid-template-columns:1fr;gap:30px}.hero-card{max-width:420px;transform:none}.hero-card h2{font-size:68px}.grid,.grid.three,.pricing{grid-template-columns:1fr}.hero h1{font-size:48px}}@media(max-width:600px){aside{position:static;width:100%;padding:16px;border-bottom:1px solid var(--line)}aside small,.aside-bottom{display:none}nav{display:flex;gap:6px;overflow:auto;margin-top:12px}nav a{white-space:nowrap;font-size:11px;padding:8px}main{margin:0;padding:0 20px}.hero{padding-top:30px}header{font-size:10px}.hero h1{font-size:42px;letter-spacing:-2px}.panel{padding:22px}.section-title{align-items:flex-start;gap:10px}footer{flex-direction:column;gap:8px}}\\n\",\"app.js\":\"'use strict';\\nfunction quote(value){if(!/^(0|[1-9]\\\\d{0,11})(\\\\.\\\\d{1,2})?$/.test(value))throw Error('Enter a non-negative amount with up to two decimal places.');const [whole,part='']=value.split('.');const cents=BigInt(whole)*100n+BigInt(part.padEnd(2,'0'));const fee=(cents+500n)/1000n;return {fee,net:cents-fee};}\\nfunction money(cents){return '$'+(cents/100n).toString().replace(/\\\\B(?=(\\\\d{3})+(?!\\\\d))/g,',')+'.'+(cents%100n).toString().padStart(2,'0');}\\nif(typeof module!=='undefined')module.exports={quote,money};\\nif(typeof document!=='undefined'){\\nconst el=id=>document.getElementById(id);let provider=null;let epoch=0;\\nel('amount').addEventListener('input',()=>{try{const q=quote(el('amount').value.trim());el('fee').textContent=money(q.fee);el('net').textContent=money(q.net);el('fee-error').textContent='';}catch(e){el('fee').textContent='—';el('net').textContent='—';el('fee-error').textContent=e.message;}});\\nfunction clear(){epoch++;if(provider&&provider.removeListener){provider.removeListener('accountsChanged',changed);provider.removeListener('chainChanged',changed);provider.removeListener('disconnect',clear);}provider=null;for(const k of ['chain','address','balance'])el(k).textContent='—';el('wallet-message').textContent='No wallet connected.';el('disconnect').hidden=true;}\\nfunction changed(){clear();el('wallet-message').textContent='Wallet or network changed. Reconnect to refresh.';}\\nel('disconnect').addEventListener('click',clear);\\nel('connect').addEventListener('click',async()=>{clear();const e=++epoch;const p=window.ethereum;if(!p||typeof p.request!=='function'){el('wallet-message').textContent='Open this page in an EVM-compatible wallet browser, or use its official browser extension.';return;}el('connect').disabled=true;el('wallet-message').textContent='Waiting for wallet permission…';try{const accounts=await p.request({method:'eth_requestAccounts'});if(!accounts.length)throw Error('No account shared.');const address=accounts[0];if(!/^0x[0-9a-fA-F]{40}$/.test(address))throw Error('Invalid wallet address.');const chain=await p.request({method:'eth_chainId'});const raw=await p.request({method:'eth_getBalance',params:[address,'latest']});const after=await p.request({method:'eth_chainId'});const current=await p.request({method:'eth_accounts'});if(chain!==after||!current[0]||current[0].toLowerCase()!==address.toLowerCase())throw Error('Wallet changed during refresh. Reconnect.');if(e!==epoch)return;provider=p;el('address').textContent=address;el('chain').textContent=BigInt(chain).toString();if(chain==='0x1'){const wei=BigInt(raw);el('balance').textContent=(wei/1000000000000000000n).toString()+'.'+(wei%1000000000000000000n).toString().padStart(18,'0')+' ETH';}else{el('balance').textContent=BigInt(raw).toString()+' base units (network-specific)';}el('wallet-message').textContent='Address connected. Balance reported by your wallet provider; not independently verified.';el('disconnect').hidden=false;if(p.on){p.on('accountsChanged',changed);p.on('chainChanged',changed);p.on('disconnect',clear);}}catch(error){if(e===epoch)el('wallet-message').textContent=error.code===4001?'Connection declined. No transaction was requested.':'Unable to read wallet. Check the connection and try again.';}finally{el('connect').disabled=false;}});\\n}\\n\",\"index.html\":\"<!doctype html><html lang=\\\"en\\\"><head><meta charset=\\\"utf-8\\\"><meta name=\\\"viewport\\\" content=\\\"width=device-width,initial-scale=1\\\"><meta name=\\\"robots\\\" content=\\\"noindex,nofollow\\\"><title>MOJ Pay · Wallet & merchant workspace</title><link rel=\\\"stylesheet\\\" href=\\\"style.css\\\"></head><body><aside><a class=\\\"brand\\\" href=\\\"/banknew/\\\"><span class=\\\"logo\\\">m.</span> MOJ Pay</a><small>YOUR MONEY. YOUR CONTROL.</small><nav><a href=\\\"#overview\\\">◈ Overview</a><a href=\\\"#wallet\\\">▣ Your wallet</a><a href=\\\"#merchant\\\">↗ Merchant payments</a><a href=\\\"#pricing\\\">◎ Pricing</a><a href=\\\"#access\\\">⚙ Account access</a></nav><div class=\\\"aside-bottom\\\">Part of <a href=\\\"/\\\">MojPlayWin ↗</a><p>Self-custody workspace</p></div></aside><main><header><span>Wallet & payments / Overview</span><span class=\\\"pill\\\">Setup in progress</span></header><section id=\\\"overview\\\" class=\\\"hero\\\"><div><p class=\\\"eyebrow\\\">BUILT AROUND YOUR WALLET</p><h1>A clearer way<br>to manage crypto.</h1><p class=\\\"intro\\\">Connect a compatible wallet, view its native balance and understand merchant fees. Your keys stay with you.</p><a class=\\\"button\\\" href=\\\"#wallet\\\">Connect your wallet <b>↗</b></a></div><div class=\\\"hero-card\\\"><span>PROPOSED MERCHANT SERVICE FEE</span><h2>0.1<span>%</span></h2><p>10 basis points. Clearly calculated.</p><div class=\\\"card-rule\\\"></div><p>Network and provider fees are separate.<br>Payment processing is not activated.</p></div></section><div class=\\\"notice\\\">This workspace does not hold customer funds. Deposits, transfers, card processing and fiat accounts are not available. No financial transaction is initiated by this page.</div><section id=\\\"wallet\\\"><div class=\\\"section-title\\\"><div><p class=\\\"eyebrow\\\">SELF-CUSTODY</p><h2>Your wallet, connected.</h2></div><span class=\\\"pill\\\">Read-only access</span></div><div class=\\\"grid\\\"><article class=\\\"panel\\\"><div class=\\\"asset-icon\\\">Ξ</div><h3>Ethereum-compatible wallet</h3><p>Use a compatible wallet browser or browser extension. Connecting requests your public address only.</p><button id=\\\"connect\\\">Connect EVM wallet ↗</button><button id=\\\"disconnect\\\" class=\\\"secondary\\\" hidden>Clear connection</button><p id=\\\"wallet-message\\\" role=\\\"status\\\" aria-live=\\\"polite\\\">No wallet connected.</p><dl><dt>Network ID</dt><dd id=\\\"chain\\\">—</dd><dt>Public address</dt><dd id=\\\"address\\\">—</dd><dt>Native balance</dt><dd id=\\\"balance\\\">—</dd></dl><p class=\\\"fine\\\">Token balances, TRON and WalletConnect QR pairing are not integrated. A connected address is not proof of identity.</p></article><article class=\\\"panel dark\\\"><p class=\\\"eyebrow\\\">SECURITY BY DESIGN</p><h3>Keep the keys.<br>Keep the control.</h3><ul><li>No seed phrase collection</li><li>No private key uploads</li><li>No token approval requests</li><li>No transaction signing on this page</li></ul><p class=\\\"fine\\\">Disconnecting here clears the page. Revoke site permissions inside your wallet to disconnect fully.</p></article></div></section><section id=\\\"merchant\\\"><p class=\\\"eyebrow\\\">FOR BUSINESSES</p><h2>Merchant payments</h2><div class=\\\"grid three\\\"><article class=\\\"panel\\\"><span class=\\\"step\\\">01</span><h3>Payment requests</h3><p>Authenticated invoices, order references and payment links.</p><span class=\\\"pending\\\">Not activated</span></article><article class=\\\"panel\\\"><span class=\\\"step\\\">02</span><h3>Verified settlement</h3><p>Chain confirmation, duplicate-payment protection and merchant notifications.</p><span class=\\\"pending\\\">Not activated</span></article><article class=\\\"panel\\\"><span class=\\\"step\\\">03</span><h3>Fiat & card payments</h3><p>Requires an eligible financial provider supporting the operator's country and documents.</p><span class=\\\"pending\\\">Provider not connected</span></article></div></section><section id=\\\"pricing\\\" class=\\\"pricing\\\"><div><p class=\\\"eyebrow\\\">NO HIDDEN MATH</p><h2>Calculate the service fee.</h2><p>0.1% = 1 unit per 1,000 units processed.</p><p class=\\\"fine\\\">Illustrative quote only. Fee deducted from the entered amount, rounded to the nearest cent. Actual asset precision and settlement costs require an activated payment integration.</p></div><div class=\\\"panel\\\"><label for=\\\"amount\\\">Payment amount (USD equivalent)</label><input id=\\\"amount\\\" inputmode=\\\"decimal\\\" type=\\\"text\\\" value=\\\"1000.00\\\" maxlength=\\\"16\\\"><div id=\\\"fee-error\\\" role=\\\"status\\\"></div><dl><dt>Service fee · 0.1%</dt><dd id=\\\"fee\\\">$1.00</dd><dt>After service fee</dt><dd id=\\\"net\\\">$999.00</dd><dt>Network / provider fees</dt><dd>Not included</dd></dl></div></section><section id=\\\"access\\\" class=\\\"panel\\\"><p class=\\\"eyebrow\\\">ACCOUNT ACCESS</p><h2>Sign in with Google</h2><p>Google sign-in is awaiting OAuth configuration. Account creation and financial identity verification are not active.</p><span class=\\\"pending\\\">Google OAuth not connected</span><p class=\\\"fine\\\">A verified email confirms access to a Google account. It does not verify a customer's financial identity or authorize custody of funds.</p></section><footer><span>© 2026 MOJ Pay · MojPlayWin</span><span>Not a bank. No deposit or fiat account services are offered.</span></footer></main><script src=\\\"app.js\\\"></script></body></html>\\n\",\".htaccess\":\"<IfModule mod_passenger.c>\\nPassengerEnabled off\\n</IfModule>\\nDirectoryIndex index.html\\nOptions -Indexes\\n<IfModule mod_headers.c>\\nHeader always set X-Content-Type-Options \\\"nosniff\\\"\\nHeader always set Referrer-Policy \\\"no-referrer\\\"\\nHeader always set Content-Security-Policy \\\"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'\\\"\\nHeader always set Cache-Control \\\"no-store\\\"\\n</IfModule>\\n\"}")
+          try:
+              target.mkdir(mode=0o755)
+              for name,content in files.items():
+                  p=target/name
+                  p.write_text(content,encoding='utf-8');p.chmod(0o644)
+              body=fetch('https://mojplaywin.com/banknew/')
+              assert b'MOJ Pay' in body and b'Google OAuth not connected' in body
+              for name in ('app.js','style.css'):
+                  assert fetch('https://mojplaywin.com/banknew/'+name).decode('utf-8')==files[name]
+              fetch('https://mojplaywin.com/')
+          except Exception:
+              if target.is_dir() and not target.is_symlink():
+                  for name,content in files.items():
+                      p=target/name
+                      if p.is_file() and not p.is_symlink() and p.read_text()==content:p.unlink()
+                  if not list(target.iterdir()):target.rmdir()
+              raise
+          print('BANKNEW_PUBLISHED=https://mojplaywin.com/banknew/')
+          print('PAYMENTS=NOT_ACTIVE GOOGLE_LOGIN=NOT_CONFIGURED CUSTODY=NONE')
+          
+          PY
+      - name: Remove temporary keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-structure-ssh"
