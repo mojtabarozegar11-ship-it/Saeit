@@ -36,41 +36,62 @@ class ScopedRollbackTests(unittest.TestCase):
         self.guard = patch.object(deploy, "GAME", self.game)
         self.guard.start()
         self.addCleanup(self.guard.stop)
+        self.assets_guard = patch.object(deploy, "ASSETS", ["game.js", "policy.mjs"])
+        self.assets_guard.start()
+        self.addCleanup(self.assets_guard.stop)
 
     def rollback(self):
-        deploy.rollback_files(self.stage, self.manifest, "123456")
+        return deploy.rollback_files(self.stage, self.manifest, "123456")
 
     def test_valid_backup_restores_existing_client_and_removes_new_module(self):
-        self.rollback()
+        self.assertTrue(self.rollback())
         self.assertEqual((self.game / "game.js").read_bytes(), self.old)
         self.assertFalse((self.game / "policy.mjs").exists())
-        self.rollback()
+        self.assertTrue(self.rollback())
         self.assertEqual((self.game / "game.js").read_bytes(), self.old)
 
     def test_corrupt_backup_never_overwrites_live_client(self):
         (self.stage / "old-game.js").write_bytes(b"damaged-or-truncated-backup")
-        self.rollback()
+        self.assertFalse(self.rollback())
         self.assertEqual((self.game / "game.js").read_bytes(), self.new)
+        self.assertEqual((self.game / "policy.mjs").read_bytes(), self.module)
 
     def test_missing_backup_never_overwrites_live_client(self):
         (self.stage / "old-game.js").unlink()
-        self.rollback()
+        self.assertFalse(self.rollback())
         self.assertEqual((self.game / "game.js").read_bytes(), self.new)
+        self.assertEqual((self.game / "policy.mjs").read_bytes(), self.module)
 
     def test_concurrent_live_edit_is_preserved(self):
         concurrent = b"newer-edit-by-another-operator"
         (self.game / "game.js").write_bytes(concurrent)
-        self.rollback()
+        self.assertFalse(self.rollback())
         self.assertEqual((self.game / "game.js").read_bytes(), concurrent)
+        self.assertEqual((self.game / "policy.mjs").read_bytes(), self.module)
 
     def test_symlinked_backup_is_rejected(self):
         (self.stage / "old-game.js").unlink()
         target = self.root / "outside.txt"
         target.write_bytes(self.old)
         (self.stage / "old-game.js").symlink_to(target)
-        self.rollback()
+        self.assertFalse(self.rollback())
         self.assertEqual((self.game / "game.js").read_bytes(), self.new)
+        self.assertEqual((self.game / "policy.mjs").read_bytes(), self.module)
         self.assertEqual(target.read_bytes(), self.old)
+        self.assertEqual((self.game / "policy.mjs").read_bytes(), self.module)
+
+
+    def test_unexpected_new_asset_blocks_entire_rollback(self):
+        (self.game / "policy.mjs").write_bytes(b"concurrent-new-module")
+        self.assertFalse(self.rollback())
+        self.assertEqual((self.game / "game.js").read_bytes(), self.new)
+        self.assertEqual((self.game / "policy.mjs").read_bytes(), b"concurrent-new-module")
+
+    def test_invalid_manifest_blocks_entire_rollback(self):
+        self.manifest["new"]["unexpected.js"] = deploy.digest(b"bad")
+        self.assertFalse(self.rollback())
+        self.assertEqual((self.game / "game.js").read_bytes(), self.new)
+        self.assertEqual((self.game / "policy.mjs").read_bytes(), self.module)
 
 
 if __name__ == "__main__":
