@@ -5,6 +5,7 @@ on:
       - research/mr-2026-001-novelty-audit
     paths:
       - research/manuscripts/AE-2026-001/AE-2026-001_FIRST_FULL_EMPIRICAL_MANUSCRIPT_DRAFT_2026-10-25.md
+      - research/manuscripts/AE-2026-001/AE-2026-001_CONSOLIDATED_AUTHOR_REVIEW_MANUSCRIPT_2026-10-27.md
       - .github/workflows/ae-2026-001-source-locked-author-word-on-push.yml
   workflow_dispatch:
 permissions:
@@ -68,4 +69,59 @@ jobs:
           name: AE-2026-001-current-source-author-review-NOT-SUBMITTED
           path: /tmp/ae-review/
           retention-days: 14
+          if-no-files-found: error
+
+  consolidated-author-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify consolidated C27 source and preserve SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = "research/mr-2026-001-novelty-audit"
+          mkdir -p /tmp/ae-consolidated
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          p=Path('research/manuscripts/AE-2026-001/AE-2026-001_CONSOLIDATED_AUTHOR_REVIEW_MANUSCRIPT_2026-10-27.md')
+          s=p.read_text(encoding='utf-8')
+          for marker in ['155 economies','153','NV.AGR.EMPL.KD','ILOSTAT','countryatlas','### 2.6','### 3.4','| 0.5 | 42 | 3 |','MAJOR REVISION / NO SUBMISSION']:
+              assert marker in s, f'Missing source marker: {marker}'
+          info={'source_path':str(p),'source_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),
+                'source_bytes':p.stat().st_size,'status':'NOT SUBMITTED; human author approval required'}
+          Path('/tmp/ae-consolidated/SOURCE_MANIFEST.json').write_text(json.dumps(info,indent=2)+'\\n')
+          print(json.dumps(info))
+          PY
+      - name: Build and inspect consolidated author-review Word
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v pandoc >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq pandoc
+          fi
+          python -m pip install --disable-pip-version-check python-docx==1.2.0
+          pandoc --from=gfm --to=docx --standalone \\
+            research/manuscripts/AE-2026-001/AE-2026-001_CONSOLIDATED_AUTHOR_REVIEW_MANUSCRIPT_2026-10-27.md \\
+            -o /tmp/ae-consolidated/AE-2026-001_CONSOLIDATED_AUTHOR_REVIEW_NOT_SUBMITTED.docx
+          python - <<'PY'
+          from pathlib import Path
+          from docx import Document
+          p=Path('/tmp/ae-consolidated/AE-2026-001_CONSOLIDATED_AUTHOR_REVIEW_NOT_SUBMITTED.docx')
+          d=Document(p)
+          t='\\n'.join([x.text for x in d.paragraphs]+[c.text for table in d.tables for row in table.rows for c in row.cells])
+          for marker in ['155','153','NV.AGR.EMPL.KD','ILOSTAT','countryatlas','2.6','3.4']:
+              assert marker in t, f'Missing Word marker: {marker}'
+          assert len(d.tables)>=3 and p.stat().st_size>15000
+          print('AE consolidated Word source-aligned QA PASS',p.stat().st_size,'bytes',len(d.tables),'tables')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AE-2026-001-C27-consolidated-author-review-NOT-SUBMITTED
+          path: /tmp/ae-consolidated/
+          retention-days: 30
           if-no-files-found: error
