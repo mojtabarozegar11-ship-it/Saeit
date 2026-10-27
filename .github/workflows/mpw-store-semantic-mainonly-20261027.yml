@@ -51,7 +51,7 @@ jobs:
                   if r.status!=200:raise RuntimeError("PROTECTED_PRECHECK_FAILED:"+path)
                   if path=="/store/":
                       content=r.read(250000).decode("utf8","replace")
-                      print("MPW_STORE_BEFORE_MAIN_COUNT",len(re.findall(r"<main\\b",content,re.I)))
+                      print("MPW_STORE_BEFORE_MAIN_COUNT",len(re.findall(r"<main\b",content,re.I)))
                       for pk in ("72","225","879"):
                           if "/store/product/"+pk+"/" not in content:
                               raise RuntimeError("STORE_PRODUCT_MISSING:"+pk)
@@ -127,8 +127,8 @@ jobs:
                                          headers={"Cache-Control":"no-cache"})
               with urllib.request.urlopen(req,timeout=25) as response:
                   doc=response.read(300000).decode("utf8","replace")
-              if (len(re.findall(r"<main\\b",doc,re.I))==1
-                  and len(re.findall(r"</main\\s*>",doc,re.I))==1
+              if (len(re.findall(r"<main\b",doc,re.I))==1
+                  and len(re.findall(r"</main\s*>",doc,re.I))==1
                   and 'class="mpw-shop"' in doc):
                   good=True;break
               time.sleep(2)
