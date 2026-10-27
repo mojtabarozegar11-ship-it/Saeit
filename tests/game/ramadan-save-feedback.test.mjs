@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
+import {boundedCampaignPickups} from '../../games/ramadan-war/save-validation.mjs';
 
 const source=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
 const saveLine=source.split('\n').find(line=>line.startsWith('let saveWarningShown=false;function save(){'));
@@ -10,6 +11,7 @@ assert.ok(saveLine,'save must expose one-time storage-failure notice');
 function setup(canSave=false) {
   const notifications=[],writes=[],removes=[];
   const context={world:{mission:0,victory:false,gameOver:false},saveKey:'rwNativeCampaign',
+    boundedCampaignPickups,
     storageWrite:(key,value)=>{writes.push({key,value});return canSave},
     storageRemove:key=>{removes.push(key);return true},
     toast:message=>notifications.push(message)};
