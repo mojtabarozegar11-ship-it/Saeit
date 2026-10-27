@@ -1,0 +1,25 @@
+# ZM-R01 C42 — independent original compact-artifact byte audit and expiry gate
+
+**Date:** 2026-10-28 (Asia/Tehran). **Status:** source ZIP actually downloaded and independently inspected, not a new FASTQ download or a 24-sample expression analysis. **Scientific decision:** DATA REBUILD / NO SUBMISSION.
+
+## Exact evidence acquired this cycle
+- GitHub Actions original run: https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40222743342 .
+- Original artifact ID **12618285422**, downloaded using the authorized GitHub connection on 2026-10-28 local time; artifact API reports **expired=false** and **expires_at=2026-11-01T23:10:31Z**.
+- Original ZIP **252,151 bytes**, independently computed SHA256 **0d2beb292eb5ffbed24e30237483513c3ac3cd1e188d2248098df0a5341f30a8**; agrees exactly with GitHub's recorded artifact digest.
+- ZIP contains five original files: `provenance.json`, `alignment_summary.txt`, `conservative_one_sample_integer_counts.tsv`, `verified_ena_download_provenance.json`, and `wheat_cdna.fa.gz.sha256`. No FASTQ or raw-read payload was downloaded this cycle.
+
+## Independent computation on original count bytes (not copied from prior notes)
+- Original sparse TSV byte length **1,343,834**; SHA256 **9b72e3042190c041033abc5b0787abc00e10bfa9df6934677afac6e6f34812f2**.
+- Parsed **58,039 unique gene identifiers**; every stored count is a strictly positive integer; zero-count genes are **absent** from this sparse file, not proven biologically absent.
+- Independently summed counts: **14,357,584**; equals `gene_assigned_fragments` in the original `provenance.json`. No duplicate gene IDs in the 58,039 rows.
+- Original Bowtie2 alignment summary states **43,926,311 input read pairs**, **8,137,578 concordantly unmapped**, **3,148,686 concordantly aligned exactly once**, and **32,640,047 concordantly aligned more than once**. Sum of the three categories is exactly **43,926,311**; overall alignment rate **81.47%**.
+- The count sum **14,357,584** exceeds the **3,148,686** concordantly uniquely aligned pairs by **11,208,898**. Thus **the artifact cannot be described as containing only concordantly uniquely aligned read pairs**. MAPQ >=20 on retained primary first mates does **not** prove a uniquely concordant paired alignment. The existing repository audit script already warns of this discrepancy; the *new action here* is independently downloading and re-parsing the original artifact bytes, **not discovering the issue for the first time**.
+
+## Required corrective interpretation
+1. The artifact is **real, one-sample, reference-dependent, nonnegative integer alignment-derived counts**. It is **not** a validated unique-pair count matrix, not equivalent to the original Milec genome-based workflow, and not a publication-grade 24-library gene matrix.
+2. `conservative_one_sample_integer_counts.tsv` is a **sparse nonzero-only** table. Even if the reference were matched, the full gene universe and true zero counts must be restored consistently across all samples before count-based analysis.
+3. Historical original CI logged source FASTQ mate MD5 checks and the provenance JSON retains official MD5 strings. **This cycle did not independently recalculate MD5 from original FASTQ bytes**. Reference cDNA compressed SHA256 is provenance only; equivalence to the authors' RefSeq v2.0 FASTA/GTF remains unverified.
+4. An archival workflow `.github/workflows/zm-r01-preserve-original-compact-pilot.yml` was created to retain this **compact, source-verified** evidence in the research branch, run an independent audit and keep the mapping gate closed. **Do not claim the archive has been committed until its run and resulting files are verified.** This workflow uses a standard GitHub-hosted runner and no VPS, paid service, live site or bulk FASTQ.
+5. Prior **1,167 hypotheses are not DEGs or FDR discoveries**. No DESeq2 execution, gene significance, independent chamber replication or new biological result is claimed.
+
+**Disposition:** independently verified original pilot ZIP, sparse-table integrity and a material mapping-classification limitation; archival execution remains evidence-gated. NO SUBMISSION.
