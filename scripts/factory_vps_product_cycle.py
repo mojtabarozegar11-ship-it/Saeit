@@ -653,15 +653,23 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                 "research_rework_queue": research_rework_counts}
 
 
+def _add_boolean_flag(parser, option, *, default):
+    """Add --option/--no-option without requiring Python 3.9's argparse API."""
+    destination = option.lstrip("-").replace("-", "_")
+    parser.add_argument(option, dest=destination, action="store_true")
+    parser.add_argument("--no-" + option[2:], dest=destination, action="store_false")
+    parser.set_defaults(**{destination: default})
+
+
 def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument("--db", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--recipes", required=True)
     p.add_argument("--max-products", type=int, default=25)
-    p.add_argument("--enable-designer", action=argparse.BooleanOptionalAction, default=True)
-    p.add_argument("--enable-design-intake", action=argparse.BooleanOptionalAction, default=True)
-    p.add_argument("--enable-invention-supply", action=argparse.BooleanOptionalAction, default=True)
+    _add_boolean_flag(p, "--enable-designer", default=True)
+    _add_boolean_flag(p, "--enable-design-intake", default=True)
+    _add_boolean_flag(p, "--enable-invention-supply", default=True)
     p.add_argument("--design-capacity", type=int, default=1,
                    help="Maximum validated synthesis requests per VPS tick (1-20).")
     p.add_argument(
