@@ -59,6 +59,32 @@ class VPSProductInstallerTests(unittest.TestCase):
         self.assertIn("python3 -m unittest discover -s tests -p 'test_factory_private_passport_20261020.py'", workflow)
         self.assertNotIn('PUBLISHING_ENABLED=true', installer)
 
+    def test_every_live_cycle_module_is_staged_and_installed(self):
+        """Prevent green hosted tests but import failures in the isolated VPS archive."""
+        import ast
+        source = Path(__file__).resolve().parents[1]
+        runtime = (source / "scripts/factory_vps_product_cycle.py").read_text(encoding="utf8")
+        installer = (source / "deploy/install_autonomous_factory_products.sh").read_text(encoding="utf8")
+        wf = (source / ".github/workflows/vps-autonomous-product-install.yml").read_text(encoding="utf8")
+        transport = wf.split("tar -cf - ", 1)[1].split(' | "${SSH[@]}"', 1)[0]
+        install_inventory = installer.split("for f in ", 1)[1].split("; do", 1)[0]
+        dependencies = set()
+        for node in ast.walk(ast.parse(runtime)):
+            if (isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div)
+                    and isinstance(node.left, ast.Name) and node.left.id == "SCRIPTS"
+                    and isinstance(node.right, ast.Constant)
+                    and isinstance(node.right.value, str)
+                    and node.right.value.endswith(".py")):
+                dependencies.add(node.right.value)
+        self.assertIn("factory_master_agent_genetics_v1.py", dependencies)
+        for module in sorted(dependencies):
+            with self.subTest(module=module):
+                self.assertTrue((source / "scripts" / module).is_file())
+                self.assertIn('test -f "$repo/scripts/' + module + '"', installer)
+                self.assertIn(module, install_inventory)
+                self.assertIn("scripts/" + module, transport)
+        self.assertIn("VPS_FACTORY_MASTER_GENETICS_MODULE_STAGED=PASS", wf)
+
     def test_manual_or_owner_requested_gated_deployment_is_packaged(self):
         source = Path(__file__).resolve().parents[1]
         wf = (source / ".github/workflows/vps-autonomous-product-install.yml").read_text(encoding="utf-8")
