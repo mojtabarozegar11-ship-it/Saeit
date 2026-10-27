@@ -6,6 +6,7 @@ from django.views.generic import RedirectView
 from command_center.views import dashboard as staff_dashboard
 
 from core.views import home, platform_page, taniya_studio
+from core.ayaar_views import ayaar
 from core.mojplaywin_views import venture
 from core.commerce_views import store_home, auctions_home
 from core.crown_checkout import crown_cosmetic_checkout
@@ -24,6 +25,8 @@ from core.company_content_views import company_gallery, company_content_feed, co
 from core.knowledge_views import knowledge_article_detail, knowledge_book_detail, knowledge_domain_detail
 
 urlpatterns = [
+    path("ayaar/", ayaar, name="ayaar"),
+    path("ayaar/<str:asset>", ayaar, name="ayaar_asset"),
     path("", services, name="home"),
     path("authors/mojtaba-rozegar/", persian_author_profile, name="mojtaba_roozegar_author_profile"),
     path("ghanadi/", TemplateView.as_view(template_name="core/ghanadi.html"), name="ghanadi"),
