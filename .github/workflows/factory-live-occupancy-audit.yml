@@ -82,7 +82,7 @@ jobs:
           print("FACTORY_LIVE_OCCUPANCY="+json.dumps({
             "cron_dispatcher_active":len(dispatch_lines)==1,
             "dispatcher_runs_every_minute":bool(dispatch_lines and
-              re.match(r"^\\s*\\*\\s+\\*\\s+\\*\\s+\\*\\s+\\*",dispatch_lines[0])),
+              re.match(r"^\s*\*\s+\*\s+\*\s+\*\s+\*",dispatch_lines[0])),
             "registered_line_routes":planner.get("registered_family_routes"),
             "worker_budget":planner.get("worker_budget"),
             "below_40_concurrent_slots":(planner.get("worker_budget") or 0)<40,
