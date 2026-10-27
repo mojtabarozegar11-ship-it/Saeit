@@ -96,6 +96,19 @@ export function reconcileBossEncounter(state) {
   return corrected;
 }
 
+// A legacy or manipulated save may pass numeric position validation while
+// placing the hero inside a solid wall. Recover to the known passable spawn
+// without touching score, objectives, inventory or earned campaign progress.
+export function restorePlayerPosition(state, isBlocked) {
+  if (!state || typeof isBlocked !== 'function') return false;
+  if (Number.isFinite(state.x) && Number.isFinite(state.y) &&
+      !isBlocked(state.x | 0, state.y | 0)) return false;
+  if (isBlocked(2, 7)) return false;
+  state.x = 2.5;
+  state.y = 7.5;
+  return true;
+}
+
 // A cleared mission must resume at its results panel, not in a non-interactive arena.
 export function resumeCampaignScreen(save) {
   return save?.missionPassed === true ? 'success' : 'game';
