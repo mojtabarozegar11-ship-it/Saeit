@@ -37,7 +37,7 @@ def test_income_cycle_dry_run_does_not_create_tasks():
 def test_income_cycle_queues_exactly_one_concrete_task():
     call_command("seed_online_income_agents")
     call_command("online_income_cycle")
-    tasks = AgentTask.objects.filter(capability_code__startswith="income_")
+    tasks = AgentTask.objects.filter(capability_code="master_self_improvement")
     assert tasks.count() == 1
     task = tasks.get()
     assert task.agent.code == "economic-master-agent"
@@ -49,14 +49,14 @@ def test_income_cycle_does_not_stack_work_while_prior_task_unfinished():
     call_command("seed_online_income_agents")
     call_command("online_income_cycle")
     call_command("online_income_cycle")
-    assert AgentTask.objects.filter(capability_code__startswith="income_").count() == 1
+    assert AgentTask.objects.filter(capability_code="master_self_improvement").count() == 1
 
 
 @pytest.mark.django_db
 def test_economic_task_cannot_fake_completion_without_effect_evidence():
     call_command("seed_online_income_agents")
     call_command("online_income_cycle")
-    task = AgentTask.objects.get(capability_code="income_market_research")
+    task = AgentTask.objects.get(capability_code="master_self_improvement")
     claimed = TaskRuntime().claim(task.pk)
     with pytest.raises(TaskExecutionError, match="verified_effect"):
         TaskRuntime().complete(

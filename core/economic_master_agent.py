@@ -4,15 +4,19 @@ The agent's permanent mission is to increase verified project completion and
 verified revenue. Research is supporting work, not the terminal output.
 Binding financial actions remain subject to the existing approval/risk layer.
 """
+from .self_funding_policy import authorize_operating_expense
 
 AGENT_CODE = "economic-master-agent"
 AGENT_TITLE = "Economic Master Agent"
 
 MISSION = (
+    "self_improvement_from_verified_failures",
+    "factory_upgrade_and_quality_rework",
     "build_and_improve_project",
     "create_market_ready_assets",
     "commercialize",
     "increase_verified_revenue",
+    "self_fund_approved_operating_costs_from_settled_revenue",
 )
 
 AUTONOMOUS_ACTIONS = frozenset({
@@ -21,6 +25,10 @@ AUTONOMOUS_ACTIONS = frozenset({
     "build_product", "improve_product", "quality_check", "price_product",
     "prepare_listing", "publish_nonbinding_listing", "generate_lead",
     "qualify_lead", "prepare_proposal", "customer_support", "reconcile",
+    "manage_pipeline", "prepare_trade_opportunity", "negotiate_nonbinding_terms",
+    "track_settlement", "manage_operating_budget", "evaluate_subscription_roi",
+    "build_self_improvement_candidate", "benchmark_agent_generation",
+    "repair_factory_bottleneck", "rework_rejected_product",
 })
 
 FINANCIAL_ACTIONS = frozenset({
@@ -68,13 +76,20 @@ class EconomicMasterAgent:
 
     def next_objective_contract(self):
         return {
-            "primary_goal": "project_completion_and_verified_revenue",
-            "selection_rule": "highest_impact_unfinished_work",
+            "primary_goal": "verified_cash_profit_and_increasing_agent_factory_capability",
+            "selection_rule": "rank_by_collected_cash_impact_delivery_readiness_risk_and_cost",
             "continuity": "continue_until_verified_result_or_explicit_blocker",
             "on_blocker": "record_blocker_and_create_remediation_work",
             "on_success": "verify_evidence_then_select_next_highest_impact_work",
             "research_only_cycles_are_success": False,
             "report_only_cycles_are_success": False,
+            "revenue_counts_only_after_settlement": True,
+            "operating_expenses_funded_only_from_settled_revenue": True,
+            "subscription_renewal_requires_usage_and_roi_evidence": True,
+            "expense_requires_preconfigured_budget_and_vendor_allowlist": True,
+            "unbudgeted_spend_requires_owner_approval": True,
+            "self_upgrade_requires_candidate_benchmark_and_rollback": True,
+            "factory_rejected_products_route_to_rework": True,
         }
 
     def report_contract(self):
@@ -89,7 +104,13 @@ class EconomicMasterAgent:
                 "project_progress_or_commercial_progress",
             ],
             "revenue_requires_external_settlement_evidence": True,
+            "cashflow_reports_separate_settled_revenue_expenses_reserves_and_net_profit": True,
+            "autonomous_spend_scope": "preauthorized_operating_budget_and_allowlisted_recurring_services_only",
         }
+
+    def authorize_self_funded_expense(self, **evidence):
+        """Apply the bounded self-funding gate; payment execution stays separate."""
+        return authorize_operating_expense(**evidence)
 
     def system_architecture(self):
         return {

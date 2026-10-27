@@ -145,7 +145,10 @@ class TaskRuntime:
         # Economic work is not complete merely because a handler returned. It must
         # prove an observable effect. This prevents report-only/no-op cycles from
         # being counted as operational progress.
-        if str(task.capability_code or "").startswith("income_"):
+        if (
+            str(task.capability_code or "").startswith("income_")
+            or task.capability_code == "master_self_improvement"
+        ):
             if normalized_output.get("verified_effect") is not True:
                 raise TaskExecutionError(
                     "Economic task cannot complete without verified_effect=true"

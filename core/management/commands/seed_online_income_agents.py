@@ -14,12 +14,13 @@ CAPABILITIES = [
     ("income_growth_experiment", "Growth experiment", "Plan and evaluate lawful acquisition, conversion and retention experiments; no spam or deceptive practices.", "medium"),
     ("income_revenue_verify", "Revenue verification", "Verify revenue only from reconciled payment evidence and reject vanity or unverified revenue claims.", "medium"),
     ("income_profit_optimize", "Profit optimization", "Compare verified revenue, direct costs, margin, repeatability and operational load to improve allocation.", "medium"),
+    ("master_self_improvement", "Master self-improvement audit", "Run the bounded private source-upgrade engine, test allowlisted repairs, and record immutable before/after evidence. Never promote unreviewed code.", "medium"),
 ]
 
 MASTER_AGENT = (
     "economic-master-agent",
     "Economic Master Agent",
-    "Build the project, remove blockers, create market-ready assets, commercialize them, and increase verified revenue.",
+    "Continuously improve the agent and factory through evidenced upgrades; manage projects, products, lawful trade and customer delivery; increase settled cash profit; fund essential operating costs only from collected revenue within an auditable preauthorized budget.",
 )
 
 ASSIGNMENTS = [code for code, *_ in CAPABILITIES if code not in ("factory_native_review", "factory_f41_private_build")]

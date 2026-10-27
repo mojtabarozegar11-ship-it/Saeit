@@ -31,6 +31,47 @@ export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 DJANGO_SETTINGS_MODULE=conf
 export MOJ_PAID_LLM_ENABLED=0 MOJ_LLM_DAILY_CALL_BUDGET=0 MOJ_LLM_MAX_COST_MINOR=0
 cd "$app"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+modules=(
+  core/autonomous_brain.py
+  core/economic_tool_pack.py
+  core/economic_master_agent.py
+  core/self_funding_policy.py
+  core/task_runtime.py
+  core/management/commands/seed_online_income_agents.py
+  core/management/commands/run_economic_worker.py
+  core/management/commands/economic_worker.py
+)
+source_backup="$ops/backups/master-source-before-$stamp"
+install -d -m 700 "$source_backup"
+for module in "${modules[@]}"; do
+  source="$source_root/$module"
+  target="$app/$module"
+  test -s "$source" && test ! -L "$source" || { echo "MASTER_DEPLOY_SOURCE_MISSING:$module"; exit 1; }
+  test ! -L "$target" || { echo "MASTER_APP_SOURCE_SYMLINK:$module"; exit 1; }
+  if [ -f "$target" ]; then
+    install -D -m 600 "$target" "$source_backup/$module"
+  else
+    install -D -m 600 /dev/null "$source_backup/$module.absent"
+  fi
+done
+restore_sources() {
+  result=$?
+  if [ "$result" -ne 0 ]; then
+    for module in "${modules[@]}"; do
+      backup="$source_backup/$module"
+      target="$app/$module"
+      if [ -s "$backup" ] && [ ! -L "$backup" ] && [ ! -L "$target" ]; then
+        install -D -m 600 "$backup" "$target.rollback.tmp"
+        mv -f "$target.rollback.tmp" "$target"
+      elif [ -f "$backup.absent" ] && [ ! -L "$target" ]; then
+        rm -f "$target"
+      fi
+    done
+    echo MASTER_SOURCE_ROLLBACK_COMPLETED
+  fi
+  return "$result"
+}
+trap restore_sources EXIT
 # SQLite's online backup API provides a consistent rollback snapshot without stopping factory.
 "$py" - "$ops/backups/master-before-$stamp.sqlite3" <<'PY'
 import sqlite3,sys
@@ -49,6 +90,17 @@ dst.chmod(0o600)
 print("MASTER_DB_BACKUP_INTEGRITY_OK")
 PY
 echo MASTER_BACKUP_VERIFIED
+for module in "${modules[@]}"; do
+  target="$app/$module"
+  install -D -m 600 "$source_root/$module" "$target.deploy.tmp"
+  mv -f "$target.deploy.tmp" "$target"
+done
+"$py" -m py_compile \
+  core/autonomous_brain.py core/economic_tool_pack.py core/economic_master_agent.py \
+  core/self_funding_policy.py core/task_runtime.py \
+  core/management/commands/seed_online_income_agents.py \
+  core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py
+"$py" manage.py check
 "$py" manage.py seed_online_income_agents
 "$py" - <<'PY'
 import django
@@ -128,6 +180,7 @@ chmod 600 "$tmp"
 crontab "$tmp"
 rm -f "$tmp"
 test "$(crontab -l | grep -c 'SAEIT_MASTER_AGENT_V1')" -eq 2
+trap - EXIT
 echo MASTER_CRON_FIVE_MINUTE_CYCLE_VERIFIED
 echo MASTER_SIX_HOUR_ADAPTIVE_EVOLUTION_VERIFIED
 echo MASTER_FACTORY_LOOP_UNMODIFIED

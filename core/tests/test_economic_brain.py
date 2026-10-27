@@ -20,6 +20,7 @@ def test_market_research_and_scoring_are_verified_before_offer_design():
         "growth_ready": 0,
         "orders": 0,
         "paid_orders": 0,
+        "self_improvement_complete": True,
     }
 
     assert brain.candidates(state)[0].action == "income_market_research"
@@ -53,6 +54,7 @@ class VerifiedEconomicCycleTests(TestCase):
 
     def test_prerequisite_evidence_must_follow_latest_offer_and_be_ordered(self):
         now = timezone.now()
+        self.add_task("master_self_improvement", now - timedelta(days=4))
         self.add_task("income_market_research", now - timedelta(days=3))
         self.add_task("income_opportunity_score", now - timedelta(days=2))
         self.add_task("income_offer_design", now - timedelta(days=1))
@@ -60,6 +62,7 @@ class VerifiedEconomicCycleTests(TestCase):
         brain = AutonomousBrain()
         state = brain.observe()
         self.assertFalse(state["market_research_complete"])
+        self.assertTrue(state["self_improvement_complete"])
         self.assertFalse(state["opportunity_scored"])
 
         self.add_task("income_opportunity_score", now - timedelta(hours=2))
@@ -76,3 +79,9 @@ class VerifiedEconomicCycleTests(TestCase):
         state = brain.observe()
         self.assertTrue(state["market_research_complete"])
         self.assertTrue(state["opportunity_scored"])
+
+    def test_self_improvement_is_the_first_master_objective(self):
+        brain = AutonomousBrain()
+        state = brain.observe()
+        self.assertFalse(state["self_improvement_complete"])
+        self.assertEqual(brain.candidates(state)[0].action, "master_self_improvement")
