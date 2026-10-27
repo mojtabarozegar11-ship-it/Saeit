@@ -1,0 +1,148 @@
+name: Zomorod domain-only response header capability diagnosis
+on:
+  pull_request:
+    paths: [.github/workflows/zomorod-header-capability-20261027.yml]
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-header-capability-20261027.yml]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-header-capability-20261027
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify isolated diagnostic scope
+        run: |
+          set -euo pipefail
+          grep -Fq 'PROBE_CLEANUP=complete' .github/workflows/zomorod-header-capability-20261027.yml
+          grep -Fq 'test ! -e "$folder"' .github/workflows/zomorod-header-capability-20261027.yml
+          echo SCOPED_PROBE_SOURCE=verified
+  diagnose:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Open pinned and non-interactive VPS-to-cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-header-capability"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo PINNED_RELAY=verified
+      - name: Probe only newly-created isolated path and delete it exactly
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/zm-header-capability/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          run="$1"
+          case "$run" in ''|*[!0-9]*) echo INVALID_RUN_ID; exit 1;; esac
+          web="/home/zomorod2/public_html"
+          folder="$web/zm-header-capability-$run"
+          test -d "$web" && test ! -L "$web"
+          test ! -e "$folder" && test ! -L "$folder"
+          before="$(sha256sum "$web/index.html" "$web/.htaccess" "$web/store/index.php" "$web/search/index.json" "$web/about/index.html" "$web/topics/index.html")"
+          install -d -m 755 "$folder"
+          cleanup(){
+            set +e
+            test "$folder" = "/home/zomorod2/public_html/zm-header-capability-$run" || return 1
+            if test -f "$folder/.htaccess" && test ! -L "$folder/.htaccess"; then unlink "$folder/.htaccess"; fi
+            if test -f "$folder/probe.txt" && test ! -L "$folder/probe.txt"; then unlink "$folder/probe.txt"; fi
+            rmdir "$folder"
+            if test ! -e "$folder" && test ! -L "$folder"; then echo PROBE_CLEANUP=complete; else echo PROBE_CLEANUP=failed; fi
+          }
+          trap cleanup EXIT
+          python3 - "$folder" "$run" <<'PY'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1]);run=sys.argv[2]
+          p.joinpath('probe.txt').write_text('zomorodmelal root-domain diagnostic\n',encoding='utf-8')
+          p.joinpath('.htaccess').write_text('''<IfModule mod_headers.c>
+          Header always set X-ZM-Always "ok"
+          Header set X-ZM-Default "ok"
+          Header always set X-ZM-Expr "ok" "expr=%{REQUEST_URI} == '/zm-header-capability-'''+run+'''/probe.txt'"
+          </IfModule>
+          <IfModule mod_setenvif.c>
+          SetEnvIf Request_URI "^/zm-header-capability-'''+run+'''/probe\\.txt$" ZM_PROBE_URI=1
+          </IfModule>
+          <IfModule mod_headers.c>
+          Header always set X-ZM-Env "ok" env=ZM_PROBE_URI
+          </IfModule>
+          ''',encoding='utf-8')
+          p.joinpath('probe.txt').chmod(0o644)
+          p.joinpath('.htaccess').chmod(0o644)
+          PY
+          url="https://zomorodmelal.ir/zm-header-capability-$run/probe.txt?nocache=$run"
+          response="$(curl -sSIL --connect-timeout 8 --max-time 25 -H 'Cache-Control: no-cache' "$url")"
+          printf '%s\n' "$response" | grep -iE '^(HTTP/|x-zm-|content-security-policy:|server:)' || true
+          printf '%s\n' "$response" | grep -Eq '^HTTP/[0-9.]+ 200|^HTTP/2 200' || { echo PUBLIC_PROBE_ROUTE=unavailable; exit 1; }
+          body="$(curl -fsSL --connect-timeout 8 --max-time 25 "$url")"
+          test "$body" = 'zomorodmelal root-domain diagnostic' || { echo PUBLIC_PROBE_BODY=wrong_route; exit 1; }
+          echo PUBLIC_PROBE_ROUTE=200
+          for suffix in Always Default Expr Env; do
+            if printf '%s\n' "$response" | grep -iq "^x-zm-$suffix: ok"; then
+              echo "HEADER_${suffix}=works"
+            else
+              echo "HEADER_${suffix}=absent"
+            fi
+          done
+          after="$(sha256sum "$web/index.html" "$web/.htaccess" "$web/store/index.php" "$web/search/index.json" "$web/about/index.html" "$web/topics/index.html")"
+          test "$before" = "$after"
+          echo PROTECTED_LIVE_FILES=unchanged
+          REMOTE
+      - name: Remove ephemeral relay credentials
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/zm-header-capability"
+          if test -d "$d"; then
+            for f in vps.key host.key config vps.known host.known; do
+              if test -f "$d/$f" && test ! -L "$d/$f"; then unlink "$d/$f"; fi
+            done
+            rmdir "$d"
+          fi
