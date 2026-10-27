@@ -69,6 +69,14 @@ class PublicClaimsTests(unittest.TestCase):
         )
         self.assertNotIn("public_html", str(mod.APP))
 
+    def test_separate_metadata_source_replacement(self):
+        original = 'meta_description = "Professional collaboration in Vancouver or remotely."'
+        updated = mod.strict_replace(original, mod.SEO_OLD, mod.SEO_NEW, "Contact SEO")
+        self.assertNotIn("Vancouver", updated)
+        self.assertIn("international and remote teams", updated)
+        with self.assertRaises(ValueError):
+            mod.strict_replace(updated, mod.SEO_OLD, mod.SEO_NEW, "Contact SEO")
+
     def test_duplicate_meta_block_rejected(self):
         with self.assertRaises(ValueError):
             mod.description(
