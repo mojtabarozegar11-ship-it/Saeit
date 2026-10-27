@@ -364,3 +364,28 @@ test('restored time stop expires normally and forged permanent freezes fail clos
   for (const freeze of [-1,5.01,1e8,Infinity,NaN,'5',null])
     assert.equal(validateCampaignSave({...fresh(),freeze}),false,String(freeze));
 });
+
+
+test('crowded recovery saves retain unique mission intel when the runtime restores 30 pickups', () => {
+  const ammo = Array.from({length:57}, (_,i) => ({x:2,y:3,life:20,type:'ammo',serial:i}));
+  const intel = Array.from({length:3}, (_,i) => ({
+    x:4+i,y:5+i,life:3600,type:'mission-intel',spotIndex:i
+  }));
+  const saved={...fresh(),mission:2,pickups:[...ammo,...intel]};
+  assert.equal(validateCampaignSave(saved),true,'crowded saved recovery stage is valid');
+  const restored=boundedCampaignPickups(saved.pickups).slice(-30);
+  assert.equal(restored.length,30);
+  assert.deepEqual(restored.filter(p=>p.type==='mission-intel').map(p=>p.spotIndex),[0,1,2],
+    'all original recovery items must survive the runtime cap');
+  assert.deepEqual(restored.filter(p=>p.type==='ammo').map(p=>p.serial),
+    Array.from({length:27},(_,i)=>i+30),'keep the newest transient drops');
+  const resumed={...saved,pickups:restored};
+  assert.equal(validateCampaignSave(resumed),true);
+  assert.equal(restoreRecoveryPickups(resumed,[[4,5],[5,6],[6,7]]),0,
+    'recovery must not create replacement intel when original items were preserved');
+  assert.equal(saved.pickups.length,60,'original persisted snapshot is not mutated');
+  const client=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
+  assert.match(client,/world\\.pickups=boundedCampaignPickups\\(world\\.pickups\\)\\.slice\\(-30\\)/,
+    'production restore must use the same intel-preserving bounded selection');
+  assert.doesNotMatch(client,/world\\.pickups=\\(world\\.pickups\\|\\|\\[\\]\\)\\.slice\\(0,30\\)/);
+});
