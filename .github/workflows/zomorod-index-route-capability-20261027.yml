@@ -19,8 +19,8 @@ jobs:
       - name: Verify isolated diagnostic scope
         run: |
           set -euo pipefail
-          grep -Fq 'PROBE_CLEANUP=complete' .github/workflows/zomorod-index-route-capability-20261027.yml
-          grep -Fq 'INDEX_PROBE_CLEANUP=complete' .github/workflows/zomorod-index-route-capability-20261027.yml
+          grep -Fq 'ROOT_PHP_PROBE_CLEANUP=complete' .github/workflows/zomorod-index-route-capability-20261027.yml
+          grep -Fq 'test ! -e "$web/index.php"' .github/workflows/zomorod-index-route-capability-20261027.yml
           echo SCOPED_INDEX_SOURCE=verified
   diagnose:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -75,7 +75,7 @@ jobs:
           printf '%s\n' "$scan" > "$d/host.known"
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           echo PINNED_RELAY=verified
-      - name: Probe PHP header and index precedence under a new domain-only temporary directory
+      - name: Reversible mirrored-homepage PHP priority probe with exact private backup
         shell: bash
         run: |
           set -euo pipefail
@@ -83,40 +83,55 @@ jobs:
           set -euo pipefail
           run="$1"
           case "$run" in ''|*[!0-9]*) echo INVALID_RUN_ID; exit 1;; esac
-          web="/home/zomorod2/public_html"
-          folder="$web/zm-index-route-$run"
+          web=/home/zomorod2/public_html
+          php="$web/index.php"
+          original="$web/index.html"
+          htaccess="$web/.htaccess"
+          backup="/home/zomorod2/.backups/zomorod-index-mirror-20261027/$run"
           test -d "$web" && test ! -L "$web"
-          test -s "$web/index.html" && test ! -L "$web/index.html"
-          test ! -e "$web/index.php" && test ! -L "$web/index.php"
-          test ! -e "$folder" && test ! -L "$folder"
-          before="$(sha256sum "$web/index.html" "$web/.htaccess" "$web/store/index.php" "$web/search/index.json" "$web/about/index.html" "$web/topics/index.html")"
-          install -d -m 755 "$folder"
+          test -s "$original" && test ! -L "$original"
+          test -s "$htaccess" && test ! -L "$htaccess"
+          test ! -e "$php" && test ! -L "$php"
+          test ! -e "$backup" && test ! -L "$backup"
+          before="$(sha256sum "$original" "$htaccess" "$web/store/index.php" "$web/search/index.json" "$web/about/index.html" "$web/topics/index.html")"
+          install -d -m 700 "$backup"
+          cp -p "$original" "$backup/index.html"
+          cp -p "$htaccess" "$backup/.htaccess"
+          cmp -s "$original" "$backup/index.html"
+          cmp -s "$htaccess" "$backup/.htaccess"
+          echo ROOT_PHP_PROBE_BACKUP=verified
+          created=0
           cleanup(){
             set +e
-            test "$folder" = "/home/zomorod2/public_html/zm-index-route-$run" || return 1
-            for f in index.html index.php;do
-              if test -f "$folder/$f" && test ! -L "$folder/$f";then unlink "$folder/$f";fi
-            done
-            rmdir "$folder"
-            if test ! -e "$folder" && test ! -L "$folder";then echo INDEX_PROBE_CLEANUP=complete;else echo INDEX_PROBE_CLEANUP=failed;return 1;fi
+            if test "$created" = 1;then
+              if cmp -s "$php" "$backup/index.php.candidate" && test ! -L "$php";then unlink "$php";else echo ROOT_PHP_PROBE_CLEANUP=conflict;return 1;fi
+            fi
+            if test ! -e "$php" && test ! -L "$php";then echo ROOT_PHP_PROBE_CLEANUP=complete;else echo ROOT_PHP_PROBE_CLEANUP=failed;return 1;fi
           }
           trap cleanup EXIT
-          printf 'ZOMOROD_INDEX_HTML\n' > "$folder/index.html"
-          printf "<?php\nheader('X-ZM-PHP-Probe: ok');\necho 'ZOMOROD_INDEX_PHP';\n" > "$folder/index.php"
-          chmod 644 "$folder/index.html" "$folder/index.php"
-          base="https://zomorodmelal.ir/zm-index-route-$run"
-          php_body="$(curl -fsSL --connect-timeout 8 --max-time 25 -H 'Cache-Control: no-cache' "$base/index.php?nocache=$run")"
-          test "$php_body" = "ZOMOROD_INDEX_PHP" || { echo PHP_HANDLER=unavailable;exit 1; }
-          echo PHP_HANDLER=works
-          php_headers="$(curl -fsSIL --connect-timeout 8 --max-time 25 -H 'Cache-Control: no-cache' "$base/index.php?nocache=$run")"
-          if printf '%s\n' "$php_headers" | grep -iq '^x-zm-php-probe: ok';then echo PHP_HEADER=works;else echo PHP_HEADER=missing;fi
-          root_body="$(curl -fsSL --connect-timeout 8 --max-time 25 -H 'Cache-Control: no-cache' "$base/?nocache=$run")"
-          case "$root_body" in
-            ZOMOROD_INDEX_HTML) echo INDEX_PRIORITY=html;;
-            ZOMOROD_INDEX_PHP) echo INDEX_PRIORITY=php;;
-            *) echo INDEX_PRIORITY=unknown;exit 1;;
-          esac
-          after="$(sha256sum "$web/index.html" "$web/.htaccess" "$web/store/index.php" "$web/search/index.json" "$web/about/index.html" "$web/topics/index.html")"
+          printf '%s\n' '<?php' \
+            "header('X-ZM-Root-PHP-Mirror: ok');" \
+            "header('X-Frame-Options: SAMEORIGIN');" \
+            "header(\"Content-Security-Policy: frame-ancestors 'self'\", false);" \
+            "header('Content-Type: text/html; charset=UTF-8');" \
+            '$bytes = file_get_contents(__DIR__ . "/index.html");' \
+            'if ($bytes === false) { http_response_code(503); exit; }' \
+            'echo $bytes;' > "$backup/index.php.candidate"
+          chmod 644 "$backup/index.php.candidate"
+          ln "$backup/index.php.candidate" "$php"
+          created=1
+          url="https://zomorodmelal.ir/?zm_php_mirror=$run"
+          root_code="$(curl -sS --connect-timeout 8 --max-time 25 -H 'Cache-Control: no-cache' -D "$backup/root.headers" -o "$backup/root.body" -w '%{http_code}' "$url")"
+          test "$root_code" = 200 || { echo ROOT_PHP_PROBE_HTTP="$root_code";exit 1; }
+          cmp -s "$backup/root.body" "$original" || { echo ROOT_PHP_PROBE_CONTENT=mismatch;exit 1; }
+          echo ROOT_PHP_PROBE_CONTENT=exact
+          if grep -iq '^x-zm-root-php-mirror: ok' "$backup/root.headers";then echo ROOT_PHP_PRIORITY=works;else echo ROOT_PHP_PRIORITY=absent;fi
+          if grep -iq '^x-frame-options: SAMEORIGIN' "$backup/root.headers";then echo ROOT_FRAME_HEADER=present;else echo ROOT_FRAME_HEADER=absent;fi
+          direct_code="$(curl -sS --connect-timeout 8 --max-time 25 -H 'Cache-Control: no-cache' -D "$backup/direct.headers" -o "$backup/direct.body" -w '%{http_code}' "https://zomorodmelal.ir/index.php?zm_php_mirror=$run")"
+          test "$direct_code" = 200 || { echo DIRECT_PHP_HTTP="$direct_code";exit 1; }
+          cmp -s "$backup/direct.body" "$original"
+          if grep -iq '^x-zm-root-php-mirror: ok' "$backup/direct.headers";then echo DIRECT_PHP_HEADER=works;else echo DIRECT_PHP_HEADER=absent;fi
+          after="$(sha256sum "$original" "$htaccess" "$web/store/index.php" "$web/search/index.json" "$web/about/index.html" "$web/topics/index.html")"
           test "$before" = "$after"
           echo PROTECTED_LIVE_FILES=unchanged
           REMOTE
