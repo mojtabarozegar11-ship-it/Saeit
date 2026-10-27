@@ -1,0 +1,103 @@
+name: MojPlayWin source architecture audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-source-architecture-audit-20261027.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-map:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-structure-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Diagnose exact live game source before any write
+      - name: Audit repeated content provenance and semantic page order
+        run: |
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import os,re,hashlib
+          root=Path("/home/zomorod2/mojplaywin.com")
+          scopes=[root/"design-preview-20261017",root/"index.php",root/"index.html",root/".htaccess"]
+          keys=[b"mpw-ten-illustrated-20261018",b"mpw-research-editorials-20261019",b"mpw-research30",b"Ten illustrated guides:"]
+          print("MAIN_ARCH_AUDIT_BEGIN")
+          for path in scopes[:1]:
+              count=0
+              for base,dirs,files in os.walk(path,followlinks=False):
+                  dirs[:]=[x for x in dirs if x not in (".git","node_modules","vendor","backup","backups","assets","images","uploads") and not x.startswith(".")]
+                  for name in files:
+                      if not name.endswith((".php",".html",".htm")):continue
+                      p=Path(base)/name
+                      try:
+                          if p.stat().st_size>850000:continue
+                          s=p.read_bytes()
+                      except (PermissionError,OSError):continue
+                      hits=[(k.decode(),s.count(k)) for k in keys if k in s]
+                      if hits:
+                          count+=1
+                          fp=s.find(b"<footer");fm=s.find(b"</footer>");im=s.find(b"</main>")
+                          print("SOURCE",str(p.relative_to(root)),"bytes",len(s),"sha256",hashlib.sha256(s).hexdigest()[:16],"hits",hits,"footer_open",fp,"footer_close",fm,"main_close",im,"marker10",s.find(keys[0]),"markerR",s.find(keys[1]))
+                  if count>100:break
+              print("MATCHED_FILES",count)
+          for p in scopes[1:]:
+              if p.exists() and p.is_file():
+                  s=p.read_bytes()
+                  print("ROOT_FILE",str(p.relative_to(root)),"bytes",len(s),"sha256",hashlib.sha256(s).hexdigest()[:16],"hit10",s.count(keys[0]),"hitR",s.count(keys[1]))
+                  if p.name==".htaccess":
+                      for line in s.decode("utf-8","replace").splitlines():
+                          if any(q in line.lower() for q in ("knowledge","services","research","mpw-ten-editorials")) and len(line)<350:print("REWRITE",line[:350])
+          PY
+      - name: Clear ephemeral relay keys
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-structure-ssh"
+          if [ -d "$d" ]; then shred -u "$d/vps.key" "$d/host.key" 2>/dev/null || true; fi
