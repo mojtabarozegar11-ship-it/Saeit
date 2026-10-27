@@ -113,12 +113,13 @@ def audit(folder, manifest_path):
     zero_pairs, one_pairs, multi_pairs = int(no.group(1)), int(unique.group(1)), int(multi.group(1))
     if zero_pairs + one_pairs + multi_pairs != original_pairs:
         raise ValueError("Original Bowtie2 categories do not sum to input pairs")
-    # Bowtie2 concordant-pair categories are not a crosswalk of the SAM
-    # primary-first-mate MAPQ-filtered gene assignments.  Discordant/mixed
-    # modes, read-pair versus alignment units, and filtering prevent
-    # subtracting the two totals to infer a lower bound on *counted*
-    # multimappers.  The alignment pool contains multimapping, but the
-    # count-level origin cannot be reconstructed from these summaries.
+    # Conditional pigeonhole bound: if every counted primary proper first
+    # mate maps to a distinct input pair in this same Bowtie2 run, and
+    # proper-pair flags correspond to the reported concordant categories,
+    # no more than one_pairs counts can come from concordant-once pairs.
+    # The archived aggregate files do not independently cross-tabulate
+    # counted read IDs with these categories, so do not label this an
+    # unconditional or directly observed counted-multimapper minimum.
     descriptive_difference = total - one_pairs
     alignment_pool_has_multimapping = multi_pairs > 0
     return {
@@ -139,7 +140,9 @@ def audit(folder, manifest_path):
         "concordant_more_than_once_pairs": multi_pairs,
         "assigned_minus_concordant_unique_pairs_descriptive_only": descriptive_difference,
         "minimum_counted_fragments_from_multimapping_category": None,
-        "counted_multimapping_lower_bound": "NOT_IDENTIFIABLE_FROM_AGGREGATE_SUMMARIES",
+        "counted_multimapping_lower_bound": "NOT_UNCONDITIONALLY_VERIFIED_FROM_ARCHIVED_AGGREGATES",
+        "conditional_lower_bound_if_one_primary_first_mate_per_concordant_pair": max(0, descriptive_difference),
+        "conditional_bound_requires_read_id_and_flag_crosswalk": True,
         "alignment_pool_contains_concordant_multimapping": alignment_pool_has_multimapping,
         "sparse_integer_table_integrity": "PASS",
         "unique_mapping_claim": "NOT_ESTABLISHED_FOR_COUNTED_FRAGMENTS",
