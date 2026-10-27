@@ -12,8 +12,10 @@ verify_public_assets = module.verify_public_assets
 
 
 class Response:
-    def __init__(self, body, status=200):
-        self.body, self.status = body, status
+    def __init__(self, body, status=200, url=None):
+        self.body, self.status, self.url = body, status, url
+    def geturl(self):
+        return self.url
     def __enter__(self):
         return self
     def __exit__(self, *_):
@@ -33,6 +35,7 @@ class ReleaseGateTests(unittest.TestCase):
         self.assets = ['game.js', 'three-addons/loader.js']
         self.responses = {name: (self.root / name).read_bytes() for name in self.assets}
         self.requests = []
+        self.redirect_to = None
 
     def opener(self, request, timeout):
         self.assertEqual(timeout, 35)
@@ -40,7 +43,7 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertIn('release_sha256=', request.full_url)
         self.requests.append(request.full_url)
         name = request.full_url.split('/ramadan-war/', 1)[1].split('?', 1)[0]
-        return Response(self.responses[name])
+        return Response(self.responses[name], url=self.redirect_to or request.full_url)
 
     def check(self):
         return verify_public_assets('https://example.test/ramadan-war/', self.root,
@@ -59,6 +62,35 @@ class ReleaseGateTests(unittest.TestCase):
         self.responses['game.js'] += b'\nUNEXPECTED'
         with self.assertRaisesRegex(RuntimeError, 'SHA-256 mismatch: game.js'):
             self.check()
+
+    def test_redirect_to_other_host_or_asset_fails_closed(self):
+        self.redirect_to = 'https://mirror.example.test/ramadan-war/game.js'
+        with self.assertRaisesRegex(RuntimeError, 'live asset redirected: game.js'):
+            self.check()
+        self.redirect_to = 'https://example.test/ramadan-war/old-game.js'
+        with self.assertRaisesRegex(RuntimeError, 'live asset redirected: game.js'):
+            self.check()
+
+    def test_symlinked_ancestor_is_not_a_release_asset(self):
+        external = self.root / 'external'
+        external.mkdir()
+        (external / 'loader.js').write_bytes(b'new loader')
+        (self.root / 'three-addons/loader.js').unlink()
+        (self.root / 'three-addons').rmdir()
+        (self.root / 'three-addons').symlink_to(external, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, 'missing or linked: three-addons/loader.js'):
+            self.check()
+
+    def test_https_and_canonical_asset_paths_required(self):
+        for url in ('http://example.test/ramadan-war/',
+                    'https://example.test/ramadan-war/?bypass=1',
+                    'https://user:pass@example.test/ramadan-war/'):
+            with self.subTest(url=url), self.assertRaisesRegex(ValueError, 'HTTPS directory'):
+                verify_public_assets(url, self.root, self.assets, self.opener)
+        for rel in ('three-addons//loader.js', './game.js', r'..\\private'):
+            with self.subTest(path=rel), self.assertRaisesRegex(ValueError, 'unsafe asset path'):
+                verify_public_assets('https://example.test/ramadan-war/',
+                                     self.root, [rel], self.opener)
 
     def test_missing_local_asset_and_unsafe_path_fail_closed(self):
         (self.root / 'game.js').unlink()
