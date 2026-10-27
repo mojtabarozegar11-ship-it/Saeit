@@ -97,7 +97,7 @@ jobs:
                   print(f'MASTER_SQLITE_FILE_{suffix or "DB"}_BYTES={stat.st_size} MTIME={int(stat.st_mtime)}')
               except OSError: print(f'MASTER_SQLITE_FILE_{suffix or "DB"}_BYTES=absent')
           backups=sorted(backup_dir.glob('master-before-*.sqlite3'),key=lambda p:p.stat().st_mtime)
-          if backups: paths.append(('LATEST_BACKUP',backups[-1]))
+          for index,path in enumerate(backups): paths.append((f'BACKUP_{index}',path))
           for label,path in paths:
               try:
                   conn=sqlite3.connect(path.as_uri()+'?mode=ro',uri=True,timeout=3)
@@ -114,6 +114,10 @@ jobs:
           echo "MASTER_PREFLIGHT_RUNNER_PID=$"
           echo MASTER_ACTIVATION_PROCESSES
           ps -eo pid=,etime=,comm=,args= | grep -E '[a]ctivate_vps_master_agent\.sh|[a]utonomous_master_loop|[v]ps_master_evolution_cycle\.py' | cut -c1-220 | tail -10 || true
+          echo MASTER_FACTORY_WORKER_PROCESSES
+          ps -eo pid=,ppid=,etime=,stat=,comm=,args= | grep -E '[m]anage.py (autonomous_master_loop|economic_autorun|online_income_cycle|run_economic_worker)|[e]conomic_worker|[a]utonomous_master_loop' | cut -c1-220 | tail -20 || true
+          echo MASTER_FACTORY_CRON
+          crontab -l 2>/dev/null | grep 'SAEIT_MASTER_AGENT_V1' | cut -c1-220 || true
           activation_pid="$(ps -eo pid=,args= | awk '/bash .*activate_vps_master_agent\.sh/ && !/awk/ {print $1; exit}')"
           if test -n "$activation_pid"; then
             pids="$(python3 - "$activation_pid" <<'PY'
