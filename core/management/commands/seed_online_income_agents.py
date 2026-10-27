@@ -19,7 +19,7 @@ CAPABILITIES = [
 MASTER_AGENT = (
     "economic-master-agent",
     "Economic Master Agent",
-    "Build the project, remove blockers, create market-ready assets, commercialize them, and increase verified revenue.",
+    "Continuously improve the agent and factory through evidenced upgrades; manage projects, products, lawful trade and customer delivery; increase settled cash profit; fund essential operating costs only from collected revenue within an auditable preauthorized budget.",
 )
 
 ASSIGNMENTS = [code for code, *_ in CAPABILITIES if code not in ("factory_native_review", "factory_f41_private_build")]
