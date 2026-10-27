@@ -1,0 +1,75 @@
+name: VPS hidden storage and deleted-open process attribution READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/vps-hidden-other-and-openfd-census-20261025.yml
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Attribute remaining masked home usage and deleted-open file handles without touching processes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-owner-reset-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 550s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          import collections,hashlib,json,os,re,shutil,subprocess
+          home=Path('/home/githubops')
+          if home.is_symlink() or not home.is_dir() or os.geteuid()==0:raise SystemExit('UNSAFE_ACCOUNT_AUDIT')
+          hidden=[p for p in home.iterdir() if p.name.startswith('.') and not p.is_symlink()]
+          cmd=subprocess.run(['du','-sx','-B1','--']+[str(p) for p in hidden],capture_output=True,text=True,timeout=230)
+          if cmd.returncode:raise SystemExit('HIDDEN_USAGE_SCAN_FAILED')
+          safe=[]
+          sensitive_total=0
+          for line in cmd.stdout.splitlines():
+              n,pth=line.split('\t',1)
+              name=Path(pth).name
+              if any(t in name.lower() for t in ('.ssh','.gnupg','credential','secret','token','key')):
+                  sensitive_total+=int(n);continue
+              safe.append({'name':name,'bytes':int(n)})
+          safe.sort(key=lambda x:-x['bytes'])
+          opened={'available':False}
+          if shutil.which('lsof'):
+              cp=subprocess.run(['lsof','-nP','+L1','-u','githubops','-Fpcfnsit'],capture_output=True,text=True,timeout=35)
+              if cp.returncode in (0,1):
+                  by_process=collections.defaultdict(dict)
+                  current_process='unknown'
+                  inode=None;size=0;dev=None
+                  def take():
+                      if inode and size>0:
+                          by_process[current_process][inode]=max(by_process[current_process].get(inode,0),size)
+                  for line in cp.stdout.splitlines():
+                      if line.startswith('p'):
+                          take();current_process='unknown';inode=None;size=0
+                      elif line.startswith('c'):
+                          current_process=line[1:][:48]
+                      elif line.startswith('f'):
+                          take();inode=None;size=0
+                      elif line.startswith('i'):
+                          inode=line[1:]
+                      elif line.startswith('s'):
+                          try:size=int(line[1:])
+                          except ValueError:pass
+                  take()
+                  opened={'available':True,'by_process_top':sorted([{'process':k,'unique_inode_count':len(v),'sum_unique_sizes':sum(v.values())} for k,v in by_process.items()],key=lambda x:-x['sum_unique_sizes'])[:20]}
+          print('VPS_HIDDEN_NONCREDENTIAL_AND_OPENFD='+json.dumps({'hidden_directories':safe[:35],
+              'masked_credential_related_bytes':sensitive_total,
+              'all_hidden_scanned_bytes':sum(x['bytes'] for x in safe)+sensitive_total,
+              'open_deleted':opened,'mutations':0},sort_keys=True),flush=True)
+
+          PY
+          echo VPS_HIDDEN_OPENFD_CENSUS_READONLY=PASS

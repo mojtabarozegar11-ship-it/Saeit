@@ -1,0 +1,68 @@
+name: VPS verify disk reclaimed and protected factory assets READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/vps-post-stale-partial-cleanup-integrity-20261025.yml
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Verify partial removal, full ciphertext backups, production engine and photo asset existence
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-owner-reset-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 550s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          import json,os,subprocess,shutil
+          home=Path('/home/githubops')
+          backup=home/'.private-mojplaywin-offhost-backups'
+          expected={
+          'mojplaywin_20261017_direct_39028306081_mysql_gpgv2.gpg':352852163,
+          'mojplaywin_20261017_direct_39028678930_files_gpgv2.gpg':1148605039,
+          'mojplaywin_20261017_direct_39028678930_mysql_gpgv2.gpg':353724449,
+          'mojplaywin_20261021T160246Z_ecabeb758eeb557b_files_gpgv2.gpg':620874129,
+          'mojplaywin_20261021T185832Z_831bd545176b41b5_mysql_gpgv2.gpg':1012874230,
+          'mojplaywin_20261021T225926Z_07f2a09cf9284f0c_extra-webroots_gpgv2.gpg':31950822
+          }
+          if os.geteuid()==0 or os.environ.get('USER')!='githubops' or backup.is_symlink():
+              raise SystemExit('BAD_OPERATOR_OR_BACKUP_ROOT')
+          files=list(backup.iterdir())
+          if len(files)!=12 or any(p.is_symlink() or not p.is_file() for p in files):
+              raise SystemExit('POST_BACKUP_TOPOLOGY_MISMATCH')
+          if set(x.name for x in files)!=set(expected)|set(x[:-4]+'.manifest.json' for x in expected):
+              raise SystemExit('BACKUP_SET_DIFFERS')
+          for name,size in expected.items():
+              p=backup/name
+              if p.stat().st_size!=size:
+                  raise SystemExit('BACKUP_SIZE_MISMATCH')
+              m=backup/(name[:-4]+'.manifest.json')
+              d=json.loads(m.read_text())
+              if d.get('ciphertext_roundtrip_integrity_verified') is not True or d.get('source_completion_footer_verified') is not True:
+                  raise SystemExit('BACKUP_CIPHERTEXT_CHECK_MISSING')
+          protected=['factory-runtime','factory-runtime/operations','factory-runtime/private',
+          'factory-runtime/django-app','comfyui-isolated','offsite-zomorod-20261018-gzip',
+          'offsite-zomorod-20261018']
+          exists={p:(home/p).is_dir() for p in protected}
+          if not all(exists.values()):
+              raise SystemExit('PROTECTED_FACTORY_IMAGE_OR_SITE_ARCHIVE_MISSING')
+          d=shutil.disk_usage(str(home))
+          r={'free_bytes':d.free,'used_bytes':d.used,'total_bytes':d.total,'protected_directories':exists,
+          'completed_backup_count':6,'manifest_count':6,'partial_count':0,'mutations':0,'read_only':True}
+          print('VPS_POST_PARTIAL_CLEANUP_VERIFICATION='+json.dumps(r,sort_keys=True),flush=True)
+
+          PY
+          echo VPS_POST_CLEANUP_READONLY_VERIFIED=PASS

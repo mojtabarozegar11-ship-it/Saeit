@@ -1,0 +1,87 @@
+name: VPS protected projects and hidden cache composition READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/vps-hidden-projects-size-classifier-20261025.yml
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Classify hidden caches, image project and offsite archives without file deletion
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-owner-reset-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 550s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          import collections,json,os,subprocess
+          home=Path('/home/githubops')
+          if home.is_symlink() or not home.is_dir() or os.geteuid()==0:
+              raise SystemExit('UNSAFE_READONLY_OWNER_HOME')
+          allowed_hidden=('.cache','.local','.npm','.nvm','.rustup','.cargo','.vscode-server','.conda','.venv','.pip','.uv','.config')
+          def get_sizes(paths):
+              paths=[p for p in paths if p.exists() and not p.is_symlink()]
+              if not paths:return []
+              cmd=subprocess.run(['du','-sx','-B1','--']+[str(p) for p in paths],capture_output=True,text=True,timeout=210)
+              if cmd.returncode:raise SystemExit('SIZE_SCAN_FAILED')
+              items=[]
+              for line in cmd.stdout.splitlines():
+                  sz,name=line.split('\t',1)
+                  items.append({'name':Path(name).name,'bytes':int(sz)})
+              return sorted(items,key=lambda x:-x['bytes'])
+          hidden=get_sizes([home/n for n in allowed_hidden])
+          projects={}
+          for name in ('comfyui-isolated','offsite-zomorod-20261018-gzip','offsite-zomorod-20261018','factory-transfer-incoming'):
+              p=home/name
+              if p.is_symlink() or not p.is_dir():raise SystemExit('PROTECTED_PROJECT_PATH_UNSAFE:'+name)
+              children=list(p.iterdir())
+              if len(children)>3000:raise SystemExit('TOO_MANY_TOP_LEVEL_PROJECT_CHILDREN')
+              size=get_sizes(children)
+              projects[name]={'top_count':len(children),'top':size[:35],'total_top_children_bytes':sum(x['bytes'] for x in size)}
+          cache_breakdown={}
+          for name in ('.cache','.local'):
+              p=home/name
+              if p.is_dir() and not p.is_symlink():
+                  child=[x for x in p.iterdir() if not x.is_symlink() and not any(z in x.name.lower() for z in ('credential','secret','token','ssh'))]
+                  cache_breakdown[name]=get_sizes(child)[:35]
+          # Report only aggregate sizes/unique inode counts of deleted-but-open files.
+          import shutil
+          opened={'available':False}
+          if shutil.which('lsof'):
+              cp=subprocess.run(['lsof','-nP','+L1','-u','githubops','-Fpcfnsit'],capture_output=True,text=True,timeout=35)
+              if cp.returncode in (0,1):
+                  sizes={}
+                  inode=None;size=0;count=0
+                  for line in cp.stdout.splitlines():
+                      if line.startswith('f'):
+                          if inode is not None:sizes[inode]=max(sizes.get(inode,0),size)
+                          inode=None;size=0;count+=1
+                      elif line.startswith('i'):
+                          inode=line[1:]
+                      elif line.startswith('s'):
+                          try:size=int(line[1:])
+                          except ValueError:pass
+                  if inode is not None:sizes[inode]=max(sizes.get(inode,0),size)
+                  opened={'available':True,'listed_open_deleted_file_descriptors':count,
+                          'unique_reported_inodes':len(sizes),'sum_unique_reported_file_sizes':sum(sizes.values())}
+          print('VPS_HIDDEN_ARCHIVE_PHOTO_PROJECT_SIZES='+json.dumps({
+              'safe_named_hidden_directories':hidden,
+              'cache_and_local_children':cache_breakdown,
+              'preserved_projects':projects,'open_deleted':opened,
+              'mutations':0,'read_only':True},sort_keys=True),flush=True)
+
+          PY
+          echo VPS_HIDDEN_ARCHIVE_PROJECT_READONLY=PASS

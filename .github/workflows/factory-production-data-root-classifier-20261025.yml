@@ -1,0 +1,69 @@
+name: Factory production-data versus engine deep inventory READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/factory-production-data-root-classifier-20261025.yml
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Map large generated families and code signatures without mutations
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-owner-reset-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 550s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          from pathlib import Path
+          import collections,json,os,stat,subprocess
+          rt=Path('/home/githubops/factory-runtime')
+          private=rt/'private/autonomous-product-cycle'
+          families=('build-50','quality-excellence','native-candidate-evidence','research-dossiers','production-instructions','design-intake','engineering-intake','engineering-gaps','generated-product-recipes','generated-source-revisions','product-planning','research-rework','research-triage','quality-return-candidates','qa-rework','digital-products','customer-packs','production-warehouse')
+          if os.geteuid()==0 or os.environ.get('USER')!='githubops':
+              raise SystemExit('NONROOT_REQUIRED')
+          if rt.is_symlink() or private.is_symlink() or not private.is_dir():
+              raise SystemExit('FACTORY_PRIVATE_ROOT_UNSAFE')
+          rows=[]
+          for name in families:
+              root=private/name
+              if root.is_symlink() or not root.is_dir():raise SystemExit('UNSAFE_FAMILY:'+name)
+              top=sorted(root.iterdir())
+              if len(top)>100000:raise SystemExit('EXCESSIVE_TOP_CHILDREN')
+              topnames=[{'name':x.name,'kind':'directory' if x.is_dir() else 'file'} for x in top[:70]]
+              ext=collections.Counter()
+              dirs=files=symlinks=other=links=0
+              bytes_total=0
+              for base,ds,ns in os.walk(root,followlinks=False):
+                  dirs+=len(ds)
+                  for entry in ds+ns:
+                      p=Path(base)/entry
+                      if p.is_symlink():symlinks+=1
+                  for filename in ns:
+                      p=Path(base)/filename
+                      if p.is_symlink():continue
+                      if not p.is_file():other+=1;continue
+                      s=p.stat()
+                      files+=1
+                      bytes_total+=s.st_size
+                      if s.st_nlink!=1:links+=1
+                      ext[p.suffix.lower() or '[none]']+=1
+              rows.append({'name':name,'top_count':len(top),'top':topnames,
+                           'total_files':files,'total_dirs':dirs,'bytes':bytes_total,
+                           'extensions_top':ext.most_common(12),'symlinks':symlinks,
+                           'hardlinked_files':links,'special':other})
+          print('OWNER_FACTORY_GENERATED_FAMILY_SHAPES='+json.dumps(rows,sort_keys=True),flush=True)
+
+          PY
+          echo FACTORY_PRODUCTION_DATA_CLASSIFIER_READONLY=PASS
