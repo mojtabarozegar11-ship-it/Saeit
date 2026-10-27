@@ -114,6 +114,20 @@ def cycle_error_buckets(private):
                  "source_recoveries", "source_evolutions",
                  "quality_return_build_candidates")
         result = {"state": "valid", "cycle_status": data.get("cycle_status")}
+        status = data.get("runtime_health")
+        if isinstance(status, dict):
+            worker = {}
+            if status.get("status") in ("ok", "needs_rework"):
+                worker["status"] = status["status"]
+            for key in ("expected_design_backlog_count", "fatal_design_failure_count"):
+                value = status.get(key)
+                if type(value) is int and value >= 0:
+                    worker[key] = value
+            if type(status.get("backlog_retained")) is bool:
+                worker["backlog_retained"] = status["backlog_retained"]
+            result["runtime_health"] = worker
+        else:
+            result["runtime_health"] = None
         for key in names:
             values = data.get(key)
             result[key + "_count"] = len(values) if isinstance(values, list) else None
