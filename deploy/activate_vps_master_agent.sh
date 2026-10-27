@@ -202,9 +202,6 @@ mv -f "$master/run-evolution.sh.tmp" "$master/run-evolution.sh"
 "$master/run-evolution.sh"
 "$master/run-cycle.sh"
 # Preserve all unrelated cron entries exactly; reject competing master loops.
-old="$ops/backups/cron-before-master-$stamp.txt"
-crontab -l > "$old" 2>/dev/null || : > "$old"
-chmod 600 "$old"
 if grep -E 'economic_autorun|autonomous_master_loop' "$old" | grep -v 'SAEIT_MASTER_AGENT_V1' >/dev/null; then
   echo MASTER_COMPETING_EXISTING_CRON_DETECTED
   exit 1
