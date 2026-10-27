@@ -31,6 +31,12 @@ export function advanceHostileProjectile(bullet, dt, player, isWall) {
     if (bullet) bullet.life = -1;
     return false;
   }
+  // A legacy save can momentarily place the hero inside solid cover.
+  // Never allow a near-boundary projectile to damage a blocked hero.
+  if (isWall(Math.floor(player.x), Math.floor(player.y))) {
+    bullet.life = -1;
+    return false;
+  }
   // A projectile expiring during this tick cannot damage the player.
   if (bullet.life <= dt) {
     bullet.life = -1;
