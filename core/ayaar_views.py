@@ -91,6 +91,7 @@ def _api(request):
                 "case_tracking": True, "payment_enabled": False,
                 "applicant_followups": True, "report_export": True,
                 "public_report_integrity": True,
+                "manual_ai_review": True, "model_api_enabled": False,
                 "independent_certification_enabled": False,
                 "staff": bool(request.user.is_authenticated and request.user.is_staff),
             })
@@ -121,6 +122,10 @@ def _api(request):
             result = cases.append_case_evidence(
                 payload.get("case_id", ""), payload.get("access_key", ""),
                 payload.get("note", ""), request.FILES.getlist("files"), settings.SECRET_KEY
+            )
+        elif action == "consent_ai":
+            result = cases.grant_ai_consent(
+                payload.get("case_id", ""), payload.get("access_key", ""), settings.SECRET_KEY
             )
         elif action == "delete":
             result = cases.delete_case(
