@@ -57,6 +57,26 @@ const assert=require('node:assert/strict');
    let state=await page.evaluate(()=>window.RamadanWarDebug.getState());
    assert.equal(state.hp,100);assert.equal(state.lives,100);assert.equal(state.stage,0);assert.equal(state.mode,'game');
    assert.equal(state.rockets,12);assert.equal(state.drones,3);assert.equal(state.ammo,8);assert.equal(state.renderer,'webgl-threejs');assert(state.enemies>0,'mission enemy spawn '+JSON.stringify(state));
+   // Real Chromium event dispatch: browser shortcuts and composition must not
+   // consume rockets/drones or suppress native key handling on either viewport.
+   const shortcutCheck=await page.evaluate(()=>{
+     const before=window.RamadanWarDebug.getState(),results=[];
+     for(const opts of [
+       {code:'KeyQ',ctrlKey:true},{code:'KeyE',altKey:true},
+       {code:'KeyF',metaKey:true},{code:'KeyQ',isComposing:true}
+     ]){
+       const event=new KeyboardEvent('keydown',{bubbles:true,cancelable:true,...opts});
+       results.push(document.dispatchEvent(event));
+     }
+     const after=window.RamadanWarDebug.getState();
+     return {results,rocketsBefore:before.rockets,rocketsAfter:after.rockets,
+       dronesBefore:before.drones,dronesAfter:after.drones,shotsBefore:before.shots,shotsAfter:after.shots};
+   });
+   assert(shortcutCheck.results.every(Boolean),'modified/composing shortcuts must not be preventDefault-ed');
+   assert.equal(shortcutCheck.rocketsAfter,shortcutCheck.rocketsBefore,'Ctrl+Q or IME must not spend rockets');
+   assert.equal(shortcutCheck.dronesAfter,shortcutCheck.dronesBefore,'Alt+E must not spend drones');
+   assert.equal(shortcutCheck.shotsAfter,shortcutCheck.shotsBefore,'browser shortcuts must not fire weapons');
+   console.log('RAMADAN_REAL_MODIFIER_IME_PASS',v.name);
    await page.evaluate(()=>window.RamadanWarDebug.spawnTestEnemy());
    await page.evaluate(()=>{window.RamadanWarDebug.fire();window.RamadanWarDebug.rocket();window.RamadanWarDebug.drone()});
    await page.evaluate(()=>{window.RamadanWarDebug.spawnTestPickup('ammo');window.RamadanWarDebug.tick(.04)});state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.shots,1);assert.equal(state.rockets,11);assert.equal(state.drones,2);assert.equal(state.ammo,8,'ammo pickup restores the magazine');

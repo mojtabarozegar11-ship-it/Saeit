@@ -50,3 +50,10 @@ export function isOwnedGameplayPointer(activePointerId, incomingPointerId) {
   return Number.isInteger(activePointerId) && activePointerId >= 0 &&
     activePointerId === incomingPointerId;
 }
+
+// Browser/system shortcuts and IME composition are never gameplay commands.
+// This also protects movement keys from being latched during Ctrl/Alt/Meta combos.
+export function isModifiedOrComposingKey(event) {
+  return Boolean(event && (event.ctrlKey || event.altKey || event.metaKey ||
+    event.isComposing || event.keyCode === 229));
+}
