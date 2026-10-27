@@ -559,7 +559,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             failures, admission_failures, designer_failures, research_failures)
         state = {
             "schema_version": 1,
-            "cycle_status": runtime_health["status"],
+            "cycle_status": "needs_rework" if failures or admission_failures or designer_failures or research_failures else "ok",
             "runtime_health": runtime_health,
             "mode": "autonomous_supply_led",
             "depends_on_orders": False,
@@ -640,8 +640,10 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         healthy=state['cycle_status']=='ok'
         fresh=state['new_or_updated_product_count']>0
         reason = (None if fresh else
+                  'awaiting_independent_quality_clearance' if (
+                      runtime_health["status"] == "ok"
+                      and quality_return_orders and active_recipe_names) else
                   'blocked_design_or_research' if not healthy else
-                  'awaiting_independent_quality_clearance' if quality_return_orders and active_recipe_names else
                   'waiting_for_new_validated_need_or_design')
         state['zero_new_products_reason_code']=reason
         finished=time.time()
@@ -673,7 +675,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         maker.atomic_text(root / "production-state.json",
                           json.dumps(state, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
         fcntl.flock(file.fileno(), fcntl.LOCK_UN)
-        return {"status": runtime_health["status"],
+        return {"status": "needs_rework" if failures or admission_failures or designer_failures or research_failures else "ok",
                 "processed": dossier["processed_count"],
                 "manufactured": len(produced),
                 "new_artifacts": sum(bool(p.get("changed")) for p in produced),
