@@ -102,7 +102,10 @@ def webdriver_request(port, method, route, data=None):
         headers={"Content-Type": "application/json"},
     )
     try:
-        with urllib.request.urlopen(request, timeout=28) as response:
+        # Chrome session creation can exceed the ordinary request budget on busy CI runners.
+        # Do not retry POST /session: a timed-out creation might still be running.
+        timeout = 60 if method == "POST" and route == "/session" else 28
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             result = json.load(response)
     except Exception as exc:
         raise RuntimeError("WEBDRIVER_REQUEST_" + type(exc).__name__) from None
