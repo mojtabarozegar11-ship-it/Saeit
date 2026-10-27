@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """Offline failure-mode tests for the public release byte-for-byte gate."""
+import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
-from verify_public_release import verify_public_assets
+
+spec = importlib.util.spec_from_file_location('verify_public_release', Path(__file__).with_name('verify_public_release.py'))
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+verify_public_assets = module.verify_public_assets
 
 
 class Response:
