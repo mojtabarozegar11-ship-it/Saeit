@@ -111,6 +111,13 @@ class HomeDeduplicationTests(unittest.TestCase):
         self.assertNotIn("{% if show %}", updated)
         self.assertNotIn(ident, updated)
 
+    def test_release_checks_element_not_shared_css_selector(self):
+        workflow = (ROOT / ".github/workflows/mojtaba-home-deduplicate-20261027.yml").read_text(encoding="utf-8")
+        self.assertIn("'id=\"mpw-journal-longform-index-20261016\"' in doc", workflow)
+        self.assertIn("HOME_HTML_STILL_TOO_LARGE", workflow)
+        self.assertIn("PUBLIC_HOME_HTML_STILL_TOO_LARGE", workflow)
+        self.assertNotIn("if 'mpw-journal-longform-index-20261016' in doc:", workflow)
+
     def test_boundary_is_one_independent_template(self):
         self.assertEqual(mod.REL, "templates/personal_site/core/home.html")
         self.assertIn("/mojtaba_personal/mojtaba_roozegar_personal_v17", str(mod.APP))
