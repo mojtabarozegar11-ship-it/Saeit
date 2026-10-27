@@ -612,7 +612,7 @@ class EditionTests(unittest.TestCase):
         return "document_edition_failed_needs_engineering"
 
 
-def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=(),products_file=None):
+def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=(),products_file=None,excluded_families=()):
     """Rebuild from either verified generated or installed native recipe roots."""
     root=Path(root);source_root=Path(source_root);maker_path=Path(maker_path)
     if not root.is_dir() or root.is_symlink():raise ValueError("PRIVATE_FACTORY_ROOT_INVALID")
@@ -649,7 +649,13 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=(),pro
         if edition_source.resolve() in (p.resolve() for p in roots):
             raise ValueError("DOCUMENT_EDITION_DUPLICATE_SOURCE_ROOT")
         roots.append(edition_source)
-    if type(limit) is not int or not 1<=limit<=3:raise ValueError("BOUNDED_CAP_REQUIRED")
+    if type(limit) is not int or not 1<=limit<=40:raise ValueError("BOUNDED_CAP_REQUIRED")
+    if not isinstance(excluded_families,(list,tuple,set,frozenset)):
+        raise ValueError("EXCLUDED_FAMILY_SET_REQUIRED")
+    excluded_families=set(excluded_families)
+    if any(not isinstance(fid,str) or not re.fullmatch(r"F(?:0[1-9]|[1-3][0-9]|40)",fid)
+           for fid in excluded_families):
+        raise ValueError("EXCLUDED_FAMILY_ID_INVALID")
     maker=load_maker(maker_path)
     workorders=root/"quality-excellence"/"production-workorders"
     if not workorders.is_dir() or workorders.is_symlink():
@@ -691,6 +697,7 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=(),pro
         orders.append((folder.name,order))
     cursor=root/"quality-excellence"/"native-rebuild-cursor.json"
     orders=rotated_orders(orders,cursor)
+    processed_families=set()
     for recipe,order in orders:
         totals["orders_seen"]+=1
         locations=[(index,parent,parent/recipe)
@@ -741,6 +748,15 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=(),pro
         if is_edition:
             original=root/"quality-excellence"/"document-edition-private-stock"/recipe/"manufacturing_manifest.json"
         prior=checked_json(original) if original.is_file() and not original.is_symlink() else {}
+        family_id=prior.get("family_id")
+        if not isinstance(family_id,str) or not re.fullmatch(r"F(?:0[1-9]|[1-3][0-9]|40)",family_id):
+            totals["missing_source"]+=1
+            continue
+        # Keep one current product per production family in each repair sweep.
+        # A line advances only after its selected product is evaluated here.
+        if family_id in excluded_families or family_id in processed_families:
+            continue
+        processed_families.add(family_id)
         changed=prior.get("source_sha256")!=source_hash
         if is_edition:
             totals["document_editions_queued_for_strict_review"]+=1
