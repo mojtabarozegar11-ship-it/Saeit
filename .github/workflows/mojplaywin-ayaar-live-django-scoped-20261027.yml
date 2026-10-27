@@ -1,0 +1,155 @@
+name: AYAR scoped exact Django route one-time production release
+on:
+  push:
+    branches: [release/ayaar-exact-path-20261027]
+    paths:
+      - ".github/workflows/mojplaywin-ayaar-live-django-scoped-20261027.yml"
+      - "scripts/deploy_ayaar_live_django_scoped_20261027.py"
+permissions:
+  contents: read
+concurrency:
+  group: mpw-ayaar-one-authorized-shared-django-restart
+  cancel-in-progress: false
+jobs:
+  deploy-scoped-route:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/release/ayaar-exact-path-20261027'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check exact AYAR source and bounded mutation list
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          a=Path('scripts/deploy_ayaar_live_django_scoped_20261027.py')
+          b=Path('core/ayaar_views.py')
+          ast.parse(a.read_text('utf-8'))
+          ast.parse(b.read_text('utf-8'))
+          root=Path('site_releases/mojplaywin/ayaar-20261027')
+          names=('index.html','methodology.html','styles.css','hero.css','app.js','favicon.svg','hero-art.svg')
+          for name in names:
+              p=root/name
+              assert p.is_file() and not p.is_symlink() and 0 < p.stat().st_size < 350_000
+          assert 'AYAR-PREASSESSMENT-v1' in (root/'app.js').read_text('utf-8')
+          assert 'mojplaywin.com/ayaar/' in (root/'index.html').read_text('utf-8')
+          print('AYAAR_SOURCE_GUARD=PASS')
+          PY
+      - name: Verify all protected public baselines
+        shell: bash
+        run: |
+          set -euo pipefail
+          for route in / /store/ /saman/ /taniya/ /mojtaba.roozegar/; do
+            code="$(curl --connect-timeout 9 --max-time 25 -L -sS -o /dev/null -w '%{http_code}' "https://mojplaywin.com$route")"
+            echo "PROTECTED_BEFORE=$route:$code"
+            test "$code" = 200
+          done
+          code="$(curl --connect-timeout 9 --max-time 25 -sS -o /dev/null -w '%{http_code}' 'https://mojplaywin.com/ayaar/')"
+          echo "AYAAR_BEFORE=$code"
+          test "$code" = 404
+      - name: Prepare pinned GitHub VPS cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/ayaar-django-protected-relay"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            path="$d/${item}.key"
+            printf '%s' "${!item}" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$path"
+            chmod 600 "$path"
+            ssh-keygen -y -P '' -f "$path" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 13
+          EOF
+          chmod 600 "$d/config"
+      - name: Preflight and deploy only AYAR view, assets and two route entries
+        shell: bash
+        run: |
+          set -euo pipefail
+          conf="$RUNNER_TEMP/ayaar-django-protected-relay/config"
+          rid="${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          sha="$GITHUB_SHA"
+          [[ "$rid" =~ ^[0-9]{5,25}_[0-9]{1,3}$ ]]
+          timeout 60s ssh -T -F "$conf" saeit-cpanel "python3 - preflight '$rid' '$sha'" < scripts/deploy_ayaar_live_django_scoped_20261027.py
+          payload="$RUNNER_TEMP/ayaar-django-payload"
+          install -d -m 700 "$payload/core" "$payload/site_releases/mojplaywin/ayaar-20261027"
+          cp -- core/ayaar_views.py "$payload/core/"
+          for item in index.html methodology.html styles.css hero.css app.js favicon.svg hero-art.svg; do
+            cp -- "site_releases/mojplaywin/ayaar-20261027/$item" "$payload/site_releases/mojplaywin/ayaar-20261027/"
+          done
+          ( cd "$payload" && sha256sum core/ayaar_views.py site_releases/mojplaywin/ayaar-20261027/{index.html,methodology.html,styles.css,hero.css,app.js,favicon.svg,hero-art.svg} > manifest.sha256 )
+          AYAAR_RUN="$rid" AYAAR_SHA="$sha" AYAAR_PAYLOAD="$payload" python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ['AYAAR_PAYLOAD'])/'deployment.json'
+          p.write_text(json.dumps({'identity':'MPW_AYAAR_SCOPED_DJANGO_V1','run':os.environ['AYAAR_RUN'],'sha':os.environ['AYAAR_SHA']},sort_keys=True),encoding='utf-8')
+          PY
+          timeout 55s ssh -T -F "$conf" saeit-cpanel "mkdir -m 700 '/home/zomorod2/.mpw-ayaar-django-stage-$rid'"
+          tar -C "$payload" -cf - . | timeout 65s ssh -T -F "$conf" saeit-cpanel "tar -C '/home/zomorod2/.mpw-ayaar-django-stage-$rid' -xf -"
+          timeout 100s ssh -T -F "$conf" saeit-cpanel "python3 - deploy '$rid' '$sha'" < scripts/deploy_ayaar_live_django_scoped_20261027.py
+      - name: Exact public health gate and automatic rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          conf="$RUNNER_TEMP/ayaar-django-protected-relay/config"
+          rid="${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          sha="$GITHUB_SHA"
+          healthy=true
+          public="$RUNNER_TEMP/ayaar-public.html"
+          ready=false
+          for attempt in 1 2 3; do
+            code="$(curl --connect-timeout 9 --max-time 28 -sS -o "$public" -w '%{http_code}' 'https://mojplaywin.com/ayaar/' || true)"
+            echo "AYAAR_PROBE=$attempt:$code"
+            if test "$code" = 200 && grep -q 'AYAR — Digital Product Review' "$public"; then ready=true; break; fi
+            if test "$attempt" -lt 3; then sleep 3; fi
+          done
+          if test "$ready" != true; then healthy=false; fi
+          for route in /ayaar/app.js /ayaar/styles.css /ayaar/methodology.html /ayaar/favicon.svg; do
+            code="$(curl --connect-timeout 9 --max-time 28 -sS -o /dev/null -w '%{http_code}' "https://mojplaywin.com$route" || true)"
+            echo "AYAAR_ASSET=$route:$code"
+            if test "$code" != 200; then healthy=false; fi
+          done
+          for route in / /store/ /saman/ /taniya/ /mojtaba.roozegar/; do
+            code="$(curl --connect-timeout 9 --max-time 28 -L -sS -o /dev/null -w '%{http_code}' "https://mojplaywin.com$route" || true)"
+            echo "PROTECTED_AFTER=$route:$code"
+            if test "$code" != 200; then healthy=false; fi
+          done
+          if test "$healthy" != true; then
+            echo 'AYAAR_RELEASE_HEALTH_FAILED_RESTORING_SAVED_URLCONF'
+            timeout 90s ssh -T -F "$conf" saeit-cpanel "python3 - rollback '$rid' '$sha'" < scripts/deploy_ayaar_live_django_scoped_20261027.py
+            exit 1
+          fi
+          echo 'AYAAR_EXACT_DOMAIN_AND_STATIC_ASSETS_LIVE=TRUE'
+          echo 'PROTECTED_SHARED_ROUTES_PASSED=TRUE'
