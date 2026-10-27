@@ -24,6 +24,7 @@ def about_source():
 <p>into a new chapter abroad</p>
 <p>An unexpected move has changed my circumstances, not the value of what I have learned.</p>
 <p>This site welcomes people in Canada and internationally.</p>
+<p>My unexpected relocation to Vancouver made continuity especially important: evidence remains primary.</p>
 <section id="mpw-academic-profile-20261016">Owner-reported doctorate</section>
 {% endblock %}
 """

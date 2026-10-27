@@ -74,6 +74,8 @@ def revise_about(src: str) -> str:
         ("An unexpected move has changed my circumstances, not the value of what I have learned.",
          "New professional directions build on the value of what I have learned."),
         ("people in Canada and internationally", "people and organizations internationally"),
+        ("My unexpected relocation to Vancouver made continuity especially important:",
+         "Changing professional circumstances make continuity especially important:"),
     )
     used = 0
     for old, new in edits:
