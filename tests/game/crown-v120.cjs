@@ -33,6 +33,13 @@ assert.equal(forged.campaign.unlockedSector,1,'string stage cannot unlock sector
 assert.equal(forged.stats.kills,0);
 assert.equal(forged.stats.attempts,0);
 
+const validClear=readCrownSave({schema:120,campaign:{unlockedSector:10,cleared:true}});
+assert.equal(validClear.campaign.cleared,true,'real boolean completion remains readable');
+for(const [schema,cleared] of [[120,'true'],[120,{}],[120,1],['120',true],[null,true]]){
+  assert.equal(readCrownSave({schema,campaign:{unlockedSector:10,cleared}}).campaign.cleared,false,
+    'forged campaign clear must not unlock the victory state');
+}
+
 // Legacy score migration is a separate untrusted storage channel.
 const legacyLine=code.split('\n').find(line=>line.startsWith('let save=loadSave();try{'));
 assert.ok(legacyLine,'legacy migration source is available for executable regression');
