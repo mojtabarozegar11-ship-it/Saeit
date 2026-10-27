@@ -106,6 +106,12 @@ jobs:
           )"
             echo MASTER_ACTIVATION_PROCESS_TREE
             ps -o pid=,ppid=,etime=,stat=,wchan:24=,comm= -p "$pids" || true
+            for process_id in ${pids//,/ }; do
+              if test -r "/proc/$process_id/io"; then
+                io="$(awk "/^(read_bytes|write_bytes):/ {printf \\\"%s=%s \\\", substr(\\$1,1,length(\\$1)-1), \\$2}" "/proc/$process_id/io")"
+                echo "MASTER_PROCESS_IO pid=$process_id $io"
+              fi
+            done
           fi
           if command -v fuser >/dev/null 2>&1 && test -e "$base/operations/master-agent/activation.lock"; then
             fuser "$base/operations/master-agent/activation.lock" 2>/dev/null || true
