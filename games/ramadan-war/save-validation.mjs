@@ -90,6 +90,14 @@ export function validateCampaignSave(s) {
   if (s.objective != null && (typeof s.objective !== 'object' || Array.isArray(s.objective) ||
       !integer(s.objective.done, 0, 3) || !finite(s.objective.hold, 0, 100) ||
       typeof s.objective.bossDefeated !== 'boolean')) return false;
+  if (s.objective != null) {
+    // Prevent a locally edited in-progress save from exceeding the current
+    // operation's actual site count or marking timed defence complete early.
+    const maxDone = [2, 1, 3, 2, 1, 0];
+    if (s.objective.done > maxDone[s.mission]) return false;
+    if (s.mission === 1 && s.objective.done === 1 && s.objective.hold < 22) return false;
+    if (s.mission !== 5 && s.objective.bossDefeated) return false;
+  }
   return true;
 }
 
