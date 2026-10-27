@@ -24,7 +24,7 @@ TARGET = Path("/home/zomorod2/.saeit-factory-inbox/bin")
 PUBLISHER = "publish_verified_factory_store_listing.py"
 LIVE_PUBLISHER_SHA = "e598544fce0f30783973e2b529549fed5d4b4457192db23e482304655963395e"
 ANCHOR = '    body = release.read_text(encoding="utf-8")\n'
-HOOK = (
+PREVIOUS_HOOK = (
     '    package_manifest=inbox/"packages"/RECIPE/(digest+".json")\n'
     '    if not package_manifest.is_file() or package_manifest.is_symlink():\n'
     '        raise ValueError("FACTORY_PRIVATE_RECIPE_MANIFEST_MISSING")\n'
@@ -35,6 +35,22 @@ HOOK = (
     '        quality=loaded("factory_premium_commercial_guard",\n'
     '                       "factory_commercial_quality_release_guard_v1.py")\n'
     '        quality.require_quality_clearance(inbox,RECIPE,digest,source_manifest,package)\n'
+)
+HOOK = (
+    '    package_manifest=inbox/"packages"/RECIPE/(digest+".json")\n'
+    '    if not package_manifest.is_file() or package_manifest.is_symlink():\n'
+    '        raise ValueError("FACTORY_PRIVATE_RECIPE_MANIFEST_MISSING")\n'
+    '    source_manifest=json.loads(package_manifest.read_text(encoding="utf8"))\n'
+    '    if not isinstance(source_manifest,dict):\n'
+    '        raise ValueError("FACTORY_PRIVATE_RECIPE_MANIFEST_INVALID")\n'
+    '    quality=loaded("factory_premium_commercial_guard",\n'
+    '                   "factory_commercial_quality_release_guard_v1.py")\n'
+    '    clearance=quality.require_quality_clearance(\n'
+    '        inbox,RECIPE,digest,source_manifest,package\n'
+    '    )\n'
+    '    if (clearance.get("status")!="VERIFIED_SIGNED_PREMIUM_1000"\n'
+    '            or clearance.get("1000_quality_verified") is not True):\n'
+    '        raise ValueError("QC1000_REQUIRED_FOR_FACTORY_EXIT")\n'
 )
 
 
@@ -74,6 +90,11 @@ def verify_negative_controls(bin_dir):
         raise RuntimeError("QC1000_FALSE_PREMIUM_APPROVAL")
     if not callable(getattr(guard, "_verify_executed_qc1000", None)):
         raise RuntimeError("QC1000_EXECUTED_EVIDENCE_GATE_MISSING")
+    publisher = (bin_dir / PUBLISHER).read_text(encoding="utf-8")
+    if ("if source_manifest.get" in publisher
+            or "QC1000_REQUIRED_FOR_FACTORY_EXIT" not in publisher
+            or "clearance.get(\"1000_quality_verified\") is not True" not in publisher):
+        raise RuntimeError("QC1000_PUBLISHER_EXIT_GATE_NOT_STRICT")
 
 
 def install(staging, expected):
@@ -101,7 +122,11 @@ def install(staging, expected):
         if original_text.count(ANCHOR) != 1:
             raise RuntimeError("QC1000_ORIGINAL_PUBLISHER_ANCHOR_MISSING")
         patched_publisher = original_text.replace(ANCHOR, HOOK + ANCHOR)
-        if publisher != patched_publisher:
+        previous_publisher = original_text.replace(ANCHOR, PREVIOUS_HOOK + ANCHOR)
+        if publisher == previous_publisher:
+            # Upgrade only the exact previously installed surgical hook.
+            pass
+        elif publisher != patched_publisher:
             raise RuntimeError("QC1000_LIVE_PUBLISHER_CHANGED_ABORT")
     compile(patched_publisher, str(TARGET / PUBLISHER), "exec")
     stage = Path(staging)
