@@ -12,6 +12,10 @@ The [AE-2026-001 C34 source-locked reanalysis](../manuscripts/AE-2026-001/AE-202
 
 The [MR C49 original-publisher abstract audit](../manuscripts/MR-2026-001/MR-2026-001_C49_RANDOMIZED_SMART_METER_FEEDBACK_CAUSAL_COMPARATOR_2026-10-27.md) documents a 2019 randomized trial involving 200 smart-meter-equipped farmers and weekly water-use feedback. This is **adjacent prior art**, not proof of event-specific DSS recommendation fidelity or a new result from MR. The [MR Perspective text](../manuscripts/MR-2026-001/MR-2026-001_DIRECT_IRRIGATION_ADHERENCE_PRIOR_ART_AUTHOR_REVIEW_V5_2026-10-26.md) and [internal AI author packet](MR_2026_001_C49_AUTHOR_DECISION_AND_INTERNAL_AI_NOVELTY_REVIEW_2026-10-27.md) now explicitly delimit the causal-comparator claim. **MAJOR REVISION / NO SUBMISSION**; no validated G/D/R/A or post-C49 source-matched Word verified.
 
+## AE C34 source-matched Word confirmed — 27 October 2026 (staging only)
+
+The [AE consolidated Word workflow](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40463322105) **completed successfully** for manuscript source commit `0910850811fdd963234b9f5b7581be2dfe956921`, which includes the new C34 Methods 2.10 and Results 3.9. Its [author-review-only DOCX artifact 12714294983](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40463322105/artifacts/12714294983) was created, and the workflow's source and DOCX content checks succeeded. A separate [source-locked workflow](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40463322122) also succeeded with [artifact 12715860014](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40463322122/artifacts/12715860014). These are **internal author-review Word files, not author-approved, submitted or published papers**. No live site deployment.
+
 ## Current research
 
 **MR-2026-001:** Unpublished V5 Perspective; 22 DOI references, C42 original Amini methods and unresolved F7 numerical contradiction; Car Table 5, event-level G/D/R/A validation and originality remain unresolved. Last independently verified Word: run 40344172230, artifact 12659259449. **MAJOR REVISION / NO SUBMISSION.**
