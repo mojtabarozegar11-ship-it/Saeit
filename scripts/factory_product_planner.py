@@ -24,15 +24,48 @@ import time
 
 HERE=Path(__file__).resolve().parent
 SCHEMA='saeit.factory.product-request.v1'
-CATALOG={'F18':'fieldwork_local_calculator_webapps','F19':'saas_launch_starter_2026','F20':'fieldwork_validation_plugins','F21':'fieldwork_developer_text_tools',
- 'F22':'fieldwork_record_workflows','F25':'fieldwork_synthetic_edge_fixtures','F27':'capacity_planning_workbook',
- 'F28':'fieldwork_engineering_calculators','F34':'fieldwork_ui_48_icons',
- 'F29':'fieldwork_editable_document_suite','F30':'fieldwork_editable_slide_suite',
+CATALOG={
+ 'F01':'fieldwork_original_technical_handbook_pilot',
+ 'F02':'fieldwork_original_microfiction_collection_pilot',
+ 'F03':'fieldwork_offline_computing_dictionary_pilot',
+ 'F04':'fieldwork_reproducible_synthetic_studies_pilot',
+ 'F05':'fieldwork_transparent_market_simulator_pilot',
+ 'F06':'fieldwork_offline_operations_guides',
+ 'F07':'fieldwork_arithmetic_mini_courses',
+ 'F08':'fieldwork_visual_practice_video_course',
+ 'F09':'fieldwork_original_signal_listening_course',
+ 'F10':'fieldwork_arithmetic_assessment_packs',
+ 'F11':'fieldwork_arithmetic_teacher_kits',
+ 'F12':'fieldwork_mobile_puzzle_game_pilot',
+ 'F13':'fieldwork_desktop_puzzle_game_pilot',
+ 'F14':'fieldwork_playable_orbit_levels',
+ 'F15':'fieldwork_original_48_game_asset_triplets',
+ 'F16':'fieldwork_mobile_inventory_app_pilot',
+ 'F17':'fieldwork_desktop_inventory_software_pilot',
+ 'F18':'fieldwork_local_calculator_webapps',
+ 'F19':'saas_launch_starter_2026',
+ 'F20':'fieldwork_validation_plugins',
+ 'F21':'fieldwork_developer_text_tools',
+ 'F22':'fieldwork_record_workflows',
+ 'F23':'fieldwork_offline_evidence_assistant',
+ 'F24':'fieldwork_original_prompt_playbooks',
+ 'F25':'fieldwork_synthetic_edge_fixtures',
+ 'F26':'fieldwork_machine_learning_model_pilot',
+ 'F27':'capacity_planning_workbook',
+ 'F28':'fieldwork_engineering_calculators',
+ 'F29':'fieldwork_editable_document_suite',
+ 'F30':'fieldwork_editable_slide_suite',
+ 'F31':'weekly_planner',
+ 'F32':'fieldwork_original_geometric_brand_portfolio',
  'F33':'fieldwork_vector_illustration_suite',
- 'F06':'fieldwork_offline_operations_guides','F07':'fieldwork_arithmetic_mini_courses',
- 'F10':'fieldwork_arithmetic_assessment_packs','F11':'fieldwork_arithmetic_teacher_kits',
- 'F36':'fieldwork_tileable_materials_48','F37':'fieldwork_animated_motion_48',
- 'F39':'fieldwork_original_audio_cues_48'}
+ 'F34':'fieldwork_ui_48_icons',
+ 'F35':'fieldwork_parametric_cad_mesh_specimens',
+ 'F36':'fieldwork_tileable_materials_48',
+ 'F37':'fieldwork_animated_motion_48',
+ 'F38':'fieldwork_original_video_editor_timeline_suite',
+ 'F39':'fieldwork_original_audio_cues_48',
+ 'F40':'fieldwork_narrated_audio_lessons_pilot'
+}
 BATCH={'F20','F21','F22','F25','F28'}
 WINDOW_SCHEMA='saeit.factory.product-planning-window.v1'
 
@@ -216,27 +249,59 @@ def admissible(capacity):
 
 def command_for(root,req):
     family=req['family_id'];timeout=90
-    if family in BATCH:command=[sys.executable,'-B',str(HERE/'factory_batch5_build.py'),'--family',family,'--factory-private',str(root)]
+    python=sys.executable
+    manifest=Path(root).parent.parent/'operations/build-toolchain/toolchain-manifest.json'
+    if family in ('F01','F02','F03','F04','F05'):
+        command=[python,'-B',str(HERE/'factory_build50_five_publications.py'),
+                 '--factory-private',str(root),'--family',family];timeout=240
+    elif family in ('F06','F07','F10','F11'):
+        command=[python,'-B',str(HERE/'factory_build50_learning_4.py'),
+                 '--factory-private',str(root),'--family',family];timeout=240
+    elif family in ('F08','F09','F32','F38'):
+        command=[python,'-B',str(HERE/'factory_build50_next4_media.py'),
+                 '--factory-private',str(root),'--family',family];timeout=900
+    elif family in ('F12','F13','F16','F17','F23','F26','F40'):
+        command=[python,'-B',str(HERE/'factory_seven_missing_builders.py'),
+                 '--factory-private',str(root),'--family',family];timeout=240
+    elif family=='F14':
+        command=[python,'-B',str(HERE/'factory_build50_three_media.py'),
+                 '--factory-private',str(root),'--family',family];timeout=900
+    elif family=='F15':
+        command=[python,'-B',str(HERE/'factory_build50_f15_game_assets.py'),
+                 '--factory-private',str(root)];timeout=900
+    elif family in BATCH:
+        command=[python,'-B',str(HERE/'factory_batch5_build.py'),
+                 '--family',family,'--factory-private',str(root)]
     elif family in ('F18','F19'):
-        script={'F18':'factory_build50_f18_webapps.py','F19':'factory_build50_f19_web_template.py'}[family]
-        command=[sys.executable,'-B',str(HERE/script),'--factory-private',str(root)]
-    elif family=='F31':command=[sys.executable,'-B',str(HERE/'factory_build50_f31_planner.py'),'--factory-private',str(root),'--week',req['parameters']['week']]
-    elif family in ('F27','F34','F29','F30','F33','F06','F07','F10','F11','F36','F37','F39'):
-        manifest=Path(root).parent.parent/'operations/build-toolchain/toolchain-manifest.json'
-        _,python=load('factory_specialist_pilots').toolchain(manifest)
-        script={'F27':'factory_build50_workbook.py','F34':'factory_build50_f34_icon_kit.py',
-          'F29':'factory_build50_creative_kits.py','F30':'factory_build50_creative_kits.py',
-          'F33':'factory_build50_creative_kits.py',
-          'F06':'factory_build50_learning_4.py','F07':'factory_build50_learning_4.py',
-          'F10':'factory_build50_learning_4.py','F11':'factory_build50_learning_4.py',
-          'F36':'factory_build50_native_media.py','F37':'factory_build50_native_media.py',
-          'F39':'factory_build50_native_media.py'}[family]
-        command=[str(python),'-B',str(HERE/script),'--factory-private',str(root)]
-        if family=='F27':command+=['--toolchain',str(manifest),'--worker'];timeout=210
-        elif family in ('F29','F30','F33','F06','F07','F10','F11'):command+=['--family',family]
-        elif family in ('F36','F37','F39'):
-            command+=['--toolchain',str(manifest),'--family',family];timeout=240
-    else:raise ValueError('PLANNER_EXECUTOR_NOT_ROUTED')
+        script={'F18':'factory_build50_f18_webapps.py',
+                'F19':'factory_build50_f19_web_template.py'}[family]
+        command=[python,'-B',str(HERE/script),'--factory-private',str(root)];timeout=240
+    elif family=='F24':
+        command=[python,'-B',str(HERE/'factory_build50_f24_prompts.py'),
+                 '--factory-private',str(root)];timeout=240
+    elif family=='F27':
+        _,pinned_python=load('factory_specialist_pilots').toolchain(manifest)
+        command=[str(pinned_python),'-B',str(HERE/'factory_build50_workbook.py'),
+                 '--factory-private',str(root),'--toolchain',str(manifest),'--worker'];timeout=900
+    elif family in ('F29','F30','F33'):
+        command=[python,'-B',str(HERE/'factory_build50_creative_kits.py'),
+                 '--factory-private',str(root),'--family',family];timeout=240
+    elif family=='F31':
+        command=[python,'-B',str(HERE/'factory_build50_f31_planner.py'),
+                 '--factory-private',str(root),'--week',req['parameters']['week']];timeout=240
+    elif family=='F34':
+        command=[python,'-B',str(HERE/'factory_build50_f34_icon_kit.py'),
+                 '--factory-private',str(root)];timeout=240
+    elif family=='F35':
+        command=[python,'-B',str(HERE/'factory_build50_f35_cad.py'),
+                 '--factory-private',str(root)];timeout=240
+    elif family in ('F36','F37','F39'):
+        _,pinned_python=load('factory_specialist_pilots').toolchain(manifest)
+        command=[str(pinned_python),'-B',str(HERE/'factory_build50_native_media.py'),
+                 '--factory-private',str(root),'--toolchain',str(manifest),
+                 '--family',family];timeout=900
+    else:
+        raise ValueError('PLANNER_EXECUTOR_NOT_ROUTED')
     return command,timeout
 
 def execute(root,req):
@@ -244,8 +309,17 @@ def execute(root,req):
     except (ValueError,RuntimeError,OSError,KeyError):
         return {'status':'blocked_executor_or_toolchain_unavailable','retry_after_seconds':3600}
     # Kill the whole child process group on timeout; leave evidence for safe retry.
-    child=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,start_new_session=True,
-      env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',OMP_NUM_THREADS='1',OPENBLAS_NUM_THREADS='1'))
+    toolchain_bin=os.environ.get('FACTORY_TOOLCHAIN_BIN')
+    try:
+        toolroot,_=load('factory_specialist_pilots').toolchain(
+            Path(root).parent.parent/'operations/build-toolchain/toolchain-manifest.json')
+        toolchain_bin=str(toolroot/'bin')
+    except (ValueError,RuntimeError,OSError,KeyError,TypeError):
+        pass
+    env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',OMP_NUM_THREADS='1',
+             OPENBLAS_NUM_THREADS='1')
+    if toolchain_bin:env['FACTORY_TOOLCHAIN_BIN']=toolchain_bin
+    child=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,start_new_session=True,env=env)
     try:
         out,err=child.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -312,7 +386,7 @@ def verified_mpw_return_family(root, order, profiles):
 def cycle(root,registry,dispatch=False,max_execute=1):
     root=Path(root)
     if not root.is_dir() or root.is_symlink():raise ValueError('PLANNER_ROOT_REQUIRED')
-    if type(max_execute) is not int or not 0<=max_execute<=2:raise ValueError('PLANNER_EXECUTION_LIMIT')
+    if type(max_execute) is not int or not 0<=max_execute<=40:raise ValueError('PLANNER_EXECUTION_LIMIT')
     area=private(root/'product-planning');intake=private(area/'intake');plans=private(area/'plans');states=private(area/'states')
     lock=area/'.planner.lock'
     if lock.is_symlink():raise ValueError('PLANNER_LOCK_SYMLINK')
@@ -377,14 +451,31 @@ def cycle(root,registry,dispatch=False,max_execute=1):
             rows.append(row)
         queued=sorted((r for r in rows if r['status']=='queued' and r['retry_at']<=now),key=lambda r:(r['last_attempt'],r['plan_id']))
         executed=0
-        if dispatch and not holds:
-            for row in queued[:max_execute]:
+        memory=capacity.get('memory_available_mb')
+        disk=capacity.get('disk_free_mb',0)
+        cpu=capacity.get('cpu_count',1)
+        memory_slots=0 if type(memory) is not int else max(0,(memory-1024)//512)
+        disk_slots=max(0,(disk-2048)//1024)
+        worker_budget=min(len(queued),max_execute,max(0,cpu),memory_slots,disk_slots,40)
+        if dispatch and not holds and worker_budget:
+            from concurrent.futures import ThreadPoolExecutor,as_completed
+            selected=queued[:worker_budget]
+            for row in selected:
                 row['last_attempt']=now;row['attempts']+=1
-                try:result=execute(root,row['request'])
-                except OSError:result={'status':'launch_failed','retry_after_seconds':300}
-                row['last_execution']=result;row['retry_at']=now+min(3600, max(result.get('retry_after_seconds',300),60*2**min(row['attempts'],5)))
-                evidence=proof(root,row['request']['product_id'],row['family_id'],proto)
-                row['proof']=evidence;row['status']='native_recipe_verified' if evidence else result['status'];executed+=1
+            with ThreadPoolExecutor(max_workers=worker_budget,thread_name_prefix='factory-line') as pool:
+                futures={pool.submit(execute,root,row['request']):row for row in selected}
+                for future in as_completed(futures):
+                    row=futures[future]
+                    try:result=future.result()
+                    except (OSError,RuntimeError,ValueError):result={'status':'launch_failed','retry_after_seconds':300}
+                    row['last_execution']=result
+                    row['retry_at']=now+min(3600,max(result.get('retry_after_seconds',300),60*2**min(row['attempts'],5)))
+                    evidence=proof(root,row['request']['product_id'],row['family_id'],proto)
+                    row['proof']=evidence
+                    row['status']='native_recipe_verified' if evidence else result['status']
+                    executed+=1
+        if dispatch and queued and worker_budget==0 and not holds:
+            holds.append('measured_capacity_below_one_full_product_slot')
         for row in rows:save(states/(row['plan_id']+'.json'),row)
         blockers=Counter(b for row in rows for b in row['blockers'])
         blocked_families=sorted({row['family_id'] for row in rows if row['kind']=='qualification'})
@@ -401,8 +492,8 @@ def cycle(root,registry,dispatch=False,max_execute=1):
           'custom_product_executors_verified':0,'families_awaiting_specialist_executor':blocked_families,
           'engineering_backlog':remediation,'rows':rows,'rejected_inputs':rejected,'bottlenecks':dict(blockers),
           'resource_snapshot':capacity,'resource_holds':holds,'executions_this_tick':executed,
-          'execution_limit':max_execute,'commercial_release':False,'observed_unix':now,
-          'warning':'Forty engineering routes are planning coverage, not forty working product generators.'}
+          'execution_limit':max_execute,'worker_budget':worker_budget,'commercial_release':False,'observed_unix':now,
+          'warning':'Each registered family now dispatches its own real private builder; native platform, specialist and quality-1000 gates remain separate.'}
         save(area/'dashboard.json',report)
         # Move the cursor only after all bounded plans and their state have
         # been durably written. Read-only audits do not consume a work page.
@@ -410,6 +501,6 @@ def cycle(root,registry,dispatch=False,max_execute=1):
         return report
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--factory-private',required=True);p.add_argument('--registry',required=True);p.add_argument('--dispatch',action='store_true');p.add_argument('--max-execute',type=int,default=1)
+    p=argparse.ArgumentParser();p.add_argument('--factory-private',required=True);p.add_argument('--registry',required=True);p.add_argument('--dispatch',action='store_true');p.add_argument('--max-execute',type=int,default=40)
     a=p.parse_args();r=cycle(a.factory_private,a.registry,a.dispatch,a.max_execute)
     print('FACTORY_PER_PRODUCT_PLANNER='+json.dumps({k:r.get(k) for k in ('status','registered_family_routes','total_distinct_requests','unique_product_plans','deferred_plan_count','window_legacy_plans','window_general_plans','window_cursor_advances','verified_native_product_plans','executions_this_tick','resource_holds')},sort_keys=True))
