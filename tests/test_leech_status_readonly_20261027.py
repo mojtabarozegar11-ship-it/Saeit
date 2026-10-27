@@ -112,6 +112,34 @@ class LeechStatusReadOnlyTests(unittest.TestCase):
             self.assertEqual(target.read_text(encoding="utf-8"),
                              "Do not follow this synthetic target.")
 
+    def test_exact_50000_byte_manuscript_is_accepted_without_mutation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            private=Path(temp)/"private"
+            private.mkdir()
+            part=private/"chapter-01-part-001.md"
+            part.write_bytes(b"A"*50000)
+            before=(part.read_bytes(),part.stat().st_mtime_ns)
+            with mock.patch.object(author,"PRIVATE",private):
+                chunks=author.list_parts()
+            self.assertEqual(len(chunks[1]),1)
+            self.assertEqual(len(chunks[1][0][1].encode("utf-8")),50000)
+            self.assertEqual((part.read_bytes(),part.stat().st_mtime_ns),before)
+            self.assertFalse((private/".authoring.lock").exists())
+
+    def test_valid_multibyte_utf8_part_is_read_without_rewriting(self):
+        with tempfile.TemporaryDirectory() as temp:
+            private=Path(temp)/"private"
+            private.mkdir()
+            part=private/"chapter-01-part-001.md"
+            prose=("Scientific observations of leech husbandry — café 🌱. "*12)
+            part.write_text(prose,encoding="utf-8")
+            original=part.read_bytes()
+            self.assertGreater(len(original),200)
+            with mock.patch.object(author,"PRIVATE",private):
+                chunks=author.list_parts()
+            self.assertEqual(chunks[1][0][1],prose)
+            self.assertEqual(part.read_bytes(),original)
+
     def test_invalid_utf8_part_fails_closed_without_mutating_bytes(self):
         with tempfile.TemporaryDirectory() as temp:
             private = Path(temp) / "private"
