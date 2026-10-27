@@ -90,6 +90,8 @@ def revise_about(src: str) -> str:
 
 
 def revise_contact(src: str) -> str:
+    if "Vancouver, British Columbia, Canada" in src:
+        raise ValueError("Contact already contains an owner-confirmed location; review before reapplying")
     out = description(src, CONTACT_DESCRIPTION)
     out = strict_replace(
         out, "International &amp; remote collaboration",
