@@ -136,6 +136,10 @@ jobs:
             fi
             if test -d "$stage" && test ! -L "$stage"; then
               rm -f -- "$stage/mojtaba_home_deduplicate_20261027.py" "$stage/mojtaba_home_two_portraits_one_intro_20261020.py"
+              if test -d "$stage/__pycache__" && test ! -L "$stage/__pycache__"; then
+                rm -f -- "$stage/__pycache__/mojtaba_home_two_portraits_one_intro_20261020."*.pyc
+                rmdir -- "$stage/__pycache__" || true
+              fi
               rmdir -- "$stage" || true
             fi
             exit "$result"
@@ -159,11 +163,12 @@ jobs:
               if r.status_code!=200:raise RuntimeError('PERSONAL_ROUTE_FAILED '+route)
               doc=r.content.decode('utf8','replace')
               if route=='':
-                  if 'mpw-journal-longform-index-20261016' in doc:raise RuntimeError('HOME_STILL_DUPLICATED')
+                  if 'id="mpw-journal-longform-index-20261016"' in doc:raise RuntimeError('HOME_STILL_DUPLICATED')
+                  if len(doc)>100000:raise RuntimeError('HOME_HTML_STILL_TOO_LARGE')
                   for mark in ('mpw-two-profile-portraits-20261020','mpw-social-central-hub-20261026','owner-original-gallery-20261015','id="hero-title"'):
                       if mark not in doc:raise RuntimeError('HOME_MISSING '+mark)
                   if 'PROFESSIONAL PROFILE' in doc:raise RuntimeError('DUPLICATE_INTRO')
-              if route=='blog/' and 'mpw-journal-longform-index-20261016' not in doc:raise RuntimeError('JOURNAL_LOST')
+              if route=='blog/' and 'id="mpw-journal-longform-index-20261016"' not in doc:raise RuntimeError('JOURNAL_LOST')
               if route=='contact/' and 'name="csrfmiddlewaretoken"' not in doc:raise RuntimeError('CONTACT_CHANGED')
               print('PERSONAL_ROUTE_200='+route,flush=True)
           PYDJANGO
@@ -177,8 +182,9 @@ jobs:
                   with urlopen(Request(base+'?_dedup='+str(time.time_ns()),headers={'Cache-Control':'no-cache'}),timeout=30) as r:
                       doc=r.read(1500000).decode('utf8','replace')
                       if r.status!=200:raise RuntimeError('HOME_STATUS')
-                  if any(x in doc for x in ('mpw-journal-longform-index-20261016','PROFESSIONAL PROFILE')):
+                  if 'id="mpw-journal-longform-index-20261016"' in doc or 'PROFESSIONAL PROFILE' in doc:
                       raise RuntimeError('HOME_NOT_CONSOLIDATED')
+                  if len(doc)>100000:raise RuntimeError('PUBLIC_HOME_HTML_STILL_TOO_LARGE')
                   if not all(x in doc for x in ('mpw-two-profile-portraits-20261020','mpw-social-central-hub-20261026','id="hero-title"')):
                       raise RuntimeError('PERSONAL_SECTIONS_MISSING')
                   print('PERSONAL_HOME_LIVE=PASS',flush=True)
@@ -191,7 +197,7 @@ jobs:
               with urlopen(Request(url,headers={'Cache-Control':'no-cache'}),timeout=30) as r:
                   if r.status!=200:raise RuntimeError('PROTECTED_ROUTE_FAILED '+url)
                   doc=r.read(1500000).decode('utf8','replace')
-              if url.endswith('/blog/') and 'mpw-journal-longform-index-20261016' not in doc:
+              if url.endswith('/blog/') and 'id="mpw-journal-longform-index-20261016"' not in doc:
                   raise RuntimeError('JOURNAL_SECTION_LOST')
               print('AFTER_200='+url,flush=True)
           PYHTTP
