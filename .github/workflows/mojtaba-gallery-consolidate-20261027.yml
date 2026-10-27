@@ -1,0 +1,217 @@
+name: Mojtaba personal homepage gallery asset consolidation
+on:
+  pull_request:
+    paths:
+      - scripts/mojtaba_gallery_consolidate_20261027.py
+      - tests/test_mojtaba_gallery_consolidate_20261027.py
+      - .github/workflows/mojtaba-gallery-consolidate-20261027.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/mojtaba_gallery_consolidate_20261027.py
+      - tests/test_mojtaba_gallery_consolidate_20261027.py
+      - .github/workflows/mojtaba-gallery-consolidate-20261027.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-v17-inner-pages-production
+  cancel-in-progress: false
+jobs:
+  tests:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test exact duplicate preservation and the single introduction
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_gallery_consolidate_20261027.py 
+          python3 -m unittest discover -s tests -p 'test_mojtaba_gallery_consolidate_20261027.py' -v
+
+  publish:
+    needs: tests
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify live baseline without any writes
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          for url in ('https://mojplaywin.com/mojtaba.roozegar/','https://mojplaywin.com/mojtaba.roozegar/blog/','https://mojplaywin.com/','https://zomorodmelal.ir/'):
+              with urlopen(Request(url,headers={'Cache-Control':'no-cache'}),timeout=30) as r:
+                  if r.status!=200:raise RuntimeError('BASELINE_FAILED '+url)
+                  body=r.read(1500000).decode('utf-8','replace')
+              if url.endswith('/mojtaba.roozegar/') and not all(x in body for x in (
+                      'id="mpw-primary-personal-profile-20261016"',
+                      'id="mpw-social-central-hub-20261026"',
+                      'id="owner-original-gallery-20261015"',
+                      'id="mpw-personal-home-sport-white-20261018"',
+                      'id="hero-title"')):
+                  raise RuntimeError('PERSONAL_SOURCE_CHANGED')
+              print('BEFORE_200='+url,flush=True)
+          PY
+      - name: Establish pinned GitHub to VPS to cPanel SSH relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-official-hub-ssh"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "HUB_SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Stage, consolidate and verify independent personal site
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mojtaba-gallery-clean-$GITHUB_RUN_ID"
+          timeout 30s ssh -T -F "$HUB_SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 60s scp -q -F "$HUB_SSH_CONFIG" scripts/mojtaba_gallery_consolidate_20261027.py  "saeit-host:$stage/"
+          timeout 1000s ssh -T -F "$HUB_SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          id="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          py="/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python"
+          stage="/home/zomorod2/.mojtaba-gallery-clean-$id"
+          script="$stage/mojtaba_gallery_consolidate_20261027.py"
+          backup="/home/zomorod2/.backups/mojtaba-gallery-consolidation/$id"
+          installed=0
+          verified=0
+          finish() {
+            result=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$verified" = 0 && test -f "$backup/manifest.json"; then
+              "$py" "$script" rollback --run-id "$id" && echo "ROLLBACK_VERIFIED=YES" || echo "ROLLBACK_NEEDS_REVIEW=YES"
+              test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+            fi
+            if test -d "$stage" && test ! -L "$stage"; then
+              rm -f -- "$stage/mojtaba_gallery_consolidate_20261027.py"
+              if test -d "$stage/__pycache__" && test ! -L "$stage/__pycache__"; then
+                rm -f -- "$stage/__pycache__/mojtaba_gallery_consolidate_20261027."*.pyc
+                rmdir -- "$stage/__pycache__" || true
+              fi
+              rmdir -- "$stage" || true
+            fi
+            exit "$result"
+          }
+          trap finish EXIT
+          test ! -L "$app" && test -f "$app/manage.py" && test -x "$py"
+          "$py" "$script" check
+          installed=1
+          "$py" "$script" install --run-id "$id"
+          cd "$app"
+          "$py" manage.py check
+          "$py" - <<'PYDJANGO'
+          import os
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from django.test import Client
+          c=Client(HTTP_HOST='mojplaywin.com')
+          for route in ('','about/','blog/','gallery/','contact/'):
+              r=c.get('/mojtaba.roozegar/'+route,secure=True)
+              if r.status_code!=200:raise RuntimeError('PERSONAL_ROUTE_FAILED '+route)
+              doc=r.content.decode('utf8','replace')
+              if route=='':
+                  if 'id="owner-original-gallery-20261015"' in doc or 'id="mpw-personal-home-sport-white-20261018"' in doc:raise RuntimeError('HOME_GALLERY_STILL_DUPLICATED')
+                  if len(doc)>62000:raise RuntimeError('HOME_HTML_STILL_TOO_LARGE')
+                  for mark in ('mpw-two-profile-portraits-20261020','mpw-social-central-hub-20261026','mpw-gallery-preview-20261027','id="hero-title"'):
+                      if mark not in doc:raise RuntimeError('HOME_MISSING '+mark)
+                  if 'PROFESSIONAL PROFILE' in doc:raise RuntimeError('DUPLICATE_INTRO')
+              if route=='blog/' and 'id="mpw-journal-longform-index-20261016"' not in doc:raise RuntimeError('JOURNAL_LOST')
+              if route=='gallery/' and ('owner_gallery_20261015/photo-01.' not in doc or 'owner_gallery_20261015_b/photo-09.' not in doc):raise RuntimeError('DEDICATED_GALLERY_LOST')
+              if route=='contact/' and 'name="csrfmiddlewaretoken"' not in doc:raise RuntimeError('CONTACT_CHANGED')
+              print('PERSONAL_ROUTE_200='+route,flush=True)
+          PYDJANGO
+          test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+          "$py" - <<'PYHTTP'
+          import time
+          from urllib.request import Request,urlopen
+          base='https://mojplaywin.com/mojtaba.roozegar/'
+          for attempt in range(7):
+              try:
+                  with urlopen(Request(base+'?_dedup='+str(time.time_ns()),headers={'Cache-Control':'no-cache'}),timeout=30) as r:
+                      doc=r.read(1500000).decode('utf8','replace')
+                      if r.status!=200:raise RuntimeError('HOME_STATUS')
+                  if 'id="owner-original-gallery-20261015"' in doc or 'id="mpw-personal-home-sport-white-20261018"' in doc or 'PROFESSIONAL PROFILE' in doc:
+                      raise RuntimeError('HOME_NOT_CONSOLIDATED')
+                  if len(doc)>62000:raise RuntimeError('PUBLIC_HOME_HTML_STILL_TOO_LARGE')
+                  if not all(x in doc for x in ('mpw-two-profile-portraits-20261020','mpw-social-central-hub-20261026','id="mpw-gallery-preview-20261027"','id="hero-title"')):
+                      raise RuntimeError('PERSONAL_SECTIONS_MISSING')
+                  print('PERSONAL_HOME_LIVE=PASS',flush=True)
+                  break
+              except Exception as exc:
+                  if attempt==6:raise
+                  print('PUBLIC_RETRY='+repr(exc),flush=True)
+                  time.sleep(4)
+          for url in (base+'blog/',base+'gallery/',base+'contact/','https://mojplaywin.com/','https://zomorodmelal.ir/'):
+              with urlopen(Request(url,headers={'Cache-Control':'no-cache'}),timeout=30) as r:
+                  if r.status!=200:raise RuntimeError('PROTECTED_ROUTE_FAILED '+url)
+                  doc=r.read(1500000).decode('utf8','replace')
+              if url.endswith('/blog/') and 'id="mpw-journal-longform-index-20261016"' not in doc:
+                  raise RuntimeError('JOURNAL_SECTION_LOST')
+              if url.endswith('/gallery/') and ('owner_gallery_20261015/photo-01.' not in doc or 'owner_gallery_20261015_b/photo-09.' not in doc):
+                  raise RuntimeError('PUBLIC_GALLERY_ASSET_MISSING')
+              print('AFTER_200='+url,flush=True)
+          PYHTTP
+          verified=1
+          echo "MOJTABA_GALLERY_CLEAN_RELEASE=VERIFIED"
+          echo "MOJTABA_GALLERY_BACKUP=$backup"
+          REMOTE
+      - name: Remove ephemeral relay credentials
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-official-hub-ssh"
+          test ! -d "$d" || rm -rf -- "$d"
