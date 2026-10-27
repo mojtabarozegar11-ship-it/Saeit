@@ -83,6 +83,19 @@ class PrivateBrowserQaTests(unittest.TestCase):
             self.assertTrue(any(item["min_width"] == "453px"
                                 for item in views[0]["overflowing_shapes"]))
 
+    def test_session_creation_has_bounded_startup_budget_without_retry(self):
+        from unittest.mock import patch
+
+        with patch.object(qa.urllib.request, "urlopen") as urlopen, patch.object(
+            qa.json, "load", return_value={"value": {"sessionId": "test-session"}}
+        ):
+            result = qa.webdriver_request(9999, "POST", "/session", {"capabilities": {}})
+            self.assertEqual(result["sessionId"], "test-session")
+            self.assertEqual(urlopen.call_args.kwargs["timeout"], 60)
+            qa.webdriver_request(9999, "GET", "/status")
+            self.assertEqual(urlopen.call_args.kwargs["timeout"], 28)
+            self.assertEqual(urlopen.call_count, 2)
+
     def test_zip_path_traversal_fails_closed(self):
         with tempfile.TemporaryDirectory() as temp:
             archive = Path(temp) / "escape.zip"
