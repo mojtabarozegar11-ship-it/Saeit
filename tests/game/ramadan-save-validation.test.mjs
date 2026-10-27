@@ -82,6 +82,23 @@ test('preserves valid objective progress while refusing corrupted mission comple
   assert.equal(validateCampaignSave({...fresh(), gameOver: true}), false);
 });
 
+test('in-progress objective state cannot exceed stage-specific site and timer rules', () => {
+  const maxDone=[2,1,3,2,1,0];
+  for(let mission=0;mission<6;mission++){
+    const objective={done:maxDone[mission],hold:mission===1?22:0,bossDefeated:false};
+    const good={...fresh(),mission,objective};
+    assert.equal(validateCampaignSave(good),true,'valid objective stage '+mission);
+    assert.equal(validateCampaignSave({...good,objective:{...objective,done:maxDone[mission]+1}}),false,
+      'out-of-stage objective progress '+mission);
+    if(mission!==5)assert.equal(validateCampaignSave({...good,objective:{...objective,bossDefeated:true}}),false,
+      'boss reward must remain final-stage only');
+  }
+  const premature={...fresh(),mission:1,objective:{done:1,hold:10,bossDefeated:false}};
+  assert.equal(validateCampaignSave(premature),false,'defence cannot be marked complete before 22 seconds');
+  assert.equal(validateCampaignSave({...premature,objective:{...premature.objective,done:0}}),true,
+    'partially completed timed defence remains playable');
+});
+
 test('reversible release manifest ships and checks every new imported save module', () => {
   const deploy = readFileSync(new URL('../../games/ramadan-war/deploy.py', import.meta.url), 'utf8');
   const client = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
