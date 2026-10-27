@@ -28,15 +28,20 @@ class RecoveryScheduler:
     def __init__(self, runtime=None):
         self.runtime = runtime or TaskRuntime()
 
-    def recover(self, limit=50, stale_after_seconds=900):
+    def recover(self, limit=50, stale_after_seconds=900, agent_code=None):
         self._validate_limit(limit)
         self._validate_stale_after(stale_after_seconds)
+        if agent_code is not None and (
+            not isinstance(agent_code, str) or not agent_code.strip()
+        ):
+            raise ValueError("agent_code must be a non-empty string when provided")
 
         cutoff = timezone.now() - timedelta(seconds=stale_after_seconds)
+        candidates = AgentTask.objects.filter(status="running", updated_at__lte=cutoff)
+        if agent_code is not None:
+            candidates = candidates.filter(agent__code=agent_code.strip())
         task_ids = list(
-            AgentTask.objects.filter(
-                status="running", updated_at__lte=cutoff
-            )
+            candidates
             .order_by("updated_at", "id")
             .values_list("id", flat=True)[:limit]
         )

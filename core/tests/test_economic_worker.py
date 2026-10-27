@@ -1,7 +1,11 @@
+import os
+from pathlib import Path
+
 import pytest
 from django.core.management import call_command
 
-from core.models import AgentTask
+from core.economic_tool_pack import build_mvp_asset, offer_design
+from core.models import AgentTask, Product
 
 
 @pytest.mark.django_db
@@ -33,3 +37,43 @@ def test_cycle_advances_from_self_improvement_to_verified_market_research(monkey
     assert tasks[0].status == "completed"
     assert tasks[1].capability_code == "income_market_research"
     assert tasks[1].status == "queued"
+
+
+def test_mvp_builder_writes_private_verified_customer_workbook(tmp_path):
+    asset = build_mvp_asset(321, "Digital Project & Automation Audit", root=tmp_path)
+    path = Path(asset["relative_path"])
+
+    assert path.is_file()
+    assert os.stat(path).st_mode & 0o777 == 0o600
+    assert asset["quality_gate"] == "passed"
+    assert asset["section_count"] == 10
+    assert asset["checklist_items"] == 50
+    assert asset["bytes"] > 7000
+    document = path.read_text(encoding="utf-8")
+    assert "Evidence register" in document
+    assert "30-day action plan" in document
+    assert "Launch gate" in document
+    assert "Digital Project &amp; Automation Audit" in document
+    assert "commercial_release" not in document
+
+
+@pytest.mark.django_db
+def test_offer_design_creates_isolated_inactive_draft_without_relabeling_catalog():
+    existing = Product.objects.create(
+        title="Existing customer workbook", product_type="book", price="12.00",
+        currency="USD", active=False, metadata={"custom": "preserve"},
+    )
+
+    result = offer_design({})
+
+    existing.refresh_from_db()
+    draft = Product.objects.get(metadata__commercial_status="offer_designed")
+    assert existing.title == "Existing customer workbook"
+    assert existing.metadata == {"custom": "preserve"}
+    assert draft.title == "Digital Project & Automation Audit"
+    assert draft.product_type == "service"
+    assert draft.active is False
+    assert draft.price == 0
+    assert draft.metadata["pricing_status"] == "requires_market_evidence"
+    assert result["evidence"]["kind"] == "product_record"
+    assert str(draft.pk) in result["evidence"]["value"]

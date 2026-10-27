@@ -40,6 +40,8 @@ modules=(
   core/management/commands/seed_online_income_agents.py
   core/management/commands/run_economic_worker.py
   core/management/commands/economic_worker.py
+  core/recovery_scheduler.py
+  core/management/commands/recover_stale_tasks.py
 )
 source_backup="$ops/backups/master-source-before-$stamp"
 install -d -m 700 "$source_backup"
@@ -150,7 +152,7 @@ done
   core/autonomous_brain.py core/economic_tool_pack.py core/economic_master_agent.py \
   core/self_funding_policy.py core/task_runtime.py \
   core/management/commands/seed_online_income_agents.py \
-  core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py
+  core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py core/recovery_scheduler.py core/management/commands/recover_stale_tasks.py
 "$py" manage.py check
 "$py" manage.py seed_online_income_agents
 "$py" - <<'PY'
@@ -190,7 +192,8 @@ except (FileNotFoundError,ValueError,TypeError,KeyError):
 print(steps if 1<=steps<=3 else 1)
 PY
 )"
-flock -n "$root/master-cycle.lock" timeout 180 "$py" manage.py autonomous_master_loop --max-steps "$steps"
+flock -n "$root/master-cycle.lock" timeout 30 "$py" manage.py recover_stale_tasks --agent-code economic-master-agent --limit 20 --stale-after 900
+flock -n "$root/master-cycle.lock" timeout 780 "$py" manage.py autonomous_master_loop --max-steps "$steps"
 SH
 chmod 700 "$master/run-cycle.sh.tmp"
 mv -f "$master/run-cycle.sh.tmp" "$master/run-cycle.sh"

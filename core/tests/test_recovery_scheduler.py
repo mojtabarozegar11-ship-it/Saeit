@@ -96,3 +96,36 @@ def test_recovery_scheduler_rejects_invalid_limit(running_task, limit):
 def test_recovery_scheduler_rejects_invalid_stale_after(running_task, value):
     with pytest.raises(ValueError):
         RecoveryScheduler().recover(stale_after_seconds=value)
+
+
+def test_recovery_scheduler_can_scope_stale_work_to_one_agent(running_task):
+    other_agent = Agent.objects.create(
+        code="other-recovery-agent",
+        name="Other Recovery Agent",
+        mission="Must not be touched by master-only recovery",
+        active=True,
+        risk_level="low",
+    )
+    other = AgentTask.objects.create(
+        agent=other_agent,
+        action_type="research",
+        capability_code="research",
+        risk_snapshot="low",
+        status="running",
+        execution_id="exec-other",
+        max_attempts=2,
+    )
+    AgentTask.objects.filter(pk=other.pk).update(updated_at=timezone.now() - timedelta(hours=1))
+    runtime = StubRuntime({running_task.pk: "queued"})
+
+    summary = RecoveryScheduler(runtime).recover(agent_code="recovery-agent")
+
+    assert summary.scanned == 1
+    assert summary.recovered == 1
+    assert runtime.calls == [(running_task.pk, 900)]
+    assert AgentTask.objects.get(pk=other.pk).status == "running"
+
+
+def test_recovery_scheduler_rejects_blank_agent_scope():
+    with pytest.raises(ValueError):
+        RecoveryScheduler().recover(agent_code="  ")
