@@ -37,6 +37,29 @@ test('rejects invalid enemy routes and oversized or malformed entity arrays', ()
     {pickups: Array(61).fill({x: 2, y: 3, life: 20, type: 'ammo'})}
   ]) assert.equal(validateCampaignSave({...fresh(), ...patch}), false);
 });
+test('runtime counters, render effects and marker are validated before restoring a save', () => {
+  const effect = {x: 8.5, y: 7.5, height: 1.08, life: .24, type: 'body'};
+  const valid = {...fresh(), shots: 18, combo: 2, best: 1, rocketHits: 1,
+    recoil: .16, reloading: false, hit: true, skillFired: false,
+    impacts: [effect], marker: {x: 8.5, y: 3.5, kind: 'activate'}};
+  assert.equal(validateCampaignSave(valid), true);
+  assert.equal(validateCampaignSave({...fresh(), impacts: [], marker: null}), true);
+  for (const patch of [
+    {shots: 'NaN'}, {shots: Infinity}, {combo: NaN}, {combo: -1},
+    {best: '1'}, {rocketHits: 1.5}, {recoil: NaN}, {recoil: -1},
+    {reloading: 'false'}, {hit: []}, {skillFired: 1},
+    {impacts: {}}, {impacts: [null]}, {impacts: [{...effect, x: '8.5'}]},
+    {impacts: [{...effect, height: Infinity}]},
+    {impacts: [{...effect, life: '0.2'}]},
+    {impacts: Array(129).fill(effect)},
+    {marker: {x: NaN, y: 3.5, kind: 'activate'}},
+    {marker: {x: 8.5, y: 3.5, kind: {}}}
+  ]) assert.equal(validateCampaignSave({...fresh(), ...patch}), false, JSON.stringify(patch));
+  // Invalid data must be rejected, not silently repaired or granted as progress.
+  assert.equal(valid.combo, 2);
+  assert.equal(valid.impacts.length, 1);
+});
+
 test('preserves valid objective progress while refusing corrupted mission completion', () => {
   assert.equal(validateCampaignSave({...fresh(), objective: {done: 2, hold: 18.5, bossDefeated: false}}), true);
   for (const objective of [[], 'done', {done: 999, hold: 0, bossDefeated: false},
