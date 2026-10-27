@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {validateCampaignSave, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove} from '../../games/ramadan-war/save-validation.mjs';
+import {validateCampaignSave, boundedCampaignPickups, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove} from '../../games/ramadan-war/save-validation.mjs';
 
 const fresh = () => ({
   hero: 0, mission: 0, lives: 100, x: 2.5, y: 7.5, angle: 0,
@@ -85,7 +85,7 @@ test('preserves valid objective progress while refusing corrupted mission comple
 test('reversible release manifest ships and checks every new imported save module', () => {
   const deploy = readFileSync(new URL('../../games/ramadan-war/deploy.py', import.meta.url), 'utf8');
   const client = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
-  assert.match(client, /import \{validateCampaignSave, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove\} from '\.\/save-validation\.mjs'/);
+  assert.match(client, /import \{validateCampaignSave, boundedCampaignPickups, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove\} from '\.\/save-validation\.mjs'/);
   assert.match(deploy, /ASSETS=\[[^\n]*'save-validation\.mjs'/);
   assert.match(deploy, /b'\.\/save-validation\.mjs' in new\['game\.js'\]/);
 });
@@ -187,6 +187,26 @@ test('game contains no direct localStorage access outside guarded helpers', () =
   assert.match(game, /storageRead\('rwWin'\)/);
   assert.match(game, /storageWrite\('rwHero',hero\)/);
   assert.match(game, /storageRemove\(saveKey\)/);
+});
+
+test('persisted pickup snapshots retain recovery objectives without mutating live drops', () => {
+  const transient=Array.from({length:80},(_,i)=>({x:2.5,y:7.5,type:'ammo',life:20,serial:i}));
+  const intel=[0,1,2].map(spotIndex=>({x:4.5+spotIndex,y:2.5,type:'mission-intel',spotIndex,life:3600}));
+  const live=[...intel,...transient];
+  const snapshot=boundedCampaignPickups(live);
+  assert.equal(live.length,83,'live gameplay pickups are never removed');
+  assert.equal(snapshot.length,60);
+  assert.deepEqual(snapshot.filter(p=>p.type==='mission-intel'),intel);
+  assert.equal(snapshot.filter(p=>p.type==='ammo')[0].serial,23,'recent transient drops are retained');
+  assert.equal(validateCampaignSave({...fresh(),mission:2,pickups:snapshot}),true);
+  assert.deepEqual(boundedCampaignPickups([]),[]);
+  assert.deepEqual(boundedCampaignPickups(null),[]);
+});
+
+test('runtime persists bounded pickup snapshots without truncating live mission rewards', () => {
+  const game=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
+  assert.ok(game.includes('JSON.stringify({...world,pickups:boundedCampaignPickups(world.pickups)})'));
+  assert.ok(game.includes('import {validateCampaignSave, boundedCampaignPickups, restoreRecoveryPickups'));
 });
 
 test('recovery intel remains stage-local, unique and cannot be duplicated in a save', () => {
