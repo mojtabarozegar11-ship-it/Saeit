@@ -148,8 +148,8 @@ def prepare(root=ROOT, source_sha=SOURCE_SHA, min_free_bytes=2 * 1024 ** 3):
             # Same-volume rename and one-time receipt, never overwriting an existing tree.
             if dest.exists() or dest.is_symlink():
                 raise RuntimeError("REWORK_DESTINATION_EXISTS")
-            os.rename(stage, dest)
             write_once(receipt, raw)
+            os.rename(stage, dest)
         finally:
             if stage.exists():
                 shutil.rmtree(stage)
