@@ -1,0 +1,94 @@
+name: VPS Factory Flagship Artifact Byte Readback
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/vps-factory-flagship-artifact-readback.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-artifact-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Independently hash active private factory recipe and package
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          reviewed_sha="$(sha256sum product_recipes/farm_enterprise_economics/calculator.py | awk '{print $1}')"
+          [[ "$reviewed_sha" =~ ^[a-f0-9]{64}$ ]]
+          d="$RUNNER_TEMP/saeit-factory-flagship-readback"
+          mkdir -m 700 -p "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          SSH=(ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes githubops@178.239.147.150)
+          "${SSH[@]}" "REVIEWED_CALC_SHA=$reviewed_sha /home/githubops/factory-runtime/.venv/bin/python -B -" <<'PYREADBACK'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path, PurePosixPath
+          from zipfile import ZipFile
+
+          recipe = "farm_enterprise_economics"
+          home = Path.home() / "factory-runtime"
+          source = home / "operations/autonomous-product-runtime/product_recipes" / recipe
+          factory = home / "private/autonomous-product-cycle"
+          goods = factory / "digital-products" / recipe
+          artifact = goods / (recipe + "-internal-qa.zip")
+          manifest_path = goods / "manufacturing_manifest.json"
+
+          for p in (source, goods):
+              assert p.is_dir() and not p.is_symlink(), "FACTORY_PRIVATE_ROOT_UNSAFE"
+          for p in (source / "calculator.py", artifact, manifest_path):
+              assert p.is_file() and not p.is_symlink(), "FACTORY_FLAGSHIP_FILE_MISSING_OR_UNSAFE"
+
+          expected = os.environ["REVIEWED_CALC_SHA"]
+          actual = hashlib.sha256((source / "calculator.py").read_bytes()).hexdigest()
+          assert actual == expected, "FACTORY_ACTIVE_CALCULATOR_NOT_REVIEWED_VERSION"
+          manifest = json.loads(manifest_path.read_text(encoding="utf8"))
+          assert manifest["recipe"] == recipe and manifest["qa_status"] == "passed"
+          assert manifest["qa_measurements"]["successful_tests"] >= 13
+          assert manifest["qa_measurements"]["policy_version"] == 4
+          file_names = manifest["files"]
+          assert isinstance(file_names, list) and "calculator.py" in file_names
+          assert len(file_names) == len(set(file_names))
+          source_hash = hashlib.sha256()
+          for name in file_names:
+              rel = PurePosixPath(name)
+              assert name == rel.as_posix() and not rel.is_absolute() and all(x not in (".", "..") for x in rel.parts)
+              path = source.joinpath(*rel.parts)
+              assert path.is_file() and not path.is_symlink()
+              source_hash.update(name.encode("utf8") + b"\0")
+              source_hash.update(path.read_bytes())
+          assert source_hash.hexdigest() == manifest["source_sha256"], "FACTORY_ACTIVE_SOURCE_MANIFEST_MISMATCH"
+          archive_hash = hashlib.sha256(artifact.read_bytes()).hexdigest()
+          assert archive_hash == manifest["artifact_sha256"], "FACTORY_PRIVATE_PACKAGE_SHA_MISMATCH"
+          with ZipFile(artifact) as z:
+              assert z.testzip() is None, "FACTORY_PRIVATE_ZIP_CORRUPTED"
+              assert z.namelist() == [recipe + "/" + x for x in sorted(file_names)], "FACTORY_ZIP_FILE_LIST_MISMATCH"
+              for name in file_names:
+                  assert z.read(recipe + "/" + name) == source.joinpath(*PurePosixPath(name).parts).read_bytes(), "FACTORY_ZIP_SOURCE_MISMATCH"
+          state = json.loads((factory / "production-state.json").read_text(encoding="utf8"))
+          quality = json.loads((goods / "professional_quality_release_stop.json").read_text(encoding="utf8"))
+          assert quality["commercial_release_permitted_from_manufacturing"] is False
+          assert manifest["professional_quality_approved"] is False
+          print("FACTORY_FLAGSHIP_ACTIVE_CALCULATOR_SOURCE_SHA256=" + actual)
+          print("FACTORY_FLAGSHIP_ACTIVE_SOURCE_MANIFEST_SHA256=" + source_hash.hexdigest())
+          print("FACTORY_FLAGSHIP_PRIVATE_ARTIFACT_SHA256=" + archive_hash)
+          print("FACTORY_FLAGSHIP_MEASURED_SUCCESSFUL_TESTS=" + str(manifest["qa_measurements"]["successful_tests"]))
+          print("FACTORY_FLAGSHIP_PRIVATE_ZIP_BYTES=" + str(artifact.stat().st_size))
+          print("FACTORY_FLAGSHIP_PACKAGE_INTEGRITY=PASS")
+          print("FACTORY_REGISTERED_RECIPES=" + str(state["registered_recipe_count"]))
+          print("FACTORY_ACTIVE_SLOT_RECIPES=" + json.dumps(state["active_product_slot_recipes"]))
+          print("FACTORY_INDEPENDENT_1000_CERTIFIED=false")
+          print("FACTORY_COMMERCIAL_RELEASE=false")
+          PYREADBACK
