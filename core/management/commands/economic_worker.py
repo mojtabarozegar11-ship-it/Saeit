@@ -1,4 +1,5 @@
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import Q
 from core.models import AgentTask
 from core.worker_runner import WorkerRunner
 from core.economic_tool_pack import build_economic_gateway
@@ -14,8 +15,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         qs = AgentTask.objects.filter(
             agent__code="economic-master-agent",
-            capability_code__startswith="income_",
             status="queued",
+        ).filter(
+            Q(capability_code__startswith="income_")
+            | Q(capability_code="master_self_improvement")
         ).order_by("created_at")
         if options["task_id"]:
             qs = qs.filter(pk=options["task_id"])
