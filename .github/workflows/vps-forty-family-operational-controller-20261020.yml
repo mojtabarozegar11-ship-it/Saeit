@@ -22,7 +22,6 @@ jobs:
           set -euo pipefail
           packages=(Pillow==11.3.0 openpyxl==3.1.5 python-docx==1.2.0 python-pptx==1.0.2 reportlab==4.4.3)
           python -m pip install "${packages[@]}"
-          python -m pip download --only-binary=:all: --dest "$RUNNER_TEMP/factory-wheelhouse" "${packages[@]}"
       - name: Test honest 40-family admission, proof separation and safe script
         run: |
           set -euo pipefail
@@ -87,6 +86,13 @@ jobs:
           d="$RUNNER_TEMP/forty-proof-ssh"
           folder="/home/githubops/factory-runtime/operations/.forty-control-release-$GITHUB_RUN_ID"
           ssh -T -F "$d/config" saeit-factory-verified "umask 077; test ! -e '$folder'; mkdir -m 700 '$folder'"
+          remote_version="$(ssh -T -F "$d/config" saeit-factory-verified 'python="$HOME/factory-runtime/.venv/bin/python"; "$python" -c "import sys; print(sys.version_info[0], sys.version_info[1])"')"
+          read -r remote_major remote_minor <<< "$remote_version"
+          [[ "$remote_major" =~ ^[0-9]+$ && "$remote_minor" =~ ^[0-9]+$ ]]
+          remote_python="$remote_major.$remote_minor"
+          remote_abi="cp$remote_major$remote_minor"
+          packages=(Pillow==11.3.0 openpyxl==3.1.5 python-docx==1.2.0 python-pptx==1.0.2 reportlab==4.4.3)
+          python -m pip download --only-binary=:all: --python-version "$remote_python" --implementation cp --abi "$remote_abi" --abi abi3 --abi none --platform manylinux_2_28_x86_64 --platform manylinux_2_27_x86_64 --platform manylinux2014_x86_64 --dest "$RUNNER_TEMP/factory-wheelhouse" "${packages[@]}"
           files=(scripts/factory_six_specialist_executors.py scripts/factory_seven_missing_builders.py scripts/factory_40_execution_controller.py scripts/factory_40_family_master.py scripts/factory_build50_family_bridge.py scripts/factory_build_50.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_build50_f31_planner.py scripts/factory_f31_independent_review.py scripts/factory_batch5_build.py scripts/factory_batch5_specs.py scripts/factory_batch5_review.py deploy/install_factory_40_execution_controller.sh scripts/factory_product_planner.py scripts/factory_product_routes.py scripts/factory_build50_f18_webapps.py scripts/factory_f18_independent_review.py scripts/factory_capability_organizer.py scripts/factory_build50_f19_web_template.py scripts/factory_f19_independent_web_review.py scripts/factory_build50_f34_icon_kit.py scripts/factory_f34_independent_icon_review.py scripts/factory_build50_workbook.py scripts/factory_build50_creative_kits.py scripts/factory_creative_independent_review.py scripts/factory_build50_learning_4.py scripts/factory_learning_independent_review.py scripts/factory_build50_native_media.py scripts/factory_native_media_review.py scripts/factory_build50_five_publications.py scripts/factory_five_publication_review.py scripts/factory_build50_next4_media.py scripts/factory_next4_review.py scripts/factory_build50_three_media.py scripts/factory_three_independent_review.py scripts/factory_build50_f15_game_assets.py scripts/factory_f15_independent_review.py scripts/factory_build50_f24_prompts.py scripts/factory_f24_prompt_review.py scripts/factory_build50_f35_cad.py scripts/factory_f35_cad_independent_review.py)
           # One bounded transfer replaces per-file SCP/SSH handshakes.
           tar -cf - --transform='s,.*/,,' "${files[@]}" | ssh -T -F "$d/config" saeit-factory-verified "umask 077; tar -xf - --no-same-owner --no-same-permissions -C '$folder'; chmod 600 '$folder'/*"
