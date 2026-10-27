@@ -30,7 +30,7 @@ jobs:
           ssh-keygen -y -P '' -f "$d/key" >/dev/null
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
-          ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=20 -o ServerAliveCountMax=9 githubops@178.239.147.150 'bash -se' <<'REMOTE'
           set -euo pipefail
           base="$HOME/factory-runtime"
           app="$base/django-app"
@@ -48,7 +48,8 @@ jobs:
           commands=get_commands()
           for name in ('seed_online_income_agents','online_income_cycle','autonomous_master_loop','economic_autorun'):
               print('MASTER_COMMAND_'+name.upper()+'='+str(name in commands))
-          for name in ('core.autonomous_brain','core.master_agent_capability_pack','core.economic_tool_pack'):
+          for name in ('core.autonomous_brain','core.master_agent_capability_pack','core.economic_tool_pack',
+                       'core.economic_master_agent','core.self_funding_policy','core.task_runtime'):
               try: importlib.import_module(name); result=True
               except Exception: result=False
               print('MASTER_MODULE_'+name.split('.')[-1].upper()+'='+str(result))
@@ -59,6 +60,9 @@ jobs:
               print('MASTER_AGENT_CAPABILITIES='+str(agent.capabilities.filter(active=True).count()))
               for status in ('queued','running','blocked','failed','completed'):
                   print('MASTER_TASK_'+status.upper()+'='+str(AgentTask.objects.filter(agent=agent,status=status).count()))
+              for status in ('queued','running','failed','completed'):
+                  print('MASTER_SELF_IMPROVEMENT_'+status.upper()+'='+str(AgentTask.objects.filter(
+                      agent=agent,capability_code='master_self_improvement',status=status).count()))
           db=settings.DATABASES['default']
           print('MASTER_DATABASE_SQLITE='+str('sqlite3' in db['ENGINE']))
           print('MASTER_VPS_LOCAL_MODE='+str(os.getenv('MOJ_FACTORY_LOCAL_MODE')=='1'))
@@ -66,6 +70,8 @@ jobs:
           current="$(crontab -l 2>/dev/null || true)"
           count="$(printf '%s\n' "$current" | grep -c 'SAEIT_MASTER_AGENT_V1' || true)"
           echo "MASTER_SCHEDULE_ENTRIES=$count"
+          backup_count="$(find "$base/operations/backups" -maxdepth 1 -type d -name 'master-source-before-*' 2>/dev/null | wc -l | tr -d ' ')"
+          echo "MASTER_SOURCE_BACKUP_SETS=$backup_count"
           test -x "$base/operations/vps-only-loop.sh" && echo FACTORY_LOOP_SCRIPT_PRESENT
           REMOTE
 # Post-activation independent owner verification 2026-10-16.
