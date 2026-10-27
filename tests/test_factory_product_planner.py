@@ -17,7 +17,7 @@ class ProductPlanner(unittest.TestCase):
     def test_all_forty_routes_plan_real_unexecuted_tasks(self):
         r=planner.cycle(self.root,REGISTRY)
         self.assertEqual(r['registered_family_routes'],40);self.assertEqual(r['unique_product_plans'],40)
-        self.assertEqual(len(r['families_awaiting_specialist_executor']),20)
+        self.assertEqual(len(r['families_awaiting_specialist_executor']),0)
         self.assertEqual(r['custom_product_executors_verified'],0)
         for path in (self.root/'product-planning/plans').glob('*.json'):
             p=planner.read(path);self.assertEqual(len(p['work_packages']),48)
@@ -124,7 +124,8 @@ class ProductPlanner(unittest.TestCase):
                 command,timeout=planner.command_for(self.root,{'family_id':family})
                 script=next(Path(x) for x in command if x.endswith('.py'))
                 self.assertTrue(script.is_file(),family)
-                self.assertEqual(timeout,210 if family=='F27' else 240 if family in ('F36','F37','F39') else 90)
+                expected=900 if family in ('F08','F09','F14','F15','F27','F32','F36','F37','F38','F39') else 240 if family not in ('F20','F21','F22','F25','F28') else 90
+                self.assertEqual(timeout,expected,family)
                 if family=='F27':self.assertIn('--worker',command);self.assertIn('--toolchain',command)
         with patch.object(planner,'load',side_effect=RuntimeError('no verified toolchain')):
             self.assertEqual(planner.execute(self.root,{'family_id':'F27'})['status'],'blocked_executor_or_toolchain_unavailable')
