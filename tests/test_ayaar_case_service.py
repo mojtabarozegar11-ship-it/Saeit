@@ -38,7 +38,7 @@ def make_dossier(public=False):
         "scope": "Review originality, references, provenance and accessibility.",
         "evidence_summary": "Original content with author-approved publication rights",
         "rights_declared": True, "privacy_consent": True,
-        "publication_consent": public,
+        "ai_processing_consent": True, "publication_consent": public,
     }
 
 
@@ -49,7 +49,10 @@ def make_review(conflict=False):
                   "evidence": "Verified test record with versioned source reference"}
             for key, _, _ in service.RUBRICS["ebook"]
         },
-        "independence_statement": "I am a qualified reviewer with no financial relationship to the publisher.",
+        "review_mode": "ai_assisted",
+        "ai_review_reference": "AYAR manual analysis session case evidence reviewed 2026-10-27",
+        "evidence_examined": True,
+        "independence_statement": "AYAR Expert Engine is a MojPlayWin-affiliated AI-assisted process, not an independent human reviewer.",
         "review_scope": "Full EPUB and rights chain for version 1.0",
         "methodology_notes": "Cross-check author permissions, citations and reading accessibility.",
         "no_material_conflict": True,
@@ -74,7 +77,7 @@ class CaseServiceTests(unittest.TestCase):
         self.assertGreater(len(item["access_key"]), 30)
         record = service.case_status(item["case_id"], item["access_key"], self.secret)
         self.assertEqual(record["status"], "submitted")
-        self.assertEqual(len(record["events"]), 1)
+        self.assertEqual(len(record["events"]), 2)
         self.assertNotIn("contact_email", record)
         with self.assertRaises(service.CaseError):
             service.case_status(item["case_id"], "incorrect-access-key", self.secret)
@@ -91,7 +94,8 @@ class CaseServiceTests(unittest.TestCase):
         self.assertTrue(reviewed["public_report"])
         self.assertEqual(len(service.registry(self.secret)), 1)
         user = service.case_status(item["case_id"], item["access_key"], self.secret)
-        self.assertEqual(user["review"]["schema"], "AYAR-HUMAN-REVIEW-v1")
+        self.assertEqual(user["review"]["schema"], "AYAR-AI-ASSISTED-REVIEW-v1")
+        self.assertEqual(user["review"]["reviewer_alias"], "AYAR Expert Engine")
         self.assertEqual(len(user["review"]["criteria"]), 8)
         with self.assertRaises(service.CaseError):
             service.set_status(item["case_id"], "declined", "staff:12", "Cannot silently change completed result")
@@ -242,6 +246,43 @@ class CaseServiceTests(unittest.TestCase):
         proof = private["review"]["integrity"]["proof"]
         self.assertFalse(service.verify_public_report(code, proof, self.secret)["verified"])
         self.assertEqual(service.registry(self.secret), [])
+
+
+    def test_explicit_ai_authorization_and_legacy_case_opt_in(self):
+        invalid = make_dossier()
+        invalid["ai_processing_consent"] = False
+        with self.assertRaises(service.CaseError):
+            service.create_case(invalid, [], "192.0.2.64", self.secret)
+        item = self.create()
+        code, key = item["case_id"], item["access_key"]
+        with service.database() as db, db:
+            db.execute("DELETE FROM events WHERE code=? AND action='ai_processing_consent'", (code,))
+        self.assertFalse(service.case_status(code, key, self.secret)["ai_processing_consent"])
+        service.set_status(code, "in_review", "staff:9", "Review authorization checkpoint")
+        with self.assertRaises(service.CaseError) as denied:
+            service.submit_review(code, "staff:9", make_review(), self.secret)
+        self.assertEqual(denied.exception.status, 403)
+        self.assertTrue(service.grant_ai_consent(code, key, self.secret)["ai_processing_consent"])
+        self.assertEqual(service.submit_review(code, "staff:9", make_review(), self.secret)["status"], "reviewed")
+        with self.assertRaises(service.CaseError):
+            service.grant_ai_consent(code, key, self.secret)
+
+    def test_ai_review_provenance_and_actual_evidence_checks(self):
+        item = self.create()
+        code = item["case_id"]
+        service.set_status(code, "in_review", "staff:5", "Review evidence and method")
+        review = make_review()
+        review["ai_review_reference"] = ""
+        with self.assertRaises(service.CaseError):
+            service.submit_review(code, "staff:5", review, self.secret)
+        review = make_review()
+        review["evidence_examined"] = False
+        with self.assertRaises(service.CaseError):
+            service.submit_review(code, "staff:5", review, self.secret)
+        review = make_review()
+        review["review_mode"] = "human"
+        with self.assertRaises(service.CaseError):
+            service.submit_review(code, "staff:5", review, self.secret)
 
     def test_private_file_access_and_owner_erasure(self):
         raw = b"%PDF-1.7\nexample controlled test evidence\n%%EOF"
