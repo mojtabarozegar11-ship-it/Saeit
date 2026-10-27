@@ -44,7 +44,7 @@ jobs:
           EOF
           chmod 600 "$d/config"
           ssh -T -F "$d/config" saeit-factory-verified 'python3 -' <<'PY'
-          import json, re, subprocess
+          import json, re, subprocess, time
           from pathlib import Path
           h=Path.home()/"factory-runtime"
           root=h/"private/autonomous-product-cycle"
@@ -52,6 +52,11 @@ jobs:
           ctrl=json.loads((root/"production-family-management/forty-execution-dashboard.json").read_text())
           cron=subprocess.check_output(["crontab","-l"],text=True)
           active=set()
+          process_lines=subprocess.check_output(["ps","-eo","args="],text=True).splitlines()
+          cron_running=any(re.search(r"(?:^|/)(?:cron|crond)(?:\s|$)",line) for line in process_lines)
+          dispatch_log=h/"operations/forty-execution.log"
+          dispatch_log_age=(round(time.time()-dispatch_log.stat().st_mtime)
+                            if dispatch_log.is_file() and not dispatch_log.is_symlink() else None)
           fixed={
             "factory_build50_f15_game_assets.py":"F15",
             "factory_build50_f18_webapps.py":"F18",
@@ -68,7 +73,7 @@ jobs:
             "factory_build50_three_media.py","factory_batch5_build.py",
             "factory_build50_creative_kits.py","factory_build50_native_media.py",
             *fixed.keys())
-          for line in subprocess.check_output(["ps","-eo","args="],text=True).splitlines():
+          for line in process_lines:
             name=next((x for x in builder_names if x in line),None)
             if not name: continue
             match=re.search(r"(?<![A-Z0-9])F(?:0[1-9]|[1-3][0-9]|40)(?![A-Z0-9])",line)
@@ -83,6 +88,8 @@ jobs:
             "cron_dispatcher_active":len(dispatch_lines)==1,
             "dispatcher_runs_every_minute":bool(dispatch_lines and
               re.match(r"^\s*\*\s+\*\s+\*\s+\*\s+\*",dispatch_lines[0])),
+            "cron_daemon_running":cron_running,
+            "dispatcher_log_age_seconds":dispatch_log_age,
             "registered_line_routes":planner.get("registered_family_routes"),
             "worker_budget":planner.get("worker_budget"),
             "below_40_concurrent_slots":(planner.get("worker_budget") or 0)<40,
