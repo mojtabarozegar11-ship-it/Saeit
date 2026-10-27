@@ -188,7 +188,7 @@ function jungleGame(stage){
   render()
  }
  buttons.forEach(x=>x.addEventListener('click',()=>move(Number(x.dataset.jungleAction))));
- function onKey(e){if(e.repeat||!document.getElementById('gameOverlay').classList.contains('open')||['INPUT','TEXTAREA','SELECT'].includes(e.target?.tagName))return;const n={'Digit1':0,'Digit2':1,'Digit3':2}[e.code];if(n!==undefined){e.preventDefault();move(n)}}
+ function onKey(e){if(e.repeat||e.isComposing||e.ctrlKey||e.altKey||e.metaKey||!document.getElementById('gameOverlay').classList.contains('open')||['INPUT','TEXTAREA','SELECT'].includes(e.target?.tagName))return;const n={'Digit1':0,'Digit2':1,'Digit3':2}[e.code];if(n!==undefined){e.preventDefault();move(n)}}
  document.addEventListener('keydown',onKey);
  jungleCleanup=()=>{document.removeEventListener('keydown',onKey);jungleCleanup=()=>{}};
  render()
