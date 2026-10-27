@@ -23,7 +23,7 @@ def module(name):
 
 @pytest.mark.django_db
 @override_settings(DEBUG=False)
-def test_verified_receipt_import_is_inactive_and_idempotent(django_user_model, tmp_path):
+def test_unreviewed_receipt_cannot_enter_store_as_a_draft(django_user_model, tmp_path):
     receiver = module("store_receiver")
     importer = module("import_factory_store_drafts")
     owner = django_user_model.objects.create_superuser(
@@ -52,20 +52,11 @@ def test_verified_receipt_import_is_inactive_and_idempotent(django_user_model, t
     }), encoding="utf-8")
     receiver.finalize(root, recipe, digest)
 
-    dry = importer.import_receipts(root, app, docroot, "09175814408")
-    assert dry["examined"] == 1 and dry["created"] == 0
+    with pytest.raises(RuntimeError, match="STORE_BLOCKED_UNTIL_CHATGPT_AND_QC1000_APPROVE"):
+        importer.import_receipts(root, app, docroot, "09175814408")
+    with pytest.raises(RuntimeError, match="STORE_BLOCKED_UNTIL_CHATGPT_AND_QC1000_APPROVE"):
+        importer.import_receipts(root, app, docroot, "09175814408", apply=True)
     assert Product.objects.count() == 0
-    applied = importer.import_receipts(root, app, docroot, "09175814408", apply=True)
-    assert applied["created"] == 1
-    product = Product.objects.get()
-    assert product.owner_id == owner.pk
-    assert product.active is False
-    assert product.price == 0
-    assert product.knowledge_article_id is None
-    assert product.metadata["factory_bridge_sha256"] == digest
-    assert product.metadata["factory_publication_permission"] is False
-    assert importer.import_receipts(root, app, docroot, "09175814408", apply=True)["already_present"] == 1
-    assert Product.objects.count() == 1
     assert Product.objects.filter(active=True).count() == 0
 
 
