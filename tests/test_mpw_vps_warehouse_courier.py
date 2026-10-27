@@ -127,6 +127,7 @@ class VPSWarehouseCourierTests(unittest.TestCase):
             stock.mkdir(parents=True,mode=0o700)
             manifest=dict(self.manifest,source_sha256=version)
             (stock/"warehouse_manifest.json").write_text(json.dumps(manifest))
+            (stock/"product.zip").write_bytes(self.zip)
         pages=[feedback_site(self.site,page=p) for p in range(2)]
         identities=[(r["product_id"],r["source_sha256"])
                     for payload in pages for r in json.loads(payload)["returns"]]
