@@ -97,7 +97,16 @@ jobs:
             "verified_technical_50_stage_products":technical_products,
             "families_with_real_50_stage_products":ctrl.get("counts",{}).get("families_with_real_50_stage_products"),
             "worker_budget":planner.get("worker_budget"),
-            "below_40_concurrent_slots":(planner.get("worker_budget") or 0)<40,
+            "worker_budget_below_40":(planner.get("worker_budget") or 0)<40,
+            "eligible_queued_requests":sum(
+              1 for row in planner.get("rows",[])
+              if row.get("status")=="queued"
+              and row.get("retry_at",0)<=planner.get("observed_unix",time.time())),
+            "planner_status_counts":dict(__import__("collections").Counter(
+              row.get("status","unknown") for row in planner.get("rows",[]))),
+            "executions_this_tick":planner.get("executions_this_tick"),
+            "execution_limit":planner.get("execution_limit"),
+            "resource_snapshot":planner.get("resource_snapshot"),
             "active_builder_lines":len(active),
             "active_builder_family_ids":sorted(active),
             "blocked_native_executor_family_ids":blocked,
