@@ -56,6 +56,9 @@ test -f "$repo/scripts/factory_autonomous_portfolio.py"
 test -f "$repo/scripts/factory_evidence_quality.py"
 test -f "$repo/scripts/factory_first_product_pilot.py"
 test -f "$repo/scripts/factory_vps_product_cycle.py"
+# The live cycle imports genetics unconditionally; stage the exact reviewed module.
+test -f "$repo/scripts/factory_master_agent_genetics_v1.py"
+test ! -L "$repo/scripts/factory_master_agent_genetics_v1.py"
 # The live cycle imports customer-extracted QA unconditionally. Abort cutover
 # unless the exact module to execute is present in this checkout.
 test -f "$repo/scripts/factory_verified_customer_cycle_20261021.py"
@@ -101,7 +104,7 @@ chmod 700 "$stage" "$scripts" "$recipes" "$private"
 
 
 for f in factory_product_maker.py factory_personal_owner_passport_policy_20261020.py factory_autonomous_portfolio.py \
-         factory_evidence_quality.py factory_first_product_pilot.py factory_vps_product_cycle.py \
+         factory_evidence_quality.py factory_first_product_pilot.py factory_vps_product_cycle.py factory_master_agent_genetics_v1.py \
          factory_verified_customer_cycle_20261021.py \
          factory_product_rework.py factory_recipe_designer.py factory_specialist_pilots.py factory_specialist_formats.py factory_research_triage.py factory_build_50.py factory_build50_workbook.py factory_design_intake.py factory_continuous_invention.py factory_customer_packager.py; do
   install -m 600 "$repo/scripts/$f" "$scripts/$f"
@@ -139,7 +142,7 @@ echo "FACTORY_FLAGSHIP_SOURCE_INSTALLED_BYTE_FOR_BYTE=PASS"
 
 # Quality gate must exist and compile BEFORE any production cycle or cron change.
 "$python" -B -c 'import ast, pathlib, sys; [ast.parse(pathlib.Path(x).read_text(encoding="utf-8")) for x in sys.argv[1:]]' \
-  "$scripts/factory_personal_owner_passport_policy_20261020.py" "$scripts/factory_recipe_designer.py" "$scripts/factory_evidence_quality.py" "$scripts/factory_autonomous_portfolio.py" "$scripts/factory_vps_product_cycle.py" "$scripts/factory_verified_customer_cycle_20261021.py" "$scripts/factory_product_rework.py" "$scripts/factory_specialist_pilots.py" "$scripts/factory_specialist_formats.py" "$scripts/factory_research_triage.py" "$scripts/factory_continuous_invention.py" "$scripts/factory_customer_packager.py"
+  "$scripts/factory_personal_owner_passport_policy_20261020.py" "$scripts/factory_master_agent_genetics_v1.py" "$scripts/factory_recipe_designer.py" "$scripts/factory_evidence_quality.py" "$scripts/factory_autonomous_portfolio.py" "$scripts/factory_vps_product_cycle.py" "$scripts/factory_verified_customer_cycle_20261021.py" "$scripts/factory_product_rework.py" "$scripts/factory_specialist_pilots.py" "$scripts/factory_specialist_formats.py" "$scripts/factory_research_triage.py" "$scripts/factory_continuous_invention.py" "$scripts/factory_customer_packager.py"
 
 # Product QA is mandatory BEFORE changes to the local scheduler.
 # The cycle discovers the complete catalog and runs each recipe's test_*.py suite.
