@@ -34,7 +34,9 @@ jobs:
           assert len(refs)==2, 'Reference section absent'
           dois=set(re.findall(r'10\.\d{4,9}/[^\s)]+',refs[1]))
           dois={x.rstrip('.,;') for x in dois}
-          assert len(dois)==22, f'Expected 22 unique DOI references, got {len(dois)}'
+          ref_nums=[int(x) for x in re.findall(r'^(\d+)\. ',refs[1],re.M)]
+          assert len(ref_nums)>=22 and ref_nums==list(range(1,len(ref_nums)+1)), 'Reference numbering invalid'
+          assert len(dois)==len(ref_nums), f'DOI/reference mismatch: {len(dois)} unique DOIs for {len(ref_nums)} references'
           for marker in ['ARIS LIAS','0.23','0.94','six commercial','24%','7%','C37','strictly hypothetical identifiability check','30 mm applied','not a validated','MAJOR REVISION']:
               if marker=='MAJOR REVISION': continue
               assert marker.lower() in s.lower(), f'Missing source revision: {marker}'
