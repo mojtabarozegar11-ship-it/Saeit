@@ -87,6 +87,10 @@ For the **separate 2026-only 217-record frame**, we extended the missing-growth 
 
 For the separate 2026-only frame of 217 economies, we extend the C36 order-statistic missingness analysis beyond the median. Define each p-quantile by the nearest-rank rule `k=ceil(217p)`. With 157 observed annualized 2000–2019 growth rates and 60 unrestricted missing rates, the sharp lower infimum is unbounded if `k<=60`, otherwise observed order statistic `x_(k-60)`; the upper supremum is unbounded if `k>157`, otherwise `x_(k)`. These are identification bounds, not uncertainty intervals or claims about actual missing-country growth. A source-SHA-locked Python replication is in [C44](AE-2026-001_C44_SHARP_FULL_FRAME_QUANTILE_MISSINGNESS_IDENTIFICATION_2026-10-28.md).
 
+### 2.14 C45: full 2019–2023 cohort versus three-endpoint baseline selection
+
+As a separate 2026-only descriptive selection check, we compared annualized 2019–2023 log growth `100 ln(P2023/P2019)/4` for all 169 economies with positive 2019/2023 observations against the 153 economies also observed at the 2000 baseline. The 16 additional cases are not assigned missing 2000 values. C30/C31 already evaluated baseline-availability group differences; the incremental C45 estimand is the **169-versus-153 signed-growth median difference**. Code and exact ISO3 membership are in [C45](AE-2026-001_C45_BASELINE_AVAILABILITY_SELECTION_2019_2023_2026-10-28.md). This is not the fixed 155-economy three-vintage sample.
+
 ## 3. Results
 
 ### 3.1 Primary fixed-country release sensitivity
@@ -210,6 +214,10 @@ Region-specific bounds qualify the aggregate result: a positive-growth majority 
 
 For the 217-record nearest-rank quantiles, the 25th percentile (rank 55) is **unbounded below** and at most **1.629363** annual log-percentage points; the 75th percentile (rank 163) is at least **3.488990** and **unbounded above**. The 10th percentile is at most −0.064478 and unbounded below; the 90th is at least 4.838383 and unbounded above. The median remains bounded between **1.423959 and 3.689876**, reproducing C36. Thus the finite-frame interquartile spread is not point-identified by the 157 observed rates; observed-sample quartiles cannot be reported as all-217-frame quartiles. The unbounded limits express missing-data nonidentification, **not** observed extreme outcomes, a world productivity distribution or a novel statistical estimator.
 
+### 3.14 C45: full two-endpoint frame changes the signed-growth median
+
+In the 2026-only 2019–2023 data, the 169-economy median annualized signed log growth was **0.9751105** log-percentage points/year (101 positive, 68 negative). Requiring a positive 2000 baseline reduces this sample to 153 economies and gives median **0.8904395**, a difference of **+0.0846709** when the 16 late-baseline economies are included. The corresponding unweighted means are **0.8101423** and **0.5417354**. The 16 additional economies have median signed growth **2.6731881** and mean **3.3767833**; those subgroup figures are an independent replication of C31, **not new discoveries**. The comparison demonstrates an exact change in the selected estimand, not a missing-at-random test, causal effect or representative global trend.
+
 ## 4. Discussion
 
 The 2026-only baseline-availability audits (C30/C31) identify a further selection caution: economies lacking the 2000 endpoint had lower pooled median 2019 productivity and higher median absolute 2019–2023 growth than the complete cases, while within-region rank comparisons differed materially. This does not establish a missingness mechanism or generalize to the 155-economy historical-vintage cohort. Excluding two extreme observations weakens, but does not eliminate, the absolute-growth rank contrast; the within-Sub-Saharan-African comparison reverses direction. With only 2019 and 2023 endpoints, the magnitude of net growth must not be called time-series volatility. Accordingly, pooled 153-versus-169 growth contrasts should not be interpreted as representative changes in the world's agricultural productivity.
@@ -231,6 +239,8 @@ The limitations are substantial. Revisions to the published composite indicator 
 The appropriate application is as a transparent, reproducible descriptive data note or methodological case study **if a suitable journal accepts this limited contribution and the human author approves the scientific and publication conditions**. It must not be presented as a new theory of agricultural productivity, a causal explanation of revision, or a new measurement of agricultural employment.
 
 The C38 sharp prevalence bounds further restrict interpretation of the C36 positive-median result: a majority of the **217 equally weighted economy/territory records** has positive observed-or-unobserved growth under all assignments of the 60 missing rates, but **not every region** has a robust positive majority, and stronger growth thresholds need not command a majority. Neither finding identifies the missing values, validates historical WDI vintages or measures world worker-weighted agricultural productivity. The threshold exercise is post hoc and uses standard partial-identification arithmetic, not a novel estimator.
+
+The C45 comparison further shows that retaining all 169 economies with both 2019 and 2023 values instead of requiring the 2000 baseline shifts the descriptive 2019–2023 signed-growth median by only **0.0846709** log-percentage points/year in this release. The small median shift is not a test of ignorable missingness or evidence of robustness in other vintages, and it does not resolve the countryatlas prior-art benchmark.
 
 ## 5. Conclusion
 
