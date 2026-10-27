@@ -22,6 +22,21 @@ export function validateCampaignSave(s) {
     (e.boss === undefined || typeof e.boss === 'boolean') &&
     (e.route == null || (Array.isArray(e.route) && e.route.length === 2 && e.route.every(n => finite(n, 0, 16))))
   )) return false;
+  // Untrusted runtime effects/counters are consumed by tick() and the WebGL renderer.
+  // A malformed impacts object crashes Array.filter(), and NaN combo/shot counts
+  // poison score or HUD state. Preserve legacy saves with absent optional fields.
+  for (const [field, max] of [['shots', 1e9], ['combo', 1e7], ['best', 1e7], ['rocketHits', 1e7]]) {
+    if (s[field] !== undefined && !integer(s[field], 0, max)) return false;
+  }
+  if (s.recoil !== undefined && !finite(s.recoil, 0, 10)) return false;
+  for (const field of ['reloading', 'hit', 'skillFired']) {
+    if (s[field] !== undefined && typeof s[field] !== 'boolean') return false;
+  }
+  if (!group(s.impacts, 128, e => point(e) &&
+      finite(e.height, -10, 20) && finite(e.life, -1, 10) &&
+      typeof e.type === 'string' && e.type.length > 0 && e.type.length <= 32)) return false;
+  if (s.marker != null && (!point(s.marker, 0, 16) ||
+      typeof s.marker.kind !== 'string' || s.marker.kind.length > 32)) return false;
   if (s.bossSpawned !== undefined && typeof s.bossSpawned !== 'boolean') return false;
   if (s.missionPassed !== undefined && typeof s.missionPassed !== 'boolean') return false;
   if (s.missionPassed === true && s.enemies.length !== 0) return false;
