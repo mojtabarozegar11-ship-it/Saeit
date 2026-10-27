@@ -1,5 +1,6 @@
 """Executable isolation, privacy, reviewer-gate and status tests for AYAR."""
 import io
+import json
 import os
 import sys
 import tempfile
@@ -84,11 +85,11 @@ class CaseServiceTests(unittest.TestCase):
         self.assertEqual(len(queue), 1)
         self.assertEqual(queue[0]['case_id'], item['case_id'])
         service.set_status(item["case_id"], "in_review", "staff:12", "Review began after triage")
-        reviewed = service.submit_review(item["case_id"], "staff:12", make_review())
+        reviewed = service.submit_review(item["case_id"], "staff:12", make_review(), self.secret)
         self.assertEqual(reviewed["status"], "reviewed")
         self.assertAlmostEqual(reviewed["score"], 80.0)
         self.assertTrue(reviewed["public_report"])
-        self.assertEqual(len(service.registry()), 1)
+        self.assertEqual(len(service.registry(self.secret)), 1)
         user = service.case_status(item["case_id"], item["access_key"], self.secret)
         self.assertEqual(user["review"]["schema"], "AYAR-HUMAN-REVIEW-v1")
         self.assertEqual(len(user["review"]["criteria"]), 8)
@@ -122,7 +123,7 @@ class CaseServiceTests(unittest.TestCase):
                                      "Updated reproducible testing notes attached in text", [], self.secret)
         self.assertEqual(service.case_status(item["case_id"], item["access_key"], self.secret)["status"], "submitted")
         service.set_status(item["case_id"], "in_review", "staff:8", "Review resumed after applicant response")
-        service.submit_review(item["case_id"], "staff:8", make_review())
+        service.submit_review(item["case_id"], "staff:8", make_review(), self.secret)
         with self.assertRaises(service.CaseError):
             service.append_case_evidence(item["case_id"], item["access_key"],
                                          "Do not silently amend signed findings", [], self.secret)
@@ -143,14 +144,14 @@ class CaseServiceTests(unittest.TestCase):
     def test_no_publication_without_consent(self):
         item = self.create(public=False)
         service.set_status(item["case_id"], "in_review", "staff:1", "A documented review is underway")
-        result = service.submit_review(item["case_id"], "staff:1", make_review())
+        result = service.submit_review(item["case_id"], "staff:1", make_review(), self.secret)
         self.assertFalse(result["public_report"])
-        self.assertEqual(service.registry(), [])
+        self.assertEqual(service.registry(self.secret), [])
 
     def test_critical_criterion_override(self):
         item = self.create(public=True)
         service.set_status(item["case_id"], "in_review", "staff:1", "A documented review is underway")
-        result = service.submit_review(item["case_id"], "staff:1", make_review(conflict=True))
+        result = service.submit_review(item["case_id"], "staff:1", make_review(conflict=True), self.secret)
         self.assertEqual(result["grade"], "Critical gate failure")
 
     def test_conflicts_and_incomplete_evidence_are_blocked(self):
@@ -159,23 +160,23 @@ class CaseServiceTests(unittest.TestCase):
         review = make_review()
         review["no_material_conflict"] = False
         with self.assertRaises(service.CaseError):
-            service.submit_review(item["case_id"], "staff:1", review)
+            service.submit_review(item["case_id"], "staff:1", review, self.secret)
         review = make_review()
         review["criteria"]["sources"]["evidence"] = "short"
         with self.assertRaises(service.CaseError):
-            service.submit_review(item["case_id"], "staff:1", review)
+            service.submit_review(item["case_id"], "staff:1", review, self.secret)
 
 
     def test_cannot_finalise_before_review_or_while_information_is_pending(self):
         item = self.create()
         code, key = item["case_id"], item["access_key"]
         with self.assertRaises(service.CaseError) as unstarted:
-            service.submit_review(code, "staff:1", make_review())
+            service.submit_review(code, "staff:1", make_review(), self.secret)
         self.assertEqual(unstarted.exception.status, 409)
         service.set_status(code, "needs_information", "staff:1",
                            "Please provide the latest rights evidence")
         with self.assertRaises(service.CaseError) as pending:
-            service.submit_review(code, "staff:1", make_review())
+            service.submit_review(code, "staff:1", make_review(), self.secret)
         self.assertEqual(pending.exception.status, 409)
         with self.assertRaises(service.CaseError) as bypass:
             service.set_status(code, "in_review", "staff:1",
@@ -185,7 +186,7 @@ class CaseServiceTests(unittest.TestCase):
         service.append_case_evidence(
             code, key, "This is the requested full provenance clarification", [], self.secret)
         service.set_status(code, "in_review", "staff:1", "Review resumed after applicant evidence")
-        self.assertEqual(service.submit_review(code, "staff:1", make_review())["status"], "reviewed")
+        self.assertEqual(service.submit_review(code, "staff:1", make_review(), self.secret)["status"], "reviewed")
 
     def test_decline_is_terminal_and_requires_reason(self):
         item = self.create()
@@ -200,8 +201,47 @@ class CaseServiceTests(unittest.TestCase):
             service.set_status(code, "in_review", "staff:1", "Reopen declined case")
         self.assertEqual(reopen.exception.status, 409)
         with self.assertRaises(service.CaseError):
-            service.submit_review(code, "staff:1", make_review())
+            service.submit_review(code, "staff:1", make_review(), self.secret)
         self.assertEqual(service.case_status(code, key, self.secret)["events"], events)
+
+
+    def test_public_report_integrity_valid_tampered_and_private(self):
+        item = self.create(public=True)
+        code = item["case_id"]
+        service.set_status(code, "in_review", "staff:12", "Start reproducible evidence review")
+        service.submit_review(code, "staff:12", make_review(), self.secret)
+        record = service.case_status(code, item["access_key"], self.secret)
+        proof = record["review"]["integrity"]["proof"]
+        self.assertEqual(len(proof), 64)
+        self.assertTrue(record["review_integrity_valid"])
+        entry = service.registry(self.secret)[0]
+        self.assertEqual(entry["proof"], proof)
+        verified = service.verify_public_report(code, proof, self.secret)
+        self.assertTrue(verified["verified"])
+        self.assertEqual(verified["product_name"], "Principles of Digital Economics")
+        self.assertNotIn("requester_email", verified)
+        self.assertFalse(service.verify_public_report(code, "0" * 64, self.secret)["verified"])
+        self.assertFalse(service.verify_public_report("AYR-26-000000000000", proof, self.secret)["verified"])
+        with service.database() as db, db:
+            row = db.execute("SELECT review FROM cases WHERE code=?", (code,)).fetchone()
+            changed = json.loads(row["review"])
+            changed["score"] = 99.9
+            db.execute("UPDATE cases SET review=? WHERE code=?",
+                       (json.dumps(changed), code))
+        self.assertEqual(service.registry(self.secret), [])
+        self.assertFalse(service.verify_public_report(code, proof, self.secret)["verified"])
+        self.assertFalse(service.case_status(code, item["access_key"], self.secret)["review_integrity_valid"])
+
+    def test_private_signed_report_is_not_publicly_disclosed(self):
+        item = self.create(public=False)
+        code = item["case_id"]
+        service.set_status(code, "in_review", "staff:6", "Review provenance and quality")
+        service.submit_review(code, "staff:6", make_review(), self.secret)
+        private = service.case_status(code, item["access_key"], self.secret)
+        self.assertTrue(private["review_integrity_valid"])
+        proof = private["review"]["integrity"]["proof"]
+        self.assertFalse(service.verify_public_report(code, proof, self.secret)["verified"])
+        self.assertEqual(service.registry(self.secret), [])
 
     def test_private_file_access_and_owner_erasure(self):
         raw = b"%PDF-1.7\nexample controlled test evidence\n%%EOF"
