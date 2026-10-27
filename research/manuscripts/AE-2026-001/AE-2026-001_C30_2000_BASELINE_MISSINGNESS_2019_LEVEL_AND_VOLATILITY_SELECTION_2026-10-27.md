@@ -1,6 +1,8 @@
 # AE-2026-001 C30 — Baseline-availability selection in 2019 productivity levels and absolute annualized endpoint-growth magnitude
 
-**Terminology correction (27 October):** The file path retains the legacy word 'VOLATILITY', but only 2019 and 2023 endpoints were observed. Absolute annualized growth is **not** a time-series volatility estimator; see [C31](AE-2026-001_C31_OUTLIER_EXCLUSION_AND_REGION_STRATIFIED_ABSOLUTE_GROWTH_SELECTION_2026-10-27.md). No original data or numeric result was changed.\n\n**27 October 2026.** Original secondary descriptive computations from the already committed, official, dated 2026 WDI country panel. This is **not** an additional historical WDI vintage, an independently generated employment dataset, a new estimator, a causal result or proof of journal novelty.
+**Terminology correction (27 October):** The file path retains the legacy word 'VOLATILITY', but only 2019 and 2023 endpoints were observed. Absolute annualized growth is **not** a time-series volatility estimator; see [C31](AE-2026-001_C31_OUTLIER_EXCLUSION_AND_REGION_STRATIFIED_ABSOLUTE_GROWTH_SELECTION_2026-10-27.md). No original data or numeric result was changed.
+
+**27 October 2026.** Original secondary descriptive computations from the already committed, official, dated 2026 WDI country panel. This is **not** an additional historical WDI vintage, an independently generated employment dataset, a new estimator, a causal result or proof of journal novelty.
 
 ## Exact source and cohorts
 
