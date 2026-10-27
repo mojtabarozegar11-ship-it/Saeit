@@ -1,0 +1,94 @@
+name: MojPlayWin AYAR exact-path read-only route diagnosis
+on:
+  push:
+    branches: [release/ayaar-exact-path-20261027]
+    paths:
+      - ".github/workflows/mojplaywin-ayaar-route-diagnostic-20261027.yml"
+permissions:
+  contents: read
+jobs:
+  read-only-route:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/release/ayaar-exact-path-20261027'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Prepare fingerprint-pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/ayaar-route-readonly"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            path="$d/${item}.key"
+            printf '%s' "${!item}" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$path"
+            chmod 600 "$path"
+            ssh-keygen -y -P '' -f "$path" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 13
+          EOF
+          chmod 600 "$d/config"
+      - name: Inspect MojPlayWin routing metadata without changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 70s ssh -T -F "$RUNNER_TEMP/ayaar-route-readonly/config" saeit-cpanel 'python3 -' <<'PY'
+          import hashlib, json, os, pwd, re, stat
+          from pathlib import Path
+          root=Path('/home/zomorod2/mojplaywin.com')
+          doc=root/'.htaccess'
+          assert pwd.getpwuid(os.getuid()).pw_name=='zomorod2'
+          assert root.is_dir() and not root.is_symlink()
+          assert doc.is_file() and not doc.is_symlink() and doc.stat().st_size < 100_000
+          raw=doc.read_bytes()
+          text=raw.decode('utf-8','replace')
+          print('AYAAR_ROOT_HTACCESS_SHA256='+hashlib.sha256(raw).hexdigest())
+          print('AYAAR_ROOT_HTACCESS_BYTES='+str(len(raw)))
+          print('AYAAR_ROOT_IS_REAL_DIRECTORY='+str(root.resolve()==root))
+          print('AYAAR_ROOT_DOCROOT_CONTAINS_PASSENGER='+str((root/'passenger_wsgi.py').is_file()))
+          print('AYAAR_ROOT_REWRITEENGINE='+str(bool(re.search(r'^\s*RewriteEngine\s+On',text,re.M|re.I))))
+          print('AYAAR_ROOT_EXISTING_AYAAR_RULE='+str('ayaar' in text.lower()))
+          lines=text.splitlines()
+          for i,line in enumerate(lines):
+            strip=line.strip()
+            if re.match(r'(?i)^RewriteRule\s+',strip):
+              parts=strip.split()
+              if len(parts)>=3:
+                target=parts[2]
+                kind='no-substitution' if target=='-' else ('absolute-url' if '://' in target else 'relative-or-root')
+                print('REWRITE_RULE='+json.dumps({'line':i+1,'pattern':parts[1][:100],'target_kind':kind,'flags':parts[3][:100] if len(parts)>3 else ''},sort_keys=True))
+          for name in ['ayaar','.well-known']:
+            path=root/name
+            print('DOCROOT_CHILD='+json.dumps({'name':name,'exists':path.exists(),'symlink':path.is_symlink(),'directory':path.is_dir()},sort_keys=True))
+          for p in Path('/home/zomorod2').glob('.mpw-ayaar-quarantine-*'):
+            if p.is_dir() and not p.is_symlink():
+              print('AYAAR_QUARANTINE_PRESENT=true')
+              break
+          print('AYAAR_DIAG_READ_ONLY=TRUE')
+          PY
