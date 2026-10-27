@@ -50,6 +50,10 @@ As an additional post hoc diagnostic within the **153-economy 2026-only cohort**
 
 To assess whether the separate 2026-only 2000–2019 versus 2019–2023 period contrast is homogeneous across starting productivity levels, we sorted the 153 complete-case economies by year-2000 value added per worker and assigned quartiles by sorted row index `1+floor(4i/153)` for zero-based `i`. We summarized the paired country difference `d=L−E` in each quartile and calculated the descriptive Spearman correlation of log baseline productivity with d. This post hoc exercise uses the **153-economy 2026-only cohort**, not the primary 155-economy three-vintage cohort. Because the baseline value also enters E, mathematical coupling and regression to the mean preclude a causal interpretation.
 
+### 2.8 Selection by availability of the 2000 baseline (C30)
+
+A separate **2026-only** availability-selection diagnostic compared the **153** economies observed in 2000/2019/2023 with **16** additional economies observed in 2019/2023 but not at the positive 2000 baseline. We compared the distributions of observed 2019 productivity using medians and exact cross-group pairwise ranks; region-conditioned comparisons used only pairs from the same WDI region. Independently, we compared the distributions of **absolute** 2019–2023 annualized log growth, `|100 ln(P2023/P2019)/4|`, using medians and predeclared descriptive thresholds 5, 10 and 15 log-percentage points. These are post hoc finite-sample descriptions, not tests of a missing-data mechanism, and must not be conflated with the primary 155-economy **three-vintage** analysis. Calculations and country identities are documented in [C30](AE-2026-001_C30_2000_BASELINE_MISSINGNESS_2019_LEVEL_AND_VOLATILITY_SELECTION_2026-10-27.md).
+
 ## 3. Results
 
 ### 3.1 Primary fixed-country release sensitivity
@@ -112,7 +116,27 @@ The ten overlapping-horizon sign reversals include seven with at least one rate 
 
 The rank correlation between log baseline productivity and the paired change was **+0.133214**, descriptive only. All four quartile medians were negative, but the pattern was **not monotone**. These observations do not establish a productivity-convergence mechanism or a world-representative trend; quartile allocation and full source-locked calculations are documented in [C28](AE-2026-001_C28_BASELINE_PRODUCTIVITY_QUARTILE_PERIOD_CONTRAST_2026-10-27.md).
 
+### 3.6 Baseline availability, observed productivity and growth volatility (C30)
+
+Among the **169** economies with positive 2019 and 2023 observations, the 153 with a positive 2000 baseline had median 2019 agricultural value added per worker of **$6,237.919**, compared with **$2,840.965** for the 16 lacking a valid 2000 baseline. In all 16×153 cross-group pairs, the proportion with the baseline-missing economy's 2019 value higher was **868/2448 = 0.3546**; however, this comparison mixes regions. Within the four regions containing baseline-missing economies, the pairwise proportion was **191/461 = 0.4143**, with a reversed direction in Sub-Saharan Africa (**0.5595**, 7 versus 36 economies). These observations caution against treating the 2000-complete cohort as a random subset of the 2019–2023-observed economies.
+
+**Table 5. Descriptive 2019–2023 absolute annual log-growth by availability of the 2000 baseline (2026-only data)**
+
+| Measure | 2000 baseline present | 2000 baseline missing |
+| --- | ---: | ---: |
+| Economies | 153 | 16 |
+| Median absolute annual log growth, log-pp/year | **2.3164** | **4.7597** |
+| Absolute annual log growth >5 log-pp/year | 40/153 | 7/16 |
+| Absolute annual log growth >10 log-pp/year | 9/153 | 2/16 |
+| Absolute annual log growth >15 log-pp/year | 1/153 | 2/16 |
+
+The two baseline-missing cases above 10 log-pp/year are Central African Republic and Djibouti, whose signed mean influence was already documented in C19. The new comparison concerns **absolute-growth dispersion by baseline availability**, not a novel causal finding. The small 16-economy cohort, regional mix, nonrandom missingness and mechanical use of 2019 productivity in the growth denominator limit interpretation. These 169 cases are **not** the primary 155-economy historical-vintage panel.
+
 ## 4. Discussion
+
+The new 2026-only baseline-availability audit (C30) identifies a further selection caution: economies lacking the 2000 endpoint had lower pooled median 2019 productivity and higher median absolute 2019–2023 growth than the complete cases, while within-region rank comparisons differed materially. This does not establish a missingness mechanism or generalize to the 155-economy historical-vintage cohort. Accordingly, pooled 153-versus-169 growth contrasts should not be interpreted as representative changes in the world's agricultural productivity.
+
+
 
 The evidence supports three narrow conclusions. First, source release is a material component of descriptive country-level measurement uncertainty: an end-to-end median absolute annual growth revision of 0.4129 log-percentage points can coexist with relatively high rank correlation. Second, sign-change headlines are sensitive to small growth rates near zero and must be accompanied by magnitude thresholds. Third, changing the time horizon is not changing the data vintage: the weighted-average identity shows exactly why extending the endpoint from 2019 to 2023 can suppress shorter-period sign reversals.
 
