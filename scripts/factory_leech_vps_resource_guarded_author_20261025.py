@@ -42,9 +42,15 @@ def stream_segment_is_acceptable(body, minimum=300):
     # compatibility glyphs must not conceal model reasoning delimiters.
     # Preserve original body bytes for word counts and downstream acceptance.
     safety_view = unicodedata.normalize("NFKC", body)
-    safety_view = re.sub(
-        r"[\u00ad\u061c\u200b\u200c\u200d\u200e\u200f\u2060\ufeff\u202a-\u202e\u2066-\u2069]",
-        "", safety_view)
+    # Match the private writer's safety view. Unicode Cf controls, the
+    # combining grapheme joiner and variation selectors can split a forbidden
+    # token while remaining invisible to a reader.
+    safety_view = "".join(
+        ch for ch in safety_view
+        if unicodedata.category(ch) != "Cf" and ch != "\u034f"
+        and not (0xFE00 <= ord(ch) <= 0xFE0F
+                 or 0xE0100 <= ord(ch) <= 0xE01EF)
+    )
     lowered = safety_view.casefold()
     if any(marker in lowered for marker in (
             "<think", "</think", "<|im_start|>", "<|im_end|>",
