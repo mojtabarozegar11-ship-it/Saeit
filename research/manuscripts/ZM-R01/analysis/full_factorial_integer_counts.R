@@ -56,8 +56,10 @@ if (!identical(digest::digest(counts_file, algo="sha256", file=TRUE, serialize=F
     !identical(digest::digest(units_file, algo="sha256", file=TRUE, serialize=FALSE),
                prov$unit_evidence_sha256))
   stop("Count or unit evidence SHA256 mismatch; NO DESeq2")
-# Directory is created only after the primary scientific release gates pass.
-dir.create(outdir, showWarnings=FALSE, recursive=TRUE)
+# Refuse to mix a new analysis with stale files from a previous attempt.
+# Do not create an output directory until every input gate and DESeq2 fit succeeds.
+if (dir.exists(outdir) && length(list.files(outdir, all.files=TRUE, no..=TRUE)) > 0L)
+  stop("Output directory is nonempty: refuse overwrite or mixed scientific results")
 titles <- manifest$GEO_sample_title
 replicate <- suppressWarnings(as.integer(sub(".*_biol_rep([123])$", "\\1", titles)))
 if (anyNA(replicate) || !all(grepl("_biol_rep[123]$", titles)))
@@ -101,6 +103,9 @@ names_available <- resultsNames(dds)
 triple <- grep("D.*H.*C", names_available, value=TRUE)
 if (length(triple) != 1L) stop(paste("Cannot uniquely identify D:H:C coefficient:",paste(names_available,collapse=", ")))
 res <- results(dds, name=triple, alpha=0.05, independentFiltering=TRUE)
+# The first output-side effect occurs only after successful primary checks and fit.
+if (!dir.exists(outdir) && !dir.create(outdir, showWarnings=FALSE, recursive=TRUE))
+  stop("Unable to create fresh analysis output directory")
 tab <- data.frame(gene_id=rownames(res), as.data.frame(res), row.names=NULL)
 tab <- tab[order(tab$padj, na.last=TRUE), , drop=FALSE]
 write.csv(tab, file.path(outdir, "DHC_integer_count_DESeq2_all_genes.csv"), row.names=FALSE)
