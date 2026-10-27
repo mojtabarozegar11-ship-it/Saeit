@@ -5,7 +5,13 @@ export function validateCampaignSave(s) {
   const integer = (n, min, max) => Number.isInteger(n) && finite(n, min, max);
   const point = (o, min = -50, max = 50) => o && typeof o === 'object' && !Array.isArray(o) && finite(o.x, min, max) && finite(o.y, min, max);
   const group = (a, limit, predicate) => a === undefined || (Array.isArray(a) && a.length <= limit && a.every(predicate));
-  if (!s || typeof s !== 'object' || Array.isArray(s) || s.endless === true || s.victory === true || s.gameOver === true) return false;
+  if (!s || typeof s !== 'object' || Array.isArray(s)) return false;
+  // A string/object "true" is truthy to the engine but previously bypassed
+  // strict-true rejection, allowing a campaign save to enter endless/victory mode.
+  // Missing legacy flags and explicit false remain compatible.
+  for (const field of ['endless', 'victory', 'gameOver']) {
+    if (s[field] !== undefined && s[field] !== false) return false;
+  }
   if (!integer(s.hero, 0, 29) || !integer(s.mission, 0, 5) || !integer(s.lives, 1, 100)) return false;
   if (!finite(s.x, 0.5, 15) || !finite(s.y, 0.5, 15) || !finite(s.angle, -1e8, 1e8)) return false;
   if (!finite(s.maxHp, 1, 200) || !finite(s.hp, 0.01, s.maxHp)) return false;
