@@ -85,3 +85,23 @@ class VerifiedEconomicCycleTests(TestCase):
         state = brain.observe()
         self.assertFalse(state["self_improvement_complete"])
         self.assertEqual(brain.candidates(state)[0].action, "master_self_improvement")
+
+
+def test_failed_self_improvement_does_not_block_commercial_pipeline():
+    brain = AutonomousBrain()
+    state = {
+        "unfinished_tasks": 0,
+        "failed_tasks": 3,
+        "market_research_complete": False,
+        "opportunity_scored": False,
+        "active_products": 0,
+        "offer_designed": 0,
+        "mvp_built": 0,
+        "growth_ready": 0,
+        "orders": 0,
+        "paid_orders": 0,
+        "self_improvement_complete": False,
+        "self_improvement_failed": True,
+    }
+
+    assert brain.candidates(state)[0].action == "income_market_research"
