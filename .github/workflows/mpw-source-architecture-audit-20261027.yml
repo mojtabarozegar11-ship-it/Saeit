@@ -94,6 +94,18 @@ jobs:
                   if p.name==".htaccess":
                       for line in s.decode("utf-8","replace").splitlines():
                           if any(q in line.lower() for q in ("knowledge","services","research","mpw-ten-editorials")) and len(line)<350:print("REWRITE",line[:350])
+          print("ARCHIVE_ROUTE_DIAGNOSTIC")
+          for base in [root/"mpw-editorial",root/"mpw-editorial/field-guides",root/"design-preview-20261017/mpw-ten-editorials-20261018"]:
+              if base.exists():
+                  print("EDITORIAL_PATH",str(base.relative_to(root)),"dir",base.is_dir())
+                  if base.is_dir():
+                      for item in sorted(base.iterdir())[:32]:
+                          print("EDITORIAL_ENTRY",str(item.relative_to(root)),"is_dir",item.is_dir())
+          ht=(root/".htaccess").read_text(errors="replace").splitlines()
+          for i,line in enumerate(ht,1):
+              if any(x in line for x in ("RewriteRule","RewriteCond","RewriteBase","Options ","DirectoryIndex","ErrorDocument","<IfModule")):
+                  print("ROUTING_RULE",i,line[:320])
+          print("ARCHIVE_ROUTE_DIAGNOSTIC_END")
           PY
       - name: Clear ephemeral relay keys
         if: always()
