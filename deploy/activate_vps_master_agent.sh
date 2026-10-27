@@ -54,24 +54,55 @@ for module in "${modules[@]}"; do
     install -D -m 600 /dev/null "$source_backup/$module.absent"
   fi
 done
-restore_sources() {
+rollback_sources() {
+  for module in "${modules[@]}"; do
+    backup="$source_backup/$module"
+    target="$app/$module"
+    if [ -s "$backup" ] && [ ! -L "$backup" ] && [ ! -L "$target" ]; then
+      install -D -m 600 "$backup" "$target.rollback.tmp"
+      mv -f "$target.rollback.tmp" "$target"
+    elif [ -f "$backup.absent" ] && [ ! -L "$target" ]; then
+      rm -f "$target"
+    fi
+  done
+  echo MASTER_SOURCE_ROLLBACK_COMPLETED
+}
+restore_all() {
   result=$?
-  if [ "$result" -ne 0 ]; then
-    for module in "${modules[@]}"; do
-      backup="$source_backup/$module"
-      target="$app/$module"
-      if [ -s "$backup" ] && [ ! -L "$backup" ] && [ ! -L "$target" ]; then
-        install -D -m 600 "$backup" "$target.rollback.tmp"
-        mv -f "$target.rollback.tmp" "$target"
-      elif [ -f "$backup.absent" ] && [ ! -L "$target" ]; then
-        rm -f "$target"
-      fi
-    done
-    echo MASTER_SOURCE_ROLLBACK_COMPLETED
+  trap - EXIT
+  if [ "$result" -ne 0 ]; then rollback_sources; fi
+  if [ "${cron_paused:-0}" -eq 1 ]; then
+    crontab "$old"
+    echo MASTER_CRON_RESTORED_AFTER_FAILURE
   fi
   return "$result"
 }
-trap restore_sources EXIT
+old="$ops/backups/cron-before-master-$stamp.txt"
+crontab -l > "$old" 2>/dev/null || : > "$old"
+chmod 600 "$old"
+tagged_count="$(grep -c 'SAEIT_MASTER_AGENT_V1' "$old" || true)"
+test "$tagged_count" -eq 2 || { echo MASTER_EXPECTED_TWO_TAGGED_CRON_ENTRIES; exit 1; }
+if grep -E 'economic_autorun|autonomous_master_loop' "$old" | grep -v 'SAEIT_MASTER_AGENT_V1' >/dev/null; then
+  echo MASTER_COMPETING_EXISTING_CRON_DETECTED
+  exit 1
+fi
+cron_paused=1
+trap restore_all EXIT
+paused="$master/cron-paused.tmp"
+grep -v 'SAEIT_MASTER_AGENT_V1' "$old" > "$paused" || true
+chmod 600 "$paused"
+crontab "$paused"
+rm -f "$paused"
+test "$(crontab -l 2>/dev/null | grep -c 'SAEIT_MASTER_AGENT_V1' || true)" -eq 0
+echo MASTER_FACTORY_CRON_PAUSED_FOR_DATABASE_SNAPSHOT
+for lock in "$master/master-cycle.lock" "$master/master-evolution.lock"; do
+  deadline=$((SECONDS+180))
+  until flock -n "$lock" -c true; do
+    if (( SECONDS >= deadline )); then echo MASTER_FACTORY_WORKER_DID_NOT_QUIESCE; exit 1; fi
+    sleep 2
+  done
+done
+echo MASTER_FACTORY_WORKERS_QUIESCENT
 # SQLite's online backup API provides a consistent rollback snapshot without stopping factory.
 "$py" - "$ops/backups/master-before-$stamp.sqlite3" <<'PY'
 import sqlite3,sys
