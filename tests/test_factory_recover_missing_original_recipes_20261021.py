@@ -126,4 +126,29 @@ class OriginalSourceRecoveryTests(unittest.TestCase):
         self.assertEqual(self.run_recovery()["totals"]["unrecoverable_with_current_provenance"],1)
         self.assertTrue((target/self.recipe).is_symlink())
 
+
+class ActiveProductAllowlistTests(unittest.TestCase):
+    def test_accepts_line_41_single_product_and_legacy_five(self):
+        with tempfile.TemporaryDirectory() as directory:
+            slots = Path(directory) / "slots.json"
+            for capacity in (1, 5):
+                recipes = ["product_%02d" % n for n in range(1, capacity + 1)]
+                slots.write_text(json.dumps({
+                    "schema": "saeit.factory.product-slots.v1",
+                    "line_id": 41 if capacity == 1 else None,
+                    "capacity": capacity,
+                    "active": [{"recipe": recipe} for recipe in recipes],
+                }))
+                self.assertEqual(m.active_product_allowlist(slots), set(recipes))
+
+    def test_rejects_family_count_as_product_slot_capacity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            slots = Path(directory) / "slots.json"
+            slots.write_text(json.dumps({
+                "schema": "saeit.factory.product-slots.v1",
+                "capacity": 40,
+                "active": [{"recipe": "product_%02d" % n} for n in range(1, 41)],
+            }))
+            with self.assertRaisesRegex(ValueError, "CAPACITY_MISMATCH"):
+                m.active_product_allowlist(slots)
 if __name__=="__main__":unittest.main()
