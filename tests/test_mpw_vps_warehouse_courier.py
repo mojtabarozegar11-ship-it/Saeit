@@ -114,6 +114,36 @@ class VPSWarehouseCourierTests(unittest.TestCase):
         entries=list((self.factory/"design-intake/mojplaywin-stage1-quality-returns").iterdir())
         self.assertEqual(len(entries),1)
 
+    def test_52_receipts_are_delivered_in_bounded_pages_with_idempotent_retry(self):
+        archive=export_factory(self.factory)
+        import_site(archive,self.site)
+        folder=self.site/"returns"/self.product
+        template=json.loads((folder/(self.version+".json")).read_text())
+        for index in range(1,52):
+            version=f"{index:064x}"
+            row=dict(template,source_sha256=version)
+            (folder/(version+".json")).write_text(json.dumps(row))
+            stock=self.factory/"production-warehouse/finished"/self.product/version
+            stock.mkdir(parents=True,mode=0o700)
+            manifest=dict(self.manifest,source_sha256=version)
+            (stock/"warehouse_manifest.json").write_text(json.dumps(manifest))
+        pages=[feedback_site(self.site,page=p) for p in range(2)]
+        identities=[(r["product_id"],r["source_sha256"])
+                    for payload in pages for r in json.loads(payload)["returns"]]
+        self.assertEqual(len(identities),52)
+        self.assertEqual(len(set(identities)),52)
+        self.assertEqual([len(json.loads(p)["returns"]) for p in pages],[50,2])
+        self.assertEqual(json.loads(feedback_site(self.site,page=2))["returns"],[])
+        self.assertEqual(sum(receive_factory_returns(p,self.factory)["accepted_stage1_qa_returns"]
+                             for p in pages),52)
+        self.assertEqual(sum(receive_factory_returns(p,self.factory)["previously_queued"]
+                             for p in pages),52)
+        state=triage_factory_stage1(self.factory)
+        self.assertEqual(state["factory_stage1_work_items"],52)
+        self.assertFalse(state["commercial_approval_claimed"])
+        with self.assertRaisesRegex(RuntimeError,"RETURN_PAGE_INVALID"):
+            feedback_site(self.site,page=32)
+
     def test_factory_authorization_never_inferred_from_technical_qa(self):
         self.manifest["commercial_release"]=True
         (self.stock/"warehouse_manifest.json").write_text(json.dumps(self.manifest))
