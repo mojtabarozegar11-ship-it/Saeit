@@ -94,5 +94,34 @@ class ScopedRollbackTests(unittest.TestCase):
         self.assertEqual((self.game / "policy.mjs").read_bytes(), self.module)
 
 
+    def test_existing_atomic_temp_aborts_before_any_live_file_changes(self):
+        temp_path = self.game / ".game.js.ramadan-123456"
+        temp_path.write_bytes(b"operator-owned-temporary-file")
+        self.assertFalse(self.rollback())
+        self.assertEqual((self.game / "game.js").read_bytes(), self.new)
+        self.assertEqual((self.game / "policy.mjs").read_bytes(), self.module)
+        self.assertEqual(temp_path.read_bytes(), b"operator-owned-temporary-file")
+
+    def test_symlinked_nested_backup_directory_is_rejected(self):
+        nested = "three-addons/foo.js"
+        old_nested = b"old-nested-file"
+        new_nested = b"new-nested-file"
+        live_nested = self.game / nested
+        live_nested.parent.mkdir()
+        live_nested.write_bytes(new_nested)
+        self.manifest["old"][nested] = deploy.digest(old_nested)
+        self.manifest["new"][nested] = deploy.digest(new_nested)
+        deploy.ASSETS.append(nested)
+        outside = self.root / "outside-backups"
+        outside.mkdir()
+        (outside / "foo.js").write_bytes(old_nested)
+        (self.stage / "old-three-addons").symlink_to(outside, target_is_directory=True)
+        self.assertFalse(self.rollback())
+        self.assertEqual((self.game / "game.js").read_bytes(), self.new)
+        self.assertEqual(live_nested.read_bytes(), new_nested)
+        self.assertEqual((self.game / "policy.mjs").read_bytes(), self.module)
+
+
+
 if __name__ == "__main__":
     unittest.main()
