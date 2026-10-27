@@ -1,0 +1,29 @@
+name: Banknew isolated financial-readiness checks
+on:
+  pull_request:
+    paths:
+      - 'banknew/**'
+      - '.github/workflows/banknew-readiness-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'banknew/**'
+      - '.github/workflows/banknew-readiness-ci.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse isolated wallet source
+        run: node --check banknew/app.js
+      - name: Exact fee and wallet fail-closed regression tests
+        run: node --test banknew/app.test.js
+      - name: Refuse production payment activation in this release
+        run: |
+          node -e "const fs=require('fs'); const s=fs.readFileSync('banknew/app.js','utf8'); if (/\b(?:sendTransaction|signTransaction|signMessage|writeContract)\s*\(/.test(s)) process.exit(1); console.log('No payment, key handling or signing methods introduced');"
