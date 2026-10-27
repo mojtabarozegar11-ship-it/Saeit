@@ -93,7 +93,7 @@ class LeechStatusReadOnlyTests(unittest.TestCase):
             private = Path(temp) / "private"
             private.mkdir()
             part = private / "chapter-01-part-001.md"
-            part.write_bytes(b"\\xff" * 300)
+            part.write_bytes(b"\xff" * 300)
             before = part.read_bytes()
             with mock.patch.object(author, "PRIVATE", private):
                 with self.assertRaisesRegex(RuntimeError, "UNSAFE_PRIVATE_MANUSCRIPT_IO"):
