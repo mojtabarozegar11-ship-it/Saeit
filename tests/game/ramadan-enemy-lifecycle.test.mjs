@@ -80,3 +80,43 @@ test('enemy projectile collision policy is called before hurt and old unsafe loo
   assert.match(client,/if\(advanceHostileProjectile\(b,dt,world,\(x,y\)=>tile\(x,y\)!==0\)\)hurt\(b\.hp\)/);
   assert.doesNotMatch(client,/b\.x\+=b\.vx\*dt;b\.y\+=b\.vy\*dt/);
 });
+
+test('fast restored projectile cannot tunnel through a solid tile with a clear endpoint', () => {
+  const bullet={x:2.9,y:2.9,vx:30,vy:30,life:5,hp:14};
+  const player={x:4.1,y:4.1};
+  const wall=(x,y)=>x===3&&y===3;
+  assert.equal(wall(4,4),false,'endpoint is passable; endpoint-only test misses cover');
+  assert.equal(advanceHostileProjectile(bullet,.04,player,wall),false);
+  assert.equal(bullet.life,-1,'intermediate wall absorbs the projectile');
+  assert.equal(bullet.x,2.9,'blocked projectile must not advance behind cover');
+});
+
+test('swept player contact is detected even when a fast projectile ends beyond the player', () => {
+  const bullet={x:2.5,y:5.5,vx:100,vy:0,life:5,hp:14};
+  assert.equal(advanceHostileProjectile(bullet,.04,{x:4.5,y:5.5},()=>false),true);
+  assert.equal(bullet.life,-1);
+  assert.ok(bullet.x>=4.19&&bullet.x<=4.81,'hit occurs near the player, not at the distant endpoint');
+  assert.equal(advanceHostileProjectile(bullet,.04,{x:4.5,y:5.5},()=>false),false,'one hit only');
+});
+
+test('untrusted projectile velocity, invalid target and missing wall callback fail closed', () => {
+  for(const patch of [{vx:100000},{vx:-Infinity},{vy:NaN}]) {
+    const bullet={x:2.5,y:5.5,vx:5,vy:0,life:5,hp:14,...patch};
+    assert.equal(advanceHostileProjectile(bullet,.04,{x:3.5,y:5.5},()=>false),false);
+    assert.equal(bullet.life,-1);
+  }
+  const noTarget={x:2.5,y:5.5,vx:5,vy:0,life:5,hp:14};
+  assert.equal(advanceHostileProjectile(noTarget,.04,{x:NaN,y:5.5},()=>false),false);
+  assert.equal(noTarget.life,-1);
+  const noWall={x:2.5,y:5.5,vx:5,vy:0,life:5,hp:14};
+  assert.equal(advanceHostileProjectile(noWall,.04,{x:3.5,y:5.5},null),false);
+  assert.equal(noWall.life,-1);
+});
+
+test('ordinary unobstructed projectile movement and remaining lifetime are preserved', () => {
+  const bullet={x:2.5,y:5.5,vx:5,vy:0,life:5,hp:14};
+  assert.equal(advanceHostileProjectile(bullet,.04,{x:9,y:9},()=>false),false);
+  assert.ok(Math.abs(bullet.x-2.7)<1e-10);
+  assert.equal(bullet.y,5.5);
+  assert.ok(Math.abs(bullet.life-4.96)<1e-10);
+});
