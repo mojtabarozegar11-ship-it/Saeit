@@ -71,6 +71,10 @@ restore_all() {
   result=$?
   trap - EXIT
   if [ "$result" -ne 0 ]; then rollback_sources; fi
+  if [ "$result" -ne 0 ] && [ "${backup_verified:-0}" -eq 0 ] && [ -f "$ops/backups/master-before-$stamp.sqlite3" ]; then
+    rm -f "$ops/backups/master-before-$stamp.sqlite3"
+    echo MASTER_INCOMPLETE_DB_BACKUP_REMOVED
+  fi
   if [ "${cron_paused:-0}" -eq 1 ]; then
     crontab "$old"
     echo MASTER_CRON_RESTORED_AFTER_FAILURE
@@ -128,6 +132,7 @@ dst.chmod(0o600)
 print("MASTER_DB_BACKUP_INTEGRITY_OK")
 PY
 echo MASTER_BACKUP_VERIFIED
+backup_verified=1
 for module in "${modules[@]}"; do
   target="$app/$module"
   install -D -m 600 "$source_root/$module" "$target.deploy.tmp"
