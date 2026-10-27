@@ -115,7 +115,16 @@ def rollback_files(stage,m,run):
     for name,h in m['new'].items():
         p=GAME/name
         if name in m['old'] and p.is_file() and not p.is_symlink() and digest(p.read_bytes())==h:
-            atomic(p,(stage/f'old-{name}').read_bytes(),run);print('RESTORED_OLD_GAME_FILE='+name)
+            backup=stage/f'old-{name}'
+            # A backup can be truncated or replaced after prepare. Never write
+            # unverified bytes over a working game during automatic rollback.
+            if backup.is_file() and not backup.is_symlink():
+                original=backup.read_bytes()
+                if digest(original)==m['old'][name]:
+                    atomic(p,original,run)
+                    print('RESTORED_OLD_GAME_FILE='+name)
+                    continue
+            print('ROLLBACK_SKIPPED_INVALID_BACKUP='+name)
         elif name not in m['old'] and p.is_file() and not p.is_symlink() and digest(p.read_bytes())==h:
             p.unlink();print('REMOVED_NEW_GAME_ASSET='+name)
         else:print('ROLLBACK_SKIPPED_UNEXPECTED_GAME_FILE='+name)
