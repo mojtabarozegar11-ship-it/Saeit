@@ -166,7 +166,7 @@ exec >> "$ops/forty-execution.log" 2>&1
 /usr/bin/timeout 90s "$py" -B "$target/factory_build50_f18_webapps.py" --factory-private "$private" || echo F18_PERIODIC_BUILD_REQUIRES_REWORK
 /usr/bin/timeout 120s "$py" -B "$target/factory_batch5_build.py" --factory-private "$private" || echo BATCH5_PERIODIC_BUILD_REQUIRES_REWORK
 /usr/bin/timeout 90s "$py" -B "$target/factory_build50_f31_planner.py" --factory-private "$private" || echo F31_PERIODIC_BUILD_REQUIRES_REWORK
-/usr/bin/timeout 240s "$py" -B "$target/factory_product_planner.py" --factory-private "$private" --registry "$registry" --dispatch --max-execute 1 || echo PER_PRODUCT_PLANNER_REQUIRES_REVIEW
+/usr/bin/timeout 1200s "$py" -B "$target/factory_product_planner.py" --factory-private "$private" --registry "$registry" --dispatch --max-execute 40 || echo PER_PRODUCT_PLANNER_REQUIRES_REVIEW
 /usr/bin/timeout 45s "$py" -B "$target/factory_capability_organizer.py" --factory-private "$private" --registry "$registry" --ops "$ops" --source-repo "$ops/multisite-deploy-source" || echo CAPABILITY_ORGANIZER_REQUIRES_REVIEW
 /usr/bin/timeout 135s "$py" -B "$target/factory_six_specialist_executors.py" --factory-private "$private" || echo SIX_SPECIALIST_AGENT_REWORK_PENDING
 exec "$py" -B "$target/factory_40_execution_controller.py" --factory-private "$private" --registry "$registry" --module-dir "$target" --toolchain-manifest "$toolchain"
