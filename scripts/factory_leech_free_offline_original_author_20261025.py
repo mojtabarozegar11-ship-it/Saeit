@@ -37,9 +37,13 @@ def digest(doc):
         separators=(",", ":")).encode("utf-8")).hexdigest()
 
 def safe_json(path, max_bytes=300000):
-    if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= max_bytes:
-        reject("MISSING_OR_UNSAFE_JSON_" + path.name)
-    obj = json.loads(path.read_text(encoding="utf-8"))
+    """Fail closed if private provenance JSON disappears or becomes unreadable."""
+    try:
+        if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= max_bytes:
+            reject("MISSING_OR_UNSAFE_JSON_" + path.name)
+        obj = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError) as exc:
+        raise RuntimeError("LEECH_ZERO_COST_UNREADABLE_PRIVATE_JSON_" + path.name) from exc
     if not isinstance(obj, dict):
         reject("NOT_JSON_OBJECT")
     return obj
