@@ -19,6 +19,15 @@ jobs:
           persist-credentials: false
       - name: Verify Cake Maker state, decoration export and safe reset
         run: node tests/game/taniya-cake.cjs
+      - name: Parse the complete Taniya studio inline JavaScript
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          html=Path('templates/taniya_studio/index.html').read_text('utf-8')
+          assert html.count('<script>')==1
+          Path('/tmp/taniya-cake-full.js').write_text(html.split('<script>',1)[1].split('</script>',1)[0],encoding='utf-8')
+          PY
+          node --check /tmp/taniya-cake-full.js
       - name: Exercise actual Cake Maker UI and SVG downloads in desktop and mobile Chromium
         run: |
           set -euo pipefail
