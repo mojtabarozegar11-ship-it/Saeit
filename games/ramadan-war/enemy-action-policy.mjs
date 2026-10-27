@@ -17,30 +17,51 @@ export function restoreEnemyRuntime(enemy, index) {
 }
 
 
-// Advance hostile bullets only while alive. Resolve solid walls before player
-// contact so an expired shot or a shot striking cover cannot hurt the player.
-// Returns true only for a new, valid player hit; caller applies armor/shield.
+// Advance hostile bullets only while alive. Sweep the full frame segment in
+// bounded increments, checking cover before contact at each point. Endpoint-only
+// collision allowed tampered/fast restored projectiles to cross solid tiles or
+// skip the player. Invalid physics and impossible jumps fail closed.
 export function advanceHostileProjectile(bullet, dt, player, isWall) {
   if (!bullet || !Number.isFinite(bullet.life) || bullet.life <= 0 ||
       !Number.isFinite(dt) || dt < 0 ||
       !Number.isFinite(bullet.x) || !Number.isFinite(bullet.y) ||
-      !Number.isFinite(bullet.vx) || !Number.isFinite(bullet.vy)) {
+      !Number.isFinite(bullet.vx) || !Number.isFinite(bullet.vy) ||
+      !Number.isFinite(player?.x) || !Number.isFinite(player?.y) ||
+      typeof isWall !== 'function') {
     if (bullet) bullet.life = -1;
     return false;
   }
-  const x = bullet.x + bullet.vx * dt;
-  const y = bullet.y + bullet.vy * dt;
-  bullet.life -= dt;
-  if (bullet.life <= 0 || !Number.isFinite(x) || !Number.isFinite(y) ||
-      isWall(x | 0, y | 0)) {
+  // A projectile expiring during this tick cannot damage the player.
+  if (bullet.life <= dt) {
     bullet.life = -1;
     return false;
   }
-  bullet.x = x;
-  bullet.y = y;
-  if (Math.hypot(x - player.x, y - player.y) < .31) {
+  const dx = bullet.vx * dt;
+  const dy = bullet.vy * dt;
+  const distance = Math.hypot(dx, dy);
+  // Arena is 16x16; traversing more than its entire width in one tick is
+  // corrupt physics. The bound also guarantees finite collision work.
+  if (!Number.isFinite(distance) || distance > 16) {
     bullet.life = -1;
-    return true;
+    return false;
   }
+  const steps = Math.max(1, Math.ceil(distance / 0.15));
+  for (let i = 0; i <= steps; i++) {
+    const x = bullet.x + dx * i / steps;
+    const y = bullet.y + dy * i / steps;
+    if (isWall(Math.floor(x), Math.floor(y))) {
+      bullet.life = -1;
+      return false;
+    }
+    if (Math.hypot(x - player.x, y - player.y) < 0.31) {
+      bullet.x = x;
+      bullet.y = y;
+      bullet.life = -1;
+      return true;
+    }
+  }
+  bullet.x += dx;
+  bullet.y += dy;
+  bullet.life -= dt;
   return false;
 }
