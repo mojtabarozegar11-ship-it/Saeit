@@ -181,7 +181,7 @@ jobs:
             ssh_retry_stdin 75s "$RUNNER_TEMP/mpw-qa-feedback.json" -T -F "$d/config" saeit-vps \
               "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-return"
             total=$((total + count))
-            if [ "$count" -lt 50 ]; then completed=1; break; fi
+            # The Python source rejects >1600 receipts. A full final page (31)\n            # therefore means exactly 1600, not an incomplete scan.\n            if [ "$count" -lt 50 ] || [ "$page" -eq 31 ]; then completed=1; break; fi
           done
           test "$completed" -eq 1 || { echo RETURN_PAGE_CAP_REACHED >&2; exit 1; }
           echo "MPW_FACTORY_QA_RETURN_RECEIPTS_REPLAYED=$total"
