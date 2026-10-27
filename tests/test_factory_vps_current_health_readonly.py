@@ -120,5 +120,30 @@ class ReadOnlyFactoryHealthTests(unittest.TestCase):
 
 
 
+    def test_actual_cycle_error_categories_do_not_expose_private_details(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            private = Path(tmp)
+            doc = {"schema_version": 1, "cycle_status": "needs_rework",
+                   "designer_failures": [
+                       {"type": "engineering_rework", "reason": "internal path secret"},
+                       {"type": "source_evolution", "reason": "private contents"},
+                   ],
+                   "research_failures": [{"reason": "raw unpublished study"}],
+                   "recipe_admission_failures": [], "quality_failures_this_cycle": [],
+                   "built_product_count": 0, "quality_returns_unresolved": 135}
+            path = private / "production-state.json"
+            path.write_text(json.dumps(doc), encoding="utf8")
+            original = path.read_bytes()
+            report = audit.cycle_error_buckets(private)
+            self.assertEqual(report["designer_failure_types"],
+                             {"engineering_rework": 1, "source_evolution": 1})
+            self.assertEqual(report["research_failures_count"], 1)
+            self.assertEqual(report["quality_returns_unresolved"], 135)
+            self.assertNotIn("private contents", json.dumps(report))
+            self.assertNotIn("unpublished study", json.dumps(report))
+            self.assertEqual(path.read_bytes(), original)
+
+
+
 if __name__ == "__main__":
     unittest.main()
