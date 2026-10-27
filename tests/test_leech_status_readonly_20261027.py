@@ -88,6 +88,30 @@ class LeechStatusReadOnlyTests(unittest.TestCase):
                     author.list_parts()
             self.assertEqual(part.stat().st_size, 50001)
 
+    def test_symlink_swap_between_preflight_and_open_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            private = base / "private"
+            private.mkdir()
+            part = private / "chapter-01-part-001.md"
+            target = base / "outside.md"
+            part.write_text("Safe original manuscript segment. " * 20, encoding="utf-8")
+            target.write_text("Do not follow this synthetic target.", encoding="utf-8")
+            original_open = os.open
+
+            def swapped_open(path, flags, *args, **kwargs):
+                if Path(path) == part:
+                    part.unlink()
+                    part.symlink_to(target)
+                return original_open(path, flags, *args, **kwargs)
+
+            with (mock.patch.object(author, "PRIVATE", private),
+                  mock.patch.object(os, "open", swapped_open)):
+                with self.assertRaisesRegex(RuntimeError, "UNSAFE_PRIVATE_MANUSCRIPT_IO"):
+                    author.list_parts()
+            self.assertEqual(target.read_text(encoding="utf-8"),
+                             "Do not follow this synthetic target.")
+
     def test_invalid_utf8_part_fails_closed_without_mutating_bytes(self):
         with tempfile.TemporaryDirectory() as temp:
             private = Path(temp) / "private"
