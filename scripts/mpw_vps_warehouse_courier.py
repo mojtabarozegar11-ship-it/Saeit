@@ -333,27 +333,44 @@ def validate_customer_companion(report, raw, product, version, original_sha):
 
 
 def stock_records(root):
+    """Return one bounded, rotating page of authenticated warehouse stock.
+
+    The hourly courier can inspect a warehouse larger than MAX_ITEMS without
+    unbounded memory or archive growth. Rotation is stable within the UTC hour,
+    so retries export the same page; later scheduled runs advance through all
+    pages. Every selected record is still fully hash-verified before transfer.
+    """
     clean_dir(root)
     finished = root / "production-warehouse/finished"
     clean_dir(finished)
-    result = []
+    identities = []
     for product in sorted(finished.iterdir()):
         require(not product.is_symlink() and product.is_dir()
                 and RECIPE.fullmatch(product.name), "WAREHOUSE_PRODUCT_PATH_INVALID")
         for version in sorted(product.iterdir()):
             require(not version.is_symlink() and version.is_dir()
                     and SHA.fullmatch(version.name), "WAREHOUSE_VERSION_PATH_INVALID")
-            manifest_path = version / "warehouse_manifest.json"
-            artifact_path = version / "product.zip"
-            manifest = json_file(manifest_path, 100_000)
-            require(artifact_path.is_file() and not artifact_path.is_symlink()
-                    and artifact_path.stat().st_size <= MAX_ZIP, "WAREHOUSE_ZIP_INVALID")
-            raw = artifact_path.read_bytes()
-            verify_stock(manifest, product.name, version.name, raw)
-            result.append((product.name, version.name, manifest, raw))
-            require(len(result) <= MAX_ITEMS, "WAREHOUSE_BATCH_LIMIT")
+            identities.append((product, version))
+    if not identities:
+        return []
+    page_count = (len(identities) + MAX_ITEMS - 1) // MAX_ITEMS
+    utc_hour = int(datetime.now(timezone.utc).timestamp() // 3600)
+    page = utc_hour % page_count
+    start = page * MAX_ITEMS
+    selected = identities[start:start + MAX_ITEMS]
+    print("MPW_WAREHOUSE_PAGE=" + str(page) + "/" + str(page_count),
+          file=sys.stderr, flush=True)
+    result = []
+    for product, version in selected:
+        manifest_path = version / "warehouse_manifest.json"
+        artifact_path = version / "product.zip"
+        manifest = json_file(manifest_path, 100_000)
+        require(artifact_path.is_file() and not artifact_path.is_symlink()
+                and artifact_path.stat().st_size <= MAX_ZIP, "WAREHOUSE_ZIP_INVALID")
+        raw = artifact_path.read_bytes()
+        verify_stock(manifest, product.name, version.name, raw)
+        result.append((product.name, version.name, manifest, raw))
     return result
-
 
 def add_tar(tar, name, raw):
     require(len(raw) <= MAX_ZIP, "ARCHIVE_MEMBER_TOO_LARGE")
