@@ -136,6 +136,81 @@ jobs:
           test "$before" = "$after"
           echo PROTECTED_LIVE_FILES=unchanged
           REMOTE
+      - name: Check if root .htaccess controls only a temporary root-level file
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/zm-header-capability/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          run="$1";case "$run" in ''|*[!0-9]*) exit 1;; esac
+          web=/home/zomorod2/public_html
+          original="$web/.htaccess"
+          probe="$web/zm-root-header-$run.txt"
+          backup="/home/zomorod2/.backups/zomorod-root-header-probe-20261027/$run"
+          test -d "$web" && test ! -L "$web"
+          test -s "$original" && test ! -L "$original"
+          test ! -e "$probe" && test ! -L "$probe" && test ! -e "$backup"
+          install -d -m 700 "$backup"
+          cp -p "$original" "$backup/.htaccess"
+          cmp -s "$original" "$backup/.htaccess"
+          before="$(sha256sum "$web/index.html" "$web/store/index.php" "$web/search/index.json" "$web/about/index.html" "$web/topics/index.html")"
+          cleanup(){
+            set +e
+            if test -f "$backup/.htaccess" && test ! -L "$original";then
+              cp -p "$backup/.htaccess" "$original.zm-restore-$run" && mv -f "$original.zm-restore-$run" "$original"
+            fi
+            if test -f "$probe" && test ! -L "$probe";then unlink "$probe";fi
+            if cmp -s "$original" "$backup/.htaccess" && test ! -e "$probe";then
+              echo ROOT_PROBE_CLEANUP=exact_bytes_restored
+            else
+              echo ROOT_PROBE_CLEANUP=failed
+              return 1
+            fi
+          }
+          trap cleanup EXIT
+          python3 - "$backup/.htaccess" "$backup/candidate.htaccess" "$probe" "$run" <<'PY'
+          from pathlib import Path
+          import sys
+          source=Path(sys.argv[1]).read_bytes()
+          run=sys.argv[4]
+          addition=('''# Temporary root-file header capability probe
+          <IfModule mod_headers.c>
+          <Files "zm-root-header-'''+run+'''.txt">
+          Header always set X-ZM-Root-Files "ok"
+          </Files>
+          </IfModule>
+          <IfModule mod_setenvif.c>
+          SetEnvIf Request_URI "^/zm-root-header-'''+run+'''\\.txt$" ZM_ROOT_PROBE=1
+          </IfModule>
+          <IfModule mod_headers.c>
+          Header always set X-ZM-Root-Env "ok" env=ZM_ROOT_PROBE
+          </IfModule>
+          ''').encode('ascii')
+          candidate=source+(b'' if source.endswith(b'\n') else b'\n')+addition
+          Path(sys.argv[2]).write_bytes(candidate)
+          Path(sys.argv[3]).write_text('zomorod root htaccess capability\n',encoding='utf-8')
+          Path(sys.argv[3]).chmod(0o644)
+          PY
+          candidate="$original.zm-root-probe-next-$run"
+          test ! -e "$candidate"
+          cp -p "$backup/candidate.htaccess" "$candidate"
+          chmod --reference="$original" "$candidate"
+          mv -T "$candidate" "$original"
+          url="https://zomorodmelal.ir/zm-root-header-$run.txt?nocache=$run"
+          headers="$(curl -sSIL --connect-timeout 8 --max-time 25 -H 'Cache-Control: no-cache' "$url")"
+          body="$(curl -fsSL --connect-timeout 8 --max-time 25 "$url")"
+          test "$body" = 'zomorod root htaccess capability' || { echo ROOT_PROBE_BODY=unexpected; exit 1; }
+          for suffix in Files Env;do
+            if printf '%s\n' "$headers" | grep -iq "^x-zm-root-$suffix: ok";then
+              echo "ROOT_HTACCESS_${suffix}=works"
+            else
+              echo "ROOT_HTACCESS_${suffix}=absent"
+            fi
+          done
+          after="$(sha256sum "$web/index.html" "$web/store/index.php" "$web/search/index.json" "$web/about/index.html" "$web/topics/index.html")"
+          test "$before" = "$after"
+          echo PROTECTED_LIVE_FILES=unchanged
+          REMOTE
       - name: Remove ephemeral relay credentials
         if: always()
         run: |
