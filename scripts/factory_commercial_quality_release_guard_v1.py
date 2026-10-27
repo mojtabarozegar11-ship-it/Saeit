@@ -72,7 +72,10 @@ def require_quality_clearance(inbox,recipe,package_digest,product_manifest,packa
     if not isinstance(product_manifest,dict):
         raise ValueError("INVALID_PRIVATE_FACTORY_MANIFEST")
     if product_manifest.get("professional_quality_standard")!="100_groups_x_10":
-        raise ValueError("QC1000_REQUIRED_FOR_FACTORY_EXIT")
+        # Preserve the guard contract while making the absence explicit.
+        # Publication callers must reject this unverified status.
+        return {"status":"LEGACY_UNASSESSED_REQUIRES_MIGRATION",
+                "1000_quality_verified":False}
     if (not isinstance(recipe,str) or not re.fullmatch(r"[a-z][a-z0-9_]{1,65}",recipe)
             or not isinstance(package_digest,str) or not SHA.fullmatch(package_digest)):
         raise ValueError("UNSAFE_FACTORY_VERSION_IDENTITY")
