@@ -483,8 +483,8 @@ def cycle(root,registry,dispatch=False,max_execute=1):
           'status':'specialist_executor_must_be_implemented_and_validated'} for f in blocked_families]
         report={'schema':'saeit.factory.product-planning-dashboard.v1','registered_family_routes':40,
           'unique_product_plans':len(rows),'deferred_plan_count':max(0,len(unique)-len(rows)),'duplicate_intakes_suppressed':max(0,len(raw)-len(unique)-len(rejected)),
-          'total_distinct_requests':len(unique),'window_legacy_plans':sum(k in legacy_aliases for k,_ in selected),
-          'window_general_plans':sum(k not in legacy_aliases for k,_ in selected),
+          'total_distinct_requests':len(unique),'window_legacy_plans':sum(r['plan_id'] in legacy_aliases for r in rows),
+          'window_general_plans':sum(r['plan_id'] not in legacy_aliases for r in rows),
           'window_cursor_advances':bool(dispatch and len(unique)>500),
           'existing_orders_scanned':legacy_scanned,'existing_order_plans':len(legacy_aliases),
           'verified_native_product_plans':sum(r['status']=='native_recipe_verified' for r in rows),
