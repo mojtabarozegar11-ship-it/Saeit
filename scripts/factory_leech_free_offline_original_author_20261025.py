@@ -193,9 +193,18 @@ def canonical_reasoning_view(body):
     """Canonicalize safety markers only; do not alter manuscript content."""
     import unicodedata
     safety_view = unicodedata.normalize("NFKC", body)
-    safety_view = re.sub(
-        r"[\u00ad\u061c\u200b\u200c\u200d\u200e\u200f\u2060\ufeff\u202a-\u202e\u2066-\u2069]",
-        "", safety_view)
+    # Canonicalize line separators in the safety view so a CRLF/Unicode
+    # newline cannot conceal a bibliography marker from the pre-write gate.
+    safety_view = (safety_view.replace("\r\n", "\n").replace("\r", "\n")
+                   .replace("\u0085", "\n").replace("\u2028", "\n")
+                   .replace("\u2029", "\n"))
+    # Strip every Unicode format control, not just a hand-picked subset.
+    # U+034F (combining grapheme joiner) is also invisible but categorized Mn.
+    # This is a safety-only view; the submitted prose is never rewritten.
+    safety_view = "".join(
+        ch for ch in safety_view
+        if unicodedata.category(ch) != "Cf" and ch != "\u034f"
+    )
     return safety_view.casefold()
 
 def accept(chunks, body):
@@ -211,7 +220,10 @@ def accept(chunks, body):
         reject("MODEL_REASONING_OR_CONTROL_TOKEN")
     if len(body.encode("utf-8")) > 48000 or len(body.encode("utf-8")) < 1200:
         reject("SEGMENT_BYTES_OUT_OF_RANGE")
-    if any(marker in body.casefold() for marker in
+    # Apply the same NFKC/invisible-control canonicalization as the reasoning
+    # gate: otherwise a zero-width mark can hide an unverified citation or
+    # placeholder from the pre-write integrity check.
+    if any(marker in canonical_reasoning_view(body) for marker in
            ("lorem ipsum", "as an ai language model", "[insert ", "[citation needed]",
             "this is a placeholder", "## references", "bibliography\n")):
         reject("CONTENT_INTEGRITY_MARKER")
