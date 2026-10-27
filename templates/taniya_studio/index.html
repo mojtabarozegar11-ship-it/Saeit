@@ -100,6 +100,12 @@ Total output lines: 1
       const toppingName={'🍓':'berries','🌼':'flowers','🍬':'sweets'}[cakeState.topping]||'topping';
       p.setAttribute('aria-label','Decorated cake with '+toppingName+', '+cakeState.candles+' candles, frosting '+cakeState.icing);
       p.style.filter='drop-shadow(0 0 14px '+cakeState.icing+')';
+      // Expose the selected topping to keyboard and screen-reader users.
+      gamebody.querySelectorAll('[data-top]').forEach(button=>
+        button.setAttribute('aria-pressed',String(button.dataset.top===cakeState.topping)));
+      // At the twelve-candle limit, prevent further no-op interactions.
+      const addCandle=gamebody.querySelector('[data-action="candle"]');
+      if(addCandle)addCandle.disabled=cakeState.candles>=12;
     }
     function cakeCardBody(){
       const s=cakeState,first=Math.min(6,s.candles),second=Math.max(0,s.candles-6);
