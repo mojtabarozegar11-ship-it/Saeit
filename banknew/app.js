@@ -142,6 +142,12 @@ if (typeof document !== 'undefined') {
 
   // Isolated TRON read-only panel. No wallet permission is requested on page load.
   const walletGrid = document.querySelector('#wallet .grid');
+  const legacyDisclaimer = document.querySelector('#wallet article.panel .fine');
+  if (legacyDisclaimer) {
+    legacyDisclaimer.textContent =
+      'Token balances and WalletConnect QR pairing are not integrated. ' +
+      'A connected address is not proof of identity.';
+  }
   if (walletGrid) {
     const panel = document.createElement('article');
     panel.className = 'panel';
