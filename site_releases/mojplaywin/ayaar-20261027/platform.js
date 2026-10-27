@@ -87,7 +87,8 @@
       evidence_summary:field(form,"evidence_summary").value,
       rights_declared:field(form,"rights_declared").checked,
       privacy_consent:field(form,"privacy_consent").checked,
-      publication_consent:field(form,"publication_consent").checked
+      publication_consent:field(form,"publication_consent").checked,
+      ai_processing_consent:field(form,"ai_processing_consent").checked
     };
   }
   function setupSubmission() {
@@ -129,9 +130,12 @@
   }
   function renderReport(container,report) {
     if(!report)return;
-    const title=h("h3","Reviewer-attested assessment — not official certification");
+    const title=h("h3",report.reviewer_alias
+      ? "AYAR Expert Engine — AI-assisted analytical assessment"
+      : "Reviewer-attested assessment — not official certification");
     const details=h("div","","a-facts");
-    addFact(details,"Reviewer account",report.reviewer_account);
+    addFact(details,"Review source",report.reviewer_alias||"Staff reviewer");
+    addFact(details,"Recorded by account",report.reviewer_account);
     addFact(details,"Preliminary grade",report.grade);
     addFact(details,"Weighted score",report.score+" / 100");
     addFact(details,"Reviewed at",report.reviewed_at);
@@ -170,6 +174,36 @@
     anchor.download="AYAR-"+details.case_id+"-assessment.json";
     document.body.append(anchor);anchor.click();anchor.remove();
     setTimeout(()=>URL.revokeObjectURL(url),3000);
+  }
+  function downloadReviewPacket(details) {
+    if(!details.ai_processing_consent)throw Error("Applicant AI consent is required");
+    const criteria=Object.fromEntries(rubric[details.category].map(([key])=>[key,{score:null,evidence:""}]));
+    const packet={
+      schema:"AYAR-EXPERT-ENGINE-REVIEW-PACKET-v1",
+      case_id:details.case_id,
+      category:details.category,product_name:details.product_name,
+      product_version:details.product_version,product_url:details.product_url,
+      scope:details.scope,evidence_summary:details.evidence_summary,
+      files:details.files.map(f=>({name:f.original_name,size:f.size,sha256:f.sha256})),
+      ai_processing_consent:true,
+      instructions:[
+        "Review only evidence actually provided and inspected; file hashes alone are not file contents.",
+        "Ask for additional evidence instead of inventing observations or test results.",
+        "Use all eight applicable criteria with integer scores 0-5 and evidence-specific notes.",
+        "Clearly disclose AYAR/MojPlayWin affiliation and limits; never claim independent human certification.",
+        "Exclude contact details, personal access keys and unrelated customer records."
+      ],
+      expected_review:{
+        case_id:details.case_id,review_mode:"ai_assisted",
+        ai_review_reference:"",review_scope:"",methodology_notes:"",
+        independence_statement:"AYAR is affiliated with MojPlayWin; this is an AI-assisted internal analytical assessment, not independent human certification.",
+        criteria,evidence_examined:false,no_material_conflict:false,publish_report:false
+      }
+    };
+    const blob=new Blob([JSON.stringify(packet,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob),a=document.createElement("a");
+    a.href=url;a.download="AYAR-"+details.case_id+"-AI-review-packet.json";
+    document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
   }
   function addApplicantFollowup(target,details) {
     if(target.id!=="casePanel" || details.status!=="needs_information")return;
@@ -217,6 +251,7 @@
     addFact(facts,"Created",details.created_at);
     addFact(facts,"Version",details.product_version);
     addFact(facts,"Evidence attachments",details.files.length);
+    addFact(facts,"AI-assisted analysis authorized",details.ai_processing_consent?"Yes":"No");
     target.append(facts);
     target.append(h("h3","Recorded scope"));
     target.append(h("p",details.scope||"Not provided"));
@@ -242,6 +277,25 @@
       target.append(div);
     }
     addApplicantFollowup(target,details);
+    if(target.id==="casePanel" && !details.ai_processing_consent && !["reviewed","declined"].includes(details.status)){
+      const consentBox=h("div","","a-paper");
+      consentBox.append(h("h3","Authorize AI-assisted review"));
+      consentBox.append(h("p","Your dossier may be analyzed using a third-party AI service. Only authorize this if you have the rights to share the materials; the review is not independent human certification.","a-small"));
+      const consentButton=h("button","Authorize AI-assisted analysis","a-button");
+      consentButton.type="button";
+      consentButton.addEventListener("click",async()=>{
+        if(!confirm("Authorize external AI-assisted analysis of the information and evidence in this AYAR dossier?"))return;
+        consentButton.disabled=true;
+        try{
+          const form=$("trackForm");
+          const args={case_id:field(form,"case_id").value,access_key:field(form,"access_key").value};
+          await request("consent_ai",args);
+          const updated=await request("status",args);
+          renderCase(target,updated);message("Your AI-processing authorization was recorded.","success");
+        }catch(error){message(error.message,"error");consentButton.disabled=false;}
+      });
+      consentBox.append(consentButton);target.append(consentBox);
+    }
   }
   function setupTracking() {
     const form=$("trackForm");
@@ -356,6 +410,15 @@
         line.append(download);panel.append(line);
       }
     }
+    if(details.ai_processing_consent){
+      const pack=h("button","Download privacy-minimized AI review packet ↓","a-button a-button-secondary");
+      pack.type="button";pack.addEventListener("click",()=>{
+        try{downloadReviewPacket(details);}catch(error){message(error.message,"error");}
+      });
+      panel.append(pack,h("p","The packet excludes the applicant email and access key; source evidence must be examined separately with the applicant's consent.","a-small"));
+    }else{
+      panel.append(h("p","AI review is blocked until the applicant explicitly authorizes processing in private case tracking.","a-small"));
+    }
     if(details.status==="declined") {
       panel.append(h("p","This declined case is closed. A fresh application is required for a new assessment.","a-small"));
     } else if(details.status!=="reviewed") {
@@ -374,8 +437,10 @@
         catch(error){message(error.message,"error");}
       });
       statusArea.append(select,note,save);panel.append(statusArea);
-      if(details.status==="in_review") {
+      if(details.status==="in_review" && details.ai_processing_consent) {
         buildReviewForm(panel,details);
+      } else if(details.status==="in_review"){
+        panel.append(h("p","Awaiting applicant authorization for AI-assisted analysis.","a-small"));
       } else if(details.status==="needs_information") {
         panel.append(h("p","The applicant's response is pending. A final assessment cannot be signed before the requested evidence is received and formal review resumes.","a-small"));
       } else {
@@ -386,8 +451,14 @@
   }
   function buildReviewForm(parent,details) {
     const form=h("form","","a-paper");form.id="expertReviewForm";form.style.marginTop="25px";
-    form.append(h("h3","Reviewer-attested weighted assessment"));
-    form.append(h("p","Only qualified staff should complete this record after examining the evidence. A saved report is not external accreditation.","a-small"));
+    form.append(h("h3","AYAR Expert Engine assessment intake"));
+    form.append(h("p","Import an actual, evidence-grounded AI analytical report prepared outside this site. It must not be invented or signed as an independent human certificate. No paid model API is connected.","a-small"));
+    const intakeLabel=h("label","AI analysis JSON returned for this exact case");intakeLabel.htmlFor="aiReviewJSON";
+    const importText=h("textarea");importText.id="aiReviewJSON";importText.rows=7;
+    importText.placeholder="Paste the structured analysis JSON after providing the privacy-minimized packet and permitted evidence for examination.";
+    const importButton=h("button","Import analyzed findings ↓","a-button a-button-secondary");
+    importButton.type="button";
+    form.append(intakeLabel,importText,importButton);
     const fields=h("div","","a-review-grid");
     for(const [key,label] of rubric[details.category]){
       const row=h("div","","a-review-row");
@@ -399,9 +470,10 @@
     }
     form.append(fields);
     const description=[
-      ["independence_statement","Reviewer identity, qualifications and material affiliations"],
+      ["independence_statement","AI process disclosure, AYAR affiliation and assessment limitations"],
       ["review_scope","Precisely tested scope, build and limitations"],
-      ["methodology_notes","Test procedures, tools and reproducibility notes"]
+      ["methodology_notes","Actual inspection, test procedures and reproducibility notes"],
+      ["ai_review_reference","AI analysis session reference and evidence scope"]
     ];
     for(const [id,title] of description) {
       const wrapper=h("div","","a-field wide");wrapper.style.marginTop="18px";
@@ -411,13 +483,44 @@
     }
     const affirm=h("label","","a-check");affirm.style.marginTop="16px";
     const input=document.createElement("input");input.type="checkbox";input.name="no_material_conflict";
-    affirm.append(input,h("span","I declare that I have no material conflict of interest affecting this decision and have accurately disclosed all affiliations."));
+    affirm.append(input,h("span","I confirm all material affiliations, interests and limitations are disclosed; no undisclosed conflict is concealed."));
     form.append(affirm);
+    const evidenceLabel=h("label","","a-check");evidenceLabel.style.marginTop="14px";
+    const examined=document.createElement("input");examined.type="checkbox";examined.name="evidence_examined";
+    evidenceLabel.append(examined,h("span","I confirm that the analysis refers only to source evidence actually examined, and does not invent tests, qualifications or results."));
+    form.append(evidenceLabel);
     const publish=h("label","","a-check");publish.style.marginTop="15px";
     const pub=document.createElement("input");pub.type="checkbox";pub.name="publish_report";pub.disabled=!details.publication_consent;
     publish.append(pub,h("span",details.publication_consent?"Publish anonymized summary in the public registry":"Applicant has not authorized public report listing"));
     form.append(publish);
-    const button=h("button","Record final reviewer assessment","a-button");button.type="submit";button.style.marginTop="22px";form.append(button);
+    const button=h("button","Record final AYAR analytical assessment","a-button");button.type="submit";button.style.marginTop="22px";form.append(button);
+    importButton.addEventListener("click",()=>{
+      try{
+        const analysis=JSON.parse(importText.value);
+        if(analysis.case_id!==details.case_id || analysis.review_mode!=="ai_assisted")
+          throw Error("AI report is not for this exact case");
+        const expected=rubric[details.category].map(([key])=>key);
+        if(!analysis.criteria || Object.keys(analysis.criteria).length!==expected.length)
+          throw Error("Eight criteria are required");
+        for(const key of expected){
+          const item=analysis.criteria[key];
+          if(!item || !Number.isInteger(item.score) || item.score<0 || item.score>5 ||
+             typeof item.evidence!=="string" || item.evidence.trim().length<12)
+            throw Error("Complete, evidence-grounded findings are required for "+key);
+          form.elements.namedItem("score_"+key).value=String(item.score);
+          form.elements.namedItem("evidence_"+key).value=item.evidence;
+        }
+        for(const key of ["independence_statement","review_scope","methodology_notes","ai_review_reference"]){
+          if(typeof analysis[key]!=="string" || analysis[key].trim().length<12)
+            throw Error("Complete AI disclosure and analysis provenance are required: "+key);
+          form.elements.namedItem(key).value=analysis[key];
+        }
+        form.elements.namedItem("no_material_conflict").checked=analysis.no_material_conflict===true;
+        form.elements.namedItem("evidence_examined").checked=analysis.evidence_examined===true;
+        form.elements.namedItem("publish_report").checked=analysis.publish_report===true && details.publication_consent;
+        message("AI report imported for review. Verify all references before recording; nothing has been finalized.","success");
+      }catch(error){message("Import rejected: "+error.message,"error");}
+    });
     form.addEventListener("submit",async e=>{
       e.preventDefault();
       const criteria={};
@@ -425,7 +528,10 @@
         const scoreValue=form.elements.namedItem("score_"+key).value;
         criteria[key]={score:scoreValue===""?null:Number(scoreValue),evidence:form.elements.namedItem("evidence_"+key).value};
       }
-      const review={criteria,independence_statement:form.elements.namedItem("independence_statement").value,
+      const review={criteria,review_mode:"ai_assisted",
+        ai_review_reference:form.elements.namedItem("ai_review_reference").value,
+        evidence_examined:form.elements.namedItem("evidence_examined").checked,
+        independence_statement:form.elements.namedItem("independence_statement").value,
         review_scope:form.elements.namedItem("review_scope").value,
         methodology_notes:form.elements.namedItem("methodology_notes").value,
         no_material_conflict:form.elements.namedItem("no_material_conflict").checked,
@@ -433,7 +539,7 @@
       button.disabled=true;
       try{
         await request("staff_review",{case_id:selectedCode,review});
-        message("Reviewer-attested report saved. This is not an official accreditation.","success");
+        message("AYAR Expert Engine AI-assisted report recorded. Not external accreditation.","success");
         await openStaffCase(selectedCode);await loadStaffList();
       }catch(error){message(error.message,"error");}
       finally{button.disabled=false;}
