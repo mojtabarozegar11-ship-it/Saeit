@@ -1,0 +1,39 @@
+name: Farm enterprise economics native expert QA
+on:
+  pull_request:
+    paths:
+      - "product_recipes/farm_enterprise_economics/**"
+      - ".github/workflows/farm-enterprise-economics-native-qa.yml"
+  push:
+    branches: [main]
+    paths:
+      - "product_recipes/farm_enterprise_economics/**"
+      - ".github/workflows/farm-enterprise-economics-native-qa.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-economic-and-csv-regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.8", "3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: \${{ matrix.python }}
+      - name: Validate full retail recipe economics and spreadsheet safety
+        shell: bash
+        working-directory: product_recipes/farm_enterprise_economics
+        run: |
+          set -euo pipefail
+          python -B -m unittest -v test_calculator.py
+          python -B -m py_compile calculator.py test_calculator.py
+          echo FARM_ENTERPRISE_SPECIALIST_INTERNAL_TESTS=PASS
+          echo FACTORY_INDEPENDENT_QUALITY_CLEARANCE=false
+          echo FACTORY_COMMERCIAL_RELEASE_ALLOWED=false
