@@ -170,16 +170,19 @@ function jungleGame(stage){
   ['🪵','Root barrier',0],['🌊','Deep stream',2],['🌿','Final vines',1]
  ];
  let step=0,hearts=3,done=false;
+ // Persist only an anonymous, bounded course record. Privacy/storage restrictions never block play.
+ const bestKey='studioRahamJungleBestV1';let best=0;
+ try{const raw=localStorage.getItem(bestKey);if(/^(?:[0-9]|1[0-2])$/.test(raw||''))best=Number(raw)}catch{}
  stage.innerHTML='<div class="stage-message" id="jungleStatus" role="status" aria-live="polite"></div><div id="jungleObstacle" class="play-preview" style="font-size:2.2rem"></div><p id="jungleHint" class="stage-message"></p><div class="stage-actions"><button class="stage-button" data-jungle-action="0">1 · Jump 🦘</button><button class="stage-button" data-jungle-action="1">2 · Duck 🐢</button><button class="stage-button" data-jungle-action="2">3 · Bridge 🌉</button></div><p id="jungleFeedback" class="stage-message" aria-live="polite"></p>';
  const status=stage.querySelector('#jungleStatus'),obstacle=stage.querySelector('#jungleObstacle'),hint=stage.querySelector('#jungleHint'),feedback=stage.querySelector('#jungleFeedback'),buttons=[...stage.querySelectorAll('[data-jungle-action]')];
  function render(){
-  status.textContent='Obstacle '+Math.min(step+1,12)+' / 12 · Hearts '+ '❤️'.repeat(hearts);
+  status.textContent='Obstacle '+Math.min(step+1,12)+' / 12 · Hearts '+ '❤️'.repeat(hearts)+' · Best '+best+' / 12';
   if(done){obstacle.textContent=step===12?'🏆 Jungle completed!':'💚 Rest and try again';hint.textContent=step===12?'All twelve obstacles cleared.':'Three missed moves ended this run.';buttons.forEach(x=>x.disabled=true);if(!stage.querySelector('#jungleRetry')){const retry=button('Run again',()=>{jungleCleanup();jungleGame(stage)},'alt');retry.id='jungleRetry';stage.append(retry)}return}
   obstacle.textContent=course[step][0];hint.textContent=course[step][1]+' — choose the safe move';buttons.forEach(x=>x.disabled=false)
  }
  function move(choice){
   if(done)return;
-  if(choice===course[step][2]){step++;feedback.textContent='Correct! Keep going.'}
+  if(choice===course[step][2]){step++;if(step>best){best=step;try{localStorage.setItem(bestKey,String(best))}catch{}}feedback.textContent='Correct! Keep going.'}
   else{hearts--;feedback.textContent='Not safe for this obstacle. Choose another move.'}
   if(step===12||hearts===0)done=true;
   render()
