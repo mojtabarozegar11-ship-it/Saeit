@@ -109,6 +109,14 @@ def revise_contact(src: str) -> str:
     return out
 
 
+def revise_shared_meta(source: str) -> str:
+    count = source.count(SEO_OLD)
+    print("CONTACT_META_COPY_COUNT=" + str(count), flush=True)
+    if count not in (2, 3, 4):
+        raise ValueError("Unexpected number of shared Contact SEO references")
+    return source.replace(SEO_OLD, SEO_NEW)
+
+
 def targets() -> dict[str, Path]:
     if APP.is_symlink() or not (APP / "manage.py").is_file():
         raise ValueError("Independent personal Django application mismatch")
@@ -158,11 +166,7 @@ def plan() -> dict[str, tuple[bytes, bytes]]:
         else:
             if rel != "templates/personal_site/base.html":
                 raise ValueError("Unexpected Contact metadata source path: " + rel)
-            count = source.count(SEO_OLD)
-            print("CONTACT_META_COPY_COUNT=" + str(count), flush=True)
-            if count not in (2, 3, 4):
-                raise ValueError("Unexpected number of shared Contact SEO references")
-            revised = source.replace(SEO_OLD, SEO_NEW)
+            revised = revise_shared_meta(source)
         after = revised.encode("utf8")
         if after == before:
             raise ValueError("No difference in " + rel)
