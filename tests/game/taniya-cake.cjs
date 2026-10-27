@@ -6,7 +6,7 @@ const start=html.indexOf('    let cakeState='),end=html.indexOf('    function mo
 assert(start>=0&&end>start,'Cake Maker code must be present in the actual studio template');
 const cakeSource=html.slice(start,end);
 const nodes={
-  cakepreview:{textContent:'',style:{}},
+  cakepreview:{textContent:'',style:{},attributes:{},setAttribute(name,value){this.attributes[name]=value}},
   icing:{value:'#ff79b8',oninput:null}
 };
 const tops=['🍓','🌼','🍬'].map(top=>({dataset:{top},onclick:null}));
@@ -25,14 +25,17 @@ const run=expression=>vm.runInContext(expression,context);
 run('mountCake()');
 assert.equal(run('cakeState.candles'),0);
 assert.match(nodes.cakepreview.textContent,/🍓/);
+assert.match(nodes.cakepreview.attributes['aria-label'],/berries, 0 candles/);
 tops[2].onclick();
 assert.equal(run('cakeState.topping'),'🍬');
 run("handleCakeAction('candle')");
 run("handleCakeAction('candle')");
 assert.equal(run('cakeState.candles'),2);
 assert.equal((nodes.cakepreview.textContent.match(/🕯️/g)||[]).length,2);
+assert.match(nodes.cakepreview.attributes['aria-label'],/sweets, 2 candles/);
 nodes.icing.oninput({target:{value:'#11aa22'}});
 assert.equal(run('cakeState.icing'),'#11aa22');
+assert.match(nodes.cakepreview.attributes['aria-label'],/frosting #11aa22/);
 run("handleCakeAction('cake-download')");
 assert.equal(downloads.length,1);
 assert.equal(downloads[0].name,'taniya-cake-card');
@@ -52,5 +55,7 @@ assert.equal(run('cakeState.candles'),0,'Start over must clear all candles');
 assert.equal(run('cakeState.topping'),'🍓','Start over must restore default topping');
 assert.equal(run('cakeState.icing'),'#ff79b8','Start over must restore default icing');
 assert.equal((nodes.cakepreview.textContent.match(/🕯️/g)||[]).length,0);
-assert(messages.length>=1);
+assert(messages.some(m=>m==='Cake topping updated.'),'topping changes must be announced');
+assert(messages.some(m=>m==='Frosting color updated.'),'frosting changes must be announced');
+assert.match(nodes.cakepreview.attributes['aria-label'],/berries, 0 candles/);
 console.log('TANIYA_CAKE_MAKER_QA=PASS topping+icing+candles+SVG+input_guard+reset');
