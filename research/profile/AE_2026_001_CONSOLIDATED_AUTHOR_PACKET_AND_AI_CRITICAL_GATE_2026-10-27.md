@@ -39,3 +39,13 @@
 - [ ] Approve final cover letter and journal submission **for this exact manuscript only**.
 
 No boxes are prechecked; the AI cannot sign or simulate consent. **0 submitted / 0 Manuscript IDs / 0 accepted / 0 published.** No live-site edit, PR #1054 merge, bulk FASTQ download, VPS use or payment was performed.
+
+
+## 27 October C27 scientific delta — newly evaluated
+
+- **Verified secondary calculation:** the 153-economy 2026-only E→L sign reversals decline from 60 at zero margin to 42 at a strict 0.5 log-pp/year margin on both rates; E→H reversals decline from 10 to **3** at the same margin, and **1** at 1.0. These results are from the archived 217-row CSV and documented in [C27](../manuscripts/AE-2026-001/AE-2026-001_C27_HORIZON_SIGN_SWITCH_MARGIN_ROBUSTNESS_2026-10-27.md).
+- **Mathematical check:** for E and L of opposite signs, a strict overlapping-horizon E→H sign reversal requires |L|>4.75|E|. This is algebra, not a novel estimator or causal result.
+- **Critical interpretation:** post hoc thresholds do not provide statistical significance, confidence intervals or evidence of a post-2019 global structural break. The 10/153 horizon reversals must not be conflated with 10/155 historical-vintage reversals.
+- **Source reconciliation:** C13 and C14 were fetched directly from the research branch and confirm the 217-economy availability masks and four excluded 2023 cases; those older analyses were not counted as new discoveries.
+- **Bibliography verified:** Eberhardt and Teal (2013), *World Bank Economic Review* 27(2):229–271, DOI 10.1093/wber/lhs020 (publisher); Dieppe and Matsuoka (2021) WPS 9767 has a separate 2025 *Empirical Economics* journal version (RePEc). The consolidated manuscript now identifies both versions accurately.
+- **Release gate unchanged:** the updated consolidated English manuscript is still **internal author review / MAJOR REVISION / NO SUBMISSION**. Its updated Word is not claimed unless a new source-locked build and artifact are verified. Historical ILOSTAT archives, matched three-vintage software comparison, external novelty and all human author declarations remain open.
