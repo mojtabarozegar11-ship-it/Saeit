@@ -24,6 +24,8 @@ class AyarRoutingTests(SimpleTestCase):
         self.assertEqual(set(_ALLOWED), {
             "index.html", "methodology.html", "styles.css", "hero.css",
             "app.js", "favicon.svg", "hero-art.svg",
+            "services.html", "submit.html", "track.html", "reviewer.html",
+            "registry.html", "privacy.html", "platform.css", "platform.js",
         })
 
     def test_block_path_probes(self):
