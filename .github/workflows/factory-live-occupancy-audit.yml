@@ -1,0 +1,90 @@
+name: Read-only factory live occupancy audit
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/factory-live-occupancy-audit.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: saeit-factory-live-occupancy-audit
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Read the verified VPS worker and line occupancy
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-audit-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\\r\\n","\\n").replace("\\r","").replace("\\\\n","\\n").rstrip()+"\\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-factory-verified
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ServerAliveInterval 10
+            ServerAliveCountMax 2
+            ForwardAgent no
+          EOF
+          chmod 600 "$d/config"
+          ssh -T -F "$d/config" saeit-factory-verified 'python3 -' <<'PY'
+          import json, re, subprocess
+          from pathlib import Path
+          h=Path.home()/"factory-runtime"
+          root=h/"private/autonomous-product-cycle"
+          planner=json.loads((root/"product-planning/dashboard.json").read_text())
+          ctrl=json.loads((root/"production-family-management/forty-execution-dashboard.json").read_text())
+          cron=subprocess.check_output(["crontab","-l"],text=True)
+          active=set()
+          fixed={
+            "factory_build50_f15_game_assets.py":"F15",
+            "factory_build50_f18_webapps.py":"F18",
+            "factory_build50_f19_web_template.py":"F19",
+            "factory_build50_f24_prompts.py":"F24",
+            "factory_build50_workbook.py":"F27",
+            "factory_build50_f31_planner.py":"F31",
+            "factory_build50_f34_icon_kit.py":"F34",
+            "factory_build50_f35_cad.py":"F35",
+          }
+          builder_names=(
+            "factory_build50_five_publications.py","factory_build50_learning_4.py",
+            "factory_build50_next4_media.py","factory_seven_missing_builders.py",
+            "factory_build50_three_media.py","factory_batch5_build.py",
+            "factory_build50_creative_kits.py","factory_build50_native_media.py",
+            *fixed.keys())
+          for line in subprocess.check_output(["ps","-eo","args="],text=True).splitlines():
+            name=next((x for x in builder_names if x in line),None)
+            if not name: continue
+            match=re.search(r"(?<![A-Z0-9])F(?:0[1-9]|[1-3][0-9]|40)(?![A-Z0-9])",line)
+            family=match.group(0) if match else fixed.get(name)
+            if family:active.add(family)
+          families=ctrl.get("families",[])
+          blocked=sorted(x.get("family_id") for x in families
+                         if x.get("operational_state")=="blocked_no_validated_native_50_stage_executor")
+          print("FACTORY_LIVE_OCCUPANCY="+json.dumps({
+            "cron_dispatcher_active":cron.count("SAEIT_FACTORY_FORTY_FAMILY_OPERATIONAL_DISPATCH_V1")==1,
+            "registered_line_routes":planner.get("registered_family_routes"),
+            "worker_budget":planner.get("worker_budget"),
+            "below_40_concurrent_slots":(planner.get("worker_budget") or 0)<40,
+            "active_builder_lines":len(active),
+            "active_builder_family_ids":sorted(active),
+            "blocked_native_executor_family_ids":blocked,
+            "resource_holds":planner.get("resource_holds",[])
+          },sort_keys=True))
+          PY
