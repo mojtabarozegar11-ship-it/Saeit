@@ -1,7 +1,7 @@
 import {createEngine} from './engine3d.js';
 import {canApplyEarnedUpgrade,applyEarnedUpgrade} from './upgrade-policy.mjs';
 import {MOJ1_COMMERCE} from './moj1-commerce-policy.mjs';
-import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, joystickAxes, canCaptureGameplayPointer, isOwnedGameplayPointer} from './input-guard.mjs';
+import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey, joystickAxes, canCaptureGameplayPointer, isOwnedGameplayPointer} from './input-guard.mjs';
 import {removeEnemyAndRetargetMissiles,missilePathBlocked,missileMotionValid} from './missile-targets.mjs';
 import {canEnemyAct,restoreEnemyRuntime,advanceHostileProjectile,shouldCleanupEnemy,activateTimeStop,advanceTimeStop} from './enemy-action-policy.mjs';
 import {validateCampaignSave, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove} from './save-validation.mjs';
@@ -123,6 +123,7 @@ let aimY=0;canvas.addEventListener('pointerdown',e=>{if(!canCaptureGameplayPoint
 function releaseGameInputs(){keys={};fireHeld=false;fireId=null;joyId=null;aimId=null;joyF=joyS=0;knob.style.transform=''}
 addEventListener('keydown',e=>{
  if(screen!=='game'||isInteractiveTarget(e.target))return;
+ if(isModifiedOrComposingKey(e))return;
  const action=keyboardAction(e.code,screen,e.target,e.repeat);
  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
  if(action==='pause'){e.preventDefault();$('#pause').click();return}
