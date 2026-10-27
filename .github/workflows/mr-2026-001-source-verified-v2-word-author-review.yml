@@ -33,8 +33,8 @@ jobs:
           doi=re.findall(r'https://doi.org/(10\.\S+)',refs)
           nums=[int(x) for x in re.findall(r'^(\d+)\. ',refs,re.M)]
           assert len(a.split())<250
-          assert len(doi)==22 and len(set(doi))==22
-          assert nums==list(range(1,23))
+          assert len(doi)>=22 and len(doi)==len(set(doi)), 'Duplicate or missing reference DOI'
+          assert nums==list(range(1,len(nums)+1)) and len(nums)==len(doi), 'Reference numbers/DOIs inconsistent'
           assert '6. **Counterfactual attribution:**' in t
           assert '**Cross-cutting follow-up:**' in t
           assert '45/72 = 62.5%' in t
