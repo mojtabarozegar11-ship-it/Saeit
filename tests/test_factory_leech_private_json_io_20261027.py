@@ -33,5 +33,20 @@ class LeechPrivateJsonIOTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "LEECH_ZERO_COST_MISSING_OR_UNSAFE_JSON"):
                 author.safe_json(path)
 
+
+    def test_file_growth_between_stat_and_read_is_bounded(self):
+        import io
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "provenance.json"
+            path.write_text('{"order_id":"WO-26102501"}', encoding="utf8")
+            original_open = Path.open
+            def grown_open(self, *args, **kwargs):
+                if self == path and args and args[0] == "rb":
+                    return io.BytesIO(b"x" * 41)
+                return original_open(self, *args, **kwargs)
+            with mock.patch.object(Path, "open", grown_open):
+                with self.assertRaisesRegex(RuntimeError, "LEECH_ZERO_COST_MISSING_OR_UNSAFE_JSON"):
+                    author.safe_json(path, max_bytes=40)
+
 if __name__ == "__main__":
     unittest.main()
