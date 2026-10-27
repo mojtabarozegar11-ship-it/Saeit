@@ -1,0 +1,71 @@
+name: SKU879 hash-pinned private writable rework
+on:
+  pull_request:
+    paths:
+      - scripts/mpw_sku879_private_rework_source_20261027.py
+      - tests/test_mpw_sku879_private_rework_source_20261027.py
+      - .github/workflows/mpw-sku879-private-writable-rework-20261027.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/mpw_sku879_private_rework_source_20261027.py
+      - tests/test_mpw_sku879_private_rework_source_20261027.py
+      - .github/workflows/mpw-sku879-private-writable-rework-20261027.yml
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency:
+  group: mpw-sku879-private-writable-rework
+  cancel-in-progress: false
+jobs:
+  safety-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Python 3.8-safe syntax and isolated source integrity tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/mpw_sku879_private_rework_source_20261027.py
+          python3 -B -m unittest discover -s tests -p test_mpw_sku879_private_rework_source_20261027.py -v
+  private-vps-rework:
+    needs: safety-tests
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish pinned VPS SSH connection without agent forwarding
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/sku879-writable-rework"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+      - name: Prepare only SHA-bound writable source tree on private VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/sku879-writable-rework"
+          payload="$(base64 -w0 scripts/mpw_sku879_private_rework_source_20261027.py)"
+          test -n "$payload"
+          timeout 150s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ForwardAgent=no githubops@178.239.147.150 "python3 -c 'import base64;exec(base64.b64decode(\"$payload\"))' prepare"
+      - name: Remove this job's transient SSH key
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/sku879-writable-rework"
+          if test -d "$d"; then
+            rm -f -- "$d/key" "$d/known"
+            rmdir "$d"
+          fi
