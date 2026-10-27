@@ -42,6 +42,10 @@ As a separate **2026-only** sensitivity, 153 economies have positive values at 2
 
 Original source-hashed three-vintage calculation: `analysis/wdi_three_vintage_fixed_cohort_revisions.py`, GitHub Actions run **40241769129**, artifact **12616508530**. Original sign-margin audit: run **40251337787**, artifact **12620841635**. Ranking audit: run **40260737559**, artifact **12623633345**. Current-source worker audit: run **40300738631**, artifact **12640371610**. The direct countryatlas CAGR implementation: run **40407883759**, artifact **12692315824**. The 2026-only exact horizon identity and row-level checks are documented in C26. These are computational provenance records, **not** independent peer review. Analyses were post hoc and descriptive. No design-based confidence interval for the global agricultural sector is asserted.
 
+### 2.6 Exploratory sign-switch margin sensitivity (C27)
+
+As an additional post hoc diagnostic within the **153-economy 2026-only cohort**, we compared strict growth-rate sign reversals between E and L (nonoverlapping periods) and between E and H (overlapping horizons). For margins m = 0, 0.1, 0.2, 0.5, 1 and 2 annual log-percentage points, a reversal is retained only if both compared rates have absolute magnitude greater than m. The identity 23H=19E+4L implies that, for E and L of opposite signs, a strict E-to-H reversal requires |L|>4.75|E|. These exploratory margins are **not** tests of statistical significance or a new estimator.
+
 ## 3. Results
 
 ### 3.1 Primary fixed-country release sensitivity
@@ -75,6 +79,21 @@ The 2026 observed-country panel contains **217** nonaggregate economies. Its 200
 
 Within the distinct **153-economy 2026-only** cohort, median annual growth was **2.355575** log-pp/year for 2000–2019, **0.890440** for 2019–2023 and **2.224484** for 2000–2023. The median within-country L−E contrast was **−1.925832** log-pp/year, versus **−0.334927** for H−E; the difference is exactly the algebraic factor **4/23**. The rowwise maximum floating-point residual was below 2×10⁻¹⁵ log-pp/year. **60/153** countries changed the sign of their growth rate from E to L, whereas **10/153** did so from E to H; the latter 10 are a subset of the former 60. The identical *number* 10 also appears in the separate 2024→2026 historical-vintage sign comparison, but the two counts have **different samples and causes**. None of these calculations demonstrates a structural break or causal post-2019 effect.
 
+### 3.4 Growth-sign margin sensitivity within the 2026-only cohort
+
+**Table 3. Exploratory growth-sign reversals under strict two-sided rate margins; 153 fully observed economies**
+
+| Minimum absolute annual log growth on each compared side (log-pp/year) | E→L, nonoverlapping periods | E→H, overlapping horizons |
+| ---: | ---: | ---: |
+| 0 | 60 | 10 |
+| 0.1 | 54 | 6 |
+| 0.2 | 51 | 6 |
+| 0.5 | 42 | 3 |
+| 1.0 | 33 | 1 |
+| 2.0 | 18 | 0 |
+
+The ten overlapping-horizon sign reversals include seven with at least one rate no larger than 0.5 log-pp/year in absolute magnitude. This demonstrates the sensitivity of a binary growth-sign label to near-zero annual rates. It does not imply that the separate ten historical-vintage sign switches in the 155-economy primary analysis have the same identities or margins. Full country-level calculations and the exact 4.75 threshold are in [C27](AE-2026-001_C27_HORIZON_SIGN_SWITCH_MARGIN_ROBUSTNESS_2026-10-27.md). No uncertainty or causal inference is attached to these post hoc thresholds.
+
 ## 4. Discussion
 
 The evidence supports three narrow conclusions. First, source release is a material component of descriptive country-level measurement uncertainty: an end-to-end median absolute annual growth revision of 0.4129 log-percentage points can coexist with relatively high rank correlation. Second, sign-change headlines are sensitive to small growth rates near zero and must be accompanied by magnitude thresholds. Third, changing the time horizon is not changing the data vintage: the weighted-average identity shows exactly why extending the endpoint from 2019 to 2023 can suppress shorter-period sign reversals.
@@ -96,8 +115,8 @@ Across the same 155 economies, three official WDI releases yield meaningfully di
 1. World Bank. World Development Indicators, NV.AGR.EMPL.KD. https://data.worldbank.org/indicator/NV.AGR.EMPL.KD
 2. International Labour Organization. ILOSTAT. https://ilostat.ilo.org/
 3. Gutierrez L. (2002). Why is agricultural labour productivity higher in some countries than others? *Agricultural Economics Review* 3(1):58–72. DOI: 10.22004/ag.econ.26431.
-4. Eberhardt M, Teal F. (2013). Structural change and cross-country growth empirics. *World Bank Economic Review* 27(2):229–271.
-5. Dieppe A, Matsuoka H. (2021). Sectoral Decomposition of Convergence in Labor Productivity. World Bank Policy Research Working Paper 9767.
+4. Eberhardt M, Teal F. (2013). Structural change and cross-country growth empirics. *World Bank Economic Review* 27(2):229–271. DOI: 10.1093/wber/lhs020.
+5. Dieppe A, Matsuoka H. (2021). Sectoral Decomposition of Convergence in Labor Productivity: A Re-examination from a New Dataset. World Bank Policy Research Working Paper 9767. A revised journal article appeared in *Empirical Economics* 68(4):1829–1859 (2025); these are distinct bibliographic versions.
 6. Gollin D, Lagakos D, Waugh ME. (2013). The Agricultural Productivity Gap. NBER Working Paper 19628. DOI: 10.3386/w19628.
 7. Johnson S, Larson W, Papageorgiou C, Subramanian A. (2013). Is newer better? Penn World Table revisions and their impact on growth estimates. *Journal of Monetary Economics* 60(2):255–274. DOI: 10.1016/j.jmoneco.2012.10.022.
 8. Filer RK, Hájková D, Hanousek J. (2004). The Other Side of the Moon: The Data Problem in Analysing Growth Determinants. CEPR Discussion Paper 4349.
