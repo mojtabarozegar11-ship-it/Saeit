@@ -204,6 +204,8 @@ def canonical_reasoning_view(body):
     safety_view = "".join(
         ch for ch in safety_view
         if unicodedata.category(ch) != "Cf" and ch != "\u034f"
+        and not (0xFE00 <= ord(ch) <= 0xFE0F
+                 or 0xE0100 <= ord(ch) <= 0xE01EF)
     )
     return safety_view.casefold()
 
