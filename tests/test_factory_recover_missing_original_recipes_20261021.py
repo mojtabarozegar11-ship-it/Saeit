@@ -139,7 +139,7 @@ class ActiveProductAllowlistTests(unittest.TestCase):
                     "capacity": capacity,
                     "active": [{"recipe": recipe} for recipe in recipes],
                 }))
-                self.assertEqual(m.active_product_allowlist(slots), set(recipes))
+                self.assertEqual(rec.active_product_allowlist(slots), set(recipes))
 
     def test_rejects_family_count_as_product_slot_capacity(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -150,5 +150,5 @@ class ActiveProductAllowlistTests(unittest.TestCase):
                 "active": [{"recipe": "product_%02d" % n} for n in range(1, 41)],
             }))
             with self.assertRaisesRegex(ValueError, "CAPACITY_MISMATCH"):
-                m.active_product_allowlist(slots)
+                rec.active_product_allowlist(slots)
 if __name__=="__main__":unittest.main()
