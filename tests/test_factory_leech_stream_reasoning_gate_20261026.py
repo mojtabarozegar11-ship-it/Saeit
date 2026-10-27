@@ -52,6 +52,9 @@ class LeechStreamAcceptanceRegression(unittest.TestCase):
             "<th\u200fink>right-to-left mark",
             "<th\u061cink>Arabic letter mark",
             "<|im_\u2060start|>",
+            "<th\u034fink>combining grapheme joiner",
+            "<th\ufe0fink>variation selector",
+            "<th\U000E0100ink>supplementary variation selector",
             "[\uff29NST]",
         )
         for marker in disguised:
@@ -74,6 +77,9 @@ class LeechStreamAcceptanceRegression(unittest.TestCase):
             "<th\u200fink>private reasoning",
             "<th\u061cink>private reasoning",
             "<|im_\u2060start|>",
+            "<th\u034fink>combining grapheme joiner",
+            "<th\ufe0fink>variation selector",
+            "<th\U000E0100ink>supplementary variation selector",
             "[\uff29NST]",
         )
         for marker in disguised:
@@ -100,6 +106,8 @@ class LeechStreamAcceptanceRegression(unittest.TestCase):
             "[\uff49nsert missing source]",
             "this is a place\u200bholder",
             "[citation\u034f needed]",  # combining grapheme joiner, Mn
+            "[citation\ufe0f needed]",  # variation selector-16, Mn
+            "[citation\U000E0100 needed]",  # supplementary variation selector, Mn
             "this is a place\u2063holder",  # invisible separator, Cf
             "lorem \u180eipsum",  # Mongolian vowel separator, Cf
             "[citation\u2066 needed]",  # left-to-right isolate, Cf
