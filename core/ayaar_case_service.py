@@ -385,7 +385,12 @@ def append_case_evidence(code, access_key, note, uploads, secret_key):
                     "INSERT INTO files(id,code,original_name,stored_name,size,sha256) VALUES(?,?,?,?,?,?)",
                     (file_id, code, filename, stored, size, content_hash.hexdigest())
                 )
-            db.execute("UPDATE cases SET status='submitted',updated_at=? WHERE code=?", (now(), code))
+            changed = db.execute(
+                "UPDATE cases SET status='submitted',updated_at=? "
+                "WHERE code=? AND status='needs_information'", (now(), code)
+            )
+            if changed.rowcount != 1:
+                raise CaseError("This information request is no longer open", 409)
             event(db, code, "customer", "customer_followup", note)
     except BaseException:
         for item in saved:
@@ -439,16 +444,33 @@ def staff_case(code):
 
 
 def set_status(code, status, actor, note):
+    """Enforce the human-review lifecycle without bypassing open evidence requests."""
+    code = clean(code, 28, True)
     if status not in {"in_review", "needs_information", "declined"}:
         raise CaseError("Unsupported staff transition")
     note = clean(note, 1000, True)
+    if status in {"needs_information", "declined"} and len(note) < 12:
+        raise CaseError("Give a clear evidence-based reason (at least twelve characters)")
+    allowed = {
+        "submitted": {"in_review", "needs_information", "declined"},
+        "in_review": {"needs_information", "declined"},
+        "needs_information": {"declined"},
+        "reviewed": set(),
+        "declined": set(),
+    }
     with database() as db, db:
         row = db.execute("SELECT status FROM cases WHERE code=?", (code,)).fetchone()
         if row is None:
             raise CaseError("Case not found", 404)
-        if row["status"] == "reviewed":
-            raise CaseError("Reviewed records are immutable; start a new revision")
-        db.execute("UPDATE cases SET status=?,updated_at=? WHERE code=?", (status, now(), code))
+        previous = row["status"]
+        if status not in allowed.get(previous, set()):
+            raise CaseError("Invalid case transition; resolve open requests before continuing", 409)
+        changed = db.execute(
+            "UPDATE cases SET status=?,updated_at=? WHERE code=? AND status=?",
+            (status, now(), code, previous)
+        )
+        if changed.rowcount != 1:
+            raise CaseError("Case changed while you were reviewing it; reload first", 409)
         event(db, code, actor, status, note)
     return {"case_id": code, "status": status}
 
@@ -491,6 +513,8 @@ def submit_review(code, actor, payload):
             raise CaseError("Final reports cannot be silently overwritten")
         if row["status"] == "declined":
             raise CaseError("Declined cases cannot be finalized")
+        if row["status"] != "in_review":
+            raise CaseError("Start formal review and resolve outstanding evidence requests first", 409)
         criteria, score, blockers = validate_review(row["category"], payload.get("criteria"))
         grade = ("Critical gate failure" if blockers else "Excellent" if score >= 90
                  else "Strong" if score >= 80 else "Acceptable with corrections" if score >= 70
@@ -505,11 +529,13 @@ def submit_review(code, actor, payload):
             "final_disclaimer": "Independence is attested by the reviewer, not technically proven by this platform."
         }
         public = int(row["publication_consent"] and payload.get("publish_report") is True)
-        db.execute(
+        changed = db.execute(
             """UPDATE cases SET status='reviewed',updated_at=?,review=?,reviewer_username=?,
-              independence_statement=?,public_report=? WHERE code=?""",
+              independence_statement=?,public_report=? WHERE code=? AND status='in_review'""",
             (now(), json.dumps(verdict, ensure_ascii=False), actor, independence, public, code)
         )
+        if changed.rowcount != 1:
+            raise CaseError("Case changed while you were reviewing it; reload first", 409)
         event(db, code, actor, "reviewed", "Staff reviewer saved final evidence-linked assessment")
         return {"case_id": code, "status": "reviewed", "score": score,
                 "grade": grade, "public_report": bool(public)}
