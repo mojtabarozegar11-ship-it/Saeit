@@ -162,6 +162,44 @@ class GreenhouseCropMarginTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "complete explicit"):
             calculate(dict(self.data, uncertainty={})) 
 
+    def test_mississippi_state_extension_2020_greenhouse_budget_reference(self):
+        """Reproduce MSU's historical 24x96-ft tomato budget arithmetic.
+
+        Source: https://extension.msstate.edu/publications/greenhouse-tomato-budgets-for-mississippi
+        This is an arithmetic reference only; its 2020 costs are not current
+        prices, independent market data, or a yield recommendation.
+        """
+        sqft_to_m2 = Decimal("0.09290304")
+        lb_to_kg = Decimal("0.45359237")
+        area_m2 = Decimal("2304") * sqft_to_m2
+        cases = (
+            ("spring", Decimal("8000"), Decimal("3640"), Decimal("4036"), "0.96"),
+            ("fall", Decimal("6000"), Decimal("2936"), Decimal("3044"), "1.00"),
+            ("continuous", Decimal("14000"), Decimal("5828"), Decimal("7080"), "0.92"),
+        )
+        for name, yield_lb, direct_cost, fixed_cost, published_break_even_lb in cases:
+            with self.subTest(crop_case=name):
+                total_cost = direct_cost + fixed_cost
+                yield_kg = yield_lb * lb_to_kg
+                input_data = {
+                    "currency": "USD",
+                    "area_m2": str(area_m2),
+                    "expected_yield_kg_per_m2": str(yield_kg / area_m2),
+                    "price_per_kg": str(total_cost / yield_kg),
+                    "variable_cost_per_m2": str(direct_cost / area_m2),
+                    "fixed_cost_total": str(fixed_cost),
+                    "rejection_rate_percent": 0,
+                }
+                result = calculate(input_data)["results"]
+                threshold = Decimal(result["break_even_price_per_kg"])
+                exact_threshold = total_cost / yield_kg
+                self.assertGreaterEqual(threshold, exact_threshold)
+                self.assertLess(threshold - Decimal("0.01"), exact_threshold)
+                self.assertEqual(
+                    (total_cost / yield_lb).quantize(Decimal("0.01")),
+                    Decimal(published_break_even_lb),
+                )
+
     def test_cli_reads_input_and_writes_json(self):
         with tempfile.TemporaryDirectory() as root:
             source = Path(root) / "input.json"
