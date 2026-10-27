@@ -180,13 +180,12 @@ chmod 700 "$target/periodic-dispatch.sh"
 bash -n "$target/periodic-dispatch.sh"
 entries="$(grep -c "$marker" "$backup/crontab-before.txt" || true)"
 test "$entries" -le 1
-if test "$entries" -eq 0;then
- cp "$backup/crontab-before.txt" "$backup/crontab-proposed.txt"
- printf '3-59/5 * * * * /bin/bash %s # %s\n' "$target/periodic-dispatch.sh" "$marker" >> "$backup/crontab-proposed.txt"
+desired_dispatch="* * * * * /bin/bash $target/periodic-dispatch.sh # $marker"
+if ! grep -Fxq "$desired_dispatch" "$backup/crontab-before.txt";then
+ awk -v marker="$marker" 'index($0,marker)==0' "$backup/crontab-before.txt" > "$backup/crontab-proposed.txt"
+ printf '%s\n' "$desired_dispatch" >> "$backup/crontab-proposed.txt"
  test "$(crontab -l | sha256sum | awk '{print $1}')" = "$(sha256sum "$backup/crontab-before.txt" | awk '{print $1}')"
  crontab - < "$backup/crontab-proposed.txt"
-else
- grep -Fq "$target/periodic-dispatch.sh" "$backup/crontab-before.txt"
 fi
 for job in "$marker" SAEIT_FACTORY_EVERY_MINUTE_V1 SAEIT_FACTORY_LIFECYCLE_12_V1 SAEIT_FACTORY_FORTY_FAMILY_MASTER_V1 SAEIT_FACTORY_BUILD50_FORTY_FAMILY_BRIDGE_V1;do
  test "$(crontab -l | grep -c "$job")" -eq 1
