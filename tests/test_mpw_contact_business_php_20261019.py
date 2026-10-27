@@ -14,7 +14,7 @@ def test_new_contact_branch_is_scoped_and_does_not_modify_allowed_routes():
     # on clean GitHub Actions checkouts despite correct, unchanged production code.
     allowed=re.search(r"\$allowed\s*=\s*\[(.*?)\];",opening,re.S)
     assert allowed,"Shared shell route inventory is missing"
-    pairs=re.findall(r"'([a-z-]+)'\\s*=>\\s*'(/[^']*/)'",allowed.group(1))
+    pairs=re.findall(r"'([a-z-]+)'\s*=>\s*'(/[^']*/)'",allowed.group(1))
     names=('store','games','ai','contact','support','privacy','terms','cookies',
            'products','blockchain','commerce','crypto-payments','global-business',
            'research-lab','canada-vision','agro-industry','agriculture',
