@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
-import {removeEnemyAndRetargetMissiles,missilePathBlocked} from '../../games/ramadan-war/missile-targets.mjs';
+import {removeEnemyAndRetargetMissiles,missilePathBlocked,missileMotionValid} from '../../games/ramadan-war/missile-targets.mjs';
 
 test('removing an earlier enemy preserves missile homing on the original surviving target', () => {
   const enemies = [{name:'a'}, {name:'b'}, {name:'c'}];
@@ -39,7 +39,7 @@ test('invalid removal does not mutate active world or missile targets', () => {
 test('game cleanup uses target-preserving removal and reversible deployment includes helper', () => {
   const game = readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
   const deploy = readFileSync(new URL('../../games/ramadan-war/deploy.py',import.meta.url),'utf8');
-  assert.match(game,/import \{removeEnemyAndRetargetMissiles,missilePathBlocked\} from '\.\/missile-targets\.mjs'/);
+  assert.match(game,/import \{removeEnemyAndRetargetMissiles,missilePathBlocked,missileMotionValid\} from '\.\/missile-targets\.mjs'/);
   assert.match(game,/removeEnemyAndRetargetMissiles\(world\.enemies,world\.missiles,i\)/);
   assert.match(deploy,/ASSETS=\[[^\n]*'missile-targets\.mjs'/);
   assert.match(deploy,/b'\.\/missile-targets\.mjs' in new\['game\.js'\]/);
@@ -96,9 +96,9 @@ test('a normal unobstructed rocket trajectory remains playable', () => {
 
 test('corrupted rocket velocities and missing collision callback fail closed', () => {
   for(const vx of [NaN,Infinity,100000]) {
-    assert.equal(missilePathBlocked({x:2.5,y:7.5,vx,vy:0},.04,()=>false),true);
+    assert.equal(missilePathBlocked({x:2.5,y:7.5,vx,vy:0,life:4},.04,()=>false),true);
   }
-  assert.equal(missilePathBlocked({x:2.5,y:7.5,vx:8,vy:0},.04,null),true);
+  assert.equal(missilePathBlocked({x:2.5,y:7.5,vx:8,vy:0,life:4},.04,null),true);
 });
 
 test('live-target and targetless missiles both use wall policy before moving', () => {
@@ -107,4 +107,16 @@ test('live-target and targetless missiles both use wall policy before moving', (
   assert.match(loop,/if\(missilePathBlocked\(m,dt,\(x,y\)=>tile\(x,y\)!==0\)\)/);
   assert.doesNotMatch(loop,/else if\(tile\(\(m\.x\+m\.vx\*dt\)/);
   assert.ok(loop.indexOf('missilePathBlocked(')<loop.indexOf('m.x+=m.vx*dt'),'wall check precedes missile movement');
+});
+
+test('invalid restored rockets are removed without granting free explosion damage', () => {
+  const invalid={x:2.5,y:7.5,vx:100000,vy:0,life:4};
+  assert.equal(missileMotionValid(invalid,.04),false);
+  assert.equal(missilePathBlocked(invalid,.04,()=>false),true);
+  const normal={x:2.5,y:7.5,vx:8,vy:0,life:4};
+  assert.equal(missileMotionValid(normal,.04),true);
+  const game=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
+  const loop=game.slice(game.indexOf('for(const m of world.missiles){'),game.indexOf('for(let i=world.enemies.length-1;'));
+  assert.match(loop,/for\(const m of world\.missiles\)\{if\(!missileMotionValid\(m,dt\)\)\{m\.life=-1;continue\}/);
+  assert.match(loop,/if\(!missileMotionValid\(m,dt\)\)\{m\.life=-1;continue\}if\(missilePathBlocked/);
 });
