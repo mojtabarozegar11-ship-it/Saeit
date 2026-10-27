@@ -26,6 +26,19 @@ class VPSProductInstallerTests(unittest.TestCase):
         self.assertIn("ORDER_REQUIRED=false", script)
         self.assertNotIn("core_order", script)
 
+    def test_deployment_preflight_enforces_private_path_safety_and_disk_reserve(self):
+        """Never cut over when the runtime can escape a protected directory or fill disk."""
+        script = (Path(__file__).resolve().parents[1] /
+                  "deploy/install_autonomous_factory_products.sh").read_text(encoding="utf-8")
+        self.assertIn("FACTORY_PRODUCT_RUNTIME_PATH_UNSAFE", script)
+        self.assertIn('[[ -L "$protected_path" ]]', script)
+        self.assertIn('df -Pk "$base/private"', script)
+        self.assertIn("free_kib < 3145728", script)
+        self.assertIn("FACTORY_PRODUCT_DEPLOY_DISK_RESERVE_HOLD", script)
+        self.assertIn("FACTORY_FLAGSHIP_SOURCE_INSTALLED_BYTE_FOR_BYTE=PASS", script)
+        self.assertIn("FACTORY_FLAGSHIP_SOURCE_ACTIVATION_MISMATCH", script)
+        self.assertIn("cmp -s", script)
+
     def test_manufacturer_policy_dependency_survives_vps_install_and_transport(self):
         """Prevent deploying a maker that cannot import its private passport policy."""
         source = Path(__file__).resolve().parents[1]

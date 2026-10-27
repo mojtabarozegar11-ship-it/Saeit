@@ -25,6 +25,19 @@ if ! "$python" -c 'import openpyxl; assert openpyxl.__version__ == "3.1.5"' >/de
 fi
 test -d "$ops"
 test -d "$base/private"
+# Fail closed before modifying the live runtime: a malicious or stale symlink
+# must never redirect backups, manufacturing, or private buyer artifacts.
+for protected_path in "$base/private" "$ops" "$ops/backups" "$stage" "$scripts" "$recipes" "$private"; do
+  if [[ -L "$protected_path" ]]; then
+    echo "FACTORY_PRODUCT_RUNTIME_PATH_UNSAFE"; exit 1
+  fi
+done
+# Keep room for the compressed rollback archive plus further minute cycles.
+# A full disk would otherwise strand manufacturing in a partially restored state.
+free_kib="$(df -Pk "$base/private" | awk 'NR==2 {print $4}')"
+if [[ ! "$free_kib" =~ ^[0-9]+$ ]] || (( free_kib < 3145728 )); then
+  echo "FACTORY_PRODUCT_DEPLOY_DISK_RESERVE_HOLD"; exit 1
+fi
 test -f "$repo/scripts/factory_product_maker.py"
 # The maker imports this mandatory, private, fail-closed personal-owner policy.
 # Missing this file previously caused manufacturing/import failures after cutover.
@@ -115,6 +128,14 @@ if ! mv "$incoming" "$recipes"; then
   echo "RECIPE_ACTIVATION_FAILED"; exit 1
 fi
 incoming=""
+
+# Verify the exact reviewed flagship calculator reached the active inventory.
+# This is a source-integrity assertion, not an independent quality certificate.
+if ! cmp -s "$repo/product_recipes/farm_enterprise_economics/calculator.py" \
+            "$recipes/farm_enterprise_economics/calculator.py"; then
+  echo "FACTORY_FLAGSHIP_SOURCE_ACTIVATION_MISMATCH"; exit 1
+fi
+echo "FACTORY_FLAGSHIP_SOURCE_INSTALLED_BYTE_FOR_BYTE=PASS"
 
 # Quality gate must exist and compile BEFORE any production cycle or cron change.
 "$python" -B -c 'import ast, pathlib, sys; [ast.parse(pathlib.Path(x).read_text(encoding="utf-8")) for x in sys.argv[1:]]' \
