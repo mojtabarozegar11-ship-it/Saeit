@@ -148,6 +148,55 @@
     container.append(h("p","Scope: "+report.review_scope,"a-small"));
     container.append(h("p",report.final_disclaimer,"a-small"));
   }
+  function downloadCaseReport(details) {
+    const exportData={
+      schema:"AYAR-PRIVATE-REVIEW-EXPORT-v1",
+      exported_at:new Date().toISOString(),
+      case_id:details.case_id, product_name:details.product_name,
+      product_version:details.product_version, category:details.category,
+      case_history:details.events, review:details.review,
+      notice:"Reviewer-attested assessment only; not accredited or independently certified. This downloaded JSON is not cryptographically signed."
+    };
+    const url=URL.createObjectURL(new Blob([JSON.stringify(exportData,null,2)],{type:"application/json"}));
+    const anchor=document.createElement("a");anchor.href=url;
+    anchor.download="AYAR-"+details.case_id+"-assessment.json";
+    document.body.append(anchor);anchor.click();anchor.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),3000);
+  }
+  function addApplicantFollowup(target,details) {
+    if(target.id!=="casePanel" || details.status!=="needs_information")return;
+    const section=h("section","","a-followup");
+    section.append(h("small","APPLICANT RESPONSE / REQUESTED INFORMATION","a-overline"));
+    section.append(h("h3","Respond to the review team"));
+    section.append(h("p","A reviewer requested more information. Your response becomes part of this case's permanent event history. You may attach up to three additional evidence files.","a-small"));
+    const form=h("form","","a-followup-form");
+    const label=h("label","Your response and evidence references *");label.htmlFor="followupNote";
+    const note=h("textarea");note.id="followupNote";note.required=true;
+    note.minLength=12;note.maxLength=2000;
+    note.placeholder="Answer the staff question and describe exactly what has changed (12 characters minimum)…";
+    const fileLabel=h("label","Additional PDF, PNG, JPG or TXT files (optional)");fileLabel.htmlFor="followupFiles";
+    const files=document.createElement("input");files.type="file";files.id="followupFiles";
+    files.multiple=true;files.accept=".pdf,.png,.jpg,.jpeg,.txt";
+    const button=h("button","Send follow-up securely ↗","a-button");button.type="submit";
+    form.append(label,note,fileLabel,files,button);section.append(form);target.append(section);
+    form.addEventListener("submit",async event=>{
+      event.preventDefault();
+      const extra=Array.from(files.files||[]);
+      if(extra.length>3 || extra.some(f=>f.size>4*1024*1024) || extra.reduce((n,f)=>n+f.size,0)>10*1024*1024){
+        message("Maximum three files, up to 4 MB each and 10 MB total.","error");return;
+      }
+      const credentials=$("trackForm");button.disabled=true;
+      try {
+        const args={case_id:field(credentials,"case_id").value,
+          access_key:field(credentials,"access_key").value,note:note.value};
+        await request("reply",args,extra);
+        const updated=await request("status",{case_id:args.case_id,access_key:args.access_key});
+        renderCase(target,updated);
+        message("Your additional evidence was received and the case returned to the review queue.","success");
+      }catch(error){message(error.message,"error");}
+      finally{button.disabled=false;}
+    });
+  }
   function renderCase(target,details) {
     clear(target);
     target.append(h("h2",details.product_name));
@@ -163,13 +212,25 @@
     target.append(facts);
     target.append(h("h3","Recorded scope"));
     target.append(h("p",details.scope||"Not provided"));
-    if(details.review)renderReport(target,details.review);
+    if(details.files.length){
+      target.append(h("h3","Evidence inventory"));
+      const list=h("ul","","a-evidence-list");
+      for(const f of details.files)list.append(h("li",f.original_name+" · "+Math.ceil(f.size/1024)+" KB · SHA-256 "+f.sha256));
+      target.append(list);
+    }
+    if(details.review){
+      renderReport(target,details.review);
+      const exportButton=h("button","Download documented review (JSON) ↓","a-button a-button-secondary");
+      exportButton.type="button";exportButton.addEventListener("click",()=>downloadCaseReport(details));
+      target.append(exportButton);
+    }
     target.append(h("h3","Case history"));
     for(const event of details.events){
       const div=h("div","","a-event");
       div.append(h("small",event.occurred_at),h("strong",event.action.replaceAll("_"," ")),h("div",event.detail));
       target.append(div);
     }
+    addApplicantFollowup(target,details);
   }
   function setupTracking() {
     const form=$("trackForm");

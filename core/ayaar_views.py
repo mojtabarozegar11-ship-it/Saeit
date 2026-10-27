@@ -89,6 +89,7 @@ def _api(request):
                 "attachment_limit": cases.MAX_FILE,
                 "max_attachments": cases.MAX_ATTACHMENTS,
                 "case_tracking": True, "payment_enabled": False,
+                "applicant_followups": True, "report_export": True,
                 "independent_certification_enabled": False,
                 "staff": bool(request.user.is_authenticated and request.user.is_staff),
             })
@@ -108,6 +109,11 @@ def _api(request):
         elif action == "status":
             result = cases.case_status(
                 payload.get("case_id", ""), payload.get("access_key", ""), settings.SECRET_KEY
+            )
+        elif action == "reply":
+            result = cases.append_case_evidence(
+                payload.get("case_id", ""), payload.get("access_key", ""),
+                payload.get("note", ""), request.FILES.getlist("files"), settings.SECRET_KEY
             )
         elif action == "delete":
             result = cases.delete_case(

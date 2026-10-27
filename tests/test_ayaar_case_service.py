@@ -95,6 +95,50 @@ class CaseServiceTests(unittest.TestCase):
         with self.assertRaises(service.CaseError):
             service.set_status(item["case_id"], "declined", "staff:12", "Cannot silently change completed result")
 
+    def test_followup_after_staff_information_request(self):
+        item = self.create()
+        service.set_status(item["case_id"], "needs_information", "staff:8", "Please provide updated permissions")
+        extra = FakeEvidence("permissions.txt", b"Updated publication authorization with version and scope")
+        answer = service.append_case_evidence(
+            item["case_id"], item["access_key"],
+            "This is the renewed permissions record for version 1.0.", [extra], self.secret
+        )
+        self.assertEqual(answer["status"], "submitted")
+        self.assertEqual(answer["attachments_added"], 1)
+        tracked = service.case_status(item["case_id"], item["access_key"], self.secret)
+        self.assertEqual(tracked["files"][0]["original_name"], "permissions.txt")
+        self.assertEqual(tracked["events"][-1]["action"], "customer_followup")
+        self.assertEqual(service.staff_list()[0]["file_count"], 1)
+
+    def test_followup_access_and_status_are_enforced(self):
+        item = self.create()
+        with self.assertRaises(service.CaseError):
+            service.append_case_evidence(item["case_id"], item["access_key"],
+                                         "This is a premature case response", [], self.secret)
+        service.set_status(item["case_id"], "needs_information", "staff:8", "Provide updated product tests")
+        with self.assertRaises(service.CaseError):
+            service.append_case_evidence(item["case_id"], "incorrect-key", "Updated product test observations", [], self.secret)
+        service.append_case_evidence(item["case_id"], item["access_key"],
+                                     "Updated reproducible testing notes attached in text", [], self.secret)
+        self.assertEqual(service.case_status(item["case_id"], item["access_key"], self.secret)["status"], "submitted")
+        service.submit_review(item["case_id"], "staff:8", make_review())
+        with self.assertRaises(service.CaseError):
+            service.append_case_evidence(item["case_id"], item["access_key"],
+                                         "Do not silently amend signed findings", [], self.secret)
+
+    def test_followup_attachment_quota_prevents_unbounded_growth(self):
+        item = self.create()
+        for cycle in range(4):
+            service.set_status(item["case_id"], "needs_information", "staff:3", "More file provenance required")
+            extra = [FakeEvidence("proof.txt", b"Evidence of rights and build provenance") for _ in range(3)]
+            service.append_case_evidence(item["case_id"], item["access_key"],
+                                         "Reply with three evidence documents, cycle %s" % cycle, extra, self.secret)
+        service.set_status(item["case_id"], "needs_information", "staff:3", "Provide a fifth reply")
+        with self.assertRaises(service.CaseError):
+            service.append_case_evidence(item["case_id"], item["access_key"],
+                                         "Additional unbounded attachment request", [FakeEvidence("extra.txt", b"xyz")], self.secret)
+        self.assertEqual(len(service.staff_case(item["case_id"])["files"]), 12)
+
     def test_no_publication_without_consent(self):
         item = self.create(public=False)
         result = service.submit_review(item["case_id"], "staff:1", make_review())

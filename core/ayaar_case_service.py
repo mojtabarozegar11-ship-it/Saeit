@@ -25,6 +25,9 @@ MAX_ATTACHMENTS = 3
 MAX_REQUEST = 10 * 1024 * 1024
 MAX_TOTAL_FILES = 250 * 1024 * 1024
 MAX_CASES_PER_HOUR = 4
+MAX_FOLLOWUPS = 8
+MAX_FILES_PER_CASE = 12
+MAX_BYTES_PER_CASE = 30 * 1024 * 1024
 CASE_TYPES = {"ebook", "game", "software", "media"}
 SERVICE_TYPES = {"screening", "professional", "enterprise"}
 STATUSES = {"submitted", "in_review", "needs_information", "reviewed", "declined"}
@@ -315,6 +318,84 @@ def case_status(code, access_key, secret_key):
         if row is None or not hmac.compare_digest(digest, row["secret_hash"]):
             raise CaseError("Invalid case reference or access key", 403)
         return as_case(db, code)
+
+
+def append_case_evidence(code, access_key, note, uploads, secret_key):
+    """Authenticated applicant reply to a *staff-requested* evidence question.
+
+    Preserves the original case and all previous events; does not overwrite any
+    reviewer statement or accept follow-ups to finalized/declined cases.
+    """
+    code = clean(code, 28, True)
+    access_key = clean(access_key, 100, True)
+    note = clean(note, 2000, True)
+    if len(note) < 12:
+        raise CaseError("Explain your follow-up in at least twelve characters")
+    if len(uploads) > MAX_ATTACHMENTS:
+        raise CaseError("Maximum three additional evidence attachments")
+    checks = [classify_file(item) for item in uploads]
+    new_bytes = sum(size for _, size, _ in checks)
+    if new_bytes > MAX_REQUEST:
+        raise CaseError("Total upload limit exceeded")
+    files_dir = root() / "evidence"
+    if not files_dir.is_dir() or files_dir.is_symlink():
+        raise CaseError("Private evidence workspace is unavailable", 503)
+    saved = []
+    try:
+        with database() as db, db:
+            row = db.execute(
+                "SELECT secret_hash,status FROM cases WHERE code=?", (code,)
+            ).fetchone()
+            digest = hmac.new(secret_key.encode(), access_key.encode(), hashlib.sha256).hexdigest()
+            if row is None or not hmac.compare_digest(digest, row["secret_hash"]):
+                raise CaseError("Invalid case reference or access key", 403)
+            if row["status"] != "needs_information":
+                raise CaseError("Follow-ups are accepted only after an information request", 409)
+            count = db.execute(
+                "SELECT COUNT(*) FROM events WHERE code=? AND action='customer_followup'", (code,)
+            ).fetchone()[0]
+            if count >= MAX_FOLLOWUPS:
+                raise CaseError("Follow-up limit reached; contact the review team", 429)
+            current_files, current_bytes = db.execute(
+                "SELECT COUNT(*),COALESCE(SUM(size),0) FROM files WHERE code=?", (code,)
+            ).fetchone()
+            used = db.execute("SELECT COALESCE(SUM(size),0) FROM files").fetchone()[0]
+            if current_files + len(checks) > MAX_FILES_PER_CASE or current_bytes + new_bytes > MAX_BYTES_PER_CASE:
+                raise CaseError("This dossier has reached its evidence quota", 413)
+            if used + new_bytes > MAX_TOTAL_FILES:
+                raise CaseError("Evidence storage is currently at capacity", 503)
+            for upload, (filename, size, suffix) in zip(uploads, checks):
+                file_id = secrets.token_hex(12)
+                stored = file_id + suffix
+                destination = files_dir / stored
+                saved.append(destination)
+                with destination.open("xb") as stream:
+                    os.chmod(destination, 0o600)
+                    content_hash = hashlib.sha256()
+                    total = 0
+                    for block in upload.chunks(chunk_size=65536):
+                        total += len(block)
+                        if total > MAX_FILE:
+                            raise CaseError("Oversized upload")
+                        stream.write(block)
+                        content_hash.update(block)
+                if total != size:
+                    raise CaseError("Upload length mismatch")
+                db.execute(
+                    "INSERT INTO files(id,code,original_name,stored_name,size,sha256) VALUES(?,?,?,?,?,?)",
+                    (file_id, code, filename, stored, size, content_hash.hexdigest())
+                )
+            db.execute("UPDATE cases SET status='submitted',updated_at=? WHERE code=?", (now(), code))
+            event(db, code, "customer", "customer_followup", note)
+    except BaseException:
+        for item in saved:
+            try:
+                item.unlink()
+            except OSError:
+                pass
+        raise
+    return {"case_id": code, "status": "submitted", "attachments_added": len(checks),
+            "message": "Response recorded and returned to the review queue"}
 
 
 def delete_case(code, access_key, secret_key):
