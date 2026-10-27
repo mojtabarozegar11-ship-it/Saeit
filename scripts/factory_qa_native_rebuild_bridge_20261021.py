@@ -748,7 +748,7 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=(),pro
         if is_edition:
             original=root/"quality-excellence"/"document-edition-private-stock"/recipe/"manufacturing_manifest.json"
         prior=checked_json(original) if original.is_file() and not original.is_symlink() else {}
-        family_id=prior.get("family_id")
+        family_id=prior.get("family_id") or order.get("family_id")
         if not isinstance(family_id,str) or not re.fullmatch(r"F(?:0[1-9]|[1-3][0-9]|40)",family_id):
             totals["missing_source"]+=1
             continue
