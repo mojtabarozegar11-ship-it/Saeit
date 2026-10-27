@@ -85,10 +85,14 @@ def verify_sources(inbox, docroot):
     source_manifest=json.loads(package_manifest.read_text(encoding="utf8"))
     if not isinstance(source_manifest,dict):
         raise ValueError("FACTORY_PRIVATE_RECIPE_MANIFEST_INVALID")
-    if source_manifest.get("professional_quality_standard")=="100_groups_x_10":
-        quality=loaded("factory_premium_commercial_guard",
-                       "factory_commercial_quality_release_guard_v1.py")
-        quality.require_quality_clearance(inbox,RECIPE,digest,source_manifest,package)
+    quality=loaded("factory_premium_commercial_guard",
+                   "factory_commercial_quality_release_guard_v1.py")
+    clearance=quality.require_quality_clearance(
+        inbox,RECIPE,digest,source_manifest,package
+    )
+    if (clearance.get("status")!="VERIFIED_SIGNED_PREMIUM_1000"
+            or clearance.get("1000_quality_verified") is not True):
+        raise ValueError("QC1000_REQUIRED_FOR_FACTORY_EXIT")
     body = release.read_text(encoding="utf-8")
     if TITLE not in body or digest not in body or "Free Toolkit" not in body:
         raise ValueError("PUBLIC_FREE_TOOLKIT_CONTENT_NOT_VERIFIED")
