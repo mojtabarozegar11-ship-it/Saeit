@@ -30,6 +30,11 @@ jobs:
           python3 -m py_compile games/ramadan-war/deploy.py
           test "$(wc -c < games/ramadan-war/soldier-rigged-ccby.glb)" -eq 3094592
           test "$(wc -c < games/ramadan-war/m24-sniper-ccby.glb)" -eq 1247684
+      - name: Verify complete, reversible Ramadan release bundle and local JS imports
+        run: |
+          set -euo pipefail
+          python3 games/ramadan-war/check_release_dependencies.py
+          python3 -m unittest discover -s games/ramadan-war -p 'test_release_dependencies.py'
       - name: Read-only protection check of currently live IT cards
         run: |
           python3 - <<'PY'
