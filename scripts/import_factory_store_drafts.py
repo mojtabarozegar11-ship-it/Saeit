@@ -86,12 +86,32 @@ def import_receipts(root, app, document_root, owner_username=None, *, apply=Fals
         raise RuntimeError("IDENTIFIED_STORE_OWNER_NOT_PRESENT")
     Product = apps.get_model("core", "Product")
     verifier = receiver_module()
+    quality_path = Path(__file__).resolve().with_name(
+        "factory_commercial_quality_release_guard_v1.py"
+    )
+    if quality_path.is_symlink() or not quality_path.is_file():
+        raise RuntimeError("STORE_FINAL_QUALITY_REVIEW_GUARD_MISSING")
+    quality_spec = importlib.util.spec_from_file_location(
+        "factory_store_final_quality_guard", str(quality_path)
+    )
+    if quality_spec is None or quality_spec.loader is None:
+        raise RuntimeError("STORE_FINAL_QUALITY_REVIEW_GUARD_UNAVAILABLE")
+    quality_guard = importlib.util.module_from_spec(quality_spec)
+    quality_spec.loader.exec_module(quality_guard)
     created, unchanged, examined = 0, 0, 0
     for recipe, digest in catalog_receipts(root):
         if not verifier.status(root, recipe, digest):
             raise RuntimeError("STOREFRONT_RECEIPT_INTEGRITY_FAILED")
         manifest_path = root / "packages" / recipe / (digest + ".json")
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        package_path = root / "packages" / recipe / (digest + ".zip")
+        clearance = quality_guard.require_quality_clearance(
+            root, recipe, digest, manifest, package_path
+        )
+        if (clearance.get("status") != "VERIFIED_SIGNED_PREMIUM_1000"
+                or clearance.get("1000_quality_verified") is not True
+                or clearance.get("chatgpt_final_review") != "CHATGPT_FINAL_REVIEW_VERIFIED"):
+            raise RuntimeError("STORE_BLOCKED_UNTIL_CHATGPT_AND_QC1000_APPROVE")
         title = str(manifest.get("name") or "").strip()
         if not title or len(title) > 300:
             raise RuntimeError("PRODUCT_TITLE_INVALID")
@@ -120,6 +140,13 @@ def import_receipts(root, app, document_root, owner_username=None, *, apply=Fals
                 "factory_storefront": "mojplaywin",
                 "factory_status": "needs_editorial_pricing_and_owner_approval",
                 "factory_software_qa": "passed",
+                "factory_quality_1000_verified": True,
+                "factory_chatgpt_final_review": "approved_for_store",
+                "factory_chatgpt_reviewer": "ChatGPT (Codex)",
+                "factory_chatgpt_review_receipt": (
+                    "quality-clearance/" + recipe + "/" + digest
+                    + "/chatgpt-final-review.json"
+                ),
                 "factory_factual_and_market_qa": "pending",
                 "factory_license_review": "pending",
                 "factory_publication_permission": False,
