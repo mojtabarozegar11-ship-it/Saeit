@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {validateCampaignSave, restoreRecoveryPickups, reconcileBossEncounter, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove} from '../../games/ramadan-war/save-validation.mjs';
+import {validateCampaignSave, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove} from '../../games/ramadan-war/save-validation.mjs';
 
 const fresh = () => ({
   hero: 0, mission: 0, lives: 100, x: 2.5, y: 7.5, angle: 0,
@@ -50,7 +50,7 @@ test('preserves valid objective progress while refusing corrupted mission comple
 test('reversible release manifest ships and checks every new imported save module', () => {
   const deploy = readFileSync(new URL('../../games/ramadan-war/deploy.py', import.meta.url), 'utf8');
   const client = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
-  assert.match(client, /import \{validateCampaignSave, restoreRecoveryPickups, reconcileBossEncounter, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove\} from '\.\/save-validation\.mjs'/);
+  assert.match(client, /import \{validateCampaignSave, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove\} from '\.\/save-validation\.mjs'/);
   assert.match(deploy, /ASSETS=\[[^\n]*'save-validation\.mjs'/);
   assert.match(deploy, /b'\.\/save-validation\.mjs' in new\['game\.js'\]/);
 });
@@ -224,4 +224,33 @@ test('runtime restores boss flags and spawns a missing boss even when kill quota
   const client=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
   assert.match(client,/reconcileBossEncounter\(world\)/);
   assert.match(client,/world\.mission===5&&!world\.endless&&!world\.bossSpawned&&!world\.objective\?\.bossDefeated/);
+});
+
+
+test('wall-embedded saved player is safely relocated without losing progress or rewards', () => {
+  const s={...fresh(),mission:2,x:4.5,y:6.5,score:1250,points:8,missionKills:3,
+    objective:{done:1,hold:0,bossDefeated:false}};
+  assert.equal(validateCampaignSave(s),true,'numeric-only validation accepts old wall position');
+  assert.equal(restorePlayerPosition(s,(x,y)=>x===4&&y===6),true);
+  assert.equal(s.x,2.5);
+  assert.equal(s.y,7.5);
+  assert.equal(s.score,1250);
+  assert.equal(s.points,8);
+  assert.equal(s.missionKills,3);
+  assert.equal(s.objective.done,1);
+  assert.equal(restorePlayerPosition(s,(x,y)=>x===4&&y===6),false,'idempotent recovery');
+});
+
+test('valid player position is not moved and an unavailable fallback fails closed', () => {
+  const valid={...fresh(),x:6.5,y:5.5};
+  assert.equal(restorePlayerPosition(valid,(x,y)=>x===4&&y===6),false);
+  assert.equal(valid.x,6.5);
+  const blocked={...fresh(),x:4.5,y:6.5};
+  assert.equal(restorePlayerPosition(blocked,(x,y)=>(x===4&&y===6)||(x===2&&y===7)),false);
+  assert.equal(blocked.x,4.5,'do not move to an obstructed fallback');
+});
+
+test('campaign restore repairs obstructed player location before engine build', () => {
+  const client=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
+  assert.match(client,/restorePlayerPosition\(world,\(x,y\)=>tile\(x,y\)!==0\);hero=world\.hero/);
 });
