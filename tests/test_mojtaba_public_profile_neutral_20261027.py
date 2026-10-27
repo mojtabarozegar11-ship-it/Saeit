@@ -77,6 +77,17 @@ class PublicClaimsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             mod.strict_replace(updated, mod.SEO_OLD, mod.SEO_NEW, "Contact SEO")
 
+    def test_multiple_exact_shared_meta_references_are_rewritten(self):
+        source = "\n".join([
+            '<meta name="description" content="Professional collaboration in Vancouver or remotely.">',
+            '<meta property="og:description" content="Professional collaboration in Vancouver or remotely.">',
+        ])
+        updated = mod.revise_shared_meta(source)
+        self.assertEqual(updated.count("Vancouver"), 0)
+        self.assertEqual(updated.count(mod.SEO_NEW), 2)
+        with self.assertRaises(ValueError):
+            mod.revise_shared_meta('meta="in Vancouver or remotely"')
+
     def test_duplicate_meta_block_rejected(self):
         with self.assertRaises(ValueError):
             mod.description(
