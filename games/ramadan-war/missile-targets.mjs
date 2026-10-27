@@ -18,14 +18,18 @@ export function removeEnemyAndRetargetMissiles(enemies, missiles, removedIndex) 
 // Check the entire movement segment, not just the endpoint: an untrusted
 // restored velocity or a slow frame must not let a missile tunnel through walls.
 // Fail closed on invalid state and cap the work to the 16x16 arena dimensions.
+export function missileMotionValid(missile, dt) {
+  return Boolean(missile) && Number.isFinite(dt) && dt >= 0 &&
+    Number.isFinite(missile.life) && missile.life > 0 &&
+    Number.isFinite(missile.x) && Number.isFinite(missile.y) &&
+    Number.isFinite(missile.vx) && Number.isFinite(missile.vy) &&
+    Math.hypot(missile.vx * dt, missile.vy * dt) <= 16;
+}
+
 export function missilePathBlocked(missile, dt, isWall) {
-  if (!missile || !Number.isFinite(dt) || dt < 0 ||
-      !Number.isFinite(missile.x) || !Number.isFinite(missile.y) ||
-      !Number.isFinite(missile.vx) || !Number.isFinite(missile.vy) ||
-      typeof isWall !== 'function') return true;
+  if (!missileMotionValid(missile, dt) || typeof isWall !== 'function') return true;
   const dx = missile.vx * dt, dy = missile.vy * dt;
   const distance = Math.hypot(dx, dy);
-  if (!Number.isFinite(distance) || distance > 16) return true;
   const steps = Math.max(1, Math.ceil(distance / 0.15));
   for (let i = 0; i <= steps; i++) {
     const x = missile.x + dx * i / steps;
