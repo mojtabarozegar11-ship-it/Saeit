@@ -48,7 +48,7 @@ test('all finite-resource actions and reload fail closed outside active gameplay
 
 test('focus loss releases sticky movement and fire and pauses the active game', () => {
   const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
-  assert.match(game, /function releaseGameInputs\(\)\{keys=\{\};fireHeld=false;joyId=null;aimId=null;joyF=joyS=0/);
+  assert.match(game, /function releaseGameInputs\(\)\{keys=\{\};fireHeld=false;fireId=null;joyId=null;aimId=null;joyF=joyS=0/);
   assert.match(game, /addEventListener\('blur',\(\)=>\{releaseGameInputs\(\);if\(screen==='game'\)/);
   assert.match(game, /visibilitychange.*document\.hidden/);
   assert.match(game, /function showScreen\(name\)\{if\(name!=='game'\)releaseGameInputs\(\)/);
@@ -91,5 +91,6 @@ test('scope toggle state and game feedback are exposed to assistive technology',
 test('lost pointer capture releases mobile movement and continuous fire', () => {
   const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
   assert.ok(game.includes("stick.onlostpointercapture=endStick"), 'joystick stops after pointer capture loss');
-  assert.ok(game.includes("$('#fire').onlostpointercapture=()=>fireHeld=false"), 'continuous fire stops after capture loss');
+  assert.ok(game.includes("$('#fire').onlostpointercapture=endFire"), 'fire release must handle capture loss');
+  assert.match(game, /function endFire\(e\)\{if\(!isOwnedGameplayPointer\(fireId,e\.pointerId\)\)return;fireId=null;fireHeld=false\}/, 'only owning pointer releases continuous fire');
 });
