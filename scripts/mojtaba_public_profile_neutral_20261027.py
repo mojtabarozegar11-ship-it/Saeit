@@ -156,7 +156,13 @@ def plan() -> dict[str, tuple[bytes, bytes]]:
         elif rel.endswith("/contact.html"):
             revised = revise_contact(source)
         else:
-            revised = strict_replace(source, SEO_OLD, SEO_NEW, "Contact SEO source")
+            if rel != "templates/personal_site/base.html":
+                raise ValueError("Unexpected Contact metadata source path: " + rel)
+            count = source.count(SEO_OLD)
+            print("CONTACT_META_COPY_COUNT=" + str(count), flush=True)
+            if count not in (2, 3, 4):
+                raise ValueError("Unexpected number of shared Contact SEO references")
+            revised = source.replace(SEO_OLD, SEO_NEW)
         after = revised.encode("utf8")
         if after == before:
             raise ValueError("No difference in " + rel)
