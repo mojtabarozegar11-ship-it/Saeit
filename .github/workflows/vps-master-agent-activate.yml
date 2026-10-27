@@ -28,7 +28,7 @@ jobs:
     needs: verify
     if: github.event_name != 'pull_request' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - name: Validate private deployment sources
