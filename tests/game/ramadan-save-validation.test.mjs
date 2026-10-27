@@ -94,7 +94,8 @@ test('completed campaign stage resumes to its result panel; ongoing stage resume
   const active = fresh();
   assert.equal(resumeCampaignScreen(active), 'game');
   assert.equal(resumeCampaignScreen({...active, missionPassed: false}), 'game');
-  const cleared = {...active, missionPassed: true};
+  const cleared = {...active, missionPassed: true, missionKills: 4,
+    objective: {done: 2, hold: 0, bossDefeated: false}};
   assert.equal(validateCampaignSave(cleared), true);
   assert.equal(resumeCampaignScreen(cleared), 'success');
 });
@@ -104,6 +105,36 @@ test('rejects malformed completion flags and impossible cleared stage with livin
     assert.equal(validateCampaignSave({...fresh(), missionPassed}), false);
   const enemy = {x: 8, y: 7, type: 1, hp: 30};
   assert.equal(validateCampaignSave({...fresh(), missionPassed: true, enemies: [enemy]}), false);
+});
+
+test('completed stage flags cannot bypass actual stage objectives or kill quotas', () => {
+  const goals = [
+    {mission: 0, quota: 4, done: 2},
+    {mission: 1, quota: 5, done: 1, hold: 22},
+    {mission: 2, quota: 5, done: 3},
+    {mission: 3, quota: 6, done: 2},
+    {mission: 4, quota: 7, done: 1},
+    {mission: 5, quota: 8, done: 0, bossDefeated: true}
+  ];
+  for (const {mission, quota, done, hold = 0, bossDefeated = false} of goals) {
+    const state = {...fresh(), mission, missionKills: quota, missionPassed: true,
+      objective: {done, hold, bossDefeated}};
+    assert.equal(validateCampaignSave(state), true, 'valid completion stage ' + mission);
+    assert.equal(validateCampaignSave({...state, missionKills: quota - 1}), false,
+      'insufficient kills cannot clear stage ' + mission);
+    assert.equal(validateCampaignSave({...state, objective: null}), false,
+      'missing objectives cannot clear stage ' + mission);
+    if (mission === 1) {
+      assert.equal(validateCampaignSave({...state, objective: {...state.objective, hold: 21.99}}), false);
+      assert.equal(validateCampaignSave({...state, objective: {...state.objective, done: 0}}), false);
+    } else if (mission === 5) {
+      assert.equal(validateCampaignSave({...state, objective: {...state.objective, bossDefeated: false}}), false);
+    } else {
+      assert.equal(validateCampaignSave({...state, objective: {...state.objective, done: done - 1}}), false);
+    }
+    assert.equal(validateCampaignSave({...state, missionPassed: false}), true,
+      'ordinary in-progress saves remain compatible');
+  }
 });
 
 test('restore branch presents completed stage results instead of trapping player in arena', () => {
