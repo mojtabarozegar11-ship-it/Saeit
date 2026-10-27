@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 from django.core.management import call_command
 
-from core.economic_tool_pack import build_mvp_asset
-from core.models import AgentTask
+from core.economic_tool_pack import build_mvp_asset, offer_design
+from core.models import AgentTask, Product
 
 
 @pytest.mark.django_db
@@ -55,3 +55,24 @@ def test_mvp_builder_writes_private_verified_customer_workbook(tmp_path):
     assert "Launch gate" in document
     assert "Digital Project &amp; Automation Audit" in document
     assert "commercial_release" not in document
+
+
+@pytest.mark.django_db
+def test_offer_design_creates_isolated_inactive_draft_without_relabeling_catalog():
+    existing = Product.objects.create(
+        title="Existing customer workbook", product_type="book", price="12.00",
+        currency="USD", active=False, metadata={"custom": "preserve"},
+    )
+
+    result = offer_design({})
+
+    existing.refresh_from_db()
+    draft = Product.objects.get(metadata__commercial_status="offer_designed")
+    assert existing.title == "Existing customer workbook"
+    assert existing.metadata == {"custom": "preserve"}
+    assert draft.title == "Digital Project & Automation Audit"
+    assert draft.product_type == "service"
+    assert draft.active is False
+    assert draft.price == 0
+    assert draft.metadata["pricing_status"] == "requires_market_evidence"
+    assert result["evidence"]["value"]["active"] is False
