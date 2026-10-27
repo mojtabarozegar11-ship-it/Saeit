@@ -124,3 +124,12 @@ No independently verified degree, institutional affiliation, ORCID, residence, i
 **ZM-R01:** No genuine 24-sample integer count matrix, exact compatible RefSeq v2.0 FASTA/GTF pair, validated FASTQ MD5 or DESeq2/FDR result. **DATA REBUILD / NO SUBMISSION**. No 149.54GB download or VPS/cost incurred.
 
 **Pipeline:** 3 active manuscripts, 2 internal author-review revisions, 1 data-rebuild project; **0** author-approved, journal-submitted, accepted or published. The 46-topic future registry remains **questions only**. **No live website deployment, PR #1054 merge or restricted social activity.**
+
+
+## 27 October — AE C30 baseline availability and growth volatility (latest staging-only update)
+
+**New source-locked descriptive results:** In the dated **2026-only** WDI panel, the **153** economies with positive 2000/2019/2023 data have median observed 2019 agricultural value added per worker **$6,237.919**; the **16** with positive 2019/2023 but no eligible 2000 baseline have median **$2,840.965**. Their median **absolute** 2019–2023 annual log-growth rates are **2.316370** versus **4.759665** log-pp/year, respectively. The pooled 2019-level pairwise comparison is **868/2448 = 0.354575**; within-region comparisons give **191/461 = 0.414317** and show regional-composition sensitivity. These are descriptive selection diagnostics, not a missingness mechanism, causal finding or three-vintage revision result. [Read C30](../manuscripts/AE-2026-001/AE-2026-001_C30_2000_BASELINE_MISSINGNESS_2019_LEVEL_AND_VOLATILITY_SELECTION_2026-10-27.md).
+
+**Author-facing output:** The [consolidated English AE manuscript](../manuscripts/AE-2026-001/AE-2026-001_CONSOLIDATED_AUTHOR_REVIEW_MANUSCRIPT_2026-10-27.md) now includes C30 in Methods 2.8 and Results 3.6; [internal AI adversarial review and human-author delta](AE_2026_001_C30_AUTHOR_REVIEW_AND_INTERNAL_AI_CRITICAL_DECISION_2026-10-27.md) was prepared. These are **GitHub staging artifacts only**. No latest Word artifact or journal submission is asserted by this update.
+
+**Current stage:** AE and MR **MAJOR REVISION / NO SUBMISSION**; ZM **DATA REBUILD / NO SUBMISSION**. No human author approval, journal transfer, Manuscript ID, acceptance or publication. All 46 future-topic entries remain questions, not completed research. **No live website deployment**; PR #1054 must remain draft/unmerged; no prohibited social-account interaction.
