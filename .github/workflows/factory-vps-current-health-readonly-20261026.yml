@@ -8,6 +8,7 @@ on:
       - 'scripts/factory_strict_serial_fullcycle_v1.py'
       - 'deploy/install_factory_strict_serial_fullcycle_v1.sh'
       - '.github/workflows/factory-vps-current-health-readonly-20261026.yml'
+      - 'scripts/factory_private_json_hotfix_20261027.py'
 permissions: {contents: read}
 concurrency:
   group: factory-vps-current-health-readonly
