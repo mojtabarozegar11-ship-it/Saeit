@@ -3,7 +3,7 @@ const html=fs.readFileSync('games/crown-defender/index.html','utf8'), code=html.
 assert.match(html, /<link rel="canonical" href="https:\/\/mojplaywin\.com\/games\/crown-defender\/">/);
 assert.match(html, /<meta property="og:url" content="https:\/\/mojplaywin\.com\/games\/crown-defender\/">/);
 assert.match(html, /<meta name="twitter:card" content="summary">/);
-assert.match(html,/MOJ1 checkout is disabled pending verified TRON contract/);
+assert.match(html,/MOJ1 is the planned premium purchase asset; checkout is disabled pending verified TRON contract/);
 assert.doesNotMatch(code,/location\.href=item\.checkout/,'client must not navigate to legacy USD checkout');
 // Legacy score migration is a separate untrusted storage channel.
 const legacyLine=code.split('\n').find(line=>line.startsWith('let save=loadSave();try{'));
