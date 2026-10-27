@@ -72,6 +72,27 @@ const assert=require('node:assert/strict');
    await page.waitForFunction(n=>window.RamadanWarDebug.getState().shots>n,shotsBefore,{timeout:5000});
    console.log('RAMADAN_REAL_POINTER_FIRE_PASS',v.name);
 
+   // Browser-level ownership regression: an unrelated finger's pointerup must
+   // not stop a genuine held fire pointer. Run only against the local candidate.
+   if(['127.0.0.1','localhost'].includes(new URL(process.env.GAME_URL).hostname)){
+     const fireBox=await page.locator('#fire').boundingBox();
+     assert(fireBox&&fireBox.width>10,'fire control must be rendered');
+     await page.evaluate(()=>{window.__ramadanFireOwner=null;document.querySelector('#fire').addEventListener('pointerdown',e=>{if(e.isTrusted)window.__ramadanFireOwner=e.pointerId},{once:true})});
+     await page.mouse.move(fireBox.x+fireBox.width/2,fireBox.y+fireBox.height/2);
+     try{
+       await page.mouse.down();
+       assert.equal(await page.evaluate(()=>document.querySelector('#fire').hasPointerCapture(window.__ramadanFireOwner)),true,'real owner must hold pointer capture');
+       await page.evaluate(()=>{
+         const button=document.querySelector('#fire');
+         button.dispatchEvent(new PointerEvent('pointerdown',{pointerId:777,pointerType:'touch',bubbles:true}));
+         button.dispatchEvent(new PointerEvent('pointerup',{pointerId:777,pointerType:'touch',bubbles:true}));
+       });
+       assert.equal(await page.evaluate(()=>document.querySelector('#fire').hasPointerCapture(window.__ramadanFireOwner)),true,'unrelated pointer release must preserve owner capture');
+       console.log('RAMADAN_FIRE_POINTER_OWNERSHIP_PASS',v.name);
+     }finally{await page.mouse.up()}
+   }
+
+
 
    // Exercise the actual objective interactions on the local release candidate.
    if(['127.0.0.1','localhost'].includes(new URL(process.env.GAME_URL).hostname)){

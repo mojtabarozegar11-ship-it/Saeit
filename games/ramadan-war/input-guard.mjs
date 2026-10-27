@@ -44,3 +44,9 @@ export function canCaptureGameplayPointer(activePointerId, incomingPointerId, sc
   return screen === 'game' && activePointerId === null &&
     Number.isInteger(incomingPointerId) && incomingPointerId >= 0;
 }
+
+// A different finger's pointerup/cancel must never release a held control.
+export function isOwnedGameplayPointer(activePointerId, incomingPointerId) {
+  return Number.isInteger(activePointerId) && activePointerId >= 0 &&
+    activePointerId === incomingPointerId;
+}
