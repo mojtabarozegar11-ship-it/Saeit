@@ -11,12 +11,14 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--limit", type=int, default=50)
         parser.add_argument("--stale-after", type=int, default=900)
+        parser.add_argument("--agent-code", type=str, default=None)
 
     def handle(self, *args, **options):
         try:
             summary = RecoveryScheduler().recover(
                 limit=options["limit"],
                 stale_after_seconds=options["stale_after"],
+                agent_code=options["agent_code"],
             )
         except Exception as exc:
             raise CommandError(str(exc)) from exc
