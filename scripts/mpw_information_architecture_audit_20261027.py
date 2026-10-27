@@ -70,6 +70,10 @@ def main():
         for para in set(p["long_paragraphs"]):shared[para].append(p["url"])
     print("DUPLICATE_CANONICALS",repr({k:v for k,v in canonicals.items() if len(v)>1})[:5000])
     print("DUPLICATE_TITLES",repr({k:v for k,v in exact_titles.items() if len(v)>1})[:5000])
+    missing_h1=[p["url"].replace(BASE,"") for p in html_pages if len(p["h1"])!=1]
+    missing_canonical=[p["url"].replace(BASE,"") for p in html_pages if len(p["canonical"])!=1]
+    print("H1_COUNT_ANOMALIES",len(missing_h1),repr(missing_h1[:35]))
+    print("CANONICAL_COUNT_ANOMALIES",len(missing_canonical),repr(missing_canonical[:35]))
     seen_urls=[]
     for p in sorted(html_pages,key=lambda x:x["url"]):
         if p["main_open"]!=p["main_close"] or p["footer_order"]!="main-before-footer" or p["late_visible_section"]:
@@ -86,5 +90,10 @@ def main():
         score.append((shared_n / count if count else 0,shared_n,count,p["url"].replace(BASE,""),p["len"],len(p["h2"]),p["h1"][:1]))
     for rec in sorted(score,reverse=True)[:45]:print("PAGE_SHARED_RATIO",repr(rec))
     print("SITE_ARCHITECTURE_AUDIT_COMPLETE",len(urls),len(html_pages),len(errs))
+    if len(urls)<152 or errs or seen_urls:
+        raise RuntimeError("Incomplete site map, HTTP failures or broken semantic structure")
+    if any(len(v)>1 for v in canonicals.values()) or any(len(v)>1 for v in exact_titles.values()):
+        raise RuntimeError("Duplicate canonical/title map")
+    print("SITE_ARCHITECTURE_LIVE_INTEGRITY_PASS",len(urls),"URLs","long_reused_paragraphs",len(common))
 
 if __name__ == "__main__":main()
