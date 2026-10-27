@@ -59,7 +59,7 @@ jobs:
   review-real-inventory:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 17
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -140,7 +140,7 @@ jobs:
             test "$(sha256sum "$local_file" | cut -d' ' -f1)" = "$(timeout 35s ssh -T "${opts[@]}" githubops@178.239.147.150 "sha256sum '$stage/$remote_file' | cut -d' ' -f1")"
           done
           echo FACTORY_JUMP_REPAIR_SOURCE_PINNING=PASS
-          timeout 480s ssh -T "${opts[@]}" githubops@178.239.147.150 \
+          timeout 900s ssh -T "${opts[@]}" githubops@178.239.147.150 \
             python3 -B "$stage/jump-repair.py" \
             --private-root /home/githubops/factory-runtime/private/autonomous-product-cycle \
             --families "$stage/families.json" \
@@ -148,7 +148,9 @@ jobs:
             --maker "$stage/factory_product_maker.py" --bridge "$stage/native-rebuild.py" \
             --additional-source-root /home/githubops/factory-runtime/operations/autonomous-product-runtime/product_recipes \
             --additional-source-root /home/githubops/factory-runtime/private/autonomous-product-cycle/recovered-original-product-recipes \
-            --rounds 2 --limit 3
+            --rounds 1 --limit 34 \
+            --exclude-family F12 --exclude-family F13 --exclude-family F16 \
+            --exclude-family F17 --exclude-family F26 --exclude-family F40
           echo FACTORY_NATIVE_TECHNICAL_REBUILD_CANDIDATES_INSPECTED=YES
           # Return every changed factory artifact to quality control in this same run.
           timeout 125s ssh -T "${opts[@]}" githubops@178.239.147.150 \
