@@ -112,6 +112,8 @@ jobs:
               with urllib.request.urlopen(req,timeout=25) as r:homepage=r.read(900000).decode('utf8','replace')
               ready=(homepage.count('data-mpw-structure-v1="20261026"')==1
                      and homepage.count('class="mpw-content-fold"')==2
+                     and homepage.count('MPW_FOOTER_ORDER_FIXED_20261027')==1
+                     and homepage.index('</main>')<homepage.index('<footer')
                      and 'id="mw-all-pages-menu"' in homepage
                      and 'id="site-directory"' in homepage)
               if ready:break
@@ -123,6 +125,13 @@ jobs:
               raise RuntimeError('Sitemap lost URLs or gained duplicates')
           for path in ('/knowledge/','/research/','/company/','/taniya/','/ventures/agriculture/'):
               if urls.count(origin+path)!=1:raise RuntimeError('Required sitemap route missing '+path)
+          for path in ('/services/','/games/'):
+              with urllib.request.urlopen(origin+path+'?structure_links='+str(time.time_ns()),timeout=25) as r:
+                  document=r.read(250000).decode('utf8','replace')
+              for obsolete in ('href="/#mpw-insight-title"', 'href="/#field-library-round2"', 'href="/#field-library-advanced"'):
+                  if obsolete in document:raise RuntimeError('Broken legacy anchor remains '+path)
+              for canonical in ('/mpw-editorial/field-guides/original-ten/', '/mpw-editorial/field-guides/20261023/index.html'):
+                  if canonical not in document:raise RuntimeError('Consolidated guide link missing '+path)
           for path,prior in baseline['status'].items():
               with urllib.request.urlopen(origin+path,timeout=25) as r:
                   if r.status!=prior:raise RuntimeError('Protected route changed '+path)

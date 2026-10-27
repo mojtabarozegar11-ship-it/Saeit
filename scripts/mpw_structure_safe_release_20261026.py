@@ -20,6 +20,9 @@ ACCOUNT = Path("/home/zomorod2")
 ROOT = ACCOUNT / "mojplaywin.com"
 HOME = ROOT / "design-preview-20261017/production-home-20261017.html"
 SITEMAP = ROOT / "design-preview-20261017/_mpw_sitemap_three_indexable_20261017.php"
+SERVICES = ROOT / "design-preview-20261017/mpw-ten-editorials-20261018/pages/services.html"
+GAMES = ROOT / "design-preview-20261017/mpw-ten-editorials-20261018/pages/games.html"
+FOOTER_FIX_MARKER = "<!-- MPW_FOOTER_ORDER_FIXED_20261027 -->"
 HOME_MARKER = 'data-mpw-structure-v1="20261026"'
 MAP_MARKER = "// MPW_MAIN_NAV_SITEMAP_20261026: indexable navigational destinations"
 PREVIOUS_MAP_MARKER = "// 2026-10-25: verified canonical MPW learning resources, isolated sitemap registration"
@@ -119,6 +122,70 @@ def patch_home(raw):
     return text.encode("utf-8")
 
 
+
+def patch_home_footer_order(raw):
+    """Move the revenue offer inside the one main landmark, before the footer."""
+    text = raw.decode("utf-8")
+    if FOOTER_FIX_MARKER in text:
+        if text.count(FOOTER_FIX_MARKER) != 1:
+            raise RuntimeError("FOOTER_FIX_MARKER_DUPLICATED")
+        return raw
+    if HOME_MARKER not in text or text.count("<main") != 1 or text.count("</main>") != 1:
+        raise RuntimeError("UNEXPECTED_ACTIVE_HOME_LANDMARKS")
+    footer_start = text.find('<footer class="mw-site-footer"')
+    if footer_start < 0 or text.count("</footer>") != 1:
+        raise RuntimeError("FOOTER_SOURCE_DRIFT")
+    footer_end = text.find("</footer>", footer_start) + len("</footer>")
+    match = re.search(r'<section id="mpw-revenue-offers-20261020"[^>]*>[\s\S]*?</section>', text)
+    if not match or text.count('id="mpw-revenue-offers-20261020"') != 1:
+        raise RuntimeError("REVENUE_SECTION_DRIFT")
+    offer_start, offer_end = match.span()
+    main_end = text.find("</main>", offer_end)
+    if not (footer_start < footer_end < offer_start < offer_end <= main_end):
+        raise RuntimeError("HOMEPAGE_FOOTER_SEQUENCE_CHANGED")
+    gap = text[footer_end:offer_start]
+    if re.sub(r'<script\b[^>]*></script>', "", gap, flags=re.I | re.S).strip():
+        raise RuntimeError("UNEXPECTED_CONTENT_BETWEEN_FOOTER_AND_REVENUE")
+    if text[offer_end:main_end].strip():
+        raise RuntimeError("UNEXPECTED_CONTENT_AFTER_REVENUE")
+    footer = text[footer_start:footer_end]
+    offer = text[offer_start:offer_end]
+    result = (
+        text[:footer_start] + offer + "\n</main>\n" + footer
+        + gap + "\n" + FOOTER_FIX_MARKER + "\n"
+        + text[main_end + len("</main>"):]
+    )
+    if (result.count("<main") != 1 or result.count("</main>") != 1
+            or result.count("<footer") != 1 or result.count("</footer>") != 1
+            or result.count('id="mpw-revenue-offers-20261020"') != 1
+            or result.index("</main>") > result.index("<footer")):
+        raise RuntimeError("FOOTER_FIX_SEMANTIC_CHECK_FAILED")
+    return result.encode("utf-8")
+
+
+GUIDE_LINK_REPLACEMENTS = {
+    'href="/#mpw-insight-title"': 'href="/mpw-editorial/field-guides/original-ten/"',
+    'href="/#field-library-round2"': 'href="/mpw-editorial/field-guides/20261023/index.html"',
+    'href="/#field-library-advanced"': 'href="/mpw-editorial/field-guides/20261023/index.html"',
+}
+
+
+def patch_editorial_guide_links(raw):
+    """Consolidate legacy in-page links onto extant standalone guide libraries."""
+    text = raw.decode("utf-8")
+    matches = [text.count(old) for old in GUIDE_LINK_REPLACEMENTS]
+    if all(count == 0 for count in matches):
+        return raw
+    if any(count == 0 for count in matches) or "<main" not in text:
+        raise RuntimeError("EDITORIAL_LINK_SOURCE_DRIFT")
+    result = text
+    for old, new in GUIDE_LINK_REPLACEMENTS.items():
+        result = result.replace(old, new)
+    if any(old in result for old in GUIDE_LINK_REPLACEMENTS):
+        raise RuntimeError("EDITORIAL_LINK_REPAIR_INCOMPLETE")
+    return result.encode("utf-8")
+
+
 def patch_sitemap(raw):
     text = raw.decode("utf-8")
     if MAP_MARKER in text:
@@ -141,7 +208,7 @@ def verify_live_targets():
     for marker in (ROOT / ".htaccess", ROOT / "passenger_wsgi.py"):
         if not marker.is_file() or marker.is_symlink():
             raise RuntimeError("SITE_IDENTITY_MISSING")
-    for path in (HOME, SITEMAP):
+    for path in (HOME, SITEMAP, SERVICES, GAMES):
         if path.is_symlink() or not path.is_file() or path.parent.is_symlink():
             raise RuntimeError("UNSAFE_RELEASE_TARGET:" + str(path))
 
@@ -181,9 +248,14 @@ def backup_path(run_id):
 
 def publish(run_id):
     verify_live_targets()
-    targets = {"home": HOME, "sitemap": SITEMAP}
+    targets = {"home": HOME, "sitemap": SITEMAP, "services": SERVICES, "games": GAMES}
     before = {key: path.read_bytes() for key, path in targets.items()}
-    after = {"home": patch_home(before["home"]), "sitemap": patch_sitemap(before["sitemap"])}
+    after = {
+        "home": patch_home_footer_order(patch_home(before["home"])),
+        "sitemap": patch_sitemap(before["sitemap"]),
+        "services": patch_editorial_guide_links(before["services"]),
+        "games": patch_editorial_guide_links(before["games"]),
+    }
     changed = [key for key in targets if before[key] != after[key]]
     if not changed:
         print("MPW_STRUCTURE_ALREADY_APPLIED")
@@ -225,7 +297,7 @@ def rollback(run_id):
     manifest = json.loads((state / "manifest.json").read_text())
     if manifest.get("run") != run_id:
         raise RuntimeError("WRONG_BACKUP_RUN")
-    targets = {"home": HOME, "sitemap": SITEMAP}
+    targets = {"home": HOME, "sitemap": SITEMAP, "services": SERVICES, "games": GAMES}
     pending = {}
     for key, checks in manifest["files"].items():
         original = (state / (key + ".before")).read_bytes()
@@ -259,6 +331,26 @@ def selftest():
     patched = patch_sitemap(existing)
     assert patched.count(MAP_MARKER.encode()) == 1 and all(path.encode() in patched for path in NAV_PATHS)
     assert patch_sitemap(patched) == patched
+    footer_fixture = (
+        '<main><p>Keep original main content</p><footer class="mw-site-footer">'
+        '<p>Protected legal footer</p></footer>\n'
+        '<script src="/assets/orbits.js" defer></script>\n'
+        '<section id="mpw-revenue-offers-20261020"><p>Keep offer</p></section>'
+        '</main><script>window.ready=true;</script>'
+    )
+    footer_fixture = footer_fixture.replace("<main>", '<main><!-- ' + HOME_MARKER + ' -->')
+    fixed = patch_home_footer_order(footer_fixture.encode())
+    assert fixed.count(b"<main") == 1 and fixed.count(b"</main>") == 1
+    assert fixed.index(b"</main>") < fixed.index(b"<footer")
+    assert b"Protected legal footer" in fixed and b"Keep offer" in fixed
+    assert patch_home_footer_order(fixed) == fixed
+    guide_fixture = ('<main><a href="/#mpw-insight-title">One</a>'
+        '<a href="/#field-library-round2">Two</a>'
+        '<a href="/#field-library-advanced">Three</a></main>').encode()
+    resolved = patch_editorial_guide_links(guide_fixture)
+    assert b'/#field-library-' not in resolved
+    assert b'/mpw-editorial/field-guides/' in resolved
+    assert patch_editorial_guide_links(resolved) == resolved
     print("MPW_STRUCTURE_SELFTEST=PASS")
 
 
