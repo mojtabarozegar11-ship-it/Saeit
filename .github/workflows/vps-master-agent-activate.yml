@@ -1,10 +1,10 @@
 name: VPS Activate and Repair Single Master Agent and Evolution
 on:
   pull_request:
-    paths: [.github/workflows/vps-master-agent-activate.yml, scripts/vps_master_evolution_cycle.py, tests/test_vps_master_evolution_cycle.py, deploy/activate_vps_master_agent.sh, core/autonomous_brain.py, core/economic_tool_pack.py, core/economic_master_agent.py, core/self_funding_policy.py, core/task_runtime.py, core/management/commands/seed_online_income_agents.py, core/management/commands/run_economic_worker.py, core/management/commands/economic_worker.py]
+    paths: [.github/workflows/vps-master-agent-activate.yml, scripts/vps_master_evolution_cycle.py, tests/test_vps_master_evolution_cycle.py, deploy/activate_vps_master_agent.sh, core/autonomous_brain.py, core/economic_tool_pack.py, core/economic_master_agent.py, core/self_funding_policy.py, core/task_runtime.py, core/recovery_scheduler.py, core/management/commands/recover_stale_tasks.py, core/management/commands/seed_online_income_agents.py, core/management/commands/run_economic_worker.py, core/management/commands/economic_worker.py]
   push:
     branches: [main]
-    paths: [.github/workflows/vps-master-agent-activate.yml, scripts/vps_master_evolution_cycle.py, tests/test_vps_master_evolution_cycle.py, deploy/activate_vps_master_agent.sh, core/autonomous_brain.py, core/economic_tool_pack.py, core/economic_master_agent.py, core/self_funding_policy.py, core/task_runtime.py, core/management/commands/seed_online_income_agents.py, core/management/commands/run_economic_worker.py, core/management/commands/economic_worker.py]
+    paths: [.github/workflows/vps-master-agent-activate.yml, scripts/vps_master_evolution_cycle.py, tests/test_vps_master_evolution_cycle.py, deploy/activate_vps_master_agent.sh, core/autonomous_brain.py, core/economic_tool_pack.py, core/economic_master_agent.py, core/self_funding_policy.py, core/task_runtime.py, core/recovery_scheduler.py, core/management/commands/recover_stale_tasks.py, core/management/commands/seed_online_income_agents.py, core/management/commands/run_economic_worker.py, core/management/commands/economic_worker.py]
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,7 +23,7 @@ jobs:
           set -euo pipefail
           bash -n deploy/activate_vps_master_agent.sh
           python3 -B -m unittest discover -s tests -p 'test_vps_master_evolution_cycle.py' -v
-          python3 -m py_compile scripts/vps_master_evolution_cycle.py core/management/commands/seed_online_income_agents.py core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py core/autonomous_brain.py core/economic_tool_pack.py core/economic_master_agent.py core/self_funding_policy.py core/task_runtime.py
+          python3 -m py_compile scripts/vps_master_evolution_cycle.py core/management/commands/seed_online_income_agents.py core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py core/autonomous_brain.py core/economic_tool_pack.py core/economic_master_agent.py core/self_funding_policy.py core/task_runtime.py core/recovery_scheduler.py core/management/commands/recover_stale_tasks.py
   activate:
     needs: verify
     if: github.event_name != 'pull_request' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
@@ -38,7 +38,7 @@ jobs:
           bash -n deploy/activate_vps_master_agent.sh
           python3 -m py_compile scripts/vps_master_evolution_cycle.py
           python3 -B -m unittest discover -s tests -p 'test_vps_master_evolution_cycle.py' -v
-          python3 -m py_compile core/management/commands/autonomous_master_loop.py core/management/commands/seed_online_income_agents.py core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py core/master_agent_capability_pack.py core/autonomous_brain.py core/economic_tool_pack.py core/economic_master_agent.py core/self_funding_policy.py core/task_runtime.py
+          python3 -m py_compile core/management/commands/autonomous_master_loop.py core/management/commands/seed_online_income_agents.py core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py core/master_agent_capability_pack.py core/autonomous_brain.py core/economic_tool_pack.py core/economic_master_agent.py core/self_funding_policy.py core/task_runtime.py core/recovery_scheduler.py core/management/commands/recover_stale_tasks.py
       - name: Backup, seed, activate and schedule bounded evolution on VPS
         shell: bash
         env:
@@ -56,7 +56,7 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=24)
-          tar -cf "$d/bundle.tar" deploy/activate_vps_master_agent.sh scripts/vps_master_evolution_cycle.py core/autonomous_brain.py core/economic_tool_pack.py core/economic_master_agent.py core/self_funding_policy.py core/task_runtime.py core/management/commands/seed_online_income_agents.py core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py
+          tar -cf "$d/bundle.tar" deploy/activate_vps_master_agent.sh scripts/vps_master_evolution_cycle.py core/autonomous_brain.py core/economic_tool_pack.py core/economic_master_agent.py core/self_funding_policy.py core/task_runtime.py core/recovery_scheduler.py core/management/commands/recover_stale_tasks.py core/management/commands/seed_online_income_agents.py core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py core/recovery_scheduler.py core/management/commands/recover_stale_tasks.py
           digest="$(sha256sum "$d/bundle.tar" | awk '{print $1}')"
           ssh "${opts[@]}" githubops@178.239.147.150 'install -d -m 700 "$HOME/factory-runtime/operations/master-activation-source"'
           scp "${opts[@]}" "$d/bundle.tar" githubops@178.239.147.150:/home/githubops/factory-runtime/operations/master-activation-source/bundle.tar
@@ -75,7 +75,8 @@ jobs:
                     "core/self_funding_policy.py","core/task_runtime.py",
                     "core/management/commands/seed_online_income_agents.py",
                     "core/management/commands/run_economic_worker.py",
-                    "core/management/commands/economic_worker.py"}
+                    "core/management/commands/economic_worker.py","core/recovery_scheduler.py",
+                    "core/management/commands/recover_stale_tasks.py"}
           with tarfile.open(root/"bundle.tar","r:") as archive:
               members=archive.getmembers()
               assert {m.name for m in members}==expected
