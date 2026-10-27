@@ -1,0 +1,172 @@
+name: MojPlayWin invoice owner route and mobile payment layout readonly verification
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-invoice-owner-mobile-verify-20261027.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Public login and invoice confidentiality baseline
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs):return None
+          opener=urllib.request.build_opener(NoRedirect)
+          root="https://mojplaywin.com"
+          for route in ("/store/product/72/checkout/","/store/product/225/checkout/",
+                        "/store/product/879/checkout/","/commerce/trx-easy/invoice/14/"):
+              try:
+                  opener.open(root+route,timeout=25)
+                  raise RuntimeError("ANONYMOUS_PURCHASE_ACCESS_UNEXPECTED:"+route)
+              except urllib.error.HTTPError as e:
+                  if e.code!=302 or "/accounts/login/" not in str(e.headers.get("Location")):
+                      raise RuntimeError("PURCHASE_AUTH_GUARD_MISSING:"+route)
+                  print("MPW_GUEST_CONFIDENTIAL_ROUTE_OK",route,e.code)
+          for route in ("/store/","/accounts/login/"):
+              with urllib.request.urlopen(root+route,timeout=25) as response:
+                  if response.status!=200:raise RuntimeError("STORE_OR_LOGIN_DOWN")
+          PY
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-invoice-verify-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Verify active owner invoice and responsive renderer without changing orders
+        run: |
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-invoice-verify-ssh/config" saeit-cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' <<'PY'
+          from pathlib import Path
+          import os,sys,inspect,json
+          app=Path("/home/zomorod2/Saeit-staging")
+          if not app.is_dir() or app.is_symlink():raise RuntimeError("APP_ROOT_UNSAFE")
+          os.chdir(app);sys.path.insert(0,str(app))
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.test import RequestFactory,Client
+          from django.contrib.auth import get_user_model
+          from django.utils import timezone
+          from core.models import PaymentIntent
+          from mpw_commerce.customer_auth import CustomerLogin
+          from services.mpw_trx_commercial_web import _show_invoice,_decode,WAITING,PROVIDER
+          import services.mpw_trx_walletless_one_tap_ui as ui
+          css=ui.render_invoice_page.__globals__["STYLES"]
+          source=Path(inspect.getfile(ui.render_invoice_page))
+          mandatory=(
+              "/* MPW_TRX_MOBILE_ACTIONS_20261026 */",
+              'section[aria-label="Easy TRX payment"]',
+              "grid-template-columns:minmax(0,1fr)",
+              "#recipient{direction:ltr",
+              "@media(max-width:600px)",
+              "white-space:normal",
+          )
+          flags={item:item in css for item in mandatory}
+          print("MPW_INVOICE_RENDERER_CSS_GATES",json.dumps(flags,sort_keys=True))
+          if not all(flags.values()):raise RuntimeError("MOBILE_INVOICE_REPAIR_NOT_LIVE")
+          if app not in source.parents or source.is_symlink():
+              raise RuntimeError("MOBILE_RENDERER_SOURCE_UNSAFE")
+          rf=RequestFactory()
+          for target in ("/commerce/trx-easy/invoice/14/","/store/product/72/checkout/"):
+              req=rf.get("/accounts/login/",{"next":target},secure=True,HTTP_HOST="mojplaywin.com")
+              view=CustomerLogin();view.setup(req)
+              if view.get_success_url()!=target:
+                  raise RuntimeError("POST_LOGIN_INVOICE_RETURN_WRONG:"+target)
+          print("MPW_POST_LOGIN_TARGETS_PRESERVED",2)
+          client=Client(raise_request_exception=False)
+          for route in ("/store/product/72/","/store/product/225/","/store/product/879/","/accounts/login/"):
+              code=client.get(route,secure=True,HTTP_HOST="mojplaywin.com").status_code
+              if code!=200:raise RuntimeError("PRODUCT_PAGE_FAILED:"+route)
+          for route in ("/commerce/trx-easy/invoice/14/","/store/product/72/checkout/"):
+              response=client.get(route,secure=True,HTTP_HOST="mojplaywin.com")
+              if response.status_code!=302 or "/accounts/login/" not in str(response.headers.get("Location")):
+                  raise RuntimeError("GUEST_INVOICE_EXPOSURE:"+route)
+          print("MPW_REAL_GUEST_ROUTING_VALIDATED")
+          row=PaymentIntent.objects.select_related("order").filter(pk=14).first()
+          if row and row.provider==PROVIDER:
+              decoded=_decode(row)
+              page,csp=ui.render_one_tap_invoice(decoded,status_path="/commerce/trx-easy/status/14/")
+              html=page.decode("utf8","replace")
+              ids=("mpw-open-wallet","mpw-open-trustwallet","recipient","copy-recipient","native-amount")
+              counts={key:html.count('id="'+key+'"') for key in ids}
+              if any(value!=1 for value in counts.values()):
+                  raise RuntimeError("INVOICE_ACTION_DOM_MISSING_OR_DUPLICATED")
+              if not all(tag in html for tag in ('name="viewport"',"MPW_TRX_MOBILE_ACTIONS_20261026")):
+                  raise RuntimeError("INVOICE_RESPONSIVE_MARKER_NOT_RENDERED")
+              if "script-src" not in csp or "style-src" not in csp:
+                  raise RuntimeError("INVOICE_CSP_BROKEN")
+              print("MPW_REAL_INVOICE_14_LAYOUT",json.dumps({"responsive":True,"action_ids_valid":True,
+                    "csp_present":True,"rendered_bytes":len(page)},sort_keys=True))
+              owner=get_user_model().objects.filter(pk=row.order.customer_id).first()
+              if owner and owner.is_active:
+                  req=rf.get("/commerce/trx-easy/invoice/14/",secure=True,
+                             HTTP_HOST="mojplaywin.com")
+                  req.user=owner
+                  rendered=_show_invoice(req,14)
+                  closed=row.status!=WAITING or decoded.expires_at<=timezone.now()
+                  if closed:
+                      if rendered.status_code!=200 or "no longer payable" not in rendered.content.decode("utf8","replace"):
+                          raise RuntimeError("OWNER_CLOSED_INVOICE_INACCESSIBLE")
+                  else:
+                      if rendered.status_code!=200:raise RuntimeError("OWNER_PAYABLE_INVOICE_INACCESSIBLE")
+                  print("MPW_REAL_OWNER_INVOICE",json.dumps({"status":rendered.status_code,
+                        "closed":closed,"owner_only":True},sort_keys=True))
+              else:
+                  print("MPW_OWNER_INVOICE_REVIEW=OWNER_INACTIVE_OR_UNAVAILABLE")
+          else:
+              print("MPW_OWNER_INVOICE_REVIEW=REFERENCE_14_NOT_AVAILABLE")
+          print("MPW_READONLY_INVOICE_QA=PASS")
+          PY
+      - name: Remove ephemeral SSH relay keys
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-invoice-verify-ssh"
+          if [ -d "$d" ]; then rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/config"; rmdir "$d"; fi
