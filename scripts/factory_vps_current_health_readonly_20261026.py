@@ -98,12 +98,44 @@ def line41_diagnostic(private):
         return {"slot_state": "unreadable"}
 
 
+
+def production_heartbeat(private):
+    """Return only a schema-checked subset of real cycle counters and timestamps."""
+    path = private / "production-health.json"
+    if not path.exists() and not path.is_symlink():
+        return {"state": "absent"}
+    try:
+        health = safe_json(path, 250000)
+        if health.get("schema") != "saeit.factory.production-health.v1":
+            return {"state": "invalid"}
+        fields = ("last_cycle_finished_at_utc", "last_healthy_cycle_at_utc",
+                  "cycle_status", "completed_cycles",
+                  "consecutive_zero_new_cycles", "consecutive_degraded_cycles",
+                  "new_or_updated_artifacts_this_cycle",
+                  "new_distinct_product_ids_this_cycle",
+                  "updated_existing_product_versions_this_cycle",
+                  "zero_new_products_reason_code",
+                  "independent_quality_returns_pending",
+                  "commercial_quality_certified")
+        result = {"state": "valid"}
+        for field in fields:
+            value = health.get(field)
+            if value is None or type(value) in (int, bool) or (
+                    isinstance(value, str) and len(value) <= 90):
+                result[field] = value
+            else:
+                result[field] = "INVALID_FIELD"
+        return result
+    except (OSError, ValueError, TypeError):
+        return {"state": "unreadable"}
+
+
 def cron_production_channels(active):
     """Redacted scheduler classification; no command lines or tokens escape."""
     if active is None:
         return None
     rules = {
-        "autonomous_cycle": r"autonomous-product-runtime|factory_vps_product_cycle",
+        "autonomous_cycle": r"autonomous-product-runtime|factory_vps_product_cycle|SAEIT_AUTONOMOUS_PRODUCTS_V2|SAEIT_FACTORY_EVERY_MINUTE_V1",
         "forty_family": r"factory[-_]40|family[-_]master|build50",
         "science_stage_workers": r"stage[2-6]|research-navigator|agri200|qc1000",
         "unreviewed_leech": r"leech",
@@ -123,6 +155,9 @@ def inventory():
     tags = (
         "SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025",
         "SAEIT_AGRI200_AUTONOMOUS_CLOSED_LOOP_V1",
+        "SAEIT_AUTONOMOUS_PRODUCTS_V2",
+        "SAEIT_FACTORY_EVERY_MINUTE_V1",
+        "SAEIT_PRODUCTION_WAREHOUSE_V1",
     )
     timers = command(["systemctl", "list-timers", "--all", "--no-legend",
                       "--no-pager"])
@@ -228,6 +263,7 @@ def inventory():
         "finished_archive_directories_with_receipts": approved_archive_dirs,
         "existing_three_sku_private_copies": sku_copies,
         "line41": line41_diagnostic(PRIVATE),
+        "production_heartbeat": production_heartbeat(PRIVATE),
         "cron_production_channels": cron_production_channels(active),
     }
 
