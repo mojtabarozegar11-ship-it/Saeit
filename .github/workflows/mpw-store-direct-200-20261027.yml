@@ -1,0 +1,161 @@
+name: MojPlayWin store canonical 307 to 200 scoped repair
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/mpw_store_direct_200_release_20261027.py
+      - .github/workflows/mpw-store-direct-200-20261027.yml
+permissions:
+  contents: read
+concurrency:
+  group: mpw-store-direct-200-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Selftest exact one-rule transform without server writes
+        run: |
+          python3 -m py_compile scripts/mpw_store_direct_200_release_20261027.py
+          python3 scripts/mpw_store_direct_200_release_20261027.py selftest
+      - name: Verify public GET-only redirect and protect route baseline
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.error,urllib.request
+          root="https://mojplaywin.com"
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs):return None
+          opener=urllib.request.build_opener(NoRedirect)
+          def response(path,method="GET"):
+              try:
+                  with opener.open(urllib.request.Request(root+path,method=method),timeout=25) as r:
+                      return r.status,r.headers.get("Location")
+              except urllib.error.HTTPError as e:
+                  return e.code,e.headers.get("Location")
+          old= response("/store/")
+          passthru=response("/store/?__mpw_canon_passthru=1")
+          head=response("/store/","HEAD")
+          print("MPW_STORE_BEFORE",old,"passthru",passthru,"head",head)
+          if old!=(307,"/store/?__mpw_canon_passthru=1"):
+              raise RuntimeError("STORE_REDIRECT_BASELINE_DRIFT")
+          if passthru[0]!=200 or head[0]!=200:
+              raise RuntimeError("EXPECTED_DIRECT_DJANGO_PATH_UNHEALTHY")
+          routes=("/","/store/product/72/","/store/product/225/",
+                  "/store/product/879/","/games/","/studio/","/services/",
+                  "/taniya/","/farnaz/","/saman/","/picm/","/mojtaba.roozegar/")
+          before={}
+          for path in routes:
+              status,location=response(path)
+              if status!=200:raise RuntimeError("PROTECTED_ROUTE_UNHEALTHY:"+path)
+              before[path]=status
+          for pk in ("72","225","879"):
+              status,loc=response("/store/product/"+pk+"/checkout/")
+              if status!=302 or "/accounts/login/" not in str(loc):
+                  raise RuntimeError("CHECKOUT_AUTH_GUARD_DRIFT:"+pk)
+          with open(os.path.join(os.environ["RUNNER_TEMP"],"mpw-store-direct-before.json"),"w") as f:
+              json.dump(before,f)
+          print("MPW_STORE_CANONICAL_PREFLIGHT_OK",len(before))
+          PY
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-store-direct-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read-only production .htaccess hash and exact isolated rule
+        run: |
+          timeout 40s ssh -T -F "$RUNNER_TEMP/mpw-store-direct-ssh/config" saeit-cpanel "python3 - audit" < scripts/mpw_store_direct_200_release_20261027.py
+      - name: Publish one store-only Apache rewrite deletion atomically
+        id: install
+        run: |
+          set -euo pipefail
+          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-store-direct-ssh/config" saeit-cpanel "python3 - publish '$GITHUB_RUN_ID'" < scripts/mpw_store_direct_200_release_20261027.py
+      - name: Prove direct 200, canonical, products, login and sibling routes
+        run: |
+          python3 - <<'PY'
+          import json,os,time,urllib.request,urllib.error
+          root="https://mojplaywin.com"
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args,**kwargs):return None
+          opener=urllib.request.build_opener(NoRedirect)
+          ready=False
+          for attempt in range(10):
+              req=urllib.request.Request(root+"/store/?_mpw_release_probe="+str(time.time_ns()),
+                                         headers={"Cache-Control":"no-cache"})
+              try:
+                  with opener.open(req,timeout=25) as response:
+                      code=response.status;content=response.read(350000).decode("utf8","replace")
+              except urllib.error.HTTPError as error:
+                  code=error.code;content=""
+              ready=(code==200
+                     and 'rel="canonical" href="https://mojplaywin.com/store/"' in content
+                     and all("/store/product/"+pk+"/" in content for pk in ("72","225","879")))
+              print("MPW_STORE_DIRECT_SMOKE",attempt,code,ready)
+              if ready:break
+              time.sleep(2)
+          if not ready:raise RuntimeError("STORE_NOT_CANONICAL_200_DIRECT")
+          baseline=json.load(open(os.path.join(os.environ["RUNNER_TEMP"],"mpw-store-direct-before.json")))
+          for path,status in baseline.items():
+              with urllib.request.urlopen(root+path,timeout=25) as response:
+                  if response.status!=status:raise RuntimeError("PROTECTED_ROUTE_CHANGED:"+path)
+          for pk in ("72","225","879"):
+              try:
+                  opener.open(root+"/store/product/"+pk+"/checkout/",timeout=25)
+                  raise RuntimeError("CHECKOUT_GUARD_WENT_MISSING:"+pk)
+              except urllib.error.HTTPError as error:
+                  if error.code!=302 or "/accounts/login/" not in str(error.headers.get("Location")):
+                      raise RuntimeError("CHECKOUT_AUTH_CHANGED:"+pk)
+          print("MPW_STORE_DIRECT_200_VERIFIED;PROTECTED_ROUTES_UNCHANGED")
+          PY
+      - name: Restore exact original store rewrite on verification failure
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-store-direct-ssh/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_store_direct_200_release_20261027.py
+      - name: Erase ephemeral SSH relay material
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-store-direct-ssh"
+          if [ -d "$d" ]; then rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/config"; rmdir "$d"; fi
