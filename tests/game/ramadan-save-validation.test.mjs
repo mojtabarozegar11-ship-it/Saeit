@@ -17,6 +17,18 @@ test('accepts an ordinary campaign save and a legacy save without optional array
   delete legacy.pickups; delete legacy.hostile; delete legacy.missiles;
   assert.equal(validateCampaignSave(legacy), true);
 });
+test('truthy forged mode flags cannot bypass campaign restore boundaries', () => {
+  const valid=fresh();
+  assert.equal(validateCampaignSave(valid),true);
+  assert.equal(validateCampaignSave({...valid,endless:false,victory:false,gameOver:false}),true);
+  for(const flag of ['endless','victory','gameOver']){
+    for(const value of [true,'true',1,[],{},null]){
+      assert.equal(validateCampaignSave({...valid,[flag]:value}),false,
+        flag+' must not become truthy or non-boolean after restore');
+    }
+  }
+});
+
 test('rejects broken player positions and numeric progress before engine initialization', () => {
   for (const patch of [
     {x: null}, {x: NaN}, {x: Infinity}, {y: -1}, {angle: '0'},
