@@ -23,7 +23,7 @@ jobs:
           test -n "$VPS_KEY"
           d="$RUNNER_TEMP/factory-audit-ssh"
           install -d -m 700 "$d"
-          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\\r\\n","\\n").replace("\\r","").replace("\\\\n","\\n").rstrip()+"\\n",end="")' > "$d/key"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
           chmod 600 "$d/key"
           ssh-keygen -y -P "" -f "$d/key" >/dev/null
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
