@@ -43,6 +43,9 @@ class AutonomousBrain:
             capability_code="master_self_improvement", status="completed",
             output_data__verified_effect=True,
         ).exists()
+        self_improvement_failed = economic_tasks.filter(
+            capability_code="master_self_improvement", status="failed",
+        ).exists()
         return {
             "unfinished_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status__in=("queued","running","blocked")).count(),
             "failed_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status="failed").count(),
@@ -55,13 +58,14 @@ class AutonomousBrain:
             "orders": Order.objects.count(),
             "paid_orders": Order.objects.filter(status__in=("paid","completed")).count(),
             "self_improvement_complete": self_improvement_complete,
+            "self_improvement_failed": self_improvement_failed,
         }
 
     def candidates(self, s):
         c=[]
         if s["unfinished_tasks"]:
             return [Candidate("continue_existing_work","An unfinished task must be resolved first.",10,10,10,1)]
-        if not s.get("self_improvement_complete", False):
+        if not s.get("self_improvement_complete", False) and not s.get("self_improvement_failed", False):
             return [Candidate(
                 "master_self_improvement",
                 "Run the measured private self-improvement engine before starting the commercial cycle.",
