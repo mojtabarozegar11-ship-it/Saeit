@@ -4,12 +4,14 @@ on:
     branches: [main]
     paths:
       - deploy/install_factory_qc1000_cpanel_private_20261024.py
+      - scripts/factory_commercial_quality_release_guard_v1.py
       - tests/test_factory_qc1000_cpanel_install_20261024.py
       - .github/workflows/factory-qc1000-cpanel-guard-private-deploy-20261024.yml
   push:
     branches: [main]
     paths:
       - deploy/install_factory_qc1000_cpanel_private_20261024.py
+      - scripts/factory_commercial_quality_release_guard_v1.py
       - tests/test_factory_qc1000_cpanel_install_20261024.py
       - .github/workflows/factory-qc1000-cpanel-guard-private-deploy-20261024.yml
 permissions: {contents: read}
