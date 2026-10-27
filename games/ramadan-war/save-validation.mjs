@@ -88,9 +88,11 @@ export function reconcileBossEncounter(state) {
   if (!state || state.mission !== 5 || state.endless === true ||
       state.missionPassed === true || !state.objective ||
       state.objective.bossDefeated === true || !Array.isArray(state.enemies)) return false;
-  const liveBoss = state.enemies.some(e => e?.boss === true && e.hp > 0);
-  const corrected = state.bossSpawned !== liveBoss;
-  state.bossSpawned = liveBoss;
+  // A defeated boss still in the entity list must be processed by the next tick;
+  // do not spawn a duplicate before kill cleanup marks the objective complete.
+  const trackedBoss = state.enemies.some(e => e?.boss === true);
+  const corrected = state.bossSpawned !== trackedBoss;
+  state.bossSpawned = trackedBoss;
   return corrected;
 }
 
