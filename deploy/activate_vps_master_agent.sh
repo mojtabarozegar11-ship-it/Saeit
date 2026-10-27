@@ -124,7 +124,7 @@ def report_progress(status,remaining,total):
     if now-last_report[0]>=15 or remaining==0:
         print(f"MASTER_DB_BACKUP_PROGRESS remaining_pages={remaining} total_pages={total}",flush=True)
         last_report[0]=now
-with sqlite3.connect(src.as_uri()+"?mode=ro",uri=True,timeout=20) as original:
+# The online backup API may update source lock/WAL metadata; use a normal local connection.\nwith sqlite3.connect(str(src),timeout=20) as original:
     with sqlite3.connect(str(dst)) as backup:
         original.backup(backup,pages=2048,progress=report_progress,sleep=0.1)
         assert backup.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
