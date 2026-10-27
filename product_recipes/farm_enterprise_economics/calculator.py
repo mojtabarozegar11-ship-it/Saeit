@@ -149,6 +149,8 @@ def evaluate(data):
     return {
         "version": "1.1",
         "currency": currency,
+        "accounting_scope": "contribution_profit_before_depreciation_financing_tax",
+        "input_values_independently_validated": False,
         "assumptions": [
             "All prices, quantities and costs must be entered by the user.",
             "Fixed costs are allocated per enterprise, not counted again in totals.",
