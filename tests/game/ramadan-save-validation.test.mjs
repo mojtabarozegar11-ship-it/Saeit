@@ -437,7 +437,8 @@ test('public Ramadan telemetry cannot mutate the campaign or invoke QA-only cont
   const makeContext=hostname=>({
     window:{},location:{hostname},NAMES:['Hero'],SKILLS:['Skill'],
     world,screen:'game',engine:{stats:()=>({renderer:'webgl-threejs'})},
-    plan:()=>({kind:'activate'}),objectiveTarget:()=>2
+    plan:()=>({kind:'activate'}),objectiveTarget:()=>2,
+    fire:()=>{},launchRocket:()=>{},droneStrike:()=>{},tick:()=>{},interactObjective:()=>{}
   });
   const publicContext=makeContext('zomorodmelal.ir');
   runInNewContext(source.slice(start,end),publicContext);
