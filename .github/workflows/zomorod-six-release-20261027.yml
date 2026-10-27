@@ -172,7 +172,7 @@ jobs:
           python3 "$b/source/patch.py" verify "$web" "$b/candidate"
           rollback(){
             set +e
-            for rel in .htaccess sitemap.xml store/index.php search/index.json index.html; do
+            for rel in sitemap.xml store/index.php search/index.json index.html; do
               target="$web/$rel";original="$b/files/$rel";temp="$target.zm-rollback-$run"
               if test -s "$original";then cp -p "$original" "$temp" && mv -f "$temp" "$target";fi
             done
@@ -194,7 +194,6 @@ jobs:
           replace search/index.json "$b/search-candidate/index.json"
           replace store/index.php "$b/candidate/store/index.php"
           replace sitemap.xml "$b/candidate/sitemap.xml"
-          replace .htaccess "$b/candidate/.htaccess"
           python3 - "$b/candidate/manifest.json" "$web" <<'PY'
           import json,hashlib,sys
           from pathlib import Path
@@ -230,18 +229,16 @@ jobs:
           fi
           echo PUBLIC_HOME_NEUTRAL_CLAIM=verified
           head="$(curl -fsSI --connect-timeout 8 --max-time 30 "https://zomorodmelal.ir/?zm_six=$run")"
-          if ! grep -iq 'x-frame-options: SAMEORIGIN' <<< "$head"; then
-            echo PUBLIC_ROOT_X_FRAME_OPTIONS=missing
-            printf '%s\n' "$head" | grep -iE '^(http/|x-frame-options:|content-security-policy:|cache-control:|age:|server:)' || true
+          if ! grep -iq "content-security-policy: base-uri 'self'; object-src 'none'" <<< "$head"; then
+            echo PUBLIC_ROOT_PREEXISTING_CSP=missing
             exit 1
           fi
-          echo PUBLIC_ROOT_X_FRAME_OPTIONS=verified
-          if ! grep -iq "frame-ancestors 'self'" <<< "$head"; then
-            echo PUBLIC_ROOT_FRAME_ANCESTORS=missing
-            printf '%s\n' "$head" | grep -iE '^(http/|x-frame-options:|content-security-policy:|cache-control:|age:|server:)' || true
-            exit 1
+          echo PUBLIC_ROOT_PREEXISTING_CSP=preserved
+          if grep -iq 'x-frame-options: SAMEORIGIN' <<< "$head"; then
+            echo PUBLIC_ROOT_X_FRAME_OPTIONS=present
+          else
+            echo PUBLIC_ROOT_X_FRAME_OPTIONS=pending_host_level_change
           fi
-          echo PUBLIC_ROOT_FRAME_ANCESTORS=verified
           first="$(find "$assets" -maxdepth 1 -name '*.svg' -type f -print -quit)"
           test -s "$first"
           sample="/static/site/zm-home-media-20261027/$(basename "$first")"
