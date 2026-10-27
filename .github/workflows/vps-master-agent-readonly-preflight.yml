@@ -65,6 +65,10 @@ jobs:
                       agent=agent,capability_code='master_self_improvement',status=status).count()))
           db=settings.DATABASES['default']
           print('MASTER_DATABASE_SQLITE='+str('sqlite3' in db['ENGINE']))
+          if 'sqlite3' in db['ENGINE']:
+              from pathlib import Path
+              try: print('MASTER_DATABASE_BYTES='+str(Path(db['NAME']).stat().st_size))
+              except OSError: print('MASTER_DATABASE_BYTES=unavailable')
           print('MASTER_VPS_LOCAL_MODE='+str(os.getenv('MOJ_FACTORY_LOCAL_MODE')=='1'))
           PY
           current="$(crontab -l 2>/dev/null || true)"
@@ -76,6 +80,31 @@ jobs:
           find "$base/operations/backups" -maxdepth 1 -type f -name 'master-before-*.sqlite3' -printf '%f bytes=%s\n' 2>/dev/null | tail -5
           echo MASTER_ACTIVATION_PROCESSES
           ps -eo pid=,etime=,comm=,args= | grep -E '[a]ctivate_vps_master_agent\.sh|[a]utonomous_master_loop|[v]ps_master_evolution_cycle\.py' | cut -c1-220 | tail -10 || true
+          activation_pid="$(ps -eo pid=,args= | awk '/bash .*activate_vps_master_agent\.sh/ && !/awk/ {print $1; exit}')"
+          if test -n "$activation_pid"; then
+            pids="$(python3 - "$activation_pid" <<'PY'
+          import sys
+          from pathlib import Path
+          root=int(sys.argv[1]); parents={}
+          for item in Path('/proc').iterdir():
+              if not item.name.isdigit(): continue
+              try:
+                  status=(item/'status').read_text()
+                  parent=int(next(line.split()[1] for line in status.splitlines() if line.startswith('PPid:')))
+                  parents[int(item.name)]=parent
+              except (OSError,StopIteration,ValueError): pass
+          result={root}; changed=True
+          while changed:
+              changed=False
+              for pid,parent in parents.items():
+                  if parent in result and pid not in result:
+                      result.add(pid); changed=True
+          print(','.join(map(str,sorted(result))))
+          PY
+          )"
+            echo MASTER_ACTIVATION_PROCESS_TREE
+            ps -o pid=,ppid=,etime=,stat=,wchan:24=,comm= -p "$pids" || true
+          fi
           if command -v fuser >/dev/null 2>&1 && test -e "$base/operations/master-agent/activation.lock"; then
             fuser "$base/operations/master-agent/activation.lock" 2>/dev/null || true
           fi
