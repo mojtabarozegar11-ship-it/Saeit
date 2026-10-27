@@ -122,6 +122,13 @@ def reload_site():
 def preview():
     guard()
     before = TARGET.read_bytes()
+    source = before.decode("utf-8")
+    signup_lines = [(i + 1, line.strip()[:220]) for i, line in
+                    enumerate(source.splitlines()) if "accounts/register" in line]
+    print("MPW_879_SIGNUP_SOURCE_DIAGNOSTIC=" + json.dumps({
+        "old_count": source.count(OLD), "new_count": source.count(NEW),
+        "book_branch_count": source.count("product.pk == 72 or product.pk == 225"),
+        "signup_lines": signup_lines[:12]}))
     after, changed = transform(before)
     print("MPW_879_SIGNUP_PREVIEW=" + json.dumps({
         "changed": changed, "before": sha(before), "after": sha(after)}))
