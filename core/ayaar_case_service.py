@@ -317,7 +317,15 @@ def case_status(code, access_key, secret_key):
         digest = hmac.new(secret_key.encode(), access_key.encode(), hashlib.sha256).hexdigest()
         if row is None or not hmac.compare_digest(digest, row["secret_hash"]):
             raise CaseError("Invalid case reference or access key", 403)
-        return as_case(db, code)
+        result = as_case(db, code)
+        if result.get("review"):
+            integrity = result["review"].get("integrity")
+            result["review_integrity_valid"] = (
+                checked_report_proof(db.execute("SELECT * FROM cases WHERE code=?", (code,)).fetchone(),
+                                     result["review"], secret_key) is not None
+                if integrity else None
+            )
+        return result
 
 
 def append_case_evidence(code, access_key, note, uploads, secret_key):
@@ -496,7 +504,38 @@ def validate_review(category, criteria):
     return result, round(score, 1), blockers
 
 
-def submit_review(code, actor, payload):
+def report_proof(row, report, secret_key):
+    """Keyed, domain-separated integrity code for one versioned AYAR assessment.
+
+    This proves consistency with the AYAR server's signing key, not external
+    reviewer independence, product quality or regulatory accreditation.
+    """
+    unsigned = {key: value for key, value in report.items() if key != "integrity"}
+    statement = {
+        "case_id": row["code"], "created_at": row["created_at"],
+        "product_name": row["product_name"], "product_version": row["product_version"],
+        "category": row["category"], "review": unsigned,
+    }
+    raw = json.dumps(statement, sort_keys=True, ensure_ascii=False,
+                     separators=(",", ":")).encode("utf-8")
+    return hmac.new(secret_key.encode("utf-8"),
+                    b"AYAR-REPORT-INTEGRITY-V1\x00" + raw, hashlib.sha256).hexdigest()
+
+
+def checked_report_proof(row, report, secret_key):
+    if not isinstance(report, dict):
+        return None
+    marker = report.get("integrity")
+    if not isinstance(marker, dict) or marker.get("scheme") != "AYAR-HMAC-SHA256-v1":
+        return None
+    recorded = marker.get("proof")
+    if not isinstance(recorded, str) or not re.fullmatch(r"[0-9a-f]{64}", recorded):
+        return None
+    expected = report_proof(row, report, secret_key)
+    return recorded if hmac.compare_digest(recorded, expected) else None
+
+
+def submit_review(code, actor, payload, secret_key):
     """Staff attestation, not a representation of independent accreditation."""
     if not isinstance(payload, dict):
         raise CaseError("Invalid review")
@@ -528,6 +567,11 @@ def submit_review(code, actor, payload):
             "score": score, "blocking_criteria": blockers, "criteria": criteria,
             "final_disclaimer": "Independence is attested by the reviewer, not technically proven by this platform."
         }
+        verdict["integrity"] = {
+            "scheme": "AYAR-HMAC-SHA256-v1",
+            "proof": report_proof(row, verdict, secret_key),
+            "notice": "AYAR server record integrity only; NOT independent accreditation"
+        }
         public = int(row["publication_consent"] and payload.get("publish_report") is True)
         changed = db.execute(
             """UPDATE cases SET status='reviewed',updated_at=?,review=?,reviewer_username=?,
@@ -541,23 +585,61 @@ def submit_review(code, actor, payload):
                 "grade": grade, "public_report": bool(public)}
 
 
-def registry():
+def registry(secret_key):
     with database() as db:
         rows = db.execute(
-            """SELECT code,updated_at,category,product_name,review
+            """SELECT code,created_at,updated_at,category,product_name,product_version,review
                FROM cases WHERE status='reviewed' AND public_report=1
                ORDER BY updated_at DESC LIMIT 100"""
         ).fetchall()
         results = []
         for row in rows:
             report = json.loads(row["review"])
+            proof = checked_report_proof(row, report, secret_key)
+            if report.get("integrity") and proof is None:
+                # Fail closed on a changed or malformed signed report.
+                continue
             results.append({
                 "case_id": row["code"], "product_name": row["product_name"],
-                "category": row["category"], "reviewed_at": row["updated_at"],
-                "grade": report["grade"], "score": report["score"],
-                "notice": report["notice"]
+                "product_version": row["product_version"], "category": row["category"],
+                "reviewed_at": row["updated_at"], "grade": report["grade"],
+                "score": report["score"], "notice": report["notice"],
+                "proof": proof or "", "integrity_status": "signed" if proof else "legacy"
             })
         return results
+
+
+
+def verify_public_report(code, supplied_proof, secret_key):
+    """Verify only customer-authorized published records, never private cases."""
+    negative = {"verified": False, "notice": "No matching published AYAR integrity record"}
+    if not isinstance(code, str) or not isinstance(supplied_proof, str):
+        return negative
+    if not re.fullmatch(r"AYR-[0-9]{2}-[0-9A-F]{12}", code.strip()):
+        return negative
+    if not re.fullmatch(r"[0-9a-f]{64}", supplied_proof.strip()):
+        return negative
+    with database() as db:
+        row = db.execute(
+            """SELECT * FROM cases
+               WHERE code=? AND status='reviewed' AND public_report=1""",
+            (code.strip(),)
+        ).fetchone()
+        if row is None or not row["review"]:
+            return negative
+        report = json.loads(row["review"])
+        stored = checked_report_proof(row, report, secret_key)
+        if not stored or not hmac.compare_digest(stored, supplied_proof.strip()):
+            return negative
+        return {
+            "verified": True, "case_id": row["code"],
+            "product_name": row["product_name"],
+            "product_version": row["product_version"],
+            "category": row["category"], "reviewed_at": report["reviewed_at"],
+            "grade": report["grade"], "score": report["score"],
+            "integrity_scheme": "AYAR-HMAC-SHA256-v1",
+            "notice": "AYAR-issued record consistency only; NOT proof of independent reviewer credentials, external certification or product quality."
+        }
 
 
 def staff_file(code, file_id):
