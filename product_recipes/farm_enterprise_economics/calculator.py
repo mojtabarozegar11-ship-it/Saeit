@@ -57,6 +57,12 @@ def enterprise(entry):
     name = str(entry.get("name") or "").strip()
     if not name or len(name) > 120:
         raise ValueError("enterprise name must contain 1 to 120 characters")
+    # Defense in depth for CSV users. Spreadsheet applications can interpret
+    # user-supplied labels beginning with =, +, -, @ or Unicode variants as
+    # formulas; nested line controls can also conceal a new spreadsheet row.
+    # Require a Unicode letter/digit at the beginning and no C0 control codes.
+    if not name[0].isalnum() or any(ord(char) < 32 or ord(char) == 127 for char in name):
+        raise ValueError("enterprise name must start with a letter or digit and contain no control characters")
     quantity = decimal_number(entry.get("units_sold"), name + ".units_sold", min_value=0)
     unit_price = decimal_number(entry.get("unit_price"), name + ".unit_price", min_value=0)
     variable = decimal_number(entry.get("variable_cost_per_unit"), name + ".variable_cost_per_unit", min_value=0)
@@ -187,7 +193,7 @@ def main(argv=None):
         with Path(args.csv_output).open("w", encoding="utf-8", newline="") as fp:
             writer = csv.DictWriter(fp, fieldnames=[
                 "enterprise", "volume_multiplier", "price_multiplier", "modeled_operating_profit"
-            ])
+            ], quoting=csv.QUOTE_ALL)
             writer.writeheader()
             writer.writerows(output["scenario_results"])
     return 0
