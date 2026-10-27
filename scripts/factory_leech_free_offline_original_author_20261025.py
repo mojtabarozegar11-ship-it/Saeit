@@ -41,7 +41,12 @@ def safe_json(path, max_bytes=300000):
     try:
         if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= max_bytes:
             reject("MISSING_OR_UNSAFE_JSON_" + path.name)
-        # The size may change after stat(): never read unbounded private input.\n        with path.open("rb") as stream:\n            raw = stream.read(max_bytes + 1)\n        if not 0 < len(raw) <= max_bytes:\n            reject("MISSING_OR_UNSAFE_JSON_" + path.name)\n        obj = json.loads(raw.decode("utf-8"))
+        # The size may change after stat(): never read unbounded private input.
+        with path.open("rb") as stream:
+            raw = stream.read(max_bytes + 1)
+        if not 0 < len(raw) <= max_bytes:
+            reject("MISSING_OR_UNSAFE_JSON_" + path.name)
+        obj = json.loads(raw.decode("utf-8"))
     except (OSError, UnicodeError) as exc:
         raise RuntimeError("LEECH_ZERO_COST_UNREADABLE_PRIVATE_JSON_" + path.name) from exc
     if not isinstance(obj, dict):
