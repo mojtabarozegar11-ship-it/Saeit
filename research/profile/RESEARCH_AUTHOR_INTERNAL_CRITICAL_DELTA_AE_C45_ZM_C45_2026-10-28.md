@@ -2,8 +2,8 @@
 
 **2026-10-28 | AI-assisted internal analysis, not human peer review or author approval**
 
-## MR-2026-001 — unchanged gate
-The Car Table 5 publisher image, the Amini F7 numerical inconsistency, Cvejić's verified questionnaire denominator, complete Lorite/Baroni/Elia methods and empirical G/D/R/A event-chain validation remain open. C60/C61 and earlier corrections are not new successes this cycle. **MAJOR REVISION / NO SUBMISSION**.
+## MR-2026-001 — C62 direct prior-art addition
+The publisher abstract for Tapsuwan (online 2014; 2015 issue), DOI 10.1002/ird.1887, documents pre/post farmer evaluation of a model-based irrigation advisory bulletin; the clean MR author-review text now explicitly disclaims novelty for such user-feedback evaluation. This is **adjacent abstract-level prior art, not a ninth fully extracted case**. The Car Table 5 publisher image, the Amini F7 numerical inconsistency, Cvejić's verified questionnaire denominator, complete Lorite/Baroni/Elia methods and empirical G/D/R/A event-chain validation remain open. C60/C61 and earlier corrections are not new successes this cycle; only C62 and its associated manuscript correction are incremental. **MAJOR REVISION / NO SUBMISSION**.
 
 ## AE-2026-001 — limited incremental selection diagnostic
 The exact 2026-only 2019–2023 signed-growth median is 0.9751104652 log-pp/year for 169 two-endpoint economies versus 0.8904395335 for the 153 also observed at the 2000 baseline; difference +0.0846709317. The 16-versus-153 group statistics were already examined in C30/C31, so **only the full-frame comparison is incremental**. This does not solve historical ILOSTAT vintages, composite-source dependence, direct three-vintage countryatlas benchmarking, or journal novelty. Source report: [C45](../manuscripts/AE-2026-001/AE-2026-001_C45_BASELINE_AVAILABILITY_SELECTION_2019_2023_2026-10-28.md). **MAJOR REVISION / NO SUBMISSION**.
