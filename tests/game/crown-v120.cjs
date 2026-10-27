@@ -5,6 +5,41 @@ assert.match(html, /<meta property="og:url" content="https:\/\/mojplaywin\.com\/
 assert.match(html, /<meta name="twitter:card" content="summary">/);
 assert.match(html,/MOJ1 is the planned premium purchase asset; checkout is disabled pending verified TRON contract/);
 assert.doesNotMatch(code,/location\.href=item\.checkout/,'client must not navigate to legacy USD checkout');
+// The actual saved economy loader must not coerce strings, booleans or decimals
+// into credits, hangar upgrades or campaign progress.
+const saveStart=code.indexOf('const STORAGE='),saveEnd=code.indexOf('let save=loadSave();',saveStart);
+assert.ok(saveStart>=0&&saveEnd>saveStart,'production save loader must be extractable');
+function readCrownSave(payload){
+  const ctx={localStorage:{getItem:()=>JSON.stringify(payload)},JSON};
+  vm.createContext(ctx);
+  vm.runInContext('const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));\\n'.replace('\\n','\n')+
+    code.slice(saveStart,saveEnd)+'\nglobalThis.loaded=loadSave();',ctx);
+  return JSON.parse(JSON.stringify(ctx.loaded));
+}
+const clean=readCrownSave({schema:120,best:1800,credits:230,hangar:{armor:2},
+  campaign:{unlockedSector:3,cleared:false},stats:{kills:12}});
+assert.equal(clean.credits,230);
+assert.equal(clean.hangar.armor,2);
+assert.equal(clean.campaign.unlockedSector,3);
+assert.equal(clean.stats.kills,12);
+const forged=readCrownSave({schema:120,best:'9000',credits:'1000000',
+  hangar:{armor:true,engine:3.5},campaign:{unlockedSector:'10',cleared:false},
+  stats:{kills:[],attempts:1.25}});
+assert.equal(forged.best,0,'string best cannot become earned score');
+assert.equal(forged.credits,0,'string credits cannot become earned currency');
+assert.equal(forged.hangar.armor,0,'boolean cannot become an upgrade');
+assert.equal(forged.hangar.engine,0,'fractional upgrades are rejected');
+assert.equal(forged.campaign.unlockedSector,1,'string stage cannot unlock sectors');
+assert.equal(forged.stats.kills,0);
+assert.equal(forged.stats.attempts,0);
+
+const validClear=readCrownSave({schema:120,campaign:{unlockedSector:10,cleared:true}});
+assert.equal(validClear.campaign.cleared,true,'real boolean completion remains readable');
+for(const [schema,cleared] of [[120,'true'],[120,{}],[120,1],['120',true],[null,true]]){
+  assert.equal(readCrownSave({schema,campaign:{unlockedSector:10,cleared}}).campaign.cleared,false,
+    'forged campaign clear must not unlock the victory state');
+}
+
 // Legacy score migration is a separate untrusted storage channel.
 const legacyLine=code.split('\n').find(line=>line.startsWith('let save=loadSave();try{'));
 assert.ok(legacyLine,'legacy migration source is available for executable regression');
