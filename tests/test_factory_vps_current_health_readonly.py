@@ -130,7 +130,12 @@ class ReadOnlyFactoryHealthTests(unittest.TestCase):
                    ],
                    "research_failures": [{"reason": "raw unpublished study"}],
                    "recipe_admission_failures": [], "quality_failures_this_cycle": [],
-                   "built_product_count": 0, "quality_returns_unresolved": 135}
+                   "built_product_count": 0, "quality_returns_unresolved": 135,
+                   "runtime_health": {"status": "ok",
+                                      "expected_design_backlog_count": 2,
+                                      "fatal_design_failure_count": 0,
+                                      "backlog_retained": True,
+                                      "secret": "MUST_NOT_ESCAPE"}}
             path = private / "production-state.json"
             path.write_text(json.dumps(doc), encoding="utf8")
             original = path.read_bytes()
@@ -139,6 +144,9 @@ class ReadOnlyFactoryHealthTests(unittest.TestCase):
                              {"engineering_rework": 1, "source_evolution": 1})
             self.assertEqual(report["research_failures_count"], 1)
             self.assertEqual(report["quality_returns_unresolved"], 135)
+            self.assertEqual(report["runtime_health"]["status"], "ok")
+            self.assertEqual(report["runtime_health"]["expected_design_backlog_count"], 2)
+            self.assertNotIn("MUST_NOT_ESCAPE", json.dumps(report))
             self.assertNotIn("private contents", json.dumps(report))
             self.assertNotIn("unpublished study", json.dumps(report))
             self.assertEqual(path.read_bytes(), original)
