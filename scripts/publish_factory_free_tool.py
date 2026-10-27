@@ -177,14 +177,16 @@ def prepare_private_product(inbox):
         raise ValueError("PRODUCT_RELEASE_GATE_FAILED")
     if not 0 < src.stat().st_size <= MAX_BYTES or digest_file(src) != digest:
         raise ValueError("BAD_SOURCE_PACKAGE")
-    if data.get("professional_quality_standard") == "100_groups_x_10":
-        guardpath=Path(__file__).resolve().with_name("factory_commercial_quality_release_guard_v1.py")
-        if guardpath.is_symlink() or not guardpath.is_file():
-            raise ValueError("SIGNED_1000_PUBLICATION_GUARD_UNAVAILABLE")
-        spec=importlib.util.spec_from_file_location("factory_1000_public_guard",str(guardpath))
-        guard=importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(guard)
-        guard.require_quality_clearance(inbox,RECIPE,digest,data,src)
+    guardpath=Path(__file__).resolve().with_name("factory_commercial_quality_release_guard_v1.py")
+    if guardpath.is_symlink() or not guardpath.is_file():
+        raise ValueError("SIGNED_1000_PUBLICATION_GUARD_UNAVAILABLE")
+    spec=importlib.util.spec_from_file_location("factory_1000_public_guard",str(guardpath))
+    guard=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(guard)
+    clearance=guard.require_quality_clearance(inbox,RECIPE,digest,data,src)
+    if (clearance.get("status")!="VERIFIED_SIGNED_PREMIUM_1000"
+            or clearance.get("1000_quality_verified") is not True):
+        raise ValueError("QC1000_REQUIRED_FOR_FACTORY_EXIT")
     return digest, src
 
 
