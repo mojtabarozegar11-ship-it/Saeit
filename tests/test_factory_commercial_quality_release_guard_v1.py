@@ -1,5 +1,6 @@
 """Release guard: legacy free asset not certified; new 100-group asset cannot bypass."""
-import hashlib,importlib.util,json
+import hashlib,importlib.util,json,io,zipfile
+from unittest import mock
 from pathlib import Path
 import tempfile
 import unittest
@@ -33,4 +34,46 @@ class PublicReleaseSafety(unittest.TestCase):
             with self.assertRaises(ValueError):
                 mod.require_quality_clearance(root,"../../private","0"*64,
                     {"professional_quality_standard":"100_groups_x_10"},file)
+    def test_review_archive_hashes_small_zip_without_extraction(self):
+        with tempfile.TemporaryDirectory() as t:
+            archive=Path(t)/"package.zip"
+            with zipfile.ZipFile(archive,"w",compression=zipfile.ZIP_DEFLATED) as z:
+                z.writestr("docs/readme.txt",b"safe review bytes")
+            result=mod._inspect_review_archive(archive)
+            self.assertEqual(result,{"docs/readme.txt":(
+                hashlib.sha256(b"safe review bytes").hexdigest(),17)})
+
+    def test_review_archive_rejects_oversize_before_decompression(self):
+        member=zipfile.ZipInfo("oversized.bin")
+        member.file_size=151*1024*1024
+        class FakeArchive:
+            def __enter__(self): return self
+            def __exit__(self,*args): return False
+            def infolist(self): return [member]
+            def open(self,*args,**kwargs):
+                raise AssertionError("oversized member must not be opened")
+        with mock.patch.object(mod.zipfile,"ZipFile",return_value=FakeArchive()):
+            with self.assertRaisesRegex(ValueError,"CHATGPT_REVIEW_ARCHIVE_SIZE_INVALID"):
+                mod._inspect_review_archive("not-read.zip")
+
+    def test_review_archive_rejects_more_bytes_than_declared(self):
+        member=zipfile.ZipInfo("tampered.bin")
+        member.file_size=1
+        class FakeArchive:
+            def __enter__(self): return self
+            def __exit__(self,*args): return False
+            def infolist(self): return [member]
+            def open(self,*args,**kwargs): return io.BytesIO(b"tampered")
+        with mock.patch.object(mod.zipfile,"ZipFile",return_value=FakeArchive()):
+            with self.assertRaisesRegex(ValueError,"CHATGPT_REVIEW_ARCHIVE_SIZE_INVALID"):
+                mod._inspect_review_archive("not-read.zip")
+
+    def test_review_archive_rejects_traversal_and_backslash(self):
+        for unsafe in ("../escape.txt","sub\\\\escape.txt"):
+            with self.subTest(name=unsafe),tempfile.TemporaryDirectory() as t:
+                archive=Path(t)/"package.zip"
+                with zipfile.ZipFile(archive,"w") as z:
+                    z.writestr(unsafe,b"data")
+                with self.assertRaisesRegex(ValueError,"CHATGPT_REVIEW_ARCHIVE_MEMBER_UNSAFE"):
+                    mod._inspect_review_archive(archive)
 if __name__=="__main__":unittest.main()
