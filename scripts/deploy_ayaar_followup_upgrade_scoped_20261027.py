@@ -116,7 +116,7 @@ def manifest(stage,rid,commit):
         fail('missing_followup_api_capability')
     for name in ('services.html','submit.html','track.html','reviewer.html','registry.html','privacy.html'):
         html=(stage/name).read_text('utf-8')
-        if '<html lang="en" dir="ltr">' not in html or 'platform.js?v=platform-2' not in html or 'platform.css?v=platform-2' not in html:
+        if '<html lang="en" dir="ltr">' not in html or 'platform.js?v=platform-3' not in html or 'platform.css?v=platform-2' not in html:
             fail('stale_or_nonenglish_platform_page_'+name)
     if 'Download documented review (JSON)' not in (stage/'platform.js').read_text('utf-8'):
         fail('missing_private_report_export')
