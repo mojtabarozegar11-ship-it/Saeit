@@ -29,8 +29,36 @@ const sandbox={document,HTMLElement:Element,console,Math,Date,Set,JSON,Number,Ob
  localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},navigator:{hardwareConcurrency:4,getGamepads:()=>[]},matchMedia:()=>({matches:false}),requestAnimationFrame:f=>frame=f,location:{href:''},fetch:async()=>{if(fetchMode==='offline')throw Error('offline');if(fetchMode==='checkout')return {ok:true,headers:{get:()=> 'application/json'},json:async()=>({game:'crown-defender',version:1,authenticated:true,owned:[],items:[{sku:'cd-spectre',currency:'USD',price:'4.00',available:true,checkout:'/store/crown/999/checkout/'}]})};return {ok:true,headers:{get:()=> 'application/json'},json:async()=>({game:'crown-defender',version:1,authenticated:true,owned:['cd-spectre'],items:[{sku:'cd-spectre',currency:'USD',price:'4.00',available:true,checkout:'/store/product/999/checkout/'}]})}}};sandbox.window=sandbox;sandbox.addEventListener=()=>{};vm.createContext(sandbox);vm.runInContext(code,sandbox);const game=sandbox.__mpwCrownDefenderTest;
 
 elements.leaders.handlers.click();assert.match(elements.overlayText.textContent,/Achievements: 2\/15/,'only two valid unique achievements count');const records=elements.leaderList.children[0].children;assert.equal(records.length,2,'malformed score, mode and wave records must be discarded');assert.match(records[0].textContent,/42.*campaign.*wave 2/);assert.match(records[1].textContent,/100.*endless.*wave 3/);
-assert.equal(game.getState().version,121);assert.equal(game.getState().activeJet,'falcon','local forged premium ignored');game.start();assert.equal(game.getState().bank,0,'nonfinite credits must not become maximum credits');assert.equal(game.getState().best,0,'nonfinite best must not become maximum score');assert.equal(game.getState().sector,1,'nonfinite unlocked sector must not skip campaign');assert.equal(game.getState().upgrades.armor,0,'nonfinite saved armor must not boost player');assert.equal(game.getState().hp,100);assert.equal(game.getState().maxHp,100);for(let i=1;i<=180;i++)frame(i*16);assert.ok(drawCalls>1000);assert.ok(game.getState().shots>0);assert.ok(game.getState().enemies+game.getState().kills>0);document.handlers.keydown({code:'ArrowLeft',target:document.body,repeat:false,preventDefault(){}});assert.equal(game.getInput().keys,1);
-document.hidden=true;document.handlers.visibilitychange();assert.equal(game.getState().state,'paused');assert.equal(game.getInput().keys,0,'hidden tab releases keyboard input');assert.equal(Object.values(game.getInput().held).some(Boolean),false);document.hidden=false;game.pause();assert.equal(game.getState().state,'playing');
+assert.equal(game.getState().version,121);assert.equal(game.getState().activeJet,'falcon','local forged premium ignored');game.start();assert.equal(game.getState().bank,0,'nonfinite credits must not become maximum credits');assert.equal(game.getState().best,0,'nonfinite best must not become maximum score');assert.equal(game.getState().sector,1,'nonfinite unlocked sector must not skip campaign');assert.equal(game.getState().upgrades.armor,0,'nonfinite saved armor must not boost player');assert.equal(game.getState().hp,100);
+// Actual registered pointer handlers: secondary touches must not steal or
+// release an active drag or fire control. Pointer-capture failure is harmless.
+const pointerEvent=id=>({pointerId:id,clientX:270,clientY:480,preventDefault(){}});
+elements.game.setPointerCapture=id=>{elements.game.captureId=id};
+elements.game.handlers.pointerdown(pointerEvent(1));
+assert.equal(game.getInput().touchActive,true);
+elements.game.handlers.pointerdown(pointerEvent(2));
+assert.equal(elements.game.captureId,1,'second finger cannot steal ship drag');
+elements.game.handlers.pointerup(pointerEvent(2));
+assert.equal(game.getInput().touchActive,true,'unrelated finger cannot release ship drag');
+elements.game.handlers.pointerup(pointerEvent(1));
+assert.equal(game.getInput().touchActive,false);
+elements.fire.setPointerCapture=id=>{elements.fire.captureId=id};
+elements.fire.handlers.pointerdown(pointerEvent(11));
+assert.equal(game.getInput().held.fire,true);
+elements.fire.handlers.pointerdown(pointerEvent(12));
+assert.equal(elements.fire.captureId,11,'second fire touch cannot steal capture');
+elements.fire.handlers.pointerup(pointerEvent(12));
+assert.equal(game.getInput().held.fire,true,'unrelated release cannot stop firing');
+elements.fire.handlers.pointercancel(pointerEvent(11));
+assert.equal(game.getInput().held.fire,false);
+elements.left.setPointerCapture=()=>{throw new Error('capture blocked')};
+elements.left.handlers.pointerdown(pointerEvent(14));
+assert.equal(game.getInput().held.left,false,'capture failure must not latch movement');
+elements.left.setPointerCapture=()=>{};
+elements.left.handlers.pointerdown(pointerEvent(15));
+assert.equal(game.getInput().held.left,true);
+assert.equal(game.getState().maxHp,100);for(let i=1;i<=180;i++)frame(i*16);assert.ok(drawCalls>1000);assert.ok(game.getState().shots>0);assert.ok(game.getState().enemies+game.getState().kills>0);document.handlers.keydown({code:'ArrowLeft',target:document.body,repeat:false,preventDefault(){}});assert.equal(game.getInput().keys,1);
+document.hidden=true;document.handlers.visibilitychange();assert.equal(game.getState().state,'paused');assert.equal(game.getInput().touchActive,false,'background tab releases ship pointer');assert.equal(game.getInput().held.left,false,'background tab releases directional owner');assert.equal(game.getInput().keys,0,'hidden tab releases keyboard input');assert.equal(Object.values(game.getInput().held).some(Boolean),false);document.hidden=false;game.pause();assert.equal(game.getState().state,'playing');
 game.pause();assert.equal(game.getState().state,'paused');game.start();frame(2980);assert.ok(Math.abs(game.getState().simulationTime-.1)<1e-6,'100 ms hitch advances simulation consistently');game.spawnBoss();const beforeBossContact=game.getState().enemies;game.testBossContact();assert.equal(game.getState().enemies,beforeBossContact,'boss must survive contact');game.advanceWave();game.advanceWave();assert.equal(game.getState().state,'playing','waves must not force shop interruption');game.start();for(let i=0;i<8;i++)game.spawnEnemy();assert.doesNotThrow(()=>game.useEMP(),'EMP finishing a wave must tolerate cleared enemy arrays');assert.equal(game.getState().wave,2);
 (async()=>{game.openFleet();await game.refreshFleet();assert.equal(elements.fleetStatus.textContent.includes('unavailable'),true);assert.equal(game.getFleet().filter(j=>j.owned).length,1);game.earn(1000);
 // Card click selects preview; local free purchase debits once.
