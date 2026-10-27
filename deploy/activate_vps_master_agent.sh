@@ -205,7 +205,6 @@ SH
 chmod 700 "$master/run-evolution.sh.tmp"
 mv -f "$master/run-evolution.sh.tmp" "$master/run-evolution.sh"
 "$master/run-evolution.sh"
-"$master/run-cycle.sh"
 # Preserve all unrelated cron entries exactly; reject competing master loops.
 if grep -E 'economic_autorun|autonomous_master_loop' "$old" | grep -v 'SAEIT_MASTER_AGENT_V1' >/dev/null; then
   echo MASTER_COMPETING_EXISTING_CRON_DETECTED
@@ -221,6 +220,11 @@ crontab "$tmp"
 rm -f "$tmp"
 test "$(crontab -l | grep -c 'SAEIT_MASTER_AGENT_V1')" -eq 2
 trap - EXIT
+if "$master/run-cycle.sh" >> "$master/cycle.log" 2>&1; then
+  echo MASTER_INITIAL_CYCLE_COMPLETED
+else
+  echo MASTER_INITIAL_CYCLE_DEFERRED_TO_SCHEDULE
+fi
 echo MASTER_CRON_FIVE_MINUTE_CYCLE_VERIFIED
 echo MASTER_SIX_HOUR_ADAPTIVE_EVOLUTION_VERIFIED
 echo MASTER_FACTORY_LOOP_UNMODIFIED
