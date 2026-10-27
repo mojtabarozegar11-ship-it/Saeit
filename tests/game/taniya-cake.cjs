@@ -10,14 +10,14 @@ const nodes={
   icing:{value:'#ff79b8',oninput:null}
 };
 const tops=['🍓','🌼','🍬'].map(top=>({dataset:{top},onclick:null}));
-const exports=[],messages=[];
+const downloads=[],messages=[];
 const context={
   gamebody:{querySelectorAll(sel){assert.equal(sel,'[data-top]');return tops}},
   $(selector){return nodes[selector.slice(1)]},
   stage(markup){assert.match(markup,/Download your cake card/);nodes.cakepreview.textContent='🎂'},
   btn(label,action){return '<button data-action="'+action+'">'+label+'</button>'},
   say(message){messages.push(message)},
-  downloadSvg(name,body){exports.push({name,body})}
+  downloadSvg(name,body){downloads.push({name,body})}
 };
 vm.createContext(context);
 vm.runInContext(cakeSource,context);
@@ -34,11 +34,11 @@ assert.equal((nodes.cakepreview.textContent.match(/🕯️/g)||[]).length,2);
 nodes.icing.oninput({target:{value:'#11aa22'}});
 assert.equal(run('cakeState.icing'),'#11aa22');
 run("handleCakeAction('cake-download')");
-assert.equal(exports.length,1);
-assert.equal(exports[0].name,'taniya-cake-card');
-assert.match(exports[0].body,/fill="#11aa22"/);
-assert.match(exports[0].body,/🍬/);
-assert.equal((exports[0].body.match(/🕯️/g)||[]).length,2,'export must preserve exactly the visible candle count');
+assert.equal(downloads.length,1);
+assert.equal(downloads[0].name,'taniya-cake-card');
+assert.match(downloads[0].body,/fill="#11aa22"/);
+assert.match(downloads[0].body,/🍬/);
+assert.equal((downloads[0].body.match(/🕯️/g)||[]).length,2,'export must preserve exactly the visible candle count');
 nodes.icing.oninput({target:{value:'"><script>'}});
 assert.equal(run('cakeState.icing'),'#11aa22','untrusted color must not enter exported SVG');
 tops[0].dataset.top='<script>';tops[0].onclick();
@@ -46,7 +46,7 @@ assert.equal(run('cakeState.topping'),'🍬','untrusted topping must not enter e
 for(let i=0;i<20;i++)run("handleCakeAction('candle')");
 assert.equal(run('cakeState.candles'),12,'candle count must be bounded');
 run("handleCakeAction('cake-download')");
-assert.equal((exports[1].body.match(/🕯️/g)||[]).length,12);
+assert.equal((downloads[1].body.match(/🕯️/g)||[]).length,12);
 run('mountCake()');
 assert.equal(run('cakeState.candles'),0,'Start over must clear all candles');
 assert.equal(run('cakeState.topping'),'🍓','Start over must restore default topping');
