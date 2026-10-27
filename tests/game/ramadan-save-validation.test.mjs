@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {validateCampaignSave, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove} from '../../games/ramadan-war/save-validation.mjs';
+import {validateCampaignSave, restoreRecoveryPickups, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove} from '../../games/ramadan-war/save-validation.mjs';
 
 const fresh = () => ({
   hero: 0, mission: 0, lives: 100, x: 2.5, y: 7.5, angle: 0,
@@ -50,7 +50,7 @@ test('preserves valid objective progress while refusing corrupted mission comple
 test('reversible release manifest ships and checks every new imported save module', () => {
   const deploy = readFileSync(new URL('../../games/ramadan-war/deploy.py', import.meta.url), 'utf8');
   const client = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
-  assert.match(client, /import \{validateCampaignSave, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove\} from '\.\/save-validation\.mjs'/);
+  assert.match(client, /import \{validateCampaignSave, restoreRecoveryPickups, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove\} from '\.\/save-validation\.mjs'/);
   assert.match(deploy, /ASSETS=\[[^\n]*'save-validation\.mjs'/);
   assert.match(deploy, /b'\.\/save-validation\.mjs' in new\['game\.js'\]/);
 });
@@ -152,4 +152,38 @@ test('game contains no direct localStorage access outside guarded helpers', () =
   assert.match(game, /storageRead\('rwWin'\)/);
   assert.match(game, /storageWrite\('rwHero',hero\)/);
   assert.match(game, /storageRemove\(saveKey\)/);
+});
+
+test('recovery intel remains stage-local, unique and cannot be duplicated in a save', () => {
+  const intel=(spotIndex)=>({x:4.5+spotIndex,y:2.5,type:'mission-intel',spotIndex,life:3600});
+  const state={...fresh(),mission:2,pickups:[intel(0),intel(1)]};
+  assert.equal(validateCampaignSave(state),true);
+  for(const pickups of [[intel(0),intel(0)],[intel(3)],[{...intel(1),spotIndex:'1'}]]) {
+    assert.equal(validateCampaignSave({...state,pickups}),false);
+  }
+  assert.equal(validateCampaignSave({...fresh(),pickups:[intel(0)]}),false);
+  assert.equal(validateCampaignSave({...state,objective:{done:2,hold:0,bossDefeated:false}}),false);
+});
+
+test('legacy recovery save with expired intel can finish without losing collected progress', () => {
+  const sites=[[4.5,2.5],[12.5,4.5],[8.5,12.5]];
+  const state={...fresh(),mission:2,objective:{done:1,hold:0,bossDefeated:false},pickups:[]};
+  assert.equal(validateCampaignSave(state),true);
+  assert.equal(restoreRecoveryPickups(state,sites),2);
+  assert.equal(state.objective.done,1,'repair must not award unearned completion');
+  assert.equal(state.pickups.length,2);
+  assert.equal(new Set(state.pickups.map(p=>p.spotIndex)).size,2);
+  assert.equal(validateCampaignSave(state),true);
+  assert.equal(restoreRecoveryPickups(state,sites),0,'repair must be idempotent');
+  const cleared={...state,objective:{done:3,hold:0,bossDefeated:false},pickups:[]};
+  assert.equal(restoreRecoveryPickups(cleared,sites),0);
+  const elsewhere={...state,mission:1,pickups:[]};
+  assert.equal(restoreRecoveryPickups(elsewhere,sites),0);
+});
+
+test('active recovery collectibles never time out and restored legacy items are wired to the client', () => {
+  const game=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
+  assert.match(game,/restoreRecoveryPickups\(world,OPERATIONS\[2\]\.sites\)/);
+  assert.match(game,/if\(p\.type!=='mission-intel'\)p\.life-=dt/);
+  assert.match(game,/p\.type!=='mission-intel'&&p\.life<=0/);
 });

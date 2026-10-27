@@ -8,7 +8,10 @@ on:
       - 'games/ramadan-war/missile-targets.mjs'
       - 'games/ramadan-war/deploy.py'
       - 'games/ramadan-war/save-validation.mjs'
+      - 'games/ramadan-war/upgrade-policy.mjs'
+      - 'games/ramadan-war/moj1-commerce-policy.mjs'
       - 'tests/game/ramadan-save-validation.test.mjs'
+      - 'tests/game/ramadan-upgrade-moj1-policy.test.mjs'
       - 'tests/game/ramadan-input-guard.test.mjs'
       - 'tests/game/ramadan-missile-targets.test.mjs'
       - 'tests/game/ramadan-special-resource.test.mjs'
@@ -37,7 +40,9 @@ jobs:
         run: node --test tests/game/ramadan-save-feedback.test.mjs
       - name: Check support skill resource consumption and save persistence
         run: node --test tests/game/ramadan-special-resource.test.mjs
+      - name: Check earned upgrade caps and disabled MOJ1 checkout
+        run: node --test tests/game/ramadan-upgrade-moj1-policy.test.mjs
       - name: Check reversible deployment script syntax
         run: python -m py_compile games/ramadan-war/deploy.py
       - name: Check browser module syntax
-        run: node --check games/ramadan-war/game.js && node --check games/ramadan-war/save-validation.mjs && node --check games/ramadan-war/input-guard.mjs && node --check games/ramadan-war/missile-targets.mjs
+        run: node --check games/ramadan-war/game.js && node --check games/ramadan-war/upgrade-policy.mjs && node --check games/ramadan-war/moj1-commerce-policy.mjs && node --check games/ramadan-war/save-validation.mjs && node --check games/ramadan-war/input-guard.mjs && node --check games/ramadan-war/missile-targets.mjs

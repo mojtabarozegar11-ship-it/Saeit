@@ -11,6 +11,9 @@ export function validateCampaignSave(s) {
   if (!finite(s.maxHp, 1, 200) || !finite(s.hp, 0.01, s.maxHp)) return false;
   if (!integer(s.ammo, 0, 40) || !integer(s.magazine, 1, 40) || s.ammo > s.magazine) return false;
   if (!integer(s.rockets, 0, 24) || !integer(s.drones, 0, 7)) return false;
+  // Legacy high-but-finite earned upgrades are normalized on restore; corrupt values fail closed.
+  if (s.power !== undefined && !integer(s.power, 0, 100)) return false;
+  if (s.armor !== undefined && !integer(s.armor, 0, 100)) return false;
   for (const [name, max] of [['score', 1e10], ['points', 1e7], ['kills', 1e7], ['missionKills', 1e6]]) {
     if (!integer(s[name], 0, max)) return false;
   }
@@ -28,6 +31,16 @@ export function validateCampaignSave(s) {
       (e.targetId === undefined || integer(e.targetId, -1, 29)))) return false;
   if (!group(s.pickups, 60, e => point(e, 0, 16) && finite(e.life, -10, 4000) &&
     ['ammo', 'health', 'intel', 'mission-intel'].includes(e.type))) return false;
+  // Recovery pickups must be unique, stage-local and bounded by unfinished objectives.
+  // Without this, a modified save can duplicate mission rewards or corrupt stage progress.
+  if (Array.isArray(s.pickups)) {
+    const intel=s.pickups.filter(p=>p.type==='mission-intel');
+    const done=s.objective?.done ?? 0;
+    if (intel.length && (s.mission!==2 || !integer(done,0,3) ||
+        intel.some(p=>!integer(p.spotIndex,0,2)) ||
+        new Set(intel.map(p=>p.spotIndex)).size!==intel.length ||
+        intel.length>3-done)) return false;
+  }
   // Preserve old saves without optional timers; fail closed on nonfinite saved clocks.
   for (const field of ['time', 'enemyTimer', 'shotTimer', 'reloadTimer', 'comboTimer',
     'rocketTimer', 'droneTimer', 'skillTimer', 'shield', 'strikeTimer', 'hitFlash',
@@ -40,6 +53,30 @@ export function validateCampaignSave(s) {
       !integer(s.objective.done, 0, 3) || !finite(s.objective.hold, 0, 100) ||
       typeof s.objective.bossDefeated !== 'boolean')) return false;
   return true;
+}
+
+// Reconstruct missing objective items in legacy saves where a long pause expired
+// the collectibles. Never reset already earned progress or grant a reward here.
+export function restoreRecoveryPickups(state, sites) {
+  if (!state || state.mission!==2 || !state.objective ||
+      !Number.isInteger(state.objective.done) || state.objective.done<0 ||
+      state.objective.done>3 || !Array.isArray(state.pickups) ||
+      !Array.isArray(sites) || sites.length!==3) return 0;
+  const existing=state.pickups.filter(p=>p?.type==='mission-intel');
+  const remaining=3-state.objective.done;
+  let needed=Math.max(0,remaining-existing.length);
+  if (!needed) return 0;
+  const occupied=new Set(existing.map(p=>p.spotIndex));
+  let restored=0;
+  for (let i=0;i<sites.length && needed>0;i++) {
+    if (occupied.has(i)) continue;
+    const site=sites[i];
+    if (!Array.isArray(site) || site.length!==2 ||
+        !site.every(n=>typeof n==='number' && Number.isFinite(n) && n>=0 && n<=16)) continue;
+    state.pickups.push({x:site[0],y:site[1],type:'mission-intel',spotIndex:i,life:3600});
+    needed--;restored++;
+  }
+  return restored;
 }
 
 // A cleared mission must resume at its results panel, not in a non-interactive arena.
