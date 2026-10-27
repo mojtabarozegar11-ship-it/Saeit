@@ -159,19 +159,32 @@ jobs:
               sleep "$((attempt * 3))"
             done
           }
-          ssh_retry_capture "$RUNNER_TEMP/mpw-qa-feedback.json" 60s -T -F "$d/config" saeit-cpanel \
-            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' site-feedback"
-          python3 - <<'PY'
+          # A single receipt batch is capped at 50; advance through every
+          # deterministic page, including previously accepted idempotent rows.
+          # The entire scan fails closed if the private backlog exceeds 1600.
+          total=0
+          completed=0
+          for page in $(seq 0 31); do
+            ssh_retry_capture "$RUNNER_TEMP/mpw-qa-feedback.json" 60s -T -F "$d/config" saeit-cpanel \
+              "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' site-feedback-page-$page"
+            count="$(python3 - <<'PY'
           import json,os
           data=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-qa-feedback.json'))
           assert data.get('tenant')=='mojplaywin-main'
           assert data.get('schema')=='mpw.factory.return-to-stage1.v1'
           assert isinstance(data.get('returns'),list)
           assert len(data['returns']) <= 50
-          print('MPW_FACTORY_QA_RETURN_RECEIPTS='+str(len(data['returns'])))
+          print(len(data['returns']))
           PY
-          ssh_retry_stdin 75s "$RUNNER_TEMP/mpw-qa-feedback.json" -T -F "$d/config" saeit-vps \
-            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-return"
+            )"
+            if [ "$count" -eq 0 ]; then completed=1; break; fi
+            ssh_retry_stdin 75s "$RUNNER_TEMP/mpw-qa-feedback.json" -T -F "$d/config" saeit-vps \
+              "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-return"
+            total=$((total + count))
+            if [ "$count" -lt 50 ]; then completed=1; break; fi
+          done
+          test "$completed" -eq 1 || { echo RETURN_PAGE_CAP_REACHED >&2; exit 1; }
+          echo "MPW_FACTORY_QA_RETURN_RECEIPTS_REPLAYED=$total"
           echo 'MPW_FACTORY_STAGE1_RETURN_CHANNEL=PASS'
       - name: Prove old site work orders and classify actual specialist blockers before new intake
         shell: bash
@@ -337,7 +350,7 @@ jobs:
               assert v['tenant']=='mojplaywin-main' and v['stage']==1
               assert v['published'] is False
               rows.append(v)
-          assert len(rows)<=50
+          assert len(rows)<=1600
           state=b/'design-state/mojplaywin-stage1-qa-work/stage1-status.json'
           assert state.is_file() and not state.is_symlink()
           proof=json.loads(state.read_text())
