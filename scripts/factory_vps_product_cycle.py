@@ -13,6 +13,7 @@ import importlib.util
 import json
 import os
 import re
+import stat
 import tempfile
 from pathlib import Path
 import sys
@@ -48,8 +49,14 @@ def _read_private_json(path):
     try:
         if path.is_symlink() or not path.is_file() or path.stat().st_size > 2_000_000:
             return None
-        # Bound the actual read: the file may grow after the size preflight.
-        with path.open("rb") as stream:
+        # Bind the validation to the opened inode: a symlink/FIFO replacement
+        # after the path preflight must never be followed or block this cycle.
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        fd = os.open(path, flags)
+        with os.fdopen(fd, "rb") as stream:
+            opened = os.fstat(stream.fileno())
+            if not stat.S_ISREG(opened.st_mode) or opened.st_size > 2_000_000:
+                return None
             raw = stream.read(2_000_001)
         if len(raw) > 2_000_000:
             return None
