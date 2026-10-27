@@ -35,5 +35,19 @@ class PrivateJsonFailClosedTests(unittest.TestCase):
             self.assertEqual(cycle._read_private_json(path), {"schema":"safe"})
 
 
+
+    def test_growth_after_stat_is_rejected_before_unbounded_allocation(self):
+        import io
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "state.json"
+            path.write_text('{"schema":"safe"}', encoding="utf8")
+            original_open = Path.open
+            def raced_open(self, *args, **kwargs):
+                if self == path and args and args[0] == "rb":
+                    return io.BytesIO(b"x" * 2_000_001)
+                return original_open(self, *args, **kwargs)
+            with mock.patch.object(Path, "open", raced_open):
+                self.assertIsNone(cycle._read_private_json(path))
+
 if __name__ == "__main__":
     unittest.main()
