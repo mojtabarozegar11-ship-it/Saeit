@@ -36,7 +36,8 @@ class LeechStreamAcceptanceRegression(unittest.TestCase):
 
     def test_streamed_reasoning_and_control_tokens_are_rejected(self):
         for marker in ("<think>hidden chain</think>", "<|im_start|>",
-                       "<|im_end|>", "[INST]", "[/INST]"):
+                       "<|im_end|>", "<|assistant", "<|endoftext|>",
+                       "[INST]", "[/INST]"):
             with self.subTest(marker=marker):
                 self.assertFalse(self.operator.stream_segment_is_acceptable(
                     marker + " " + self.valid))
