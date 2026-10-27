@@ -145,6 +145,23 @@ class VPSWarehouseCourierTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,"RETURN_PAGE_INVALID"):
             feedback_site(self.site,page=32)
 
+    def test_exact_1600_receipts_fills_last_page_and_1601_fails_closed(self):
+        archive=export_factory(self.factory)
+        import_site(archive,self.site)
+        folder=self.site/"returns"/self.product
+        template=json.loads((folder/(self.version+".json")).read_text())
+        for index in range(1,1600):
+            version=f"{index:064x}"
+            row=dict(template,source_sha256=version)
+            (folder/(version+".json")).write_text(json.dumps(row))
+        last=json.loads(feedback_site(self.site,page=31))
+        self.assertEqual(len(last["returns"]),50)
+        self.assertEqual(len(json.loads(feedback_site(self.site,page=0))["returns"]),50)
+        extra=dict(template,source_sha256="f"*64)
+        (folder/("f"*64+".json")).write_text(json.dumps(extra))
+        with self.assertRaisesRegex(RuntimeError,"RETURN_BACKLOG_REQUIRES_REVIEW"):
+            feedback_site(self.site,page=31)
+
     def test_factory_authorization_never_inferred_from_technical_qa(self):
         self.manifest["commercial_release"]=True
         (self.stock/"warehouse_manifest.json").write_text(json.dumps(self.manifest))
