@@ -102,3 +102,14 @@ No independently verified degree, institutional affiliation, ORCID, residence, i
 **MR:** C45 publisher Table 5 provenance, Amini F7, Cvejić denominator and field validation remain unresolved. **ZM:** exact RefSeq v2.0 assembly/annotation pairing, experimental-unit independence and count-based analysis remain unresolved; no FASTQ bulk download authorized.
 
 **Release status:** AE and MR **MAJOR REVISION / NO SUBMISSION**, ZM **DATA REBUILD / NO SUBMISSION**. **0** journal submissions, Manuscript IDs, author approvals, acceptances, publications or live-site changes. PR #1054 remains outside scope for merging; prohibited social accounts untouched.
+
+
+## 27 October 2026 — C27 current scientific status (staging only)
+
+**AE-2026-001:** The [consolidated English internal author-review manuscript](../manuscripts/AE-2026-001/AE-2026-001_CONSOLIDATED_AUTHOR_REVIEW_MANUSCRIPT_2026-10-27.md) has now been updated with [C27 source-rowwise growth-sign margin sensitivity](../manuscripts/AE-2026-001/AE-2026-001_C27_HORIZON_SIGN_SWITCH_MARGIN_ROBUSTNESS_2026-10-27.md): in the distinct 153-economy 2026-only sample, E→H growth-sign reversals decrease from 10 to 3 with a strict 0.5 log-pp/year absolute margin on both compared rates. This is a post hoc descriptive sensitivity, **not** the 10/155 historical-vintage sign-switch comparison, statistical significance, new estimator or causal inference. The [internal AI review and author packet](AE_2026_001_CONSOLIDATED_AUTHOR_PACKET_AND_AI_CRITICAL_GATE_2026-10-27.md) has been updated. A Word build **must be separately verified** against the consolidated source; older artifacts are not current. **MAJOR REVISION / NO SUBMISSION.**
+
+**MR-2026-001:** Car Table 5, Amini F7, Cvejić denominator, source methods and independent event-level G/D/R/A validation remain unresolved. **MAJOR REVISION / NO SUBMISSION.**
+
+**ZM-R01:** exact RefSeq v2.0 FASTA/annotation, experimental independence, multimapping and real 24-sample integer count matrix remain unresolved; published FPKM and 1,167 exploratory candidates are not independently validated DEG/FDR. No bulk FASTQ download. **DATA REBUILD / NO SUBMISSION.**
+
+**Future registry:** 46 gated English research questions remain a queue, not 46 completed papers. **Human author approvals, journal submissions, manuscript IDs, acceptances and publications: zero.** No live-site edits, PR #1054 merge or prohibited social-account interactions.
