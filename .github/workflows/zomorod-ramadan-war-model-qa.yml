@@ -54,6 +54,22 @@ jobs:
           assert cards[2]['id'] == 'ZM-R25-GAME-ARROW-ESCAPE-20261022' and cards[2]['canonicalUrl'] == '/arrow-escape/'
           assert cards[3]['slug'] == 'website-design'
           print('LIVE_IT_FIRST_FOUR_CARDS=PASS count=',len(cards))
+          # Read-only live-route smoke: a homepage card alone does not prove
+          # that the actual game, JavaScript and CSS resolve successfully.
+          from urllib.parse import urlsplit
+          for route,signature in [
+              ('/ramadan-war/',b'ZM-RAMADAN-WAR-WEB-CARD-20261022'),
+              ('/ramadan-war/game.js',b'RamadanWarDebug'),
+              ('/ramadan-war/game.css',b'#game'),
+          ]:
+              with urlopen(Request('https://zomorodmelal.ir'+route,
+                  headers={'Cache-Control':'no-cache','User-Agent':'RamadanReadOnlyRouteQA/1'}),timeout=40) as response:
+                  assert response.status==200, 'live game asset not HTTP 200: '+route
+                  resolved=urlsplit(response.geturl())
+                  assert resolved.hostname in ('zomorodmelal.ir','www.zomorodmelal.ir') and resolved.path==route, 'unexpected redirect: '+route
+                  body=response.read(4000000)
+              assert signature in body, 'live game asset signature missing: '+route
+              print('LIVE_RAMADAN_ROUTE=PASS',route,len(body))
           PY
       - name: Full desktop and mobile gameplay with real GLB texture loading
         run: |
