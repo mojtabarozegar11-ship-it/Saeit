@@ -25,7 +25,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile scripts/zomorod_six_safe_patch_20261027.py content/zomorod-v11/search_build.py
-          test "$(rg -c 'ASSET_PREFIX = "/static/site/zm-home-media-20261027/"' scripts/zomorod_six_safe_patch_20261027.py)" -eq 1
+          grep -Fq 'ASSET_PREFIX = "/static/site/zm-home-media-20261027/"' scripts/zomorod_six_safe_patch_20261027.py
           grep -Fq 'ZM_SIX_REVERSIBILITY=byte_identical' scripts/zomorod_six_safe_patch_20261027.py
           grep -Fq 'store_payment_remains_disabled' scripts/zomorod_six_safe_patch_20261027.py
           echo SOURCE_SAFETY=passed
