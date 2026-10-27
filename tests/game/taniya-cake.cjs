@@ -57,6 +57,8 @@ assert.equal(run('cakeState.candles'),12,'candle count must be bounded');
 assert.equal(nodes.candle.disabled,true,'the capped candle action must be disabled');
 run("handleCakeAction('cake-download')");
 assert.equal((downloads[1].body.match(/🕯️/g)||[]).length,12);
+// Restore the fixture after deliberately corrupting the simulated DOM dataset.
+tops[0].dataset.top='🍓';
 run('mountCake()');
 assert.equal(run('cakeState.candles'),0,'Start over must clear all candles');
 assert.equal(run('cakeState.topping'),'🍓','Start over must restore default topping');
