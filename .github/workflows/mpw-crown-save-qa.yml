@@ -1,0 +1,28 @@
+name: Crown Defender local save and MOJ1 safety QA
+on:
+  pull_request:
+    paths:
+      - 'games/crown-defender/index.html'
+      - 'tests/game/crown-v120.cjs'
+      - '.github/workflows/mpw-crown-save-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  crown-save:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify game script parses and safe local history cannot bypass premium checkout guard
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          html=Path('games/crown-defender/index.html').read_text('utf-8')
+          Path('/tmp/crown-defender-qa.js').write_text(html.split('<script>',1)[1].split('</script>',1)[0],encoding='utf-8')
+          PY
+          node --check /tmp/crown-defender-qa.js
+          node tests/game/crown-v120.cjs
