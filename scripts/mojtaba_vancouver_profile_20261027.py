@@ -25,11 +25,8 @@ RELATIVES = (
 )
 BACKUP_ROOT = Path("/home/zomorod2/.backups/mojtaba-residence-profession")
 ABOUT_DESCRIPTION = (
-    "Mojtaba Roozegar is an Iranian entrepreneur and researcher based in "
-    "Vancouver, British Columbia, Canada. His reported academic background is "
-    "a PhD in Agricultural Economics from Universiti Putra Malaysia (UPM), "
-    "specializing in Production Economics and Farm Management. He is CEO "
-    "of Zomorod Melal Agro-Industry Company and founder of MojPlayWin."
+    "Mojtaba Roozegar — Vancouver-based entrepreneur with a reported PhD in "
+    "Agricultural Economics (UPM); CEO of Zomorod Melal and founder of MojPlayWin."
 )
 CONTACT_DESCRIPTION = (
     "Contact Mojtaba Roozegar in Vancouver, British Columbia, Canada "
