@@ -54,19 +54,12 @@ class ReleaseTests(unittest.TestCase):
             publisher.publish(self.inbox, self.webroot)
         self.assertFalse((self.webroot / "factory-releases").exists())
 
-    def test_release_visible_and_repeat_safe(self):
-        published = publisher.publish(self.inbox, self.webroot, release_authorized=True)
-        self.assertEqual(published["status"], "published_public_free_download")
-        folder = self.webroot / "factory-releases" / publisher.PUBLIC_SLUG
-        package = folder / publisher.PUBLIC_FILENAME
-        self.assertEqual(publisher.digest_file(package), self.sha)
-        self.assertIn(self.sha, (folder / "index.html").read_text())
-        self.assertIn("Download the Free Toolkit", (folder / "index.html").read_text())
-        self.assertIn("no paid checkout", (folder / "index.html").read_text())
-        self.assertIn(self.sha, (folder / "SHA256SUMS.txt").read_text())
-        self.assertEqual(publisher.publish(
-            self.inbox, self.webroot, release_authorized=True
-        )["status"], "existing_valid_release")
+    def test_release_blocked_without_chatgpt_review_and_real_qc1000(self):
+        with self.assertRaisesRegex(ValueError, "QC1000_REQUIRED_FOR_FACTORY_EXIT"):
+            publisher.publish(self.inbox, self.webroot, release_authorized=True)
+        self.assertFalse(
+            (self.webroot / "factory-releases" / publisher.PUBLIC_SLUG).exists()
+        )
 
     def test_existing_conflicting_public_directory_never_overwritten(self):
         dest = self.webroot / "factory-releases" / publisher.PUBLIC_SLUG

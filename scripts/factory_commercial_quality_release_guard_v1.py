@@ -11,6 +11,9 @@ import json
 import os
 from pathlib import Path
 import re
+from datetime import datetime, timezone
+from pathlib import PurePosixPath
+import zipfile
 
 SHA=re.compile(r"^[a-f0-9]{64}$")
 
@@ -68,6 +71,122 @@ def _verify_executed_qc1000(root,container,artifact_sha,decision):
             "doctoral_evidence_structurally_bound":True,
             "scientific_specialist_signatures_still_mandatory":True}
 
+CHATGPT_REVIEW_SCHEMA="saeit.factory.chatgpt-final-store-review.v1"
+CHATGPT_REVIEWER="ChatGPT (Codex)"
+CHATGPT_REVIEW_CHECKS=(
+    "artifact_integrity",
+    "functional_completeness",
+    "edge_cases_and_failure_handling",
+    "documentation_and_setup",
+    "claims_and_limitations",
+    "rights_and_attribution",
+    "security_and_privacy",
+    "store_listing_accuracy",
+    "quality_1000_evidence",
+)
+
+def require_chatgpt_final_review(inbox,recipe,artifact_sha,product_manifest,package_path):
+    """Require ChatGPT's substantive, exact-artifact review before store entry.
+
+    The receipt is authored only after the assistant inspects every packaged
+    file. This validator checks identity, review scope, timestamps and byte
+    coverage; it never creates or grants a review decision itself.
+    """
+    if (not isinstance(recipe,str) or not re.fullmatch(r"[a-z][a-z0-9_]{1,65}",recipe)
+            or not isinstance(artifact_sha,str) or not SHA.fullmatch(artifact_sha)
+            or not isinstance(product_manifest,dict)):
+        raise ValueError("CHATGPT_REVIEW_PRODUCT_IDENTITY_INVALID")
+    package=Path(package_path)
+    if (not package.is_file() or package.is_symlink()
+            or _digest_file(package)!=artifact_sha):
+        raise ValueError("CHATGPT_REVIEW_ARTIFACT_HASH_MISMATCH")
+    container=Path(inbox)/"quality-clearance"/recipe/artifact_sha
+    receipt_path=container/"chatgpt-final-review.json"
+    if (receipt_path.is_symlink() or not receipt_path.is_file()
+            or not 0<receipt_path.stat().st_size<=500_000):
+        raise ValueError("CHATGPT_FINAL_REVIEW_MISSING")
+    try:
+        review=json.loads(receipt_path.read_text(encoding="utf8"))
+    except (ValueError,OSError,UnicodeError) as exc:
+        raise ValueError("CHATGPT_FINAL_REVIEW_INVALID_JSON") from exc
+    if not isinstance(review,dict):
+        raise ValueError("CHATGPT_FINAL_REVIEW_INVALID")
+    manifest_bytes=json.dumps(product_manifest,ensure_ascii=False,sort_keys=True,
+                              separators=(",",":")).encode("utf8")
+    manifest_sha=hashlib.sha256(manifest_bytes).hexdigest()
+    if (review.get("schema")!=CHATGPT_REVIEW_SCHEMA
+            or review.get("reviewer")!=CHATGPT_REVIEWER
+            or review.get("reviewer_role")!="owner-delegated final product quality reviewer"
+            or review.get("decision")!="approved_for_store"
+            or review.get("recipe")!=recipe
+            or review.get("artifact_sha256")!=artifact_sha
+            or review.get("manifest_sha256")!=manifest_sha):
+        raise ValueError("CHATGPT_FINAL_REVIEW_NOT_BOUND_TO_PRODUCT")
+    stamp=review.get("reviewed_at_utc")
+    if not isinstance(stamp,str):
+        raise ValueError("CHATGPT_FINAL_REVIEW_TIMESTAMP_INVALID")
+    try:
+        parsed=datetime.fromisoformat(stamp.replace("Z","+00:00"))
+    except ValueError as exc:
+        raise ValueError("CHATGPT_FINAL_REVIEW_TIMESTAMP_INVALID") from exc
+    if parsed.tzinfo is None or parsed.utcoffset()!=timezone.utc.utcoffset(parsed):
+        raise ValueError("CHATGPT_FINAL_REVIEW_TIMESTAMP_NOT_UTC")
+    summary=review.get("review_summary")
+    if not isinstance(summary,str) or len(summary.strip())<300:
+        raise ValueError("CHATGPT_FINAL_REVIEW_SUMMARY_TOO_SHALLOW")
+    if review.get("unresolved_findings")!=[]:
+        raise ValueError("CHATGPT_FINAL_REVIEW_HAS_UNRESOLVED_FINDINGS")
+    checks=review.get("checklist")
+    if (not isinstance(checks,dict) or set(checks)!=set(CHATGPT_REVIEW_CHECKS)
+            or any(value is not True for value in checks.values())):
+        raise ValueError("CHATGPT_FINAL_REVIEW_CHECKLIST_INCOMPLETE")
+    files=review.get("reviewed_files")
+    if not isinstance(files,list) or not files or len(files)>2500:
+        raise ValueError("CHATGPT_FINAL_REVIEW_FILE_COVERAGE_INVALID")
+    reviewed={}
+    for row in files:
+        if (not isinstance(row,dict) or set(row)!={"path","sha256","size"}
+                or not isinstance(row.get("path"),str)
+                or not isinstance(row.get("sha256"),str)
+                or not SHA.fullmatch(row["sha256"])
+                or type(row.get("size")) is not int or row["size"]<0):
+            raise ValueError("CHATGPT_FINAL_REVIEW_FILE_RECORD_INVALID")
+        name=row["path"]
+        parts=PurePosixPath(name)
+        if (not name or name.startswith("/") or "\\" in name
+                or any(part in ("",".","..") for part in parts.parts)
+                or name in reviewed):
+            raise ValueError("CHATGPT_FINAL_REVIEW_FILE_PATH_INVALID")
+        reviewed[name]=(row["sha256"],row["size"])
+    actual={}
+    total=0
+    try:
+        with zipfile.ZipFile(package,"r") as archive:
+            members=archive.infolist()
+            if not members or len(members)>2500:
+                raise ValueError("CHATGPT_REVIEW_ARCHIVE_MEMBER_LIMIT")
+            for item in members:
+                name=item.filename
+                parts=PurePosixPath(name)
+                if (item.is_dir() or not name or name.startswith("/") or "\\" in name
+                        or any(part in ("",".","..") for part in parts.parts)
+                        or ((item.external_attr>>16)&0o170000)==0o120000
+                        or name in actual):
+                    raise ValueError("CHATGPT_REVIEW_ARCHIVE_MEMBER_UNSAFE")
+                data=archive.read(item)
+                total+=len(data)
+                if len(data)!=item.file_size or total>150*1024*1024:
+                    raise ValueError("CHATGPT_REVIEW_ARCHIVE_SIZE_INVALID")
+                actual[name]=(hashlib.sha256(data).hexdigest(),len(data))
+    except (zipfile.BadZipFile,OSError,EOFError) as exc:
+        raise ValueError("CHATGPT_REVIEW_ARCHIVE_INVALID") from exc
+    if reviewed!=actual:
+        raise ValueError("CHATGPT_FINAL_REVIEW_FILE_COVERAGE_MISMATCH")
+    return {"status":"CHATGPT_FINAL_REVIEW_VERIFIED",
+            "reviewer":CHATGPT_REVIEWER,
+            "artifact_sha256":artifact_sha,
+            "reviewed_files":len(actual)}
+
 def require_quality_clearance(inbox,recipe,package_digest,product_manifest,package_path):
     if not isinstance(product_manifest,dict):
         raise ValueError("INVALID_PRIVATE_FACTORY_MANIFEST")
@@ -101,8 +220,12 @@ def require_quality_clearance(inbox,recipe,package_digest,product_manifest,packa
     # trusted verifier on the exact 1000 test receipts and research dossier.
     checked=_verify_executed_qc1000(root,container,package_digest,
                                    approval.get("decision"))
+    chatgpt_review=require_chatgpt_final_review(
+        root,recipe,package_digest,product_manifest,package_path
+    )
     return {"status":"VERIFIED_SIGNED_PREMIUM_1000",
             "artifact_sha256":package_digest,
             "1000_quality_verified":True,
             "real_executions_verified":checked["real_executions_verified"],
-            "independent_signed_reviewers":result["verifiable_reviewer_count"]}
+            "independent_signed_reviewers":result["verifiable_reviewer_count"],
+            "chatgpt_final_review":chatgpt_review["status"]}
