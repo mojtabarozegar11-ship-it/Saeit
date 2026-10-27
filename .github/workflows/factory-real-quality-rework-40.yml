@@ -133,7 +133,7 @@ jobs:
           echo FACTORY_ORIGINAL_SOURCE_RECOVERY_HASH_BOUND=COMPLETED
           # Only source-backed, genuinely executed offline technical QA rebuilds;
           # original factory stock and public release state remain unchanged.
-          # Two bounded 3-product repair waves plus independent candidate ZIP / hash / original-QA reinspection.
+          # One bounded, provenance-checked sweep across all 40 registered production families.
           for pair in "scripts/factory_autonomous_jump_repair_v1.py:jump-repair.py" "scripts/factory_qa_native_rebuild_bridge_20261021.py:native-rebuild.py" "factory_config/forty_families.json:families.json"; do
             local_file="${pair%%:*}"
             remote_file="${pair#*:}"
@@ -148,9 +148,7 @@ jobs:
             --maker "$stage/factory_product_maker.py" --bridge "$stage/native-rebuild.py" \
             --additional-source-root /home/githubops/factory-runtime/operations/autonomous-product-runtime/product_recipes \
             --additional-source-root /home/githubops/factory-runtime/private/autonomous-product-cycle/recovered-original-product-recipes \
-            --rounds 1 --limit 34 \
-            --exclude-family F12 --exclude-family F13 --exclude-family F16 \
-            --exclude-family F17 --exclude-family F26 --exclude-family F40
+            --rounds 1 --limit 40
           echo FACTORY_NATIVE_TECHNICAL_REBUILD_CANDIDATES_INSPECTED=YES
           # Return every changed factory artifact to quality control in this same run.
           timeout 125s ssh -T "${opts[@]}" githubops@178.239.147.150 \
