@@ -90,11 +90,18 @@ def _api(request):
                 "max_attachments": cases.MAX_ATTACHMENTS,
                 "case_tracking": True, "payment_enabled": False,
                 "applicant_followups": True, "report_export": True,
+                "public_report_integrity": True,
                 "independent_certification_enabled": False,
                 "staff": bool(request.user.is_authenticated and request.user.is_staff),
             })
         if operation == "registry":
-            return _api_json({"ok": True, "reports": cases.registry()})
+            return _api_json({"ok": True, "reports": cases.registry(settings.SECRET_KEY)})
+        if operation == "verify":
+            result = cases.verify_public_report(
+                request.GET.get("case_id", ""), request.GET.get("proof", ""),
+                settings.SECRET_KEY
+            )
+            return _api_json({"ok": True, **result})
         return _api_json({"ok": False, "error": "Unknown API operation"}, 404)
     if request.method != "POST":
         return _api_json({"ok": False, "error": "Method not allowed"}, 405)
@@ -134,7 +141,7 @@ def _api(request):
         elif action == "staff_review":
             actor = _require_staff(request)
             result = cases.submit_review(
-                payload.get("case_id", ""), actor, payload.get("review")
+                payload.get("case_id", ""), actor, payload.get("review"), settings.SECRET_KEY
             )
         elif action == "staff_file":
             _require_staff(request)
