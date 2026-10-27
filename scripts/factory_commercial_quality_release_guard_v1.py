@@ -85,6 +85,51 @@ CHATGPT_REVIEW_CHECKS=(
     "quality_1000_evidence",
 )
 
+def _inspect_review_archive(package):
+    """Hash each ZIP member with bounded memory and reject oversized archives.
+
+    Reject from central-directory sizes before decompression, and independently
+    cap streamed bytes so forged ZIP metadata cannot cause unbounded allocation.
+    This is read-only; no archive member is extracted to disk.
+    """
+    actual={}
+    total=0
+    limit=150*1024*1024
+    try:
+        with zipfile.ZipFile(package,"r") as archive:
+            members=archive.infolist()
+            if not members or len(members)>2500:
+                raise ValueError("CHATGPT_REVIEW_ARCHIVE_MEMBER_LIMIT")
+            for item in members:
+                name=item.filename
+                parts=PurePosixPath(name)
+                if (item.is_dir() or not name or name.startswith("/") or "\\" in name
+                        or parts.as_posix()!=name or any(part in ("",".","..") for part in parts.parts)
+                        or ((item.external_attr>>16)&0o170000)==0o120000
+                        or name in actual):
+                    raise ValueError("CHATGPT_REVIEW_ARCHIVE_MEMBER_UNSAFE")
+                remaining=limit-total
+                if item.file_size<0 or item.file_size>remaining:
+                    raise ValueError("CHATGPT_REVIEW_ARCHIVE_SIZE_INVALID")
+                digest=hashlib.sha256()
+                size=0
+                with archive.open(item,"r") as stream:
+                    while True:
+                        chunk=stream.read(min(1024*1024,remaining-size+1))
+                        if not chunk:
+                            break
+                        size+=len(chunk)
+                        if size>item.file_size or size>remaining:
+                            raise ValueError("CHATGPT_REVIEW_ARCHIVE_SIZE_INVALID")
+                        digest.update(chunk)
+                if size!=item.file_size:
+                    raise ValueError("CHATGPT_REVIEW_ARCHIVE_SIZE_INVALID")
+                total+=size
+                actual[name]=(digest.hexdigest(),size)
+    except (zipfile.BadZipFile,OSError,EOFError,RuntimeError) as exc:
+        raise ValueError("CHATGPT_REVIEW_ARCHIVE_INVALID") from exc
+    return actual
+
 def require_chatgpt_final_review(inbox,recipe,artifact_sha,product_manifest,package_path):
     """Require ChatGPT's substantive, exact-artifact review before store entry.
 
@@ -154,32 +199,11 @@ def require_chatgpt_final_review(inbox,recipe,artifact_sha,product_manifest,pack
         name=row["path"]
         parts=PurePosixPath(name)
         if (not name or name.startswith("/") or "\\" in name
-                or any(part in ("",".","..") for part in parts.parts)
+                or parts.as_posix()!=name or any(part in ("",".","..") for part in parts.parts)
                 or name in reviewed):
             raise ValueError("CHATGPT_FINAL_REVIEW_FILE_PATH_INVALID")
         reviewed[name]=(row["sha256"],row["size"])
-    actual={}
-    total=0
-    try:
-        with zipfile.ZipFile(package,"r") as archive:
-            members=archive.infolist()
-            if not members or len(members)>2500:
-                raise ValueError("CHATGPT_REVIEW_ARCHIVE_MEMBER_LIMIT")
-            for item in members:
-                name=item.filename
-                parts=PurePosixPath(name)
-                if (item.is_dir() or not name or name.startswith("/") or "\\" in name
-                        or any(part in ("",".","..") for part in parts.parts)
-                        or ((item.external_attr>>16)&0o170000)==0o120000
-                        or name in actual):
-                    raise ValueError("CHATGPT_REVIEW_ARCHIVE_MEMBER_UNSAFE")
-                data=archive.read(item)
-                total+=len(data)
-                if len(data)!=item.file_size or total>150*1024*1024:
-                    raise ValueError("CHATGPT_REVIEW_ARCHIVE_SIZE_INVALID")
-                actual[name]=(hashlib.sha256(data).hexdigest(),len(data))
-    except (zipfile.BadZipFile,OSError,EOFError) as exc:
-        raise ValueError("CHATGPT_REVIEW_ARCHIVE_INVALID") from exc
+    actual=_inspect_review_archive(package)
     if reviewed!=actual:
         raise ValueError("CHATGPT_FINAL_REVIEW_FILE_COVERAGE_MISMATCH")
     return {"status":"CHATGPT_FINAL_REVIEW_VERIFIED",
