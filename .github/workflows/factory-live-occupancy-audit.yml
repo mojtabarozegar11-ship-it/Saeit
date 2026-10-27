@@ -80,6 +80,9 @@ jobs:
             family=match.group(0) if match else fixed.get(name)
             if family:active.add(family)
           families=ctrl.get("families",[])
+          technical_products=sum(x.get("completed_50_stage_products",0)
+                                 for x in families
+                                 if type(x.get("completed_50_stage_products",0)) is int)
           blocked=sorted(x.get("family_id") for x in families
                          if x.get("operational_state")=="blocked_no_validated_native_50_stage_executor")
           dispatch_lines=[line for line in cron.splitlines()
@@ -91,6 +94,8 @@ jobs:
             "cron_daemon_running":cron_running,
             "dispatcher_log_age_seconds":dispatch_log_age,
             "registered_line_routes":planner.get("registered_family_routes"),
+            "verified_technical_50_stage_products":technical_products,
+            "families_with_real_50_stage_products":ctrl.get("counts",{}).get("families_with_real_50_stage_products"),
             "worker_budget":planner.get("worker_budget"),
             "below_40_concurrent_slots":(planner.get("worker_budget") or 0)<40,
             "active_builder_lines":len(active),
