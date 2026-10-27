@@ -48,7 +48,7 @@ def public_route(slug):
     return ("/ventures/" + slug[len("ventures-"):] + "/") if slug.startswith("ventures-") else "/" + slug + "/"
 
 def archive_route(slug):
-    return "/mpw-editorial/collections/" + slug + "/"
+    return "/mpw-editorial/collections/" + slug + "/index.html"
 
 def section_span(s, needle):
     pos = s.find(needle)
