@@ -1,0 +1,158 @@
+name: MojPlayWin dynamic games and static studio guide link repair
+on:
+  push:
+    branches: [main]
+    paths:
+      - core/templates/brands/mojplaywin/page.html
+      - scripts/mpw_main_guide_links_release_20261027.py
+      - .github/workflows/mpw-main-guide-links-safe-20261027.yml
+permissions:
+  contents: read
+concurrency:
+  group: mpw-main-guide-links-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify source code and guide URL transformation
+        run: |
+          python3 -m py_compile scripts/mpw_main_guide_links_release_20261027.py
+          python3 scripts/mpw_main_guide_links_release_20261027.py selftest
+          python3 - <<'PY'
+          from pathlib import Path
+          text=Path('core/templates/brands/mojplaywin/page.html').read_text('utf8')
+          for old in ('href="/#mpw-insight-title"','href="/#field-library-round2"',
+                      'href="/#field-library-business"','href="/#field-library-advanced"'):
+              if old in text:raise RuntimeError('REPO_DYNAMIC_LEGACY_ANCHOR_REMAINS:'+old)
+          for new in ('/mpw-editorial/field-guides/original-ten/',
+                      '/mpw-editorial/field-guides/20261023/index.html'):
+              if new not in text:raise RuntimeError('REPO_GUIDE_TARGET_MISSING:'+new)
+          print('MPW_DYNAMIC_GUIDES_SOURCE_VERIFIED')
+          PY
+      - name: Snapshot site availability and prove guide library URLs live
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request
+          site="https://mojplaywin.com"
+          routes=("/","/games/","/studio/","/services/","/ai/",
+                  "/store/","/store/product/72/","/store/product/225/",
+                  "/store/product/879/","/mojtaba.roozegar/","/taniya/",
+                  "/farnaz/","/saman/","/picm/")
+          result={}
+          for route in routes:
+              with urllib.request.urlopen(site+route,timeout=25) as response:
+                  if response.status!=200:raise RuntimeError('BASELINE_ROUTE_UNHEALTHY:'+route)
+                  result[route]=response.status
+          for route in ("/mpw-editorial/field-guides/original-ten/",
+                        "/mpw-editorial/field-guides/20261023/index.html"):
+              with urllib.request.urlopen(site+route,timeout=25) as response:
+                  if response.status!=200:raise RuntimeError('TARGET_GUIDE_NOT_AVAILABLE:'+route)
+          with open(os.path.join(os.environ["RUNNER_TEMP"],"mpw-guide-baseline.json"),"w") as f:
+              json.dump(result,f)
+          print('MPW_GUIDES_BASELINE_OK',len(result))
+          PY
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-guide-links-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Audit exact on-host source files without changing them
+        run: |
+          timeout 35s ssh -T -F "$RUNNER_TEMP/mpw-guide-links-ssh/config" saeit-cpanel "python3 - audit" < scripts/mpw_main_guide_links_release_20261027.py
+      - name: Atomically update only main-brand page template and studio static file
+        id: install
+        run: |
+          set -euo pipefail
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-guide-links-ssh/config" saeit-cpanel "python3 - publish '$GITHUB_RUN_ID'" < scripts/mpw_main_guide_links_release_20261027.py
+      - name: Refresh verified MojPlayWin Passenger template cache
+        run: |
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-guide-links-ssh/config" saeit-cpanel "python3 - refresh" < scripts/mpw_main_guide_links_release_20261027.py
+      - name: Verify dynamic games and studio live anchors and protected routes
+        run: |
+          python3 - <<'PY'
+          import json,os,time,urllib.request
+          root="https://mojplaywin.com"
+          prior=json.load(open(os.path.join(os.environ["RUNNER_TEMP"],"mpw-guide-baseline.json")))
+          old=('href="/#mpw-insight-title"','href="/#field-library-round2"',
+               'href="/#field-library-business"','href="/#field-library-advanced"')
+          for route in ("/games/","/studio/"):
+              ready=False
+              for attempt in range(10):
+                  req=urllib.request.Request(root+route+'?mpw_guides='+str(time.time_ns()),
+                                             headers={"Cache-Control":"no-cache"})
+                  with urllib.request.urlopen(req,timeout=25) as response:
+                      text=response.read(350000).decode("utf8","replace")
+                  ready=(not any(fragment in text for fragment in old)
+                         and '/mpw-editorial/field-guides/original-ten/' in text
+                         and '/mpw-editorial/field-guides/20261023/index.html' in text)
+                  if ready:break
+                  time.sleep(2)
+              if not ready:raise RuntimeError('DYNAMIC_GUIDE_LINKS_NOT_FIXED:'+route)
+              print('MPW_GUIDE_LINKS_LIVE_OK',route)
+          for route,status in prior.items():
+              with urllib.request.urlopen(root+route,timeout=25) as response:
+                  if response.status!=status:raise RuntimeError('PROTECTED_ROUTE_CHANGED:'+route)
+          for pk in ("72","225","879"):
+              with urllib.request.urlopen(root+"/store/product/"+pk+"/checkout/",timeout=25) as response:
+                  if "/accounts/login/" not in response.url:
+                      raise RuntimeError("CHECKOUT_GUARD_CHANGED:"+pk)
+          print('MPW_GUIDE_LINKS_AND_PROTECTED_ROUTES_VERIFIED')
+          PY
+      - name: Roll back only matching source files on smoke failure
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-guide-links-ssh/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_main_guide_links_release_20261027.py
+      - name: Refresh templates after exact rollback
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-guide-links-ssh/config" saeit-cpanel "python3 - refresh" < scripts/mpw_main_guide_links_release_20261027.py
+      - name: Remove ephemeral SSH material
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-guide-links-ssh"
+          if [ -d "$d" ]; then rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/config"; rmdir "$d"; fi
