@@ -45,7 +45,8 @@ jobs:
               else:
                 slug=p.split("/")[0]
                 checks["interactive_tool"]=('data-tool="'+slug+'"') in body and 'assets/tools-v1.js' in body
-                checks["quotation_cta"]="Request a tailored quote by email" in body
+                checks["scoped_inquiry_cta"]=("Send a scoped service request" in body and
+                                               ("inquiry.php?service="+slug) in body)
                 checks["no_fake_payment"]="No payment is collected on this page" in body
               misses=[k for k,ok in checks.items() if not ok]
               if misses:faults.append((p,"BAD_CONTENT:"+",".join(misses)))
