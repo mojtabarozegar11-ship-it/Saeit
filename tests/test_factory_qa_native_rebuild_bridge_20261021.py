@@ -46,14 +46,14 @@ class QARebuildTests(unittest.TestCase):
         self.quality=self.root/"quality-excellence/production-workorders"
         self.quality.mkdir(parents=True)
         FakeMaker.calls=0
-    def seed(self,name="synth_abc123",*,defects=None,source_bytes=b"v2 changed"):
+    def seed(self,name="synth_abc123",*,defects=None,source_bytes=b"v2 changed",family="F28"):
         item=self.source/name;item.mkdir()
         (item/"README.md").write_bytes(source_bytes)
         order=self.quality/name;order.mkdir()
         (order/"current.json").write_text(json.dumps({
             "schema":"saeit.factory.production-rework-order.v1",
             "recipe":name,
-            "family_id":"F28",
+            "family_id":family,
             "source_quality_receipt_sha256":"a"*64,
             "unresolved_technical_or_domain_defects":defects or []}))
         original=self.root/"digital-products"/name;original.mkdir(parents=True)
@@ -63,8 +63,8 @@ class QARebuildTests(unittest.TestCase):
     def run_bridge(self):
         with patch.object(m,"load_maker",return_value=FakeMaker):
             return m.execute(self.root,self.source,FILE,limit=2)
-    def seed_archived_only(self,name="synth_abc123",*,tamper=False,flat=False):
-        item,original=self.seed(name=name,defects=["P0_BUILD_ARCHIVE_INVALID"])
+    def seed_archived_only(self,name="synth_abc123",*,tamper=False,flat=False,family="F28"):
+        item,original=self.seed(name=name,defects=["P0_BUILD_ARCHIVE_INVALID"],family=family)
         source_bytes=(item/"README.md").read_bytes()
         archive=original/(item.name+"-internal-qa.zip")
         with zipfile.ZipFile(archive,"w",zipfile.ZIP_DEFLATED) as zf:
@@ -88,8 +88,9 @@ class QARebuildTests(unittest.TestCase):
         shutil.rmtree(item)
         return item.name,archive
     def test_failed_first_recipes_cannot_starve_remaining_rebuild_orders(self):
-        for recipe in ("synth_first", "synth_second", "synth_third"):
-            self.seed(name=recipe)
+        for recipe,family in zip(("synth_first", "synth_second", "synth_third"),
+                                  ("F28","F27","F29")):
+            self.seed(name=recipe,family=family)
         class BrokenMaker(FakeMaker):
             attempted = []
             @classmethod
@@ -243,8 +244,8 @@ class QARebuildTests(unittest.TestCase):
         self.assertEqual(result["missing_source"],1)
         self.assertEqual(result["rebuild_attempted"],0)
     def test_recovery_root_is_reused_across_recipes_without_ambiguity(self):
-        self.seed_archived_only("synth_first")
-        self.seed_archived_only("synth_other")
+        self.seed_archived_only("synth_first",family="F28")
+        self.seed_archived_only("synth_other",family="F27")
         result=self.run_bridge()
         self.assertEqual(result["technical_candidates_verified"],2)
         self.assertEqual(result["duplicate_recipe_roots_blocked"],0)
@@ -365,12 +366,13 @@ class QARebuildTests(unittest.TestCase):
         manuf.mkdir(parents=True)
         source_hash=FakeMaker.source_digest(source,("README.md",))
         (manuf/"manufacturing_manifest.json").write_text(json.dumps({
-            "recipe":edition,"source_sha256":source_hash,"qa_status":"passed"}))
+            "recipe":edition,"family_id":"F28",
+            "source_sha256":source_hash,"qa_status":"passed"}))
         order=self.quality/edition
         order.mkdir()
         (order/"current.json").write_text(json.dumps({
             "schema":"saeit.factory.production-rework-order.v1",
-            "recipe":edition,
+            "recipe":edition,"family_id":"F28",
             "source_quality_receipt_sha256":"a"*64,
             "unresolved_technical_or_domain_defects":[
                 "P0_PROOF_MISSING:independent_expert_review"]}))
