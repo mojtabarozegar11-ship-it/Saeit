@@ -1,4 +1,5 @@
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import Q
 
 from core.economic_tool_pack import build_economic_gateway
 from core.models import AgentTask
@@ -16,7 +17,9 @@ class Command(BaseCommand):
             agent__code="economic-master-agent",
             agent__active=True,
             status="queued",
-            capability_code__startswith="income_",
+        ).filter(
+            Q(capability_code__startswith="income_")
+            | Q(capability_code="master_self_improvement")
         ).order_by("created_at").first()
         if not task:
             self.stdout.write("IDLE: no queued economic task.")
