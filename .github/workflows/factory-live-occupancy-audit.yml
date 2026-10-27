@@ -2,7 +2,7 @@ name: Read-only factory live occupancy audit
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/factory-live-occupancy-audit.yml"]
+    paths: [".github/workflows/factory-live-occupancy-audit.yml", "scripts/factory_product_planner.py", "scripts/factory_40_execution_controller.py", ".github/workflows/factory-real-quality-rework-40.yml"]
 permissions:
   contents: read
 concurrency:
