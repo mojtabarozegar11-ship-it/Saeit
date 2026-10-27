@@ -112,6 +112,28 @@ class LeechStatusReadOnlyTests(unittest.TestCase):
             self.assertEqual(target.read_text(encoding="utf-8"),
                              "Do not follow this synthetic target.")
 
+    def test_fifo_swap_between_preflight_and_open_fails_without_hanging(self):
+        with tempfile.TemporaryDirectory() as temp:
+            private=Path(temp)/"private"
+            private.mkdir()
+            part=private/"chapter-01-part-001.md"
+            part.write_text("Synthetic manuscript content. "*20,encoding="utf-8")
+            original_open=os.open
+
+            def replace_with_fifo(path,flags,*args,**kwargs):
+                if Path(path)==part:
+                    part.unlink()
+                    os.mkfifo(part,0o600)
+                return original_open(path,flags,*args,**kwargs)
+
+            with (mock.patch.object(author,"PRIVATE",private),
+                  mock.patch.object(os,"open",replace_with_fifo)):
+                with self.assertRaisesRegex(RuntimeError,"UNEXPECTED_PRIVATE_MANUSCRIPT_ENTRY"):
+                    author.list_parts()
+            self.assertTrue(part.exists())
+            self.assertFalse(part.is_file())
+            self.assertFalse((private/".authoring.lock").exists())
+
     def test_exact_50000_byte_manuscript_is_accepted_without_mutation(self):
         with tempfile.TemporaryDirectory() as temp:
             private=Path(temp)/"private"
