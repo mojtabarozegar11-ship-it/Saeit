@@ -614,6 +614,9 @@ def feedback_site(root=DEST, page=0):
     private_new(folder)
     rows = []
     count = 0
+    # Hash the complete validated receipt set, not just the selected page.
+    # The caller must reject pages from different snapshots before replay.
+    snapshot = hashlib.sha256()
     for product in sorted(folder.iterdir()):
         require(product.is_dir() and not product.is_symlink()
                 and RECIPE.fullmatch(product.name), "RETURN_DIRECTORY_INVALID")
@@ -624,11 +627,18 @@ def feedback_site(root=DEST, page=0):
             require(value.get("tenant")==TENANT and value.get("schema")==RETURN_SCHEMA
                     and value.get("product_id")==product.name
                     and value.get("source_sha256")==item.stem, "RETURN_IDENTITY_INVALID")
+            snapshot.update(json_blob({
+                "product_id": product.name,
+                "source_sha256": item.stem,
+                "receipt_sha256": digest(json_blob(value)),
+            }))
+            snapshot.update(b"\n")
             if page * MAX_ITEMS <= count < (page + 1) * MAX_ITEMS:
                 rows.append(value)
             count += 1
             require(count <= MAX_ITEMS * 32, "RETURN_BACKLOG_REQUIRES_REVIEW")
-    return json_blob({"schema":RETURN_SCHEMA,"tenant":TENANT,"returns":rows})
+    return json_blob({"schema":RETURN_SCHEMA,"tenant":TENANT,
+                      "snapshot_sha256":snapshot.hexdigest(),"returns":rows})
 
 
 def receive_factory_returns(raw, root=VPS):
