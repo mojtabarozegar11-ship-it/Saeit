@@ -101,7 +101,18 @@ def patch_home(raw):
     if HOME_MARKER in text:
         if text.count(HOME_MARKER) != 1:
             raise RuntimeError("HOME_MARKER_DUPLICATED")
-        return raw
+        existing_folds = text.count('<details class="mpw-content-fold"')
+        if existing_folds == 2:
+            return raw
+        if existing_folds != 0:
+            raise RuntimeError("PARTIAL_HOME_FOLD_DRIFT")
+        # A prior interrupted deployment installed CSS but not the two semantic
+        # disclosure containers. Repair this partial state without duplicating CSS.
+        text = fold(text, "mpw-home-ten-guides", "Read the ten original field guides")
+        text = fold(text, "site-directory", "Browse the complete site directory")
+        if text.count('<details class="mpw-content-fold"') != 2:
+            raise RuntimeError("PARTIAL_HOME_FOLD_REPAIR_FAILED")
+        return text.encode("utf-8")
     if not (100_000 < len(raw) < 850_000):
         raise RuntimeError("UNEXPECTED_HOME_SIZE")
     for marker in ('id="mpw-home-ten-guides"', 'id="site-directory"', 'id="mw-all-pages-menu"', 'class="mw-site-nav"'):
@@ -326,6 +337,11 @@ def selftest():
     home = patch_home(padded.encode())
     assert HOME_MARKER.encode() in home and home.count(b'mpw-content-fold') >= 2
     assert patch_home(home) == home
+    half_applied = padded.replace("</head>", HOME_CSS + "\n</head>").encode()
+    repaired = patch_home(half_applied)
+    assert repaired.count(b'<details class="mpw-content-fold"') == 2
+    assert repaired.count(HOME_MARKER.encode()) == 1
+    assert patch_home(repaired) == repaired
     existing = ('<?php\n' + PREVIOUS_MAP_MARKER + '\n$paths=[];').encode()
     patched = patch_sitemap(existing)
     assert patched.count(MAP_MARKER.encode()) == 1 and all(path.encode() in patched for path in NAV_PATHS)
