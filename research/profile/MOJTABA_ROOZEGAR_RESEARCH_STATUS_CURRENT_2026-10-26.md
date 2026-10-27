@@ -144,3 +144,8 @@ No independently verified degree, institutional affiliation, ORCID, residence, i
 **Other active work:** MR Car Table 5, Amini F7 residual discrepancy, Cvejić denominator, source methods and G/D/R/A empirical validation remain unresolved (**MAJOR REVISION**). ZM exact RefSeq v2.0 FASTA/annotation, multimapping, FASTQ byte-level MD5, experimental-unit independence and 24-sample integer counts remain unresolved (**DATA REBUILD**). Future 46-topic registry remains exploratory questions only.
 
 **Stage transitions:** 0 author-approved, 0 journal-submitted, 0 accepted, 0 published; no Manuscript ID. No live-site deployment, no PR #1054 merge, no prohibited social activity, no bulk FASTQ download, no VPS/cost.
+
+
+## 27 October 2026 — MR C47 denominator audit (public GitHub staging only)
+
+[MR C47](../manuscripts/MR-2026-001/MR-2026-001_C47_CVEJIC_MODELED_SAVINGS_FARM_VS_VOLUME_WEIGHTED_DENOMINATORS_2026-10-27.md) independently recomputes the **volume-weighted modeled** irrigation-requirement reduction from Cvejić (2020) Tables A6/A8: **22.55%, 28.47%, 20.58%** for 2017–2019 and **23.66%** for the pooled three-year modeled volume. These differ from the paper's *mean farm-level percentages* and are different estimands, not an alleged publisher error. Three of 35 farm rows lack modeled values, leaving **32 usable modeled rows**; the separate **83% self-reported use** survey denominator is still unverified. This is **not observed water saving**, validated event adherence, or publication novelty. The [internal author decision packet](RESEARCH_AUTHOR_REVIEW_DELTA_C47_2026-10-27.md) preserves all three projects' NO SUBMISSION gates. **No site deployment, PR #1054 merge, social-account interaction, journal submission or human approval.**
