@@ -16,18 +16,21 @@ import re
 import stat
 import zipfile
 def active_product_allowlist(path):
-    """Read the factory's authoritative five active slots; fail closed."""
+    """Read the authoritative single active line or the legacy five-slot set."""
     state_path = Path(path)
     if state_path.is_symlink() or not state_path.is_file() or state_path.stat().st_size > 2000000:
         raise ValueError("ACTIVE_PRODUCT_SLOTS_REQUIRED")
     state = json.loads(state_path.read_text(encoding="utf8"))
-    active = state.get("active") if isinstance(state, dict) else None
+    if not isinstance(state, dict):
+        raise ValueError("ACTIVE_PRODUCT_SLOTS_SCHEMA_INVALID")
+    active = state.get("active")
+    capacity = state.get("capacity")
     if (state.get("schema") != "saeit.factory.product-slots.v1"
-            or state.get("capacity") != 5 or not isinstance(active, list)
-            or len(active) != 5):
-        raise ValueError("EXACTLY_FIVE_ACTIVE_FACTORY_PRODUCTS_REQUIRED")
+            or type(capacity) is not int or capacity not in (1, 5)
+            or not isinstance(active, list) or len(active) != capacity):
+        raise ValueError("ACTIVE_PRODUCT_SLOT_CAPACITY_MISMATCH")
     recipes = [item.get("recipe") if isinstance(item, dict) else None for item in active]
-    if (len(set(recipes)) != 5 or any(not isinstance(recipe, str)
+    if (len(set(recipes)) != capacity or any(not isinstance(recipe, str)
             or not re.fullmatch(r"[a-z][a-z0-9_]{1,65}", recipe) for recipe in recipes)):
         raise ValueError("ACTIVE_PRODUCT_SLOT_ENTRIES_INVALID")
     return set(recipes)
