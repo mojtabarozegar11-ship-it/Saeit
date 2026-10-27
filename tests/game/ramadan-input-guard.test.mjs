@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey} from '../../games/ramadan-war/input-guard.mjs';
+import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey, normalizeMovementAxes} from '../../games/ramadan-war/input-guard.mjs';
 
 const arena = {closest: () => null};
 const menuButton = {closest: selector => selector.includes('button') ? {} : null};
@@ -108,4 +108,20 @@ test('browser modifiers and IME composition never activate game shortcuts', () =
   assert.ok(game.indexOf('if(isModifiedOrComposingKey(e))return;') <
     game.indexOf('const action=keyboardAction(e.code,screen,e.target,e.repeat);'),
     'modified/composing keys must be ignored before gameplay actions and preventDefault');
+});
+
+
+test('combined keyboard directions cannot exceed single-axis movement speed', () => {
+  const straight = normalizeMovementAxes(1, 0);
+  const diagonal = normalizeMovementAxes(1, 1);
+  assert.equal(Math.hypot(straight.forward, straight.side), 1);
+  assert.ok(Math.abs(Math.hypot(diagonal.forward, diagonal.side) - 1) < 1e-12);
+  assert.ok(Math.abs(diagonal.forward - Math.SQRT1_2) < 1e-12);
+  assert.ok(Math.abs(diagonal.side - Math.SQRT1_2) < 1e-12);
+  assert.deepEqual(normalizeMovementAxes(0.3, -0.4), {forward: 0.3, side: -0.4});
+  assert.deepEqual(normalizeMovementAxes(Infinity, 1), {forward: 0, side: 0});
+  assert.deepEqual(normalizeMovementAxes(0, NaN), {forward: 0, side: 0});
+  assert.equal(Math.hypot(...Object.values(normalizeMovementAxes(-20, 30))) <= 1, true);
+  const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
+  assert.match(game, /const movement=normalizeMovementAxes\\(forward,side\\);forward=movement.forward;side=movement.side;move\\(/);
 });
