@@ -135,6 +135,22 @@ class QARebuildTests(unittest.TestCase):
         self.assertEqual(result["technical_candidates_verified"],1)
         self.assertEqual(FakeMaker.calls,1)
 
+    def test_inert_order_does_not_starve_actionable_product_in_same_family(self):
+        first, original=self.seed(name="synth_aaa111",family="F28",
+                                  source_bytes=b"unchanged source")
+        manifest=original/"manufacturing_manifest.json"
+        prior=json.loads(manifest.read_text())
+        prior["source_sha256"]=FakeMaker.source_digest(first,("README.md",))
+        manifest.write_text(json.dumps(prior))
+        self.seed(name="synth_bbb222",family="F28",
+                  source_bytes=b"genuinely changed source")
+        with patch.object(m,"load_maker",return_value=FakeMaker):
+            result=m.execute(self.root,self.source,FILE,limit=40)
+        self.assertEqual(result["unchanged_or_human_only"],1)
+        self.assertEqual(result["rebuild_attempted"],1)
+        self.assertEqual(result["technical_candidates_verified"],1)
+        self.assertEqual(FakeMaker.calls,1)
+
     def test_excluded_family_does_not_enter_rebuild_loop(self):
         self.seed()
         with patch.object(m,"load_maker",return_value=FakeMaker):
