@@ -116,7 +116,7 @@ def rollback_files(stage,m,run):
     # backup is corrupt, deleting newly staged modules would leave the new
     # game.js importing missing files. Concurrent edits also abort the whole
     # rollback rather than creating a mixed-version client.
-    if set(m['new'])!=set(ASSETS) or not set(m['old']).issubset(set(ASSETS)) or GAME.is_symlink():
+    if set(m['new'])!=set(ASSETS) or not set(m['old']).issubset(set(ASSETS)) or GAME.is_symlink() or stage.is_symlink():
         print('ROLLBACK_ABORT_INVALID_MANIFEST');return False
     restore=[];remove=[]
     for name,new_hash in m['new'].items():
@@ -137,11 +137,21 @@ def rollback_files(stage,m,run):
             if current!=new_hash:
                 print('ROLLBACK_ABORT_CONCURRENT_EDIT='+name);return False
             backup=stage/f'old-{name}'
-            if not backup.is_file() or backup.is_symlink():
+            if not backup.is_relative_to(stage) or not backup.is_file() or backup.is_symlink():
                 print('ROLLBACK_ABORT_INVALID_BACKUP='+name);return False
+            backup_parent=backup.parent
+            while backup_parent!=stage:
+                if backup_parent.is_symlink():
+                    print('ROLLBACK_ABORT_UNSAFE_BACKUP_PARENT='+name);return False
+                backup_parent=backup_parent.parent
             original=backup.read_bytes()
             if digest(original)!=m['old'][name]:
                 print('ROLLBACK_ABORT_INVALID_BACKUP='+name);return False
+            # A leftover temporary file would make atomic() fail halfway through
+            # a multi-file rollback. Reject it before restoring any asset.
+            tmp=p.with_name('.'+p.name+'.ramadan-'+run)
+            if tmp.exists() or tmp.is_symlink():
+                print('ROLLBACK_ABORT_TEMP_PATH_COLLISION='+name);return False
             restore.append((name,p,original))
         elif p.exists():
             if not p.is_file() or digest(p.read_bytes())!=new_hash:
