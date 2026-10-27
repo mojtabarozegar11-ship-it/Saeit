@@ -9,23 +9,12 @@
 ## Actual page features
 
 - Responsive, dark-and-gold, English-first free casino-simulation lounge.
-- **16 self-contained browser-local free-play simulations** on the same page:
-  1. European roulette colour.
-  2. Blackjack practice against a virtual dealer.
-  3. Symbol reels (decorative slots).
-  4. Fictional virtual sports pick (not live sports or bookmaker odds).
-  5. Simplified two-card baccarat.
-  6. Five-card poker hand classification.
-  7. Two-dice challenge (below/above seven).
-  8. Coin toss.
-  9. Six-symbol fortune wheel.
-  10. Mini Keno (one pick; three draws).
-  11. Mini Bingo comparison.
-  12. Nine-tile Mines (two simulated mines).
-  13. Plinko random left/right path.
-  14. Virtual three-racer sprint.
-  15. Penalty kick direction.
-  16. High/Low card ranks.
+- **37 browser-local free-play games** in one page:
+  - 4 originals: European roulette, Blackjack practice, symbol reels and fictional sports picks.
+  - 12 additional casino-style activities: simplified baccarat, five-card poker hand classifier, above/below seven, coin toss, animated fortune wheel, Keno, Bingo, Mines, Plinko, fictional racer sprint, penalty direction and high/low cards.
+  - 15 new dice/chance exercises: exact die face, odd/even sum, doubles, three-dice range, four-or-more, triple match, craps point practice, Pig to thirty, two-dice duel, 1-2-3 sequence, sum ten, four of a kind, count sixes, closest to seven, six-seeking run.
+  - Chess and backgammon: local two-player boards with move validation, checkmate, castling, en passant, promotion, undo; and dice turns, bar entry, hits and bearing-off.
+  - 4 card games: Card War, Memory Pairs, three-card showdown and five-trick card duel.
 - Six-language interface including original four simulations' status messages, descriptions, controls, and twelve extra card descriptions/results.
 - 21+ self-declaration overlay. This is **not** verification of identity or legal eligibility.
 - Clear prohibition of cash stakes, real-money wagering, paid spins, wallets, purchasable tokens, withdrawals, prizes and MOJ1 wagering.
@@ -35,10 +24,10 @@
 ## Confirmed checks
 
 - Node static script syntax parsed successfully.
-- Dependency-free runtime QA: all twelve new simulations' choice buttons, four original interactions, 21+ gate and six-language switching exercised successfully.
+- Dependency-free runtime QA: all fifteen new dice games, four card games, chess legal moves/checkmate/undo, a backgammon move, four original interactions and six-language switching exercised successfully.
 - RTL for Persian/Arabic and LTR for English/German/French/Spanish asserted.
 - Isolated poker deck from Blackjack state to avoid cross-game interference.
-- No external script dependencies.
+- No external script dependencies or financial connections.\n- The mock-DOM checks are not equivalent to an actual mobile-browser evaluation.
 - Actual browser/mobile visual QA **not completed** (headless browser executable unavailable here). No production HTTP test was completed.
 
 ## Before any publication
