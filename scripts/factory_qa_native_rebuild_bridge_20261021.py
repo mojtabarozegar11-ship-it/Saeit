@@ -756,7 +756,6 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=(),pro
         # A line advances only after its selected product is evaluated here.
         if family_id in excluded_families or family_id in processed_families:
             continue
-        processed_families.add(family_id)
         changed=prior.get("source_sha256")!=source_hash
         if is_edition:
             totals["document_editions_queued_for_strict_review"]+=1
@@ -765,6 +764,10 @@ def execute(root,source_root,maker_path,*,limit=2,additional_source_roots=(),pro
         if not changed and not mechanical:
             totals["unchanged_or_human_only"]+=1
             continue
+        # Reserve this family slot only after finding an actionable product.
+        # An unchanged/human-only order must not starve another repairable
+        # product on the same independent production line.
+        processed_families.add(family_id)
         if changed:totals["source_changed"]+=1
         receipt_folder=receipts/recipe
         if receipt_folder.is_symlink():raise ValueError("UNSAFE_RECIPE_RECEIPT")
