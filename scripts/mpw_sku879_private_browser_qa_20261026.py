@@ -95,14 +95,14 @@ def get_port():
         return connection.getsockname()[1]
 
 
-def webdriver_request(port, method, route, data=None):
+def webdriver_request(port, method, route, data=None, *, timeout=28):
     encoded = None if data is None else json.dumps(data).encode("utf-8")
     request = urllib.request.Request(
         "http://127.0.0.1:" + str(port) + route, encoded, method=method,
         headers={"Content-Type": "application/json"},
     )
     try:
-        with urllib.request.urlopen(request, timeout=28) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             result = json.load(response)
     except Exception as exc:
         raise RuntimeError("WEBDRIVER_REQUEST_" + type(exc).__name__) from None
@@ -265,7 +265,7 @@ def browser_views(destination, entrypoint, sizes=None):
             "capabilities": {"alwaysMatch": {
                 "browserName": "chrome", "goog:chromeOptions": options
             }}
-        })
+        }, timeout=90)
         session_id = created.get("sessionId") if isinstance(created, dict) else None
         if not session_id:
             raise RuntimeError("WEBDRIVER_SESSION_MISSING")
