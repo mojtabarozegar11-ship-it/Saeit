@@ -44,6 +44,11 @@ for name in factory_six_specialist_executors.py factory_seven_missing_builders.p
  mv -f "$tmp" "$target/$name"
 done
 "$py" -B -m py_compile "$target"/*.py
+# Install the pinned catalog builders' runtime from the hash-verified offline
+# wheelhouse staged by GitHub Actions; the VPS does not need outbound package access.
+test -d "$source_dir/wheelhouse" && test ! -L "$source_dir/wheelhouse"
+"$py" -m pip install --disable-pip-version-check --no-index --find-links "$source_dir/wheelhouse" \
+ Pillow==11.3.0 openpyxl==3.1.5 python-docx==1.2.0 python-pptx==1.0.2 reportlab==4.4.3
 # Repair six previously blocked specialist producer routes using the real
 # audited source/runtime builders, and verify their exact candidate ZIP bytes.
 # Source pilots stay private and must NOT be counted as signed APK/EXE/ONNX.
