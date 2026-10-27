@@ -152,3 +152,6 @@ No independently verified degree, institutional affiliation, ORCID, residence, i
 
 
 **AE C32 comparator-method clarification (27 October; staging only):** [C32](../manuscripts/AE-2026-001/AE-2026-001_C32_COUNTRYATLAS_COMPARE_VINTAGES_ESTIMAND_AND_RELEASE_IDENTITY_GATE_2026-10-27.md) establishes from package documentation that `compare_vintages` is a **single-year level comparison**, not a direct 2000–2019 growth-revision computation. The [consolidated AE author-review text](../manuscripts/AE-2026-001/AE-2026-001_CONSOLIDATED_AUTHOR_REVIEW_MANUSCRIPT_2026-10-27.md) now specifies the necessary two-endpoint join and archive-release identity gate. **No direct three-vintage package benchmark, final author approval or journal submission has been claimed. No live deployment.**
+
+
+**ZM C35 Ensembl archive identity check (27 October; staging only):** The [official EnsemblPlants archive metadata](https://jun2026-plants.ensembl.org/Triticum_aestivum_refseqv2/Info/Annotation) reports **assembly IWGSC_RefSeq_v2.1 / GCA_018294505.1** despite its `refseqv2` URL slug. [C35](../manuscripts/ZM-R01/C35_ENSEMBL_REFSEQV2_SLUG_V21_ASSEMBLY_IDENTITY_GATE_2026-10-27.md) documents why that label cannot authenticate the paper's stated v2.0 FASTA/GTF. Exact reference and count matrix remain missing. **DATA REBUILD / NO SUBMISSION; no live deployment.**
