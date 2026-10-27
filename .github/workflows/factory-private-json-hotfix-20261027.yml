@@ -63,5 +63,7 @@ jobs:
           SSH=(ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150)
           timeout 70s "${SSH[@]}" "python3 -B - --run-id '$GITHUB_RUN_ID'" < scripts/factory_private_json_hotfix_20261027.py
           timeout 70s "${SSH[@]}" "python3 -B - --run-id '$GITHUB_RUN_ID' --apply" < scripts/factory_private_json_hotfix_20261027.py
-          timeout 70s "${SSH[@]}" "python3 -B - --run-id '$GITHUB_RUN_ID'" < scripts/factory_private_json_hotfix_20261027.py
+          post="$(timeout 70s "${SSH[@]}" "python3 -B - --run-id '$GITHUB_RUN_ID'" < scripts/factory_private_json_hotfix_20261027.py)"
+          printf '%s\n' "$post"
+          printf '%s\n' "$post" | python3 -c 'import json,sys;s=sys.stdin.read().strip();p="FACTORY_JSON_HOTFIX=";assert s.startswith(p);d=json.loads(s[len(p):]);assert d["change_required"] is False and d["sites_modified"] is False and d["commercial_release_authorized"] is False'
           echo FACTORY_PRIVATE_JSON_READER_HOTFIX_VERIFIED=PASS
