@@ -80,6 +80,17 @@ export function validateCampaignSave(s) {
   return true;
 }
 
+// Keep live pickups untouched while bounding the persisted snapshot. Transient
+// drops can accumulate during dense fights; an oversized save is rejected on
+// next launch. Preserve all stage-recovery intel before retaining recent drops.
+export function boundedCampaignPickups(pickups) {
+  if (!Array.isArray(pickups)) return [];
+  const intel = pickups.filter(p => p?.type === 'mission-intel');
+  const transient = pickups.filter(p => p?.type !== 'mission-intel');
+  const slots = Math.max(0, 60 - intel.length);
+  return [...(slots ? transient.slice(-slots) : []), ...intel].slice(-60);
+}
+
 // Reconstruct missing objective items in legacy saves where a long pause expired
 // the collectibles. Never reset already earned progress or grant a reward here.
 export function restoreRecoveryPickups(state, sites) {
