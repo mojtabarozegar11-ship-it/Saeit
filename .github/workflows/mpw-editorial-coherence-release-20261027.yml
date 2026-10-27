@@ -1,0 +1,119 @@
+name: MojPlayWin evidence and content-coherence release
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-editorial-coherence-release-20261027.yml
+      - scripts/mpw_editorial_coherence_release_20261027.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-main-editorial-evidence-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify all content transformation rules
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_editorial_coherence_release_20261027.py
+          python3 scripts/mpw_editorial_coherence_release_20261027.py selftest
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-structure-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Confirm exact 80 page source candidates and policy destination
+        run: |
+          timeout 85s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 - preflight' < scripts/mpw_editorial_coherence_release_20261027.py
+      - name: Back up and publish evidence consolidation across 80 pages
+        id: publish
+        run: |
+          timeout 115s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel "python3 - publish '$GITHUB_RUN_ID'" < scripts/mpw_editorial_coherence_release_20261027.py
+      - name: Verify public integrity and distinct page context
+        run: |
+          python3 - <<'PY'
+          import sys,urllib.request,urllib.error
+          from concurrent.futures import ThreadPoolExecutor,as_completed
+          sys.path.insert(0,"scripts")
+          from mpw_editorial_coherence_release_20261027 import OLD_GUIDE,OLD_VISUAL,OLD_RESEARCH,OLD_NOTICE,OLD_CTA,MARKER,POLICY_URL
+          import xml.etree.ElementTree as ET
+          base="https://mojplaywin.com"
+          with urllib.request.urlopen(base+"/sitemap.xml",timeout=25) as r:
+              root=ET.fromstring(r.read())
+          urls=[x.text for x in root.iter() if x.tag.endswith("loc") and x.text]
+          chosen=[u for u in urls if "/mpw-editorial/field-guides/20261023/guides/" in u or "/mpw-editorial/collections/" in u or ("/mpw-editorial/revenue/" in u and "/index.html" in u and "/revenue/index.html" not in u)]
+          if len(chosen)!=80:raise RuntimeError("Unexpected public page count "+str(len(chosen)))
+          chosen.append(base+POLICY_URL)
+          def check(u):
+              with urllib.request.urlopen(u,timeout=25) as resp:
+                  if resp.status!=200:raise RuntimeError("HTTP "+u)
+                  d=resp.read(250000).decode("utf-8","replace")
+              if u.endswith(POLICY_URL):
+                  if "Research and evidence standards" not in d or 'rel="canonical"' not in d:raise RuntimeError("Policy missing")
+              else:
+                  if MARKER not in d or POLICY_URL not in d:raise RuntimeError("Missing new contextual notice "+u)
+                  if any(x in d for x in (OLD_GUIDE,OLD_VISUAL,OLD_RESEARCH,OLD_NOTICE,OLD_CTA)):raise RuntimeError("Repeated long boilerplate remains "+u)
+              return u
+          with ThreadPoolExecutor(max_workers=8) as pool:
+              for fut in as_completed([pool.submit(check,u) for u in chosen]):fut.result()
+          for p in ("/","/store/","/games/","/taniya/","/mojtaba.roozegar/"):
+              with urllib.request.urlopen(base+p,timeout=25) as resp:
+                  if resp.status!=200:raise RuntimeError("Protected path unhealthy "+p)
+          print("MPW_EDITORIAL_COHERENCE_LIVE_PASS",len(chosen)-1,"pages","policy",POLICY_URL,"protected",5)
+          PY
+      - name: Roll back release when public checks fail
+        if: failure() && steps.publish.outcome == 'success'
+        run: |
+          timeout 110s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_editorial_coherence_release_20261027.py
+      - name: Clear ephemeral relay keys
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-structure-ssh"
+          if [ -d "$d" ]; then shred -u "$d/vps.key" "$d/host.key" 2>/dev/null || true; fi
