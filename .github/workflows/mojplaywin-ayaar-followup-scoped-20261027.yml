@@ -30,7 +30,7 @@ jobs:
           python3 - <<'PY'
           import ast,subprocess
           from pathlib import Path
-          baseline='ca8748ab0762ae1d420355f5f84930bf217fc676'
+          baseline='45d58cd052b4c5bad158969300fb0d0ab682b2ec'
           names=('services.html','submit.html','track.html','reviewer.html',
                  'registry.html','privacy.html','platform.css','platform.js')
           old_paths={'ayaar_case_service.py':'core/ayaar_case_service.py',
@@ -47,7 +47,8 @@ jobs:
           for name in names[:6]:
               text=Path('site_releases/mojplaywin/ayaar-20261027',name).read_text('utf-8')
               assert '<html lang="en" dir="ltr">' in text
-              assert 'platform-2' in text
+              assert 'platform.js?v=platform-3' in text
+           assert 'platform.css?v=platform-2' in text
           assert 'def append_case_evidence' in Path('core/ayaar_case_service.py').read_text('utf-8')
           print('AYAR_FOLLOWUP_QA=PASS')
           PY
@@ -124,7 +125,7 @@ jobs:
           stage=Path(os.environ['AYAAR_PAYLOAD'])
           names=('ayaar_case_service.py','ayaar_views.py','services.html','submit.html',
                  'track.html','reviewer.html','registry.html','privacy.html','platform.css','platform.js')
-          baseline='ca8748ab0762ae1d420355f5f84930bf217fc676'
+          baseline='45d58cd052b4c5bad158969300fb0d0ab682b2ec'
           previous={name:('core/'+name if name.endswith('.py') and name!='platform.js'
                           else 'site_releases/mojplaywin/ayaar-20261027/'+name) for name in names}
           old={name:hashlib.sha256(subprocess.check_output(['git','show',f'{baseline}:{previous[name]}'])).hexdigest() for name in names}
@@ -155,7 +156,7 @@ jobs:
             page="$RUNNER_TEMP/ayaar-check-$(basename "$route")"
             code="$(curl --connect-timeout 9 --max-time 28 -sS -o "$page" -w '%{http_code}' "https://mojplaywin.com$route?v=$rid" || true)"
             echo "AYAR_UPGRADE_PAGE=$route:$code"
-            if test "$code" != 200 || ! grep -q 'platform.js?v=platform-2' "$page"; then healthy=false; fi
+            if test "$code" != 200 || ! grep -q 'platform.js?v=platform-3' "$page"; then healthy=false; fi
           done
           for route in /ayaar/platform.js /ayaar/platform.css /ayaar/ / /store/ /saman/ /taniya/ /mojtaba.roozegar/; do
             code="$(curl --connect-timeout 9 --max-time 28 -L -sS -o /dev/null -w '%{http_code}' "https://mojplaywin.com$route?v=$rid" || true)"
