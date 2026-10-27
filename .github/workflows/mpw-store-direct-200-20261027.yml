@@ -47,12 +47,15 @@ jobs:
               raise RuntimeError("EXPECTED_DIRECT_DJANGO_PATH_UNHEALTHY")
           routes=("/","/store/product/72/","/store/product/225/",
                   "/store/product/879/","/games/","/studio/","/services/",
-                  "/taniya/","/farnaz/","/saman/","/picm/","/mojtaba.roozegar/")
+                  "/taniya/","/farnaz/","/saman/","/mojtaba.roozegar/")
           before={}
           for path in routes:
               status,location=response(path)
               if status!=200:raise RuntimeError("PROTECTED_ROUTE_UNHEALTHY:"+path)
               before[path]=status
+          picm_status,picm_location=response("/picm/")
+          if picm_status!=302 or picm_location!="/picm/login/":
+              raise RuntimeError("PICM_PRIVATE_LOGIN_REDIRECT_CHANGED")
           for pk in ("72","225","879"):
               status,loc=response("/store/product/"+pk+"/checkout/")
               if status!=302 or "/accounts/login/" not in str(loc):
@@ -141,6 +144,12 @@ jobs:
           for path,status in baseline.items():
               with urllib.request.urlopen(root+path,timeout=25) as response:
                   if response.status!=status:raise RuntimeError("PROTECTED_ROUTE_CHANGED:"+path)
+          try:
+              opener.open(root+"/picm/",timeout=25)
+              raise RuntimeError("PICM_PRIVATE_LOGIN_GUARD_REMOVED")
+          except urllib.error.HTTPError as error:
+              if error.code!=302 or error.headers.get("Location")!="/picm/login/":
+                  raise RuntimeError("PICM_PRIVATE_LOGIN_REDIRECT_CHANGED")
           for pk in ("72","225","879"):
               try:
                   opener.open(root+"/store/product/"+pk+"/checkout/",timeout=25)
