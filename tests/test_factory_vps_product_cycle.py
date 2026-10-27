@@ -356,6 +356,10 @@ class ProductionContinuityTests(unittest.TestCase):
         self.assertEqual(state['status'],'needs_rework')
         self.assertEqual(state['manufactured'],1)
         self.assertTrue(json.loads((self.output/'production-health.json').read_text())['unfinished_rework_requires_attention'])
+        private_state=json.loads((self.output/'production-state.json').read_text())
+        self.assertEqual(private_state['runtime_health']['status'],'ok')
+        self.assertEqual(private_state['runtime_health']['expected_design_backlog_count'],1)
+        self.assertEqual(private_state['cycle_status'],'needs_rework')
 
     def test_high_level_internal_needs_feed_real_new_product_builds(self):
         novel=0
