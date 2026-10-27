@@ -103,7 +103,7 @@ for lock in "$master/master-cycle.lock" "$master/master-evolution.lock"; do
   done
 done
 echo MASTER_FACTORY_WORKERS_QUIESCENT
-# SQLite's online backup API provides a consistent rollback snapshot without stopping factory.
+# SQLite's online backup API provides a consistent rollback snapshot while application services stay online.
 "$py" - "$ops/backups/master-before-$stamp.sqlite3" <<'PY'
 import sqlite3,sys
 from pathlib import Path
