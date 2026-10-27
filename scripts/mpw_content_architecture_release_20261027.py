@@ -141,7 +141,7 @@ def transform(original, slug):
         raise ValueError("Already patched source: " + slug)
     ten = section_span(original, 'id="mpw-ten-illustrated-20261018"')
     research = section_span(original, 'id="mpw-research-editorials-20261019-')
-    if ten[1] >= research[0]:
+    if ten[1] > research[0]:
         raise ValueError("Unexpected section order: " + slug)
     visual = original[ten[0]:ten[1]]
     papers = original[research[0]:research[1]]
@@ -165,7 +165,7 @@ def transform(original, slug):
     updated = updated[:close.start()] + render_summary(slug, page_title(original, slug)) + updated[close.start():]
     main_end = re.search(r"</main\s*>", updated, re.I)
     footer = re.search(r"<footer\b[^>]*>.*?</footer\s*>", updated, re.I | re.S)
-    if not main_end or not footer or main_end.end() >= footer.start():
+    if not main_end or not footer or main_end.end() > footer.start():
         raise ValueError("Footer still inside main: " + slug)
     if updated.count(MARKER) != 2:
         raise ValueError("Incorrect archive signpost count: " + slug)
