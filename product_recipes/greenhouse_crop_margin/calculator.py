@@ -163,6 +163,8 @@ def calculate(data):
     result = {
         "version": "2.1" if granular else "1.1",
         "model_scope": "resource_explicit_uncalibrated" if granular else "legacy_aggregate_cost",
+        "input_values_independently_validated": False,
+        "output_scope": "user_supplied_scenario_arithmetic_not_a_forecast",
         "market_data_independently_validated": False,
         "currency": currency,
         "assumptions": [

@@ -89,6 +89,33 @@ class WaterBudgetTests(unittest.TestCase):
     def test_deterministic(self):
         self.assertEqual(evaluate(sample()), evaluate(sample()))
 
+    def test_allocation_matches_independent_grid_search_oracle(self):
+        """Check the continuous optimizer against exhaustive feasible allocations."""
+        data = {"currency": "USD", "water_available_m3": 500, "crops": [
+            {"name": "Crop A", "max_area_ha": 2, "water_m3_per_ha": 100,
+             "gross_margin_per_ha": 500},
+            {"name": "Crop B", "max_area_ha": 2, "water_m3_per_ha": 200,
+             "gross_margin_per_ha": 800},
+            {"name": "Crop C", "max_area_ha": 2, "water_m3_per_ha": 150,
+             "gross_margin_per_ha": 450},
+        ]}
+        result = evaluate(data)
+        grid_best = Decimal(0)
+        # Independent exhaustive search in 0.1-ha steps across the bounded
+        # feasible region; the exact LP optimum must be at least this value.
+        for a in range(21):
+            for b in range(21):
+                for c in range(21):
+                    water = Decimal(a) * 10 + Decimal(b) * 20 + Decimal(c) * 15
+                    if water <= Decimal("500"):
+                        margin = Decimal(a) * 50 + Decimal(b) * 80 + Decimal(c) * 45
+                        grid_best = max(grid_best, margin)
+        self.assertEqual(grid_best, Decimal("2200"))
+        self.assertEqual(Decimal(result["estimated_total_gross_margin"]), grid_best)
+        self.assertEqual(result["optimization_scope"],
+                         "continuous_single_resource_linear_model")
+        self.assertFalse(result["input_values_independently_validated"])
+
 
 if __name__ == "__main__":
     unittest.main()

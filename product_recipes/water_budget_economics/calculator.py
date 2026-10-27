@@ -88,6 +88,8 @@ def evaluate(data):
     total_margin = sum((Decimal(row["estimated_gross_margin"]) for row in rows), ZERO)
     return {
         "method": "fractional_greedy_gross_margin_per_water",
+        "optimization_scope": "continuous_single_resource_linear_model",
+        "input_values_independently_validated": False,
         "currency": currency,
         "water_budget_m3": string(budget),
         "water_used_m3": string(budget - remaining),

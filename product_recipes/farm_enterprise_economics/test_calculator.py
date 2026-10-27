@@ -51,6 +51,39 @@ class EconomicsTests(unittest.TestCase):
         self.assertIsNone(full_fee["break_even_unit_price_at_planned_volume"])
         self.assertIsNone(full_fee["margin_of_safety_units"])
 
+    def test_mississippi_state_extension_2020_greenhouse_enterprise_budget(self):
+        """Cross-check contribution and break-even against an external budget.
+
+        Source: https://extension.msstate.edu/publications/greenhouse-tomato-budgets-for-mississippi
+        Historical 2020 arithmetic reference only, not current prices or a
+        production recommendation.
+        """
+        from decimal import Decimal
+        cases = (
+            ("spring", 8000, "0.96", 3640, 4036, "0.96", "4.00"),
+            ("fall", 6000, "1.00", 2936, 3044, "1.00", "20.00"),
+            ("continuous", 14000, "0.92", 5828, 7080, "0.93", "-28.00"),
+        )
+        for name, units, price, direct, fixed, expected_break_even, expected_profit in cases:
+            with self.subTest(crop_case=name):
+                row = enterprise({
+                    "name": name, "units_sold": units, "unit_price": price,
+                    "variable_cost_per_unit": str(Decimal(direct) / Decimal(units)),
+                    "allocated_fixed_cost": fixed,
+                })
+                self.assertEqual(row["break_even_unit_price_at_planned_volume"], expected_break_even)
+                self.assertEqual(row["operating_profit"], expected_profit)
+                self.assertGreaterEqual(
+                    Decimal(row["break_even_unit_price_at_planned_volume"])
+                    * Decimal(units), Decimal(direct + fixed))
+                self.assertEqual(row["break_even_unit_price_at_planned_volume"],
+                                 str((Decimal(direct + fixed) / Decimal(units)).quantize(
+                                     Decimal("0.01"), rounding=__import__("decimal").ROUND_CEILING)))
+        result = evaluate(self.example)
+        self.assertEqual(result["accounting_scope"],
+                         "contribution_profit_before_depreciation_financing_tax")
+        self.assertFalse(result["input_values_independently_validated"])
+
     def test_negative_contribution_has_no_break_even(self):
         row = enterprise({
             "name": "Loss-making", "units_sold": 50, "unit_price": 3,
