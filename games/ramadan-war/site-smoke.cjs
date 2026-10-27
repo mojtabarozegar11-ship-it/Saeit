@@ -40,6 +40,14 @@ const assert=require('node:assert/strict');
    assert.match(await page.locator('#start').innerText(),/ادامه/);
    await page.locator('#start').click();
    state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.stage,0);assert.equal(state.rockets,11);assert.equal(state.drones,2);assert.equal(state.mode,'game');
+   // A real pointer click exercises the published control path, unlike debug.fire().
+   assert((await page.locator('#pause').getAttribute('aria-label'))?.length>=3,'pause needs a screen-reader name');
+   await page.evaluate(()=>{for(let i=0;i<40;i++)window.RamadanWarDebug.tick(.04)});
+   const shotsBefore=await page.evaluate(()=>window.RamadanWarDebug.getState().shots);
+   await page.locator('#fire').click();
+   await page.waitForFunction(n=>window.RamadanWarDebug.getState().shots>n,shotsBefore,{timeout:5000});
+   console.log('RAMADAN_REAL_POINTER_FIRE_PASS',v.name);
+
 
    // Exercise the actual objective interactions on the local release candidate.
    if(['127.0.0.1','localhost'].includes(new URL(process.env.GAME_URL).hostname)){
