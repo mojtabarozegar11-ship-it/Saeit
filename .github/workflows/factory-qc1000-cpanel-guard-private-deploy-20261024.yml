@@ -1,10 +1,11 @@
-name: QC1000 genuine executions - private cPanel verifier install
+name: QC1000 and ChatGPT pre-store gate - private cPanel install
 on:
   pull_request:
     branches: [main]
     paths:
       - deploy/install_factory_qc1000_cpanel_private_20261024.py
       - scripts/factory_commercial_quality_release_guard_v1.py
+      - scripts/import_factory_store_drafts.py
       - tests/test_factory_qc1000_cpanel_install_20261024.py
       - .github/workflows/factory-qc1000-cpanel-guard-private-deploy-20261024.yml
   push:
@@ -12,6 +13,7 @@ on:
     paths:
       - deploy/install_factory_qc1000_cpanel_private_20261024.py
       - scripts/factory_commercial_quality_release_guard_v1.py
+      - scripts/import_factory_store_drafts.py
       - tests/test_factory_qc1000_cpanel_install_20261024.py
       - .github/workflows/factory-qc1000-cpanel-guard-private-deploy-20261024.yml
 permissions: {contents: read}
@@ -39,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
-      - name: Pinned SSH install three QC scripts only; prove live server reject
+      - name: Pinned SSH install QC scripts and ChatGPT store importer; prove live server reject
         shell: bash
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -85,15 +87,16 @@ jobs:
           target="/home/zomorod2/.saeit-factory-inbox/.qc1000-stage-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           ssh -T -F "$d/config" saeit-cpanel "set -eu; test \"\$(id -un)\" = zomorod2; umask 077; test ! -e '$target'; mkdir -m 700 '$target'; test -f /home/zomorod2/.saeit-factory-inbox/bin/publish_verified_factory_store_listing.py"
           scp -q -F "$d/config" deploy/install_factory_qc1000_cpanel_private_20261024.py saeit-cpanel:"$target/installer.py"
-          for name in factory_commercial_quality_release_guard_v1.py factory_quality_signed_approval_v1.py factory_real_qc1000_live_monitor_20261023.py; do
+          for name in factory_commercial_quality_release_guard_v1.py factory_quality_signed_approval_v1.py factory_real_qc1000_live_monitor_20261023.py import_factory_store_drafts.py; do
             scp -q -F "$d/config" "scripts/$name" saeit-cpanel:"$target/$name"
           done
           s1="$(sha256sum scripts/factory_commercial_quality_release_guard_v1.py | awk '{print $1}')"
           s2="$(sha256sum scripts/factory_quality_signed_approval_v1.py | awk '{print $1}')"
           s3="$(sha256sum scripts/factory_real_qc1000_live_monitor_20261023.py | awk '{print $1}')"
+          s4="$(sha256sum scripts/import_factory_store_drafts.py | awk '{print $1}')"
           installer_sha="$(sha256sum deploy/install_factory_qc1000_cpanel_private_20261024.py | awk '{print $1}')"
           ssh -T -F "$d/config" saeit-cpanel "test \"\$(sha256sum '$target/installer.py' | awk '{print \$1}')\" = '$installer_sha'"
-          timeout 120s ssh -T -F "$d/config" saeit-cpanel "python3 -B '$target/installer.py' --staging '$target' --sha-factory-commercial-quality-release-guard-v1 '$s1' --sha-factory-quality-signed-approval-v1 '$s2' --sha-factory-real-qc1000-live-monitor-20261023 '$s3'"
+          timeout 120s ssh -T -F "$d/config" saeit-cpanel "python3 -B '$target/installer.py' --staging '$target' --sha-factory-commercial-quality-release-guard-v1 '$s1' --sha-factory-quality-signed-approval-v1 '$s2' --sha-factory-real-qc1000-live-monitor-20261023 '$s3' --sha-import-factory-store-drafts '$s4'"
           echo 'QC1000_CPANEL_DEPLOYED_FROM_VERIFIED_SOURCE=PASS'
           timeout 35s ssh -T -F "$d/config" saeit-vps 'python3 -' <<'PY'
           import json
