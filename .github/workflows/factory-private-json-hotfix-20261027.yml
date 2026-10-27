@@ -1,0 +1,69 @@
+name: Factory VPS private JSON reader guarded hotfix
+on:
+  pull_request:
+    paths:
+      - scripts/factory_private_json_hotfix_20261027.py
+      - tests/test_factory_private_json_hotfix_20261027.py
+      - .github/workflows/factory-private-json-hotfix-20261027.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/factory_private_json_hotfix_20261027.py
+      - tests/test_factory_private_json_hotfix_20261027.py
+      - .github/workflows/factory-private-json-hotfix-20261027.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factory-private-json-reader-hotfix
+  cancel-in-progress: false
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify exact reviewed source transform and race regressions
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_factory_private_json_hotfix_20261027.py -v
+          python3 -B -m unittest discover -s tests -p test_factory_private_json_read_race_20261027.py -v
+          python3 -B -m py_compile scripts/factory_private_json_hotfix_20261027.py
+  guarded-private-vps-install:
+    needs: regression
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      ((github.event_name == 'push' &&
+        contains(github.event.head_commit.message, '[approved-factory-json-reader-hotfix-20261027]')) ||
+       github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Probe then patch only reviewed VPS factory function under existing lock
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/json-reader-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" 2>/dev/null || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          SSH=(ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150)
+          timeout 70s "${SSH[@]}" "python3 -B - --run-id '$GITHUB_RUN_ID'" < scripts/factory_private_json_hotfix_20261027.py
+          timeout 70s "${SSH[@]}" "python3 -B - --run-id '$GITHUB_RUN_ID' --apply" < scripts/factory_private_json_hotfix_20261027.py
+          post="$(timeout 70s "${SSH[@]}" "python3 -B - --run-id '$GITHUB_RUN_ID'" < scripts/factory_private_json_hotfix_20261027.py)"
+          printf '%s\n' "$post"
+          printf '%s\n' "$post" | python3 -c 'import json,sys;s=sys.stdin.read().strip();p="FACTORY_JSON_HOTFIX=";assert s.startswith(p);d=json.loads(s[len(p):]);assert d["change_required"] is False and d["sites_modified"] is False and d["commercial_release_authorized"] is False'
+          echo FACTORY_PRIVATE_JSON_READER_HOTFIX_VERIFIED=PASS
