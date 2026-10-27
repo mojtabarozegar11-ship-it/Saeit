@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {validateCampaignSave, restoreRecoveryPickups, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove} from '../../games/ramadan-war/save-validation.mjs';
+import {validateCampaignSave, restoreRecoveryPickups, reconcileBossEncounter, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove} from '../../games/ramadan-war/save-validation.mjs';
 
 const fresh = () => ({
   hero: 0, mission: 0, lives: 100, x: 2.5, y: 7.5, angle: 0,
@@ -50,7 +50,7 @@ test('preserves valid objective progress while refusing corrupted mission comple
 test('reversible release manifest ships and checks every new imported save module', () => {
   const deploy = readFileSync(new URL('../../games/ramadan-war/deploy.py', import.meta.url), 'utf8');
   const client = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
-  assert.match(client, /import \{validateCampaignSave, restoreRecoveryPickups, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove\} from '\.\/save-validation\.mjs'/);
+  assert.match(client, /import \{validateCampaignSave, restoreRecoveryPickups, reconcileBossEncounter, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove\} from '\.\/save-validation\.mjs'/);
   assert.match(deploy, /ASSETS=\[[^\n]*'save-validation\.mjs'/);
   assert.match(deploy, /b'\.\/save-validation\.mjs' in new\['game\.js'\]/);
 });
@@ -186,4 +186,42 @@ test('active recovery collectibles never time out and restored legacy items are 
   assert.match(game,/restoreRecoveryPickups\(world,OPERATIONS\[2\]\.sites\)/);
   assert.match(game,/if\(p\.type!=='mission-intel'\)p\.life-=dt/);
   assert.match(game,/p\.type!=='mission-intel'&&p\.life<=0/);
+});
+
+test('final mission recovers a missing boss without erasing earned campaign progress', () => {
+  const s={...fresh(),mission:5,missionKills:8,score:2400,points:6,bossSpawned:true,enemies:[]};
+  assert.equal(validateCampaignSave(s),true);
+  assert.equal(reconcileBossEncounter(s),true);
+  assert.equal(s.bossSpawned,false);
+  assert.equal(s.missionKills,8);
+  assert.equal(s.score,2400);
+  assert.equal(s.points,6);
+  assert.equal(reconcileBossEncounter(s),false,'recovery is idempotent');
+});
+test('a living final boss cannot be duplicated by a corrupted spawn flag', () => {
+  const s={...fresh(),mission:5,bossSpawned:false,enemies:[{x:8.5,y:7.5,type:3,hp:410,boss:true}]};
+  assert.equal(validateCampaignSave(s),true);
+  assert.equal(reconcileBossEncounter(s),true);
+  assert.equal(s.bossSpawned,true);
+  assert.equal(reconcileBossEncounter(s),false);
+});
+test('a defeated boss awaiting cleanup does not trigger a duplicate boss spawn', () => {
+  const s={...fresh(),mission:5,bossSpawned:false,enemies:[{x:8.5,y:7.5,type:3,hp:-5,boss:true}]};
+  assert.equal(validateCampaignSave(s),true);
+  assert.equal(reconcileBossEncounter(s),true);
+  assert.equal(s.bossSpawned,true,'next tick must process the existing boss death');
+});
+test('completed and unrelated encounters remain untouched, malformed boss flags fail validation', () => {
+  for(const s of [
+    {...fresh(),mission:5,bossSpawned:true,objective:{done:0,hold:0,bossDefeated:true}},
+    {...fresh(),mission:2,bossSpawned:true},
+    {...fresh(),mission:5,missionPassed:true,bossSpawned:true}
+  ]) {const before=structuredClone(s);assert.equal(reconcileBossEncounter(s),false);assert.deepEqual(s,before);}
+  for(const flag of ['true',1,{},null])assert.equal(validateCampaignSave({...fresh(),bossSpawned:flag}),false);
+  assert.equal(validateCampaignSave({...fresh(),enemies:[{x:8,y:7,type:3,hp:40,boss:'yes'}]}),false);
+});
+test('runtime restores boss flags and spawns a missing boss even when kill quota was reached', () => {
+  const client=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
+  assert.match(client,/reconcileBossEncounter\(world\)/);
+  assert.match(client,/world\.mission===5&&!world\.endless&&!world\.bossSpawned&&!world\.objective\?\.bossDefeated/);
 });

@@ -19,8 +19,10 @@ export function validateCampaignSave(s) {
   }
   if (!Array.isArray(s.enemies) || s.enemies.length > 30 || !s.enemies.every(e =>
     point(e, 0, 16) && integer(e.type, 0, 3) && finite(e.hp, -10000, 10000) &&
+    (e.boss === undefined || typeof e.boss === 'boolean') &&
     (e.route == null || (Array.isArray(e.route) && e.route.length === 2 && e.route.every(n => finite(n, 0, 16))))
   )) return false;
+  if (s.bossSpawned !== undefined && typeof s.bossSpawned !== 'boolean') return false;
   if (s.missionPassed !== undefined && typeof s.missionPassed !== 'boolean') return false;
   if (s.missionPassed === true && s.enemies.length !== 0) return false;
   // Projectiles are integrated each frame; missing velocities poison the world with NaN.
@@ -77,6 +79,21 @@ export function restoreRecoveryPickups(state, sites) {
     needed--;restored++;
   }
   return restored;
+}
+
+// A saved final-stage encounter can lose its boss between spawn and persistence.
+// Reconcile the spawn flag with the actual living boss, preserving earned kills and
+// completed objectives. Never create a paid entitlement or change campaign rewards.
+export function reconcileBossEncounter(state) {
+  if (!state || state.mission !== 5 || state.endless === true ||
+      state.missionPassed === true || !state.objective ||
+      state.objective.bossDefeated === true || !Array.isArray(state.enemies)) return false;
+  // A defeated boss still in the entity list must be processed by the next tick;
+  // do not spawn a duplicate before kill cleanup marks the objective complete.
+  const trackedBoss = state.enemies.some(e => e?.boss === true);
+  const corrected = state.bossSpawned !== trackedBoss;
+  state.bossSpawned = trackedBoss;
+  return corrected;
 }
 
 // A cleared mission must resume at its results panel, not in a non-interactive arena.
