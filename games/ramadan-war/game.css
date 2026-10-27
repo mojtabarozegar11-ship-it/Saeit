@@ -24,3 +24,13 @@
 #objectiveRange{color:#8cf2cb;font-size:10px;white-space:nowrap}
 .interact{position:absolute;left:12px;bottom:calc(env(safe-area-inset-bottom) + 194px);padding:8px 13px;color:#f8e1a0;background:linear-gradient(145deg,#305e45,#153127);font-size:17px;z-index:6}
 @media(max-height:650px){#missionObjective{top:97px;padding:5px 8px;font-size:10px;max-width:62%;min-width:230px}.interact{bottom:calc(env(safe-area-inset-bottom) + 150px)}}
+
+/* Accessible gameplay: preserve objective cues without forced animation or tiny controls. */
+@media (prefers-reduced-motion: reduce) {
+  #game.firing #weaponArt, #reticle, #missionBackdrop, #objectiveArrow, .toast, .bar i { animation: none !important; transition: none !important; }
+}
+@media (pointer: coarse) {
+  #pause, #fullscreen { min-width: 44px; min-height: 44px; }
+  #interact, #special { min-height: 44px; }
+}
+button:focus-visible { outline: 3px solid #ffe6a6; outline-offset: 3px; }
