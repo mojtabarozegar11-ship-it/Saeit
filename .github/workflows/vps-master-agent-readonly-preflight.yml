@@ -72,6 +72,8 @@ jobs:
           echo "MASTER_SCHEDULE_ENTRIES=$count"
           backup_count="$(find "$base/operations/backups" -maxdepth 1 -type d -name 'master-source-before-*' 2>/dev/null | wc -l | tr -d ' ')"
           echo "MASTER_SOURCE_BACKUP_SETS=$backup_count"
+          echo MASTER_DB_BACKUP_FILES
+          find "$base/operations/backups" -maxdepth 1 -type f -name 'master-before-*.sqlite3' -printf '%f bytes=%s\n' 2>/dev/null | tail -5
           test -x "$base/operations/vps-only-loop.sh" && echo FACTORY_LOOP_SCRIPT_PRESENT
           REMOTE
 # Post-activation independent owner verification 2026-10-16.

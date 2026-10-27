@@ -55,7 +55,7 @@ jobs:
           ssh-keygen -y -P '' -f "$d/key" >/dev/null
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
-          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=24)
           tar -cf "$d/bundle.tar" deploy/activate_vps_master_agent.sh scripts/vps_master_evolution_cycle.py core/autonomous_brain.py core/economic_tool_pack.py core/economic_master_agent.py core/self_funding_policy.py core/task_runtime.py core/management/commands/seed_online_income_agents.py core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py
           digest="$(sha256sum "$d/bundle.tar" | awk '{print $1}')"
           ssh "${opts[@]}" githubops@178.239.147.150 'install -d -m 700 "$HOME/factory-runtime/operations/master-activation-source"'

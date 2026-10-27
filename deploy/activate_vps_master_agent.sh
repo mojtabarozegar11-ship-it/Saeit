@@ -76,15 +76,22 @@ trap restore_sources EXIT
 "$py" - "$ops/backups/master-before-$stamp.sqlite3" <<'PY'
 import sqlite3,sys
 from pathlib import Path
+import time
 from django.conf import settings
 db=settings.DATABASES["default"]
 assert "sqlite3" in db["ENGINE"], "MASTER_DB_BACKEND_UNEXPECTED"
 src=Path(db["NAME"]).resolve()
 assert src.exists() and src.is_file() and not src.is_symlink(), "MASTER_DB_MISSING"
 dst=Path(sys.argv[1])
+last_report=[0.0]
+def report_progress(status,remaining,total):
+    now=time.monotonic()
+    if now-last_report[0]>=15 or remaining==0:
+        print(f"MASTER_DB_BACKUP_PROGRESS remaining_pages={remaining} total_pages={total}",flush=True)
+        last_report[0]=now
 with sqlite3.connect(src.as_uri()+"?mode=ro",uri=True,timeout=20) as original:
     with sqlite3.connect(str(dst)) as backup:
-        original.backup(backup)
+        original.backup(backup,pages=2048,progress=report_progress,sleep=0.1)
         assert backup.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
 dst.chmod(0o600)
 print("MASTER_DB_BACKUP_INTEGRITY_OK")
