@@ -4,7 +4,7 @@ const {readFileSync} = require('node:fs');
 const {join} = require('node:path');
 
 (async () => {
-  const {joystickAxes} = await import('./input-guard.mjs');
+  const {joystickAxes, canCaptureGameplayPointer} = await import('./input-guard.mjs');
   const close = (a, b) => assert(Math.abs(a - b) < 1e-9, `expected ${b}, got ${a}`);
   const check = (dx, dy, forward, side) => {
     const value = joystickAxes(dx, dy, 50);
@@ -31,5 +31,19 @@ const {join} = require('node:path');
   assert.match(game, /joystickAxes\(x,y,lim\)/);
   assert.match(game, /joyF=axes\.forward;joyS=axes\.side/);
   assert.doesNotMatch(game, /joyF=x\/lim;joyS=y\/lim/);
-  console.log('RAMADAN_JOYSTICK_AXES_PASS directions=4 diagonal=normalized invalid=neutral integration=wired');
+  // Multi-touch: a second finger may aim while the first moves, but may not
+  // replace the active pointer within either control. Pointer id 0 is valid.
+  assert.equal(canCaptureGameplayPointer(null, 0, 'game'), true);
+  assert.equal(canCaptureGameplayPointer(null, 3, 'game'), true);
+  assert.equal(canCaptureGameplayPointer(0, 3, 'game'), false);
+  assert.equal(canCaptureGameplayPointer(3, 3, 'game'), false);
+  assert.equal(canCaptureGameplayPointer(null, 3, 'pausePanel'), false);
+  assert.equal(canCaptureGameplayPointer(null, -1, 'game'), false);
+  assert.equal(canCaptureGameplayPointer(null, NaN, 'game'), false);
+  assert.equal(canCaptureGameplayPointer(null, 1.5, 'game'), false);
+  assert.match(game, /canCaptureGameplayPointer\(joyId,e\.pointerId,screen\)/);
+  assert.match(game, /canCaptureGameplayPointer\(aimId,e\.pointerId,screen\)/);
+  assert.match(game, /canvas\.addEventListener\('lostpointercapture'/);
+  assert.match(game, /stick\.setPointerCapture\(e\.pointerId\)/);
+  console.log('RAMADAN_JOYSTICK_AXES_PASS directions=4 diagonal=normalized multitouch=capture-isolated lostcapture=handled integration=wired');
 })().catch(error => {console.error(error);process.exitCode = 1;});
