@@ -1,8 +1,10 @@
 import base64
+import io
 from pathlib import Path
 import importlib.util
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 spec = importlib.util.spec_from_file_location(
@@ -18,6 +20,24 @@ PIXEL = base64.b64decode(
 
 
 class PrivateBrowserQaTests(unittest.TestCase):
+    def test_webdriver_timeout_is_bounded_and_session_can_use_longer_budget(self):
+        # Real browser tests still fail closed if session creation exceeds 90s.
+        # Normal status, navigation, metrics and screenshot requests stay at 28s.
+        with mock.patch.object(
+                qa.urllib.request, "urlopen",
+                return_value=io.BytesIO(b'{"value":{"ready":true}}')) as opened:
+            self.assertEqual(qa.webdriver_request(12345, "GET", "/status"),
+                             {"ready": True})
+            self.assertEqual(opened.call_args.kwargs["timeout"], 28)
+        with mock.patch.object(
+                qa.urllib.request, "urlopen",
+                return_value=io.BytesIO(b'{"value":{"sessionId":"synthetic"}}')) as opened:
+            self.assertEqual(
+                qa.webdriver_request(12345, "POST", "/session",
+                                     {"capabilities": {}}, timeout=90),
+                {"sessionId": "synthetic"})
+            self.assertEqual(opened.call_args.kwargs["timeout"], 90)
+
     def make_archive(self, path, missing=False, wide=False):
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("index.html",
