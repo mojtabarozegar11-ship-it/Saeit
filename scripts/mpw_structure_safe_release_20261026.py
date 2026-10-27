@@ -208,7 +208,7 @@ def verify_live_targets():
     for marker in (ROOT / ".htaccess", ROOT / "passenger_wsgi.py"):
         if not marker.is_file() or marker.is_symlink():
             raise RuntimeError("SITE_IDENTITY_MISSING")
-    for path in (HOME, SITEMAP, SERVICES, GAMES):
+    for path in (HOME, SITEMAP, SERVICES):
         if path.is_symlink() or not path.is_file() or path.parent.is_symlink():
             raise RuntimeError("UNSAFE_RELEASE_TARGET:" + str(path))
 
@@ -248,13 +248,12 @@ def backup_path(run_id):
 
 def publish(run_id):
     verify_live_targets()
-    targets = {"home": HOME, "sitemap": SITEMAP, "services": SERVICES, "games": GAMES}
+    targets = {"home": HOME, "sitemap": SITEMAP, "services": SERVICES}
     before = {key: path.read_bytes() for key, path in targets.items()}
     after = {
         "home": patch_home_footer_order(patch_home(before["home"])),
         "sitemap": patch_sitemap(before["sitemap"]),
         "services": patch_editorial_guide_links(before["services"]),
-        "games": patch_editorial_guide_links(before["games"]),
     }
     changed = [key for key in targets if before[key] != after[key]]
     if not changed:
@@ -297,7 +296,7 @@ def rollback(run_id):
     manifest = json.loads((state / "manifest.json").read_text())
     if manifest.get("run") != run_id:
         raise RuntimeError("WRONG_BACKUP_RUN")
-    targets = {"home": HOME, "sitemap": SITEMAP, "services": SERVICES, "games": GAMES}
+    targets = {"home": HOME, "sitemap": SITEMAP, "services": SERVICES}
     pending = {}
     for key, checks in manifest["files"].items():
         original = (state / (key + ".before")).read_bytes()
