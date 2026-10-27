@@ -18,6 +18,12 @@ function makeStage(){
  return {nodes,buttons,retry:null,innerHTML:'',querySelector(s){return s==='#jungleRetry'?this.retry:nodes[s.slice(1)]},querySelectorAll(s){assert.equal(s,'[data-jungle-action]');return buttons},append(b){this.retry=b}};
 }
 let stage=makeStage();jungleContext.jungleGame(stage);assert(keyListener,'keyboard listener installed');
+for(const modifier of ['ctrlKey','altKey','metaKey','isComposing']){
+ let prevented=false;
+ keyListener({code:'Digit1',repeat:false,target:{tagName:'DIV'},[modifier]:true,preventDefault(){prevented=true}});
+ assert.equal(prevented,false,modifier+' must remain available to browser/IME');
+ assert.match(stage.nodes.jungleStatus.textContent,/Obstacle 1 \/ 12/,modifier+' must not advance gameplay');
+}
 const course=[0,1,2,0,1,2,1,0,2,0,2,1];
 for(const action of course)stage.buttons[action].handlers.click();
 assert.match(stage.nodes.jungleObstacle.textContent,/completed/);
