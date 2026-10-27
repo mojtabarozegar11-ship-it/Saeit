@@ -39,7 +39,7 @@ test('runtime guard precedes the movement and attack loop, but not the reward cl
   assert.match(client,/import \{canEnemyAct,restoreEnemyRuntime,advanceHostileProjectile,shouldCleanupEnemy,activateTimeStop,advanceTimeStop\} from '\.\/enemy-action-policy\.mjs'/);
   assert.match(client,/world\.enemies\.forEach\(\(e,i\)=>restoreEnemyRuntime\(e,i\)\)/);
   assert.match(client,/for\(const e of world\.enemies\)\{if\(enemyFrozen\|\|!canEnemyAct\(e\)\)continue;let dx=/);
-  assert.match(client,/for\(let i=world\.enemies\.length-1;i>=0;i--\)\{const e=world\.enemies\[i\];if\(e\.hp<=0\|\|e\.life< -4\)/);
+  assert.match(client,/for\(let i=world\.enemies\.length-1;i>=0;i--\)\{const e=world\.enemies\[i\];if\(shouldCleanupEnemy\(e\)\)/);
 });
 
 test('reversible deployment manifest includes the imported enemy policy module',()=>{
