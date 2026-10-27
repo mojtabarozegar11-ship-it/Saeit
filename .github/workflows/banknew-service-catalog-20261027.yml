@@ -2,7 +2,7 @@ name: Update banknew launch authorization and service catalog
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/banknew-service-catalog-20261027.yml']
+    paths: ['.github/workflows/banknew-service-catalog-20261027.yml', 'banknew/app.js', 'banknew/app.test.js']
 permissions:
   contents: read
 concurrency:
@@ -83,6 +83,48 @@ jobs:
            if backup.exists():backup.unlink()
            raise
           print('BANKNEW_SERVICE_CATALOG_UPDATED_AND_SMOKED='+url)
+          PY
+      - name: Checkout tested banknew source
+        uses: actions/checkout@v4
+      - name: Run isolated banknew unit checks
+        run: |
+          node --check banknew/app.js
+          node --test banknew/app.test.js
+      - name: Upload verified read-only wallet script and auto-rollback on failure
+        run: |
+          set -euo pipefail
+          scp -q -F "$RUNNER_TEMP/mpw-structure-ssh/config" banknew/app.js saeit-cpanel:/home/zomorod2/mojplaywin.com/banknew/.app.js.candidate
+          timeout 180s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import hashlib,os,urllib.request
+          root=Path('/home/zomorod2/mojplaywin.com')
+          d=root/'banknew'; p=d/'app.js'; candidate=d/'.app.js.candidate'
+          backup=d/'.app.js.banknew-release-backup'
+          assert root.is_dir() and not root.is_symlink()
+          assert d.is_dir() and not d.is_symlink()
+          assert p.is_file() and not p.is_symlink()
+          assert candidate.is_file() and not candidate.is_symlink()
+          assert not backup.exists() and not backup.is_symlink()
+          old=p.read_bytes(); new=candidate.read_bytes()
+          assert len(new)<100000 and b'getTronState' in new and b'eth_requestAccounts' in new
+          assert b'Payment gateway' not in new and b'privateKey' not in new
+          before=hashlib.sha256(old).hexdigest()
+          expected=hashlib.sha256(new).hexdigest()
+          backup.write_bytes(old); backup.chmod(0o600)
+          try:
+           os.replace(candidate,p)
+           assert hashlib.sha256(p.read_bytes()).hexdigest()==expected
+           request=urllib.request.Request('https://mojplaywin.com/banknew/app.js?release='+expected[:20],headers={'Cache-Control':'no-cache, no-store'})
+           with urllib.request.urlopen(request,timeout=25) as r: actual=r.read(200000); assert r.status==200
+           assert hashlib.sha256(actual).hexdigest()==expected
+           with urllib.request.urlopen('https://mojplaywin.com/banknew/',timeout=25) as r: assert r.status==200
+           with urllib.request.urlopen('https://mojplaywin.com/',timeout=25) as r: assert r.status==200
+           backup.unlink()
+          except Exception:
+           os.replace(backup,p)
+           if candidate.exists():candidate.unlink()
+           raise
+          print('BANKNEW_READONLY_WALLET_UPDATED old='+before[:12]+' new='+expected[:12])
           PY
       - name: Remove temporary keys
         if: always()
